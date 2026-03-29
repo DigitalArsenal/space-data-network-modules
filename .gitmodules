@@ -10,3 +10,6 @@
 [submodule "packages/sgp4-propagator"]
 	path = packages/sgp4-propagator
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-sgp4-propagator.git
+[submodule "packages/atmosphere"]
+	path = packages/atmosphere
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-atmosphere.git
