@@ -66,7 +66,7 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 | `packages/ntm-scraper` | `DigitalArsenal/space-data-network-plugin-ntm-scraper` | `Friends-Of-Lobsternaut/ntm-scraper-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/numerical-propagator` | `DigitalArsenal/space-data-network-plugin-numerical-propagator` | `Friends-Of-Lobsternaut/numerical-propagator-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/nws` | `DigitalArsenal/space-data-network-plugin-nws` | `Friends-Of-Lobsternaut/nws-sdn-plugin` | Pending | Not migrated yet. |
-| `packages/od` | `DigitalArsenal/space-data-network-plugin-od` | `Friends-Of-Lobsternaut/od-sdn-plugin` | Pending | Not migrated yet. |
+| `packages/od` | `DigitalArsenal/space-data-network-plugin-od` | `Friends-Of-Lobsternaut/od-sdn-plugin` | Completed | SDK compliance, browser shim, WasmEdge smoke, and command-surface OD MEME fit bridge committed. |
 | `packages/ofac` | `DigitalArsenal/space-data-network-plugin-ofac` | `Friends-Of-Lobsternaut/ofac-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/opensanctions` | `DigitalArsenal/space-data-network-plugin-opensanctions` | `Friends-Of-Lobsternaut/opensanctions-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/patents` | `DigitalArsenal/space-data-network-plugin-patents` | `Friends-Of-Lobsternaut/patents-sdn-plugin` | Pending | Not migrated yet. |
@@ -99,8 +99,8 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 
 ## Current State
 
-- `packages/maneuver` and `packages/cislunar` are migrated and tracked as submodules in this repo.
-- `maneuver` and `cislunar` both pass native tests, the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in their target repos.
+- `packages/maneuver`, `packages/cislunar`, and `packages/od` are migrated and tracked as submodules in this repo.
+- `maneuver`, `cislunar`, and `od` each pass the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in their target repos.
 - Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under `packages/`.
 
 ## Working With Packages

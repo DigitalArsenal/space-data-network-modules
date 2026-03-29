@@ -4,3 +4,6 @@
 [submodule "packages/cislunar"]
 	path = packages/cislunar
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-cislunar.git
+[submodule "packages/od"]
+	path = packages/od
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-od.git
