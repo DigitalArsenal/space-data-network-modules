@@ -1,0 +1,3 @@
+[submodule "packages/maneuver"]
+	path = packages/maneuver
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-maneuver.git
