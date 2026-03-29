@@ -27,7 +27,7 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 | `packages/bls` | `DigitalArsenal/space-data-network-plugin-bls` | `Friends-Of-Lobsternaut/bls-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/bolide` | `DigitalArsenal/space-data-network-plugin-bolide` | `Friends-Of-Lobsternaut/bolide-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/cell-towers-worldwide` | `DigitalArsenal/space-data-network-plugin-cell-towers-worldwide` | `Friends-Of-Lobsternaut/cell-towers-worldwide-sdn-plugin` | Pending | Not migrated yet. |
-| `packages/cislunar` | `DigitalArsenal/space-data-network-plugin-cislunar` | `Friends-Of-Lobsternaut/cislunar-sdn-plugin` | Queued next | Source repo exists and is next in the migration sequence. |
+| `packages/cislunar` | `DigitalArsenal/space-data-network-plugin-cislunar` | `Friends-Of-Lobsternaut/cislunar-sdn-plugin` | Completed | SDK compliance, browser shim, WasmEdge smoke, sdn-flow example, and native CR3BP coverage committed. |
 | `packages/comtrade` | `DigitalArsenal/space-data-network-plugin-comtrade` | `Friends-Of-Lobsternaut/comtrade-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/conjunction-assessment` | `DigitalArsenal/space-data-network-plugin-conjunction-assessment` | `Friends-Of-Lobsternaut/conjunction-assessment-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/da-asat-predictor` | `DigitalArsenal/space-data-network-plugin-da-asat-predictor` | `Friends-Of-Lobsternaut/da-asat-predictor-sdn-plugin` | Pending | Not migrated yet. |
@@ -99,13 +99,12 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 
 ## Current State
 
-- `packages/maneuver` is the first migrated package in this repo.
-- `maneuver` currently passes native tests, the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in its target repo.
-- `cislunar` is the next migration target.
+- `packages/maneuver` and `packages/cislunar` are migrated and tracked as submodules in this repo.
+- `maneuver` and `cislunar` both pass native tests, the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in their target repos.
+- Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under `packages/`.
 
 ## Working With Packages
 
 ```bash
 git submodule update --init --recursive
 ```
-

@@ -1,3 +1,6 @@
 [submodule "packages/maneuver"]
 	path = packages/maneuver
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-maneuver.git
+[submodule "packages/cislunar"]
+	path = packages/cislunar
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-cislunar.git
