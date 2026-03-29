@@ -7,3 +7,6 @@
 [submodule "packages/od"]
 	path = packages/od
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-od.git
+[submodule "packages/sgp4-propagator"]
+	path = packages/sgp4-propagator
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-sgp4-propagator.git
