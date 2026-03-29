@@ -41,7 +41,7 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 | `packages/fcc` | `DigitalArsenal/space-data-network-plugin-fcc` | `Friends-Of-Lobsternaut/fcc-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/firms` | `DigitalArsenal/space-data-network-plugin-firms` | `Friends-Of-Lobsternaut/firms-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/flipper` | `DigitalArsenal/space-data-network-plugin-flipper` | `Friends-Of-Lobsternaut/flipper-sdn-plugin` | Pending | Not migrated yet. |
-| `packages/fred` | `DigitalArsenal/space-data-network-plugin-fred` | `Friends-Of-Lobsternaut/fred-sdn-plugin` | Pending | Not migrated yet. |
+| `packages/fred` | `DigitalArsenal/space-data-network-plugin-fred` | `Friends-Of-Lobsternaut/fred-sdn-plugin` | Completed | SDK compliance, browser shim, WasmEdge smoke, native FRED tests, and flow example committed. |
 | `packages/gdelt` | `DigitalArsenal/space-data-network-plugin-gdelt` | `Friends-Of-Lobsternaut/gdelt-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/gencast` | `DigitalArsenal/space-data-network-plugin-gencast` | `Friends-Of-Lobsternaut/gencast-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/gps-jamming-detection` | `DigitalArsenal/space-data-network-plugin-gps-jamming-detection` | `Friends-Of-Lobsternaut/gps-jamming-detection-sdn-plugin` | Pending | Not migrated yet. |
@@ -99,8 +99,8 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 
 ## Current State
 
-- `packages/maneuver`, `packages/cislunar`, `packages/od`, `packages/sgp4-propagator`, and `packages/atmosphere` are migrated and tracked as submodules in this repo.
-- `maneuver`, `cislunar`, `od`, `sgp4-propagator`, and `atmosphere` each pass the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in their target repos.
+- `packages/maneuver`, `packages/cislunar`, `packages/od`, `packages/sgp4-propagator`, `packages/atmosphere`, and `packages/fred` are migrated and tracked as submodules in this repo.
+- `maneuver`, `cislunar`, `od`, `sgp4-propagator`, `atmosphere`, and `fred` each pass the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in their target repos.
 - Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under `packages/`.
 
 ## Working With Packages
