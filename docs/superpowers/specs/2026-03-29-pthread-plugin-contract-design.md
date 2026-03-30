@@ -44,13 +44,20 @@ Those packages already pass the SDK/browser/WasmEdge compatibility smoke tests, 
 
 The super-repo currently has no repo-local Codex skill wiring.
 
+During implementation investigation, a critical runtime constraint became clear:
+
+- an Emscripten pthread build remains browser/JS-host oriented and imports Emscripten thread host functions such as `emscripten_check_blocking_allowed`
+- the direct WasmEdge CLI path used by the current smoke harness cannot satisfy those imports
+- therefore a single Emscripten artifact cannot be the full threaded answer for both browser and WasmEdge
+
 ## Requirements
 
 ### Runtime contract
 
 Every plugin in this repo family must:
 
-- build with Emscripten pthread support enabled by default
+- ship a browser artifact built with Emscripten pthread support enabled by default
+- ship a standalone WasmEdge artifact built for WASI threads rather than the Emscripten JS thread host
 - use one shared-memory request/response path centered on the canonical plugin invoke surface
 - embed the plugin manifest in the wasm artifact
 - keep the browser shim as a thin wrapper around the same invoke surface used by WasmEdge
@@ -68,7 +75,7 @@ Browser execution must:
 
 WasmEdge execution must:
 
-- use the same standalone wasm artifact contract
+- use a WASI-threads-compatible standalone artifact, not the browser-targeted Emscripten pthread artifact
 - keep the command invoke surface stable
 - avoid browser-only assumptions in the core invoke path
 
@@ -147,13 +154,20 @@ The skill itself will stay concise and procedural. Detailed build rules and chec
 
 ## Build Contract Design
 
-For Emscripten-targeted plugin builds:
+For browser-targeted plugin builds:
 
 - pthread support is the default, not an opt-in variant
 - the compile and link stages must both carry the threading configuration
 - the browser artifact must support Emscripten’s pthread worker model without any Cesium task-processing layer
-- the wasm export surface must remain compatible with the SDK harness and `sdn-flow`
-- the package build should continue producing a standalone-compatible wasm artifact plus the browser bootstrap assets needed by the browser harness
+- the browser wasm export surface must remain compatible with the SDK harness and browser-side `sdn-flow` integration
+- the package build should emit the browser bootstrap assets needed by the browser harness
+
+For WasmEdge-targeted builds:
+
+- the standalone artifact should be produced with a WASI threads toolchain such as `wasi-sdk`
+- the standalone artifact must keep the canonical plugin invoke contract over stdin/stdout or exported invoke functions
+- the standalone artifact cannot depend on Emscripten JS thread host imports
+- current exception-heavy JSON-first runtimes may require additional refactoring before they can use the WASI threads path cleanly
 
 The build contract reference will describe the expected flag categories instead of hard-coding one fragile copy-paste command. The implementation will then translate that into the shared CMake/build patterns used by the migrated packages.
 
@@ -170,7 +184,7 @@ The canonical plugin ABI remains the command-surface invoke contract already ado
 
 The browser shim may expose convenience helpers, but those helpers must be wrappers over the same shared-memory invoke path. There is no separate Cesium ABI and no Cesium-shaped payload conversion layer.
 
-Legacy JSON helpers may temporarily remain only where needed to avoid breaking already-checked-in smoke tests during the retrofit, but the skill will define them as compatibility shims rather than the target architecture.
+Legacy JSON helpers may temporarily remain only where needed to avoid breaking already-checked-in smoke tests during the retrofit, but the skill will define them as compatibility shims rather than the target architecture. The target architecture is shared-memory FlatBuffer invocation without a JSON-first runtime dependency on the standalone WasmEdge path.
 
 ## Retrofit Plan
 
@@ -188,6 +202,8 @@ For each package:
 - update `src/cpp/CMakeLists.txt` to the pthread-aware contract
 - update `build.sh` so browser artifacts and standalone wasm are emitted in the correct shape
 - update browser-harness glue as needed so it uses the same shared-memory invoke path
+- separate the browser-targeted Emscripten artifact from the WasmEdge-targeted WASI threads artifact
+- remove or isolate exception-heavy JSON-first runtime dependencies from the standalone threaded path
 - update tests and fixture coverage to assert the pthread/browser/WasmEdge contract
 - rerun native tests when present plus wasm/sdk/browser/WasmEdge verification
 - commit and push the package repo

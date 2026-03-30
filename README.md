@@ -6,6 +6,8 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 
 - `packages/<domain>`: git submodule for one migrated plugin repo
 - `README.md`: migration catalog and package status board
+- `AGENTS.md`: repo-level Codex entry point for plugin migration and build work
+- `skills/building-space-data-network-plugins/`: repo-local Codex skill and references for the plugin build contract
 
 ## Naming Convention
 
@@ -101,6 +103,8 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 
 - `packages/maneuver`, `packages/cislunar`, `packages/od`, `packages/sgp4-propagator`, `packages/atmosphere`, and `packages/fred` are migrated and tracked as submodules in this repo.
 - `maneuver`, `cislunar`, `od`, `sgp4-propagator`, `atmosphere`, and `fred` each pass the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in their target repos.
+- The repo now includes a repo-local Codex skill that defines the next build standard: browser-targeted Emscripten pthread bundles plus standalone WasmEdge-targeted WASI threads artifacts, with shared-memory FlatBuffer invoke paths and no Cesium `TaskProcessor`.
+- The migrated packages have not yet all been retrofitted to that dual-runtime threaded contract; they currently remain on the earlier single-artifact compatibility pattern while the standalone WasmEdge threads refactor is being worked through.
 - Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under `packages/`.
 
 ## Working With Packages
