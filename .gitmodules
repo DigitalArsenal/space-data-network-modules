@@ -16,3 +16,9 @@
 [submodule "packages/fred"]
 	path = packages/fred
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-fred.git
+[submodule "packages/conjunction-assessment"]
+	path = packages/conjunction-assessment
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-conjunction-assessment.git
+[submodule "packages/hpop"]
+	path = packages/hpop
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-hpop.git
