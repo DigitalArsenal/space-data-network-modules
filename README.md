@@ -101,10 +101,12 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 
 ## Current State
 
-- `packages/maneuver`, `packages/cislunar`, `packages/od`, `packages/sgp4-propagator`, `packages/atmosphere`, and `packages/fred` are migrated and tracked as submodules in this repo.
-- `maneuver`, `cislunar`, `od`, `sgp4-propagator`, `atmosphere`, and `fred` each pass the SDK compliance harness, the browser shim smoke, and the WasmEdge command smoke in their target repos.
-- The repo now includes a repo-local Codex skill that defines the next build standard: browser-targeted Emscripten pthread bundles plus standalone WasmEdge-targeted WASI threads artifacts, with shared-memory FlatBuffer invoke paths and no Cesium `TaskProcessor`.
-- The migrated packages have not yet all been retrofitted to that dual-runtime threaded contract; they currently remain on the earlier single-artifact compatibility pattern while the standalone WasmEdge threads refactor is being worked through.
+- `packages/maneuver`, `packages/cislunar`, `packages/od`, `packages/sgp4-propagator`, `packages/atmosphere`, `packages/fred`, `packages/conjunction-assessment`, and `packages/hpop` are migrated and tracked as submodules in this repo.
+- `maneuver`, `cislunar`, `od`, `sgp4-propagator`, `atmosphere`, `fred`, `conjunction-assessment`, and `hpop` now build dual artifacts:
+  - browser pthread bundle: `dist/<plugin>_wasm.js` + `dist/<plugin>_wasm.wasm`
+  - shared standalone artifact: `dist/<plugin>_standalone.wasm`
+- The shared standalone artifact is the isomorphic contract. It uses only `wasi_snapshot_preview1` imports so the SDK browser harness and the WasmEdge CLI can load the exact same `.wasm` file.
+- The browser pthread bundle remains available for direct JS wrapper integration where `SharedArrayBuffer` and cross-origin isolation are available.
 - Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under `packages/`.
 
 ## Working With Packages
@@ -112,3 +114,49 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 ```bash
 git submodule update --init --recursive
 ```
+
+## Build Migrated Packages
+
+Build every migrated package, or pass one or more package names to build a subset:
+
+```bash
+./scripts/build-migrated-packages.sh
+./scripts/build-migrated-packages.sh atmosphere maneuver
+```
+
+## Run SDK Compatibility Tests
+
+The compatibility tests install the SDK into each package and then verify:
+
+- artifact compliance
+- pure `wasi_snapshot_preview1` imports on `*_standalone.wasm`
+- browser JS wrapper smoke
+- SDK browser harness loading the standalone artifact
+- WasmEdge command invoke smoke using the same standalone artifact
+
+When the SDK repo lives next to this repo:
+
+```bash
+SPACE_DATA_MODULE_SDK_ROOT=../space-data-module-sdk ./scripts/test-sdk-compat.sh
+```
+
+You can also pass a subset of package names:
+
+```bash
+SPACE_DATA_MODULE_SDK_ROOT=../space-data-module-sdk ./scripts/test-sdk-compat.sh atmosphere od
+```
+
+These checks require the `wasmedge` CLI.
+
+## Cross-Repo Signing And Encryption Regression
+
+The SDK repo owns the real-plugin signing and encrypted-delivery regression. Run
+this from `space-data-module-sdk` after building the migrated packages here:
+
+```bash
+SPACE_DATA_NETWORK_PLUGINS_ROOT=../space-data-network-plugins \
+node --test test/isomorphic-plugin-loading.test.js
+```
+
+That test loads the real standalone plugin artifacts, validates them, and
+round-trips them through publication signing and encrypted delivery.
