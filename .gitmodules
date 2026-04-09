@@ -22,3 +22,9 @@
 [submodule "packages/hpop"]
 	path = packages/hpop
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-hpop.git
+[submodule "packages/plugin-delivery"]
+	path = packages/plugin-delivery
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-delivery.git
+[submodule "packages/client-decrypt"]
+	path = packages/client-decrypt
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-client-decrypt.git
