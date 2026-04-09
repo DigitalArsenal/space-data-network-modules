@@ -1,0 +1,213 @@
+{
+  "pluginId": "protection-license-client",
+  "name": "Protection License Client",
+  "version": "0.1.0",
+  "description": "Isomorphic WASM module for DEK retrieval, FlatBuffer signature verification, and AES-256-GCM decryption with appended headers. Runs in browser or WasmEdge.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "clock",
+    "random",
+    "logging",
+    "crypto_hash",
+    "crypto_encrypt",
+    "crypto_decrypt",
+    "crypto_verify",
+    "crypto_key_agreement",
+    "protocol_dial"
+  ],
+  "protocols": [],
+  "timers": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "get_dek",
+      "displayName": "Get DEK",
+      "description": "Perform 3-step key broker protocol (public-key → challenge → key-broker) to retrieve a Data Encryption Key.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "json-request",
+              "allowedTypes": [{ "schemaName": "application/json", "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "json-response",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "decrypt",
+      "displayName": "Decrypt Protected Content",
+      "description": "Decrypt AES-256-GCM content with appended headers (format: [12-byte IV][ciphertext][16-byte tag]).",
+      "inputPorts": [
+        {
+          "portId": "ciphertext",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "key",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "plaintext",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "verify",
+      "displayName": "Verify Signed Content",
+      "description": "Verify Ed25519 signature on content with appended 64-byte signature and 4-byte content-length trailer.",
+      "inputPorts": [
+        {
+          "portId": "signed_content",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "public_key",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "json-result",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "decrypt_and_verify",
+      "displayName": "Decrypt and Verify",
+      "description": "Decrypt AES-256-GCM content then verify the inner Ed25519 signature. Combined operation for signed-then-encrypted FlatBuffers.",
+      "inputPorts": [
+        {
+          "portId": "protected_content",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "dek",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "signer_key",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "plaintext",
+          "acceptedTypeSets": [
+            {
+              "setId": "binary",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

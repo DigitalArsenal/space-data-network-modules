@@ -1,0 +1,208 @@
+{
+  "pluginId": "protection-key-server",
+  "name": "Protection Key Server",
+  "version": "0.1.0",
+  "description": "ECDH P-256 key broker that manages DEK distribution via a 3-step challenge-response protocol over libp2p streams.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "clock",
+    "random",
+    "logging",
+    "crypto_hash",
+    "crypto_sign",
+    "crypto_encrypt",
+    "crypto_decrypt",
+    "crypto_key_agreement"
+  ],
+  "protocols": [
+    {
+      "protocolId": "/orbpro/public-key/1.0.0",
+      "methodId": "get_public_key",
+      "description": "Returns the server's uncompressed P-256 public key.",
+      "transportKind": "request-response",
+      "role": "responder",
+      "autoInstall": true,
+      "advertise": true
+    },
+    {
+      "protocolId": "/orbpro/challenge/1.0.0",
+      "methodId": "request_challenge",
+      "description": "Issues a random challenge token for client proof-of-possession.",
+      "transportKind": "request-response",
+      "role": "responder",
+      "autoInstall": true,
+      "advertise": false
+    },
+    {
+      "protocolId": "/orbpro/key-broker/1.0.0",
+      "methodId": "handle_key_request",
+      "description": "Validates challenge proof, performs ECDH key agreement, and returns the encrypted DEK.",
+      "transportKind": "request-response",
+      "role": "responder",
+      "autoInstall": true,
+      "advertise": false
+    }
+  ],
+  "timers": [
+    {
+      "timerId": "key-rotation-check",
+      "methodId": "check_key_rotation",
+      "defaultIntervalMs": 3600000,
+      "description": "Periodic check for key rotation events."
+    }
+  ],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "configure_runtime",
+      "displayName": "Configure Runtime",
+      "description": "Initialize the key broker with a P-256 private key and configuration.",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "json-config",
+              "allowedTypes": [{ "schemaName": "application/json", "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "json-status",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "get_public_key",
+      "displayName": "Get Public Key",
+      "description": "Returns the server's P-256 public key and runtime state.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "public-key-response",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "request_challenge",
+      "displayName": "Request Challenge",
+      "description": "Generates a random challenge for client proof-of-possession.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "any",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "any",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "handle_key_request",
+      "displayName": "Handle Key Request",
+      "description": "Validates challenge, performs ECDH, returns encrypted DEK.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "any",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "any",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "check_key_rotation",
+      "displayName": "Check Key Rotation",
+      "description": "Periodic timer method for key rotation.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "any",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
