@@ -7,9 +7,6 @@
 [submodule "packages/od"]
 	path = packages/od
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-od.git
-[submodule "packages/sgp4-propagator"]
-	path = packages/sgp4-propagator
-	url = https://github.com/DigitalArsenal/space-data-network-plugin-sgp4-propagator.git
 [submodule "packages/atmosphere"]
 	path = packages/atmosphere
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-atmosphere.git
@@ -28,3 +25,15 @@
 [submodule "packages/client-decrypt"]
 	path = packages/client-decrypt
 	url = https://github.com/DigitalArsenal/space-data-network-plugin-client-decrypt.git
+[submodule "packages/sgp4"]
+	path = packages/sgp4
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-sgp4.git
+[submodule "packages/viewshed-shader"]
+	path = packages/viewshed-shader
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-viewshed-shader.git
+[submodule "packages/sensor-shaders"]
+	path = packages/sensor-shaders
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-sensor-shaders.git
+[submodule "packages/fastest-path"]
+	path = packages/fastest-path
+	url = https://github.com/DigitalArsenal/space-data-network-plugin-fastest-path.git
