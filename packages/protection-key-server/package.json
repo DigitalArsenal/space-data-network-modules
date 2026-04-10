@@ -5,6 +5,7 @@
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "bash build.sh",
+    "test": "node --test tests/sdk_compat.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {

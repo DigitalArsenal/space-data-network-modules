@@ -22,15 +22,8 @@ import { MemoryBlockstore } from "blockstore-core/memory";
 import { MemoryDatastore } from "datastore-core/memory";
 
 import {
-  createBrowserWasiShim,
-} from "../node_modules/space-data-module-sdk/src/host/wasiShim.js";
-import {
-  createJsonHostcallBridge,
-} from "../node_modules/space-data-module-sdk/src/host/abi.js";
-import {
-  encodePluginInvokeRequest,
-  decodePluginInvokeResponse,
-} from "../node_modules/space-data-module-sdk/src/invoke/codec.js";
+  createSdkBrowserShimHarness,
+} from "../../../tests/lib/sdkBrowserShimHarness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
@@ -140,45 +133,12 @@ function createDeliveryHarness(wasmBytes, contentStore) {
     throw new Error(`Unsupported operation: ${operation}`);
   }
 
-  return async () => {
-    const wasmModule = await WebAssembly.compile(wasmBytes);
-    const wasi = createBrowserWasiShim({ args: [], env: {} });
-    const importObject = { ...wasi.imports };
-    let instance = null;
-    const bridge = createJsonHostcallBridge({
+  return () =>
+    createSdkBrowserShimHarness({
+      wasmSource: wasmBytes,
       dispatch,
-      getMemory: () => instance.exports.memory,
+      surface: "direct",
     });
-    Object.assign(importObject, bridge.imports);
-    instance = await WebAssembly.instantiate(wasmModule, importObject);
-    if (instance.exports.memory) wasi.setMemory(instance.exports.memory);
-    if (instance.exports._initialize) instance.exports._initialize();
-
-    return {
-      invoke({ methodId, inputs }) {
-        const reqBytes = encodePluginInvokeRequest({
-          methodId,
-          inputs: (inputs || []).map((i) => ({ payload: i.payload })),
-        });
-        const alloc = instance.exports.plugin_alloc;
-        const free = instance.exports.plugin_free;
-        const invoke = instance.exports.plugin_invoke_stream;
-        const inPtr = alloc(reqBytes.length);
-        new Uint8Array(instance.exports.memory.buffer, inPtr, reqBytes.length).set(reqBytes);
-        const outLenPtr = alloc(4);
-        const outPtr = invoke(inPtr, reqBytes.length, outLenPtr);
-        free(inPtr, reqBytes.length);
-        const outLen = new DataView(instance.exports.memory.buffer).getUint32(outLenPtr, true);
-        free(outLenPtr, 4);
-        if (!outPtr || outLen === 0) {
-          return { statusCode: 1, errorMessage: "invoke returned null", outputs: [] };
-        }
-        const outBytes = new Uint8Array(instance.exports.memory.buffer, outPtr, outLen).slice();
-        free(outPtr, outLen);
-        return decodePluginInvokeResponse(outBytes);
-      },
-    };
-  };
 }
 
 // ── Check WASM ──────────────────────────────────────────────────────────────
@@ -228,7 +188,7 @@ await test("e2e: deliver_plugin encrypts IPFS artifact, JS decrypts it", async (
 
   // 3. Invoke deliver_plugin
   const harness = await createHarness();
-  const result = harness.invoke({
+  const result = await harness.invoke({
     methodId: "deliver_plugin",
     inputs: [
       { payload: publicKey },
@@ -264,7 +224,7 @@ await test("e2e: large artifact (64 KB)", async () => {
 
   const { publicKey, privateKey } = await generateX25519KeyPair();
   const harness = await createHarness();
-  const result = harness.invoke({
+  const result = await harness.invoke({
     methodId: "deliver_plugin",
     inputs: [
       { payload: publicKey },
@@ -294,11 +254,11 @@ await test("e2e: different clients get different ciphertexts", async () => {
   const client2 = await generateX25519KeyPair();
   const harness = await createHarness();
 
-  const r1 = harness.invoke({
+  const r1 = await harness.invoke({
     methodId: "deliver_plugin",
     inputs: [{ payload: client1.publicKey }, { payload: new TextEncoder().encode(cidStr) }],
   });
-  const r2 = harness.invoke({
+  const r2 = await harness.invoke({
     methodId: "deliver_plugin",
     inputs: [{ payload: client2.publicKey }, { payload: new TextEncoder().encode(cidStr) }],
   });
@@ -319,7 +279,7 @@ await test("e2e: different clients get different ciphertexts", async () => {
 await test("e2e: wrong CID returns error", async () => {
   const { publicKey } = await generateX25519KeyPair();
   const harness = await createHarness();
-  const result = harness.invoke({
+  const result = await harness.invoke({
     methodId: "deliver_plugin",
     inputs: [
       { payload: publicKey },

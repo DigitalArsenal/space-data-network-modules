@@ -8,6 +8,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -34,6 +36,44 @@ PluginInvokeResult make_error_result(
     return result;
 }
 
+astro::IntegrationMethod parse_integration_method(const std::string& raw_name) {
+    std::string name = raw_name;
+    std::transform(
+        name.begin(),
+        name.end(),
+        name.begin(),
+        [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+
+    if (name == "RK4") {
+        return astro::IntegrationMethod::RK4;
+    }
+    if (name == "RKF45") {
+        return astro::IntegrationMethod::RKF45;
+    }
+    if (name == "RKF78") {
+        return astro::IntegrationMethod::RKF78;
+    }
+    if (name == "RK78") {
+        return astro::IntegrationMethod::RK78;
+    }
+    if (name == "ABM") {
+        return astro::IntegrationMethod::ABM;
+    }
+    if (name == "BS") {
+        return astro::IntegrationMethod::BS;
+    }
+    if (name == "COWELL") {
+        return astro::IntegrationMethod::Cowell;
+    }
+    if (name == "ENCKE") {
+        return astro::IntegrationMethod::Encke;
+    }
+    if (name == "EQUINOCTIALVOP") {
+        return astro::IntegrationMethod::EquinoctialVOP;
+    }
+    throw std::runtime_error("Unknown integrator method: " + raw_name);
+}
+
 void configure_integrator(
     const json& params,
     astro::IntegratorConfig& config) {
@@ -42,6 +82,10 @@ void configure_integrator(
     }
 
     const auto& integrator = params.at("integrator");
+    if (integrator.contains("method")) {
+        config.method =
+            parse_integration_method(integrator.at("method").get<std::string>());
+    }
     if (integrator.contains("initialStep")) {
         config.initialStep = integrator.at("initialStep").get<double>();
     }
@@ -222,32 +266,31 @@ std::string propagate_json(const json& params) {
         }).dump();
     }
 
-    double y0[6] = {
-        sv.position.x, sv.position.y, sv.position.z,
-        sv.velocity.x, sv.velocity.y, sv.velocity.z
-    };
-
-    IntegratorState istate = integratorInit(config, y0, 0.0);
-    bool ok = integratorPropagate(
-        istate, config,
-        ForceModel::ForceModelDerivative,
-        &forces,
-        dt_sec
-    );
-
-    if (!ok) {
-        throw std::runtime_error("Integration failed to reach target epoch.");
+    const auto result = Integrator::PropagateWithResult(sv, dt_sec, config, forces);
+    if (!result.success) {
+        throw std::runtime_error(
+            result.errorMessage.empty()
+                ? "Integration failed to reach target epoch."
+                : result.errorMessage);
     }
 
-    json result = {
+    json output = {
         {"epochJD", target_jd},
-        {"position", {istate.y[0], istate.y[1], istate.y[2]}},
-        {"velocity", {istate.y[3], istate.y[4], istate.y[5]}},
+        {"position", {
+            result.finalState.position.x,
+            result.finalState.position.y,
+            result.finalState.position.z,
+        }},
+        {"velocity", {
+            result.finalState.velocity.x,
+            result.finalState.velocity.y,
+            result.finalState.velocity.z,
+        }},
         {"propagatedDeltaSeconds", dt_sec},
-        {"integrationSteps", istate.steps},
+        {"integrationSteps", result.steps},
     };
 
-    return result.dump();
+    return output.dump();
 }
 
 std::string dispatch_operation(const std::string& operation, const json& params) {

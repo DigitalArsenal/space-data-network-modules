@@ -161,7 +161,7 @@ async function encryptArtifact(
 
 import {
   createBrowserModuleHarness,
-} from "../node_modules/space-data-module-sdk/src/testing/browserModuleHarness.js";
+} from "space-data-module-sdk/testing";
 
 // ── Test runner ─────────────────────────────────────────────────────────────
 

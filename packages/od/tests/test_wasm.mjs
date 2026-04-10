@@ -1,259 +1,194 @@
-/**
- * Node.js WASM Test Harness for OD SDN Plugin
- *
- * Tests the WASM build of the SGP4 equinoctial fitter against
- * SpaceX MEME ephemeris data and CelesTrak SupGP reference.
- *
- * Usage:
- *   node tests/test_wasm.mjs [meme_dir] [celestrak_csv] [max_files]
- *
- * Default:
- *   meme_dir:      tests/data/meme
- *   celestrak_csv:  tests/data/celestrak_starlink_supgp.csv
- *   max_files:      20
- */
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import {
+  STANDALONE_RUNTIME_KINDS,
+  assertSuccessfulResponse,
+  createStandaloneHarnessOrSkip,
+} from "../../../tests/lib/isomorphicHarness.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const FIXTURE_MEME_PATH = new URL("./fixtures/request.fit.meme", import.meta.url);
+const MEME_DATA_DIR = path.join(__dirname, "data", "meme");
+const DEFAULT_CELESTRAK_CSV = path.join(
+  __dirname,
+  "data",
+  "celestrak_starlink_supgp.csv",
+);
 
-// ── Load WASM module ──
-
-async function loadWasm() {
-  const moduleJsPath = join(ROOT, 'dist', 'browser', 'module.js');
-  const moduleWasmPath = join(ROOT, 'dist', 'browser', 'module.wasm');
-  if (!existsSync(moduleJsPath) || !existsSync(moduleWasmPath)) {
-    throw new Error(
-      `Browser artifacts not found at ${moduleJsPath} and ${moduleWasmPath}. Run: bash build.sh`
-    );
-  }
-
-  // Emscripten MODULARIZE output
-  const require = createRequire(import.meta.url);
-  const ODModuleFactory = require(moduleJsPath);
-  const previousExitCode = process.exitCode;
-  const Module = await ODModuleFactory({
-    print() {},
-    printErr() {},
-    locateFile(path) {
-      return path.endsWith('.wasm') ? moduleWasmPath : path;
-    },
-  });
-  process.exitCode = previousExitCode;
-  return Module;
+function createFitRequest(payload) {
+  return {
+    methodId: "fit",
+    inputs: [
+      {
+        portId: "meme",
+        payload,
+      },
+    ],
+  };
 }
 
-// ── Parse CelesTrak CSV ──
+async function invokeFitJson(harness, payload) {
+  const response = await harness.invoke(createFitRequest(payload));
+  const bytes = assertSuccessfulResponse(response, { outputPortId: "result" });
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
 
-function parseCelestrakCSV(path) {
-  if (!existsSync(path)) return new Map();
-  const lines = readFileSync(path, 'utf-8').split('\n');
+function listRegressionFiles() {
+  if (!fs.existsSync(MEME_DATA_DIR)) {
+    return [];
+  }
+  return fs.readdirSync(MEME_DATA_DIR)
+    .filter((entry) => entry.startsWith("MEME_") && entry.endsWith(".txt"))
+    .sort()
+    .map((entry) => path.join(MEME_DATA_DIR, entry));
+}
+
+function parseCelestrakCsv(csvPath) {
+  if (!csvPath || !fs.existsSync(csvPath)) {
+    return new Map();
+  }
+  const lines = fs.readFileSync(csvPath, "utf8").split(/\r?\n/);
   const records = new Map();
-
-  for (let i = 1; i < lines.length; i++) {
-    const fields = lines[i].split(',');
-    if (fields.length < 18) continue;
-    const norad = parseInt(fields[11]);
-    const rms = parseFloat(fields[17]);
-    if (isNaN(norad) || isNaN(rms)) continue;
-    records.set(norad, {
-      name: fields[0],
-      rms,
-      bstar: fields[14],
-      ndot: fields[15],
-    });
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) {
+      continue;
+    }
+    const fields = line.split(",");
+    if (fields.length < 18) {
+      continue;
+    }
+    const noradId = Number.parseInt(fields[11], 10);
+    const rms = Number.parseFloat(fields[17]);
+    if (!Number.isFinite(noradId) || !Number.isFinite(rms)) {
+      continue;
+    }
+    records.set(noradId, { rms });
   }
   return records;
 }
 
-// ── Test runner ──
+function summarizeRegression(results, celestrak) {
+  const successful = results
+    .filter((entry) => entry.ok)
+    .map((entry) => entry.rms)
+    .sort((left, right) => left - right);
+  const comparisons = results
+    .filter((entry) => entry.ok && celestrak.has(entry.noradId))
+    .map((entry) => ({
+      rms: entry.rms,
+      referenceRms: celestrak.get(entry.noradId).rms,
+    }));
 
-async function main() {
-  const args = process.argv.slice(2);
-  const memeDir = args[0] || join(ROOT, 'tests', 'data', 'meme');
-  const celestrakCSV = args[1] || join(ROOT, 'tests', 'data', 'celestrak_starlink_supgp.csv');
-  const maxFiles = parseInt(args[2] || '20');
-
-  console.log('='.repeat(60));
-  console.log('OD SDN Plugin — WASM Node.js Test Harness');
-  console.log('='.repeat(60));
-  console.log();
-
-  // Load WASM
-  console.log('Loading WASM module...');
-  const Module = await loadWasm();
-  console.log('WASM module loaded ✓');
-
-  // Wrap C functions — use manual memory management for strings
-  const _wasm_parse_and_fit = Module.cwrap('wasm_parse_and_fit', 'number', ['number', 'number']);
-  const _wasm_parse = Module.cwrap('wasm_parse', 'number', ['number', 'number']);
-  const _wasm_fit = Module.cwrap('wasm_fit', 'number', ['number']);
-  const _wasm_malloc = Module.cwrap('wasm_malloc', 'number', ['number']);
-  const _wasm_free = Module.cwrap('wasm_free', null, ['number']);
-
-  // Helper: allocate string in WASM memory, call fn, read result string, free
-  function wasmParseAndFit(content) {
-    const len = Module.lengthBytesUTF8(content);
-    const ptr = Module._wasm_malloc(len + 1);
-    Module.stringToUTF8(content, ptr, len + 1);
-    const resultPtr = _wasm_parse_and_fit(ptr, len);
-    Module._wasm_free(ptr);
-    return Module.UTF8ToString(resultPtr);
-  }
-
-  // Load CelesTrak reference
-  const celestrak = parseCelestrakCSV(celestrakCSV);
-  console.log(`CelesTrak records: ${celestrak.size}`);
-
-  // List MEME files
-  if (!existsSync(memeDir)) {
-    console.error(`MEME directory not found: ${memeDir}`);
-    console.error('Run: cd tests/data/meme && bash ../../../scripts/download-meme.sh . 20');
-    process.exit(1);
-  }
-
-  let memeFiles = readdirSync(memeDir)
-    .filter(f => f.startsWith('MEME_') && f.endsWith('.txt'))
-    .sort()
-    .slice(0, maxFiles);
-
-  console.log(`MEME files: ${memeFiles.length}`);
-  console.log();
-
-  // Run tests
-  let total = 0, success = 0, failed = 0, parseErr = 0;
-  let betterCount = 0, worseCount = 0;
-  const rmsValues = [];
-  const timings = [];
-
-  console.log('Running fits...');
-  console.log('-'.repeat(60));
-
-  for (const file of memeFiles) {
-    total++;
-    const content = readFileSync(join(memeDir, file), 'utf-8');
-
-    // Extract NORAD from filename: MEME_NORAD_NAME_...
-    const parts = file.split('_');
-    const norad = parseInt(parts[1]);
-
-    try {
-      const t0 = performance.now();
-
-      // Method 1: parse-and-fit in one call
-      const resultJson = wasmParseAndFit(content);
-
-      const t1 = performance.now();
-      const elapsed = t1 - t0;
-      timings.push(elapsed);
-
-      const result = JSON.parse(resultJson);
-
-      if (result.error) {
-        parseErr++;
-        console.log(`  ✗ ${file}: ${result.error}`);
-        continue;
-      }
-
-      const rms = parseFloat(result.RMS);
-      if (isNaN(rms) || rms > 50) {
-        failed++;
-        console.log(`  ✗ ${file}: RMS=${rms} (diverged)`);
-        continue;
-      }
-
-      success++;
-      rmsValues.push(rms);
-
-      // Compare to CelesTrak
-      let comparison = '';
-      if (celestrak.has(norad)) {
-        const ctRms = celestrak.get(norad).rms;
-        if (rms <= ctRms) {
-          betterCount++;
-          comparison = ` ✓ beats CT (${ctRms.toFixed(3)})`;
-        } else {
-          worseCount++;
-          comparison = ` ✗ loses to CT (${ctRms.toFixed(3)})`;
-        }
-      }
-
-      if (total % 5 === 0 || total === memeFiles.length) {
-        const medianRms = rmsValues.length > 0
-          ? rmsValues.slice().sort((a, b) => a - b)[Math.floor(rmsValues.length / 2)]
-          : 0;
-        console.log(`  [${total}/${memeFiles.length}] ${success} ok | median RMS: ${medianRms.toFixed(3)} km | ${elapsed.toFixed(0)} ms${comparison}`);
-      }
-
-    } catch (err) {
-      failed++;
-      console.log(`  ✗ ${file}: ${err.message}`);
-    }
-  }
-
-  // Statistics
-  rmsValues.sort((a, b) => a - b);
-  timings.sort((a, b) => a - b);
-
-  const median = rmsValues.length > 0 ? rmsValues[Math.floor(rmsValues.length / 2)] : 0;
-  const mean = rmsValues.length > 0 ? rmsValues.reduce((a, b) => a + b) / rmsValues.length : 0;
-  const p90 = rmsValues.length > 0 ? rmsValues[Math.floor(rmsValues.length * 0.9)] : 0;
-  const p95 = rmsValues.length > 0 ? rmsValues[Math.floor(rmsValues.length * 0.95)] : 0;
-  const best = rmsValues.length > 0 ? rmsValues[0] : 0;
-  const worst = rmsValues.length > 0 ? rmsValues[rmsValues.length - 1] : 0;
-
-  const medianTime = timings.length > 0 ? timings[Math.floor(timings.length / 2)] : 0;
-  const p90Time = timings.length > 0 ? timings[Math.floor(timings.length * 0.9)] : 0;
-
-  console.log();
-  console.log('='.repeat(60));
-  console.log('RESULTS');
-  console.log('='.repeat(60));
-
-  console.log();
-  console.log('Files:');
-  console.log(`  Total:      ${total}`);
-  console.log(`  Success:    ${success} (${(100 * success / Math.max(1, total)).toFixed(1)}%)`);
-  console.log(`  Failed:     ${failed}`);
-  console.log(`  Parse err:  ${parseErr}`);
-
-  console.log();
-  console.log('Fit Quality (RMS, km):');
-  console.log(`  Best:    ${best.toFixed(3)}`);
-  console.log(`  Median:  ${median.toFixed(3)}`);
-  console.log(`  Mean:    ${mean.toFixed(3)}`);
-  console.log(`  P90:     ${p90.toFixed(3)}`);
-  console.log(`  P95:     ${p95.toFixed(3)}`);
-  console.log(`  Worst:   ${worst.toFixed(3)}`);
-
-  console.log();
-  console.log('Timing (WASM):');
-  console.log(`  Median fit:  ${medianTime.toFixed(0)} ms`);
-  console.log(`  P90 fit:     ${p90Time.toFixed(0)} ms`);
-
-  if (celestrak.size > 0) {
-    console.log();
-    console.log('CelesTrak Comparison:');
-    console.log(`  Better RMS:  ${betterCount}`);
-    console.log(`  Worse RMS:   ${worseCount}`);
-    const winRate = 100 * betterCount / Math.max(1, betterCount + worseCount);
-    console.log(`  Win rate:    ${winRate.toFixed(1)}%`);
-  }
-
-  console.log();
-  console.log('='.repeat(60));
-
-  // Assert minimum quality
-  const PASS = median < 0.35 && success >= total * 0.9;
-  console.log(PASS ? '\n✓ PASS' : '\n✗ FAIL');
-  process.exit(PASS ? 0 : 1);
+  return {
+    count: results.length,
+    successCount: successful.length,
+    medianRms: successful.length
+      ? successful[Math.floor(successful.length / 2)]
+      : Number.NaN,
+    meanRms: successful.length
+      ? successful.reduce((sum, value) => sum + value, 0) / successful.length
+      : Number.NaN,
+    betterCount: comparisons.filter((entry) => entry.rms <= entry.referenceRms).length,
+    worseCount: comparisons.filter((entry) => entry.rms > entry.referenceRms).length,
+  };
 }
 
-main().catch(err => {
-  console.error('Fatal:', err);
-  process.exit(1);
-});
+for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
+  test(`OD fixture fit produces a stable GP estimate on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeFitJson(
+      harness,
+      fs.readFileSync(fileURLToPath(FIXTURE_MEME_PATH)),
+    );
+
+    assert.equal(result.DATA_SOURCE, "SpaceX-E");
+    assert.equal(result.OBJECT_ID.trim(), "99999A");
+    assert.ok(result.EPOCH.startsWith("2026-03-10T20:16:42"));
+    assert.ok(Math.abs(result.MEAN_MOTION - 15.08802686) < 1e-8);
+    assert.ok(Math.abs(result.ECCENTRICITY - 0.0001602) < 1e-7);
+    assert.ok(Math.abs(result.INCLINATION - 53.2223) < 1e-4);
+    assert.ok(Number.parseFloat(result.RMS) <= 0.001);
+  });
+
+  test(`OD fit rejects malformed MEME payloads on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await harness.invoke(
+      createFitRequest(Buffer.from("not a meme", "utf8")),
+    );
+    assert.equal(response.statusCode, 1);
+    assert.equal(response.errorCode, "parse-failed");
+    assert.match(response.errorMessage, /did not contain any ephemeris points/i);
+  });
+
+  test(`OD MEME corpus regression stays within fit-quality thresholds on ${runtimeKind}`, async (t) => {
+    const regressionFiles = listRegressionFiles();
+    if (regressionFiles.length === 0) {
+      t.skip("Add MEME files under tests/data/meme to run the broader OD regression corpus.");
+      return;
+    }
+
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    // Keep the default corpus small enough for the repo-wide WasmEdge matrix.
+    // Larger public MEME sweeps stay available through OD_MEME_MAX_FILES.
+    const maxFiles = Number.parseInt(process.env.OD_MEME_MAX_FILES ?? "5", 10);
+    const files = regressionFiles.slice(0, Math.max(1, maxFiles));
+    const celestrak = parseCelestrakCsv(
+      process.env.OD_CELESTRAK_SUPGP_CSV ?? DEFAULT_CELESTRAK_CSV,
+    );
+    const results = [];
+
+    for (const filePath of files) {
+      const fit = await invokeFitJson(harness, fs.readFileSync(filePath));
+      const noradId = Number.parseInt(path.basename(filePath).split("_")[1] ?? "", 10);
+      const rms = Number.parseFloat(fit.RMS);
+      results.push({
+        filePath,
+        noradId,
+        ok: Number.isFinite(rms) && rms <= 50 && !fit.error,
+        rms,
+      });
+    }
+
+    const summary = summarizeRegression(results, celestrak);
+    assert.ok(
+      summary.successCount >= Math.ceil(summary.count * 0.9),
+      `Expected at least 90% successful fits, got ${summary.successCount}/${summary.count}.`,
+    );
+    assert.ok(
+      summary.medianRms < 0.35,
+      `Expected median RMS < 0.35 km, got ${summary.medianRms}.`,
+    );
+    if (summary.betterCount + summary.worseCount > 0) {
+      assert.ok(
+        summary.betterCount >= summary.worseCount,
+        `Expected OD fits to beat or match the optional CelesTrak reference on at least half of comparable files (${summary.betterCount} vs ${summary.worseCount}).`,
+      );
+    }
+  });
+}

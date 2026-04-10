@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   createBrowserModuleHarness,
-} from "../node_modules/space-data-module-sdk/src/testing/browserModuleHarness.js";
+} from "space-data-module-sdk/testing";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");

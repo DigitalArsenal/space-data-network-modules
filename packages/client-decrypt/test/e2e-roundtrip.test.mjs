@@ -27,18 +27,10 @@ import { MemoryDatastore } from "datastore-core/memory";
 
 import {
   createBrowserModuleHarness,
-} from "../node_modules/space-data-module-sdk/src/testing/browserModuleHarness.js";
-
+} from "space-data-module-sdk/testing";
 import {
-  createBrowserWasiShim,
-} from "../node_modules/space-data-module-sdk/src/host/wasiShim.js";
-import {
-  createJsonHostcallBridge,
-} from "../node_modules/space-data-module-sdk/src/host/abi.js";
-import {
-  encodePluginInvokeRequest,
-  decodePluginInvokeResponse,
-} from "../node_modules/space-data-module-sdk/src/invoke/codec.js";
+  createSdkBrowserShimHarness,
+} from "../../../tests/lib/sdkBrowserShimHarness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DECRYPT_WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
@@ -162,54 +154,31 @@ async function test(name, fn) {
 // ── Plugin-delivery harness (with IPFS host bridge) ─────────────────────────
 
 function createDeliveryHarness(wasmBytes, contentStore) {
-  return async () => {
-    function dispatch(operation, params) {
-      if (operation === "ipfs.cat") {
-        let cid = params?.cid ?? "";
-        if (!cid && params?.path) cid = params.path.replace(/^\/ipfs\//, "");
-        const data = contentStore.get(cid);
-        if (!data) throw new Error(`CID not found: ${cid}`);
-        return new Uint8Array(data);
-      }
-      if (operation === "host.runtimeTarget") return "node";
-      if (operation === "host.listCapabilities") return ["ipfs"];
-      if (operation === "host.hasCapability") return params?.capability === "ipfs";
-      if (operation === "host.listOperations") return ["ipfs.cat"];
-      if (operation === "clock.now") return Date.now();
-      if (operation === "random.bytes") return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
-      throw new Error(`Unsupported: ${operation}`);
+  function dispatch(operation, params) {
+    if (operation === "ipfs.cat") {
+      let cid = params?.cid ?? "";
+      if (!cid && params?.path) cid = params.path.replace(/^\/ipfs\//, "");
+      const data = contentStore.get(cid);
+      if (!data) throw new Error(`CID not found: ${cid}`);
+      return new Uint8Array(data);
     }
+    if (operation === "host.runtimeTarget") return "node";
+    if (operation === "host.listCapabilities") return ["ipfs"];
+    if (operation === "host.hasCapability") return params?.capability === "ipfs";
+    if (operation === "host.listOperations") return ["ipfs.cat"];
+    if (operation === "clock.now") return Date.now();
+    if (operation === "random.bytes") {
+      return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
+    }
+    throw new Error(`Unsupported: ${operation}`);
+  }
 
-    const wasmModule = await WebAssembly.compile(wasmBytes);
-    const wasi = createBrowserWasiShim({ args: [], env: {} });
-    const importObject = { ...wasi.imports };
-    let instance = null;
-    const bridge = createJsonHostcallBridge({ dispatch, getMemory: () => instance.exports.memory });
-    Object.assign(importObject, bridge.imports);
-    instance = await WebAssembly.instantiate(wasmModule, importObject);
-    if (instance.exports.memory) wasi.setMemory(instance.exports.memory);
-    if (instance.exports._initialize) instance.exports._initialize();
-
-    return {
-      invoke({ methodId, inputs }) {
-        const reqBytes = encodePluginInvokeRequest({ methodId, inputs: (inputs || []).map((i) => ({ payload: i.payload })) });
-        const alloc = instance.exports.plugin_alloc;
-        const free = instance.exports.plugin_free;
-        const invoke = instance.exports.plugin_invoke_stream;
-        const inPtr = alloc(reqBytes.length);
-        new Uint8Array(instance.exports.memory.buffer, inPtr, reqBytes.length).set(reqBytes);
-        const outLenPtr = alloc(4);
-        const outPtr = invoke(inPtr, reqBytes.length, outLenPtr);
-        free(inPtr, reqBytes.length);
-        const outLen = new DataView(instance.exports.memory.buffer).getUint32(outLenPtr, true);
-        free(outLenPtr, 4);
-        if (!outPtr || outLen === 0) return { statusCode: 1, errorMessage: "null", outputs: [] };
-        const outBytes = new Uint8Array(instance.exports.memory.buffer, outPtr, outLen).slice();
-        free(outPtr, outLen);
-        return decodePluginInvokeResponse(outBytes);
-      },
-    };
-  };
+  return () =>
+    createSdkBrowserShimHarness({
+      wasmSource: wasmBytes,
+      dispatch,
+      surface: "direct",
+    });
 }
 
 // ── Check WASMs ─────────────────────────────────────────────────────────────
@@ -312,7 +281,7 @@ if (hasDeliveryWasm) {
     const { publicKey, privateKey } = await generateX25519KeyPair();
 
     // Server encrypts
-    const deliverResult = deliveryHarness.invoke({
+    const deliverResult = await deliveryHarness.invoke({
       methodId: "deliver_plugin",
       inputs: [
         { payload: publicKey },
@@ -349,7 +318,7 @@ if (hasDeliveryWasm) {
     const deliveryHarness = await createDeliveryHarness(deliveryWasm, contentStore)();
     const { publicKey, privateKey } = await generateX25519KeyPair();
 
-    const dr = deliveryHarness.invoke({
+    const dr = await deliveryHarness.invoke({
       methodId: "deliver_plugin",
       inputs: [{ payload: publicKey }, { payload: new TextEncoder().encode(cidStr) }],
     });

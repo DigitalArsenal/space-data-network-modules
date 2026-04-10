@@ -13,18 +13,10 @@ import { fileURLToPath } from "node:url";
 import { validatePluginArtifact } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
-
 import {
-  createBrowserWasiShim,
-  WasiExitError,
-} from "../node_modules/space-data-module-sdk/src/host/wasiShim.js";
-import {
-  createJsonHostcallBridge,
-} from "../node_modules/space-data-module-sdk/src/host/abi.js";
-import {
-  encodePluginInvokeRequest,
-  decodePluginInvokeResponse,
-} from "../node_modules/space-data-module-sdk/src/invoke/codec.js";
+  createSdkBrowserShimHarness,
+  createSdkBrowserShimSyncHarness,
+} from "../../../tests/lib/sdkBrowserShimHarness.mjs";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -80,119 +72,6 @@ function makeKeyServerConfig() {
       expiresAtMs: Date.now() + 60_000,
       challengeTtlMs: 30_000,
       maxClockSkewMs: 5_000,
-    },
-  };
-}
-
-function createCustomHarnessFactory({ wasmBytes, dispatch, surface }) {
-  const wasmModulePromise = WebAssembly.compile(wasmBytes);
-
-  async function instantiate(stdinBytes = new Uint8Array()) {
-    const wasmModule = await wasmModulePromise;
-    const wasi = createBrowserWasiShim({ args: [], env: {}, stdinBytes });
-    const importObject = { ...wasi.imports };
-    let instance = null;
-    const bridge = createJsonHostcallBridge({
-      dispatch,
-      getMemory: () => instance.exports.memory,
-    });
-    Object.assign(importObject, bridge.imports);
-    instance = await WebAssembly.instantiate(wasmModule, importObject);
-    if (instance.exports.memory) {
-      wasi.setMemory(instance.exports.memory);
-    }
-    if (surface !== "command" && instance.exports._initialize) {
-      instance.exports._initialize();
-    }
-    return { instance, wasi };
-  }
-
-  async function invokeDirect(request) {
-    const { instance, wasi } = await instantiate();
-    try {
-      const requestBytes = encodePluginInvokeRequest(request);
-      const alloc = instance.exports.plugin_alloc;
-      const free = instance.exports.plugin_free;
-      const invoke = instance.exports.plugin_invoke_stream;
-      const inPtr = alloc(requestBytes.length);
-      new Uint8Array(instance.exports.memory.buffer, inPtr, requestBytes.length).set(requestBytes);
-      const outLenPtr = alloc(4);
-      const outPtr = invoke(inPtr, requestBytes.length, outLenPtr);
-      free(inPtr, requestBytes.length);
-      const outLen = new DataView(instance.exports.memory.buffer).getUint32(outLenPtr, true);
-      free(outLenPtr, 4);
-      const outBytes = new Uint8Array(instance.exports.memory.buffer, outPtr, outLen).slice();
-      free(outPtr, outLen);
-      return decodePluginInvokeResponse(outBytes);
-    } finally {
-      wasi.flushOutput();
-    }
-  }
-
-  async function invokeCommand(request) {
-    const requestBytes = encodePluginInvokeRequest(request);
-    const { instance, wasi } = await instantiate(requestBytes);
-    let stdoutBytes = new Uint8Array();
-    try {
-      instance.exports._start();
-    } catch (error) {
-      if (!(error instanceof WasiExitError) || error.code !== 0) {
-        throw error;
-      }
-    } finally {
-      stdoutBytes = wasi.stdout;
-      wasi.flushOutput();
-    }
-    return decodePluginInvokeResponse(stdoutBytes);
-  }
-
-  return {
-    async invoke(request) {
-      if (surface === "command") {
-        return invokeCommand(request);
-      }
-      return invokeDirect(request);
-    },
-    destroy() {},
-  };
-}
-
-async function createSynchronousDirectHarness({ wasmBytes, dispatch }) {
-  const wasi = createBrowserWasiShim({ args: [], env: {} });
-  const importObject = { ...wasi.imports };
-  let instance = null;
-  const bridge = createJsonHostcallBridge({
-    dispatch,
-    getMemory: () => instance.exports.memory,
-  });
-  Object.assign(importObject, bridge.imports);
-  instance = await WebAssembly.instantiate(await WebAssembly.compile(wasmBytes), importObject);
-  if (instance.exports.memory) {
-    wasi.setMemory(instance.exports.memory);
-  }
-  if (instance.exports._initialize) {
-    instance.exports._initialize();
-  }
-
-  return {
-    invokeSync(request) {
-      const requestBytes = encodePluginInvokeRequest(request);
-      const alloc = instance.exports.plugin_alloc;
-      const free = instance.exports.plugin_free;
-      const invoke = instance.exports.plugin_invoke_stream;
-      const inPtr = alloc(requestBytes.length);
-      new Uint8Array(instance.exports.memory.buffer, inPtr, requestBytes.length).set(requestBytes);
-      const outLenPtr = alloc(4);
-      const outPtr = invoke(inPtr, requestBytes.length, outLenPtr);
-      free(inPtr, requestBytes.length);
-      const outLen = new DataView(instance.exports.memory.buffer).getUint32(outLenPtr, true);
-      free(outLenPtr, 4);
-      const outBytes = new Uint8Array(instance.exports.memory.buffer, outPtr, outLen).slice();
-      free(outPtr, outLen);
-      return decodePluginInvokeResponse(outBytes);
-    },
-    destroy() {
-      wasi.flushOutput();
     },
   };
 }
@@ -382,8 +261,8 @@ test("browser direct surface decrypts and verifies protected content", async (t)
 });
 
 test("direct sdn_host harness retrieves the DEK through the local key broker protocol", async (t) => {
-  const keyServerHarness = await createSynchronousDirectHarness({
-    wasmBytes: fs.readFileSync(fileURLToPath(KEY_SERVER_WASM_PATH)),
+  const keyServerHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: KEY_SERVER_WASM_PATH,
     dispatch: createDefaultHostDispatch(),
   });
   t.after(() => {
@@ -393,10 +272,13 @@ test("direct sdn_host harness retrieves the DEK through the local key broker pro
   const keyServerConfig = makeKeyServerConfig();
   configureKeyServerSync(keyServerHarness, keyServerConfig);
 
-  const clientHarness = createCustomHarnessFactory({
-    wasmBytes: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+  const clientHarness = await createSdkBrowserShimHarness({
+    wasmSource: ISOMORPHIC_WASM_PATH,
     dispatch: createProtocolDispatch(keyServerHarness),
     surface: "direct",
+  });
+  t.after(async () => {
+    await clientHarness.destroy();
   });
 
   const response = await clientHarness.invoke({
@@ -418,8 +300,8 @@ test("direct sdn_host harness retrieves the DEK through the local key broker pro
 });
 
 test("command sdn_host harness retrieves the DEK through the local key broker protocol", async (t) => {
-  const keyServerHarness = await createSynchronousDirectHarness({
-    wasmBytes: fs.readFileSync(fileURLToPath(KEY_SERVER_WASM_PATH)),
+  const keyServerHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: KEY_SERVER_WASM_PATH,
     dispatch: createDefaultHostDispatch(),
   });
   t.after(() => {
@@ -429,10 +311,13 @@ test("command sdn_host harness retrieves the DEK through the local key broker pr
   const keyServerConfig = makeKeyServerConfig();
   configureKeyServerSync(keyServerHarness, keyServerConfig);
 
-  const clientHarness = createCustomHarnessFactory({
-    wasmBytes: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+  const clientHarness = await createSdkBrowserShimHarness({
+    wasmSource: ISOMORPHIC_WASM_PATH,
     dispatch: createProtocolDispatch(keyServerHarness),
     surface: "command",
+  });
+  t.after(async () => {
+    await clientHarness.destroy();
   });
 
   const response = await clientHarness.invoke({

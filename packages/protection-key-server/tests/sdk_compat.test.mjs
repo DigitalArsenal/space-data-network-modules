@@ -181,45 +181,13 @@ test("browser command surface accepts runtime configuration", async (t) => {
   assert.equal(status.publicKeyHex, config.publicKey.toString("hex"));
 });
 
-test("built artifact loads through the WasmEdge server path", async (t) => {
+test("sdn-abi artifact requires the SDK host bridge instead of raw standalone WasmEdge", async () => {
   const inspection = await inspectModule(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
   );
-  if (inspection.profile === "sdn-abi") {
-    t.skip("Raw WasmEdge loading does not provide the sdn_host bridge for sdn-abi artifacts.");
-    return;
-  }
+  const importedModuleNames = uniqueImportModules(inspection);
 
-  let harness;
-  try {
-    harness = await loadModule({
-      wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-      runtimeKind: "wasmedge",
-      enableThreads: false,
-    });
-  } catch (error) {
-    if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
-      t.skip("Install wasmedge to verify the server-path harness.");
-      return;
-    }
-    throw error;
-  }
-  t.after(async () => {
-    await harness.destroy();
-  });
-
-  const config = makeRuntimeConfig();
-  const response = await harness.invoke({
-    methodId: "configure_runtime",
-    inputs: [
-      {
-        portId: "config",
-        payload: textEncoder.encode(JSON.stringify(config.json)),
-      },
-    ],
-  });
-  assert.equal(response.statusCode, 0);
-  assert.equal(response.outputs.length, 1);
-  const status = JSON.parse(textDecoder.decode(response.outputs[0].payload));
-  assert.equal(status.keyVersion, 7);
+  assert.equal(inspection.profile, "sdn-abi");
+  assert.ok(importedModuleNames.includes("sdn_host"));
+  assert.ok(importedModuleNames.includes("wasi_snapshot_preview1"));
 });

@@ -65,23 +65,43 @@ bash build.sh
 
 Artifacts:
 
-- `dist/sgp4_wasm.js`
-- `dist/sgp4_wasm.wasm`
+- `dist/isomorphic/module.wasm`
+- `dist/browser/module.js`
+- `dist/browser/module.wasm`
 
 ## Verification
 
 SDK, browser, and WasmEdge harness:
 
 ```bash
-node --test tests/sdk_compat.test.mjs
+npm test
 ```
 
 That test covers:
 
 - SDK artifact compliance
-- browser wrapper smoke via `dist/sgp4_wasm.js`
-- WasmEdge command invoke smoke via `dist/sgp4_wasm.wasm`
+- browser wrapper smoke via `dist/browser/module.js`
+- WasmEdge command invoke smoke via `dist/isomorphic/module.wasm`
 - an `sdn-flow` example contract check
+- Tudat-derived SGP4 regression coverage in `tests/tudat_wasm_derived.test.mjs`
+
+## Tudat-Derived Verification
+
+The package-local SGP4 regression suite is derived from:
+
+- `testSpiceTLEPropagation` in
+  `https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/src/testSpice.cpp`
+- `testLambertTargetingIzzo` in
+  `https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/src/testMissionSegments.cpp`
+
+The copied cases preserve the same Vallado benchmark, epoch-conversion check,
+ISS-like orbit sanity test, plus the Izzo Lambert textbook and hyperbolic
+reference cases from Tudat's mission-segments coverage. One adaptation is
+intentional: Tudat compares the Vallado benchmark after converting from TEME to
+J2000, while this package's public command surface returns TEME state vectors.
+The local test therefore uses the same Vallado case against the vendored
+`libsgp4` TEME verification vector from `src/cpp/deps/sgp4/SGP4-VER.TLE`, and
+keeps the Tudat source links in the test header for provenance.
 
 ## sdn-flow example
 

@@ -4,6 +4,11 @@
   "description": "OrbPro High-Precision Orbital Propagator Plugin",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "test": "node --test tests/sdk_compat.test.mjs tests/tudat_wasm_derived.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
+    "test:tudat": "node --test tests/tudat_wasm_derived.test.mjs"
+  },
   "main": "index.js",
   "exports": {
     ".": "./index.js",

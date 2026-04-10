@@ -3,7 +3,9 @@
   "private": true,
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
+    "test": "node --test tests/sdk_compat.test.mjs tests/tudat_wasm_derived.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
+    "test:tudat": "node --test tests/tudat_wasm_derived.test.mjs"
   },
   "devDependencies": {
     "space-data-module-sdk": "0.5.22"
