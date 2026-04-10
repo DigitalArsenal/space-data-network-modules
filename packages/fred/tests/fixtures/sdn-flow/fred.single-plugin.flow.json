@@ -1,0 +1,33 @@
+{
+  "programId": "com.digitalarsenal.examples.fred-single-plugin-flow",
+  "name": "FRED Single Plugin Flow",
+  "version": "0.1.0",
+  "nodes": [
+    {
+      "nodeId": "fred",
+      "pluginId": "fred-economic-data",
+      "methodId": "invoke",
+      "kind": "transform",
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "edges": [],
+  "triggers": [
+    {
+      "triggerId": "manual-request",
+      "kind": "manual",
+      "source": "user"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "manual-request",
+      "targetNodeId": "fred",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": ["fred-economic-data"],
+  "description": "Minimal sdn-flow example invoking the FRED plugin through the canonical command bridge."
+}

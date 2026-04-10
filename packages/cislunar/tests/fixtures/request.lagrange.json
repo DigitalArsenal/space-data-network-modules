@@ -1,0 +1,6 @@
+{
+  "operation": "computeLagrangePoints",
+  "params": {
+    "mu": 0.0121505856
+  }
+}

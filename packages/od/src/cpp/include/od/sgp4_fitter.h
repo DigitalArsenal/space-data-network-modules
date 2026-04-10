@@ -1,0 +1,117 @@
+#ifndef OD_SGP4_FITTER_H
+#define OD_SGP4_FITTER_H
+
+/**
+ * SGP4 Differential Correction (Element Fitting) — Equinoctial Formulation
+ *
+ * Given truth ephemeris data, fit SGP4 mean elements that minimize
+ * position RMS over the fit span. Produces SupGP/OMM records.
+ *
+ * Method: Levenberg-Marquardt with equinoctial elements (Vallado AIAA 2008-6770)
+ *   - Parameters: [af, ag, a, L, pe, qe, B*] (7 parameters)
+ *   - Observations: position vectors from operator ephemeris
+ *   - Jacobian: forward finite differences with uniform percentchg
+ *   - SVD solve for numerical stability
+ *
+ * Reference: "Revisiting Spacetrack Report #3" (AIAA 2006-6753)
+ *            Vallado, Crawford, Hujsak, Kelso
+ *            "SGP4 Orbit Determination" (AIAA 2008-6770)
+ */
+
+#include "meme_parser.h"
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <array>
+
+namespace od {
+
+/// SGP4 mean elements (OMM/GP format) — classical output
+struct SGP4Elements {
+    double epoch_jd;           // Epoch (Julian Date)
+    std::string epoch_iso;     // Epoch (ISO 8601)
+
+    double mean_motion;        // rev/day
+    double eccentricity;       // dimensionless
+    double inclination;        // degrees
+    double ra_of_asc_node;     // degrees (RAAN/Ω)
+    double arg_of_pericenter;  // degrees (ω)
+    double mean_anomaly;       // degrees (M)
+    double bstar;              // B* drag term (1/earth radii)
+    double mean_motion_dot;    // rev/day² (ṅ, NOT ndot/2)
+    double mean_motion_ddot;   // rev/day³ (n̈, usually 0)
+
+    // Metadata
+    int norad_cat_id = 0;
+    std::string object_name;
+    std::string object_id;     // International designator (e.g., "2019-074B")
+    int element_set_no = 69;   // CelesTrak SupGP convention
+    int rev_at_epoch = 1;      // SupGP convention
+    char classification = 'C'; // 'C' for CelesTrak supplemental
+    int ephemeris_type = 0;
+
+    // Fit quality
+    double rms_km = 0.0;       // RMS of fit (km)
+    int iterations = 0;
+    bool converged = false;
+    std::string data_source;   // "SpaceX-E", etc.
+};
+
+/// Fitting configuration
+struct FitterConfig {
+    int max_iterations = 50;
+    double convergence_tol = 0.0002; // Relative sigma change threshold (Vallado)
+
+    // Fit window (seconds from epoch)
+    double fit_window_sec = 11520.0; // ~192 min = 2 orbital periods for LEO
+
+    // Subsample: target ~144 points over fit window
+    int subsample = 1;
+
+    // B* bounds
+    double bstar_max = 1.0;
+    double bstar_min = -1.0;
+};
+
+/// Fit result
+struct FitResult {
+    SGP4Elements elements;
+    std::vector<double> residuals_km;  // Per-point residuals
+    double rms_km;
+    int iterations;
+    bool converged;
+};
+
+/// Fit SGP4 elements to ephemeris data
+FitResult fit_sgp4(
+    const std::vector<EphemerisPoint>& points,
+    const FitterConfig& config = {});
+
+/// Fit SGP4 elements from a MEME file
+FitResult fit_sgp4_meme(
+    const MEMEFile& meme,
+    const FitterConfig& config = {});
+
+/// Convert Cartesian state → Keplerian elements (initial guess)
+/// Returns [a(km), e, i(rad), Ω(rad), ω(rad), M(rad)]
+std::array<double, 6> cartesian_to_keplerian(
+    double x, double y, double z,
+    double vx, double vy, double vz);
+
+/// Convert Keplerian elements → SGP4 mean elements
+SGP4Elements keplerian_to_mean(
+    const std::array<double, 6>& kepler,
+    double epoch_jd);
+
+/// Format SupGP record as CSV line
+std::string elements_to_csv(const SGP4Elements& el);
+
+/// Format SupGP record as JSON object
+std::string elements_to_json(const SGP4Elements& el);
+
+/// Format as TLE lines (2 or 3 lines including line 0)
+std::string elements_to_tle(const SGP4Elements& el);
+
+}  // namespace od
+
+#endif  // OD_SGP4_FITTER_H

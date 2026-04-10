@@ -1,0 +1,33 @@
+{
+  "programId": "com.digitalarsenal.examples.atmosphere-single-plugin-flow",
+  "name": "Atmosphere Single Plugin Flow",
+  "version": "0.1.0",
+  "nodes": [
+    {
+      "nodeId": "atmosphere",
+      "pluginId": "atmosphere-model",
+      "methodId": "invoke",
+      "kind": "transform",
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "edges": [],
+  "triggers": [
+    {
+      "triggerId": "manual-request",
+      "kind": "manual",
+      "source": "user"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "manual-request",
+      "targetNodeId": "atmosphere",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": ["atmosphere-model"],
+  "description": "Minimal sdn-flow example invoking the atmosphere plugin through the canonical command bridge."
+}

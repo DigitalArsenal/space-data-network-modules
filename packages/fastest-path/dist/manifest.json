@@ -1,0 +1,40 @@
+{
+  "pluginId": "com.orbpro.fastest-path",
+  "name": "Fastest Path (SSSP)",
+  "version": "1.0.0",
+  "pluginType": "Analysis",
+  "abiVersion": 1,
+  "description": "Single-source shortest path solver using a frontier-shrinking algorithm with Dijkstra fallback for weighted directed graphs.",
+  "encrypted": true,
+  "wasmModule": {
+    "file": "fastest-path.wasm",
+    "loader": "fastest-path.mjs",
+    "hash": "69d487c833fe51238b2a70656a77e4ef2f531d0d819fe9f3a31d426553fbe33b",
+    "exports": [
+      "plugin_init",
+      "plugin_destroy",
+      "plugin_stream_invoke",
+      "graph_create",
+      "graph_add_edge",
+      "graph_add_edges_bulk",
+      "graph_build",
+      "graph_load_csr",
+      "compute_sssp",
+      "get_distances",
+      "get_predecessors",
+      "get_vertex_count",
+      "get_edge_count",
+      "reconstruct_path",
+      "plugin_get_manifest_flatbuffer",
+      "plugin_get_manifest_flatbuffer_size",
+      "malloc",
+      "free"
+    ]
+  },
+  "embeddedManifest": {
+    "file": "plugin-manifest.fb",
+    "fileIdentifier": "PMAN",
+    "bytesSymbol": "plugin_get_manifest_flatbuffer",
+    "sizeSymbol": "plugin_get_manifest_flatbuffer_size"
+  }
+}

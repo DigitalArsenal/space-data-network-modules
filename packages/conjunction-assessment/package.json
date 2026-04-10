@@ -1,0 +1,10 @@
+{
+  "name": "space-data-network-plugin-conjunction-assessment",
+  "private": true,
+  "scripts": {
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.5.18"
+  }
+}

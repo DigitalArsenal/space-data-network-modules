@@ -1,0 +1,8 @@
+build/
+build-native/
+node_modules/
+src/cpp/build-isomorphic/
+src/cpp/build-wasm/
+*.o
+*.a
+deps/emsdk/

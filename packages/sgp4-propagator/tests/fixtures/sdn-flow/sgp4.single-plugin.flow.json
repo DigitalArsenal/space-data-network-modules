@@ -1,0 +1,33 @@
+{
+  "programId": "com.digitalarsenal.examples.sgp4-single-plugin-flow",
+  "name": "SGP4 Single Plugin Flow",
+  "version": "0.1.0",
+  "nodes": [
+    {
+      "nodeId": "sgp4",
+      "pluginId": "sgp4-propagator",
+      "methodId": "invoke",
+      "kind": "transform",
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "edges": [],
+  "triggers": [
+    {
+      "triggerId": "manual-request",
+      "kind": "manual",
+      "source": "user"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "manual-request",
+      "targetNodeId": "sgp4",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": ["sgp4-propagator"],
+  "description": "Minimal sdn-flow example invoking the SGP4 plugin through the canonical command bridge."
+}

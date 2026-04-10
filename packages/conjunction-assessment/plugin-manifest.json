@@ -1,0 +1,47 @@
+{
+  "pluginId": "conjunction-assessment",
+  "name": "Conjunction Assessment Plugin",
+  "version": "0.2.0",
+  "description": "Conjunction assessment and collision probability analysis through a canonical SDK command bridge.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "invoke",
+      "displayName": "Invoke Conjunction Assessment",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "any-flatbuffer",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "any-flatbuffer",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

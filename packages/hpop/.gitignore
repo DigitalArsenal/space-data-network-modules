@@ -1,0 +1,7 @@
+node_modules/
+.build/
+*.log
+src/cpp/build/
+src/cpp/build-wasm/
+src/cpp/build-wasi/
+deps/emsdk/

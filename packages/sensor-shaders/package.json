@@ -1,0 +1,18 @@
+{
+  "name": "@orbpro/plugin-sensor-shaders",
+  "version": "1.0.0",
+  "description": "OrbPro Sensor Shaders Plugin",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": ["dist/", "src/", "index.js"],
+  "keywords": ["orbpro", "wasm", "sensor-shaders", "plugin", "shader", "cesium", "sensor-visualization"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DigitalArsenal/space-data-network-plugin-sensor-shaders"
+  },
+  "license": "UNLICENSED"
+}

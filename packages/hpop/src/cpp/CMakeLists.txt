@@ -1,0 +1,106 @@
+cmake_minimum_required(VERSION 3.15)
+project(hpop_sdn_plugin LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(EMSCRIPTEN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto")
+else()
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto -ffast-math -march=native -mtune=native")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+
+find_path(
+    FLATBUFFERS_INCLUDE_DIR
+    NAMES flatbuffers/flatbuffers.h
+    PATHS
+        /opt/homebrew/include
+        /opt/homebrew/opt/flatbuffers/include
+        /usr/local/include
+        /usr/local/opt/flatbuffers/include
+    NO_CMAKE_FIND_ROOT_PATH
+)
+
+if(NOT FLATBUFFERS_INCLUDE_DIR)
+    message(FATAL_ERROR "flatbuffers headers not found. Install flatbuffers and retry.")
+endif()
+
+add_library(
+    hpop STATIC
+    src/astrodynamics.cpp
+    src/integrators.cpp
+    src/coords.cpp
+    src/environment_models.cpp
+    src/ephemeris.cpp
+    src/force_models.cpp
+    src/nrlmsise00.cpp
+    src/time_convert.cpp
+    src/us76.cpp
+    src/plugin_runtime.cpp
+)
+target_include_directories(hpop PUBLIC include include/hpop)
+
+if(NOT EMSCRIPTEN)
+    # Native test targets can be added here
+endif()
+
+if(EMSCRIPTEN)
+    # --- Emscripten browser artifact ---
+    add_executable(
+        hpop_wasm
+        wasm_api.cpp
+        src/plugin_entrypoints.cpp
+        src/plugin_invoke_bridge.cpp
+    )
+    target_include_directories(
+        hpop_wasm PRIVATE
+        include
+        generated
+        "${FLATBUFFERS_INCLUDE_DIR}"
+    )
+    target_link_libraries(hpop_wasm hpop)
+    set_target_properties(
+        hpop_wasm PROPERTIES
+        SUFFIX ".js"
+        LINK_FLAGS "\
+            -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
+            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
+            -s MODULARIZE=1 \
+            -s EXPORT_NAME='HPOPModule' \
+            -s STANDALONE_WASM=1 \
+            -s INITIAL_MEMORY=134217728 \
+            -s STACK_SIZE=2097152 \
+            -s MALLOC='emmalloc' \
+            -s FILESYSTEM=0 \
+        "
+    )
+elseif(WASI_SDK)
+    # --- Standalone WASI artifact (isomorphic — runs in WasmEdge and browser via shim) ---
+    add_executable(
+        hpop_standalone
+        wasm_api.cpp
+        src/plugin_entrypoints.cpp
+        src/plugin_invoke_bridge.cpp
+    )
+    target_include_directories(
+        hpop_standalone PRIVATE
+        include
+        generated
+        "${FLATBUFFERS_INCLUDE_DIR}"
+    )
+    target_link_libraries(hpop_standalone hpop)
+    set_target_properties(
+        hpop_standalone PROPERTIES
+        SUFFIX ".wasm"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+    target_link_options(hpop_standalone PRIVATE
+        -Wl,--export=plugin_alloc
+        -Wl,--export=plugin_free
+        -Wl,--export=plugin_invoke_stream
+        -Wl,--export=plugin_get_manifest_flatbuffer
+        -Wl,--export=plugin_get_manifest_flatbuffer_size
+    )
+endif()

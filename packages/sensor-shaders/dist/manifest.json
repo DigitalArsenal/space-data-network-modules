@@ -1,0 +1,48 @@
+{
+  "pluginId": "com.orbpro.sensor-shaders",
+  "name": "OrbPro Sensor Shaders",
+  "version": "1.0.0",
+  "pluginType": "Shader",
+  "abiVersion": 1,
+  "description": "Encrypted sensor volume shader bundle for SensorVolumeAppearance and SensorMaterialProperty.",
+  "encrypted": true,
+  "requiresProtection": true,
+  "wasmModule": {
+    "file": "sensor-shaders.wasm",
+    "loader": "sensor-shaders.mjs",
+    "hash": "08081f761252908f9641bc8309243f2b30a74f5e3ecec7290dac5832eb467394",
+    "exports": [
+      "get_name",
+      "get_version",
+      "get_type",
+      "orbpro_cleanup",
+      "orbpro_malloc",
+      "orbpro_free",
+      "plugin_stream_invoke",
+      "sensor_shaders_set_bundle_json",
+      "plugin_get_manifest_flatbuffer",
+      "plugin_get_manifest_flatbuffer_size",
+      "malloc",
+      "free"
+    ]
+  },
+  "shaderData": {
+    "file": "sensor-shaders-encrypted.js",
+    "shaderNames": [
+      "SensorVolumeVS",
+      "SensorVolumeFS",
+      "SensorVolumeVSEllipsoid",
+      "SensorVolumeVSLimited",
+      "SensorVolumeCommonFS"
+    ]
+  },
+  "wasmData": {
+    "file": "sensor-shaders-data.js"
+  },
+  "embeddedManifest": {
+    "file": "plugin-manifest.fb",
+    "fileIdentifier": "PMAN",
+    "bytesSymbol": "plugin_get_manifest_flatbuffer",
+    "sizeSymbol": "plugin_get_manifest_flatbuffer_size"
+  }
+}

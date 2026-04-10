@@ -1,0 +1,33 @@
+{
+  "programId": "com.digitalarsenal.examples.od-single-plugin-flow",
+  "name": "OD Single Plugin Flow",
+  "version": "0.1.0",
+  "nodes": [
+    {
+      "nodeId": "od",
+      "pluginId": "orbit-determination",
+      "methodId": "fit",
+      "kind": "transform",
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "edges": [],
+  "triggers": [
+    {
+      "triggerId": "manual-fit",
+      "kind": "manual",
+      "source": "user"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "manual-fit",
+      "targetNodeId": "od",
+      "targetPortId": "meme",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": ["orbit-determination"],
+  "description": "Minimal sdn-flow example invoking the orbit determination plugin through the canonical MEME fit bridge."
+}

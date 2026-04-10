@@ -1,0 +1,47 @@
+{
+  "pluginId": "orbit-determination",
+  "name": "Orbit Determination Plugin",
+  "version": "0.1.0",
+  "description": "Fits SGP4 mean elements to MEME ephemeris data and returns JSON fit results.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "fit",
+      "displayName": "Fit MEME",
+      "inputPorts": [
+        {
+          "portId": "meme",
+          "acceptedTypeSets": [
+            {
+              "setId": "any-flatbuffer",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "any-flatbuffer",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "programId": "com.digitalarsenal.examples.cislunar-single-plugin-flow",
+  "name": "Cislunar Single Plugin Flow",
+  "version": "0.1.0",
+  "nodes": [
+    {
+      "nodeId": "cislunar",
+      "pluginId": "cislunar-propagator",
+      "methodId": "invoke",
+      "kind": "transform",
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "edges": [],
+  "triggers": [
+    {
+      "triggerId": "manual-request",
+      "kind": "manual",
+      "source": "user"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "manual-request",
+      "targetNodeId": "cislunar",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": ["cislunar-propagator"],
+  "description": "Minimal sdn-flow example invoking the cislunar plugin through the canonical command bridge."
+}

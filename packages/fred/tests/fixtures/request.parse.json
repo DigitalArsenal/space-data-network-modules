@@ -1,0 +1,6 @@
+{
+  "operation": "parseJson",
+  "params": {
+    "input": "{\"observations\":[{\"date\":\"2025-01-02\",\"value\":\"4.33\",\"realtime_start\":\"2025-01-02\",\"realtime_end\":\"2025-01-02\"}]}"
+  }
+}

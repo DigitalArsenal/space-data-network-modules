@@ -1,0 +1,33 @@
+{
+  "programId": "com.digitalarsenal.examples.conjunction-single-plugin-flow",
+  "name": "Conjunction Assessment Single Plugin Flow",
+  "version": "0.1.0",
+  "nodes": [
+    {
+      "nodeId": "conjunction",
+      "pluginId": "conjunction-assessment",
+      "methodId": "invoke",
+      "kind": "transform",
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "edges": [],
+  "triggers": [
+    {
+      "triggerId": "manual-request",
+      "kind": "manual",
+      "source": "user"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "manual-request",
+      "targetNodeId": "conjunction",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": ["conjunction-assessment"],
+  "description": "Minimal sdn-flow example invoking the conjunction assessment plugin through the canonical command bridge."
+}

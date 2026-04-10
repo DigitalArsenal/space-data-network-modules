@@ -1,0 +1,33 @@
+{
+  "programId": "com.digitalarsenal.examples.hpop-single-plugin-flow",
+  "name": "HPOP Single Plugin Flow",
+  "version": "0.1.0",
+  "nodes": [
+    {
+      "nodeId": "hpop",
+      "pluginId": "hpop-propagator",
+      "methodId": "invoke",
+      "kind": "transform",
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "edges": [],
+  "triggers": [
+    {
+      "triggerId": "manual-request",
+      "kind": "manual",
+      "source": "user"
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "manual-request",
+      "targetNodeId": "hpop",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": ["hpop-propagator"],
+  "description": "Minimal sdn-flow example invoking the HPOP propagator plugin through the canonical command bridge."
+}

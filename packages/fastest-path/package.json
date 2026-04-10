@@ -1,0 +1,18 @@
+{
+  "name": "@orbpro/plugin-fastest-path",
+  "version": "1.0.0",
+  "description": "OrbPro Fastest Path Solver Plugin",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": ["dist/", "src/", "index.js"],
+  "keywords": ["orbpro", "wasm", "fastest-path", "plugin", "routing", "orbital-routing", "optimization"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DigitalArsenal/space-data-network-plugin-fastest-path"
+  },
+  "license": "UNLICENSED"
+}

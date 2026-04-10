@@ -1,0 +1,7 @@
+src/cpp/build/
+src/cpp/build-isomorphic/
+tests/data/meme/MEME_*.txt
+tests/data/meme/supgp_results.csv
+tests/data/celestrak_starlink_supgp.csv
+src/cpp/build-wasm/
+node_modules/

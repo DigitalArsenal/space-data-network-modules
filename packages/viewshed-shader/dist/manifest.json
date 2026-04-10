@@ -1,0 +1,50 @@
+{
+  "pluginId": "com.orbpro.viewshed-shader",
+  "name": "OrbPro Viewshed Shader",
+  "version": "1.0.0",
+  "pluginType": "Shader",
+  "abiVersion": 1,
+  "description": "Viewshed frustum volume rendering with terrain occlusion visualization.",
+  "encrypted": true,
+  "requiresProtection": true,
+  "wasmModule": {
+    "file": "viewshed-shader.wasm",
+    "dataModule": "viewshed-shader-data.js",
+    "hash": "d9c06f0f00a6f8abe5ce708e2f5d1b422be9953a837fee0929d8d36b8ad4d531",
+    "exports": [
+      "orbpro_set_shaders",
+      "orbpro_set_frustum_shaders",
+      "orbpro_compile_program",
+      "orbpro_get_program",
+      "orbpro_init_key",
+      "orbpro_is_initialized",
+      "get_name",
+      "get_version",
+      "get_vertex_source",
+      "get_fragment_source",
+      "get_uniforms",
+      "get_frustum_vertex_source",
+      "get_frustum_fragment_source",
+      "get_type",
+      "get_defines",
+      "orbpro_malloc",
+      "orbpro_free",
+      "orbpro_cleanup",
+      "malloc",
+      "free",
+      "plugin_stream_invoke",
+      "plugin_get_manifest_flatbuffer",
+      "plugin_get_manifest_flatbuffer_size"
+    ]
+  },
+  "shaderData": {
+    "file": "viewshed-shader-encrypted.js",
+    "fragmentCount": 8
+  },
+  "embeddedManifest": {
+    "file": "plugin-manifest.fb",
+    "fileIdentifier": "PMAN",
+    "bytesSymbol": "plugin_get_manifest_flatbuffer",
+    "sizeSymbol": "plugin_get_manifest_flatbuffer_size"
+  }
+}
