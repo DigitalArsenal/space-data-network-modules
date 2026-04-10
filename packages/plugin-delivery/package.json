@@ -4,6 +4,7 @@
   "description": "SDN plugin delivery module — fetches plugins from IPFS and delivers them encrypted via X25519 ECIES",
   "private": true,
   "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node build.mjs",
     "build:clean": "rm -rf .build dist && node build.mjs",

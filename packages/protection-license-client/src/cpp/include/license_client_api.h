@@ -1,0 +1,35 @@
+#ifndef PROTECTION_LICENSE_CLIENT_API_H
+#define PROTECTION_LICENSE_CLIENT_API_H
+
+#include <cstdint>
+#include <vector>
+
+int32_t license_client_get_dek(
+    const uint8_t* request_json,
+    uint32_t request_len,
+    std::vector<uint8_t>& response_out);
+
+int32_t license_client_decrypt(
+    const uint8_t* ciphertext,
+    uint32_t ciphertext_len,
+    const uint8_t* key,
+    uint32_t key_len,
+    std::vector<uint8_t>& plaintext_out);
+
+int32_t license_client_verify(
+    const uint8_t* signed_content,
+    uint32_t signed_content_len,
+    const uint8_t* public_key,
+    uint32_t public_key_len,
+    std::vector<uint8_t>& result_json_out);
+
+int32_t license_client_decrypt_and_verify(
+    const uint8_t* protected_content,
+    uint32_t protected_content_len,
+    const uint8_t* dek,
+    uint32_t dek_len,
+    const uint8_t* signer_key,
+    uint32_t signer_key_len,
+    std::vector<uint8_t>& plaintext_out);
+
+#endif  // PROTECTION_LICENSE_CLIENT_API_H

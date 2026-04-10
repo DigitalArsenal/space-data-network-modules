@@ -16,10 +16,6 @@
 #include <cstdint>
 #include <vector>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * Initialize the key server with a JSON configuration.
  * JSON fields: privateKeyHex, generateRandomKey, maxClockSkewMs, activeKeyVersion
@@ -58,9 +54,5 @@ int32_t key_server_handle_key_request(
  * Returns 0 on success.
  */
 int32_t key_server_check_key_rotation(std::vector<uint8_t> &status_out);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  // KEY_SERVER_API_H

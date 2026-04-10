@@ -20,7 +20,7 @@ import {
 } from "../node_modules/space-data-module-sdk/src/testing/browserModuleHarness.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WASM_PATH = path.resolve(__dirname, "../dist/plugin-delivery.wasm");
+const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
 
 const PASS = "\x1b[32mPASS\x1b[0m";
 const FAIL = "\x1b[31mFAIL\x1b[0m";
@@ -52,7 +52,7 @@ console.log(`Loaded ${path.basename(WASM_PATH)} (${wasmBytes.length} bytes)\n`);
 
 let harness;
 
-await test("load plugin-delivery.wasm via browser harness", async () => {
+await test("load plugin-delivery module.wasm via browser harness", async () => {
   harness = await createBrowserModuleHarness({
     wasmSource: wasmBytes,
     surface: "direct",

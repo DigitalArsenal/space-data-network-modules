@@ -60,6 +60,9 @@ add_library(conjunction_assessment STATIC ${CA_SOURCES})
 target_include_directories(conjunction_assessment PUBLIC
     include
     include/conjunction
+    generated
+    "${FLATBUFFERS_INCLUDE_DIR}"
+    "${CMAKE_SOURCE_DIR}/deps/sgp4"
     "${SGP4_DIR}"
 )
 target_link_libraries(conjunction_assessment PUBLIC sgp4_lib)

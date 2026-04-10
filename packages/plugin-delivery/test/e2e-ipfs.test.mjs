@@ -33,7 +33,7 @@ import {
 } from "../node_modules/space-data-module-sdk/src/invoke/codec.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WASM_PATH = path.resolve(__dirname, "../dist/plugin-delivery.wasm");
+const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
 
 // ── Inline WebCrypto ECIES decrypt ──────────────────────────────────────────
 
@@ -189,7 +189,7 @@ if (!fs.existsSync(WASM_PATH)) {
 }
 
 const wasmBytes = fs.readFileSync(WASM_PATH);
-console.log(`Loaded plugin-delivery.wasm (${wasmBytes.length} bytes)\n`);
+console.log(`Loaded plugin-delivery module.wasm (${wasmBytes.length} bytes)\n`);
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 

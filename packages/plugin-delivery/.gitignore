@@ -1,3 +1,4 @@
 .build/
+.emcache/
 .server-key.hex
 node_modules/

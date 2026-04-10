@@ -16,7 +16,10 @@
 #include "TypedArenaBuffer_generated.h"
 #include "space_data_module_invoke.h"
 
-extern "C" int invoke(void);
+extern "C" int protection_license_client_get_dek(void);
+extern "C" int protection_license_client_decrypt(void);
+extern "C" int protection_license_client_verify(void);
+extern "C" int protection_license_client_decrypt_and_verify(void);
 
 namespace {
 
@@ -75,24 +78,82 @@ struct InvokeContext {
   std::string error_message{};
 };
 
-static const PortRequirement kMethod_invoke_input_ports[] = {
+static const PortRequirement kMethod_get_dek_input_ports[] = {
   { "request", true },
 };
-static const char *kMethod_invoke_output_ports[] = {
+static const char *kMethod_get_dek_output_ports[] = {
   "response",
+};
+
+static const PortRequirement kMethod_decrypt_input_ports[] = {
+  { "ciphertext", true },
+  { "key", true },
+};
+static const char *kMethod_decrypt_output_ports[] = {
+  "plaintext",
+};
+
+static const PortRequirement kMethod_verify_input_ports[] = {
+  { "signed_content", true },
+  { "public_key", true },
+};
+static const char *kMethod_verify_output_ports[] = {
+  "result",
+};
+
+static const PortRequirement kMethod_decrypt_and_verify_input_ports[] = {
+  { "protected_content", true },
+  { "dek", true },
+  { "signer_key", true },
+};
+static const char *kMethod_decrypt_and_verify_output_ports[] = {
+  "plaintext",
 };
 
 static const MethodDescriptor kMethodTable[] = {
   {
-    "invoke",
-    &invoke,
-    kMethod_invoke_input_ports,
+    "get_dek",
+    &protection_license_client_get_dek,
+    kMethod_get_dek_input_ports,
     1u,
-    kMethod_invoke_output_ports,
+    kMethod_get_dek_output_ports,
     1u,
     true,
     "request",
     "response"
+  },
+  {
+    "decrypt",
+    &protection_license_client_decrypt,
+    kMethod_decrypt_input_ports,
+    2u,
+    kMethod_decrypt_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "verify",
+    &protection_license_client_verify,
+    kMethod_verify_input_ports,
+    2u,
+    kMethod_verify_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "decrypt_and_verify",
+    &protection_license_client_decrypt_and_verify,
+    kMethod_decrypt_and_verify_input_ports,
+    3u,
+    kMethod_decrypt_and_verify_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
   },
 };
 

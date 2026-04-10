@@ -1,21 +1,20 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+import { validatePluginArtifact } from "space-data-module-sdk/compliance";
+import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
 import {
+  createBrowserModuleHarness,
   generateManifestHarnessPlan,
   materializeHarnessScenario,
 } from "space-data-module-sdk/testing";
-import { decodePluginInvokeResponse } from "space-data-module-sdk/invoke";
-import { validatePluginArtifact } from "space-data-module-sdk/compliance";
 
-const ROOT = new URL("..", import.meta.url);
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const WASM_PATH = new URL("../dist/sgp4_wasm.wasm", import.meta.url);
-const JS_LOADER_PATH = new URL("../dist/sgp4_wasm.js", import.meta.url);
+const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
+const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
 const REQUEST_FIXTURE_PATH = new URL(
   "../tests/fixtures/request.propagate.json",
   import.meta.url,
@@ -45,13 +44,12 @@ function createHarnessScenario(surface) {
   return materializeHarnessScenario(scenario);
 }
 
-function runWithWasmEdge(stdinBytes) {
-  return spawnSync("wasmedge", [fileURLToPath(WASM_PATH)], {
-    cwd: fileURLToPath(ROOT),
-    input: stdinBytes,
-    encoding: null,
-    maxBuffer: 16 * 1024 * 1024,
-  });
+function createInvokeRequest() {
+  const scenario = createHarnessScenario("command");
+  return {
+    methodId: scenario.methodId,
+    inputs: scenario.inputs,
+  };
 }
 
 function assertSuccessfulResponse(response) {
@@ -67,92 +65,73 @@ function assertSuccessfulResponse(response) {
   assert.ok(Array.isArray(payload.states));
 }
 
+test("build publishes canonical browser and isomorphic artifact paths", () => {
+  assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
+  assert.equal(fs.existsSync(fileURLToPath(BROWSER_MODULE_PATH)), true);
+  assert.equal(fs.existsSync(fileURLToPath(BROWSER_WASM_PATH)), true);
+});
+
 test("built artifact passes SDK compliance checks", async () => {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const report = await validatePluginArtifact({
     manifest,
-    wasmPath: fileURLToPath(WASM_PATH),
+    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
   });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
-test("built artifact loads through the JS/browser wrapper and preserves invoke_json", async () => {
-  const require = createRequire(import.meta.url);
-  const factory = require(fileURLToPath(JS_LOADER_PATH));
-  const previousExitCode = process.exitCode;
-  const Module = await factory({ print() {}, printErr() {} });
-  process.exitCode = previousExitCode;
-  const content = fs.readFileSync(REQUEST_FIXTURE_PATH, "utf8");
-
-  const len = Module.lengthBytesUTF8(content);
-  const ptr = Module._wasm_malloc(len + 1);
-  Module.stringToUTF8(content, ptr, len + 1);
-
-  try {
-    const resultPtr = Module._wasm_invoke_json(ptr, len);
-    const result = JSON.parse(Module.UTF8ToString(resultPtr));
-    assert.equal(result.objectName, "ISS (ZARYA)");
-    assert.equal(result.noradId, 25544);
-    assert.ok(result.numStates >= 13);
-  } finally {
-    Module._wasm_free(ptr);
-    process.exitCode = previousExitCode;
-  }
-});
-
-test("built artifact handles command invoke smoke in WasmEdge", () => {
-  const scenario = createHarnessScenario("command");
-  const result = runWithWasmEdge(scenario.stdinBytes);
-  assert.equal(result.status, 0, result.stderr?.toString("utf8") ?? "");
-  const response = decodePluginInvokeResponse(new Uint8Array(result.stdout));
-  assertSuccessfulResponse(response);
-});
-
-test("standalone artifact handles direct invoke in WasmEdge", () => {
-  const standalonePath = fileURLToPath(
-    new URL("../dist/sgp4_standalone.wasm", import.meta.url),
+test("built artifact exposes the standalone isomorphic surface", async () => {
+  const inspection = await inspectModule(
+    fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
   );
-  try {
-    fs.accessSync(standalonePath);
-  } catch {
-    return; // standalone not built — skip
-  }
-  const scenario = createHarnessScenario("command");
-  const result = spawnSync("wasmedge", [standalonePath], {
-    cwd: fileURLToPath(ROOT),
-    input: scenario.stdinBytes,
-    encoding: null,
-    maxBuffer: 16 * 1024 * 1024,
+  const importedModuleNames = Array.from(
+    new Set(inspection.imports.map((entry) => entry.module)),
+  ).sort();
+
+  assert.equal(inspection.profile, "standalone");
+  assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"]);
+  assert.ok(inspection.exports.includes("_start"));
+  assert.ok(inspection.exports.includes("plugin_alloc"));
+  assert.ok(inspection.exports.includes("plugin_free"));
+  assert.ok(inspection.exports.includes("plugin_invoke_stream"));
+  assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer"));
+  assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer_size"));
+});
+
+test("built artifact loads through the SDK browser harness", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "command",
   });
-  assert.equal(result.status, 0, result.stderr?.toString("utf8") ?? "");
-  const response = decodePluginInvokeResponse(new Uint8Array(result.stdout));
+  t.after(() => {
+    harness.destroy();
+  });
+
+  const response = await harness.invoke(createInvokeRequest());
   assertSuccessfulResponse(response);
 });
 
-test("standalone artifact exports the isomorphic invoke surface", async () => {
-  const standalonePath = fileURLToPath(
-    new URL("../dist/sgp4_standalone.wasm", import.meta.url),
-  );
+test("built artifact loads through the WasmEdge server path", async (t) => {
+  let harness;
   try {
-    fs.accessSync(standalonePath);
-  } catch {
-    return; // standalone not built — skip
+    harness = await loadModule({
+      wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+      runtimeKind: "wasmedge",
+      enableThreads: false,
+    });
+  } catch (error) {
+    if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
+      t.skip("Install wasmedge to verify the server-path harness.");
+      return;
+    }
+    throw error;
   }
-  const wasmBytes = fs.readFileSync(standalonePath);
-  const compiled = await WebAssembly.compile(wasmBytes);
-  const exportNames = WebAssembly.Module.exports(compiled).map((e) => e.name);
-  for (const name of [
-    "plugin_alloc",
-    "plugin_free",
-    "plugin_invoke_stream",
-    "plugin_get_manifest_flatbuffer",
-    "plugin_get_manifest_flatbuffer_size",
-  ]) {
-    assert.ok(exportNames.includes(name), `missing export: ${name}`);
-  }
-  const imports = WebAssembly.Module.imports(compiled);
-  const importModules = [...new Set(imports.map((i) => i.module))];
-  assert.deepEqual(importModules, ["wasi_snapshot_preview1"]);
+  t.after(async () => {
+    await harness.destroy();
+  });
+
+  const response = await harness.invoke(createInvokeRequest());
+  assertSuccessfulResponse(response);
 });
 
 test("sdn-flow example is wired to the canonical invoke contract", () => {

@@ -32,6 +32,7 @@ add_library(
     src/astrodynamics.cpp
     src/integrators.cpp
     src/coords.cpp
+    ../../lib/atmosphere_plugin.cpp
     src/environment_models.cpp
     src/ephemeris.cpp
     src/force_models.cpp

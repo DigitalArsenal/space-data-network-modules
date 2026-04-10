@@ -1,7 +1,7 @@
 #include "conjunction/resident_screening_index.h"
 #include "conjunction/sgp4_propagator.h"
-#include "../../../../plugin-sdk/include/generated/PropagatorTrajectorySegments_generated.h"
-#include "../../../../plugin-sdk/include/generated/StateVector_generated.h"
+#include "orbpro/generated/PropagatorTrajectorySegments_generated.h"
+#include "orbpro/generated/StateVector_generated.h"
 
 #include <algorithm>
 #include <atomic>

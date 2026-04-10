@@ -41,11 +41,18 @@ import {
 } from "../node_modules/space-data-module-sdk/src/invoke/codec.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DECRYPT_WASM_PATH = path.resolve(__dirname, "../dist/client-decrypt.wasm");
+const DECRYPT_WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
 
 // Resolve plugin-delivery WASM
 function findDeliveryWasm() {
   if (process.env.PLUGIN_DELIVERY_WASM) return process.env.PLUGIN_DELIVERY_WASM;
+  const monorepoIsomorphic = path.resolve(
+    __dirname,
+    "../../plugin-delivery/dist/isomorphic/module.wasm",
+  );
+  if (fs.existsSync(monorepoIsomorphic)) return monorepoIsomorphic;
+  const monorepoLegacy = path.resolve(__dirname, "../../plugin-delivery/dist/plugin-delivery.wasm");
+  if (fs.existsSync(monorepoLegacy)) return monorepoLegacy;
   const sibling = path.resolve(__dirname, "../../space-data-network-plugin-delivery/dist/plugin-delivery.wasm");
   if (fs.existsSync(sibling)) return sibling;
   return null;

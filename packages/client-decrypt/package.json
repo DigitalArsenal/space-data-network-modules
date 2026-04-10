@@ -4,6 +4,7 @@
   "description": "SDN client decryption module — decrypts X25519 ECIES artifact envelopes using Crypto++",
   "private": true,
   "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node build.mjs",
     "build:clean": "rm -rf .build dist && node build.mjs",

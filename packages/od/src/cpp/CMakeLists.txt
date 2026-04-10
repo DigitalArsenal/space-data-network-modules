@@ -24,7 +24,10 @@ if(NOT Eigen3_FOUND)
         PATH_SUFFIXES eigen3
         PATHS
             /opt/homebrew/include
+            /opt/homebrew/opt/eigen/include
             /usr/local/include
+            /usr/local/opt/eigen/include
+        NO_CMAKE_FIND_ROOT_PATH
     )
     if(NOT EIGEN3_INCLUDE_DIR)
         message(FATAL_ERROR "Eigen3 headers not found. Install eigen and retry.")

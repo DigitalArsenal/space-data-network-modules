@@ -2,65 +2,78 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-EMSDK_DIR="$SCRIPT_DIR/deps/emsdk"
+EMSDK_DIR="${SDN_LOCAL_EMSDK_DIR:-$SCRIPT_DIR/deps/emsdk}"
 SRC_DIR="$SCRIPT_DIR/src/cpp"
+BUILD_DIR="$SRC_DIR/build-isomorphic"
 DIST_DIR="$SCRIPT_DIR/dist"
-ISOMORPHIC_BUILD_DIR="$SRC_DIR/build-isomorphic"
+BROWSER_DIST_DIR="$DIST_DIR/browser"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
+BROWSER_TARGET="cislunar_wasm"
 
 cpu_count() {
     if command -v nproc >/dev/null 2>&1; then
         nproc
         return
     fi
-    if command -v sysctl >/dev/null 2>&1; then
+    if command -v getconf >/dev/null 2>&1; then
+        getconf _NPROCESSORS_ONLN
+        return
+    fi
+    if command -v sysctl >/dev/null 2>&1 && sysctl -n hw.ncpu >/dev/null 2>&1; then
         sysctl -n hw.ncpu
         return
     fi
     echo 4
 }
 
-if [ -f "$EMSDK_DIR/emsdk_env.sh" ]; then
-    if [ ! -f "$EMSDK_DIR/upstream/emscripten/emcc" ]; then
-        echo "Installing emsdk..."
-        cd "$EMSDK_DIR"
-        ./emsdk install latest
-        ./emsdk activate latest
+ensure_emscripten() {
+    local toolchain="${SDN_WASM_TOOLCHAIN:-local-emsdk}"
+
+    export EM_CACHE="${EM_CACHE:-$SCRIPT_DIR/.emcache}"
+    mkdir -p "$EM_CACHE"
+
+    if [ "$toolchain" != "local-emsdk" ]; then
+        echo "This repo requires repo-local deps/emsdk. Unsupported SDN_WASM_TOOLCHAIN=$toolchain" >&2
+        exit 1
     fi
-    # shellcheck disable=SC1090
-    source "$EMSDK_DIR/emsdk_env.sh" 2>/dev/null
-elif command -v emcmake >/dev/null 2>&1 && command -v emcc >/dev/null 2>&1; then
-    echo "Using Emscripten from PATH"
-else
+
     if [ -L "$EMSDK_DIR" ] && [ ! -e "$EMSDK_DIR" ]; then
         rm "$EMSDK_DIR"
     fi
-    if [ ! -d "$EMSDK_DIR" ]; then
+    if [ ! -f "$EMSDK_DIR/emsdk_env.sh" ]; then
         echo "Cloning emsdk into deps/emsdk..."
         git clone https://github.com/emscripten-core/emsdk.git "$EMSDK_DIR"
     fi
-    echo "Installing emsdk..."
-    cd "$EMSDK_DIR"
-    ./emsdk install latest
-    ./emsdk activate latest
+    if [ ! -f "$EMSDK_DIR/upstream/emscripten/emcc" ]; then
+        echo "Installing emsdk..."
+        (
+            cd "$EMSDK_DIR"
+            ./emsdk install latest
+            ./emsdk activate latest
+        )
+    fi
+
     # shellcheck disable=SC1090
-    source "$EMSDK_DIR/emsdk_env.sh" 2>/dev/null
-fi
+    source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
+}
 
+ensure_emscripten
+
+rm -rf "$BUILD_DIR"
 rm -rf "$DIST_DIR"
-mkdir -p "$ISOMORPHIC_DIST_DIR"
+mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
 
-echo "Configuring standalone isomorphic build..."
-emcmake cmake -S "$SRC_DIR" -B "$ISOMORPHIC_BUILD_DIR" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DSDN_ISOMORPHIC_STANDALONE=ON
+echo "Configuring Emscripten build..."
+emcmake cmake -S "$SRC_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 
 echo ""
-echo "Building standalone isomorphic artifact..."
-cmake --build "$ISOMORPHIC_BUILD_DIR" -j"$(cpu_count)"
+echo "Building browser-compatible standalone artifact..."
+cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
-cp "$ISOMORPHIC_BUILD_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
+cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
+cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
 
 echo ""
-echo "=== Isomorphic Build Complete ==="
-ls -lh "$ISOMORPHIC_DIST_DIR/module.wasm"
+echo "=== Build Complete ==="
+ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"

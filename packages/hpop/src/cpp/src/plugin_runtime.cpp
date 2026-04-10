@@ -34,14 +34,156 @@ PluginInvokeResult make_error_result(
     return result;
 }
 
-// ---------------------------------------------------------------------------
-// propagate — basic high-precision orbit propagation
-// ---------------------------------------------------------------------------
-// Accepts an initial ECI state vector (position km, velocity km/s) with a
-// Julian-date epoch and a target Julian-date epoch. Uses the HPOP library
-// RK7(8) integrator with a configurable force model set to propagate the
-// state and returns the resulting position/velocity.
-// ---------------------------------------------------------------------------
+void configure_integrator(
+    const json& params,
+    astro::IntegratorConfig& config) {
+    if (!params.contains("integrator")) {
+        return;
+    }
+
+    const auto& integrator = params.at("integrator");
+    if (integrator.contains("initialStep")) {
+        config.initialStep = integrator.at("initialStep").get<double>();
+    }
+    if (integrator.contains("minStep")) {
+        config.minStep = integrator.at("minStep").get<double>();
+    }
+    if (integrator.contains("maxStep")) {
+        config.maxStep = integrator.at("maxStep").get<double>();
+    }
+    if (integrator.contains("absTolerance")) {
+        config.absTolerance = integrator.at("absTolerance").get<double>();
+    }
+    if (integrator.contains("relTolerance")) {
+        config.relTolerance = integrator.at("relTolerance").get<double>();
+    }
+    if (integrator.contains("tolerance")) {
+        const double tolerance = integrator.at("tolerance").get<double>();
+        config.absTolerance = tolerance;
+        config.relTolerance = tolerance;
+    }
+    if (integrator.contains("maxSteps")) {
+        config.maxSteps = integrator.at("maxSteps").get<uint32_t>();
+    }
+}
+
+double read_optional_double(
+    const json& value,
+    const char* first_key,
+    const char* second_key,
+    double fallback) {
+    if (value.contains(first_key)) {
+        return value.at(first_key).get<double>();
+    }
+    if (second_key != nullptr && value.contains(second_key)) {
+        return value.at(second_key).get<double>();
+    }
+    return fallback;
+}
+
+bool read_optional_bool(
+    const json& value,
+    const char* first_key,
+    const char* second_key,
+    bool fallback) {
+    if (value.contains(first_key)) {
+        return value.at(first_key).get<bool>();
+    }
+    if (second_key != nullptr && value.contains(second_key)) {
+        return value.at(second_key).get<bool>();
+    }
+    return fallback;
+}
+
+void configure_force_models(
+    const json& params,
+    double epoch_jd,
+    astro::ForceModel::ForceModelSet& forces) {
+    using namespace astro;
+
+    forces.usePointMass = true;
+    forces.mu = MU_EARTH;
+    forces.useSphericalHarmonics = true;
+    forces.sphericalHarmonics.includeJ2 = true;
+    forces.sphericalHarmonics.includeJ3 = false;
+    forces.sphericalHarmonics.includeJ4 = false;
+    forces.weather.epoch = epoch_jd;
+
+    double mass = 1000.0;
+    double area = 10.0;
+    if (params.contains("spacecraft")) {
+        const auto& spacecraft = params.at("spacecraft");
+        mass = read_optional_double(spacecraft, "massKg", "mass", mass);
+        area = read_optional_double(spacecraft, "areaM2", "area", area);
+    }
+
+    if (!params.contains("forces")) {
+        forces.srp.mass = mass;
+        forces.srp.area = area;
+        forces.drag.mass = mass;
+        forces.drag.area = area;
+        return;
+    }
+
+    const auto& requested = params.at("forces");
+
+    forces.usePointMass =
+        read_optional_bool(requested, "centralBody", "pointMass", forces.usePointMass);
+    forces.mu = read_optional_double(requested, "mu", nullptr, forces.mu);
+
+    const bool use_j2 = read_optional_bool(requested, "j2", nullptr, true);
+    const bool use_j3 = read_optional_bool(requested, "j3", nullptr, false);
+    const bool use_j4 = read_optional_bool(requested, "j4", nullptr, false);
+    forces.useSphericalHarmonics = use_j2 || use_j3 || use_j4;
+    forces.sphericalHarmonics.includeJ2 = use_j2;
+    forces.sphericalHarmonics.includeJ3 = use_j3;
+    forces.sphericalHarmonics.includeJ4 = use_j4;
+    if (requested.contains("maxDegree")) {
+        forces.sphericalHarmonics.maxDegree =
+            requested.at("maxDegree").get<uint16_t>();
+    }
+    if (requested.contains("maxOrder")) {
+        forces.sphericalHarmonics.maxOrder =
+            requested.at("maxOrder").get<uint16_t>();
+    }
+
+    forces.useThirdBody =
+        read_optional_bool(requested, "thirdBody", nullptr, forces.useThirdBody);
+    forces.thirdBody.includeSun =
+        read_optional_bool(requested, "thirdBodySun", "sun", forces.thirdBody.includeSun);
+    forces.thirdBody.includeMoon =
+        read_optional_bool(requested, "thirdBodyMoon", "moon", forces.thirdBody.includeMoon);
+
+    forces.useSRP = read_optional_bool(requested, "srp", nullptr, forces.useSRP);
+    forces.useDrag = read_optional_bool(requested, "drag", nullptr, forces.useDrag);
+
+    mass = read_optional_double(requested, "massKg", "mass", mass);
+    area = read_optional_double(requested, "areaM2", "area", area);
+
+    forces.srp.mass = mass;
+    forces.srp.area = area;
+    forces.srp.Cr = read_optional_double(requested, "cr", "Cr", forces.srp.Cr);
+
+    forces.drag.mass = mass;
+    forces.drag.area = area;
+    forces.drag.Cd = read_optional_double(requested, "cd", "Cd", forces.drag.Cd);
+}
+
+void configure_weather(
+    const json& params,
+    double epoch_jd,
+    astro::ForceModel::ForceModelSet& forces) {
+    forces.weather.epoch = epoch_jd;
+    if (!params.contains("weather")) {
+        return;
+    }
+
+    const auto& weather = params.at("weather");
+    forces.weather.F107 = read_optional_double(weather, "F107", "f107", forces.weather.F107);
+    forces.weather.F107a = read_optional_double(weather, "F107a", "f107a", forces.weather.F107a);
+    forces.weather.Ap = read_optional_double(weather, "Ap", "ap", forces.weather.Ap);
+    forces.weather.Kp = read_optional_double(weather, "Kp", "kp", forces.weather.Kp);
+}
 
 std::string propagate_json(const json& params) {
     using namespace astro;
@@ -62,63 +204,34 @@ std::string propagate_json(const json& params) {
     sv.velocity.z = vel.at(2).get<double>();
     sv.epoch = epoch_jd;
 
-    // Configure integrator
     IntegratorConfig config;
-    if (params.contains("integrator")) {
-        const auto& integ = params.at("integrator");
-        if (integ.contains("minStep")) config.minStep = integ.at("minStep").get<double>();
-        if (integ.contains("maxStep")) config.maxStep = integ.at("maxStep").get<double>();
-        if (integ.contains("tolerance")) config.tolerance = integ.at("tolerance").get<double>();
-    }
+    configure_integrator(params, config);
 
-    // Configure force model
     ForceModel::ForceModelSet forces;
-    forces.enableCentralBody = true;
-    forces.enableJ2 = true;
+    configure_force_models(params, epoch_jd, forces);
+    configure_weather(params, epoch_jd, forces);
 
-    if (params.contains("forces")) {
-        const auto& f = params.at("forces");
-        if (f.contains("centralBody")) forces.enableCentralBody = f.at("centralBody").get<bool>();
-        if (f.contains("j2")) forces.enableJ2 = f.at("j2").get<bool>();
-        if (f.contains("j4")) forces.enableJ4 = f.at("j4").get<bool>();
-        if (f.contains("drag")) forces.enableDrag = f.at("drag").get<bool>();
-        if (f.contains("srp")) forces.enableSRP = f.at("srp").get<bool>();
-        if (f.contains("thirdBodyMoon")) forces.enableThirdBodyMoon = f.at("thirdBodyMoon").get<bool>();
-        if (f.contains("thirdBodySun")) forces.enableThirdBodySun = f.at("thirdBodySun").get<bool>();
-    }
-
-    // Space weather (optional)
-    SpaceWeatherData weather;
-    if (params.contains("weather")) {
-        const auto& w = params.at("weather");
-        if (w.contains("f107")) weather.f107 = w.at("f107").get<double>();
-        if (w.contains("f107a")) weather.f107a = w.at("f107a").get<double>();
-        if (w.contains("ap")) weather.ap = w.at("ap").get<double>();
-    }
-
-    // Propagation time span in seconds
     const double dt_sec = (target_jd - epoch_jd) * 86400.0;
+    if (std::abs(dt_sec) < 1e-12) {
+        return json({
+            {"epochJD", target_jd},
+            {"position", {sv.position.x, sv.position.y, sv.position.z}},
+            {"velocity", {sv.velocity.x, sv.velocity.y, sv.velocity.z}},
+            {"propagatedDeltaSeconds", 0.0},
+            {"integrationSteps", 0},
+        }).dump();
+    }
 
-    // Build derivative function parameters
-    ForceModel::PropagatorParams propParams;
-    propParams.forceSet = &forces;
-    propParams.epochJD = epoch_jd;
-    propParams.weather = &weather;
-
-    // Initial state array [rx, ry, rz, vx, vy, vz]
     double y0[6] = {
         sv.position.x, sv.position.y, sv.position.z,
         sv.velocity.x, sv.velocity.y, sv.velocity.z
     };
 
-    // Initialize integrator
     IntegratorState istate = integratorInit(config, y0, 0.0);
-
-    // Propagate to target time
     bool ok = integratorPropagate(
         istate, config,
-        ForceModel::forceModelDerivative,
-        &propParams,
+        ForceModel::ForceModelDerivative,
+        &forces,
         dt_sec
     );
 
@@ -126,7 +239,6 @@ std::string propagate_json(const json& params) {
         throw std::runtime_error("Integration failed to reach target epoch.");
     }
 
-    // Build result
     json result = {
         {"epochJD", target_jd},
         {"position", {istate.y[0], istate.y[1], istate.y[2]}},

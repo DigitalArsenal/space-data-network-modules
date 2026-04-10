@@ -16,7 +16,11 @@
 #include "TypedArenaBuffer_generated.h"
 #include "space_data_module_invoke.h"
 
-extern "C" int invoke(void);
+extern "C" int protection_key_server_configure_runtime(void);
+extern "C" int protection_key_server_get_public_key(void);
+extern "C" int protection_key_server_request_challenge(void);
+extern "C" int protection_key_server_handle_key_request(void);
+extern "C" int protection_key_server_check_key_rotation(void);
 
 namespace {
 
@@ -75,24 +79,92 @@ struct InvokeContext {
   std::string error_message{};
 };
 
-static const PortRequirement kMethod_invoke_input_ports[] = {
+static const PortRequirement kMethod_configure_runtime_input_ports[] = {
+  { "config", true },
+};
+static const char *kMethod_configure_runtime_output_ports[] = {
+  "status",
+};
+
+static const PortRequirement kMethod_get_public_key_input_ports[] = {};
+static const char *kMethod_get_public_key_output_ports[] = {
+  "response",
+};
+
+static const PortRequirement kMethod_request_challenge_input_ports[] = {
   { "request", true },
 };
-static const char *kMethod_invoke_output_ports[] = {
+static const char *kMethod_request_challenge_output_ports[] = {
   "response",
+};
+
+static const PortRequirement kMethod_handle_key_request_input_ports[] = {
+  { "request", true },
+};
+static const char *kMethod_handle_key_request_output_ports[] = {
+  "response",
+};
+
+static const PortRequirement kMethod_check_key_rotation_input_ports[] = {};
+static const char *kMethod_check_key_rotation_output_ports[] = {
+  "status",
 };
 
 static const MethodDescriptor kMethodTable[] = {
   {
-    "invoke",
-    &invoke,
-    kMethod_invoke_input_ports,
+    "configure_runtime",
+    &protection_key_server_configure_runtime,
+    kMethod_configure_runtime_input_ports,
     1u,
-    kMethod_invoke_output_ports,
+    kMethod_configure_runtime_output_ports,
+    1u,
+    true,
+    "config",
+    "status"
+  },
+  {
+    "get_public_key",
+    &protection_key_server_get_public_key,
+    kMethod_get_public_key_input_ports,
+    0u,
+    kMethod_get_public_key_output_ports,
+    1u,
+    true,
+    nullptr,
+    "response"
+  },
+  {
+    "request_challenge",
+    &protection_key_server_request_challenge,
+    kMethod_request_challenge_input_ports,
+    1u,
+    kMethod_request_challenge_output_ports,
     1u,
     true,
     "request",
     "response"
+  },
+  {
+    "handle_key_request",
+    &protection_key_server_handle_key_request,
+    kMethod_handle_key_request_input_ports,
+    1u,
+    kMethod_handle_key_request_output_ports,
+    1u,
+    true,
+    "request",
+    "response"
+  },
+  {
+    "check_key_rotation",
+    &protection_key_server_check_key_rotation,
+    kMethod_check_key_rotation_input_ports,
+    0u,
+    kMethod_check_key_rotation_output_ports,
+    1u,
+    true,
+    nullptr,
+    "status"
   },
 };
 

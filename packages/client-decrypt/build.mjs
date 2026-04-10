@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
- * Build the SDN client-decrypt WASM module using system emcc.
+ * Build the SDN client-decrypt WASM module using a repo-local emsdk toolchain.
  *
  * Prerequisites:
- *   - emcc in PATH (Emscripten 3.x or 4.x)
  *   - Internet access to fetch Crypto++ 8.9.0 (or set CRYPTOPP_SOURCE_DIR)
  *   - npm install (for space-data-module-sdk + flatc-wasm)
  *
@@ -12,21 +11,29 @@
  *
  * Output:
  *   dist/client-decrypt.wasm
+ *   dist/isomorphic/module.wasm
  *
  * Environment:
  *   CRYPTOPP_SOURCE_DIR      — local Crypto++ source tree (skips git clone)
+ *   SDN_LOCAL_EMSDK_DIR      — repo-local emsdk root override
  *   FLATBUFFERS_INCLUDE_DIR  — path to flatbuffers C++ headers (optional override)
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const EMSDK_DIR = path.resolve(
+  process.env.SDN_LOCAL_EMSDK_DIR || path.join(__dirname, "deps", "emsdk"),
+);
+const EM_CACHE_DIR = path.join(__dirname, ".emcache");
 const BUILD_DIR = path.join(__dirname, ".build");
 const DIST_DIR = path.join(__dirname, "dist");
+const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
 const SRC_DIR = path.join(__dirname, "src");
+const TOOLCHAIN_STAMP_PATH = path.join(BUILD_DIR, ".emsdk-path");
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +44,72 @@ function run(cmd, opts = {}) {
 
 function runSilent(cmd, opts = {}) {
   return execSync(cmd, { encoding: "utf8", ...opts });
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function activateLocalEmsdk() {
+  const envScript = path.join(EMSDK_DIR, "emsdk_env.sh");
+  const sourcedEnv = execFileSync(
+    "bash",
+    ["-lc", `source ${shellQuote(envScript)} >/dev/null 2>&1 && env -0`],
+    {
+      encoding: "buffer",
+      env: {
+        ...process.env,
+        EM_CACHE: process.env.EM_CACHE || EM_CACHE_DIR,
+      },
+    },
+  );
+
+  for (const entry of sourcedEnv.toString("utf8").split("\0")) {
+    if (!entry) {
+      continue;
+    }
+    const separator = entry.indexOf("=");
+    if (separator <= 0) {
+      continue;
+    }
+    const key = entry.slice(0, separator);
+    const value = entry.slice(separator + 1);
+    process.env[key] = value;
+  }
+}
+
+function ensureLocalEmscripten() {
+  fs.mkdirSync(EM_CACHE_DIR, { recursive: true });
+  process.env.EM_CACHE = process.env.EM_CACHE || EM_CACHE_DIR;
+
+  const envScript = path.join(EMSDK_DIR, "emsdk_env.sh");
+  const emccPath = path.join(EMSDK_DIR, "upstream", "emscripten", "emcc");
+
+  if (!fs.existsSync(envScript)) {
+    console.log(`  Cloning emsdk into ${EMSDK_DIR}...`);
+    fs.mkdirSync(path.dirname(EMSDK_DIR), { recursive: true });
+    run(`git clone https://github.com/emscripten-core/emsdk.git ${EMSDK_DIR}`);
+  }
+  if (!fs.existsSync(emccPath)) {
+    console.log("  Installing local emsdk...");
+    run("./emsdk install latest", { cwd: EMSDK_DIR });
+    run("./emsdk activate latest", { cwd: EMSDK_DIR });
+  }
+
+  activateLocalEmsdk();
+}
+
+function syncToolchainStamp() {
+  fs.mkdirSync(BUILD_DIR, { recursive: true });
+  const recorded = fs.existsSync(TOOLCHAIN_STAMP_PATH)
+    ? fs.readFileSync(TOOLCHAIN_STAMP_PATH, "utf8").trim()
+    : "";
+  if (recorded && recorded !== EMSDK_DIR) {
+    console.log("  Local emsdk path changed; clearing cached toolchain outputs...");
+    fs.rmSync(path.join(BUILD_DIR, "cryptopp-obj"), { recursive: true, force: true });
+    fs.rmSync(path.join(BUILD_DIR, "libcryptopp.a"), { force: true });
+  }
+  fs.writeFileSync(TOOLCHAIN_STAMP_PATH, `${EMSDK_DIR}\n`, "utf8");
 }
 
 // ── FlatBuffer C++ header generation ─────────────────────────────────────────
@@ -156,20 +229,25 @@ function compileCryptoppLib(srcDir, parentDir, objDir, archivePath) {
     .filter((f) => f.endsWith(".cpp") && !skip.has(f));
 
   const objFiles = [];
+  const emcc = path.join(EMSDK_DIR, "upstream", "emscripten", "emcc");
+  const emar = path.join(EMSDK_DIR, "upstream", "emscripten", "emar");
   for (const src of sources) {
     const obj = path.join(objDir, src.replace(".cpp", ".o"));
     if (!fs.existsSync(obj)) {
       run(
-        `emcc -O2 -std=c++17 -fwasm-exceptions ` +
+        `${shellQuote(emcc)} -O2 -std=c++17 -fwasm-exceptions ` +
           `-DCRYPTOPP_DISABLE_ASM=1 -DCRYPTOPP_DISABLE_SSSE3=1 -DCRYPTOPP_DISABLE_AESNI=1 ` +
-          `-I${parentDir} -I${srcDir} ` +
-          `-c ${path.join(srcDir, src)} -o ${obj}`,
+          `-I${shellQuote(parentDir)} -I${shellQuote(srcDir)} ` +
+          `-c ${shellQuote(path.join(srcDir, src))} -o ${shellQuote(obj)}`,
       );
     }
     objFiles.push(obj);
   }
 
-  run(`emar rcs ${archivePath} ${objFiles.join(" ")}`);
+  run(
+    `${shellQuote(emar)} rcs ${shellQuote(archivePath)} ` +
+    objFiles.map((obj) => shellQuote(obj)).join(" "),
+  );
   console.log(`  Crypto++ archive: ${archivePath}`);
 }
 
@@ -201,8 +279,11 @@ function resolveFlatbuffersInclude() {
 async function main() {
   console.log("SDN Plugin Build — client-decrypt");
   console.log(`Build dir: ${BUILD_DIR}`);
+  ensureLocalEmscripten();
+  syncToolchainStamp();
   fs.mkdirSync(BUILD_DIR, { recursive: true });
   fs.mkdirSync(DIST_DIR, { recursive: true });
+  fs.mkdirSync(ISOMORPHIC_DIST_DIR, { recursive: true });
 
   const flatbuffersInclude = resolveFlatbuffersInclude();
 
@@ -239,19 +320,22 @@ uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
 
   const srcPath = path.join(SRC_DIR, "client_decrypt.cpp");
   const outWasm = path.join(DIST_DIR, "client-decrypt.wasm");
+  const emxx = path.join(EMSDK_DIR, "upstream", "emscripten", "em++");
 
   run(
-    `em++ -O2 -std=c++17 -fwasm-exceptions ` +
+    `${shellQuote(emxx)} -O2 -std=c++17 -fwasm-exceptions ` +
       `-DCRYPTOPP_DISABLE_ASM=1 -DCRYPTOPP_DISABLE_SSSE3=1 -DCRYPTOPP_DISABLE_AESNI=1 ` +
-      `-I${cryptoppParent} -I${cryptoppSrc} -I${fbbHeadersDir} -I${flatbuffersInclude} ` +
-      `${srcPath} ${manifestExportsPath} ${cryptoppLib} ` +
+      `-I${shellQuote(cryptoppParent)} -I${shellQuote(cryptoppSrc)} -I${shellQuote(fbbHeadersDir)} -I${shellQuote(flatbuffersInclude)} ` +
+      `${shellQuote(srcPath)} ${shellQuote(manifestExportsPath)} ${shellQuote(cryptoppLib)} ` +
       `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 ` +
       `-sINITIAL_MEMORY=16777216 -sALLOW_MEMORY_GROWTH=1 ` +
       `-sFILESYSTEM=0 ` +
       `-sERROR_ON_UNDEFINED_SYMBOLS=0 ` +
       `-sEXPORTED_FUNCTIONS="['_plugin_invoke_stream','_plugin_alloc','_plugin_free','_plugin_get_manifest_flatbuffer','_plugin_get_manifest_flatbuffer_size']" ` +
-      `--no-entry -o ${outWasm}`,
+      `--no-entry -o ${shellQuote(outWasm)}`,
   );
+
+  fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
 
   console.log(`\n✓ Build complete: ${outWasm}`);
 }

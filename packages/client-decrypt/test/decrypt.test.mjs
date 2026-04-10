@@ -15,7 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WASM_PATH = path.resolve(__dirname, "../dist/client-decrypt.wasm");
+const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
 
 // ── Inline WebCrypto artifact-crypto (self-contained, no external dep) ──────
 
@@ -195,7 +195,7 @@ console.log(`Loaded ${path.basename(WASM_PATH)} (${wasmBytes.length} bytes)\n`);
 
 let harness;
 
-await test("load client-decrypt.wasm via browser harness", async () => {
+await test("load client-decrypt module.wasm via browser harness", async () => {
   harness = await createBrowserModuleHarness({
     wasmSource: wasmBytes,
     surface: "direct",

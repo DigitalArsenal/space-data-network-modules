@@ -34,6 +34,11 @@ When creating, migrating, retrofitting, or verifying a package under
 - No Cesium `TaskProcessor` or Cesium-specific data structures.
 - Build through repo-local `deps/emsdk`, not Homebrew or machine-global
   Emscripten.
+- Never invoke `emcc`, `em++`, `emcmake`, or `emar` from PATH unless PATH has
+  already been populated by sourcing a repo-local `deps/emsdk/emsdk_env.sh`.
+- If a package build script still uses system Emscripten or Homebrew-managed
+  Emscripten, fix the script before continuing. That is a repo bug, not an
+  acceptable fallback.
 
 ## What Belongs Here
 

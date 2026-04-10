@@ -24,20 +24,24 @@ const ROOT = join(__dirname, '..');
 // ── Load WASM module ──
 
 async function loadWasm() {
-  const wasmPath = join(ROOT, 'dist', 'od_wasm.js');
-  if (!existsSync(wasmPath)) {
+  const moduleJsPath = join(ROOT, 'dist', 'browser', 'module.js');
+  const moduleWasmPath = join(ROOT, 'dist', 'browser', 'module.wasm');
+  if (!existsSync(moduleJsPath) || !existsSync(moduleWasmPath)) {
     throw new Error(
-      `WASM not found at ${wasmPath}. Run: bash build.sh`
+      `Browser artifacts not found at ${moduleJsPath} and ${moduleWasmPath}. Run: bash build.sh`
     );
   }
 
   // Emscripten MODULARIZE output
   const require = createRequire(import.meta.url);
-  const ODModuleFactory = require(wasmPath);
+  const ODModuleFactory = require(moduleJsPath);
   const previousExitCode = process.exitCode;
   const Module = await ODModuleFactory({
     print() {},
     printErr() {},
+    locateFile(path) {
+      return path.endsWith('.wasm') ? moduleWasmPath : path;
+    },
   });
   process.exitCode = previousExitCode;
   return Module;

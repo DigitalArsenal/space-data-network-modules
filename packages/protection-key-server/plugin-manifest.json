@@ -7,50 +7,10 @@
   "capabilities": [
     "clock",
     "random",
-    "logging",
-    "crypto_hash",
-    "crypto_sign",
-    "crypto_encrypt",
-    "crypto_decrypt",
-    "crypto_key_agreement"
+    "logging"
   ],
-  "protocols": [
-    {
-      "protocolId": "/orbpro/public-key/1.0.0",
-      "methodId": "get_public_key",
-      "description": "Returns the server's uncompressed P-256 public key.",
-      "transportKind": "request-response",
-      "role": "responder",
-      "autoInstall": true,
-      "advertise": true
-    },
-    {
-      "protocolId": "/orbpro/challenge/1.0.0",
-      "methodId": "request_challenge",
-      "description": "Issues a random challenge token for client proof-of-possession.",
-      "transportKind": "request-response",
-      "role": "responder",
-      "autoInstall": true,
-      "advertise": false
-    },
-    {
-      "protocolId": "/orbpro/key-broker/1.0.0",
-      "methodId": "handle_key_request",
-      "description": "Validates challenge proof, performs ECDH key agreement, and returns the encrypted DEK.",
-      "transportKind": "request-response",
-      "role": "responder",
-      "autoInstall": true,
-      "advertise": false
-    }
-  ],
-  "timers": [
-    {
-      "timerId": "key-rotation-check",
-      "methodId": "check_key_rotation",
-      "defaultIntervalMs": 3600000,
-      "description": "Periodic check for key rotation events."
-    }
-  ],
+  "protocols": [],
+  "timers": [],
   "externalInterfaces": [],
   "invokeSurfaces": ["direct", "command"],
   "runtimeTargets": ["wasi", "wasmedge"],
@@ -94,7 +54,20 @@
       "methodId": "get_public_key",
       "displayName": "Get Public Key",
       "description": "Returns the server's P-256 public key and runtime state.",
-      "inputPorts": [],
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "optional-request",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "outputPorts": [
         {
           "portId": "response",
@@ -186,7 +159,20 @@
       "methodId": "check_key_rotation",
       "displayName": "Check Key Rotation",
       "description": "Periodic timer method for key rotation.",
-      "inputPorts": [],
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "optional-request",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
       "outputPorts": [
         {
           "portId": "status",

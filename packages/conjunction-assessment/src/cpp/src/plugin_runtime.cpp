@@ -66,7 +66,8 @@ json conjunction_event_to_json(const ConjunctionEvent& event) {
 TLE parse_tle_from_json(const json& obj) {
     TLE tle{};
     if (obj.contains("line1") && obj.contains("line2")) {
-        tle = parse_tle(obj.at("line1").get<std::string>(),
+        tle = parse_tle(obj.value("name", std::string()),
+                        obj.at("line1").get<std::string>(),
                         obj.at("line2").get<std::string>());
     }
     if (obj.contains("name")) {
