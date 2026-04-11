@@ -59,6 +59,8 @@ ensure_emscripten() {
 
 ensure_emscripten
 
+node "$SCRIPT_DIR/generate-manifest-header.mjs"
+
 rm -rf "$EMSCRIPTEN_BUILD_DIR"
 rm -rf "$DIST_DIR"
 mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
@@ -73,6 +75,11 @@ cmake --build "$EMSCRIPTEN_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)
 cp "$EMSCRIPTEN_BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
 cp "$EMSCRIPTEN_BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
 cp "$EMSCRIPTEN_BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+
+# OrbPro workers import the browser glue as an ES module and expect a default factory.
+if ! grep -q 'export default HPOPModule;' "$BROWSER_DIST_DIR/module.js"; then
+    printf '\nexport default HPOPModule;\n' >> "$BROWSER_DIST_DIR/module.js"
+fi
 
 echo ""
 echo "=== Build Complete ==="

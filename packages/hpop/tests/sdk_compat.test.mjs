@@ -52,6 +52,34 @@ function createInvokeRequest() {
   };
 }
 
+function instantiateStandaloneModule(wasmBytes) {
+  const wasi = {
+    proc_exit() {},
+    fd_read() {
+      return 52;
+    },
+    fd_seek() {
+      return 70;
+    },
+    fd_write() {
+      return 0;
+    },
+    fd_close() {
+      return 52;
+    },
+    args_get() {
+      return 0;
+    },
+    args_sizes_get() {
+      return 0;
+    },
+  };
+  return new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {
+    env: wasi,
+    wasi_snapshot_preview1: wasi,
+  });
+}
+
 function assertSuccessfulResponse(response) {
   assert.equal(response.statusCode, 0);
   assert.ok(response.errorCode === "" || response.errorCode === null);
@@ -69,6 +97,12 @@ test("build publishes canonical browser and isomorphic artifact paths", () => {
   assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
   assert.equal(fs.existsSync(fileURLToPath(BROWSER_MODULE_PATH)), true);
   assert.equal(fs.existsSync(fileURLToPath(BROWSER_WASM_PATH)), true);
+});
+
+test("browser module exposes a default factory for worker imports", async () => {
+  const namespace = await import(BROWSER_MODULE_PATH.href);
+
+  assert.equal(typeof namespace.default, "function");
 });
 
 test("built artifact passes SDK compliance checks", async () => {
@@ -96,6 +130,16 @@ test("built artifact exposes the standalone isomorphic surface", async () => {
   assert.ok(inspection.exports.includes("plugin_invoke_stream"));
   assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer"));
   assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer_size"));
+});
+
+test("built artifact embeds a non-empty manifest flatbuffer", () => {
+  const wasmBytes = fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
+  const instance = instantiateStandaloneModule(wasmBytes);
+  const manifestPtr = instance.exports.plugin_get_manifest_flatbuffer();
+  const manifestSize = instance.exports.plugin_get_manifest_flatbuffer_size();
+
+  assert.ok(manifestPtr > 0);
+  assert.ok(manifestSize > 0);
 });
 
 test("built artifact loads through the SDK browser harness", async (t) => {

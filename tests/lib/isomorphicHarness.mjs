@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import {
-  createBrowserModuleHarness,
-} from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
-import {
-  loadModule,
-} from "../../../space-data-module-sdk/src/host/isomorphicLoader.js";
+const cwdRequire = createRequire(path.join(process.cwd(), "package.json"));
+const { createBrowserModuleHarness } = await import(
+  pathToFileURL(cwdRequire.resolve("space-data-module-sdk/testing")).href,
+);
+const { loadModule } = await import(
+  pathToFileURL(cwdRequire.resolve("space-data-module-sdk/host/isomorphic")).href,
+);
 
 export const STANDALONE_RUNTIME_KINDS = Object.freeze(["browser", "wasmedge"]);
 

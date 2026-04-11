@@ -51,12 +51,14 @@ if(EMSCRIPTEN)
     # --- Emscripten browser artifact ---
     add_executable(
         hpop_wasm
+        ../hpop_plugin.cpp
         wasm_api.cpp
         src/plugin_entrypoints.cpp
         src/plugin_invoke_bridge.cpp
     )
     target_include_directories(
         hpop_wasm PRIVATE
+        ..
         include
         generated
         "${FLATBUFFERS_INCLUDE_DIR}"
@@ -66,7 +68,7 @@ if(EMSCRIPTEN)
         hpop_wasm PROPERTIES
         SUFFIX ".js"
         LINK_FLAGS "\
-            -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
+            -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_init\",\"_plugin_init_states\",\"_plugin_stream_invoke\",\"_get_entity_count\",\"_get_orbital_period\",\"_get_eccentricity\",\"_plugin_propagate\",\"_plugin_propagate_path_entity\",\"_plugin_propagate_path_times\",\"_plugin_set_integrator\",\"_plugin_set_state\",\"_plugin_set_force_model\",\"_plugin_set_drag_options\",\"_plugin_set_atmosphere_model\",\"_plugin_set_solar_activity\",\"_plugin_set_gravity\",\"_plugin_set_tides\",\"_plugin_set_relativity\",\"_plugin_set_earth_radiation\",\"_plugin_set_third_body_extended\",\"_plugin_set_empirical\",\"_plugin_propagate_to\",\"_plugin_propagate_path\",\"_plugin_compute_stm\",\"_plugin_propagate_covariance\",\"_plugin_get_covariance_ellipsoid\",\"_plugin_get_acceleration_breakdown\",\"_plugin_set_burns\",\"_plugin_clear_burns\",\"_plugin_destroy\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\",\"_malloc\",\"_free\"]' \
             -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
             -s MODULARIZE=1 \
             -s EXPORT_NAME='HPOPModule' \
