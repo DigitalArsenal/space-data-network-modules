@@ -507,6 +507,58 @@ await test(
   },
 );
 
+await test(
+  "decrypt_artifact: accepts prefetched encrypted bundle bytes for awaited browser delivery",
+  async () => {
+    const { publicKey, privateKey } = await generateX25519KeyPair();
+    const plaintext = new Uint8Array([
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+      ...crypto.getRandomValues(new Uint8Array(192)),
+    ]);
+    const fixture = await buildGrantResponseFixture(plaintext, publicKey);
+    const operations = [];
+
+    const shimHarness = await createSdkBrowserShimHarness({
+      wasmSource: wasmBytes,
+      surface: "direct",
+      maxRequestBytes: 1024 * 1024,
+      maxResponseBytes: 4 * 1024 * 1024,
+      dispatch(operation, params) {
+        operations.push(operation);
+        if (operation === "host.runtimeTarget") return "browser";
+        if (operation === "host.listCapabilities") return [];
+        if (operation === "host.hasCapability") return false;
+        if (operation === "host.listOperations") return [];
+        if (operation === "clock.now") return Date.now();
+        if (operation === "random.bytes") {
+          return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
+        }
+        throw new Error(`Unsupported operation: ${operation}`);
+      },
+    });
+
+    try {
+      const result = await shimHarness.invoke({
+        methodId: "decrypt_artifact",
+        inputs: [
+          { payload: fixture.grantResponseBytes },
+          { payload: privateKey },
+          { payload: fixture.packedEncryptedBundle },
+        ],
+      });
+
+      assert.deepEqual(
+        result.outputs[0].payload,
+        plaintext,
+        "GrantResponse/prefetched bundle flow should decrypt without host IPFS access",
+      );
+      assert.equal(operations.includes("ipfs.cat"), false);
+    } finally {
+      await shimHarness.destroy();
+    }
+  },
+);
+
 await test("decrypt_artifact: large payload (64 KB)", async () => {
   const { publicKey, privateKey } = await generateX25519KeyPair();
   const plaintext = crypto.getRandomValues(new Uint8Array(65536));
