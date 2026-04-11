@@ -1,4 +1,5 @@
 .build/
 .emcache/
 .server-key.hex
+deps/emsdk/
 node_modules/
