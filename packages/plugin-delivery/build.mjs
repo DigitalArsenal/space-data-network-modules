@@ -139,31 +139,66 @@ async function generateFlatbufferHeaders(outDir) {
       `space-data-module-sdk schemas not found.\nRun: npm install`,
     );
   }
+  const moduleDeliverySchemasDir = path.resolve(
+    __dirname,
+    "../../../space-data-network/packages/plugin-sdk/schemas/space-data-network/module-delivery/v1",
+  );
+  if (!fs.existsSync(moduleDeliverySchemasDir)) {
+    throw new Error(
+      `module-delivery schemas not found at ${moduleDeliverySchemasDir}`,
+    );
+  }
 
   const { default: createFlatc } = await import(`file://${flatcWasmPath}`);
   const flatc = await createFlatc();
 
-  const schemaFiles = [
+  const sdkSchemaFiles = [
     "PluginInvokeRequest.fbs",
     "PluginInvokeResponse.fbs",
     "TypedArenaBuffer.fbs",
   ];
+  const moduleDeliverySchemaFiles = [
+    "BundleDescriptor.fbs",
+    "WrappedContentKey.fbs",
+    "GrantResponse.fbs",
+  ];
 
   const ensureDir = (p) => { try { flatc.FS.mkdir(p); } catch {} };
   ensureDir("/schemas");
+  ensureDir("/schemas/sdk");
+  ensureDir("/schemas/module_delivery");
   ensureDir("/out_cpp");
 
-  for (const sf of schemaFiles) {
+  for (const sf of sdkSchemaFiles) {
     flatc.FS.writeFile(
-      `/schemas/${sf}`,
+      `/schemas/sdk/${sf}`,
       fs.readFileSync(path.join(sdkSchemasDir, sf), "utf8"),
     );
   }
+  for (const sf of moduleDeliverySchemaFiles) {
+    flatc.FS.writeFile(
+      `/schemas/module_delivery/${sf}`,
+      fs.readFileSync(path.join(moduleDeliverySchemasDir, sf), "utf8"),
+    );
+  }
 
-  for (const sf of schemaFiles) {
+  for (const sf of sdkSchemaFiles) {
     const rc = flatc.callMain([
       "--cpp", "--cpp-std", "c++17", "--gen-object-api",
-      "-I", "/schemas", "-o", "/out_cpp", `/schemas/${sf}`,
+      "-I", "/schemas/sdk", "-o", "/out_cpp", `/schemas/sdk/${sf}`,
+    ]);
+    if (rc !== 0) throw new Error(`flatc failed for ${sf}`);
+    const hdr = `${path.basename(sf, ".fbs")}_generated.h`;
+    fs.writeFileSync(
+      path.join(outDir, hdr),
+      flatc.FS.readFile(`/out_cpp/${hdr}`, { encoding: "utf8" }),
+    );
+  }
+
+  for (const sf of moduleDeliverySchemaFiles) {
+    const rc = flatc.callMain([
+      "--cpp", "--cpp-std", "c++17", "--gen-object-api",
+      "-I", "/schemas/module_delivery", "-o", "/out_cpp", `/schemas/module_delivery/${sf}`,
     ]);
     if (rc !== 0) throw new Error(`flatc failed for ${sf}`);
     const hdr = `${path.basename(sf, ".fbs")}_generated.h`;
@@ -299,7 +334,10 @@ async function main() {
 
   // Generate invoke FlatBuffer headers
   const fbbHeadersDir = path.join(BUILD_DIR, "fbb-headers");
-  if (!fs.existsSync(path.join(fbbHeadersDir, "PluginInvokeRequest_generated.h"))) {
+  if (
+    !fs.existsSync(path.join(fbbHeadersDir, "PluginInvokeRequest_generated.h")) ||
+    !fs.existsSync(path.join(fbbHeadersDir, "GrantResponse_generated.h"))
+  ) {
     await generateFlatbufferHeaders(fbbHeadersDir);
   } else {
     console.log("  FlatBuffer headers already generated.");

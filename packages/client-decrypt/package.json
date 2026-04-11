@@ -4,11 +4,22 @@
   "description": "SDN client decryption module — decrypts X25519 ECIES artifact envelopes using Crypto++",
   "private": true,
   "type": "module",
+  "main": "index.js",
   "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "index.js",
+    "build.mjs",
+    "src/"
+  ],
   "scripts": {
     "build": "node build.mjs",
     "build:clean": "rm -rf .build dist && node build.mjs",
-    "test": "node test/decrypt.test.mjs && node test/e2e-roundtrip.test.mjs"
+    "test": "node test/api.test.mjs && node test/decrypt.test.mjs && node test/e2e-roundtrip.test.mjs"
   },
   "devDependencies": {
     "blockstore-core": "^6.1.2",

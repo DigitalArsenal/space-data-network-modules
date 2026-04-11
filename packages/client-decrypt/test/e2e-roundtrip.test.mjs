@@ -17,20 +17,20 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHelia } from "helia";
-import { unixfs } from "@helia/unixfs";
-import { MemoryBlockstore } from "blockstore-core/memory";
-import { MemoryDatastore } from "datastore-core/memory";
 
 import {
   createBrowserModuleHarness,
 } from "space-data-module-sdk/testing";
 import {
   createSdkBrowserShimHarness,
-} from "../../../tests/lib/sdkBrowserShimHarness.mjs";
+} from "./lib/sdkBrowserShimHarness.mjs";
+import {
+  decodeGrantResponse,
+} from "../../../../space-data-network/packages/plugin-sdk/src/module-delivery-codec.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DECRYPT_WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
@@ -68,6 +68,19 @@ function toBase64(bytes) {
   let binary = "";
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
+}
+
+function fromBase64(b64) {
+  const raw = atob(b64.replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function storeIpfsBytes(contentStore, bytes) {
+  const cid = `bafy-source-${createHash("sha256").update(bytes).digest("hex").slice(0, 24)}`;
+  contentStore.set(cid, bytes);
+  return cid;
 }
 
 function concat(...arrays) {
@@ -162,10 +175,22 @@ function createDeliveryHarness(wasmBytes, contentStore) {
       if (!data) throw new Error(`CID not found: ${cid}`);
       return new Uint8Array(data);
     }
+    if (operation === "ipfs.add") {
+      const raw =
+        typeof params?.base64 === "string"
+          ? fromBase64(params.base64)
+          : typeof params?.data === "string"
+            ? fromBase64(params.data)
+            : null;
+      if (!raw) throw new Error("ipfs.add requires base64 payload");
+      const cid = `bafy-encrypted-${createHash("sha256").update(raw).digest("hex").slice(0, 24)}`;
+      contentStore.set(cid, raw);
+      return { Hash: cid, Size: raw.length };
+    }
     if (operation === "host.runtimeTarget") return "node";
     if (operation === "host.listCapabilities") return ["ipfs"];
     if (operation === "host.hasCapability") return params?.capability === "ipfs";
-    if (operation === "host.listOperations") return ["ipfs.cat"];
+    if (operation === "host.listOperations") return ["ipfs.cat", "ipfs.add"];
     if (operation === "clock.now") return Date.now();
     if (operation === "random.bytes") {
       return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
@@ -178,6 +203,8 @@ function createDeliveryHarness(wasmBytes, contentStore) {
       wasmSource: wasmBytes,
       dispatch,
       surface: "direct",
+      maxRequestBytes: 1024 * 1024,
+      maxResponseBytes: 4 * 1024 * 1024,
     });
 }
 
@@ -248,15 +275,9 @@ await test("e2e: JS encrypt → C++ WASM decrypt (plugin info)", async () => {
 // ── Cross-plugin tests (require plugin-delivery WASM) ───────────────────────
 
 if (hasDeliveryWasm) {
-  let helia, heliaUfs, contentStore;
+  let contentStore;
 
-  await test("start Helia node (in-memory)", async () => {
-    helia = await createHelia({
-      blockstore: new MemoryBlockstore(),
-      datastore: new MemoryDatastore(),
-      start: false,
-    });
-    heliaUfs = unixfs(helia);
+  await test("start in-memory IPFS store", async () => {
     contentStore = new Map();
   });
 
@@ -266,17 +287,11 @@ if (hasDeliveryWasm) {
       ...crypto.getRandomValues(new Uint8Array(512)),
     ]);
 
-    const cid = await heliaUfs.addBytes(artifact);
-    const cidStr = cid.toString();
-    const chunks = [];
-    for await (const chunk of heliaUfs.cat(cid)) chunks.push(chunk);
-    const fetched = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-    let off = 0;
-    for (const c of chunks) { fetched.set(c, off); off += c.length; }
-    contentStore.set(cidStr, fetched);
+    const cidStr = storeIpfsBytes(contentStore, artifact);
 
     const deliveryWasm = fs.readFileSync(DELIVERY_WASM_PATH);
     const deliveryHarness = await createDeliveryHarness(deliveryWasm, contentStore)();
+    const crossPluginDecryptHarness = await createDeliveryHarness(decryptWasm, contentStore)();
 
     const { publicKey, privateKey } = await generateX25519KeyPair();
 
@@ -286,36 +301,53 @@ if (hasDeliveryWasm) {
       inputs: [
         { payload: publicKey },
         { payload: new TextEncoder().encode(cidStr) },
+        {
+          payload: new TextEncoder().encode(
+            JSON.stringify({
+              reqId: "req-cross-plugin",
+              moduleId: "com.orbpro.fastest-path",
+              moduleVersion: "1.0.0",
+              runtime: "browser",
+              abi: "sdn-abi",
+              entrypoint: "plugin_invoke_stream",
+              publicationCid: cidStr,
+            }),
+          ),
+        },
       ],
     });
     assert.ok(deliverResult.outputs?.length >= 1, `deliver failed: ${deliverResult.errorMessage}`);
+    const grant = decodeGrantResponse(deliverResult.outputs[0].payload);
+    assert.equal(grant.bundleDescriptor.publicationCid, cidStr);
+    assert.ok(contentStore.has(grant.bundleDescriptor.cid));
 
     // Client decrypts (C++ → C++)
-    const decryptResult = await decryptHarness.invoke({
-      methodId: "decrypt_artifact",
-      inputs: [
-        { payload: deliverResult.outputs[0].payload },
-        { payload: privateKey },
-      ],
-    });
-    assert.ok(decryptResult.outputs?.length >= 1);
-    assert.deepEqual(decryptResult.outputs[0].payload, artifact,
-      "C++ decrypt of C++ encrypted IPFS artifact must match original");
+    try {
+      const decryptResult = await crossPluginDecryptHarness.invoke({
+        methodId: "decrypt_artifact",
+        inputs: [
+          { payload: deliverResult.outputs[0].payload },
+          { payload: privateKey },
+        ],
+      });
+      assert.ok(decryptResult.outputs?.length >= 1);
+      assert.deepEqual(
+        decryptResult.outputs[0].payload,
+        artifact,
+        "C++ decrypt of C++ encrypted IPFS artifact must match original",
+      );
+    } finally {
+      await crossPluginDecryptHarness.destroy();
+    }
   });
 
   await test("e2e: large artifact cross-plugin (64 KB)", async () => {
     const artifact = crypto.getRandomValues(new Uint8Array(65536));
-    const cid = await heliaUfs.addBytes(artifact);
-    const cidStr = cid.toString();
-    const chunks = [];
-    for await (const chunk of heliaUfs.cat(cid)) chunks.push(chunk);
-    const fetched = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-    let off = 0;
-    for (const c of chunks) { fetched.set(c, off); off += c.length; }
-    contentStore.set(cidStr, fetched);
+    const cidStr = storeIpfsBytes(contentStore, artifact);
 
     const deliveryWasm = fs.readFileSync(DELIVERY_WASM_PATH);
     const deliveryHarness = await createDeliveryHarness(deliveryWasm, contentStore)();
+    const crossPluginDecryptHarness = await createDeliveryHarness(decryptWasm, contentStore)();
     const { publicKey, privateKey } = await generateX25519KeyPair();
 
     const dr = await deliveryHarness.invoke({
@@ -324,14 +356,17 @@ if (hasDeliveryWasm) {
     });
     assert.ok(dr.outputs?.length >= 1, `failed: ${dr.errorMessage}`);
 
-    const cr = await decryptHarness.invoke({
-      methodId: "decrypt_artifact",
-      inputs: [{ payload: dr.outputs[0].payload }, { payload: privateKey }],
-    });
-    assert.deepEqual(cr.outputs[0].payload, artifact, "64 KB cross-plugin round-trip");
+    try {
+      const cr = await crossPluginDecryptHarness.invoke({
+        methodId: "decrypt_artifact",
+        inputs: [{ payload: dr.outputs[0].payload }, { payload: privateKey }],
+      });
+      assert.deepEqual(cr.outputs[0].payload, artifact, "64 KB cross-plugin round-trip");
+    } finally {
+      await crossPluginDecryptHarness.destroy();
+    }
   });
 
-  if (helia) await helia.stop();
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────────

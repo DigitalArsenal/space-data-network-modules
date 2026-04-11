@@ -13,17 +13,17 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHelia } from "helia";
-import { unixfs } from "@helia/unixfs";
-import { MemoryBlockstore } from "blockstore-core/memory";
-import { MemoryDatastore } from "datastore-core/memory";
 
 import {
   createSdkBrowserShimHarness,
-} from "../../../tests/lib/sdkBrowserShimHarness.mjs";
+} from "./lib/sdkBrowserShimHarness.mjs";
+import {
+  decodeGrantResponse,
+} from "../../../../space-data-network/packages/plugin-sdk/src/module-delivery-codec.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
@@ -62,35 +62,51 @@ async function generateX25519KeyPair() {
   return { publicKey: spki.slice(12), privateKey: pkcs8.slice(16) };
 }
 
-async function decryptEciesEnvelope(envelopeJson, recipientPrivateKey) {
-  const env = typeof envelopeJson === "string" ? JSON.parse(envelopeJson) : envelopeJson;
-  const ke = env.keyEncryption;
-  const ce = env.contentEncryption;
+function sha256Bytes(bytes) {
+  return new Uint8Array(createHash("sha256").update(bytes).digest());
+}
 
-  const ephemeralPub = hexToBytes(ke.ephemeralPublicKeyHex);
+function storeIpfsBytes(contentStore, bytes) {
+  const cid = `bafy-source-${Buffer.from(sha256Bytes(bytes)).toString("hex").slice(0, 24)}`;
+  contentStore.set(cid, bytes);
+  return cid;
+}
+
+async function decryptDeliveredBundle(grant, encryptedBundleBytes, recipientPrivateKey) {
+  const wrappedContentKey = grant.wrappedContentKey;
   const priv = await crypto.subtle.importKey("pkcs8", concat(PKCS8_HEADER, recipientPrivateKey), "X25519", false, ["deriveBits"]);
-  const pub = await crypto.subtle.importKey("spki", concat(SPKI_HEADER, ephemeralPub), "X25519", false, []);
+  const pub = await crypto.subtle.importKey(
+    "spki",
+    concat(SPKI_HEADER, wrappedContentKey.ephemeralPublicKey),
+    "X25519",
+    false,
+    [],
+  );
   const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: pub }, priv, 256));
 
-  const hkdfSalt = fromBase64(ke.hkdfSaltB64);
   const hkdfKey = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveBits"]);
   const wrapKey = new Uint8Array(await crypto.subtle.deriveBits({
-    name: "HKDF", hash: "SHA-256", salt: hkdfSalt,
+    name: "HKDF",
+    hash: "SHA-256",
+    salt: new Uint8Array(),
     info: new TextEncoder().encode("orbpro-key-server-artifact-wrap-v1"),
   }, hkdfKey, 256));
 
-  const wrappedKey = fromBase64(ke.wrappedKeyB64);
-  const wrappedTag = fromBase64(ke.wrappedKeyTagB64);
   const wrapCk = await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, ["decrypt"]);
   const contentKey = new Uint8Array(await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: fromBase64(ke.wrapIvB64) }, wrapCk, concat(wrappedKey, wrappedTag),
+    { name: "AES-GCM", iv: wrappedContentKey.nonce },
+    wrapCk,
+    concat(wrappedContentKey.ciphertext, wrappedContentKey.tag),
   ));
 
-  const ct = fromBase64(ce.ciphertextB64);
-  const tag = fromBase64(ce.tagB64);
+  const contentIv = encryptedBundleBytes.slice(0, 12);
+  const ciphertext = encryptedBundleBytes.slice(12, encryptedBundleBytes.length - 16);
+  const tag = encryptedBundleBytes.slice(encryptedBundleBytes.length - 16);
   const ck = await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, ["decrypt"]);
   return new Uint8Array(await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: fromBase64(ce.ivB64) }, ck, concat(ct, tag),
+    { name: "AES-GCM", iv: contentIv },
+    ck,
+    concat(ciphertext, tag),
   ));
 }
 
@@ -113,8 +129,9 @@ async function test(name, fn) {
 
 // ── WASM + host bridge loader ───────────────────────────────────────────────
 
-function createDeliveryHarness(wasmBytes, contentStore) {
+function createDeliveryHarness(wasmBytes, contentStore, operationLog) {
   function dispatch(operation, params) {
+    operationLog.push(operation);
     if (operation === "ipfs.cat") {
       let cid = params?.cid ?? "";
       if (!cid && params?.path) cid = params.path.replace(/^\/ipfs\//, "");
@@ -122,10 +139,24 @@ function createDeliveryHarness(wasmBytes, contentStore) {
       if (!data) throw new Error(`CID not found: ${cid}`);
       return new Uint8Array(data);
     }
+    if (operation === "ipfs.add") {
+      const raw =
+        typeof params?.base64 === "string"
+          ? fromBase64(params.base64)
+          : typeof params?.data === "string"
+            ? fromBase64(params.data)
+            : null;
+      if (!raw) {
+        throw new Error("ipfs.add requires base64 payload");
+      }
+      const cidStr = `bafy-encrypted-${Buffer.from(sha256Bytes(raw)).toString("hex").slice(0, 24)}`;
+      contentStore.set(cidStr, raw);
+      return { Hash: cidStr, Size: raw.length };
+    }
     if (operation === "host.runtimeTarget") return "node";
     if (operation === "host.listCapabilities") return ["ipfs"];
     if (operation === "host.hasCapability") return params?.capability === "ipfs";
-    if (operation === "host.listOperations") return ["ipfs.cat"];
+    if (operation === "host.listOperations") return ["ipfs.cat", "ipfs.add"];
     if (operation === "clock.now") return Date.now();
     if (operation === "random.bytes") {
       return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
@@ -138,6 +169,8 @@ function createDeliveryHarness(wasmBytes, contentStore) {
       wasmSource: wasmBytes,
       dispatch,
       surface: "direct",
+      maxRequestBytes: 1024 * 1024,
+      maxResponseBytes: 4 * 1024 * 1024,
     });
 }
 
@@ -153,38 +186,25 @@ console.log(`Loaded plugin-delivery module.wasm (${wasmBytes.length} bytes)\n`);
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-let helia, heliaUfs, contentStore, createHarness;
+let contentStore, createHarness, operationLog;
 
-await test("start Helia node (in-memory)", async () => {
-  helia = await createHelia({
-    blockstore: new MemoryBlockstore(),
-    datastore: new MemoryDatastore(),
-    start: false,
-  });
-  heliaUfs = unixfs(helia);
+await test("start in-memory IPFS store", async () => {
   contentStore = new Map();
-  createHarness = createDeliveryHarness(wasmBytes, contentStore);
+  operationLog = [];
+  createHarness = () => createDeliveryHarness(wasmBytes, contentStore, operationLog)();
 });
 
-await test("e2e: deliver_plugin encrypts IPFS artifact, JS decrypts it", async () => {
+await test("e2e: deliver_plugin returns GrantResponse metadata and encrypted bundle over IPFS", async () => {
   // 1. Store artifact in Helia
   const artifact = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...crypto.getRandomValues(new Uint8Array(512)),
   ]);
-  const cid = await heliaUfs.addBytes(artifact);
-  const cidStr = cid.toString();
-
-  // Pre-fetch into sync store
-  const chunks = [];
-  for await (const chunk of heliaUfs.cat(cid)) chunks.push(chunk);
-  const fetched = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-  let off = 0;
-  for (const c of chunks) { fetched.set(c, off); off += c.length; }
-  contentStore.set(cidStr, fetched);
+  const cidStr = storeIpfsBytes(contentStore, artifact);
 
   // 2. Client generates keypair
   const { publicKey, privateKey } = await generateX25519KeyPair();
+  operationLog.length = 0;
 
   // 3. Invoke deliver_plugin
   const harness = await createHarness();
@@ -193,36 +213,64 @@ await test("e2e: deliver_plugin encrypts IPFS artifact, JS decrypts it", async (
     inputs: [
       { payload: publicKey },
       { payload: new TextEncoder().encode(cidStr) },
+      {
+        payload: new TextEncoder().encode(
+          JSON.stringify({
+            reqId: "req-plugin-delivery-e2e",
+            moduleId: "com.orbpro.fastest-path",
+            moduleVersion: "1.0.0",
+            runtime: "browser",
+            abi: "sdn-abi",
+            entrypoint: "plugin_invoke_stream",
+            publicationCid: cidStr,
+          }),
+        ),
+      },
     ],
   });
 
   assert.ok(result.outputs?.length >= 1, `deliver_plugin failed: ${result.errorMessage}`);
-  const envelopeStr = new TextDecoder().decode(result.outputs[0].payload);
-  const envelope = JSON.parse(envelopeStr);
-  assert.equal(envelope.keyEncryption.scheme, "ecies-x25519-hkdf-sha256-aes-256-gcm");
+  const grant = decodeGrantResponse(result.outputs[0].payload);
+  const encryptedBundleBytes = contentStore.get(grant.bundleDescriptor.cid);
+  assert.ok(encryptedBundleBytes, "plugin-delivery should publish an encrypted bundle CID");
+  assert.equal(grant.reqId, "req-plugin-delivery-e2e");
+  assert.equal(grant.bundleDescriptor.moduleId, "com.orbpro.fastest-path");
+  assert.equal(grant.bundleDescriptor.publicationCid, cidStr);
+  assert.equal(grant.bundleDescriptor.contentCodec, "application/wasm+encrypted");
+  assert.equal(
+    grant.bundleDescriptor.encryptionCodec,
+    "x25519-hkdf-sha256-aes-256-gcm",
+  );
+  assert.equal(grant.wrappedContentKey.wrappingAlgorithm, "ecies-x25519-hkdf-sha256-aes-256-gcm");
+  assert.equal(grant.bundleDescriptor.sizeBytes, encryptedBundleBytes.length);
+  assert.deepEqual(grant.bundleDescriptor.contentHash, sha256Bytes(encryptedBundleBytes));
 
   // 4. Decrypt with JS WebCrypto
-  const decrypted = await decryptEciesEnvelope(envelope, privateKey);
+  const decrypted = await decryptDeliveredBundle(grant, encryptedBundleBytes, privateKey);
   assert.deepEqual(decrypted, artifact, "decrypted bytes must match original IPFS artifact");
   assert.equal(decrypted[0], 0x00);
   assert.equal(decrypted[1], 0x61);
   assert.equal(decrypted[2], 0x73);
   assert.equal(decrypted[3], 0x6d);
+  assert.ok(operationLog.includes("ipfs.cat"));
+  assert.ok(operationLog.includes("ipfs.add"));
+  assert.ok(
+    !operationLog.some(
+      (operation) =>
+        operation.startsWith("http.") ||
+        operation.includes("node-info") ||
+        operation.includes("orbpro"),
+    ),
+    "module-delivery publication must stay on IPFS without HTTP/node-info/orbpro broker calls",
+  );
 });
 
 await test("e2e: large artifact (64 KB)", async () => {
   const artifact = crypto.getRandomValues(new Uint8Array(65536));
-  const cid = await heliaUfs.addBytes(artifact);
-  const cidStr = cid.toString();
-
-  const chunks = [];
-  for await (const chunk of heliaUfs.cat(cid)) chunks.push(chunk);
-  const fetched = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-  let off = 0;
-  for (const c of chunks) { fetched.set(c, off); off += c.length; }
-  contentStore.set(cidStr, fetched);
+  const cidStr = storeIpfsBytes(contentStore, artifact);
 
   const { publicKey, privateKey } = await generateX25519KeyPair();
+  operationLog.length = 0;
   const harness = await createHarness();
   const result = await harness.invoke({
     methodId: "deliver_plugin",
@@ -233,25 +281,19 @@ await test("e2e: large artifact (64 KB)", async () => {
   });
 
   assert.ok(result.outputs?.length >= 1, `failed: ${result.errorMessage}`);
-  const decrypted = await decryptEciesEnvelope(
-    new TextDecoder().decode(result.outputs[0].payload), privateKey,
-  );
+  const grant = decodeGrantResponse(result.outputs[0].payload);
+  const encryptedBundleBytes = contentStore.get(grant.bundleDescriptor.cid);
+  const decrypted = await decryptDeliveredBundle(grant, encryptedBundleBytes, privateKey);
   assert.deepEqual(decrypted, artifact, "64 KB artifact should round-trip");
 });
 
 await test("e2e: different clients get different ciphertexts", async () => {
   const artifact = new TextEncoder().encode("shared secret plugin");
-  const cid = await heliaUfs.addBytes(artifact);
-  const cidStr = cid.toString();
-  const chunks = [];
-  for await (const chunk of heliaUfs.cat(cid)) chunks.push(chunk);
-  const fetched = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-  let off = 0;
-  for (const c of chunks) { fetched.set(c, off); off += c.length; }
-  contentStore.set(cidStr, fetched);
+  const cidStr = storeIpfsBytes(contentStore, artifact);
 
   const client1 = await generateX25519KeyPair();
   const client2 = await generateX25519KeyPair();
+  operationLog.length = 0;
   const harness = await createHarness();
 
   const r1 = await harness.invoke({
@@ -263,15 +305,26 @@ await test("e2e: different clients get different ciphertexts", async () => {
     inputs: [{ payload: client2.publicKey }, { payload: new TextEncoder().encode(cidStr) }],
   });
 
-  const env1 = new TextDecoder().decode(r1.outputs[0].payload);
-  const env2 = new TextDecoder().decode(r2.outputs[0].payload);
+  const grant1 = decodeGrantResponse(r1.outputs[0].payload);
+  const grant2 = decodeGrantResponse(r2.outputs[0].payload);
 
-  // Envelopes must differ (fresh ephemeral keys each time)
-  assert.notEqual(env1, env2, "envelopes for different clients must differ");
+  assert.notEqual(
+    grant1.bundleDescriptor.cid,
+    grant2.bundleDescriptor.cid,
+    "different recipients should receive different encrypted bundle CIDs",
+  );
 
   // But both decrypt to the same artifact
-  const d1 = await decryptEciesEnvelope(env1, client1.privateKey);
-  const d2 = await decryptEciesEnvelope(env2, client2.privateKey);
+  const d1 = await decryptDeliveredBundle(
+    grant1,
+    contentStore.get(grant1.bundleDescriptor.cid),
+    client1.privateKey,
+  );
+  const d2 = await decryptDeliveredBundle(
+    grant2,
+    contentStore.get(grant2.bundleDescriptor.cid),
+    client2.privateKey,
+  );
   assert.deepEqual(d1, artifact);
   assert.deepEqual(d2, artifact);
 });
@@ -290,10 +343,6 @@ await test("e2e: wrong CID returns error", async () => {
   const hasError = result.statusCode !== 0 || result.errorMessage || !result.outputs?.[0]?.payload?.length;
   assert.ok(hasError, "missing CID should produce an error");
 });
-
-// ── Cleanup ─────────────────────────────────────────────────────────────────
-
-if (helia) await helia.stop();
 
 console.log(`\nDone. ${failures === 0 ? "All tests passed." : `${failures} failure(s).`}`);
 if (failures > 0) process.exit(1);

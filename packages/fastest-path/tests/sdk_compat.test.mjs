@@ -10,6 +10,7 @@ import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import * as fastestPathPackage from "../index.js";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
+const PACKAGE_JSON_PATH = new URL("../package.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
 const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
@@ -25,6 +26,23 @@ const EXPECTED_METHOD_IDS = [
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
 }
+
+function readPackageJson() {
+  return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
+}
+
+test("package.json exposes SDK-style canonical exports", () => {
+  const pkg = readPackageJson();
+
+  assert.equal(pkg.name, "@orbpro/plugin-fastest-path");
+  assert.equal(pkg.main, "index.js");
+  assert.deepEqual(pkg.exports, {
+    ".": "./index.js",
+    "./dist/*": "./dist/*",
+  });
+  assert.ok(pkg.files.includes("dist/"));
+  assert.ok(pkg.files.includes("index.js"));
+});
 
 test("package manifest advertises the canonical Fastest Path stream surface", () => {
   const manifest = readManifest();

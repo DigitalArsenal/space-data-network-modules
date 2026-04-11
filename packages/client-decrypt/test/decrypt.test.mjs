@@ -10,6 +10,7 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -157,11 +158,140 @@ async function encryptArtifact(
   };
 }
 
+function fromBase64(b64) {
+  const raw = atob(b64.replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    out[i] = raw.charCodeAt(i);
+  }
+  return out;
+}
+
+function sha256Bytes(bytes) {
+  return new Uint8Array(createHash("sha256").update(bytes).digest());
+}
+
+async function buildGrantResponseFixture(
+  plaintext,
+  recipientPublicKey,
+  metadata = {},
+) {
+  const ephemeral = await generateX25519KeyPair();
+  const contentKey = crypto.getRandomValues(new Uint8Array(32));
+  const contentIv = crypto.getRandomValues(new Uint8Array(12));
+  const encryptedContent = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: contentIv },
+      await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, [
+        "encrypt",
+      ]),
+      plaintext,
+    ),
+  );
+
+  const ephemeralPrivateKey = await crypto.subtle.importKey(
+    "pkcs8",
+    concat(PKCS8_HEADER, ephemeral.privateKey),
+    "X25519",
+    false,
+    ["deriveBits"],
+  );
+  const recipientPublicCryptoKey = await crypto.subtle.importKey(
+    "spki",
+    concat(SPKI_HEADER, recipientPublicKey),
+    "X25519",
+    false,
+    [],
+  );
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.deriveBits(
+      { name: "X25519", public: recipientPublicCryptoKey },
+      ephemeralPrivateKey,
+      256,
+    ),
+  );
+  const hkdfKey = await crypto.subtle.importKey(
+    "raw",
+    sharedSecret,
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
+  const wrapKey = new Uint8Array(
+    await crypto.subtle.deriveBits(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: new Uint8Array(),
+        info: new TextEncoder().encode("orbpro-key-server-artifact-wrap-v1"),
+      },
+      hkdfKey,
+      256,
+    ),
+  );
+  const wrapIv = crypto.getRandomValues(new Uint8Array(12));
+  const wrappedContentKeyRaw = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: wrapIv },
+      await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, [
+        "encrypt",
+      ]),
+      contentKey,
+    ),
+  );
+
+  const ciphertext = encryptedContent.slice(0, encryptedContent.length - 16);
+  const contentTag = encryptedContent.slice(encryptedContent.length - 16);
+  const wrappedKey = wrappedContentKeyRaw.slice(0, 32);
+  const wrappedTag = wrappedContentKeyRaw.slice(32);
+  const packedEncryptedBundle = concat(contentIv, ciphertext, contentTag);
+  const bundleHash = sha256Bytes(packedEncryptedBundle);
+  const bundleCid =
+    metadata.bundleCid ??
+    `bafy-test-${Buffer.from(bundleHash).toString("hex").slice(0, 24)}`;
+
+  return {
+    bundleCid,
+    packedEncryptedBundle,
+    grantResponseBytes: encodeGrantResponse({
+      reqId: metadata.reqId ?? "req-client-decrypt-fixture",
+      bundleDescriptor: {
+        cid: bundleCid,
+        contentHash: bundleHash,
+        sizeBytes: packedEncryptedBundle.length,
+        moduleId: metadata.moduleId ?? "com.orbpro.client-decrypt-fixture",
+        moduleVersion: metadata.moduleVersion ?? "1.0.0",
+        runtime: metadata.runtime ?? "browser",
+        abi: metadata.abi ?? "sdn-abi",
+        entrypoint: metadata.entrypoint ?? "plugin_invoke_stream",
+        publicationCid: metadata.publicationCid ?? "bafy-publication-fixture",
+        contentCodec: metadata.contentCodec ?? "application/wasm+encrypted",
+        encryptionCodec:
+          metadata.encryptionCodec ?? "x25519-hkdf-sha256-aes-256-gcm",
+      },
+      wrappedContentKey: {
+        wrappingAlgorithm: "ecies-x25519-hkdf-sha256-aes-256-gcm",
+        recipientPublicKey,
+        ephemeralPublicKey: ephemeral.publicKey,
+        nonce: wrapIv,
+        ciphertext: wrappedKey,
+        tag: wrappedTag,
+      },
+    }),
+  };
+}
+
 // ── Browser harness loader ──────────────────────────────────────────────────
 
 import {
   createBrowserModuleHarness,
 } from "space-data-module-sdk/testing";
+import {
+  createSdkBrowserShimHarness,
+} from "./lib/sdkBrowserShimHarness.mjs";
+import {
+  encodeGrantResponse,
+} from "../../../../space-data-network/packages/plugin-sdk/src/module-delivery-codec.js";
 
 // ── Test runner ─────────────────────────────────────────────────────────────
 
@@ -303,6 +433,79 @@ await test("decrypt_artifact: wrong private key returns error", async () => {
     !result.outputs?.[0]?.payload?.length;
   assert.ok(hasError, "wrong key should produce an error or empty output");
 });
+
+await test(
+  "decrypt_artifact: consumes module-delivery GrantResponse bytes over IPFS without HTTP",
+  async () => {
+    const { publicKey, privateKey } = await generateX25519KeyPair();
+    const plaintext = new Uint8Array([
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+      ...crypto.getRandomValues(new Uint8Array(192)),
+    ]);
+    const fixture = await buildGrantResponseFixture(plaintext, publicKey);
+    const contentStore = new Map([
+      [fixture.bundleCid, fixture.packedEncryptedBundle],
+    ]);
+    const operations = [];
+
+    const shimHarness = await createSdkBrowserShimHarness({
+      wasmSource: wasmBytes,
+      surface: "direct",
+      maxRequestBytes: 1024 * 1024,
+      maxResponseBytes: 4 * 1024 * 1024,
+      dispatch(operation, params) {
+        operations.push(operation);
+        if (operation === "ipfs.cat") {
+          const cid = params?.cid ?? "";
+          const bytes = contentStore.get(cid);
+          if (!bytes) {
+            throw new Error(`CID not found: ${cid}`);
+          }
+          return bytes;
+        }
+        if (operation === "host.runtimeTarget") return "browser";
+        if (operation === "host.listCapabilities") return ["ipfs"];
+        if (operation === "host.hasCapability") {
+          return params?.capability === "ipfs";
+        }
+        if (operation === "host.listOperations") return ["ipfs.cat"];
+        if (operation === "clock.now") return Date.now();
+        if (operation === "random.bytes") {
+          return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
+        }
+        throw new Error(`Unsupported operation: ${operation}`);
+      },
+    });
+
+    try {
+      const result = await shimHarness.invoke({
+        methodId: "decrypt_artifact",
+        inputs: [
+          { payload: fixture.grantResponseBytes },
+          { payload: privateKey },
+        ],
+      });
+
+      assert.deepEqual(
+        result.outputs[0].payload,
+        plaintext,
+        "GrantResponse/IPFS flow should decrypt the packed bundle bytes",
+      );
+      assert.ok(operations.includes("ipfs.cat"));
+      assert.ok(
+        !operations.some(
+          (operation) =>
+            operation.startsWith("http.") ||
+            operation.includes("node-info") ||
+            operation.includes("orbpro"),
+        ),
+        "GrantResponse flow must stay on IPFS and not use HTTP/node-info/orbpro broker calls",
+      );
+    } finally {
+      await shimHarness.destroy();
+    }
+  },
+);
 
 await test("decrypt_artifact: large payload (64 KB)", async () => {
   const { publicKey, privateKey } = await generateX25519KeyPair();
