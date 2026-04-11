@@ -133,7 +133,7 @@ async function generateFlatbufferHeaders(outDir) {
   }
   const moduleDeliverySchemasDir = path.resolve(
     __dirname,
-    "../../../space-data-network/packages/plugin-sdk/schemas/space-data-network/module-delivery/v1",
+    "../../schemas/space-data-network/module-delivery/v1",
   );
   if (!fs.existsSync(moduleDeliverySchemasDir)) {
     throw new Error(
@@ -324,14 +324,7 @@ async function main() {
 
   // Generate invoke FlatBuffer headers
   const fbbHeadersDir = path.join(BUILD_DIR, "fbb-headers");
-  if (
-    !fs.existsSync(path.join(fbbHeadersDir, "PluginInvokeRequest_generated.h")) ||
-    !fs.existsSync(path.join(fbbHeadersDir, "GrantResponse_generated.h"))
-  ) {
-    await generateFlatbufferHeaders(fbbHeadersDir);
-  } else {
-    console.log("  FlatBuffer headers already generated.");
-  }
+  await generateFlatbufferHeaders(fbbHeadersDir);
 
   // Ensure Crypto++ sources
   const { srcDir: cryptoppSrc, parentDir: cryptoppParent } =

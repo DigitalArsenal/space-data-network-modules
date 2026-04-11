@@ -30,7 +30,7 @@ import {
 } from "./lib/sdkBrowserShimHarness.mjs";
 import {
   decodeGrantResponse,
-} from "../../../../space-data-network/packages/plugin-sdk/src/module-delivery-codec.js";
+} from "../../plugin-delivery/lib/module-delivery-codec.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DECRYPT_WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");

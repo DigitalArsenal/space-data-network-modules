@@ -7,7 +7,6 @@ SRC_DIR="$SCRIPT_DIR/src/cpp"
 DIST_DIR="$SCRIPT_DIR/dist"
 BROWSER_DIST_DIR="$DIST_DIR/browser"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
-PLUGIN_SDK_INCLUDE_DIR="$(cd "$SCRIPT_DIR/../../../plugin-sdk/include" && pwd)"
 
 ensure_emscripten() {
     local toolchain="${SDN_WASM_TOOLCHAIN:-local-emsdk}"
@@ -77,7 +76,6 @@ em++ \
     -I"$SRC_DIR/include" \
     -I"$SRC_DIR/generated" \
     -I"$FLATBUFFERS_INCLUDE_DIR" \
-    -I"$PLUGIN_SDK_INCLUDE_DIR" \
     -s EXPORTED_FUNCTIONS='["_plugin_alloc","_plugin_free","_plugin_invoke_stream","_plugin_get_manifest_flatbuffer","_plugin_get_manifest_flatbuffer_size","_sensor_shaders_set_bundle_json","_sensor_shaders_stream_cleanup","_get_name","_get_version","_get_type"]' \
     -s MODULARIZE=1 \
     -s EXPORT_ES6=1 \

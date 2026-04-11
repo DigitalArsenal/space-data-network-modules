@@ -10,14 +10,14 @@ Provides GPU-accelerated viewshed and line-of-sight rendering for ground-based s
 npm install @orbpro/plugin-viewshed-shader
 ```
 
-This package is intended to be used within an OrbPro workspace or alongside the OrbPro engine. Standalone use requires the OrbPro plugin-sdk.
+This package is intended to be used within an OrbPro workspace or alongside the OrbPro engine. Standalone use requires the module SDK.
 
 ## Building
 
-Build the WASM artifact using the OrbPro plugin-sdk:
+Build the WASM artifact using the module SDK:
 
 ```bash
-# From within the OrbPro plugin-sdk workspace:
+# From within the module SDK workspace:
 npm run build:viewshed-shader
 # Output: dist/viewshed-shader.wasm
 ```

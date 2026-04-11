@@ -12,6 +12,7 @@
 #include <stdlib.h>
 
 #include <array>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -172,7 +173,17 @@ struct DeliveryMetadata {
     std::string publication_cid;
     std::string content_codec;
     std::string encryption_codec;
+    std::string granted_domain;
+    uint64_t granted_timeout_ms = 30000;
+    uint64_t expires_at_ms = 0;
 };
+
+static uint64_t current_time_ms() {
+    using namespace std::chrono;
+    return static_cast<uint64_t>(
+        duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count()
+    );
+}
 
 static DeliveryMetadata parse_metadata(const uint8_t* data, size_t len, const std::string& source_cid) {
     DeliveryMetadata metadata;
@@ -195,6 +206,10 @@ static DeliveryMetadata parse_metadata(const uint8_t* data, size_t len, const st
     if (metadata.publication_cid.empty()) metadata.publication_cid = source_cid;
     if (metadata.content_codec.empty()) metadata.content_codec = DEFAULT_CONTENT_CODEC;
     if (metadata.encryption_codec.empty()) metadata.encryption_codec = DEFAULT_ENCRYPTION_CODEC;
+    if (metadata.granted_domain.empty()) metadata.granted_domain = "localhost";
+    if (metadata.expires_at_ms == 0) {
+        metadata.expires_at_ms = current_time_ms() + metadata.granted_timeout_ms;
+    }
     return metadata;
 }
 
@@ -549,6 +564,7 @@ static flatbuffers::DetachedBuffer handle_deliver_plugin(const PluginInvokeReque
     const auto publication_cid = builder.CreateString(metadata.publication_cid);
     const auto content_codec = builder.CreateString(metadata.content_codec);
     const auto encryption_codec = builder.CreateString(metadata.encryption_codec);
+    const auto granted_domain = builder.CreateString(metadata.granted_domain);
     const auto wrapping_algorithm = builder.CreateString(WRAP_ALGORITHM);
     const auto recipient_key_id = builder.CreateString(bytes_to_hex(client_pub, KEY_BYTES));
     const auto recipient_public_key = builder.CreateVector(client_pub, KEY_BYTES);
@@ -595,6 +611,10 @@ static flatbuffers::DetachedBuffer handle_deliver_plugin(const PluginInvokeReque
     module_delivery::GrantResponseBuilder grant_builder(builder);
     grant_builder.add_schema_version(1);
     grant_builder.add_req_id(req_id);
+    grant_builder.add_expires_at_ms(metadata.expires_at_ms);
+    grant_builder.add_granted_domain(granted_domain);
+    grant_builder.add_granted_timeout_ms(metadata.granted_timeout_ms);
+    grant_builder.add_grant_verifier_public_key(recipient_public_key);
     grant_builder.add_bundle_descriptor(descriptor);
     grant_builder.add_wrapped_content_key(wrapped_content_key);
     const auto grant = grant_builder.Finish();

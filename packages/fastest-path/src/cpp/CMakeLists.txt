@@ -27,7 +27,6 @@ if(NOT FLATBUFFERS_INCLUDE_DIR)
 endif()
 
 set(FASTEST_PATH_PACKAGE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-set(PLUGIN_SDK_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../plugin-sdk/include")
 set(INVOKE_GENERATED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../protection-license-client/src/cpp/generated")
 
 add_executable(
@@ -42,8 +41,6 @@ target_include_directories(
     generated
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${FASTEST_PATH_PACKAGE_ROOT}/src"
-    "${PLUGIN_SDK_INCLUDE_DIR}"
-    "${PLUGIN_SDK_INCLUDE_DIR}/generated"
     "${INVOKE_GENERATED_DIR}"
 )
 set_target_properties(

@@ -1,9 +1,21 @@
 {
   "name": "space-data-network-plugin-conjunction-assessment",
   "private": true,
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "index.js",
+    "plugin-manifest.json"
+  ],
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:replay": "node --test tests/wasmedgeStandaloneHarness.test.mjs tests/socratesReplayHarness.test.mjs",
     "test:aerospace": "node --test tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs"

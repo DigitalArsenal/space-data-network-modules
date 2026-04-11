@@ -10,7 +10,7 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 npm install @orbpro/plugin-hpop
 ```
 
-This package is intended to be used within an OrbPro workspace or alongside the OrbPro engine. Standalone use requires the OrbPro plugin-sdk.
+This package is intended to be used within an OrbPro workspace or alongside the OrbPro engine. Standalone use requires the module SDK.
 
 ## Building
 

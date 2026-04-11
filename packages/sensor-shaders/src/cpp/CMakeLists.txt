@@ -24,16 +24,6 @@ if(NOT FLATBUFFERS_INCLUDE_DIR)
     message(FATAL_ERROR "flatbuffers headers not found. Install flatbuffers and retry.")
 endif()
 
-get_filename_component(
-    PLUGIN_SDK_INCLUDE_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../plugin-sdk/include"
-    ABSOLUTE
-)
-
-if(NOT EXISTS "${PLUGIN_SDK_INCLUDE_DIR}/generated/PluginMessage_generated.h")
-    message(FATAL_ERROR "plugin-sdk generated headers not found at ${PLUGIN_SDK_INCLUDE_DIR}.")
-endif()
-
 if(EMSCRIPTEN)
     add_executable(
         sensor_shaders_wasm
@@ -45,7 +35,6 @@ if(EMSCRIPTEN)
         include
         generated
         "${FLATBUFFERS_INCLUDE_DIR}"
-        "${PLUGIN_SDK_INCLUDE_DIR}"
     )
     set_target_properties(
         sensor_shaders_wasm PROPERTIES

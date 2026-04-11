@@ -8,6 +8,9 @@
     ".": "./index.js",
     "./dist/*": "./dist/*"
   },
+  "scripts": {
+    "test": "node --test test/direct-entry.test.mjs"
+  },
   "files": ["dist/", "src/", "index.js"],
   "keywords": ["orbpro", "wasm", "viewshed", "plugin", "shader", "cesium", "sensor-coverage"],
   "repository": {

@@ -255,6 +255,10 @@ async function buildGrantResponseFixture(
     packedEncryptedBundle,
     grantResponseBytes: encodeGrantResponse({
       reqId: metadata.reqId ?? "req-client-decrypt-fixture",
+      grantedDomain: metadata.grantedDomain ?? "localhost",
+      grantedTimeoutMs: metadata.grantedTimeoutMs ?? 30000,
+      expiresAtMs: metadata.expiresAtMs ?? 60000,
+      grantVerifierPublicKey: recipientPublicKey,
       bundleDescriptor: {
         cid: bundleCid,
         contentHash: bundleHash,
@@ -291,7 +295,7 @@ import {
 } from "./lib/sdkBrowserShimHarness.mjs";
 import {
   encodeGrantResponse,
-} from "../../../../space-data-network/packages/plugin-sdk/src/module-delivery-codec.js";
+} from "../../plugin-delivery/lib/module-delivery-codec.mjs";
 
 // ── Test runner ─────────────────────────────────────────────────────────────
 

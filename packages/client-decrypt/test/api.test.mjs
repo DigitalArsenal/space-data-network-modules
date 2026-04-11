@@ -9,7 +9,7 @@ import clientDecrypt, {
 } from "../index.js";
 import {
   encodeGrantResponse,
-} from "../../../../space-data-network/packages/plugin-sdk/src/module-delivery-codec.js";
+} from "../../plugin-delivery/lib/module-delivery-codec.mjs";
 
 function hexToBytes(hex) {
   const normalized = hex.replace(/^0x/i, "");
@@ -116,6 +116,10 @@ async function buildGrantResponseFixture(plaintext, recipientPublicKey) {
     encryptedBundleBytes,
     grantResponseBytes: encodeGrantResponse({
       reqId: "req-client-decrypt-api",
+      grantedDomain: "localhost",
+      grantedTimeoutMs: 30000,
+      expiresAtMs: 60000,
+      grantVerifierPublicKey: recipientPublicKey,
       bundleDescriptor: {
         cid: bundleCid,
         contentHash: bundleHash,

@@ -7,10 +7,10 @@ export const browserWasmPath = new URL("./dist/browser/module.wasm", import.meta
 export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", import.meta.url);
 
 export const metadata = Object.freeze({
-  id: "hpop-propagator",
-  name: "HPOP Propagator Plugin",
-  version: "0.1.0",
-  type: "Propagator",
+  id: "conjunction-assessment",
+  name: "Conjunction Assessment Plugin",
+  version: "0.2.0",
+  type: "Analysis",
   encrypted: false,
   requiresProtection: false,
 });
@@ -41,7 +41,7 @@ async function readUrlBytes(url) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch hpop artifact from ${url.href}: ${response.status} ${response.statusText}`,
+      `Failed to fetch conjunction-assessment artifact from ${url.href}: ${response.status} ${response.statusText}`,
     );
   }
   return new Uint8Array(await response.arrayBuffer());
@@ -51,7 +51,7 @@ async function readJson(url) {
   return JSON.parse(textDecoder.decode(await readUrlBytes(url)));
 }
 
-async function resolveHpopWasmBytes(options = {}) {
+async function resolveConjunctionWasmBytes(options = {}) {
   const directBytes = toUint8Array(options.wasmBinary ?? options.wasmBytes);
   if (directBytes) {
     return directBytes;
@@ -75,7 +75,7 @@ async function resolveHpopWasmBytes(options = {}) {
   return readUrlBytes(isomorphicWasmPath);
 }
 
-export async function getHPOPManifest(plugin = null) {
+export async function getConjunctionAssessmentManifest(plugin = null) {
   if (typeof plugin?.readManifest === "function") {
     const bytes = await plugin.readManifest();
     if (bytes instanceof Uint8Array && bytes.length > 0) {
@@ -86,12 +86,12 @@ export async function getHPOPManifest(plugin = null) {
   return readJson(pluginManifestPath);
 }
 
-export async function getHPOPWorkerBootstrap() {
+export async function getConjunctionAssessmentWorkerBootstrap() {
   const namespace = await import(browserModulePath.href);
   return namespace.default ?? namespace;
 }
 
-function bindHpopApi(harness, manifest, manifestSource) {
+function bindConjunctionAssessmentApi(harness, manifest, manifestSource) {
   const module = harness.instance.exports;
   return Object.freeze({
     ...harness,
@@ -108,8 +108,8 @@ function bindHpopApi(harness, manifest, manifestSource) {
   });
 }
 
-export async function loadHPOPPlugin(options = {}) {
-  const wasmBytes = await resolveHpopWasmBytes(options);
+export async function loadConjunctionAssessmentPlugin(options = {}) {
+  const wasmBytes = await resolveConjunctionWasmBytes(options);
   const harness = await createBrowserModuleHarness({
     wasmSource: wasmBytes,
     surface: options.surface ?? "direct",
@@ -120,10 +120,10 @@ export async function loadHPOPPlugin(options = {}) {
     performance: options.performance,
     logOutput: options.logOutput === true,
   });
-  const manifest = await getHPOPManifest(harness);
-  return bindHpopApi(harness, manifest, "embedded-flatbuffer");
+  const manifest = await getConjunctionAssessmentManifest(harness);
+  return bindConjunctionAssessmentApi(harness, manifest, "embedded-flatbuffer");
 }
 
-export async function createHPOPPropagator(options = {}) {
-  return loadHPOPPlugin(options);
+export async function createConjunctionAssessmentPlugin(options = {}) {
+  return loadConjunctionAssessmentPlugin(options);
 }

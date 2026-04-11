@@ -10,14 +10,14 @@ Provides a collection of GPU shaders for rendering sensor volumes, coverage cone
 npm install @orbpro/plugin-sensor-shaders
 ```
 
-This package is intended to be used within an OrbPro workspace or alongside the OrbPro engine. Standalone use requires the OrbPro plugin-sdk.
+This package is intended to be used within an OrbPro workspace or alongside the OrbPro engine. Standalone use requires the module SDK.
 
 ## Building
 
-Build the module using the OrbPro plugin-sdk:
+Build the module using the module SDK:
 
 ```bash
-# From within the OrbPro plugin-sdk workspace:
+# From within the module SDK workspace:
 npm run build:sensor-shaders
 # Output: dist/sensor-shaders.mjs
 ```

@@ -7,7 +7,7 @@ import {
   encodePluginInvokeRequest,
 } from "space-data-module-sdk/invoke";
 import { decodePluginManifest } from "space-data-module-sdk/manifest";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
 
 export const pluginManifestPath = new URL("./plugin-manifest.json", import.meta.url);
 export const browserModulePath = new URL("./dist/browser/module.js", import.meta.url);
