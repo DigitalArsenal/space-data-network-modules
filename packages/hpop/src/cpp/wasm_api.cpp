@@ -15,7 +15,18 @@ std::string g_last_result;
 
 }  // namespace
 
+extern "C" void __wasm_call_ctors(void);
+
 extern "C" {
+
+EMSCRIPTEN_KEEPALIVE
+void _initialize(void) {
+    static bool initialized = false;
+    if (!initialized) {
+        initialized = true;
+        __wasm_call_ctors();
+    }
+}
 
 EMSCRIPTEN_KEEPALIVE
 void* wasm_malloc(int size) {

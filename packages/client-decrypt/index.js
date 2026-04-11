@@ -12,6 +12,11 @@ const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const DEFAULT_MAX_REQUEST_BYTES = 1024 * 1024;
 const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+const NODE_SCHEME = "node";
+
+function nodeSpecifier(name) {
+  return `${NODE_SCHEME}:${name}`;
+}
 
 function toUint8Array(value) {
   if (value instanceof Uint8Array) {
@@ -39,8 +44,8 @@ function bytesToBase64(bytes) {
 
 async function readNodeFile(url) {
   const [{ readFileSync }, { fileURLToPath }] = await Promise.all([
-    import("node:fs"),
-    import("node:url"),
+    import(nodeSpecifier("fs")),
+    import(nodeSpecifier("url")),
   ]);
   return readFileSync(fileURLToPath(url));
 }
@@ -328,12 +333,20 @@ function normalizeDecryptPayload(firstArg, secondArg) {
           firstArg.payload ?? firstArg.grantResponse ?? firstArg.envelope ?? firstArg.bytes,
         ) ?? new Uint8Array(),
       privateKey: toUint8Array(firstArg.privateKey) ?? new Uint8Array(),
+      encryptedBundle:
+        toUint8Array(
+          firstArg.encryptedBundle ??
+            firstArg.encryptedBundleBytes ??
+            firstArg.bundleBytes ??
+            firstArg.artifactBytes,
+        ) ?? new Uint8Array(),
     };
   }
 
   return {
     payload: toUint8Array(firstArg) ?? new Uint8Array(),
     privateKey: toUint8Array(secondArg) ?? new Uint8Array(),
+    encryptedBundle: new Uint8Array(),
   };
 }
 
@@ -351,7 +364,10 @@ export async function createClientDecrypt(options = {}) {
       return invokeDirect(runtime.instance, request);
     },
     async decryptArtifact(firstArg, secondArg) {
-      const { payload, privateKey } = normalizeDecryptPayload(firstArg, secondArg);
+      const { payload, privateKey, encryptedBundle } = normalizeDecryptPayload(
+        firstArg,
+        secondArg,
+      );
       if (payload.length === 0) {
         throw new Error("decryptArtifact requires a payload.");
       }
@@ -361,7 +377,11 @@ export async function createClientDecrypt(options = {}) {
 
       const result = invokeDirect(runtime.instance, {
         methodId: "decrypt_artifact",
-        inputs: [{ payload }, { payload: privateKey }],
+        inputs: [
+          { payload },
+          { payload: privateKey },
+          ...(encryptedBundle.length > 0 ? [{ payload: encryptedBundle }] : []),
+        ],
       });
       if (result.statusCode !== 0 || result.errorMessage) {
         throw new Error(result.errorMessage || "client-decrypt failed");

@@ -80,6 +80,37 @@ function instantiateStandaloneModule(wasmBytes) {
   });
 }
 
+async function instantiateBrowserModuleAsBrowser({
+  wasmBytes = fs.readFileSync(fileURLToPath(BROWSER_WASM_PATH)),
+  noInitialRun = true,
+} = {}) {
+  const savedProcess = globalThis.process;
+  const savedWindow = globalThis.window;
+  const savedDocument = globalThis.document;
+
+  try {
+    globalThis.window = {};
+    globalThis.document = {
+      currentScript: {
+        src: "https://localhost/plugin-hpop/module.js",
+      },
+    };
+    globalThis.process = undefined;
+
+    const namespace = await import(
+      `${BROWSER_MODULE_PATH.href}?browser-shim=${Date.now()}-${Math.random()}`
+    );
+    return await namespace.default({
+      wasmBinary: wasmBytes,
+      noInitialRun,
+    });
+  } finally {
+    globalThis.process = savedProcess;
+    globalThis.window = savedWindow;
+    globalThis.document = savedDocument;
+  }
+}
+
 function assertSuccessfulResponse(response) {
   assert.equal(response.statusCode, 0);
   assert.ok(response.errorCode === "" || response.errorCode === null);
@@ -103,6 +134,24 @@ test("browser module exposes a default factory for worker imports", async () => 
   const namespace = await import(BROWSER_MODULE_PATH.href);
 
   assert.equal(typeof namespace.default, "function");
+});
+
+test("browser module exports an explicit initializer so noInitialRun library loads can safely allocate after plugin_init", async (t) => {
+  const module = await instantiateBrowserModuleAsBrowser({
+    noInitialRun: true,
+  });
+  t.after(() => {
+    module._plugin_destroy?.();
+  });
+
+  assert.equal(typeof module.__initialize, "function");
+  module.__initialize();
+  assert.equal(module._plugin_init(), 0);
+
+  const firstAllocation = module._malloc(56);
+  const secondAllocation = module._malloc(56);
+  assert.ok(firstAllocation > 0);
+  assert.ok(secondAllocation > 0);
 });
 
 test("built artifact passes SDK compliance checks", async () => {

@@ -11,12 +11,33 @@
 
 #include <flatbuffers/flatbuffers.h>
 
+#include "conjunction/conjunction_assessment.h"
+#include "conjunction/conjunction_engine.h"
+#include "conjunction/ephemeris_source.h"
+#include "conjunction/generated/all_generated.h"
+#include "conjunction/pc_method.h"
+#include "conjunction/resident_screening_index.h"
+#include "conjunction/screening.h"
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
 #include "TypedArenaBuffer_generated.h"
+#include "orbpro/generated/PropagatorTrajectorySegments_generated.h"
+#include "orbpro/generated/StateVector_generated.h"
 #include "space_data_module_invoke.h"
 
 extern "C" int invoke(void);
+extern "C" int32_t plugin_push_output_typed(
+  const char *port_id,
+  const char *schema_name,
+  const char *file_identifier,
+  uint32_t wire_format,
+  const char *root_type_name,
+  uint16_t fixed_string_length,
+  uint32_t byte_length,
+  uint16_t required_alignment,
+  const uint8_t *payload_ptr,
+  uint32_t payload_length
+);
 
 namespace {
 
@@ -78,9 +99,50 @@ struct InvokeContext {
 static const PortRequirement kMethod_invoke_input_ports[] = {
   { "request", true },
 };
+static const PortRequirement kMethod_pair_request_input_ports[] = {
+  { "request", true },
+};
+static const PortRequirement kMethod_prepare_screening_index_input_ports[] = {
+  { "request", true },
+  { "sources", true },
+};
+static const PortRequirement kMethod_prepare_segment_screening_index_input_ports[] = {
+  { "request", true },
+  { "sources", true },
+  { "segments", true },
+};
+static const PortRequirement kMethod_prepare_sample_screening_index_input_ports[] = {
+  { "request", true },
+  { "sources", true },
+  { "samples", true },
+};
+static const PortRequirement kMethod_destroy_screening_index_input_ports[] = {
+  { "request", true },
+};
+static const PortRequirement kMethod_screen_window_input_ports[] = {
+  { "request", true },
+};
 static const char *kMethod_invoke_output_ports[] = {
   "response",
 };
+static const char *kMethod_result_output_ports[] = {
+  "result",
+};
+static const char *kMethod_cdm_output_ports[] = {
+  "cdm",
+};
+
+static int HandleAssessConjunction(void);
+static int HandleEmitCdm(void);
+static int HandleFindTca(void);
+static int HandleAlfanoMaxProbability(void);
+static int HandleComputePc(void);
+static int HandlePrepareScreeningIndex(void);
+static int HandlePrepareSegmentScreeningIndex(void);
+static int HandlePrepareSampleScreeningIndex(void);
+static int HandleDestroyScreeningIndex(void);
+static int HandleScreenWindow(void);
+static int HandleScreenSegmentWindow(void);
 
 static const MethodDescriptor kMethodTable[] = {
   {
@@ -93,6 +155,127 @@ static const MethodDescriptor kMethodTable[] = {
     true,
     "request",
     "response"
+  },
+  {
+    "assess_conjunction",
+    &HandleAssessConjunction,
+    kMethod_pair_request_input_ports,
+    1u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "emit_cdm",
+    &HandleEmitCdm,
+    kMethod_pair_request_input_ports,
+    1u,
+    kMethod_cdm_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "find_tca",
+    &HandleFindTca,
+    kMethod_pair_request_input_ports,
+    1u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "alfano_max_probability",
+    &HandleAlfanoMaxProbability,
+    kMethod_pair_request_input_ports,
+    1u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "compute_pc",
+    &HandleComputePc,
+    kMethod_pair_request_input_ports,
+    1u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "prepare_screening_index",
+    &HandlePrepareScreeningIndex,
+    kMethod_prepare_screening_index_input_ports,
+    2u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "prepare_segment_screening_index",
+    &HandlePrepareSegmentScreeningIndex,
+    kMethod_prepare_segment_screening_index_input_ports,
+    3u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "prepare_sample_screening_index",
+    &HandlePrepareSampleScreeningIndex,
+    kMethod_prepare_sample_screening_index_input_ports,
+    3u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "destroy_screening_index",
+    &HandleDestroyScreeningIndex,
+    kMethod_destroy_screening_index_input_ports,
+    1u,
+    nullptr,
+    0u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "screen_window",
+    &HandleScreenWindow,
+    kMethod_screen_window_input_ports,
+    1u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "screen_segment_window",
+    &HandleScreenSegmentWindow,
+    kMethod_screen_window_input_ports,
+    1u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
   },
 };
 
@@ -420,6 +603,839 @@ static bool BuildRawShortcutRequest(
   frame->size = static_cast<uint32_t>(stdin_bytes.size());
   request->input_frames.emplace_back(std::move(frame));
   return true;
+}
+
+static constexpr uint16_t kAlignedBinaryAlignment = 8;
+
+static const InputFrameOwned *FindInputFrame(const char *port_id, uint32_t ordinal = 0u) {
+  if (!port_id || !port_id[0]) {
+    return nullptr;
+  }
+  uint32_t seen = 0u;
+  for (const auto &frame : g_invoke_context.inputs) {
+    if (frame.port_id != port_id) {
+      continue;
+    }
+    if (seen == ordinal) {
+      return &frame;
+    }
+    seen += 1u;
+  }
+  return nullptr;
+}
+
+template <typename Table>
+static const Table *DecodeFlatbufferInput(
+  const InputFrameOwned *frame,
+  const char *port_id,
+  const char *expected_file_identifier,
+  const char *friendly_name
+) {
+  if (!frame) {
+    SetError(
+      "missing-required-input",
+      std::string("Missing required input port: ") + (port_id ? port_id : "<unknown>")
+    );
+    return nullptr;
+  }
+  if (frame->payload.empty()) {
+    SetError(
+      "invalid-request-frame",
+      std::string(friendly_name ? friendly_name : "input payload") + " is empty."
+    );
+    return nullptr;
+  }
+  if (expected_file_identifier &&
+      expected_file_identifier[0] &&
+      !frame->file_identifier.empty() &&
+      frame->file_identifier != expected_file_identifier) {
+    SetError(
+      "invalid-request-frame",
+      std::string(friendly_name ? friendly_name : "input payload") +
+        " expected file identifier " + expected_file_identifier +
+        " but received " + frame->file_identifier + "."
+    );
+    return nullptr;
+  }
+
+  ::flatbuffers::Verifier verifier(frame->payload.data(), frame->payload.size());
+  if (!verifier.template VerifyBuffer<Table>(expected_file_identifier)) {
+    SetError(
+      "invalid-request-frame",
+      std::string("FlatBuffer verification failed for ") +
+        (friendly_name ? friendly_name : "input payload") + "."
+    );
+    return nullptr;
+  }
+  return ::flatbuffers::GetRoot<Table>(frame->payload.data());
+}
+
+static bool PushAlignedBinaryOutput(
+  const char *port_id,
+  const char *schema_name,
+  const char *file_identifier,
+  const char *root_type_name,
+  const ::flatbuffers::FlatBufferBuilder &builder
+) {
+  return plugin_push_output_typed(
+           port_id,
+           schema_name,
+           file_identifier,
+           static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
+           root_type_name,
+           0,
+           static_cast<uint32_t>(builder.GetSize()),
+           kAlignedBinaryAlignment,
+           builder.GetBufferPointer(),
+           static_cast<uint32_t>(builder.GetSize())
+         ) >= 0;
+}
+
+static conjunction::TLE DecodeTleRecord(const orbpro::conjunction::TleRecord *record) {
+  return conjunction::parse_tle(
+    record && record->name() ? record->name()->str() : std::string(),
+    record && record->line1() ? record->line1()->str() : std::string(),
+    record && record->line2() ? record->line2()->str() : std::string()
+  );
+}
+
+static std::shared_ptr<conjunction::EphemerisSource> DecodePropagatedTrack(
+  const orbpro::conjunction::PropagatedTrack *track
+) {
+  if (!track || !track->samples()) {
+    return nullptr;
+  }
+
+  std::vector<conjunction::EphemerisPoint> points;
+  points.reserve(track->samples()->size());
+  for (const auto *sample : *track->samples()) {
+    if (!sample) {
+      continue;
+    }
+    points.push_back(
+      conjunction::EphemerisPoint{
+        sample->jd(),
+        sample->xKm(),
+        sample->yKm(),
+        sample->zKm(),
+        sample->vxKmS(),
+        sample->vyKmS(),
+        sample->vzKmS(),
+      }
+    );
+  }
+  if (points.size() < 2u) {
+    return nullptr;
+  }
+
+  return std::make_shared<conjunction::OEMEphemerisSource>(
+    std::move(points),
+    track->objectName() ? track->objectName()->str() : std::string(),
+    track->objectId() ? track->objectId()->str() : std::string(),
+    track->noradCatId()
+  );
+}
+
+static std::unique_ptr<orbpro::conjunction::ConjunctionEventT> ToFlatbufferEvent(
+  const conjunction::ConjunctionEvent &event
+) {
+  auto output = std::make_unique<orbpro::conjunction::ConjunctionEventT>();
+  output->obj1Name = event.obj1.name;
+  output->obj1Id =
+    event.obj1.norad_cat_id > 0 ? std::to_string(event.obj1.norad_cat_id) : std::string();
+  output->obj1Norad = event.obj1.norad_cat_id;
+  output->obj2Name = event.obj2.name;
+  output->obj2Id =
+    event.obj2.norad_cat_id > 0 ? std::to_string(event.obj2.norad_cat_id) : std::string();
+  output->obj2Norad = event.obj2.norad_cat_id;
+  output->tcaJd = event.tca_jd;
+  output->tcaIso = event.tca_iso.empty() ? conjunction::jd_to_iso(event.tca_jd) : event.tca_iso;
+  output->minRangeKm = event.min_range_km;
+  output->relSpeedKms = event.rel_speed_kms;
+  output->maxProbability = event.max_probability;
+  output->dilutionThresholdKm = event.dilution_threshold_km;
+  output->probabilityMethod = event.probability_method;
+  output->relPosR = event.rel_pos_r;
+  output->relPosT = event.rel_pos_t;
+  output->relPosN = event.rel_pos_n;
+  output->relVelR = event.rel_vel_r;
+  output->relVelT = event.rel_vel_t;
+  output->relVelN = event.rel_vel_n;
+  output->covR1 = event.cov_r1;
+  output->covT1 = event.cov_t1;
+  output->covN1 = event.cov_n1;
+  output->covR2 = event.cov_r2;
+  output->covT2 = event.cov_t2;
+  output->covN2 = event.cov_n2;
+  output->dse1 = event.dse1;
+  output->dse2 = event.dse2;
+  return output;
+}
+
+static std::unique_ptr<orbpro::conjunction::ConjunctionEventT> ToFlatbufferEvent(
+  const conjunction::ConjunctionEvent2 &event
+) {
+  auto output = std::make_unique<orbpro::conjunction::ConjunctionEventT>();
+  output->obj1Name = event.obj1_name;
+  output->obj1Id = event.obj1_id;
+  output->obj1Norad = event.obj1_norad;
+  output->obj2Name = event.obj2_name;
+  output->obj2Id = event.obj2_id;
+  output->obj2Norad = event.obj2_norad;
+  output->tcaJd = event.tca_jd;
+  output->tcaIso = event.tca_iso.empty() ? conjunction::jd_to_iso(event.tca_jd) : event.tca_iso;
+  output->minRangeKm = event.miss_distance_km;
+  output->relSpeedKms = event.relative_speed_kms;
+  output->maxProbability = event.pc.max_probability;
+  output->dilutionThresholdKm = 0.0;
+  output->probabilityMethod = event.pc.method;
+  output->relPosR = event.rel_r;
+  output->relPosT = event.rel_t;
+  output->relPosN = event.rel_n;
+  output->relVelR = event.rel_vr;
+  output->relVelT = event.rel_vt;
+  output->relVelN = event.rel_vn;
+  output->covR1 = std::sqrt(std::max(0.0, event.cov1.data[0])) * 1000.0;
+  output->covT1 = std::sqrt(std::max(0.0, event.cov1.data[4])) * 1000.0;
+  output->covN1 = std::sqrt(std::max(0.0, event.cov1.data[8])) * 1000.0;
+  output->covR2 = std::sqrt(std::max(0.0, event.cov2.data[0])) * 1000.0;
+  output->covT2 = std::sqrt(std::max(0.0, event.cov2.data[4])) * 1000.0;
+  output->covN2 = std::sqrt(std::max(0.0, event.cov2.data[8])) * 1000.0;
+  output->dse1 = event.dse1;
+  output->dse2 = event.dse2;
+  return output;
+}
+
+static std::unique_ptr<orbpro::conjunction::ScreeningStatsT> ToFlatbufferStats(
+  const conjunction::ScreeningStats &stats
+) {
+  auto output = std::make_unique<orbpro::conjunction::ScreeningStatsT>();
+  output->totalObjects = static_cast<uint32_t>(stats.total_objects);
+  output->pairsScreened = static_cast<uint32_t>(stats.pairs_screened);
+  output->pairsPrefiltered = static_cast<uint32_t>(stats.pairs_prefiltered);
+  output->kdtreeCandidates = static_cast<uint32_t>(stats.kdtree_candidates);
+  output->tcaRefined = static_cast<uint32_t>(stats.tca_refined);
+  output->conjunctionsFound = static_cast<uint32_t>(stats.conjunctions_found);
+  output->propagations = static_cast<uint32_t>(stats.propagations);
+  output->elapsedMs = stats.elapsed_ms;
+  return output;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildEventPayload(
+  const conjunction::ConjunctionEvent &event
+) {
+  ::flatbuffers::FlatBufferBuilder builder(1024);
+  const auto event_offset = orbpro::conjunction::ConjunctionEvent::Pack(
+    builder,
+    ToFlatbufferEvent(event).get()
+  );
+  builder.Finish(event_offset, "CAEV");
+  return builder;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildEventPayload(
+  const conjunction::ConjunctionEvent2 &event
+) {
+  ::flatbuffers::FlatBufferBuilder builder(1024);
+  const auto event_offset = orbpro::conjunction::ConjunctionEvent::Pack(
+    builder,
+    ToFlatbufferEvent(event).get()
+  );
+  builder.Finish(event_offset, "CAEV");
+  return builder;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildFindTcaPayload(double tca_jd, const std::string &tca_iso) {
+  ::flatbuffers::FlatBufferBuilder builder(256);
+  const auto root = orbpro::conjunction::CreateConjunctionFindTcaResultDirect(
+    builder,
+    tca_jd,
+    tca_iso.c_str()
+  );
+  builder.Finish(root, "CATR");
+  return builder;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildAlfanoPayload(const conjunction::ProbResult &result) {
+  ::flatbuffers::FlatBufferBuilder builder(256);
+  const auto root = orbpro::conjunction::CreateConjunctionAlfanoResult(
+    builder,
+    result.max_probability,
+    result.dilution_threshold_km,
+    result.sigma_star_km
+  );
+  builder.Finish(root, "CAAL");
+  return builder;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildPcPayload(const conjunction::PcResult &result) {
+  ::flatbuffers::FlatBufferBuilder builder(256);
+  const auto method = builder.CreateString(result.method);
+  const auto root = orbpro::conjunction::CreateConjunctionPcResult(
+    builder,
+    result.probability,
+    method,
+    result.converged,
+    result.iterations,
+    result.max_probability,
+    result.mahalanobis_2d
+  );
+  builder.Finish(root, "CAPC");
+  return builder;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildPrepareScreeningIndexPayload(
+  const conjunction::ResidentScreeningIndexBuildResult &result
+) {
+  ::flatbuffers::FlatBufferBuilder builder(256);
+  const auto root = orbpro::conjunction::CreateConjunctionPrepareScreeningIndexResult(
+    builder,
+    result.screening_index_handle,
+    result.source_count,
+    result.candidate_pair_count
+  );
+  builder.Finish(root, "CSPR");
+  return builder;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildScreenCatalogResultPayload(
+  uint32_t objects_parsed,
+  const std::vector<conjunction::ConjunctionEvent> &events,
+  const conjunction::ScreeningStats &stats
+) {
+  orbpro::conjunction::ConjunctionScreenCatalogResultT result{};
+  result.objectsParsed = objects_parsed;
+  result.conjunctionsFound = static_cast<uint32_t>(events.size());
+  result.stats = ToFlatbufferStats(stats);
+  result.conjunctions.reserve(events.size());
+  for (const auto &event : events) {
+    result.conjunctions.emplace_back(ToFlatbufferEvent(event));
+  }
+
+  ::flatbuffers::FlatBufferBuilder builder(4096);
+  const auto root = orbpro::conjunction::ConjunctionScreenCatalogResult::Pack(
+    builder,
+    &result
+  );
+  builder.Finish(root, "CASS");
+  return builder;
+}
+
+static const orbpro::conjunction::ConjunctionPairRequest *DecodePairRequest(void) {
+  return DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPairRequest>(
+    FindInputFrame("request"),
+    "request",
+    "CAPQ",
+    "ConjunctionPairRequest"
+  );
+}
+
+static int HandleAssessConjunction(void) {
+  try {
+    const auto *request = DecodePairRequest();
+    if (!request) {
+      return 400;
+    }
+
+    if (request->primaryTrack() && request->secondaryTrack()) {
+      auto primary = DecodePropagatedTrack(request->primaryTrack());
+      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
+      if (!primary || !secondary) {
+        SetError("invalid-track", "Propagated conjunction requests require at least two samples per track.");
+        return 400;
+      }
+
+      conjunction::ConjunctionEngine engine;
+      engine.set_pc_method("alfano");
+      engine.set_combined_radius_m(request->radius1M(), request->radius2M());
+      const auto event = engine.assess(
+        *primary,
+        *secondary,
+        request->startJd(),
+        request->durationDays()
+      );
+
+      const auto payload = BuildEventPayload(event);
+      if (!PushAlignedBinaryOutput(
+            "result",
+            "orbpro.conjunction.ConjunctionEvent",
+            "CAEV",
+            "ConjunctionEvent",
+            payload
+          )) {
+        SetError("output-failed", "Failed to push conjunction event output.");
+        return 500;
+      }
+      return 0;
+    }
+
+    const auto event = conjunction::assess_conjunction(
+      DecodeTleRecord(request->tle1()),
+      DecodeTleRecord(request->tle2()),
+      request->startJd(),
+      request->durationDays(),
+      request->radius1M(),
+      request->radius2M()
+    );
+    const auto payload = BuildEventPayload(event);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionEvent",
+          "CAEV",
+          "ConjunctionEvent",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push conjunction event output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("assess-conjunction-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleEmitCdm(void) {
+  try {
+    const auto *request = DecodePairRequest();
+    if (!request) {
+      return 400;
+    }
+    if (request->primaryTrack() || request->secondaryTrack()) {
+      SetError("unsupported-request", "emit_cdm currently requires TLE-backed conjunction requests.");
+      return 400;
+    }
+
+    const auto event = conjunction::assess_conjunction(
+      DecodeTleRecord(request->tle1()),
+      DecodeTleRecord(request->tle2()),
+      request->startJd(),
+      request->durationDays(),
+      request->radius1M(),
+      request->radius2M()
+    );
+
+    std::vector<uint8_t> payload(4096u);
+    int32_t written = conjunction::conjunction_to_cdm(
+      event,
+      payload.data(),
+      static_cast<uint32_t>(payload.size())
+    );
+    while (written == -2) {
+      payload.resize(payload.size() * 2u);
+      written = conjunction::conjunction_to_cdm(
+        event,
+        payload.data(),
+        static_cast<uint32_t>(payload.size())
+      );
+    }
+    if (written < 0) {
+      SetError("emit-cdm-failed", "Failed to serialize conjunction event as CDM.");
+      return 500;
+    }
+    payload.resize(static_cast<size_t>(written));
+
+    if (plugin_push_output_typed(
+          "cdm",
+          "CDM.fbs",
+          "$CDM",
+          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
+          "CDM",
+          0,
+          static_cast<uint32_t>(payload.size()),
+          kAlignedBinaryAlignment,
+          payload.data(),
+          static_cast<uint32_t>(payload.size())
+        ) < 0) {
+      SetError("output-failed", "Failed to push CDM output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("emit-cdm-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleFindTca(void) {
+  try {
+    const auto *request = DecodePairRequest();
+    if (!request) {
+      return 400;
+    }
+
+    double tca_jd = 0.0;
+    if (request->primaryTrack() && request->secondaryTrack()) {
+      auto primary = DecodePropagatedTrack(request->primaryTrack());
+      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
+      if (!primary || !secondary) {
+        SetError("invalid-track", "Propagated conjunction requests require at least two samples per track.");
+        return 400;
+      }
+      conjunction::ConjunctionEngine engine;
+      tca_jd = engine.find_tca(
+        *primary,
+        *secondary,
+        request->startJd(),
+        request->durationDays(),
+        request->coarseStepSec()
+      );
+    } else {
+      tca_jd = conjunction::find_tca(
+        DecodeTleRecord(request->tle1()),
+        DecodeTleRecord(request->tle2()),
+        request->startJd(),
+        request->durationDays(),
+        request->coarseStepSec(),
+        request->fineTolSec()
+      );
+    }
+
+    const auto payload = BuildFindTcaPayload(tca_jd, conjunction::jd_to_iso(tca_jd));
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionFindTcaResult",
+          "CATR",
+          "ConjunctionFindTcaResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push find_tca output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("find-tca-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleAlfanoMaxProbability(void) {
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionAlfanoRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CAAR",
+      "ConjunctionAlfanoRequest"
+    );
+    if (!request) {
+      return 400;
+    }
+
+    const auto result = conjunction::alfano_max_probability(
+      request->missDistanceKm(),
+      request->combinedRadiusKm()
+    );
+    const auto payload = BuildAlfanoPayload(result);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionAlfanoResult",
+          "CAAL",
+          "ConjunctionAlfanoResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push alfano_max_probability output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("alfano-max-probability-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleComputePc(void) {
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPcRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CAPR",
+      "ConjunctionPcRequest"
+    );
+    if (!request || !request->bplane()) {
+      SetError("invalid-request-frame", "ConjunctionPcRequest requires a B-plane geometry payload.");
+      return 400;
+    }
+
+    conjunction::BPlaneGeometry bplane{};
+    bplane.xi = request->bplane()->xi();
+    bplane.zeta = request->bplane()->zeta();
+    bplane.sigma_xx = request->bplane()->sigmaXx();
+    bplane.sigma_xz = request->bplane()->sigmaXz();
+    bplane.sigma_zz = request->bplane()->sigmaZz();
+    bplane.combined_radius = request->bplane()->combinedRadius();
+
+    const auto method_name =
+      request->method() ? request->method()->str() : std::string("foster");
+    auto method = conjunction::create_pc_method(method_name);
+    const auto result = method->compute(bplane);
+    const auto payload = BuildPcPayload(result);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionPcResult",
+          "CAPC",
+          "ConjunctionPcResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push compute_pc output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("compute-pc-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandlePrepareScreeningIndex(void) {
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPrepareScreeningIndexRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CSPI",
+      "ConjunctionPrepareScreeningIndexRequest"
+    );
+    const auto *descriptions = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeSourcesBatchResult>(
+      FindInputFrame("sources"),
+      "sources",
+      nullptr,
+      "PropagatorDescribeSourcesBatchResult"
+    );
+    if (!request || !descriptions) {
+      return 400;
+    }
+
+    std::vector<uint32_t> primary_source_handles;
+    if (request->sourceHandles()) {
+      primary_source_handles.assign(
+        request->sourceHandles()->begin(),
+        request->sourceHandles()->end()
+      );
+    }
+
+    const auto result = conjunction::prepare_resident_screening_index(
+      request->catalogHandle(),
+      primary_source_handles,
+      descriptions
+    );
+    const auto payload = BuildPrepareScreeningIndexPayload(result);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionPrepareScreeningIndexResult",
+          "CSPR",
+          "ConjunctionPrepareScreeningIndexResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push prepare_screening_index output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("prepare-screening-index-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandlePrepareSegmentScreeningIndex(void) {
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPrepareSegmentScreeningIndexRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CSSI",
+      "ConjunctionPrepareSegmentScreeningIndexRequest"
+    );
+    const auto *descriptions = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeSourcesBatchResult>(
+      FindInputFrame("sources"),
+      "sources",
+      nullptr,
+      "PropagatorDescribeSourcesBatchResult"
+    );
+    const auto *segments = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeTrajectorySegmentsResult>(
+      FindInputFrame("segments"),
+      "segments",
+      nullptr,
+      "PropagatorDescribeTrajectorySegmentsResult"
+    );
+    if (!request || !descriptions || !segments) {
+      return 400;
+    }
+
+    std::vector<uint32_t> primary_source_handles;
+    if (request->primarySourceHandles()) {
+      primary_source_handles.assign(
+        request->primarySourceHandles()->begin(),
+        request->primarySourceHandles()->end()
+      );
+    }
+
+    const auto result = conjunction::prepare_resident_segment_screening_index(
+      request->catalogHandle(),
+      request->segmentSetHandle(),
+      primary_source_handles,
+      request->screeningMode(),
+      descriptions,
+      segments
+    );
+    const auto payload = BuildPrepareScreeningIndexPayload(result);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionPrepareScreeningIndexResult",
+          "CSPR",
+          "ConjunctionPrepareScreeningIndexResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push prepare_segment_screening_index output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("prepare-segment-screening-index-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandlePrepareSampleScreeningIndex(void) {
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPrepareSampleScreeningIndexRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CSSM",
+      "ConjunctionPrepareSampleScreeningIndexRequest"
+    );
+    const auto *descriptions = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeSourcesBatchResult>(
+      FindInputFrame("sources"),
+      "sources",
+      nullptr,
+      "PropagatorDescribeSourcesBatchResult"
+    );
+    const auto *samples = DecodeFlatbufferInput<orbpro::propagator::PropagatorSampleTrajectoryStatesResult>(
+      FindInputFrame("samples"),
+      "samples",
+      nullptr,
+      "PropagatorSampleTrajectoryStatesResult"
+    );
+    if (!request || !descriptions || !samples) {
+      return 400;
+    }
+
+    std::vector<uint32_t> primary_source_handles;
+    if (request->primarySourceHandles()) {
+      primary_source_handles.assign(
+        request->primarySourceHandles()->begin(),
+        request->primarySourceHandles()->end()
+      );
+    }
+
+    const auto result = conjunction::prepare_resident_sample_screening_index(
+      request->catalogHandle(),
+      primary_source_handles,
+      request->screeningMode(),
+      descriptions,
+      samples
+    );
+    const auto payload = BuildPrepareScreeningIndexPayload(result);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionPrepareScreeningIndexResult",
+          "CSPR",
+          "ConjunctionPrepareScreeningIndexResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push prepare_sample_screening_index output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("prepare-sample-screening-index-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleDestroyScreeningIndex(void) {
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionDestroyScreeningIndexRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CSDI",
+      "ConjunctionDestroyScreeningIndexRequest"
+    );
+    if (!request) {
+      return 400;
+    }
+    if (!conjunction::destroy_resident_screening_index(request->screeningIndexHandle())) {
+      SetError("unknown-screening-index", "unknown screeningIndexHandle");
+      return 404;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("destroy-screening-index-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleResidentScreenWindow(bool segment_window) {
+  (void)segment_window;
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionScreenWindowRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CSWN",
+      "ConjunctionScreenWindowRequest"
+    );
+    if (!request) {
+      return 400;
+    }
+
+    const auto *resident_index =
+      conjunction::find_resident_screening_index(request->screeningIndexHandle());
+    if (!resident_index) {
+      SetError("unknown-screening-index", "unknown screeningIndexHandle");
+      return 404;
+    }
+
+    conjunction::ScreeningConfig config{};
+    config.start_jd = request->startJd();
+    config.duration_days = request->durationDays();
+    config.threshold_km = request->thresholdKm();
+    config.num_threads = request->numThreads();
+    config.coarse_step_sec = request->coarseStepSec();
+    config.fine_tol_sec = request->fineTolSec();
+    config.combined_radius_m = request->combinedRadiusM();
+    config.progress_interval_sec = request->progressIntervalSec();
+
+    conjunction::ScreeningStats stats{};
+    const auto events = conjunction::screen_resident_index_window(
+      *resident_index,
+      config,
+      stats
+    );
+    const auto payload = BuildScreenCatalogResultPayload(
+      resident_index->tles.size(),
+      events,
+      stats
+    );
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionScreenCatalogResult",
+          "CASS",
+          "ConjunctionScreenCatalogResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push resident screening result.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("screen-window-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleScreenWindow(void) {
+  return HandleResidentScreenWindow(false);
+}
+
+static int HandleScreenSegmentWindow(void) {
+  return HandleResidentScreenWindow(true);
 }
 
 }  // namespace

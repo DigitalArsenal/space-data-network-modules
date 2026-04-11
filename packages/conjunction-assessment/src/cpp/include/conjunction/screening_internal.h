@@ -13,7 +13,7 @@ struct CoarseHitRecord {
     int32_t earliest_step = std::numeric_limits<int32_t>::max();
     int32_t latest_step = -1;
     int32_t best_step = -1;
-    double best_distance_km = std::numeric_limits<double>::infinity();
+    double best_distance_km = std::numeric_limits<double>::max();
 };
 
 struct RefinementWindow {

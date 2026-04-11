@@ -534,12 +534,24 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
             static_cast<uint32_t>(index.tles.size() - 1);
     }
     index.trajectory_segments.resize(index.source_handles.size());
-    index.sample_min_x_km.assign(index.source_handles.size(), std::numeric_limits<float>::infinity());
-    index.sample_max_x_km.assign(index.source_handles.size(), -std::numeric_limits<float>::infinity());
-    index.sample_min_y_km.assign(index.source_handles.size(), std::numeric_limits<float>::infinity());
-    index.sample_max_y_km.assign(index.source_handles.size(), -std::numeric_limits<float>::infinity());
-    index.sample_min_z_km.assign(index.source_handles.size(), std::numeric_limits<float>::infinity());
-    index.sample_max_z_km.assign(index.source_handles.size(), -std::numeric_limits<float>::infinity());
+    index.sample_min_x_km.assign(
+        index.source_handles.size(),
+        std::numeric_limits<float>::max());
+    index.sample_max_x_km.assign(
+        index.source_handles.size(),
+        std::numeric_limits<float>::lowest());
+    index.sample_min_y_km.assign(
+        index.source_handles.size(),
+        std::numeric_limits<float>::max());
+    index.sample_max_y_km.assign(
+        index.source_handles.size(),
+        std::numeric_limits<float>::lowest());
+    index.sample_min_z_km.assign(
+        index.source_handles.size(),
+        std::numeric_limits<float>::max());
+    index.sample_max_z_km.assign(
+        index.source_handles.size(),
+        std::numeric_limits<float>::lowest());
     index.sample_motion_margin_km = std::move(conservative_motion_margin_km);
 
     for (flatbuffers::uoffset_t handle_index = 0;

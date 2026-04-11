@@ -73,7 +73,7 @@ int32_t sdn_host_clear_response(void);
 
 static const uint8_t SERVER_PRIVATE_KEY[32] = { SDN_BAKED_SERVER_PRIVATE_KEY };
 
-static const char HKDF_WRAP_INFO[] = "orbpro-key-server-artifact-wrap-v1";
+static const char HKDF_WRAP_INFO[] = "space-data-network/module-delivery/wrap/v1";
 static const char WRAP_ALGORITHM[] = "ecies-x25519-hkdf-sha256-aes-256-gcm";
 static const char DEFAULT_REQ_ID[] = "deliver_plugin";
 static const char DEFAULT_MODULE_ID[] = "module";

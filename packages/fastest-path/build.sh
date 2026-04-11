@@ -3,10 +3,28 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EMSDK_DIR="${SDN_LOCAL_EMSDK_DIR:-$SCRIPT_DIR/deps/emsdk}"
+SRC_DIR="$SCRIPT_DIR/src/cpp"
+BUILD_DIR="$SRC_DIR/build-isomorphic"
 DIST_DIR="$SCRIPT_DIR/dist"
 BROWSER_DIST_DIR="$DIST_DIR/browser"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
-ARTIFACTS_SOURCE="$SCRIPT_DIR/../../../orbpro-runtime/taggedPluginArtifacts.generated.js"
+BROWSER_TARGET="fastest_path_wasm"
+
+cpu_count() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+        return
+    fi
+    if command -v getconf >/dev/null 2>&1; then
+        getconf _NPROCESSORS_ONLN
+        return
+    fi
+    if command -v sysctl >/dev/null 2>&1 && sysctl -n hw.ncpu >/dev/null 2>&1; then
+        sysctl -n hw.ncpu
+        return
+    fi
+    echo 4
+}
 
 ensure_emscripten() {
     local toolchain="${SDN_WASM_TOOLCHAIN:-local-emsdk}"
@@ -42,61 +60,20 @@ ensure_emscripten() {
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
 ensure_emscripten
 
+rm -rf "$BUILD_DIR"
+rm -rf "$DIST_DIR"
 mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
 
-PACKAGE_DIR="$SCRIPT_DIR" ARTIFACTS_SOURCE="$ARTIFACTS_SOURCE" node --input-type=module <<'NODE'
-import fs from "node:fs";
-import path from "node:path";
+echo "Configuring Emscripten build..."
+emcmake cmake -S "$SRC_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 
-const packageDir = process.env.PACKAGE_DIR;
-const sourcePath = process.env.ARTIFACTS_SOURCE;
-if (!packageDir || !sourcePath) {
-  throw new Error("PACKAGE_DIR and ARTIFACTS_SOURCE must be set.");
-}
-const source = fs.readFileSync(sourcePath, "utf8");
+echo ""
+echo "Building browser-compatible standalone artifact..."
+cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
-function extractBase64(key, commentPath) {
-  const marker = `"${key}": "`;
-  const start = source.indexOf(marker);
-  if (start < 0) {
-    throw new Error(`Missing artifact key: ${key}`);
-  }
-  const begin = start + marker.length;
-  const endMarker = `", // ${commentPath}`;
-  const end = source.indexOf(endMarker, begin);
-  if (end < 0) {
-    throw new Error(`Missing artifact terminator for ${key}`);
-  }
-  return source.slice(begin, end);
-}
-
-const browserJsLiteral = extractBase64(
-  "fastest-path-browser-module",
-  "packages/space-data-network-plugins/packages/fastest-path/dist/browser/module.js",
-);
-const browserJs = JSON.parse(`"${browserJsLiteral}"`);
-const browserWasm = Buffer.from(
-  extractBase64(
-    "fastest-path-wasm",
-    "packages/space-data-network-plugins/packages/fastest-path/dist/isomorphic/module.wasm",
-  ),
-  "base64",
-);
-
-const browserOut = path.join(packageDir, "dist", "browser", "module.js");
-const browserWasmOut = path.join(packageDir, "dist", "browser", "module.wasm");
-const isomorphicOut = path.join(packageDir, "dist", "isomorphic", "module.wasm");
-
-fs.mkdirSync(path.dirname(browserOut), { recursive: true });
-fs.mkdirSync(path.dirname(browserWasmOut), { recursive: true });
-fs.mkdirSync(path.dirname(isomorphicOut), { recursive: true });
-
-fs.writeFileSync(browserOut, browserJs);
-fs.writeFileSync(browserWasmOut, browserWasm);
-fs.writeFileSync(isomorphicOut, browserWasm);
-
-console.log("Wrote canonical browser and isomorphic artifacts.");
-NODE
+cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
+cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
+cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
 
 echo ""
 echo "=== Build Complete ==="

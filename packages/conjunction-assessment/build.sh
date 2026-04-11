@@ -59,6 +59,8 @@ ensure_emscripten() {
 
 ensure_emscripten
 
+node "$SCRIPT_DIR/generate-manifest-header.mjs"
+
 rm -rf "$EMSCRIPTEN_BUILD_DIR"
 rm -rf "$DIST_DIR"
 mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"

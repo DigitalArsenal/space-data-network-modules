@@ -281,8 +281,8 @@ std::vector<std::pair<double, double>> find_all_polynomial_minima(
 {
     std::vector<std::pair<double, double>> minima;
     const double step_days = std::max(0.05, step_sec) / 86400.0;
-    double prev_prev = std::numeric_limits<double>::infinity();
-    double prev = std::numeric_limits<double>::infinity();
+    double prev_prev = std::numeric_limits<double>::max();
+    double prev = std::numeric_limits<double>::max();
     double prev_jd = start_jd;
 
     for (double jd = start_jd; jd <= end_jd + step_days * 0.5; jd += step_days) {
@@ -368,7 +368,7 @@ double find_polynomial_tca(
 
     const int refine_count = std::min(static_cast<int>(minima.size()), 30);
     double best_jd = minima.front().first;
-    double best_distance = std::numeric_limits<double>::infinity();
+    double best_distance = std::numeric_limits<double>::max();
     for (int i = 0; i < refine_count; i++) {
         const double center = minima[static_cast<size_t>(i)].first;
         double subscan_best_jd = center;
@@ -1715,7 +1715,7 @@ ConjunctionSolution refine_exact_window_locally(
 
     ConjunctionSolution solution;
     solution.tca_jd = ts;
-    solution.min_range_km = std::numeric_limits<double>::infinity();
+    solution.min_range_km = std::numeric_limits<double>::max();
 
     for (int iter = 0; iter < 64 && h >= fine_tol_days; iter++) {
         const double dist = distance_at_jd(ts);

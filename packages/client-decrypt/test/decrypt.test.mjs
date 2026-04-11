@@ -223,7 +223,7 @@ async function buildGrantResponseFixture(
         name: "HKDF",
         hash: "SHA-256",
         salt: new Uint8Array(),
-        info: new TextEncoder().encode("orbpro-key-server-artifact-wrap-v1"),
+        info: new TextEncoder().encode("space-data-network/module-delivery/wrap/v1"),
       },
       hkdfKey,
       256,

@@ -40,6 +40,26 @@ test("build publishes canonical browser and isomorphic artifact paths", () => {
   assert.equal(fs.existsSync(fileURLToPath(BROWSER_WASM_PATH)), true);
 });
 
+test("browser module artifact avoids literal node: imports so browser bundlers can parse it", () => {
+  const source = fs.readFileSync(fileURLToPath(BROWSER_MODULE_PATH), "utf8");
+
+  assert.equal(source.includes("node:"), false);
+});
+
+test("browser module exposes the Emscripten factory surface", async () => {
+  const namespace = await import(BROWSER_MODULE_PATH.href);
+  const module = await namespace.default({
+    noInitialRun: true,
+    wasmBinary: fs.readFileSync(fileURLToPath(BROWSER_WASM_PATH)),
+  });
+
+  assert.equal(typeof namespace.default, "function");
+  assert.equal(typeof module._plugin_alloc, "function");
+  assert.equal(typeof module._plugin_free, "function");
+  assert.equal(typeof module._plugin_invoke_stream, "function");
+  assert.equal(typeof module._sensor_shaders_set_bundle_json, "function");
+});
+
 test("package entrypoint exports the OrbPro-compatible loader and canonical paths", () => {
   assert.equal(typeof sensorShadersPackage.loadSensorShaders, "function");
   assert.equal(typeof sensorShadersPackage.getSensorShadersManifest, "function");

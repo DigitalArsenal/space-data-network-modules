@@ -24,8 +24,8 @@ OrbPro method IDs:
 bash build.sh
 ```
 
-The build script uses the repo-local `deps/emsdk` checkout and repackages the
-checked-in compiled artifact bundle into the canonical SDK paths.
+The build script uses the repo-local `deps/emsdk` checkout and compiles the
+package-local C++ source into the canonical SDK browser and isomorphic paths.
 
 ## Verification
 

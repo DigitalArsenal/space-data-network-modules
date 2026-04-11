@@ -92,6 +92,24 @@ em++ \
 
 cp "$BROWSER_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
 
+BROWSER_MODULE_OUT="$BROWSER_DIST_DIR/module.js" node --input-type=module <<'NODE'
+import fs from "node:fs";
+
+const outputPath = process.env.BROWSER_MODULE_OUT;
+if (!outputPath) {
+  throw new Error("BROWSER_MODULE_OUT must be set.");
+}
+
+let source = fs.readFileSync(outputPath, "utf8");
+source = source
+  .replaceAll('import("node:module")', 'import(["node","module"].join(":"))')
+  .replaceAll('require("node:fs")', 'require(["node","fs"].join(":"))')
+  .replaceAll('require("node:path")', 'require(["node","path"].join(":"))')
+  .replaceAll('require("node:url")', 'require(["node","url"].join(":"))');
+
+fs.writeFileSync(outputPath, source);
+NODE
+
 echo ""
 echo "=== Build Complete ==="
 ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"

@@ -291,6 +291,46 @@ export function parseAerospaceOcmText(text, options = {}) {
   return result;
 }
 
+export function extractEpochState(ocm, options = {}) {
+  const trajectory = options.trajectory ?? ocm?.primaryTrajectory;
+  const samples = Array.isArray(trajectory?.samples) ? trajectory.samples : [];
+  if (samples.length === 0) {
+    return null;
+  }
+
+  const targetEpochJD = Number.isFinite(options.targetEpochJD)
+    ? options.targetEpochJD
+    : Number.isFinite(ocm?.epochTzeroJD)
+      ? ocm.epochTzeroJD
+      : samples[0].epochJD;
+
+  let bestSample = samples[0];
+  let bestDelta = Math.abs(samples[0].epochJD - targetEpochJD);
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const sample = samples[index];
+    const delta = Math.abs(sample.epochJD - targetEpochJD);
+    if (delta < bestDelta) {
+      bestSample = sample;
+      bestDelta = delta;
+    }
+  }
+
+  if (!bestSample.positionKm || !bestSample.velocityKmS) {
+    return null;
+  }
+
+  return {
+    epoch: bestSample.epoch,
+    epochJD: bestSample.epochJD,
+    positionKm: { ...bestSample.positionKm },
+    velocityKmS: { ...bestSample.velocityKmS },
+    objectDesignator: ocm?.objectDesignator ?? null,
+    objectName: ocm?.objectName ?? null,
+    sourcePath: ocm?.sourcePath ?? null,
+  };
+}
+
 export function odAgeDaysFromScreeningStart(ocm) {
   if (!Number.isFinite(ocm?.odEpochJD)) {
     return Number.NaN;

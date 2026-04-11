@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
 import test from "node:test";
 
 import clientDecrypt, {
@@ -87,7 +88,7 @@ async function buildGrantResponseFixture(plaintext, recipientPublicKey) {
         name: "HKDF",
         hash: "SHA-256",
         salt: new Uint8Array(),
-        info: new TextEncoder().encode("orbpro-key-server-artifact-wrap-v1"),
+        info: new TextEncoder().encode("space-data-network/module-delivery/wrap/v1"),
       },
       hkdfKey,
       256,
@@ -176,4 +177,43 @@ test("package entrypoint exposes the awaited client-decrypt API", async (t) => {
 
   const decrypted = await decryptor.decryptArtifact(fixture.grantResponseBytes, privateKey);
   assert.deepEqual(decrypted, plaintext);
+});
+
+test("package entrypoint avoids literal node: imports so browser bundlers can parse it", () => {
+  const source = fs.readFileSync(new URL("../index.js", import.meta.url), "utf8");
+
+  assert.equal(source.includes("node:"), false);
+});
+
+test("package entrypoint accepts prefetched encrypted bundle bytes for awaited browser delivery", async (t) => {
+  const { publicKey, privateKey } = await generateX25519KeyPair();
+  const plaintext = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    ...crypto.getRandomValues(new Uint8Array(128)),
+  ]);
+  const fixture = await buildGrantResponseFixture(plaintext, publicKey);
+  const operations = [];
+
+  const decryptor = await createClientDecrypt({
+    dispatch(operation) {
+      operations.push(operation);
+      if (operation === "host.runtimeTarget") return "node";
+      if (operation === "host.listCapabilities") return [];
+      if (operation === "host.hasCapability") return false;
+      if (operation === "host.listOperations") return [];
+      throw new Error(`Unsupported operation: ${operation}`);
+    },
+  });
+  t.after(async () => {
+    await decryptor.destroy();
+  });
+
+  const decrypted = await decryptor.decryptArtifact({
+    payload: fixture.grantResponseBytes,
+    privateKey,
+    encryptedBundleBytes: fixture.encryptedBundleBytes,
+  });
+
+  assert.deepEqual(decrypted, plaintext);
+  assert.equal(operations.includes("ipfs.cat"), false);
 });

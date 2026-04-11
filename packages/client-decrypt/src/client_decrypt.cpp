@@ -35,7 +35,7 @@ static const char WRAP_INFOS[][64] = {
     "plugin-key-server-artifact-wrap-v1",
 };
 static const size_t WRAP_INFO_COUNT = 2;
-static const char MODULE_DELIVERY_WRAP_INFO[] = "orbpro-key-server-artifact-wrap-v1";
+static const char MODULE_DELIVERY_WRAP_INFO[] = "space-data-network/module-delivery/wrap/v1";
 static const size_t KEY_BYTES = 32;
 static const size_t GCM_IV_BYTES = 12;
 static const size_t GCM_TAG_BYTES = 16;
