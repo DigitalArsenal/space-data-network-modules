@@ -1,0 +1,102 @@
+{
+  "pluginId": "com.orbpro.sensor-shaders",
+  "name": "OrbPro Sensor Shaders",
+  "version": "1.0.0",
+  "pluginFamily": "shader",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "load_shader_bundle",
+      "displayName": "Load Shader Bundle",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Control input used to update or confirm the active sensor shader bundle."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "bundle",
+          "acceptedTypeSets": [
+            {
+              "setId": "raw-data",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.plugin.RawDataPayload"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Returns the active sensor shader bundle payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Returns the active bundle after the package-local loader has synchronized shader state into the module."
+    },
+    {
+      "methodId": "get_shader_bundle",
+      "displayName": "Get Shader Bundle",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Control input used to request the current shader bundle."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "bundle",
+          "acceptedTypeSets": [
+            {
+              "setId": "raw-data",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.plugin.RawDataPayload"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Returns the current sensor shader bundle payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Returns the logical sensor shader bundle metadata and GLSL shader source map."
+    }
+  ]
+}

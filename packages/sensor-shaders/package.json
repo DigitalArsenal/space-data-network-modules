@@ -1,18 +1,30 @@
 {
-  "name": "@orbpro/plugin-sensor-shaders",
-  "version": "1.0.0",
-  "description": "OrbPro Sensor Shaders Plugin",
+  "name": "space-data-network-plugin-sensor-shaders",
+  "private": true,
+  "version": "0.1.0",
   "type": "module",
-  "main": "index.js",
+  "main": "./index.js",
+  "sdn-module": "./dist/isomorphic/module.wasm",
   "exports": {
     ".": "./index.js",
-    "./dist/*": "./dist/*"
+    "./plugin-manifest.json": "./plugin-manifest.json",
+    "./dist/browser/module.js": "./dist/browser/module.js",
+    "./dist/browser/module.wasm": "./dist/browser/module.wasm",
+    "./dist/isomorphic/module.wasm": "./dist/isomorphic/module.wasm"
   },
-  "files": ["dist/", "src/", "index.js"],
-  "keywords": ["orbpro", "wasm", "sensor-shaders", "plugin", "shader", "cesium", "sensor-visualization"],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/DigitalArsenal/space-data-network-plugin-sensor-shaders"
+  "files": [
+    "dist/",
+    "shaders/",
+    "index.js",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bash build.sh",
+    "test": "node --test tests/sdk_compat.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
-  "license": "UNLICENSED"
+  "devDependencies": {
+    "space-data-module-sdk": "0.5.22"
+  }
 }
