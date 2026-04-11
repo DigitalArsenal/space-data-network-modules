@@ -1,0 +1,183 @@
+{
+  "pluginId": "com.orbpro.fastest-path",
+  "name": "Fastest Path (SSSP)",
+  "version": "1.0.0",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "create_graph",
+      "displayName": "Create Graph",
+      "inputPorts": [
+        {
+          "portId": "graph",
+          "acceptedTypeSets": [
+            {
+              "setId": "graph-definition",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.GraphDefinition",
+                  "fileIdentifier": "FGDF"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 64,
+      "drainPolicy": "drain-to-empty",
+      "description": "Initializes or resets a graph with a declared vertex count."
+    },
+    {
+      "methodId": "ingest_edges",
+      "displayName": "Ingest Edges",
+      "inputPorts": [
+        {
+          "portId": "edges",
+          "acceptedTypeSets": [
+            {
+              "setId": "weighted-edge-list",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.WeightedEdgeList",
+                  "fileIdentifier": "FELT"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 4096,
+      "drainPolicy": "drain-to-empty",
+      "description": "Loads one or more weighted edge lists into the in-memory graph."
+    },
+    {
+      "methodId": "ingest_csr",
+      "displayName": "Ingest CSR",
+      "inputPorts": [
+        {
+          "portId": "csr",
+          "acceptedTypeSets": [
+            {
+              "setId": "csr-graph",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.CSRGraph",
+                  "fileIdentifier": "FCSR"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 128,
+          "required": true
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 128,
+      "drainPolicy": "drain-to-empty",
+      "description": "Loads a pre-built CSR graph directly into the solver."
+    },
+    {
+      "methodId": "compute_shortest_paths",
+      "displayName": "Compute Shortest Paths",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "shortest-path-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.ShortestPathRequest",
+                  "fileIdentifier": "FSPR"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "results",
+          "acceptedTypeSets": [
+            {
+              "setId": "shortest-path-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.ShortestPathResult",
+                  "fileIdentifier": "FSPS"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false
+        }
+      ],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty",
+      "description": "Runs single-source shortest path on the current graph."
+    },
+    {
+      "methodId": "reconstruct_path",
+      "displayName": "Reconstruct Path",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "path-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.PathRequest",
+                  "fileIdentifier": "FPTR"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "path",
+          "acceptedTypeSets": [
+            {
+              "setId": "path-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.PathResult",
+                  "fileIdentifier": "FPTH"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false
+        }
+      ],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty",
+      "description": "Reconstructs a target path from the latest shortest-path solve."
+    }
+  ]
+}

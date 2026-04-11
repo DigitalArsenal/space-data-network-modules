@@ -1,56 +1,41 @@
-# @orbpro/plugin-fastest-path
+# Fastest Path
 
-OrbPro Fastest Path Solver Plugin.
+Fastest Path is the OrbPro single-source shortest-path analysis module.
+It keeps the canonical plugin ID `com.orbpro.fastest-path` and the existing
+OrbPro method IDs:
 
-Computes optimal orbital routing and fastest-path solutions between space objects, ground stations, and relay nodes. Accounts for orbital mechanics, link budgets, and coverage windows. Distributed as a compiled ES module.
+- `create_graph`
+- `ingest_edges`
+- `ingest_csr`
+- `compute_shortest_paths`
+- `reconstruct_path`
 
-## Installation
+## Layout
+
+- `plugin-manifest.json` is the authoring manifest.
+- `dist/isomorphic/module.wasm` is the canonical shared runtime artifact.
+- `dist/browser/module.js` and `dist/browser/module.wasm` are browser-side
+  publication artifacts.
+- `tests/sdk_compat.test.mjs` validates the package against the SDK contract.
+
+## Build
 
 ```bash
-npm install @orbpro/plugin-fastest-path
+bash build.sh
 ```
 
-This package is intended to be used within an OrbPro workspace or alongside the OrbPro engine. Standalone use requires the OrbPro plugin-sdk.
+The build script uses the repo-local `deps/emsdk` checkout and repackages the
+checked-in compiled artifact bundle into the canonical SDK paths.
 
-## Building
-
-Build the module using the OrbPro plugin-sdk:
+## Verification
 
 ```bash
-# From within the OrbPro plugin-sdk workspace:
-npm run build:fastest-path
-# Output: dist/fastest-path.mjs
+node --test tests/sdk_compat.test.mjs
 ```
 
-## Usage
+## Notes
 
-### Via SDN Plugin Delivery (ecies-decrypted bytes)
-
-```javascript
-import { createFastestPathSolver } from "@orbpro/plugin-fastest-path";
-
-// wasmBytes are delivered pre-decrypted by the SDN plugin-delivery system
-// (ecies-x25519-hkdf-sha256-aes-256-gcm)
-const solver = await createFastestPathSolver({ wasmBytes });
-```
-
-### Direct / Development
-
-```javascript
-import { createFastestPathSolver } from "@orbpro/plugin-fastest-path";
-
-// Without wasmBytes, loads raw module from dist/fastest-path.mjs
-const solver = await createFastestPathSolver();
-```
-
-### Options
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `wasmBytes` | `Uint8Array` | Pre-decrypted module bytes from the SDN delivery system. |
-| `decryptFn` | `Function` | Legacy AES-256-GCM decrypt function (protection-runtime). |
-| `lowMemory` | `boolean` | Use reduced memory configuration. |
-
-## License
-
-UNLICENSED — Proprietary. All rights reserved by DigitalArsenal.io, Inc.
+This package is a module package, not a JS wrapper API. Consumers should load
+`dist/isomorphic/module.wasm` through the SDK host or browser harnesses.
+The package entrypoint still exports `createFastestPathSolver` for OrbPro
+bridge compatibility, alongside the canonical artifact paths.
