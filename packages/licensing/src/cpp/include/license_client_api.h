@@ -9,6 +9,11 @@ int32_t license_client_get_dek(
     uint32_t request_len,
     std::vector<uint8_t>& response_out);
 
+int32_t license_client_fetch_protected_content(
+    const uint8_t* descriptor_bytes,
+    uint32_t descriptor_len,
+    std::vector<uint8_t>& protected_content_out);
+
 int32_t license_client_decrypt(
     const uint8_t* ciphertext,
     uint32_t ciphertext_len,

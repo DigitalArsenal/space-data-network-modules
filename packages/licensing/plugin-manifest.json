@@ -120,7 +120,8 @@
       "displayName": "Client Fetch And Decrypt",
       "description": "Fetch a protected artifact and decrypt it.",
       "inputPorts": [
-        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "module_descriptor", "acceptedTypeSets": [{"setId": "module_descriptor", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false},
+        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false},
         {"portId": "dek", "acceptedTypeSets": [{"setId": "dek", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}
       ],
       "outputPorts": [{"portId": "plaintext", "acceptedTypeSets": [{"setId": "plaintext", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],

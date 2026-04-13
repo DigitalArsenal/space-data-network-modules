@@ -278,20 +278,41 @@ EMSCRIPTEN_KEEPALIVE
 int licensing_client_fetch_and_decrypt(void) {
     plugin_reset_output_state();
 
+    const auto* module_descriptor = find_input_frame("module_descriptor");
     const auto* protected_content = find_input_frame("protected_content");
     const auto* dek = find_input_frame("dek");
-    if (!protected_content || !protected_content->payload ||
-        !dek || !dek->payload) {
+    if (!dek || !dek->payload ||
+        ((!module_descriptor || !module_descriptor->payload) &&
+         (!protected_content || !protected_content->payload))) {
         plugin_set_error(
             "missing-input",
-            "Input ports \"protected_content\" and \"dek\" are required.");
+            "Input port \"dek\" and either \"module_descriptor\" or \"protected_content\" are required.");
         return 1;
+    }
+
+    std::vector<uint8_t> fetched_content;
+    const uint8_t* ciphertext = nullptr;
+    uint32_t ciphertext_len = 0;
+    if (module_descriptor && module_descriptor->payload) {
+        const int32_t fetch_status = license_client_fetch_protected_content(
+            module_descriptor->payload,
+            module_descriptor->payload_length,
+            fetched_content);
+        if (fetch_status != 0) {
+            plugin_set_error("fetch-failed", "Failed to fetch protected content from IPFS.");
+            return fetch_status;
+        }
+        ciphertext = fetched_content.data();
+        ciphertext_len = static_cast<uint32_t>(fetched_content.size());
+    } else {
+        ciphertext = protected_content->payload;
+        ciphertext_len = protected_content->payload_length;
     }
 
     std::vector<uint8_t> plaintext;
     const int32_t status = license_client_decrypt(
-        protected_content->payload,
-        protected_content->payload_length,
+        ciphertext,
+        ciphertext_len,
         dek->payload,
         dek->payload_length,
         plaintext);

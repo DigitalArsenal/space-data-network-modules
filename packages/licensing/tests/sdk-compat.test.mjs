@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createECDH, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createECDH, createHash, randomBytes } from "node:crypto";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as flatbuffers from "flatbuffers";
@@ -88,13 +88,21 @@ function configureServerSync(harness, config) {
   assert.equal(response.statusCode, 0);
 }
 
-function createProtocolDispatch(serverHarness) {
+function createProtocolDispatch(serverHarness, contentStore = new Map()) {
   return (operation, params) => {
     if (operation === "clock.now") {
       return Date.now();
     }
     if (operation === "random.bytes") {
       return randomBytes(params?.length ?? 32);
+    }
+    if (operation === "ipfs.cat") {
+      const cid = params?.cid ?? "";
+      const content = contentStore.get(cid);
+      if (!content) {
+        throw new Error(`CID not found: ${cid}`);
+      }
+      return new Uint8Array(content);
     }
     if (operation !== "protocol.request") {
       throw new Error(`Unsupported operation: ${operation}`);
@@ -187,6 +195,14 @@ function buildModuleDescriptor({
 function decodeModuleDescriptor(bytes) {
   const buffer = new flatbuffers.ByteBuffer(bytes);
   return PLG.getRootAsPLG(buffer);
+}
+
+function encryptProtectedContent(plaintext, contentKey) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", contentKey, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, ciphertext, tag]);
 }
 
 function publishModuleSync(serverHarness, descriptorBytes, protectedContent, contentKey) {
@@ -308,4 +324,76 @@ test("client and server role entrypoints interoperate inside the unified licensi
   assert.equal(result.keyVersion, 9);
   assert.deepEqual(Buffer.from(result.dekBase64, "base64"), moduleDek);
   assert.ok(result.expiresAtMs > Date.now());
+});
+
+test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", async (t) => {
+  const contentStore = new Map();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(contentStore),
+  });
+  t.after(() => {
+    serverHarness.destroy();
+  });
+
+  configureServerSync(serverHarness, makeRuntimeConfig());
+
+  const moduleDek = randomBytes(32);
+  const plaintext = textEncoder.encode("hello protected module");
+  const encryptedContent = encryptProtectedContent(plaintext, moduleDek);
+  const descriptorBytes = buildModuleDescriptor({
+    moduleId: "orbpro.fetch.module",
+    version: "9.1.0",
+  });
+  const publishedDescriptor = publishModuleSync(
+    serverHarness,
+    descriptorBytes,
+    encryptedContent,
+    moduleDek,
+  );
+
+  const clientHarness = await createSdkBrowserShimHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createProtocolDispatch(serverHarness, contentStore),
+    surface: "direct",
+  });
+  t.after(async () => {
+    await clientHarness.destroy();
+  });
+
+  const grantResponse = await clientHarness.invoke({
+    methodId: "client_request_grant",
+    inputs: [
+      {
+        portId: "request",
+        payload: textEncoder.encode(
+          JSON.stringify({
+            target: "ipfs://local-test",
+            moduleId: "orbpro.fetch.module",
+            moduleVersion: "9.1.0",
+            keyVersion: 9,
+          }),
+        ),
+      },
+    ],
+  });
+  assert.equal(grantResponse.statusCode, 0);
+  const grant = JSON.parse(textDecoder.decode(grantResponse.outputs[0].payload));
+
+  const decryptResponse = await clientHarness.invoke({
+    methodId: "client_fetch_and_decrypt",
+    inputs: [
+      {
+        portId: "module_descriptor",
+        payload: publishedDescriptor,
+      },
+      {
+        portId: "dek",
+        payload: Buffer.from(grant.dekBase64, "base64"),
+      },
+    ],
+  });
+
+  assert.equal(decryptResponse.statusCode, 0);
+  assert.deepEqual(decryptResponse.outputs[0].payload, plaintext);
 });

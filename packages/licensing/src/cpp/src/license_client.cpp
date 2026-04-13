@@ -2,6 +2,7 @@
 
 #include "KeyBrokerRequest_generated.h"
 #include "KeyBrokerResponse_generated.h"
+#include "PLG_generated.h"
 #include "PublicKeyResponse_generated.h"
 
 #include <flatbuffers/flatbuffers.h>
@@ -468,6 +469,26 @@ bool protocol_request(
   if (!extract_json_string_field(response, "base64", &base64)) {
     response_out->clear();
     return true;
+  }
+  return decode_base64_bytes(base64, response_out);
+}
+
+bool ipfs_cat(
+    std::string_view cid,
+    std::vector<uint8_t>* response_out) {
+  if (!response_out) {
+    return false;
+  }
+  const std::string request_json =
+      "{\"cid\":\"" + escape_json_string(cid) + "\"}";
+  std::string response;
+  if (!call_host_json_ok("ipfs.cat", request_json, &response)) {
+    return false;
+  }
+  std::string base64;
+  if (!extract_json_string_field(response, "base64", &base64)) {
+    response_out->clear();
+    return false;
   }
   return decode_base64_bytes(base64, response_out);
 }
@@ -1147,6 +1168,33 @@ int32_t license_client_get_dek(
       ",\"dekBase64\":\"" + dek_base64 + "\"}";
   response_out.assign(response_json.begin(), response_json.end());
   secure_zero(session_result.data(), session_result.size());
+  return 0;
+}
+
+int32_t license_client_fetch_protected_content(
+    const uint8_t* descriptor_bytes,
+    uint32_t descriptor_len,
+    std::vector<uint8_t>& protected_content_out) {
+  protected_content_out.clear();
+  if (!descriptor_bytes || descriptor_len == 0) {
+    return kClientMalformed;
+  }
+
+  flatbuffers::Verifier verifier(descriptor_bytes, descriptor_len);
+  if (!VerifyPLGBuffer(verifier)) {
+    return kClientMalformed;
+  }
+  const auto* descriptor = GetPLG(descriptor_bytes);
+  if (!descriptor || !descriptor->WASM_CID()) {
+    return kClientMalformed;
+  }
+  const std::string_view cid = descriptor->WASM_CID()->string_view();
+  if (cid.empty()) {
+    return kClientMalformed;
+  }
+  if (!ipfs_cat(cid, &protected_content_out) || protected_content_out.empty()) {
+    return kClientInternalError;
+  }
   return 0;
 }
 

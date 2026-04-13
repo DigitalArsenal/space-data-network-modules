@@ -127,7 +127,8 @@ static const char *kMethod_client_request_grant_output_ports[] = {
 };
 
 static const PortRequirement kMethod_client_fetch_and_decrypt_input_ports[] = {
-  { "protected_content", true },
+  { "module_descriptor", false },
+  { "protected_content", false },
   { "dek", true },
 };
 static const char *kMethod_client_fetch_and_decrypt_output_ports[] = {
