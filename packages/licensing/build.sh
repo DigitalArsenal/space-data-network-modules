@@ -71,6 +71,7 @@ ensure_cryptopp() {
 ensure_emscripten
 ensure_cryptopp
 
+node "$SCRIPT_DIR/generate-sds-headers.mjs"
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
 
 rm -rf "$DIST_DIR"

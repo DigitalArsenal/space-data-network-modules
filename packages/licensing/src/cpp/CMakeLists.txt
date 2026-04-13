@@ -62,6 +62,7 @@ target_include_directories(
     licensing_core PUBLIC
     include
     generated
+    generated/sds
     generated/keybroker
     "${FLATBUFFERS_INCLUDE_DIR}"
 )
@@ -76,6 +77,7 @@ target_include_directories(
     licensing_wasm PRIVATE
     include
     generated
+    generated/sds
     generated/keybroker
     "${FLATBUFFERS_INCLUDE_DIR}"
 )
