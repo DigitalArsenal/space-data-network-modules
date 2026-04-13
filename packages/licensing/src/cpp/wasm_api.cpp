@@ -117,10 +117,53 @@ int licensing_server_configure_runtime(void) {
 EMSCRIPTEN_KEEPALIVE
 int licensing_server_publish_module(void) {
     plugin_reset_output_state();
-    plugin_set_error(
-        "not-implemented",
-        "server_publish_module is not implemented in the scaffolded licensing runtime yet.");
-    return 1;
+
+    const plugin_input_frame_t* descriptor_frame = nullptr;
+    if (require_input(
+            "module_descriptor",
+            &descriptor_frame,
+            "missing-module-descriptor-input",
+            "Input port \"module_descriptor\" is required.") != 0) {
+        return 1;
+    }
+
+    const plugin_input_frame_t* protected_content_frame = nullptr;
+    if (require_input(
+            "protected_content",
+            &protected_content_frame,
+            "missing-protected-content-input",
+            "Input port \"protected_content\" is required.") != 0) {
+        return 1;
+    }
+
+    const plugin_input_frame_t* content_key_frame = nullptr;
+    if (require_input(
+            "content_key",
+            &content_key_frame,
+            "missing-content-key-input",
+            "Input port \"content_key\" is required.") != 0) {
+        return 1;
+    }
+
+    std::vector<uint8_t> response;
+    const int32_t status = key_server_publish_module(
+        descriptor_frame->payload,
+        descriptor_frame->payload_length,
+        protected_content_frame->payload,
+        protected_content_frame->payload_length,
+        content_key_frame->payload,
+        content_key_frame->payload_length,
+        response);
+    if (status != 0) {
+        plugin_set_error("publish-failed", "Failed to publish protected module.");
+        return status;
+    }
+    return emit_output(
+        "response",
+        "$PLG",
+        response,
+        "emit-failed",
+        "Failed to emit published module descriptor.");
 }
 
 EMSCRIPTEN_KEEPALIVE

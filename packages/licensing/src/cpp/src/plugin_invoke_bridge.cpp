@@ -90,7 +90,9 @@ static const char *kMethod_server_configure_runtime_output_ports[] = {
 };
 
 static const PortRequirement kMethod_server_publish_module_input_ports[] = {
-  { "request", true },
+  { "module_descriptor", true },
+  { "protected_content", true },
+  { "content_key", true },
 };
 static const char *kMethod_server_publish_module_output_ports[] = {
   "response",

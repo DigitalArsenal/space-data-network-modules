@@ -70,7 +70,11 @@
       "methodId": "server_publish_module",
       "displayName": "Server Publish Module",
       "description": "Publish an encrypted module artifact.",
-      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "inputPorts": [
+        {"portId": "module_descriptor", "acceptedTypeSets": [{"setId": "module_descriptor", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "protected_content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "content_key", "acceptedTypeSets": [{"setId": "content_key", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+      ],
       "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
       "maxBatch": 1,
       "drainPolicy": "single-shot"

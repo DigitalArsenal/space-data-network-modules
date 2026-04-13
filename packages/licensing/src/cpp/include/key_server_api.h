@@ -2,7 +2,7 @@
 #define KEY_SERVER_API_H
 
 /**
- * C API for the protection key server core.
+ * C API for the unified licensing server core.
  *
  * These functions implement the key broker protocol:
  * - ECDH P-256 key agreement
@@ -24,6 +24,21 @@
 int32_t key_server_configure_runtime(
     const uint8_t *config_json, uint32_t config_len,
     std::vector<uint8_t> &status_out);
+
+/**
+ * Publish an encrypted module artifact and bind its content key to moduleId+version.
+ * Inputs:
+ * - descriptor_bytes: SDS PLG descriptor for the protected module publication
+ * - protected_content: encrypted module delivery bytes
+ * - content_key: raw 32-byte module content key
+ * Output:
+ * - updated PLG descriptor with CID/hash/size delivery metadata
+ */
+int32_t key_server_publish_module(
+    const uint8_t *descriptor_bytes, uint32_t descriptor_len,
+    const uint8_t *protected_content, uint32_t protected_content_len,
+    const uint8_t *content_key, uint32_t content_key_len,
+    std::vector<uint8_t> &response_out);
 
 /**
  * Get the server's P-256 public key and runtime state as JSON.

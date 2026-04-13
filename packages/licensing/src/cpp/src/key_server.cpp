@@ -2,6 +2,7 @@
 
 #include "KeyBrokerRequest_generated.h"
 #include "KeyBrokerResponse_generated.h"
+#include "PLG_generated.h"
 #include "PublicKeyResponse_generated.h"
 
 #include <flatbuffers/flatbuffers.h>
@@ -82,6 +83,13 @@ struct PendingChallenge {
   uint32_t key_version = 1;
   int64_t expires_at_ms = 0;
   std::array<uint8_t, kChallengeTokenHexBytes> token{};
+  std::string publication_key{};
+};
+
+struct ModulePublication {
+  PLGT descriptor{};
+  std::vector<uint8_t> descriptor_bytes{};
+  std::array<uint8_t, kDekBytes> content_key{};
 };
 
 bool g_initialized = false;
@@ -96,6 +104,9 @@ uint32_t g_active_key_version = 1;
 std::mutex g_challenge_mutex;
 std::unordered_map<std::string, PendingChallenge> g_pending_challenges;
 
+std::mutex g_publication_mutex;
+std::unordered_map<std::string, ModulePublication> g_publications;
+
 void secure_zero(void* ptr, size_t len) {
   if (!ptr || len == 0) {
     return;
@@ -104,6 +115,42 @@ void secure_zero(void* ptr, size_t len) {
   for (size_t i = 0; i < len; ++i) {
     bytes[i] = 0;
   }
+}
+
+std::string make_publication_key(
+    std::string_view module_id,
+    std::string_view module_version) {
+  return std::string(module_id) + "\n" + std::string(module_version);
+}
+
+void secure_zero_publication(ModulePublication* publication) {
+  if (!publication) {
+    return;
+  }
+  secure_zero(publication->content_key.data(), publication->content_key.size());
+}
+
+void clear_publications() {
+  std::lock_guard<std::mutex> lock(g_publication_mutex);
+  for (auto& entry : g_publications) {
+    secure_zero_publication(&entry.second);
+  }
+  g_publications.clear();
+}
+
+bool load_publication(
+    std::string_view publication_key,
+    ModulePublication* publication_out) {
+  if (!publication_out) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(g_publication_mutex);
+  const auto it = g_publications.find(std::string(publication_key));
+  if (it == g_publications.end()) {
+    return false;
+  }
+  *publication_out = it->second;
+  return true;
 }
 
 size_t skip_json_whitespace(std::string_view text, size_t cursor) {
@@ -432,6 +479,43 @@ bool call_host_json(
          extract_json_bool_field(*response_out, "ok", &ok) && ok;
 }
 
+bool ipfs_add_bytes(
+    const uint8_t* payload,
+    size_t payload_len,
+    std::string* cid_out) {
+  if (!cid_out) {
+    return false;
+  }
+  const std::string payload_base64 = encode_base64_bytes(payload, payload_len);
+  const std::string request_json =
+      "{\"base64\":\"" + payload_base64 + "\"}";
+  std::string response;
+  if (!call_host_json("ipfs.add", request_json, &response)) {
+    return false;
+  }
+  return extract_json_string_field(response, "Hash", cid_out) ||
+         extract_json_string_field(response, "cid", cid_out);
+}
+
+std::vector<uint8_t> sha256_bytes(const uint8_t* payload, size_t payload_len) {
+  std::vector<uint8_t> digest(CryptoPP::SHA256::DIGESTSIZE, 0);
+  CryptoPP::SHA256 sha256;
+  if (payload_len > 0) {
+    sha256.Update(payload, payload_len);
+  }
+  sha256.Final(digest.data());
+  return digest;
+}
+
+std::vector<uint8_t> build_plg_bytes(const PLGT& descriptor) {
+  flatbuffers::FlatBufferBuilder builder(1024);
+  const auto root = CreatePLG(builder, &descriptor);
+  FinishPLGBuffer(builder, root);
+  return std::vector<uint8_t>(
+      builder.GetBufferPointer(),
+      builder.GetBufferPointer() + builder.GetSize());
+}
+
 int64_t now_ms() {
   std::string response;
   int64_t value = 0;
@@ -685,7 +769,8 @@ int32_t consume_challenge(
     const uint8_t* request_salt,
     const uint8_t* request_blob,
     size_t request_blob_len,
-    const uint8_t* challenge_proof) {
+    const uint8_t* challenge_proof,
+    std::string* publication_key_out) {
   const std::string challenge_id_hex = encode_hex_bytes(challenge_id, kChallengeIdBytes);
   PendingChallenge challenge{};
   const int64_t now = now_ms();
@@ -733,6 +818,9 @@ int32_t consume_challenge(
       constant_time_equals(expected_proof.data(), challenge_proof, kProofBytes);
   secure_zero(expected_proof.data(), expected_proof.size());
   secure_zero(blob_hash, sizeof(blob_hash));
+  if (proof_match && publication_key_out) {
+    *publication_key_out = challenge.publication_key;
+  }
   secure_zero(challenge.token.data(), challenge.token.size());
   return proof_match ? kServerOk : kServerChallengeInvalid;
 }
@@ -899,6 +987,7 @@ int32_t handle_key_packet(
   }
   const uint8_t* request_blob = request_packet + kRequestHeaderBytes;
 
+  std::string publication_key;
   const int32_t challenge_status = consume_challenge(
       request_packet + 8,
       requested_key_version,
@@ -906,11 +995,17 @@ int32_t handle_key_packet(
       request_salt,
       request_blob,
       request_blob_len,
-      request_packet + 24);
+      request_packet + 24,
+      &publication_key);
   if (challenge_status != kServerOk) {
     return challenge_status;
   }
   if (requested_key_version != g_active_key_version) {
+    return kServerVersionNotFound;
+  }
+
+  ModulePublication publication{};
+  if (!load_publication(publication_key, &publication)) {
     return kServerVersionNotFound;
   }
 
@@ -972,7 +1067,10 @@ int32_t handle_key_packet(
   write_u64_le(
       response_plaintext.data() + 6,
       static_cast<uint64_t>(g_expires_at_ms > 0 ? g_expires_at_ms : 0));
-  std::memcpy(response_plaintext.data() + 14, g_dek.data(), g_dek.size());
+  std::memcpy(
+      response_plaintext.data() + 14,
+      publication.content_key.data(),
+      publication.content_key.size());
 
   uint8_t response_salt[kSaltBytes] = {0};
   if (!fill_random_bytes(response_salt, sizeof(response_salt))) {
@@ -1027,6 +1125,7 @@ int32_t handle_key_packet(
   secure_zero(request_key, sizeof(request_key));
   secure_zero(response_key, sizeof(response_key));
   secure_zero(response_salt, sizeof(response_salt));
+  secure_zero_publication(&publication);
   secure_zero(request_plaintext.data(), request_plaintext.size());
   secure_zero(response_plaintext.data(), response_plaintext.size());
   secure_zero(response_blob.data(), response_blob.size());
@@ -1065,6 +1164,7 @@ int32_t key_server_configure_runtime(
   }
 
   clear_pending_challenges();
+  clear_publications();
 
   secure_zero(g_dek.data(), g_dek.size());
   g_server_private = next_private;
@@ -1082,6 +1182,86 @@ int32_t key_server_configure_runtime(
       ",\"publicKeyHex\":\"" +
       encode_hex_bytes(g_server_public.BytePtr(), g_server_public.size()) + "\"}";
   status_out.assign(json.begin(), json.end());
+  return 0;
+}
+
+int32_t key_server_publish_module(
+    const uint8_t* descriptor_bytes,
+    uint32_t descriptor_len,
+    const uint8_t* protected_content,
+    uint32_t protected_content_len,
+    const uint8_t* content_key,
+    uint32_t content_key_len,
+    std::vector<uint8_t>& response_out) {
+  response_out.clear();
+  if (!g_initialized) {
+    return kServerNotInitialized;
+  }
+  if (!descriptor_bytes || descriptor_len == 0 ||
+      !protected_content || protected_content_len == 0 ||
+      !content_key || content_key_len != kDekBytes) {
+    return kServerMalformed;
+  }
+
+  flatbuffers::Verifier verifier(descriptor_bytes, descriptor_len);
+  if (!VerifyPLGBuffer(verifier)) {
+    return kServerMalformed;
+  }
+  const auto* descriptor_root = GetPLG(descriptor_bytes);
+  if (!descriptor_root || !descriptor_root->PLUGIN_ID() || !descriptor_root->VERSION()) {
+    return kServerMalformed;
+  }
+
+  std::unique_ptr<PLGT> descriptor_native(descriptor_root->UnPack());
+  if (!descriptor_native || descriptor_native->PLUGIN_ID.empty() ||
+      descriptor_native->VERSION.empty()) {
+    return kServerMalformed;
+  }
+
+  std::string cid;
+  if (!ipfs_add_bytes(protected_content, protected_content_len, &cid) || cid.empty()) {
+    return kServerInternalError;
+  }
+
+  const auto encrypted_hash = sha256_bytes(protected_content, protected_content_len);
+  descriptor_native->WASM_CID = cid;
+  descriptor_native->ENCRYPTED_WASM_HASH = encrypted_hash;
+  descriptor_native->ENCRYPTED_WASM_SIZE =
+      static_cast<uint64_t>(protected_content_len);
+  descriptor_native->ENCRYPTED = true;
+  if (descriptor_native->KEY_ID.empty()) {
+    descriptor_native->KEY_ID =
+        descriptor_native->PLUGIN_ID + ":" + descriptor_native->VERSION;
+  }
+  if (descriptor_native->UPDATED_AT == 0) {
+    descriptor_native->UPDATED_AT = static_cast<uint64_t>(now_ms());
+  }
+  if (descriptor_native->CREATED_AT == 0) {
+    descriptor_native->CREATED_AT = descriptor_native->UPDATED_AT;
+  }
+
+  ModulePublication publication{};
+  publication.descriptor = *descriptor_native;
+  publication.descriptor_bytes = build_plg_bytes(publication.descriptor);
+  std::memcpy(
+      publication.content_key.data(),
+      content_key,
+      publication.content_key.size());
+
+  {
+    std::lock_guard<std::mutex> lock(g_publication_mutex);
+    const std::string publication_key = make_publication_key(
+        publication.descriptor.PLUGIN_ID,
+        publication.descriptor.VERSION);
+    auto [it, inserted] =
+        g_publications.emplace(publication_key, std::move(publication));
+    if (!inserted) {
+      secure_zero_publication(&it->second);
+      it->second = std::move(publication);
+    }
+    response_out = it->second.descriptor_bytes;
+  }
+
   return 0;
 }
 
@@ -1104,6 +1284,8 @@ int32_t key_server_request_challenge(
   }
 
   uint32_t requested_version = g_active_key_version;
+  std::string module_id;
+  std::string module_version;
   if (request && request_len > 0) {
     const std::string_view request_text(
         reinterpret_cast<const char*>(request),
@@ -1111,6 +1293,24 @@ int32_t key_server_request_challenge(
     if (!parse_positive_json_u32(
             request_text, "keyVersion", g_active_key_version, &requested_version)) {
       build_challenge_error_json(kServerMalformed, &response_out);
+      return 0;
+    }
+    if (!extract_json_string_field(request_text, "moduleId", &module_id) ||
+        module_id.empty()) {
+      build_challenge_error_json(kServerMalformed, &response_out);
+      return 0;
+    }
+    extract_json_string_field(request_text, "moduleVersion", &module_version);
+  } else {
+    build_challenge_error_json(kServerMalformed, &response_out);
+    return 0;
+  }
+
+  const std::string publication_key = make_publication_key(module_id, module_version);
+  {
+    std::lock_guard<std::mutex> lock(g_publication_mutex);
+    if (g_publications.find(publication_key) == g_publications.end()) {
+      build_challenge_error_json(kServerVersionNotFound, &response_out);
       return 0;
     }
   }
@@ -1129,6 +1329,7 @@ int32_t key_server_request_challenge(
   PendingChallenge challenge{};
   challenge.key_version = requested_version;
   challenge.expires_at_ms = now + g_challenge_ttl_ms;
+  challenge.publication_key = publication_key;
   const std::string challenge_token =
       encode_hex_bytes(challenge_token_raw.data(), challenge_token_raw.size());
   std::memcpy(challenge.token.data(), challenge_token.data(), challenge_token.size());

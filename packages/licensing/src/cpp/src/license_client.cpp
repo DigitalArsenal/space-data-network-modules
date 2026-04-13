@@ -998,6 +998,13 @@ int32_t license_client_get_dek(
 
   std::string target;
   extract_json_string_field(request_text, "target", &target);
+  std::string module_id;
+  if (!extract_json_string_field(request_text, "moduleId", &module_id) ||
+      module_id.empty()) {
+    return kClientMalformed;
+  }
+  std::string module_version;
+  extract_json_string_field(request_text, "moduleVersion", &module_version);
   uint32_t requested_key_version = 1;
   int64_t parsed_key_version = 0;
   if (extract_json_int64_field(request_text, "keyVersion", &parsed_key_version)) {
@@ -1025,7 +1032,9 @@ int32_t license_client_get_dek(
   }
 
   const std::string challenge_request_json =
-      "{\"keyVersion\":" + std::to_string(requested_key_version) + "}";
+      "{\"moduleId\":\"" + escape_json_string(module_id) +
+      "\",\"moduleVersion\":\"" + escape_json_string(module_version) +
+      "\",\"keyVersion\":" + std::to_string(requested_key_version) + "}";
   std::vector<uint8_t> challenge_response;
   if (!protocol_request(
           target,
