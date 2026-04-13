@@ -18,17 +18,23 @@ const outDir = path.join(__dirname, "src", "cpp", "generated", "sds");
 
 const schemaFamilies = [
   "PLG",
+  "ENC",
+  "REC",
   "LCH",
   "LPF",
-  "LWK",
   "LGR",
   "LMR",
+  "LCF",
+  "KRF",
+  "KMF",
 ];
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];
   for (const line of fs.readFileSync(schemaPath, "utf8").split(/\r?\n/)) {
-    const match = line.match(/^\s*include\s+"(?:\.\.\/)?([A-Z0-9_]+)\/main\.fbs";\s*$/);
+    const match = line.match(
+      /^\s*include\s+"(?:\.\.\/)?([A-Z0-9_]+)\/main\.fbs";(?:\s*\/\/.*)?\s*$/,
+    );
     if (match) {
       includes.push(match[1]);
     }
@@ -37,19 +43,20 @@ function schemaIncludeFamilies(schemaPath) {
 }
 
 function rewriteGeneratedHeader(generated, family, includeFamilies) {
-  let rewritten = generated.replaceAll(
+  const rewritten = generated.replaceAll(
     "FLATBUFFERS_GENERATED_MAIN_H_",
     `FLATBUFFERS_GENERATED_${family}_MAIN_H_`,
   );
-
-  for (const includeFamily of includeFamilies) {
-    rewritten = rewritten.replace(
-      '#include "main_generated.h"',
-      `#include "${includeFamily}_generated.h"`,
-    );
-  }
-
-  return rewritten;
+  let includeIndex = 0;
+  return rewritten.replace(/#include "main_generated\.h"/g, () => {
+    const includeFamily = includeFamilies[includeIndex++];
+    if (!includeFamily) {
+      throw new Error(
+        `generated header for ${family} includes more main_generated.h entries than schema parser found`,
+      );
+    }
+    return `#include "${includeFamily}_generated.h"`;
+  });
 }
 
 function ensureFileExists(filePath, label) {
@@ -76,14 +83,24 @@ async function main() {
   ensureDir("/schemas");
   ensureDir("/out_cpp");
 
-  for (const family of schemaFamilies) {
+  const allSchemaFamilies = fs
+    .readdirSync(path.join(standardsRoot, "schema"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  for (const family of allSchemaFamilies) {
     ensureDir(`/schemas/${family}`);
     const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
     ensureFileExists(schemaPath, `${family} schema`);
     flatc.FS.writeFile(`/schemas/${family}/main.fbs`, fs.readFileSync(schemaPath, "utf8"));
   }
 
-  for (const family of schemaFamilies) {
+  const generatedFamilies = schemaFamilies.includes("REC")
+    ? allSchemaFamilies
+    : schemaFamilies;
+
+  for (const family of generatedFamilies) {
     const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
     const includeFamilies = schemaIncludeFamilies(schemaPath);
     const rc = flatc.callMain([
@@ -110,7 +127,7 @@ async function main() {
     );
   }
 
-  console.log(`Generated SDS headers: ${schemaFamilies.join(", ")}`);
+  console.log(`Generated SDS headers: ${generatedFamilies.join(", ")}`);
 }
 
 main().catch((error) => {

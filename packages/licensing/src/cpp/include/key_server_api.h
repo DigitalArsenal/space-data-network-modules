@@ -19,7 +19,7 @@
  * Returns 0 on success.
  */
 int32_t key_server_configure_runtime(
-    const uint8_t *config_json, uint32_t config_len,
+    const uint8_t *config_bytes, uint32_t config_len,
     std::vector<uint8_t> &status_out);
 
 /**

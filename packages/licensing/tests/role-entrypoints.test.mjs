@@ -30,7 +30,11 @@ test("licensing package publishes canonical artifacts and both role entrypoints"
   );
 
   assert.equal(manifest.pluginId, "licensing");
+  assert.equal(manifest.capabilities.includes("ipfs"), true);
+  assert.equal(manifest.capabilities.includes("wallet_sign"), true);
   assert.equal(manifest.capabilities.includes("protocol_handle"), true);
+  assert.equal(manifest.capabilities.includes("crypto_sign"), true);
+  assert.equal(manifest.capabilities.includes("crypto_verify"), true);
   assert.equal(methods.has("server_configure_runtime"), true);
   assert.equal(methods.has("server_publish_module"), true);
   assert.equal(methods.has("server_handle_message"), true);
@@ -40,6 +44,37 @@ test("licensing package publishes canonical artifacts and both role entrypoints"
   assert.equal(
     protocols.get("/space-data-network/module-delivery/1.0.0"),
     "server_handle_message",
+  );
+
+  const configureMethod = manifest.methods.find(
+    (entry) => entry.methodId === "server_configure_runtime",
+  );
+  const grantMethod = manifest.methods.find(
+    (entry) => entry.methodId === "client_request_grant",
+  );
+  assert.equal(
+    configureMethod.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$LCF",
+  );
+  assert.equal(
+    configureMethod.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$LCF",
+  );
+  assert.equal(
+    grantMethod.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$LCH",
+  );
+  assert.equal(
+    grantMethod.inputPorts[1].portId,
+    "requester_signing_key",
+  );
+  assert.equal(
+    grantMethod.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$KMF",
+  );
+  assert.equal(
+    grantMethod.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$LGR",
   );
 });
 

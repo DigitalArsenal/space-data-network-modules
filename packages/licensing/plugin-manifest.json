@@ -7,8 +7,12 @@
   "capabilities": [
     "clock",
     "random",
+    "ipfs",
+    "wallet_sign",
     "protocol_handle",
     "protocol_dial",
+    "crypto_sign",
+    "crypto_verify",
     "logging"
   ],
   "protocols": [
@@ -35,8 +39,8 @@
       "methodId": "server_configure_runtime",
       "displayName": "Server Configure Runtime",
       "description": "Initialize the licensing server runtime.",
-      "inputPorts": [{"portId": "config", "acceptedTypeSets": [{"setId": "config", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
-      "outputPorts": [{"portId": "status", "acceptedTypeSets": [{"setId": "status", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "inputPorts": [{"portId": "config", "acceptedTypeSets": [{"setId": "config", "allowedTypes": [{"schemaName": "LCF.fbs", "fileIdentifier": "$LCF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "outputPorts": [{"portId": "status", "acceptedTypeSets": [{"setId": "status", "allowedTypes": [{"schemaName": "LCF.fbs", "fileIdentifier": "$LCF"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -45,11 +49,11 @@
       "displayName": "Server Publish Module",
       "description": "Publish an encrypted module artifact.",
       "inputPorts": [
-        {"portId": "module_descriptor", "acceptedTypeSets": [{"setId": "module_descriptor", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "module_descriptor", "acceptedTypeSets": [{"setId": "module_descriptor", "allowedTypes": [{"schemaName": "PLG.fbs", "fileIdentifier": "$PLG"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
         {"portId": "protected_content", "acceptedTypeSets": [{"setId": "protected_content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "content_key", "acceptedTypeSets": [{"setId": "content_key", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+        {"portId": "content_key", "acceptedTypeSets": [{"setId": "content_key", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}
       ],
-      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"schemaName": "PLG.fbs", "fileIdentifier": "$PLG"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -57,8 +61,8 @@
       "methodId": "server_handle_message",
       "displayName": "Server Handle Message",
       "description": "Handle a canonical SDS licensing/module-delivery message.",
-      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
-      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"schemaName": "LCH.fbs", "fileIdentifier": "$LCH"}, {"schemaName": "LPF.fbs", "fileIdentifier": "$LPF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"schemaName": "LCH.fbs", "fileIdentifier": "$LCH"}, {"schemaName": "LGR.fbs", "fileIdentifier": "$LGR"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -67,10 +71,10 @@
       "displayName": "Client Request Grant",
       "description": "Run the client-side grant request flow.",
       "inputPorts": [
-        {"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "requester_signing_seed", "acceptedTypeSets": [{"setId": "requester_signing_seed", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+        {"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"schemaName": "LCH.fbs", "fileIdentifier": "$LCH"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "requester_signing_key", "acceptedTypeSets": [{"setId": "requester_signing_key", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}
       ],
-      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"schemaName": "LGR.fbs", "fileIdentifier": "$LGR"}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -79,7 +83,7 @@
       "displayName": "Client Fetch And Decrypt",
       "description": "Fetch a protected artifact and decrypt it.",
       "inputPorts": [
-        {"portId": "grant_response", "acceptedTypeSets": [{"setId": "grant_response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "grant_response", "acceptedTypeSets": [{"setId": "grant_response", "allowedTypes": [{"schemaName": "LGR.fbs", "fileIdentifier": "$LGR"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
         {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}
       ],
       "outputPorts": [{"portId": "plaintext", "acceptedTypeSets": [{"setId": "plaintext", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
@@ -92,8 +96,8 @@
       "description": "Decrypt AES-256-GCM content then verify the inner signature.",
       "inputPorts": [
         {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "dek", "acceptedTypeSets": [{"setId": "dek", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
-        {"portId": "signer_key", "acceptedTypeSets": [{"setId": "signer", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+        {"portId": "dek", "acceptedTypeSets": [{"setId": "dek", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "signer_key", "acceptedTypeSets": [{"setId": "signer", "allowedTypes": [{"schemaName": "KMF.fbs", "fileIdentifier": "$KMF"}]}], "minStreams": 1, "maxStreams": 1, "required": true}
       ],
       "outputPorts": [{"portId": "plaintext", "acceptedTypeSets": [{"setId": "plaintext", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
       "maxBatch": 1,

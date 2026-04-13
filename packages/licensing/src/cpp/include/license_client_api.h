@@ -7,8 +7,8 @@
 int32_t license_client_request_grant(
     const uint8_t* request_bytes,
     uint32_t request_len,
-    const uint8_t* requester_signing_seed,
-    uint32_t requester_signing_seed_len,
+    const uint8_t* requester_signing_key,
+    uint32_t requester_signing_key_len,
     std::vector<uint8_t>& response_out);
 
 int32_t license_client_fetch_and_decrypt(

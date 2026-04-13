@@ -1,18 +1,23 @@
 #include "license_client_api.h"
 
+#ifdef TIME_UTC
+#undef TIME_UTC
+#endif
+
 #include "KeyBrokerRequest_generated.h"
 #include "KeyBrokerResponse_generated.h"
+#include "ENC_generated.h"
 #include "LCH_generated.h"
 #include "LGR_generated.h"
 #include "LPF_generated.h"
-#include "LWK_generated.h"
 #include "PLG_generated.h"
 #include "PublicKeyResponse_generated.h"
+#include "REC_generated.h"
 
+#include <flatbuffers/encryption.h>
 #include <flatbuffers/flatbuffers.h>
 
 #include <cryptopp/aes.h>
-#include <cryptopp/donna.h>
 #include <cryptopp/eccrypto.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/hkdf.h>
@@ -77,8 +82,9 @@ constexpr const char* kChallengeProtocolId = "/orbpro/challenge/1.0.0";
 constexpr const char* kKeyBrokerProtocolId = "/orbpro/key-broker/1.0.0";
 constexpr const char* kModuleDeliveryProtocolId =
     "/space-data-network/module-delivery/1.0.0";
-constexpr const char* kWrappedKeyInfo =
-    "space-data-network/module-delivery/wrap/v1";
+constexpr uint16_t kKmfKeyBytesFieldId = 4;
+constexpr const char* kGrantPayloadContext =
+    "space-data-network/module-delivery/grant/v1";
 
 struct ClientSession {
   std::array<uint8_t, 32> shared_secret{};
@@ -426,6 +432,39 @@ bool call_host_json_ok(
     std::string_view payload,
     std::string* response_out) {
   return call_host_json(operation, payload, response_out);
+}
+
+bool call_host_json_bool_result(
+    std::string_view operation,
+    std::string_view payload,
+    bool* value_out) {
+  if (!value_out) {
+    return false;
+  }
+  std::string response;
+  if (!call_host_json_ok(operation, payload, &response)) {
+    return false;
+  }
+  return extract_json_bool_field(response, "result", value_out);
+}
+
+bool call_host_json_bytes(
+    std::string_view operation,
+    std::string_view payload,
+    std::vector<uint8_t>* bytes_out) {
+  if (!bytes_out) {
+    return false;
+  }
+  std::string response;
+  if (!call_host_json_ok(operation, payload, &response)) {
+    return false;
+  }
+  std::string base64;
+  if (!extract_json_string_field(response, "result", &base64) &&
+      !extract_json_string_field(response, "base64", &base64)) {
+    return false;
+  }
+  return decode_base64_bytes(base64, bytes_out);
 }
 
 int64_t now_ms() {
@@ -991,6 +1030,26 @@ bool parse_signed_payload(
   return true;
 }
 
+bool ed25519_verify_detached(
+    const uint8_t* message,
+    size_t message_len,
+    const uint8_t* public_key,
+    size_t public_key_len,
+    const uint8_t* signature,
+    size_t signature_len,
+    bool* valid_out) {
+  if (!message || !public_key || !signature || !valid_out ||
+      public_key_len != 32 || signature_len != 64) {
+    return false;
+  }
+  const std::string request_json =
+      "{\"message\":\"" + encode_base64_bytes(message, message_len) +
+      "\",\"signature\":\"" + encode_base64_bytes(signature, signature_len) +
+      "\",\"publicKey\":\"" + encode_base64_bytes(public_key, public_key_len) + "\"}";
+  return call_host_json_bool_result(
+      "crypto.ed25519.verify", request_json, valid_out);
+}
+
 bool verify_signed_payload(
     const uint8_t* signed_content,
     size_t signed_content_len,
@@ -1013,8 +1072,16 @@ bool verify_signed_payload(
           &signature_ptr)) {
     return false;
   }
-  *valid_out = CryptoPP::Donna::ed25519_sign_open(
-                   content_ptr, content_len, public_key, signature_ptr) == 0;
+  if (!ed25519_verify_detached(
+          content_ptr,
+          content_len,
+          public_key,
+          public_key_len,
+          signature_ptr,
+          64,
+          valid_out)) {
+    return false;
+  }
   if (content_ptr_out) {
     *content_ptr_out = content_ptr;
   }
@@ -1042,7 +1109,20 @@ bool ed25519_public_key_from_seed(
   if (!seed || !public_key_out || seed_len != 32) {
     return false;
   }
-  CryptoPP::Donna::ed25519_publickey(public_key_out->data(), seed);
+  std::vector<uint8_t> public_key_bytes;
+  const std::string request_json =
+      "{\"seed\":\"" + encode_base64_bytes(seed, seed_len) + "\"}";
+  if (!call_host_json_bytes(
+          "crypto.ed25519.publicKeyFromSeed",
+          request_json,
+          &public_key_bytes) ||
+      public_key_bytes.size() != public_key_out->size()) {
+    return false;
+  }
+  std::memcpy(
+      public_key_out->data(),
+      public_key_bytes.data(),
+      public_key_out->size());
   return true;
 }
 
@@ -1058,12 +1138,19 @@ bool ed25519_sign_detached(
       seed_len != 32 || public_key_len != 32) {
     return false;
   }
-  CryptoPP::Donna::ed25519_sign(
-      message,
-      message_len,
-      seed,
-      public_key,
-      signature_out->data());
+  std::vector<uint8_t> signature_bytes;
+  const std::string request_json =
+      "{\"message\":\"" + encode_base64_bytes(message, message_len) +
+      "\",\"seed\":\"" + encode_base64_bytes(seed, seed_len) + "\"}";
+  if (!call_host_json_bytes(
+          "crypto.ed25519.sign", request_json, &signature_bytes) ||
+      signature_bytes.size() != signature_out->size()) {
+    return false;
+  }
+  std::memcpy(
+      signature_out->data(),
+      signature_bytes.data(),
+      signature_out->size());
   return true;
 }
 
@@ -1261,7 +1348,8 @@ std::vector<uint8_t> build_lpf_bytes(
 bool grant_is_success(const LGR* grant) {
   return grant &&
          grant->MESSAGE_TYPE() == licensingGrantMessageType::Granted &&
-         grant->WRAPPED_CONTENT_KEY() != nullptr &&
+         grant->WRAPPED_CONTENT_KEY_HEADER() != nullptr &&
+         grant->WRAPPED_CONTENT_KEY_PAYLOAD() != nullptr &&
          grant->MODULE_DESCRIPTOR() != nullptr;
 }
 
@@ -1669,14 +1757,21 @@ int32_t license_client_fetch_and_decrypt(
     return kClientInternalError;
   }
 
-  const auto* wrapped = grant->WRAPPED_CONTENT_KEY();
+  const auto* wrapped_header = grant->WRAPPED_CONTENT_KEY_HEADER();
+  const auto* wrapped_payload = grant->WRAPPED_CONTENT_KEY_PAYLOAD();
   const auto* descriptor = grant->MODULE_DESCRIPTOR();
-  if (!wrapped || !descriptor || !descriptor->WASM_CID() ||
-      !wrapped->PROVIDER_EPHEMERAL_PUBKEY() ||
-      !wrapped->HKDF_SALT() ||
-      !wrapped->IV() ||
-      !wrapped->CIPHERTEXT() ||
-      !wrapped->TAG()) {
+  if (!wrapped_header || !wrapped_payload || !descriptor || !descriptor->WASM_CID() ||
+      !wrapped_header->EPHEMERAL_PUBLIC_KEY() ||
+      !wrapped_header->CONTEXT() ||
+      !wrapped_header->ROOT_TYPE() ||
+      wrapped_payload->size() == 0) {
+    secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+    return kClientMalformed;
+  }
+  if (wrapped_header->KEY_EXCHANGE() != KeyExchange::X25519 ||
+      wrapped_header->SYMMETRIC() != SymmetricAlgo::AES_256_CTR ||
+      wrapped_header->KEY_DERIVATION() != KDF::HKDF_SHA256 ||
+      wrapped_header->ROOT_TYPE()->string_view() != "REC") {
     secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
     return kClientMalformed;
   }
@@ -1693,65 +1788,69 @@ int32_t license_client_fetch_and_decrypt(
     }
   }
 
-  std::array<uint8_t, 32> shared_secret{};
-  CryptoPP::x25519 x25519_scheme;
-  if (!x25519_scheme.Agree(
-          shared_secret.data(),
+  std::array<uint8_t, flatbuffers::kX25519SharedSecretSize> shared_secret{};
+  if (!flatbuffers::X25519SharedSecret(
           session.ephemeral_private_key.data(),
-          wrapped->PROVIDER_EPHEMERAL_PUBKEY()->Data())) {
+          wrapped_header->EPHEMERAL_PUBLIC_KEY()->Data(),
+          shared_secret.data())) {
     secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
     secure_zero(shared_secret.data(), shared_secret.size());
     return kClientCryptoError;
   }
 
-  uint8_t wrap_key[kAesKeyBytes] = {0};
-  if (!derive_hkdf_key(
-          shared_secret.data(),
-          shared_secret.size(),
-          wrapped->HKDF_SALT()->Data(),
-          wrapped->HKDF_SALT()->size(),
-          kWrappedKeyInfo,
-          wrap_key)) {
+  std::array<uint8_t, flatbuffers::kEncryptionKeySize> payload_key{};
+  const std::string_view context =
+      wrapped_header->CONTEXT()->string_view().empty()
+          ? std::string_view(kGrantPayloadContext)
+          : wrapped_header->CONTEXT()->string_view();
+  flatbuffers::DeriveSymmetricKey(
+      shared_secret.data(),
+      shared_secret.size(),
+      reinterpret_cast<const uint8_t*>(context.data()),
+      context.size(),
+      payload_key.data());
+
+  std::vector<uint8_t> decrypted_payload(
+      wrapped_payload->begin(),
+      wrapped_payload->end());
+  flatbuffers::Verifier payload_verifier(
+      decrypted_payload.data(),
+      decrypted_payload.size());
+  if (!VerifyRECBuffer(payload_verifier)) {
     secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
     secure_zero(shared_secret.data(), shared_secret.size());
-    return kClientCryptoError;
+    secure_zero(payload_key.data(), payload_key.size());
+    return kClientMalformed;
   }
 
-  std::vector<uint8_t> wrapped_key_and_tag;
-  wrapped_key_and_tag.reserve(
-      wrapped->CIPHERTEXT()->size() + wrapped->TAG()->size());
-  wrapped_key_and_tag.insert(
-      wrapped_key_and_tag.end(),
-      wrapped->CIPHERTEXT()->begin(),
-      wrapped->CIPHERTEXT()->end());
-  wrapped_key_and_tag.insert(
-      wrapped_key_and_tag.end(),
-      wrapped->TAG()->begin(),
-      wrapped->TAG()->end());
-
-  std::vector<uint8_t> content_key(kDekBytes, 0);
-  try {
-    CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
-    dec.SetKeyWithIV(
-        wrap_key,
-        kAesKeyBytes,
-        wrapped->IV()->Data(),
-        wrapped->IV()->size());
-    CryptoPP::ArraySink sink(content_key.data(), content_key.size());
-    CryptoPP::AuthenticatedDecryptionFilter filter(
-        dec,
-        &sink,
-        CryptoPP::AuthenticatedDecryptionFilter::DEFAULT_FLAGS,
-        kGcmTagBytes);
-    filter.Put(wrapped_key_and_tag.data(), wrapped_key_and_tag.size());
-    filter.MessageEnd();
-  } catch (...) {
+  auto* rec = const_cast<REC*>(GetREC(decrypted_payload.data()));
+  if (!rec || !rec->RECORDS() || rec->RECORDS()->size() != 1) {
     secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
     secure_zero(shared_secret.data(), shared_secret.size());
-    secure_zero(wrap_key, sizeof(wrap_key));
-    secure_zero(content_key.data(), content_key.size());
-    return kClientCryptoError;
+    secure_zero(payload_key.data(), payload_key.size());
+    return kClientMalformed;
   }
+  const auto* record = rec->RECORDS()->Get(0);
+  const auto* kmf = record ? record->value_as_KMF() : nullptr;
+  auto* key_bytes = kmf
+      ? const_cast<::flatbuffers::Vector<uint8_t>*>(kmf->KEY_BYTES())
+      : nullptr;
+  if (!kmf || !key_bytes || key_bytes->size() != kDekBytes) {
+    secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+    secure_zero(shared_secret.data(), shared_secret.size());
+    secure_zero(payload_key.data(), payload_key.size());
+    return kClientMalformed;
+  }
+
+  flatbuffers::EncryptionContext encryption_ctx(payload_key.data(), payload_key.size());
+  flatbuffers::EncryptVector(
+      const_cast<uint8_t*>(key_bytes->Data()),
+      1,
+      key_bytes->size(),
+      encryption_ctx,
+      kKmfKeyBytesFieldId,
+      0);
+  std::vector<uint8_t> content_key(key_bytes->begin(), key_bytes->end());
 
   const int32_t decrypt_status = license_client_decrypt(
       encrypted_content.data(),
@@ -1761,8 +1860,9 @@ int32_t license_client_fetch_and_decrypt(
       plaintext_out);
   secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
   secure_zero(shared_secret.data(), shared_secret.size());
-  secure_zero(wrap_key, sizeof(wrap_key));
+  secure_zero(payload_key.data(), payload_key.size());
   secure_zero(content_key.data(), content_key.size());
+  secure_zero(decrypted_payload.data(), decrypted_payload.size());
   return decrypt_status;
 }
 

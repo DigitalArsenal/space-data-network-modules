@@ -36,9 +36,14 @@ endif()
 
 get_filename_component(CRYPTOPP_SRC_DIR "${CRYPTOPP_SRC_DIR}" ABSOLUTE)
 get_filename_component(CRYPTOPP_PARENT_DIR "${CRYPTOPP_PARENT_DIR}" ABSOLUTE)
+get_filename_component(DA_FLATBUFFERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../da-flatbuffers" ABSOLUTE)
 
 if(NOT EXISTS "${CRYPTOPP_PARENT_DIR}/cryptopp")
     file(CREATE_LINK "${CRYPTOPP_SRC_DIR}" "${CRYPTOPP_PARENT_DIR}/cryptopp" SYMBOLIC COPY_ON_ERROR)
+endif()
+
+if(NOT EXISTS "${DA_FLATBUFFERS_ROOT}/include/flatbuffers/encryption.h")
+    message(FATAL_ERROR "da-flatbuffers encryption headers not found at ${DA_FLATBUFFERS_ROOT}")
 endif()
 
 file(GLOB CRYPTOPP_ALL_SOURCES "${CRYPTOPP_SRC_DIR}/*.cpp")
@@ -57,6 +62,11 @@ add_library(
     licensing_core STATIC
     src/key_server.cpp
     src/license_client.cpp
+    "${DA_FLATBUFFERS_ROOT}/src/encryption.cpp"
+)
+target_compile_definitions(
+    licensing_core PRIVATE
+    FLATBUFFERS_USE_CRYPTOPP=1
 )
 target_include_directories(
     licensing_core PUBLIC
@@ -65,6 +75,7 @@ target_include_directories(
     generated/sds
     generated/keybroker
     "${FLATBUFFERS_INCLUDE_DIR}"
+    "${DA_FLATBUFFERS_ROOT}/include"
 )
 target_link_libraries(licensing_core PUBLIC cryptopp)
 
@@ -80,6 +91,7 @@ target_include_directories(
     generated/sds
     generated/keybroker
     "${FLATBUFFERS_INCLUDE_DIR}"
+    "${DA_FLATBUFFERS_ROOT}/include"
 )
 target_link_libraries(licensing_wasm PRIVATE licensing_core)
 set_target_properties(

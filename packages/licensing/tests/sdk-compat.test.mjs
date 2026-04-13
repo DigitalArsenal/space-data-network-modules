@@ -8,13 +8,27 @@ import {
   createSdkBrowserShimHarness,
   createSdkBrowserShimSyncHarness,
 } from "../../../tests/lib/sdkBrowserShimHarness.mjs";
+import { getWasmWallet } from "../../../../space-data-module-sdk/src/utils/wasmCrypto.js";
 import { PLG } from "../../../../spacedatastandards.org/lib/js/PLG/PLG.js";
 import { pluginType } from "../../../../spacedatastandards.org/lib/js/PLG/pluginType.js";
+import { KMF } from "../../../../spacedatastandards.org/lib/js/REC/KMF.js";
+import { keyMaterialAlgorithm } from "../../../../spacedatastandards.org/lib/js/REC/keyMaterialAlgorithm.js";
+import { keyMaterialEncoding } from "../../../../spacedatastandards.org/lib/js/REC/keyMaterialEncoding.js";
+import { keyMaterialRole } from "../../../../spacedatastandards.org/lib/js/REC/keyMaterialRole.js";
+import { KRF } from "../../../../spacedatastandards.org/lib/js/REC/KRF.js";
+import { keyReferenceAlgorithm } from "../../../../spacedatastandards.org/lib/js/REC/keyReferenceAlgorithm.js";
+import { keyReferenceRole } from "../../../../spacedatastandards.org/lib/js/REC/keyReferenceRole.js";
 import { LCH } from "../../../../spacedatastandards.org/lib/js/REC/LCH.js";
+import { LCF } from "../../../../spacedatastandards.org/lib/js/REC/LCF.js";
 import { licensingChallengeMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingChallengeMessageType.js";
 import { licensingChallengeRole } from "../../../../spacedatastandards.org/lib/js/REC/licensingChallengeRole.js";
+import { licensingConfigMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingConfigMessageType.js";
+import { licensingConfigRole } from "../../../../spacedatastandards.org/lib/js/REC/licensingConfigRole.js";
 import { LGR } from "../../../../spacedatastandards.org/lib/js/REC/LGR.js";
 import { licensingGrantMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingGrantMessageType.js";
+import { KeyExchange } from "../../../../spacedatastandards.org/lib/js/REC/KeyExchange.js";
+import { SymmetricAlgo } from "../../../../spacedatastandards.org/lib/js/REC/SymmetricAlgo.js";
+import { KDF } from "../../../../spacedatastandards.org/lib/js/REC/KDF.js";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -23,23 +37,63 @@ const MODULE_DELIVERY_PROTOCOL_ID = "/space-data-network/module-delivery/1.0.0";
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
 function makeRuntimeConfig() {
-  const signingSeed = randomBytes(32);
+  const signingSlotId = "provider-signing";
+  const wrappingSlotId = "provider-wrapping";
   return {
-    json: {
-      privateKeyHex: randomBytes(32).toString("hex"),
-      dekHex: randomBytes(32).toString("hex"),
-      providerSigningSeedHex: signingSeed.toString("hex"),
-      providerPeerId: "provider.orbpro.test",
-      activeKeyVersion: 9,
-      expiresAtMs: Date.now() + 60_000,
-      challengeTtlMs: 30_000,
-      maxClockSkewMs: 5_000,
-    },
+    providerPeerId: "provider.orbpro.test",
+    activeKeyVersion: 9,
+    expiresAtMs: Date.now() + 60_000,
+    challengeTtlMs: 30_000,
+    maxClockSkewMs: 5_000,
+    capabilityToken: textEncoder.encode("capability-token"),
+    signingSlotId,
+    wrappingSlotId,
+    keySlots: new Map([
+      [signingSlotId, randomBytes(32)],
+      [wrappingSlotId, randomBytes(32)],
+    ]),
   };
 }
 
-function createDefaultHostDispatch() {
+function decodeBase64Param(params, field) {
+  if (typeof params?.[field] !== "string") {
+    throw new Error(`Missing base64 field: ${field}`);
+  }
+  return new Uint8Array(Buffer.from(params[field], "base64"));
+}
+
+function handleEd25519HostOperation(wallet, operation, params) {
+  if (!wallet) {
+    throw new Error(`Wallet not initialized for operation: ${operation}`);
+  }
+  if (operation === "crypto.ed25519.publicKeyFromSeed") {
+    return new Uint8Array(
+      wallet.curves.ed25519.publicKeyFromSeed(decodeBase64Param(params, "seed")),
+    );
+  }
+  if (operation === "crypto.ed25519.sign") {
+    return new Uint8Array(
+      wallet.curves.ed25519.sign(
+        decodeBase64Param(params, "message"),
+        decodeBase64Param(params, "seed"),
+      ),
+    );
+  }
+  if (operation === "crypto.ed25519.verify") {
+    return wallet.curves.ed25519.verify(
+      decodeBase64Param(params, "message"),
+      decodeBase64Param(params, "signature"),
+      decodeBase64Param(params, "publicKey"),
+    );
+  }
+  return undefined;
+}
+
+function createDefaultHostDispatch(wallet = null) {
   return (operation, params) => {
+    if (operation.startsWith("crypto.ed25519.")) {
+      return handleEd25519HostOperation(wallet, operation, params);
+    }
     if (operation === "clock.now") {
       return Date.now();
     }
@@ -50,13 +104,24 @@ function createDefaultHostDispatch() {
   };
 }
 
-function createServerHostDispatch(contentStore) {
+function createServerHostDispatch(contentStore, keySlots = new Map(), wallet = null) {
   return (operation, params) => {
+    if (operation.startsWith("crypto.ed25519.")) {
+      return handleEd25519HostOperation(wallet, operation, params);
+    }
     if (operation === "clock.now") {
       return Date.now();
     }
     if (operation === "random.bytes") {
       return randomBytes(params?.length ?? 32);
+    }
+    if (operation === "keyslot.get") {
+      const slotId = String(params?.slotId ?? "");
+      const keyBytes = keySlots.get(slotId);
+      if (!keyBytes) {
+        throw new Error(`keyslot.get missing slot: ${slotId}`);
+      }
+      return new Uint8Array(keyBytes);
     }
     if (operation === "ipfs.add") {
       const raw =
@@ -79,21 +144,100 @@ function createServerHostDispatch(contentStore) {
   };
 }
 
+function buildRuntimeConfigFrame(config) {
+  const builder = new flatbuffers.Builder(512);
+  const providerPeerIdOffset = builder.createString(config.providerPeerId);
+  const signingKeyIdOffset = builder.createString("licensing.provider.signing");
+  const signingSlotIdOffset = builder.createString(config.signingSlotId);
+  const wrappingKeyIdOffset = builder.createString("licensing.provider.wrapping");
+  const wrappingSlotIdOffset = builder.createString(config.wrappingSlotId);
+  const capabilityTokenOffset =
+    config.capabilityToken?.length > 0
+      ? LCF.createCapabilityTokenVector(builder, config.capabilityToken)
+      : 0;
+  const signingKeyOffset = KRF.createKRF(
+    builder,
+    signingKeyIdOffset,
+    signingSlotIdOffset,
+    keyReferenceRole.ProviderSigning,
+    keyReferenceAlgorithm.Ed25519Seed,
+    0,
+    config.activeKeyVersion,
+    0n,
+    true,
+  );
+  const wrappingKeyOffset = KRF.createKRF(
+    builder,
+    wrappingKeyIdOffset,
+    wrappingSlotIdOffset,
+    keyReferenceRole.ProviderWrapping,
+    keyReferenceAlgorithm.X25519Private,
+    0,
+    config.activeKeyVersion,
+    0n,
+    true,
+  );
+  LCF.startLCF(builder);
+  LCF.addMessageType(builder, licensingConfigMessageType.Configure);
+  LCF.addRole(builder, licensingConfigRole.Provider);
+  LCF.addProviderPeerId(builder, providerPeerIdOffset);
+  LCF.addProviderSigningKey(builder, signingKeyOffset);
+  LCF.addProviderWrappingKey(builder, wrappingKeyOffset);
+  LCF.addActiveKeyVersion(builder, config.activeKeyVersion);
+  LCF.addExpiresAt(builder, BigInt(config.expiresAtMs));
+  LCF.addMaxClockSkewMs(builder, BigInt(config.maxClockSkewMs));
+  LCF.addChallengeTtlMs(builder, BigInt(config.challengeTtlMs));
+  if (capabilityTokenOffset !== 0) {
+    LCF.addCapabilityToken(builder, capabilityTokenOffset);
+  }
+  const root = LCF.endLCF(builder);
+  LCF.finishLCFBuffer(builder, root);
+  return builder.asUint8Array();
+}
+
+function buildKeyMaterialFrame({
+  keyId,
+  role,
+  algorithm,
+  encoding,
+  keyBytes,
+}) {
+  const builder = new flatbuffers.Builder(256);
+  const keyIdOffset = builder.createString(keyId);
+  const keyBytesOffset = KMF.createKeyBytesVector(builder, keyBytes);
+  const root = KMF.createKMF(
+    builder,
+    keyIdOffset,
+    role,
+    algorithm,
+    encoding,
+    keyBytesOffset,
+    0,
+    0n,
+  );
+  KMF.finishKMFBuffer(builder, root);
+  return builder.asUint8Array();
+}
+
 function configureServerSync(harness, config) {
   const response = harness.invokeSync({
     methodId: "server_configure_runtime",
     inputs: [
       {
         portId: "config",
-        payload: textEncoder.encode(JSON.stringify(config.json)),
+        fileIdentifier: "$LCF",
+        payload: buildRuntimeConfigFrame(config),
       },
     ],
   });
   assert.equal(response.statusCode, 0);
 }
 
-function createProtocolDispatch(serverHarness, contentStore = new Map()) {
+function createProtocolDispatch(serverHarness, contentStore = new Map(), wallet = null) {
   return (operation, params) => {
+    if (operation.startsWith("crypto.ed25519.")) {
+      return handleEd25519HostOperation(wallet, operation, params);
+    }
     if (operation === "clock.now") {
       return Date.now();
     }
@@ -117,10 +261,14 @@ function createProtocolDispatch(serverHarness, contentStore = new Map()) {
       : new Uint8Array();
 
     if (params?.protocolId === MODULE_DELIVERY_PROTOCOL_ID) {
+      const fileIdentifier = detectFlatbufferFileIdentifier(payload);
       const response = serverHarness.invokeSync({
         methodId: "server_handle_message",
-        inputs: [{ portId: "request", payload }],
+        inputs: [{ portId: "request", fileIdentifier, payload }],
       });
+      if (response.statusCode !== 0 || response.outputs.length === 0) {
+        throw new Error(`server_handle_message failed with status ${response.statusCode}`);
+      }
       return response.outputs[0].payload;
     }
 
@@ -135,6 +283,8 @@ function buildGrantRequest({
   requesterPeerId,
   requesterXpub,
   requesterDomain,
+  requesterSigningPubkey,
+  requesterEphemeralPubkey,
   requestedTimeoutMs = 30_000n,
   requestedAtMs = BigInt(Date.now()),
   providerPeerId = "provider.orbpro.test",
@@ -147,6 +297,12 @@ function buildGrantRequest({
   const requesterXpubOffset = builder.createString(requesterXpub);
   const requesterDomainOffset = builder.createString(requesterDomain);
   const providerPeerIdOffset = builder.createString(providerPeerId);
+  const requesterSigningPubkeyOffset = requesterSigningPubkey
+    ? LCH.createRequesterSigningPubkeyVector(builder, requesterSigningPubkey)
+    : 0;
+  const requesterEphemeralPubkeyOffset = requesterEphemeralPubkey
+    ? LCH.createRequesterEphemeralPubkeyVector(builder, requesterEphemeralPubkey)
+    : 0;
   const root = LCH.createLCH(
     builder,
     licensingChallengeMessageType.Request,
@@ -156,8 +312,8 @@ function buildGrantRequest({
     moduleVersionOffset,
     requesterPeerIdOffset,
     requesterXpubOffset,
-    0,
-    0,
+    requesterSigningPubkeyOffset,
+    requesterEphemeralPubkeyOffset,
     requesterDomainOffset,
     requestedTimeoutMs,
     requestedAtMs,
@@ -174,6 +330,11 @@ function buildGrantRequest({
 function decodeGrantResponse(bytes) {
   const buffer = new flatbuffers.ByteBuffer(bytes);
   return LGR.getRootAsLGR(buffer);
+}
+
+function decodeChallengeMessage(bytes) {
+  const buffer = new flatbuffers.ByteBuffer(bytes);
+  return LCH.getRootAsLCH(buffer);
 }
 
 function buildModuleDescriptor({
@@ -235,6 +396,13 @@ function decodeModuleDescriptor(bytes) {
   return PLG.getRootAsPLG(buffer);
 }
 
+function detectFlatbufferFileIdentifier(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length < 8) {
+    return null;
+  }
+  return String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
+}
+
 function encryptProtectedContent(plaintext, contentKey) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", contentKey, iv);
@@ -258,7 +426,14 @@ function publishModuleSync(serverHarness, descriptorBytes, protectedContent, con
       },
       {
         portId: "content_key",
-        payload: contentKey,
+        fileIdentifier: "$KMF",
+        payload: buildKeyMaterialFrame({
+          keyId: "publication-content-key",
+          role: keyMaterialRole.PublicationContent,
+          algorithm: keyMaterialAlgorithm.Aes256Gcm,
+          encoding: keyMaterialEncoding.RawBytes,
+          keyBytes: contentKey,
+        }),
       },
     ],
   });
@@ -270,15 +445,17 @@ function publishModuleSync(serverHarness, descriptorBytes, protectedContent, con
 
 test("server_publish_module publishes encrypted content and returns an updated PLG descriptor", async (t) => {
   const contentStore = new Map();
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
   const serverHarness = await createSdkBrowserShimSyncHarness({
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createServerHostDispatch(contentStore),
+    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet),
   });
   t.after(() => {
     serverHarness.destroy();
   });
 
-  configureServerSync(serverHarness, makeRuntimeConfig());
+  configureServerSync(serverHarness, runtimeConfig);
 
   const moduleDescriptor = buildModuleDescriptor({
     moduleId: "orbpro.test.module",
@@ -305,15 +482,16 @@ test("server_publish_module publishes encrypted content and returns an updated P
 
 test("client and server role entrypoints interoperate inside the unified licensing module", async (t) => {
   const contentStore = new Map();
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
   const serverHarness = await createSdkBrowserShimSyncHarness({
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createServerHostDispatch(contentStore),
+    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet),
   });
   t.after(() => {
     serverHarness.destroy();
   });
 
-  const runtimeConfig = makeRuntimeConfig();
   configureServerSync(serverHarness, runtimeConfig);
   const moduleDek = randomBytes(32);
   const descriptorBytes = buildModuleDescriptor({
@@ -330,7 +508,7 @@ test("client and server role entrypoints interoperate inside the unified licensi
 
   const clientHarness = await createSdkBrowserShimHarness({
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createProtocolDispatch(serverHarness),
+    dispatch: createProtocolDispatch(serverHarness, new Map(), wallet),
     surface: "direct",
   });
   t.after(async () => {
@@ -354,8 +532,15 @@ test("client and server role entrypoints interoperate inside the unified licensi
         }),
       },
       {
-        portId: "requester_signing_seed",
-        payload: randomBytes(32),
+        portId: "requester_signing_key",
+        fileIdentifier: "$KMF",
+        payload: buildKeyMaterialFrame({
+          keyId: "requester-signing-key",
+          role: keyMaterialRole.RequesterSigning,
+          algorithm: keyMaterialAlgorithm.Ed25519Seed,
+          encoding: keyMaterialEncoding.Seed32,
+          keyBytes: randomBytes(32),
+        }),
       }
     ],
   });
@@ -371,21 +556,30 @@ test("client and server role entrypoints interoperate inside the unified licensi
   assert.equal(grant.GRANTED_DOMAIN(), "app.orbpro.test");
   assert.equal(grant.GRANTED_TIMEOUT_MS(), 30_000n);
   assert.ok(grant.EXPIRES_AT() > BigInt(Date.now()));
-  assert.ok(grant.WRAPPED_CONTENT_KEY());
+  const wrappedHeader = grant.WRAPPED_CONTENT_KEY_HEADER();
+  assert.ok(wrappedHeader);
+  assert.equal(wrappedHeader.KEY_EXCHANGE(), KeyExchange.X25519);
+  assert.equal(wrappedHeader.SYMMETRIC(), SymmetricAlgo.AES_256_CTR);
+  assert.equal(wrappedHeader.KEY_DERIVATION(), KDF.HKDF_SHA256);
+  assert.equal(wrappedHeader.ROOT_TYPE(), "REC");
+  assert.equal(wrappedHeader.nonceStartLength(), 12);
+  assert.ok(grant.wrappedContentKeyPayloadLength() > 0);
   assert.ok(grant.MODULE_DESCRIPTOR());
 });
 
 test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", async (t) => {
   const contentStore = new Map();
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
   const serverHarness = await createSdkBrowserShimSyncHarness({
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createServerHostDispatch(contentStore),
+    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet),
   });
   t.after(() => {
     serverHarness.destroy();
   });
 
-  configureServerSync(serverHarness, makeRuntimeConfig());
+  configureServerSync(serverHarness, runtimeConfig);
 
   const moduleDek = randomBytes(32);
   const plaintext = textEncoder.encode("hello protected module");
@@ -403,7 +597,7 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
 
   const clientHarness = await createSdkBrowserShimHarness({
     wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createProtocolDispatch(serverHarness, contentStore),
+    dispatch: createProtocolDispatch(serverHarness, contentStore, wallet),
     surface: "direct",
   });
   t.after(async () => {
@@ -427,8 +621,15 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
         }),
       },
       {
-        portId: "requester_signing_seed",
-        payload: randomBytes(32),
+        portId: "requester_signing_key",
+        fileIdentifier: "$KMF",
+        payload: buildKeyMaterialFrame({
+          keyId: "requester-signing-key",
+          role: keyMaterialRole.RequesterSigning,
+          algorithm: keyMaterialAlgorithm.Ed25519Seed,
+          encoding: keyMaterialEncoding.Seed32,
+          keyBytes: randomBytes(32),
+        }),
       }
     ],
   });
@@ -447,4 +648,107 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
 
   assert.equal(decryptResponse.statusCode, 0);
   assert.deepEqual(decryptResponse.outputs[0].payload, plaintext);
+});
+
+test("server_handle_message rejects challenge requests for disallowed domains", async (t) => {
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(new Map(), runtimeConfig.keySlots, wallet),
+  });
+  t.after(() => {
+    serverHarness.destroy();
+  });
+
+  configureServerSync(serverHarness, runtimeConfig);
+  publishModuleSync(
+    serverHarness,
+    buildModuleDescriptor({
+      moduleId: "orbpro.policy.module",
+      version: "1.0.0",
+      allowedDomains: ["app.orbpro.test"],
+    }),
+    textEncoder.encode("encrypted bundle"),
+    randomBytes(32),
+  );
+
+  const response = serverHarness.invokeSync({
+    methodId: "server_handle_message",
+    inputs: [
+      {
+        portId: "request",
+        fileIdentifier: "$LCH",
+        payload: buildGrantRequest({
+          requestId: "grant-req-domain-denied",
+          moduleId: "orbpro.policy.module",
+          moduleVersion: "1.0.0",
+          requesterPeerId: "requester.orbpro.test",
+          requesterXpub: "xpub-test-requester",
+          requesterDomain: "evil.orbpro.test",
+          requesterSigningPubkey: new Uint8Array(32).fill(6),
+          requesterEphemeralPubkey: new Uint8Array(32).fill(8),
+          providerPeerId: "provider.orbpro.test",
+        }),
+      },
+    ],
+  });
+
+  assert.equal(response.statusCode, 0);
+  assert.equal(response.outputs.length, 1);
+  const challenge = decodeChallengeMessage(response.outputs[0].payload);
+  assert.equal(challenge.MESSAGE_TYPE(), licensingChallengeMessageType.Error);
+  assert.equal(challenge.ERROR_CODE(), "domain_not_allowed");
+});
+
+test("server_handle_message rejects challenge requests that exceed timeout policy", async (t) => {
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(new Map(), runtimeConfig.keySlots, wallet),
+  });
+  t.after(() => {
+    serverHarness.destroy();
+  });
+
+  configureServerSync(serverHarness, runtimeConfig);
+  publishModuleSync(
+    serverHarness,
+    buildModuleDescriptor({
+      moduleId: "orbpro.policy.module",
+      version: "1.0.0",
+      maxGrantTimeoutMs: 30_000n,
+    }),
+    textEncoder.encode("encrypted bundle"),
+    randomBytes(32),
+  );
+
+  const response = serverHarness.invokeSync({
+    methodId: "server_handle_message",
+    inputs: [
+      {
+        portId: "request",
+        fileIdentifier: "$LCH",
+        payload: buildGrantRequest({
+          requestId: "grant-req-timeout-denied",
+          moduleId: "orbpro.policy.module",
+          moduleVersion: "1.0.0",
+          requesterPeerId: "requester.orbpro.test",
+          requesterXpub: "xpub-test-requester",
+          requesterDomain: "app.orbpro.test",
+          requesterSigningPubkey: new Uint8Array(32).fill(6),
+          requesterEphemeralPubkey: new Uint8Array(32).fill(8),
+          requestedTimeoutMs: 30_001n,
+          providerPeerId: "provider.orbpro.test",
+        }),
+      },
+    ],
+  });
+
+  assert.equal(response.statusCode, 0);
+  assert.equal(response.outputs.length, 1);
+  const challenge = decodeChallengeMessage(response.outputs[0].payload);
+  assert.equal(challenge.MESSAGE_TYPE(), licensingChallengeMessageType.Error);
+  assert.equal(challenge.ERROR_CODE(), "timeout_exceeds_policy");
 });

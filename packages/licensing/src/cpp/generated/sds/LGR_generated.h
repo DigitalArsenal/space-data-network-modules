@@ -14,7 +14,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
              "Non-compatible flatbuffers version included");
 
 #include "PLG_generated.h"
-#include "LWK_generated.h"
+#include "ENC_generated.h"
 
 struct LGR;
 struct LGRBuilder;
@@ -72,7 +72,8 @@ struct LGRT : public ::flatbuffers::NativeTable {
   std::string DENIAL_REASON{};
   std::vector<uint8_t> CAPABILITY_TOKEN{};
   std::unique_ptr<PLGT> MODULE_DESCRIPTOR{};
-  std::unique_ptr<LWKT> WRAPPED_CONTENT_KEY{};
+  std::unique_ptr<ENCT> WRAPPED_CONTENT_KEY_HEADER{};
+  std::vector<uint8_t> WRAPPED_CONTENT_KEY_PAYLOAD{};
   std::vector<uint8_t> GRANT_VERIFIER_PUBKEY{};
   std::vector<uint8_t> PROVIDER_SIGNATURE{};
   LGRT() = default;
@@ -103,9 +104,10 @@ struct LGR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_DENIAL_REASON = 30,
     VT_CAPABILITY_TOKEN = 32,
     VT_MODULE_DESCRIPTOR = 34,
-    VT_WRAPPED_CONTENT_KEY = 36,
-    VT_GRANT_VERIFIER_PUBKEY = 38,
-    VT_PROVIDER_SIGNATURE = 40
+    VT_WRAPPED_CONTENT_KEY_HEADER = 36,
+    VT_WRAPPED_CONTENT_KEY_PAYLOAD = 38,
+    VT_GRANT_VERIFIER_PUBKEY = 40,
+    VT_PROVIDER_SIGNATURE = 42
   };
   /// Message type
   licensingGrantMessageType MESSAGE_TYPE() const {
@@ -171,9 +173,15 @@ struct LGR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const PLG *MODULE_DESCRIPTOR() const {
     return GetPointer<const PLG *>(VT_MODULE_DESCRIPTOR);
   }
-  /// Wrapped module content key
-  const LWK *WRAPPED_CONTENT_KEY() const {
-    return GetPointer<const LWK *>(VT_WRAPPED_CONTENT_KEY);
+  /// Encryption header for the recipient-specific wrapped content-key payload.
+  const ENC *WRAPPED_CONTENT_KEY_HEADER() const {
+    return GetPointer<const ENC *>(VT_WRAPPED_CONTENT_KEY_HEADER);
+  }
+  /// Encrypted FlatBuffer payload containing the recipient-specific content key
+  /// material. The payload currently uses `$KMF` semantics and is decrypted
+  /// using `WRAPPED_CONTENT_KEY_HEADER` before reading the key bytes.
+  const ::flatbuffers::Vector<uint8_t> *WRAPPED_CONTENT_KEY_PAYLOAD() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_WRAPPED_CONTENT_KEY_PAYLOAD);
   }
   /// Provider public key used to verify the grant signature
   const ::flatbuffers::Vector<uint8_t> *GRANT_VERIFIER_PUBKEY() const {
@@ -214,8 +222,10 @@ struct LGR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVector(CAPABILITY_TOKEN()) &&
            VerifyOffset(verifier, VT_MODULE_DESCRIPTOR) &&
            verifier.VerifyTable(MODULE_DESCRIPTOR()) &&
-           VerifyOffset(verifier, VT_WRAPPED_CONTENT_KEY) &&
-           verifier.VerifyTable(WRAPPED_CONTENT_KEY()) &&
+           VerifyOffset(verifier, VT_WRAPPED_CONTENT_KEY_HEADER) &&
+           verifier.VerifyTable(WRAPPED_CONTENT_KEY_HEADER()) &&
+           VerifyOffset(verifier, VT_WRAPPED_CONTENT_KEY_PAYLOAD) &&
+           verifier.VerifyVector(WRAPPED_CONTENT_KEY_PAYLOAD()) &&
            VerifyOffset(verifier, VT_GRANT_VERIFIER_PUBKEY) &&
            verifier.VerifyVector(GRANT_VERIFIER_PUBKEY()) &&
            VerifyOffset(verifier, VT_PROVIDER_SIGNATURE) &&
@@ -279,8 +289,11 @@ struct LGRBuilder {
   void add_MODULE_DESCRIPTOR(::flatbuffers::Offset<PLG> MODULE_DESCRIPTOR) {
     fbb_.AddOffset(LGR::VT_MODULE_DESCRIPTOR, MODULE_DESCRIPTOR);
   }
-  void add_WRAPPED_CONTENT_KEY(::flatbuffers::Offset<LWK> WRAPPED_CONTENT_KEY) {
-    fbb_.AddOffset(LGR::VT_WRAPPED_CONTENT_KEY, WRAPPED_CONTENT_KEY);
+  void add_WRAPPED_CONTENT_KEY_HEADER(::flatbuffers::Offset<ENC> WRAPPED_CONTENT_KEY_HEADER) {
+    fbb_.AddOffset(LGR::VT_WRAPPED_CONTENT_KEY_HEADER, WRAPPED_CONTENT_KEY_HEADER);
+  }
+  void add_WRAPPED_CONTENT_KEY_PAYLOAD(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> WRAPPED_CONTENT_KEY_PAYLOAD) {
+    fbb_.AddOffset(LGR::VT_WRAPPED_CONTENT_KEY_PAYLOAD, WRAPPED_CONTENT_KEY_PAYLOAD);
   }
   void add_GRANT_VERIFIER_PUBKEY(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> GRANT_VERIFIER_PUBKEY) {
     fbb_.AddOffset(LGR::VT_GRANT_VERIFIER_PUBKEY, GRANT_VERIFIER_PUBKEY);
@@ -319,7 +332,8 @@ inline ::flatbuffers::Offset<LGR> CreateLGR(
     ::flatbuffers::Offset<::flatbuffers::String> DENIAL_REASON = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CAPABILITY_TOKEN = 0,
     ::flatbuffers::Offset<PLG> MODULE_DESCRIPTOR = 0,
-    ::flatbuffers::Offset<LWK> WRAPPED_CONTENT_KEY = 0,
+    ::flatbuffers::Offset<ENC> WRAPPED_CONTENT_KEY_HEADER = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> WRAPPED_CONTENT_KEY_PAYLOAD = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> GRANT_VERIFIER_PUBKEY = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PROVIDER_SIGNATURE = 0) {
   LGRBuilder builder_(_fbb);
@@ -328,7 +342,8 @@ inline ::flatbuffers::Offset<LGR> CreateLGR(
   builder_.add_REQUESTED_TIMEOUT_MS(REQUESTED_TIMEOUT_MS);
   builder_.add_PROVIDER_SIGNATURE(PROVIDER_SIGNATURE);
   builder_.add_GRANT_VERIFIER_PUBKEY(GRANT_VERIFIER_PUBKEY);
-  builder_.add_WRAPPED_CONTENT_KEY(WRAPPED_CONTENT_KEY);
+  builder_.add_WRAPPED_CONTENT_KEY_PAYLOAD(WRAPPED_CONTENT_KEY_PAYLOAD);
+  builder_.add_WRAPPED_CONTENT_KEY_HEADER(WRAPPED_CONTENT_KEY_HEADER);
   builder_.add_MODULE_DESCRIPTOR(MODULE_DESCRIPTOR);
   builder_.add_CAPABILITY_TOKEN(CAPABILITY_TOKEN);
   builder_.add_DENIAL_REASON(DENIAL_REASON);
@@ -368,7 +383,8 @@ inline ::flatbuffers::Offset<LGR> CreateLGRDirect(
     const char *DENIAL_REASON = nullptr,
     const std::vector<uint8_t> *CAPABILITY_TOKEN = nullptr,
     ::flatbuffers::Offset<PLG> MODULE_DESCRIPTOR = 0,
-    ::flatbuffers::Offset<LWK> WRAPPED_CONTENT_KEY = 0,
+    ::flatbuffers::Offset<ENC> WRAPPED_CONTENT_KEY_HEADER = 0,
+    const std::vector<uint8_t> *WRAPPED_CONTENT_KEY_PAYLOAD = nullptr,
     const std::vector<uint8_t> *GRANT_VERIFIER_PUBKEY = nullptr,
     const std::vector<uint8_t> *PROVIDER_SIGNATURE = nullptr) {
   auto REQUEST_ID__ = REQUEST_ID ? _fbb.CreateString(REQUEST_ID) : 0;
@@ -382,6 +398,7 @@ inline ::flatbuffers::Offset<LGR> CreateLGRDirect(
   auto GRANT_STATUS__ = GRANT_STATUS ? _fbb.CreateString(GRANT_STATUS) : 0;
   auto DENIAL_REASON__ = DENIAL_REASON ? _fbb.CreateString(DENIAL_REASON) : 0;
   auto CAPABILITY_TOKEN__ = CAPABILITY_TOKEN ? _fbb.CreateVector<uint8_t>(*CAPABILITY_TOKEN) : 0;
+  auto WRAPPED_CONTENT_KEY_PAYLOAD__ = WRAPPED_CONTENT_KEY_PAYLOAD ? _fbb.CreateVector<uint8_t>(*WRAPPED_CONTENT_KEY_PAYLOAD) : 0;
   auto GRANT_VERIFIER_PUBKEY__ = GRANT_VERIFIER_PUBKEY ? _fbb.CreateVector<uint8_t>(*GRANT_VERIFIER_PUBKEY) : 0;
   auto PROVIDER_SIGNATURE__ = PROVIDER_SIGNATURE ? _fbb.CreateVector<uint8_t>(*PROVIDER_SIGNATURE) : 0;
   return CreateLGR(
@@ -402,7 +419,8 @@ inline ::flatbuffers::Offset<LGR> CreateLGRDirect(
       DENIAL_REASON__,
       CAPABILITY_TOKEN__,
       MODULE_DESCRIPTOR,
-      WRAPPED_CONTENT_KEY,
+      WRAPPED_CONTENT_KEY_HEADER,
+      WRAPPED_CONTENT_KEY_PAYLOAD__,
       GRANT_VERIFIER_PUBKEY__,
       PROVIDER_SIGNATURE__);
 }
@@ -426,7 +444,8 @@ inline LGRT::LGRT(const LGRT &o)
         DENIAL_REASON(o.DENIAL_REASON),
         CAPABILITY_TOKEN(o.CAPABILITY_TOKEN),
         MODULE_DESCRIPTOR((o.MODULE_DESCRIPTOR) ? new PLGT(*o.MODULE_DESCRIPTOR) : nullptr),
-        WRAPPED_CONTENT_KEY((o.WRAPPED_CONTENT_KEY) ? new LWKT(*o.WRAPPED_CONTENT_KEY) : nullptr),
+        WRAPPED_CONTENT_KEY_HEADER((o.WRAPPED_CONTENT_KEY_HEADER) ? new ENCT(*o.WRAPPED_CONTENT_KEY_HEADER) : nullptr),
+        WRAPPED_CONTENT_KEY_PAYLOAD(o.WRAPPED_CONTENT_KEY_PAYLOAD),
         GRANT_VERIFIER_PUBKEY(o.GRANT_VERIFIER_PUBKEY),
         PROVIDER_SIGNATURE(o.PROVIDER_SIGNATURE) {
 }
@@ -448,7 +467,8 @@ inline LGRT &LGRT::operator=(LGRT o) FLATBUFFERS_NOEXCEPT {
   std::swap(DENIAL_REASON, o.DENIAL_REASON);
   std::swap(CAPABILITY_TOKEN, o.CAPABILITY_TOKEN);
   std::swap(MODULE_DESCRIPTOR, o.MODULE_DESCRIPTOR);
-  std::swap(WRAPPED_CONTENT_KEY, o.WRAPPED_CONTENT_KEY);
+  std::swap(WRAPPED_CONTENT_KEY_HEADER, o.WRAPPED_CONTENT_KEY_HEADER);
+  std::swap(WRAPPED_CONTENT_KEY_PAYLOAD, o.WRAPPED_CONTENT_KEY_PAYLOAD);
   std::swap(GRANT_VERIFIER_PUBKEY, o.GRANT_VERIFIER_PUBKEY);
   std::swap(PROVIDER_SIGNATURE, o.PROVIDER_SIGNATURE);
   return *this;
@@ -479,7 +499,8 @@ inline void LGR::UnPackTo(LGRT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = DENIAL_REASON(); if (_e) _o->DENIAL_REASON = _e->str(); }
   { auto _e = CAPABILITY_TOKEN(); if (_e) { _o->CAPABILITY_TOKEN.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->CAPABILITY_TOKEN.begin()); } }
   { auto _e = MODULE_DESCRIPTOR(); if (_e) { if(_o->MODULE_DESCRIPTOR) { _e->UnPackTo(_o->MODULE_DESCRIPTOR.get(), _resolver); } else { _o->MODULE_DESCRIPTOR = std::unique_ptr<PLGT>(_e->UnPack(_resolver)); } } else if (_o->MODULE_DESCRIPTOR) { _o->MODULE_DESCRIPTOR.reset(); } }
-  { auto _e = WRAPPED_CONTENT_KEY(); if (_e) { if(_o->WRAPPED_CONTENT_KEY) { _e->UnPackTo(_o->WRAPPED_CONTENT_KEY.get(), _resolver); } else { _o->WRAPPED_CONTENT_KEY = std::unique_ptr<LWKT>(_e->UnPack(_resolver)); } } else if (_o->WRAPPED_CONTENT_KEY) { _o->WRAPPED_CONTENT_KEY.reset(); } }
+  { auto _e = WRAPPED_CONTENT_KEY_HEADER(); if (_e) { if(_o->WRAPPED_CONTENT_KEY_HEADER) { _e->UnPackTo(_o->WRAPPED_CONTENT_KEY_HEADER.get(), _resolver); } else { _o->WRAPPED_CONTENT_KEY_HEADER = std::unique_ptr<ENCT>(_e->UnPack(_resolver)); } } else if (_o->WRAPPED_CONTENT_KEY_HEADER) { _o->WRAPPED_CONTENT_KEY_HEADER.reset(); } }
+  { auto _e = WRAPPED_CONTENT_KEY_PAYLOAD(); if (_e) { _o->WRAPPED_CONTENT_KEY_PAYLOAD.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->WRAPPED_CONTENT_KEY_PAYLOAD.begin()); } }
   { auto _e = GRANT_VERIFIER_PUBKEY(); if (_e) { _o->GRANT_VERIFIER_PUBKEY.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->GRANT_VERIFIER_PUBKEY.begin()); } }
   { auto _e = PROVIDER_SIGNATURE(); if (_e) { _o->PROVIDER_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->PROVIDER_SIGNATURE.begin()); } }
 }
@@ -508,7 +529,8 @@ inline ::flatbuffers::Offset<LGR> LGR::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _DENIAL_REASON = _o->DENIAL_REASON.empty() ? 0 : _fbb.CreateString(_o->DENIAL_REASON);
   auto _CAPABILITY_TOKEN = _o->CAPABILITY_TOKEN.size() ? _fbb.CreateVector(_o->CAPABILITY_TOKEN) : 0;
   auto _MODULE_DESCRIPTOR = _o->MODULE_DESCRIPTOR ? CreatePLG(_fbb, _o->MODULE_DESCRIPTOR.get(), _rehasher) : 0;
-  auto _WRAPPED_CONTENT_KEY = _o->WRAPPED_CONTENT_KEY ? CreateLWK(_fbb, _o->WRAPPED_CONTENT_KEY.get(), _rehasher) : 0;
+  auto _WRAPPED_CONTENT_KEY_HEADER = _o->WRAPPED_CONTENT_KEY_HEADER ? CreateENC(_fbb, _o->WRAPPED_CONTENT_KEY_HEADER.get(), _rehasher) : 0;
+  auto _WRAPPED_CONTENT_KEY_PAYLOAD = _o->WRAPPED_CONTENT_KEY_PAYLOAD.size() ? _fbb.CreateVector(_o->WRAPPED_CONTENT_KEY_PAYLOAD) : 0;
   auto _GRANT_VERIFIER_PUBKEY = _o->GRANT_VERIFIER_PUBKEY.size() ? _fbb.CreateVector(_o->GRANT_VERIFIER_PUBKEY) : 0;
   auto _PROVIDER_SIGNATURE = _o->PROVIDER_SIGNATURE.size() ? _fbb.CreateVector(_o->PROVIDER_SIGNATURE) : 0;
   return CreateLGR(
@@ -529,7 +551,8 @@ inline ::flatbuffers::Offset<LGR> LGR::Pack(::flatbuffers::FlatBufferBuilder &_f
       _DENIAL_REASON,
       _CAPABILITY_TOKEN,
       _MODULE_DESCRIPTOR,
-      _WRAPPED_CONTENT_KEY,
+      _WRAPPED_CONTENT_KEY_HEADER,
+      _WRAPPED_CONTENT_KEY_PAYLOAD,
       _GRANT_VERIFIER_PUBKEY,
       _PROVIDER_SIGNATURE);
 }

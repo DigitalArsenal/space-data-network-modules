@@ -7,7 +7,7 @@ const packageRoot = path.resolve(import.meta.dirname, "..");
 const generatedDir = path.join(packageRoot, "src", "cpp", "generated", "sds");
 
 test("licensing package checks in canonical SDS generated headers for module delivery", () => {
-  for (const family of ["PLG", "LCH", "LPF", "LWK", "LGR", "LMR"]) {
+  for (const family of ["PLG", "ENC", "REC", "LCH", "LPF", "LGR", "LMR", "LCF", "KRF", "KMF"]) {
     const headerPath = path.join(generatedDir, `${family}_generated.h`);
     assert.equal(
       fs.existsSync(headerPath),

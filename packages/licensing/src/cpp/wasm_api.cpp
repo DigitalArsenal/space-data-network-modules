@@ -5,6 +5,7 @@
 #endif
 
 #include "key_server_api.h"
+#include "KMF_generated.h"
 #include "license_client_api.h"
 #include "plugin_manifest_bytes.h"
 #include "space_data_module_invoke.h"
@@ -59,6 +60,52 @@ int require_input(
     return 0;
 }
 
+int extract_kmf_bytes(
+    const plugin_input_frame_t* frame,
+    keyMaterialRole expected_role,
+    keyMaterialAlgorithm expected_algorithm,
+    keyMaterialEncoding expected_encoding,
+    std::vector<uint8_t>* bytes_out,
+    const char* error_code,
+    const char* error_message) {
+    if (!frame || !frame->payload || !bytes_out) {
+        plugin_set_error(error_code, error_message);
+        return 1;
+    }
+
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifyKMFBuffer(verifier)) {
+        plugin_set_error(error_code, error_message);
+        return 1;
+    }
+
+    const auto* key_material = GetKMF(frame->payload);
+    if (!key_material || !key_material->KEY_BYTES()) {
+        plugin_set_error(error_code, error_message);
+        return 1;
+    }
+    if (expected_role != keyMaterialRole::Unknown &&
+        key_material->ROLE() != expected_role) {
+        plugin_set_error(error_code, error_message);
+        return 1;
+    }
+    if (expected_algorithm != keyMaterialAlgorithm::Unknown &&
+        key_material->ALGORITHM() != expected_algorithm) {
+        plugin_set_error(error_code, error_message);
+        return 1;
+    }
+    if (expected_encoding != keyMaterialEncoding::Unknown &&
+        key_material->ENCODING() != expected_encoding) {
+        plugin_set_error(error_code, error_message);
+        return 1;
+    }
+
+    bytes_out->assign(
+        key_material->KEY_BYTES()->begin(),
+        key_material->KEY_BYTES()->end());
+    return 0;
+}
+
 }  // namespace
 
 extern "C" void __wasm_call_ctors(void);
@@ -108,7 +155,7 @@ int licensing_server_configure_runtime(void) {
     }
     return emit_output(
         "status",
-        nullptr,
+        "$LCF",
         status_bytes,
         "emit-failed",
         "Failed to emit configuration status.");
@@ -145,14 +192,26 @@ int licensing_server_publish_module(void) {
         return 1;
     }
 
+    std::vector<uint8_t> content_key_bytes;
+    if (extract_kmf_bytes(
+            content_key_frame,
+            keyMaterialRole::PublicationContent,
+            keyMaterialAlgorithm::Aes256Gcm,
+            keyMaterialEncoding::RawBytes,
+            &content_key_bytes,
+            "invalid-content-key-input",
+            "Input port \"content_key\" must carry a $KMF publication content key.") != 0) {
+        return 1;
+    }
+
     std::vector<uint8_t> response;
     const int32_t status = key_server_publish_module(
         descriptor_frame->payload,
         descriptor_frame->payload_length,
         protected_content_frame->payload,
         protected_content_frame->payload_length,
-        content_key_frame->payload,
-        content_key_frame->payload_length,
+        content_key_bytes.data(),
+        static_cast<uint32_t>(content_key_bytes.size()),
         response);
     if (status != 0) {
         plugin_set_error("publish-failed", "Failed to publish protected module.");
@@ -209,12 +268,24 @@ int licensing_client_request_grant(void) {
         return 1;
     }
 
-    const plugin_input_frame_t* signing_seed_frame = nullptr;
+    const plugin_input_frame_t* signing_key_frame = nullptr;
     if (require_input(
-            "requester_signing_seed",
-            &signing_seed_frame,
-            "missing-requester-signing-seed-input",
-            "Input port \"requester_signing_seed\" is required.") != 0) {
+            "requester_signing_key",
+            &signing_key_frame,
+            "missing-requester-signing-key-input",
+            "Input port \"requester_signing_key\" is required.") != 0) {
+        return 1;
+    }
+
+    std::vector<uint8_t> requester_signing_key_bytes;
+    if (extract_kmf_bytes(
+            signing_key_frame,
+            keyMaterialRole::RequesterSigning,
+            keyMaterialAlgorithm::Ed25519Seed,
+            keyMaterialEncoding::Seed32,
+            &requester_signing_key_bytes,
+            "invalid-requester-signing-key-input",
+            "Input port \"requester_signing_key\" must carry a $KMF requester signing seed.") != 0) {
         return 1;
     }
 
@@ -222,8 +293,8 @@ int licensing_client_request_grant(void) {
     const int32_t status = license_client_request_grant(
         request_frame->payload,
         request_frame->payload_length,
-        signing_seed_frame->payload,
-        signing_seed_frame->payload_length,
+        requester_signing_key_bytes.data(),
+        static_cast<uint32_t>(requester_signing_key_bytes.size()),
         response);
     if (status != 0) {
         plugin_set_error("grant-request-failed", "Failed to request licensing grant.");
@@ -285,14 +356,38 @@ int licensing_decrypt_and_verify(void) {
         return 1;
     }
 
+    std::vector<uint8_t> dek_bytes;
+    if (extract_kmf_bytes(
+            dek,
+            keyMaterialRole::DecryptKey,
+            keyMaterialAlgorithm::Aes256Gcm,
+            keyMaterialEncoding::RawBytes,
+            &dek_bytes,
+            "invalid-dek-input",
+            "Input port \"dek\" must carry a $KMF decrypt key.") != 0) {
+        return 1;
+    }
+
+    std::vector<uint8_t> signer_key_bytes;
+    if (extract_kmf_bytes(
+            signer_key,
+            keyMaterialRole::VerificationKey,
+            keyMaterialAlgorithm::Ed25519Public,
+            keyMaterialEncoding::PublicKey32,
+            &signer_key_bytes,
+            "invalid-signer-key-input",
+            "Input port \"signer_key\" must carry a $KMF verification key.") != 0) {
+        return 1;
+    }
+
     std::vector<uint8_t> plaintext;
     const int32_t status = license_client_decrypt_and_verify(
         protected_content->payload,
         protected_content->payload_length,
-        dek->payload,
-        dek->payload_length,
-        signer_key->payload,
-        signer_key->payload_length,
+        dek_bytes.data(),
+        static_cast<uint32_t>(dek_bytes.size()),
+        signer_key_bytes.data(),
+        static_cast<uint32_t>(signer_key_bytes.size()),
         plaintext);
     if (status != 0) {
         plugin_set_error("decrypt-verify-failed", "Failed to decrypt and verify content.");

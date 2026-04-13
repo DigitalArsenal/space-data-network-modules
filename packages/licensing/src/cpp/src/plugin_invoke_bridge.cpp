@@ -105,7 +105,7 @@ static const char *kMethod_server_handle_message_output_ports[] = {
 
 static const PortRequirement kMethod_client_request_grant_input_ports[] = {
   { "request", true },
-  { "requester_signing_seed", true },
+  { "requester_signing_key", true },
 };
 static const char *kMethod_client_request_grant_output_ports[] = {
   "response",
