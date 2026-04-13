@@ -1,0 +1,10 @@
+node_modules/
+.build/
+.emcache/
+build/
+build-native/
+src/cpp/build-isomorphic/
+src/cpp/build-wasm/
+*.o
+*.a
+deps/emsdk/

@@ -1,0 +1,140 @@
+{
+  "pluginId": "licensing",
+  "name": "Licensing",
+  "version": "0.1.0",
+  "description": "Unified SDN licensing module with server and client role entrypoints for protected module delivery.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "clock",
+    "random",
+    "protocol_handle",
+    "protocol_dial",
+    "logging"
+  ],
+  "protocols": [
+    {
+      "protocolId": "licensing-public-key",
+      "methodId": "server_get_public_key",
+      "inputPortId": "request",
+      "outputPortId": "response",
+      "description": "Serve the active licensing public key.",
+      "wireId": "/orbpro/public-key/1.0.0",
+      "transportKind": "libp2p",
+      "role": "handle",
+      "autoInstall": true,
+      "advertise": false,
+      "discoveryKey": "licensing-public-key"
+    },
+    {
+      "protocolId": "licensing-challenge",
+      "methodId": "server_issue_challenge",
+      "inputPortId": "request",
+      "outputPortId": "response",
+      "description": "Issue a licensing challenge to a requester.",
+      "wireId": "/orbpro/challenge/1.0.0",
+      "transportKind": "libp2p",
+      "role": "handle",
+      "autoInstall": true,
+      "advertise": false,
+      "discoveryKey": "licensing-challenge"
+    },
+    {
+      "protocolId": "licensing-key-broker",
+      "methodId": "server_complete_grant",
+      "inputPortId": "request",
+      "outputPortId": "response",
+      "description": "Complete the licensing grant and return the wrapped content key.",
+      "wireId": "/orbpro/key-broker/1.0.0",
+      "transportKind": "libp2p",
+      "role": "handle",
+      "autoInstall": true,
+      "advertise": false,
+      "discoveryKey": "licensing-key-broker"
+    }
+  ],
+  "timers": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "server_configure_runtime",
+      "displayName": "Server Configure Runtime",
+      "description": "Initialize the licensing server runtime.",
+      "inputPorts": [{"portId": "config", "acceptedTypeSets": [{"setId": "config", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "outputPorts": [{"portId": "status", "acceptedTypeSets": [{"setId": "status", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "server_publish_module",
+      "displayName": "Server Publish Module",
+      "description": "Publish an encrypted module artifact.",
+      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "server_get_public_key",
+      "displayName": "Server Get Public Key",
+      "description": "Return the active licensing server public key.",
+      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "server_issue_challenge",
+      "displayName": "Server Issue Challenge",
+      "description": "Issue a licensing challenge to the requester.",
+      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "server_complete_grant",
+      "displayName": "Server Complete Grant",
+      "description": "Validate requester proof and emit a grant response.",
+      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "client_request_grant",
+      "displayName": "Client Request Grant",
+      "description": "Run the client-side grant request flow.",
+      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "request", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}],
+      "outputPorts": [{"portId": "response", "acceptedTypeSets": [{"setId": "response", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "client_fetch_and_decrypt",
+      "displayName": "Client Fetch And Decrypt",
+      "description": "Fetch a protected artifact and decrypt it.",
+      "inputPorts": [
+        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "dek", "acceptedTypeSets": [{"setId": "dek", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+      ],
+      "outputPorts": [{"portId": "plaintext", "acceptedTypeSets": [{"setId": "plaintext", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "decrypt_and_verify",
+      "displayName": "Decrypt And Verify",
+      "description": "Decrypt AES-256-GCM content then verify the inner signature.",
+      "inputPorts": [
+        {"portId": "protected_content", "acceptedTypeSets": [{"setId": "content", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "dek", "acceptedTypeSets": [{"setId": "dek", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true},
+        {"portId": "signer_key", "acceptedTypeSets": [{"setId": "signer", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 1, "maxStreams": 1, "required": true}
+      ],
+      "outputPorts": [{"portId": "plaintext", "acceptedTypeSets": [{"setId": "plaintext", "allowedTypes": [{"acceptsAnyFlatbuffer": true}]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
