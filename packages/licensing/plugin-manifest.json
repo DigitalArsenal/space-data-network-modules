@@ -55,7 +55,7 @@
   "timers": [],
   "externalInterfaces": [],
   "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["wasi", "wasmedge"],
+  "runtimeTargets": ["browser", "wasmedge"],
   "methods": [
     {
       "methodId": "server_configure_runtime",
