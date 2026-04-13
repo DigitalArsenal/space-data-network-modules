@@ -2,12 +2,17 @@
 
 #include "KeyBrokerRequest_generated.h"
 #include "KeyBrokerResponse_generated.h"
+#include "LCH_generated.h"
+#include "LGR_generated.h"
+#include "LPF_generated.h"
+#include "LWK_generated.h"
 #include "PLG_generated.h"
 #include "PublicKeyResponse_generated.h"
 
 #include <flatbuffers/flatbuffers.h>
 
 #include <cryptopp/aes.h>
+#include <cryptopp/donna.h>
 #include <cryptopp/eccrypto.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/hkdf.h>
@@ -16,12 +21,14 @@
 #include <cryptopp/oids.h>
 #include <cryptopp/secblock.h>
 #include <cryptopp/sha.h>
+#include <cryptopp/xed25519.h>
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -63,6 +70,8 @@ constexpr size_t kRequestHeaderBytes =
 constexpr size_t kResponseHeaderBytes = 38;
 constexpr int64_t kDefaultMaxSkewMs = 5LL * 60LL * 1000LL;
 constexpr int64_t kDefaultChallengeTtlMs = 60LL * 1000LL;
+constexpr const char* kWrappedKeyInfo =
+    "space-data-network/module-delivery/wrap/v1";
 
 enum ServerStatus : int32_t {
   kServerOk = 0,
@@ -92,6 +101,24 @@ struct ModulePublication {
   std::array<uint8_t, kDekBytes> content_key{};
 };
 
+struct PendingGrantMessage {
+  std::string request_id{};
+  std::string publication_key{};
+  std::string module_id{};
+  std::string module_version{};
+  std::string requester_peer_id{};
+  std::string requester_xpub{};
+  std::string requested_domain{};
+  uint64_t requested_timeout_ms = 0;
+  uint64_t requested_at_ms = 0;
+  std::string provider_peer_id{};
+  std::array<uint8_t, 32> requester_signing_pubkey{};
+  std::array<uint8_t, 32> requester_ephemeral_pubkey{};
+  std::array<uint8_t, 32> challenge_nonce{};
+  uint64_t expires_at_ms = 0;
+  std::vector<uint8_t> challenge_bytes{};
+};
+
 bool g_initialized = false;
 CryptoPP::SecByteBlock g_server_private;
 CryptoPP::SecByteBlock g_server_public;
@@ -100,12 +127,19 @@ int64_t g_expires_at_ms = 0;
 int64_t g_max_skew_ms = kDefaultMaxSkewMs;
 int64_t g_challenge_ttl_ms = kDefaultChallengeTtlMs;
 uint32_t g_active_key_version = 1;
+std::string g_provider_peer_id = "provider.orbpro.test";
+std::array<uint8_t, 32> g_provider_signing_seed{};
+std::array<uint8_t, 32> g_provider_signing_public{};
+std::vector<uint8_t> g_capability_token{};
 
 std::mutex g_challenge_mutex;
 std::unordered_map<std::string, PendingChallenge> g_pending_challenges;
 
 std::mutex g_publication_mutex;
 std::unordered_map<std::string, ModulePublication> g_publications;
+
+std::mutex g_pending_grant_mutex;
+std::unordered_map<std::string, PendingGrantMessage> g_pending_grants;
 
 void secure_zero(void* ptr, size_t len) {
   if (!ptr || len == 0) {
@@ -885,6 +919,257 @@ void build_challenge_error_json(int32_t error, std::vector<uint8_t>* response_ou
   response_out->assign(json.begin(), json.end());
 }
 
+class HostRng : public CryptoPP::RandomNumberGenerator {
+ public:
+  void GenerateBlock(CryptoPP::byte* output, size_t size) override {
+    if (!fill_random_bytes(output, size)) {
+      throw std::runtime_error("host random generation failed");
+    }
+  }
+
+  void IncorporateEntropy(const CryptoPP::byte*, size_t) override {}
+};
+
+void clear_pending_grants() {
+  std::lock_guard<std::mutex> lock(g_pending_grant_mutex);
+  for (auto& entry : g_pending_grants) {
+    secure_zero(
+        entry.second.requester_signing_pubkey.data(),
+        entry.second.requester_signing_pubkey.size());
+    secure_zero(
+        entry.second.requester_ephemeral_pubkey.data(),
+        entry.second.requester_ephemeral_pubkey.size());
+    secure_zero(
+        entry.second.challenge_nonce.data(),
+        entry.second.challenge_nonce.size());
+  }
+  g_pending_grants.clear();
+}
+
+bool ed25519_public_key_from_seed(
+    const uint8_t* seed,
+    size_t seed_len,
+    std::array<uint8_t, 32>* public_key_out) {
+  if (!seed || !public_key_out || seed_len != 32) {
+    return false;
+  }
+  CryptoPP::Donna::ed25519_publickey(public_key_out->data(), seed);
+  return true;
+}
+
+bool ed25519_sign_detached(
+    const uint8_t* message,
+    size_t message_len,
+    const uint8_t* seed,
+    size_t seed_len,
+    const uint8_t* public_key,
+    size_t public_key_len,
+    std::array<uint8_t, 64>* signature_out) {
+  if (!message || !seed || !public_key || !signature_out ||
+      seed_len != 32 || public_key_len != 32) {
+    return false;
+  }
+  CryptoPP::Donna::ed25519_sign(
+      message,
+      message_len,
+      seed,
+      public_key,
+      signature_out->data());
+  return true;
+}
+
+std::vector<uint8_t> build_lch_bytes(
+    licensingChallengeMessageType message_type,
+    licensingChallengeRole role,
+    std::string_view request_id,
+    std::string_view module_id,
+    std::string_view module_version,
+    std::string_view requester_peer_id,
+    std::string_view requester_xpub,
+    const uint8_t* requester_signing_pubkey,
+    size_t requester_signing_pubkey_len,
+    const uint8_t* requester_ephemeral_pubkey,
+    size_t requester_ephemeral_pubkey_len,
+    std::string_view requested_domain,
+    uint64_t requested_timeout_ms,
+    uint64_t requested_at_ms,
+    const uint8_t* challenge_nonce,
+    size_t challenge_nonce_len,
+    uint64_t expires_at_ms,
+    std::string_view provider_peer_id,
+    std::string_view error_code,
+    std::string_view error_message) {
+  flatbuffers::FlatBufferBuilder builder(512);
+  const auto request_id_offset = builder.CreateString(request_id.data(), request_id.size());
+  const auto module_id_offset = builder.CreateString(module_id.data(), module_id.size());
+  const auto module_version_offset =
+      module_version.empty() ? 0 : builder.CreateString(module_version.data(), module_version.size());
+  const auto requester_peer_id_offset =
+      requester_peer_id.empty() ? 0 : builder.CreateString(requester_peer_id.data(), requester_peer_id.size());
+  const auto requester_xpub_offset =
+      requester_xpub.empty() ? 0 : builder.CreateString(requester_xpub.data(), requester_xpub.size());
+  const auto requester_signing_pubkey_offset =
+      requester_signing_pubkey_len == 0 ? 0 : builder.CreateVector(requester_signing_pubkey, requester_signing_pubkey_len);
+  const auto requester_ephemeral_pubkey_offset =
+      requester_ephemeral_pubkey_len == 0 ? 0 : builder.CreateVector(requester_ephemeral_pubkey, requester_ephemeral_pubkey_len);
+  const auto requested_domain_offset =
+      requested_domain.empty() ? 0 : builder.CreateString(requested_domain.data(), requested_domain.size());
+  const auto challenge_nonce_offset =
+      challenge_nonce_len == 0 ? 0 : builder.CreateVector(challenge_nonce, challenge_nonce_len);
+  const auto provider_peer_id_offset =
+      provider_peer_id.empty() ? 0 : builder.CreateString(provider_peer_id.data(), provider_peer_id.size());
+  const auto error_code_offset =
+      error_code.empty() ? 0 : builder.CreateString(error_code.data(), error_code.size());
+  const auto error_message_offset =
+      error_message.empty() ? 0 : builder.CreateString(error_message.data(), error_message.size());
+  const auto root = CreateLCH(
+      builder,
+      message_type,
+      role,
+      request_id_offset,
+      module_id_offset,
+      module_version_offset,
+      requester_peer_id_offset,
+      requester_xpub_offset,
+      requester_signing_pubkey_offset,
+      requester_ephemeral_pubkey_offset,
+      requested_domain_offset,
+      requested_timeout_ms,
+      requested_at_ms,
+      challenge_nonce_offset,
+      expires_at_ms,
+      provider_peer_id_offset,
+      error_code_offset,
+      error_message_offset);
+  FinishLCHBuffer(builder, root);
+  return std::vector<uint8_t>(
+      builder.GetBufferPointer(),
+      builder.GetBufferPointer() + builder.GetSize());
+}
+
+bool parse_runtime_config_sds(
+    std::string_view json,
+    std::array<uint8_t, 32>* provider_signing_seed_out,
+    std::array<uint8_t, 32>* provider_signing_public_out,
+    std::string* provider_peer_id_out,
+    std::vector<uint8_t>* capability_token_out) {
+  if (!provider_signing_seed_out || !provider_signing_public_out ||
+      !provider_peer_id_out || !capability_token_out) {
+    return false;
+  }
+
+  std::string signing_seed_hex;
+  if (!extract_json_string_field(json, "providerSigningSeedHex", &signing_seed_hex) ||
+      !decode_hex_bytes(
+          signing_seed_hex,
+          provider_signing_seed_out->data(),
+          provider_signing_seed_out->size())) {
+    return false;
+  }
+  if (!ed25519_public_key_from_seed(
+          provider_signing_seed_out->data(),
+          provider_signing_seed_out->size(),
+          provider_signing_public_out)) {
+    return false;
+  }
+
+  std::string provider_peer_id;
+  if (!extract_json_string_field(json, "providerPeerId", &provider_peer_id) ||
+      provider_peer_id.empty()) {
+    return false;
+  }
+  *provider_peer_id_out = provider_peer_id;
+
+  std::string capability_token_base64;
+  if (extract_json_string_field(json, "capabilityTokenBase64", &capability_token_base64) &&
+      !capability_token_base64.empty()) {
+    if (!decode_base64_bytes(capability_token_base64, capability_token_out)) {
+      return false;
+    }
+  } else {
+    capability_token_out->clear();
+  }
+  return true;
+}
+
+struct WrappedKeyEnvelope {
+  std::array<uint8_t, 32> provider_ephemeral_public_key{};
+  std::array<uint8_t, 32> hkdf_salt{};
+  std::array<uint8_t, kGcmIvBytes> iv{};
+  std::array<uint8_t, kDekBytes> ciphertext{};
+  std::array<uint8_t, kGcmTagBytes> tag{};
+};
+
+bool wrap_content_key_for_requester(
+    const uint8_t* requester_ephemeral_pubkey,
+    size_t requester_ephemeral_pubkey_len,
+    const uint8_t* content_key,
+    size_t content_key_len,
+    WrappedKeyEnvelope* envelope_out) {
+  if (!requester_ephemeral_pubkey || requester_ephemeral_pubkey_len != 32 ||
+      !content_key || content_key_len != 32 || !envelope_out) {
+    return false;
+  }
+
+  try {
+    HostRng rng;
+    CryptoPP::x25519 x25519_scheme;
+    std::array<uint8_t, 32> provider_ephemeral_private{};
+    x25519_scheme.GeneratePrivateKey(rng, provider_ephemeral_private.data());
+    x25519_scheme.GeneratePublicKey(
+        rng,
+        provider_ephemeral_private.data(),
+        envelope_out->provider_ephemeral_public_key.data());
+
+    std::array<uint8_t, 32> shared_secret{};
+    if (!x25519_scheme.Agree(
+            shared_secret.data(),
+            provider_ephemeral_private.data(),
+            requester_ephemeral_pubkey)) {
+      secure_zero(provider_ephemeral_private.data(), provider_ephemeral_private.size());
+      secure_zero(shared_secret.data(), shared_secret.size());
+      return false;
+    }
+
+    rng.GenerateBlock(envelope_out->hkdf_salt.data(), envelope_out->hkdf_salt.size());
+    uint8_t wrap_key[kAesKeyBytes] = {0};
+    derive_hkdf_key(
+        shared_secret.data(),
+        shared_secret.size(),
+        envelope_out->hkdf_salt.data(),
+        envelope_out->hkdf_salt.size(),
+        kWrappedKeyInfo,
+        wrap_key);
+    rng.GenerateBlock(envelope_out->iv.data(), envelope_out->iv.size());
+
+    std::array<uint8_t, kDekBytes + kGcmTagBytes> ciphertext_and_tag{};
+    CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
+    enc.SetKeyWithIV(wrap_key, kAesKeyBytes, envelope_out->iv.data(), envelope_out->iv.size());
+    CryptoPP::ArraySink sink(ciphertext_and_tag.data(), ciphertext_and_tag.size());
+    CryptoPP::AuthenticatedEncryptionFilter filter(enc, &sink, false, kGcmTagBytes);
+    filter.Put(content_key, content_key_len);
+    filter.MessageEnd();
+
+    std::memcpy(
+        envelope_out->ciphertext.data(),
+        ciphertext_and_tag.data(),
+        envelope_out->ciphertext.size());
+    std::memcpy(
+        envelope_out->tag.data(),
+        ciphertext_and_tag.data() + envelope_out->ciphertext.size(),
+        envelope_out->tag.size());
+    secure_zero(provider_ephemeral_private.data(), provider_ephemeral_private.size());
+    secure_zero(shared_secret.data(), shared_secret.size());
+    secure_zero(wrap_key, sizeof(wrap_key));
+    secure_zero(ciphertext_and_tag.data(), ciphertext_and_tag.size());
+    return true;
+  } catch (...) {
+    secure_zero(envelope_out->ciphertext.data(), envelope_out->ciphertext.size());
+    secure_zero(envelope_out->tag.data(), envelope_out->tag.size());
+    return false;
+  }
+}
+
 bool parse_runtime_config(
     std::string_view json,
     CryptoPP::SecByteBlock* private_key_out,
@@ -1149,6 +1434,10 @@ int32_t key_server_configure_runtime(
   int64_t next_max_skew_ms = kDefaultMaxSkewMs;
   int64_t next_challenge_ttl_ms = kDefaultChallengeTtlMs;
   uint32_t next_key_version = 1;
+  std::array<uint8_t, 32> next_provider_signing_seed{};
+  std::array<uint8_t, 32> next_provider_signing_public{};
+  std::string next_provider_peer_id{};
+  std::vector<uint8_t> next_capability_token{};
 
   if (!parse_runtime_config(
           config_text,
@@ -1162,8 +1451,24 @@ int32_t key_server_configure_runtime(
     secure_zero(next_dek.data(), next_dek.size());
     return kServerMalformed;
   }
+  if (!parse_runtime_config_sds(
+          config_text,
+          &next_provider_signing_seed,
+          &next_provider_signing_public,
+          &next_provider_peer_id,
+          &next_capability_token)) {
+    secure_zero(next_dek.data(), next_dek.size());
+    secure_zero(
+        next_provider_signing_seed.data(),
+        next_provider_signing_seed.size());
+    secure_zero(
+        next_provider_signing_public.data(),
+        next_provider_signing_public.size());
+    return kServerMalformed;
+  }
 
   clear_pending_challenges();
+  clear_pending_grants();
   clear_publications();
 
   secure_zero(g_dek.data(), g_dek.size());
@@ -1174,13 +1479,21 @@ int32_t key_server_configure_runtime(
   g_max_skew_ms = next_max_skew_ms;
   g_challenge_ttl_ms = next_challenge_ttl_ms;
   g_active_key_version = next_key_version;
+  g_provider_peer_id = next_provider_peer_id;
+  secure_zero(g_provider_signing_seed.data(), g_provider_signing_seed.size());
+  secure_zero(g_provider_signing_public.data(), g_provider_signing_public.size());
+  g_provider_signing_seed = next_provider_signing_seed;
+  g_provider_signing_public = next_provider_signing_public;
+  g_capability_token = std::move(next_capability_token);
   g_initialized = true;
 
   const std::string json =
       "{\"ok\":true,\"keyVersion\":" + std::to_string(g_active_key_version) +
       ",\"expiresAtMs\":" + std::to_string(g_expires_at_ms) +
       ",\"publicKeyHex\":\"" +
-      encode_hex_bytes(g_server_public.BytePtr(), g_server_public.size()) + "\"}";
+      encode_hex_bytes(
+          g_provider_signing_public.data(),
+          g_provider_signing_public.size()) + "\"}";
   status_out.assign(json.begin(), json.end());
   return 0;
 }
@@ -1399,5 +1712,445 @@ int32_t key_server_check_key_rotation(std::vector<uint8_t>& status_out) {
       ",\"expiresAtMs\":" + std::to_string(g_expires_at_ms) +
       ",\"needsRotation\":" + (needs_rotation ? "true" : "false") + "}";
   status_out.assign(json.begin(), json.end());
+  return 0;
+}
+
+int32_t key_server_handle_message(
+    const uint8_t* request,
+    uint32_t request_len,
+    std::vector<uint8_t>& response_out) {
+  response_out.clear();
+  if (!g_initialized || !request || request_len == 0) {
+    return kServerMalformed;
+  }
+
+  flatbuffers::Verifier verifier(request, request_len);
+  if (VerifyLCHBuffer(verifier)) {
+    const auto* challenge_request = GetLCH(request);
+    if (!challenge_request ||
+        challenge_request->MESSAGE_TYPE() != licensingChallengeMessageType::Request ||
+        challenge_request->ROLE() != licensingChallengeRole::Requester ||
+        !challenge_request->REQUEST_ID() ||
+        !challenge_request->MODULE_ID() ||
+        !challenge_request->REQUESTED_DOMAIN() ||
+        !challenge_request->PROVIDER_PEER_ID() ||
+        !challenge_request->REQUESTER_SIGNING_PUBKEY() ||
+        challenge_request->REQUESTER_SIGNING_PUBKEY()->size() != 32 ||
+        !challenge_request->REQUESTER_EPHEMERAL_PUBKEY() ||
+        challenge_request->REQUESTER_EPHEMERAL_PUBKEY()->size() != 32) {
+      response_out = build_lch_bytes(
+          licensingChallengeMessageType::Error,
+          licensingChallengeRole::Provider,
+          challenge_request && challenge_request->REQUEST_ID()
+              ? challenge_request->REQUEST_ID()->string_view()
+              : std::string_view(),
+          challenge_request && challenge_request->MODULE_ID()
+              ? challenge_request->MODULE_ID()->string_view()
+              : std::string_view(),
+          challenge_request && challenge_request->MODULE_VERSION()
+              ? challenge_request->MODULE_VERSION()->string_view()
+              : std::string_view(),
+          challenge_request && challenge_request->REQUESTER_PEER_ID()
+              ? challenge_request->REQUESTER_PEER_ID()->string_view()
+              : std::string_view(),
+          challenge_request && challenge_request->REQUESTER_XPUB()
+              ? challenge_request->REQUESTER_XPUB()->string_view()
+              : std::string_view(),
+          nullptr,
+          0,
+          nullptr,
+          0,
+          challenge_request && challenge_request->REQUESTED_DOMAIN()
+              ? challenge_request->REQUESTED_DOMAIN()->string_view()
+              : std::string_view(),
+          challenge_request ? challenge_request->REQUESTED_TIMEOUT_MS() : 0,
+          challenge_request ? challenge_request->REQUESTED_AT() : 0,
+          nullptr,
+          0,
+          0,
+          g_provider_peer_id,
+          "invalid_request",
+          "challenge request missing required fields");
+      return 0;
+    }
+
+    const std::string request_id = challenge_request->REQUEST_ID()->str();
+    const std::string module_id = challenge_request->MODULE_ID()->str();
+    const std::string module_version =
+        challenge_request->MODULE_VERSION()
+            ? challenge_request->MODULE_VERSION()->str()
+            : std::string();
+    const std::string requester_peer_id =
+        challenge_request->REQUESTER_PEER_ID()
+            ? challenge_request->REQUESTER_PEER_ID()->str()
+            : std::string();
+    const std::string requester_xpub =
+        challenge_request->REQUESTER_XPUB()
+            ? challenge_request->REQUESTER_XPUB()->str()
+            : std::string();
+    const std::string requested_domain =
+        challenge_request->REQUESTED_DOMAIN()->str();
+    const uint64_t requested_timeout_ms =
+        challenge_request->REQUESTED_TIMEOUT_MS();
+    const uint64_t requested_at_ms =
+        challenge_request->REQUESTED_AT() != 0
+            ? challenge_request->REQUESTED_AT()
+            : static_cast<uint64_t>(now_ms());
+    const std::string provider_peer_id =
+        challenge_request->PROVIDER_PEER_ID()->str();
+
+    if (provider_peer_id != g_provider_peer_id) {
+      response_out = build_lch_bytes(
+          licensingChallengeMessageType::Error,
+          licensingChallengeRole::Provider,
+          request_id,
+          module_id,
+          module_version,
+          requester_peer_id,
+          requester_xpub,
+          nullptr,
+          0,
+          nullptr,
+          0,
+          requested_domain,
+          requested_timeout_ms,
+          requested_at_ms,
+          nullptr,
+          0,
+          0,
+          g_provider_peer_id,
+          "provider_mismatch",
+          "requested provider peer id does not match this provider");
+      return 0;
+    }
+
+    const std::string publication_key = make_publication_key(module_id, module_version);
+    ModulePublication publication{};
+    if (!load_publication(publication_key, &publication)) {
+      response_out = build_lch_bytes(
+          licensingChallengeMessageType::Error,
+          licensingChallengeRole::Provider,
+          request_id,
+          module_id,
+          module_version,
+          requester_peer_id,
+          requester_xpub,
+          nullptr,
+          0,
+          nullptr,
+          0,
+          requested_domain,
+          requested_timeout_ms,
+          requested_at_ms,
+          nullptr,
+          0,
+          0,
+          g_provider_peer_id,
+          "module_not_found",
+          "requested module publication was not found");
+      return 0;
+    }
+
+    bool domain_allowed =
+        publication.descriptor.ALLOWED_DOMAINS.empty();
+    for (const auto& allowed_domain : publication.descriptor.ALLOWED_DOMAINS) {
+      if (allowed_domain == requested_domain) {
+        domain_allowed = true;
+        break;
+      }
+    }
+    if (!domain_allowed) {
+      secure_zero_publication(&publication);
+      response_out = build_lch_bytes(
+          licensingChallengeMessageType::Error,
+          licensingChallengeRole::Provider,
+          request_id,
+          module_id,
+          module_version,
+          requester_peer_id,
+          requester_xpub,
+          nullptr,
+          0,
+          nullptr,
+          0,
+          requested_domain,
+          requested_timeout_ms,
+          requested_at_ms,
+          nullptr,
+          0,
+          0,
+          g_provider_peer_id,
+          "domain_not_allowed",
+          "requester domain is not allowed for this module");
+      return 0;
+    }
+    if (publication.descriptor.MAX_GRANT_TIMEOUT_MS != 0 &&
+        requested_timeout_ms > publication.descriptor.MAX_GRANT_TIMEOUT_MS) {
+      secure_zero_publication(&publication);
+      response_out = build_lch_bytes(
+          licensingChallengeMessageType::Error,
+          licensingChallengeRole::Provider,
+          request_id,
+          module_id,
+          module_version,
+          requester_peer_id,
+          requester_xpub,
+          nullptr,
+          0,
+          nullptr,
+          0,
+          requested_domain,
+          requested_timeout_ms,
+          requested_at_ms,
+          nullptr,
+          0,
+          0,
+          g_provider_peer_id,
+          "timeout_exceeds_policy",
+          "requested timeout exceeds the publication policy");
+      return 0;
+    }
+
+    const int64_t now = now_ms();
+    if (requested_at_ms + static_cast<uint64_t>(g_max_skew_ms) < static_cast<uint64_t>(now) ||
+        requested_at_ms > static_cast<uint64_t>(now + g_max_skew_ms)) {
+      secure_zero_publication(&publication);
+      response_out = build_lch_bytes(
+          licensingChallengeMessageType::Error,
+          licensingChallengeRole::Provider,
+          request_id,
+          module_id,
+          module_version,
+          requester_peer_id,
+          requester_xpub,
+          nullptr,
+          0,
+          nullptr,
+          0,
+          requested_domain,
+          requested_timeout_ms,
+          requested_at_ms,
+          nullptr,
+          0,
+          0,
+          g_provider_peer_id,
+          "invalid_timestamp",
+          "requested timestamp is outside the allowed skew");
+      return 0;
+    }
+
+    std::array<uint8_t, 32> challenge_nonce{};
+    if (!fill_random_bytes(challenge_nonce.data(), challenge_nonce.size())) {
+      secure_zero_publication(&publication);
+      return kServerCryptoError;
+    }
+    const uint64_t expires_at_ms =
+        static_cast<uint64_t>(now + g_challenge_ttl_ms);
+    response_out = build_lch_bytes(
+        licensingChallengeMessageType::Response,
+        licensingChallengeRole::Provider,
+        request_id,
+        module_id,
+        module_version,
+        requester_peer_id,
+        requester_xpub,
+        challenge_request->REQUESTER_SIGNING_PUBKEY()->Data(),
+        challenge_request->REQUESTER_SIGNING_PUBKEY()->size(),
+        challenge_request->REQUESTER_EPHEMERAL_PUBKEY()->Data(),
+        challenge_request->REQUESTER_EPHEMERAL_PUBKEY()->size(),
+        requested_domain,
+        requested_timeout_ms,
+        requested_at_ms,
+        challenge_nonce.data(),
+        challenge_nonce.size(),
+        expires_at_ms,
+        g_provider_peer_id,
+        {},
+        {});
+
+    PendingGrantMessage pending{};
+    pending.request_id = request_id;
+    pending.publication_key = publication_key;
+    pending.module_id = module_id;
+    pending.module_version = module_version;
+    pending.requester_peer_id = requester_peer_id;
+    pending.requester_xpub = requester_xpub;
+    pending.requested_domain = requested_domain;
+    pending.requested_timeout_ms = requested_timeout_ms;
+    pending.requested_at_ms = requested_at_ms;
+    pending.provider_peer_id = g_provider_peer_id;
+    std::memcpy(
+        pending.requester_signing_pubkey.data(),
+        challenge_request->REQUESTER_SIGNING_PUBKEY()->Data(),
+        pending.requester_signing_pubkey.size());
+    std::memcpy(
+        pending.requester_ephemeral_pubkey.data(),
+        challenge_request->REQUESTER_EPHEMERAL_PUBKEY()->Data(),
+        pending.requester_ephemeral_pubkey.size());
+    std::memcpy(
+        pending.challenge_nonce.data(),
+        challenge_nonce.data(),
+        pending.challenge_nonce.size());
+    pending.expires_at_ms = expires_at_ms;
+    pending.challenge_bytes = response_out;
+
+    {
+      std::lock_guard<std::mutex> lock(g_pending_grant_mutex);
+      g_pending_grants[request_id] = std::move(pending);
+    }
+    secure_zero_publication(&publication);
+    return 0;
+  }
+
+  flatbuffers::Verifier proof_verifier(request, request_len);
+  if (!VerifyLPFBuffer(proof_verifier)) {
+    return kServerMalformed;
+  }
+
+  const auto* proof = GetLPF(request);
+  if (!proof || proof->MESSAGE_TYPE() != licensingProofMessageType::ProofRequest ||
+      !proof->REQUEST_ID() || !proof->MODULE_ID() || !proof->SIGNATURE() ||
+      !proof->SIGNING_PUBKEY() || !proof->CHALLENGE_NONCE() ||
+      !proof->REQUESTER_EPHEMERAL_PUBKEY()) {
+    return kServerMalformed;
+  }
+
+  PendingGrantMessage pending{};
+  {
+    std::lock_guard<std::mutex> lock(g_pending_grant_mutex);
+    const auto it = g_pending_grants.find(proof->REQUEST_ID()->str());
+    if (it == g_pending_grants.end()) {
+      return kServerChallengeInvalid;
+    }
+    pending = it->second;
+    g_pending_grants.erase(it);
+  }
+
+  if (proof->SIGNING_PUBKEY()->size() != 32 ||
+      proof->REQUESTER_EPHEMERAL_PUBKEY()->size() != 32 ||
+      proof->CHALLENGE_NONCE()->size() != pending.challenge_nonce.size() ||
+      proof->SIGNATURE()->size() != 64) {
+    return kServerMalformed;
+  }
+  if (pending.expires_at_ms <= static_cast<uint64_t>(now_ms())) {
+    return kServerChallengeExpired;
+  }
+  if (proof->MODULE_ID()->str() != pending.module_id ||
+      (proof->MODULE_VERSION() ? proof->MODULE_VERSION()->str() : std::string()) != pending.module_version ||
+      (proof->REQUESTER_PEER_ID() ? proof->REQUESTER_PEER_ID()->str() : std::string()) != pending.requester_peer_id ||
+      (proof->REQUESTER_XPUB() ? proof->REQUESTER_XPUB()->str() : std::string()) != pending.requester_xpub ||
+      (proof->REQUESTED_DOMAIN() ? proof->REQUESTED_DOMAIN()->str() : std::string()) != pending.requested_domain ||
+      proof->REQUESTED_TIMEOUT_MS() != pending.requested_timeout_ms ||
+      (proof->PROVIDER_PEER_ID() ? proof->PROVIDER_PEER_ID()->str() : std::string()) != pending.provider_peer_id ||
+      std::memcmp(
+          proof->SIGNING_PUBKEY()->Data(),
+          pending.requester_signing_pubkey.data(),
+          pending.requester_signing_pubkey.size()) != 0 ||
+      std::memcmp(
+          proof->REQUESTER_EPHEMERAL_PUBKEY()->Data(),
+          pending.requester_ephemeral_pubkey.data(),
+          pending.requester_ephemeral_pubkey.size()) != 0 ||
+      std::memcmp(
+          proof->CHALLENGE_NONCE()->Data(),
+          pending.challenge_nonce.data(),
+          pending.challenge_nonce.size()) != 0) {
+    return kServerChallengeInvalid;
+  }
+  if (CryptoPP::Donna::ed25519_sign_open(
+          pending.challenge_bytes.data(),
+          pending.challenge_bytes.size(),
+          pending.requester_signing_pubkey.data(),
+          proof->SIGNATURE()->Data()) != 0) {
+    return kServerChallengeInvalid;
+  }
+
+  ModulePublication publication{};
+  if (!load_publication(pending.publication_key, &publication)) {
+    return kServerVersionNotFound;
+  }
+
+  WrappedKeyEnvelope wrapped{};
+  if (!wrap_content_key_for_requester(
+          pending.requester_ephemeral_pubkey.data(),
+          pending.requester_ephemeral_pubkey.size(),
+          publication.content_key.data(),
+          publication.content_key.size(),
+          &wrapped)) {
+    secure_zero_publication(&publication);
+    return kServerCryptoError;
+  }
+
+  LWKT wrapped_native;
+  wrapped_native.REQUEST_ID = pending.request_id;
+  wrapped_native.MODULE_ID = pending.module_id;
+  wrapped_native.MODULE_VERSION = pending.module_version;
+  wrapped_native.CONTENT_KEY_ID = publication.descriptor.KEY_ID;
+  wrapped_native.RECIPIENT_KEY_ID = pending.requester_peer_id;
+  wrapped_native.ALGORITHM =
+      licensingWrappedKeyAlgorithm::X25519_HKDF_SHA256_AES_256_GCM;
+  wrapped_native.REQUESTER_EPHEMERAL_PUBKEY.assign(
+      pending.requester_ephemeral_pubkey.begin(),
+      pending.requester_ephemeral_pubkey.end());
+  wrapped_native.PROVIDER_EPHEMERAL_PUBKEY.assign(
+      wrapped.provider_ephemeral_public_key.begin(),
+      wrapped.provider_ephemeral_public_key.end());
+  wrapped_native.HKDF_SALT.assign(
+      wrapped.hkdf_salt.begin(),
+      wrapped.hkdf_salt.end());
+  wrapped_native.IV.assign(wrapped.iv.begin(), wrapped.iv.end());
+  wrapped_native.CIPHERTEXT.assign(
+      wrapped.ciphertext.begin(),
+      wrapped.ciphertext.end());
+  wrapped_native.TAG.assign(wrapped.tag.begin(), wrapped.tag.end());
+  wrapped_native.EXPIRES_AT = pending.expires_at_ms;
+
+  LGRT grant_native;
+  grant_native.MESSAGE_TYPE = licensingGrantMessageType::Granted;
+  grant_native.REQUEST_ID = pending.request_id;
+  grant_native.MODULE_ID = pending.module_id;
+  grant_native.MODULE_VERSION = pending.module_version;
+  grant_native.REQUESTER_PEER_ID = pending.requester_peer_id;
+  grant_native.REQUESTER_XPUB = pending.requester_xpub;
+  grant_native.REQUESTED_DOMAIN = pending.requested_domain;
+  grant_native.REQUESTED_TIMEOUT_MS = pending.requested_timeout_ms;
+  grant_native.GRANTED_DOMAIN = pending.requested_domain;
+  grant_native.GRANTED_TIMEOUT_MS = pending.requested_timeout_ms;
+  grant_native.EXPIRES_AT = pending.expires_at_ms;
+  grant_native.REQUIRED_SCOPE = publication.descriptor.REQUIRED_SCOPE;
+  grant_native.GRANT_STATUS = "granted";
+  grant_native.CAPABILITY_TOKEN = g_capability_token;
+  grant_native.MODULE_DESCRIPTOR = std::make_unique<PLGT>(publication.descriptor);
+  grant_native.WRAPPED_CONTENT_KEY = std::make_unique<LWKT>(wrapped_native);
+  grant_native.GRANT_VERIFIER_PUBKEY.assign(
+      g_provider_signing_public.begin(),
+      g_provider_signing_public.end());
+
+  flatbuffers::FlatBufferBuilder grant_builder(2048);
+  const auto root_without_signature = LGR::Pack(grant_builder, &grant_native);
+  FinishLGRBuffer(grant_builder, root_without_signature);
+  std::array<uint8_t, 64> provider_signature{};
+  if (!ed25519_sign_detached(
+          grant_builder.GetBufferPointer(),
+          grant_builder.GetSize(),
+          g_provider_signing_seed.data(),
+          g_provider_signing_seed.size(),
+          g_provider_signing_public.data(),
+          g_provider_signing_public.size(),
+          &provider_signature)) {
+    secure_zero_publication(&publication);
+    return kServerCryptoError;
+  }
+  grant_native.PROVIDER_SIGNATURE.assign(
+      provider_signature.begin(),
+      provider_signature.end());
+
+  flatbuffers::FlatBufferBuilder final_builder(2048);
+  const auto final_root = LGR::Pack(final_builder, &grant_native);
+  FinishLGRBuffer(final_builder, final_root);
+  response_out.assign(
+      final_builder.GetBufferPointer(),
+      final_builder.GetBufferPointer() + final_builder.GetSize());
+  secure_zero_publication(&publication);
+  secure_zero(provider_signature.data(), provider_signature.size());
   return 0;
 }

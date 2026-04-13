@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createCipheriv, createECDH, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as flatbuffers from "flatbuffers";
@@ -10,22 +10,26 @@ import {
 } from "../../../tests/lib/sdkBrowserShimHarness.mjs";
 import { PLG } from "../../../../spacedatastandards.org/lib/js/PLG/PLG.js";
 import { pluginType } from "../../../../spacedatastandards.org/lib/js/PLG/pluginType.js";
+import { LCH } from "../../../../spacedatastandards.org/lib/js/REC/LCH.js";
+import { licensingChallengeMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingChallengeMessageType.js";
+import { licensingChallengeRole } from "../../../../spacedatastandards.org/lib/js/REC/licensingChallengeRole.js";
+import { LGR } from "../../../../spacedatastandards.org/lib/js/REC/LGR.js";
+import { licensingGrantMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingGrantMessageType.js";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const MODULE_DELIVERY_PROTOCOL_ID = "/space-data-network/module-delivery/1.0.0";
 
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
 function makeRuntimeConfig() {
-  const ecdh = createECDH("prime256v1");
-  ecdh.generateKeys();
-  const privateKey = ecdh.getPrivateKey();
-  const dek = randomBytes(32);
+  const signingSeed = randomBytes(32);
   return {
-    dek,
     json: {
-      privateKeyHex: privateKey.toString("hex"),
-      dekHex: dek.toString("hex"),
+      privateKeyHex: randomBytes(32).toString("hex"),
+      dekHex: randomBytes(32).toString("hex"),
+      providerSigningSeedHex: signingSeed.toString("hex"),
+      providerPeerId: "provider.orbpro.test",
       activeKeyVersion: 9,
       expiresAtMs: Date.now() + 60_000,
       challengeTtlMs: 30_000,
@@ -112,23 +116,9 @@ function createProtocolDispatch(serverHarness, contentStore = new Map()) {
       ? Buffer.from(params.payloadBase64, "base64")
       : new Uint8Array();
 
-    if (params?.protocolId === "/orbpro/public-key/1.0.0") {
+    if (params?.protocolId === MODULE_DELIVERY_PROTOCOL_ID) {
       const response = serverHarness.invokeSync({
-        methodId: "server_get_public_key",
-        inputs: [],
-      });
-      return response.outputs[0].payload;
-    }
-    if (params?.protocolId === "/orbpro/challenge/1.0.0") {
-      const response = serverHarness.invokeSync({
-        methodId: "server_issue_challenge",
-        inputs: [{ portId: "request", payload }],
-      });
-      return response.outputs[0].payload;
-    }
-    if (params?.protocolId === "/orbpro/key-broker/1.0.0") {
-      const response = serverHarness.invokeSync({
-        methodId: "server_complete_grant",
+        methodId: "server_handle_message",
         inputs: [{ portId: "request", payload }],
       });
       return response.outputs[0].payload;
@@ -136,6 +126,54 @@ function createProtocolDispatch(serverHarness, contentStore = new Map()) {
 
     throw new Error(`Unsupported protocol: ${params?.protocolId}`);
   };
+}
+
+function buildGrantRequest({
+  requestId,
+  moduleId,
+  moduleVersion,
+  requesterPeerId,
+  requesterXpub,
+  requesterDomain,
+  requestedTimeoutMs = 30_000n,
+  requestedAtMs = BigInt(Date.now()),
+  providerPeerId = "provider.orbpro.test",
+}) {
+  const builder = new flatbuffers.Builder(512);
+  const requestIdOffset = builder.createString(requestId);
+  const moduleIdOffset = builder.createString(moduleId);
+  const moduleVersionOffset = builder.createString(moduleVersion);
+  const requesterPeerIdOffset = builder.createString(requesterPeerId);
+  const requesterXpubOffset = builder.createString(requesterXpub);
+  const requesterDomainOffset = builder.createString(requesterDomain);
+  const providerPeerIdOffset = builder.createString(providerPeerId);
+  const root = LCH.createLCH(
+    builder,
+    licensingChallengeMessageType.Request,
+    licensingChallengeRole.Requester,
+    requestIdOffset,
+    moduleIdOffset,
+    moduleVersionOffset,
+    requesterPeerIdOffset,
+    requesterXpubOffset,
+    0,
+    0,
+    requesterDomainOffset,
+    requestedTimeoutMs,
+    requestedAtMs,
+    0,
+    0n,
+    providerPeerIdOffset,
+    0,
+    0,
+  );
+  LCH.finishLCHBuffer(builder, root);
+  return builder.asUint8Array();
+}
+
+function decodeGrantResponse(bytes) {
+  const buffer = new flatbuffers.ByteBuffer(bytes);
+  return LGR.getRootAsLGR(buffer);
 }
 
 function buildModuleDescriptor({
@@ -304,26 +342,37 @@ test("client and server role entrypoints interoperate inside the unified licensi
     inputs: [
       {
         portId: "request",
-        payload: textEncoder.encode(
-          JSON.stringify({
-            target: "ipfs://local-test",
-            moduleId: "orbpro.test.module",
-            moduleVersion: "1.2.3",
-            keyVersion: 9,
-          }),
-        ),
+        fileIdentifier: "$LCH",
+        payload: buildGrantRequest({
+          requestId: "grant-req-001",
+          moduleId: "orbpro.test.module",
+          moduleVersion: "1.2.3",
+          requesterPeerId: "requester.orbpro.test",
+          requesterXpub: "xpub-test-requester",
+          requesterDomain: "app.orbpro.test",
+          providerPeerId: "provider.orbpro.test",
+        }),
       },
+      {
+        portId: "requester_signing_seed",
+        payload: randomBytes(32),
+      }
     ],
   });
 
   assert.equal(response.statusCode, 0);
   assert.equal(response.outputs.length, 1);
   assert.equal(response.outputs[0].portId, "response");
-
-  const result = JSON.parse(textDecoder.decode(response.outputs[0].payload));
-  assert.equal(result.keyVersion, 9);
-  assert.deepEqual(Buffer.from(result.dekBase64, "base64"), moduleDek);
-  assert.ok(result.expiresAtMs > Date.now());
+  const grant = decodeGrantResponse(response.outputs[0].payload);
+  assert.equal(grant.MESSAGE_TYPE(), licensingGrantMessageType.Granted);
+  assert.equal(grant.REQUEST_ID(), "grant-req-001");
+  assert.equal(grant.MODULE_ID(), "orbpro.test.module");
+  assert.equal(grant.MODULE_VERSION(), "1.2.3");
+  assert.equal(grant.GRANTED_DOMAIN(), "app.orbpro.test");
+  assert.equal(grant.GRANTED_TIMEOUT_MS(), 30_000n);
+  assert.ok(grant.EXPIRES_AT() > BigInt(Date.now()));
+  assert.ok(grant.WRAPPED_CONTENT_KEY());
+  assert.ok(grant.MODULE_DESCRIPTOR());
 });
 
 test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", async (t) => {
@@ -366,30 +415,32 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
     inputs: [
       {
         portId: "request",
-        payload: textEncoder.encode(
-          JSON.stringify({
-            target: "ipfs://local-test",
-            moduleId: "orbpro.fetch.module",
-            moduleVersion: "9.1.0",
-            keyVersion: 9,
-          }),
-        ),
+        fileIdentifier: "$LCH",
+        payload: buildGrantRequest({
+          requestId: "grant-req-002",
+          moduleId: "orbpro.fetch.module",
+          moduleVersion: "9.1.0",
+          requesterPeerId: "requester.orbpro.test",
+          requesterXpub: "xpub-test-requester",
+          requesterDomain: "app.orbpro.test",
+          providerPeerId: "provider.orbpro.test",
+        }),
       },
+      {
+        portId: "requester_signing_seed",
+        payload: randomBytes(32),
+      }
     ],
   });
   assert.equal(grantResponse.statusCode, 0);
-  const grant = JSON.parse(textDecoder.decode(grantResponse.outputs[0].payload));
 
   const decryptResponse = await clientHarness.invoke({
     methodId: "client_fetch_and_decrypt",
     inputs: [
       {
-        portId: "module_descriptor",
-        payload: publishedDescriptor,
-      },
-      {
-        portId: "dek",
-        payload: Buffer.from(grant.dekBase64, "base64"),
+        portId: "grant_response",
+        fileIdentifier: "$LGR",
+        payload: grantResponse.outputs[0].payload,
       },
     ],
   });

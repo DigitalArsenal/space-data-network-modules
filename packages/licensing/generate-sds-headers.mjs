@@ -25,6 +25,33 @@ const schemaFamilies = [
   "LMR",
 ];
 
+function schemaIncludeFamilies(schemaPath) {
+  const includes = [];
+  for (const line of fs.readFileSync(schemaPath, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*include\s+"(?:\.\.\/)?([A-Z0-9_]+)\/main\.fbs";\s*$/);
+    if (match) {
+      includes.push(match[1]);
+    }
+  }
+  return includes;
+}
+
+function rewriteGeneratedHeader(generated, family, includeFamilies) {
+  let rewritten = generated.replaceAll(
+    "FLATBUFFERS_GENERATED_MAIN_H_",
+    `FLATBUFFERS_GENERATED_${family}_MAIN_H_`,
+  );
+
+  for (const includeFamily of includeFamilies) {
+    rewritten = rewritten.replace(
+      '#include "main_generated.h"',
+      `#include "${includeFamily}_generated.h"`,
+    );
+  }
+
+  return rewritten;
+}
+
 function ensureFileExists(filePath, label) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`${label} not found at ${filePath}`);
@@ -57,6 +84,8 @@ async function main() {
   }
 
   for (const family of schemaFamilies) {
+    const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
+    const includeFamilies = schemaIncludeFamilies(schemaPath);
     const rc = flatc.callMain([
       "--cpp",
       "--cpp-std",
@@ -75,7 +104,10 @@ async function main() {
     const generated = flatc.FS.readFile("/out_cpp/main_generated.h", {
       encoding: "utf8",
     });
-    fs.writeFileSync(path.join(outDir, `${family}_generated.h`), generated);
+    fs.writeFileSync(
+      path.join(outDir, `${family}_generated.h`),
+      rewriteGeneratedHeader(generated, family, includeFamilies),
+    );
   }
 
   console.log(`Generated SDS headers: ${schemaFamilies.join(", ")}`);

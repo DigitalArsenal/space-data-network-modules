@@ -90,6 +90,17 @@ function invokeDirect(instance, request) {
 export async function createSdkBrowserShimHarness(options = {}) {
   const wasmModule = await compileWasmModule(options.wasmSource);
   const surface = options.surface ?? "direct";
+  let persistentRuntime = null;
+
+  if (surface !== "command") {
+    persistentRuntime = await instantiateWithHostcallBridge({
+      wasmModule,
+      dispatch: options.dispatch,
+      args: options.args,
+      env: options.env,
+      logOutput: options.logOutput,
+    });
+  }
 
   async function invoke(request) {
     if (surface === "command") {
@@ -116,13 +127,7 @@ export async function createSdkBrowserShimHarness(options = {}) {
       return decodePluginInvokeResponse(stdoutBytes);
     }
 
-    const { instance, wasi } = await instantiateWithHostcallBridge({
-      wasmModule,
-      dispatch: options.dispatch,
-      args: options.args,
-      env: options.env,
-      logOutput: options.logOutput,
-    });
+    const { instance, wasi } = persistentRuntime;
     try {
       return invokeDirect(instance, request);
     } finally {
@@ -134,7 +139,9 @@ export async function createSdkBrowserShimHarness(options = {}) {
     async invoke(request) {
       return invoke(request);
     },
-    async destroy() {},
+    async destroy() {
+      persistentRuntime?.wasi.flushOutput();
+    },
   };
 }
 

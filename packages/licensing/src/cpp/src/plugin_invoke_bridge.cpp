@@ -18,9 +18,7 @@
 
 extern "C" int licensing_server_configure_runtime(void);
 extern "C" int licensing_server_publish_module(void);
-extern "C" int licensing_server_get_public_key(void);
-extern "C" int licensing_server_issue_challenge(void);
-extern "C" int licensing_server_complete_grant(void);
+extern "C" int licensing_server_handle_message(void);
 extern "C" int licensing_client_request_grant(void);
 extern "C" int licensing_client_fetch_and_decrypt(void);
 extern "C" int licensing_decrypt_and_verify(void);
@@ -98,38 +96,24 @@ static const char *kMethod_server_publish_module_output_ports[] = {
   "response",
 };
 
-static const PortRequirement kMethod_server_get_public_key_input_ports[] = {
-  { "request", false },
-};
-static const char *kMethod_server_get_public_key_output_ports[] = {
-  "response",
-};
-
-static const PortRequirement kMethod_server_issue_challenge_input_ports[] = {
+static const PortRequirement kMethod_server_handle_message_input_ports[] = {
   { "request", true },
 };
-static const char *kMethod_server_issue_challenge_output_ports[] = {
-  "response",
-};
-
-static const PortRequirement kMethod_server_complete_grant_input_ports[] = {
-  { "request", true },
-};
-static const char *kMethod_server_complete_grant_output_ports[] = {
+static const char *kMethod_server_handle_message_output_ports[] = {
   "response",
 };
 
 static const PortRequirement kMethod_client_request_grant_input_ports[] = {
   { "request", true },
+  { "requester_signing_seed", true },
 };
 static const char *kMethod_client_request_grant_output_ports[] = {
   "response",
 };
 
 static const PortRequirement kMethod_client_fetch_and_decrypt_input_ports[] = {
-  { "module_descriptor", false },
+  { "grant_response", true },
   { "protected_content", false },
-  { "dek", true },
 };
 static const char *kMethod_client_fetch_and_decrypt_output_ports[] = {
   "plaintext",
@@ -160,7 +144,7 @@ static const MethodDescriptor kMethodTable[] = {
     "server_publish_module",
     &licensing_server_publish_module,
     kMethod_server_publish_module_input_ports,
-    1u,
+    3u,
     kMethod_server_publish_module_output_ports,
     1u,
     true,
@@ -168,33 +152,11 @@ static const MethodDescriptor kMethodTable[] = {
     "response"
   },
   {
-    "server_get_public_key",
-    &licensing_server_get_public_key,
-    kMethod_server_get_public_key_input_ports,
+    "server_handle_message",
+    &licensing_server_handle_message,
+    kMethod_server_handle_message_input_ports,
     1u,
-    kMethod_server_get_public_key_output_ports,
-    1u,
-    true,
-    "request",
-    "response"
-  },
-  {
-    "server_issue_challenge",
-    &licensing_server_issue_challenge,
-    kMethod_server_issue_challenge_input_ports,
-    1u,
-    kMethod_server_issue_challenge_output_ports,
-    1u,
-    true,
-    "request",
-    "response"
-  },
-  {
-    "server_complete_grant",
-    &licensing_server_complete_grant,
-    kMethod_server_complete_grant_input_ports,
-    1u,
-    kMethod_server_complete_grant_output_ports,
+    kMethod_server_handle_message_output_ports,
     1u,
     true,
     "request",
@@ -204,7 +166,7 @@ static const MethodDescriptor kMethodTable[] = {
     "client_request_grant",
     &licensing_client_request_grant,
     kMethod_client_request_grant_input_ports,
-    1u,
+    2u,
     kMethod_client_request_grant_output_ports,
     1u,
     true,

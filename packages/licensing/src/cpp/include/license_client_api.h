@@ -4,10 +4,19 @@
 #include <cstdint>
 #include <vector>
 
-int32_t license_client_get_dek(
-    const uint8_t* request_json,
+int32_t license_client_request_grant(
+    const uint8_t* request_bytes,
     uint32_t request_len,
+    const uint8_t* requester_signing_seed,
+    uint32_t requester_signing_seed_len,
     std::vector<uint8_t>& response_out);
+
+int32_t license_client_fetch_and_decrypt(
+    const uint8_t* grant_response_bytes,
+    uint32_t grant_response_len,
+    const uint8_t* protected_content,
+    uint32_t protected_content_len,
+    std::vector<uint8_t>& plaintext_out);
 
 int32_t license_client_fetch_protected_content(
     const uint8_t* descriptor_bytes,

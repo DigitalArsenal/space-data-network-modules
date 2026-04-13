@@ -33,15 +33,14 @@ test("licensing package publishes canonical artifacts and both role entrypoints"
   assert.equal(manifest.capabilities.includes("protocol_handle"), true);
   assert.equal(methods.has("server_configure_runtime"), true);
   assert.equal(methods.has("server_publish_module"), true);
-  assert.equal(methods.has("server_get_public_key"), true);
-  assert.equal(methods.has("server_issue_challenge"), true);
-  assert.equal(methods.has("server_complete_grant"), true);
+  assert.equal(methods.has("server_handle_message"), true);
   assert.equal(methods.has("client_request_grant"), true);
   assert.equal(methods.has("client_fetch_and_decrypt"), true);
   assert.equal(methods.has("decrypt_and_verify"), true);
-  assert.equal(protocols.get("/orbpro/public-key/1.0.0"), "server_get_public_key");
-  assert.equal(protocols.get("/orbpro/challenge/1.0.0"), "server_issue_challenge");
-  assert.equal(protocols.get("/orbpro/key-broker/1.0.0"), "server_complete_grant");
+  assert.equal(
+    protocols.get("/space-data-network/module-delivery/1.0.0"),
+    "server_handle_message",
+  );
 });
 
 test("embedded manifest in the built wasm matches the licensing package manifest", async () => {

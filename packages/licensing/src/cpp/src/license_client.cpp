@@ -2,6 +2,10 @@
 
 #include "KeyBrokerRequest_generated.h"
 #include "KeyBrokerResponse_generated.h"
+#include "LCH_generated.h"
+#include "LGR_generated.h"
+#include "LPF_generated.h"
+#include "LWK_generated.h"
 #include "PLG_generated.h"
 #include "PublicKeyResponse_generated.h"
 
@@ -17,11 +21,13 @@
 #include <cryptopp/oids.h>
 #include <cryptopp/secblock.h>
 #include <cryptopp/sha.h>
+#include <cryptopp/xed25519.h>
 
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -46,6 +52,7 @@ int32_t sdn_host_last_status_code(void);
 namespace {
 
 constexpr uint8_t kProtocolVersion = 3;
+constexpr size_t kDekBytes = 32;
 constexpr size_t kAesKeyBytes = 32;
 constexpr size_t kGcmIvBytes = 12;
 constexpr size_t kGcmTagBytes = 16;
@@ -68,14 +75,25 @@ constexpr int32_t kClientInvalidSignature = -17;
 constexpr const char* kPublicKeyProtocolId = "/orbpro/public-key/1.0.0";
 constexpr const char* kChallengeProtocolId = "/orbpro/challenge/1.0.0";
 constexpr const char* kKeyBrokerProtocolId = "/orbpro/key-broker/1.0.0";
+constexpr const char* kModuleDeliveryProtocolId =
+    "/space-data-network/module-delivery/1.0.0";
+constexpr const char* kWrappedKeyInfo =
+    "space-data-network/module-delivery/wrap/v1";
 
 struct ClientSession {
   std::array<uint8_t, 32> shared_secret{};
 };
 
+struct ClientGrantSession {
+  std::array<uint8_t, 32> ephemeral_private_key{};
+};
+
 std::mutex g_client_session_mutex;
 std::unordered_map<uint32_t, ClientSession> g_client_sessions;
 uint32_t g_next_session_id = 1;
+
+std::mutex g_client_grant_session_mutex;
+std::unordered_map<std::string, ClientGrantSession> g_client_grant_sessions;
 
 void secure_zero(void* ptr, size_t len) {
   if (!ptr || len == 0) {
@@ -1006,6 +1024,247 @@ bool verify_signed_payload(
   return true;
 }
 
+class HostRng : public CryptoPP::RandomNumberGenerator {
+ public:
+  void GenerateBlock(CryptoPP::byte* output, size_t size) override {
+    if (!fill_random_bytes(output, size)) {
+      throw std::runtime_error("host random generation failed");
+    }
+  }
+
+  void IncorporateEntropy(const CryptoPP::byte*, size_t) override {}
+};
+
+bool ed25519_public_key_from_seed(
+    const uint8_t* seed,
+    size_t seed_len,
+    std::array<uint8_t, 32>* public_key_out) {
+  if (!seed || !public_key_out || seed_len != 32) {
+    return false;
+  }
+  CryptoPP::Donna::ed25519_publickey(public_key_out->data(), seed);
+  return true;
+}
+
+bool ed25519_sign_detached(
+    const uint8_t* message,
+    size_t message_len,
+    const uint8_t* seed,
+    size_t seed_len,
+    const uint8_t* public_key,
+    size_t public_key_len,
+    std::array<uint8_t, 64>* signature_out) {
+  if (!message || !seed || !public_key || !signature_out ||
+      seed_len != 32 || public_key_len != 32) {
+    return false;
+  }
+  CryptoPP::Donna::ed25519_sign(
+      message,
+      message_len,
+      seed,
+      public_key,
+      signature_out->data());
+  return true;
+}
+
+bool generate_x25519_keypair(
+    std::array<uint8_t, 32>* private_key_out,
+    std::array<uint8_t, 32>* public_key_out) {
+  if (!private_key_out || !public_key_out) {
+    return false;
+  }
+  try {
+    HostRng rng;
+    CryptoPP::x25519 x25519_scheme;
+    x25519_scheme.GeneratePrivateKey(rng, private_key_out->data());
+    x25519_scheme.GeneratePublicKey(
+        rng,
+        private_key_out->data(),
+        public_key_out->data());
+    return true;
+  } catch (...) {
+    secure_zero(private_key_out->data(), private_key_out->size());
+    secure_zero(public_key_out->data(), public_key_out->size());
+    return false;
+  }
+}
+
+bool store_client_grant_session(
+    std::string_view request_id,
+    const std::array<uint8_t, 32>& ephemeral_private_key) {
+  if (request_id.empty()) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(g_client_grant_session_mutex);
+  auto [it, inserted] = g_client_grant_sessions.emplace(
+      std::string(request_id),
+      ClientGrantSession{ephemeral_private_key});
+  if (!inserted) {
+    secure_zero(
+        it->second.ephemeral_private_key.data(),
+        it->second.ephemeral_private_key.size());
+    it->second.ephemeral_private_key = ephemeral_private_key;
+  }
+  return true;
+}
+
+bool take_client_grant_session(
+    std::string_view request_id,
+    ClientGrantSession* session_out) {
+  if (!session_out || request_id.empty()) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(g_client_grant_session_mutex);
+  const auto it = g_client_grant_sessions.find(std::string(request_id));
+  if (it == g_client_grant_sessions.end()) {
+    return false;
+  }
+  *session_out = it->second;
+  g_client_grant_sessions.erase(it);
+  return true;
+}
+
+std::vector<uint8_t> build_lch_bytes(
+    licensingChallengeMessageType message_type,
+    licensingChallengeRole role,
+    std::string_view request_id,
+    std::string_view module_id,
+    std::string_view module_version,
+    std::string_view requester_peer_id,
+    std::string_view requester_xpub,
+    const uint8_t* requester_signing_pubkey,
+    size_t requester_signing_pubkey_len,
+    const uint8_t* requester_ephemeral_pubkey,
+    size_t requester_ephemeral_pubkey_len,
+    std::string_view requested_domain,
+    uint64_t requested_timeout_ms,
+    uint64_t requested_at_ms,
+    const uint8_t* challenge_nonce,
+    size_t challenge_nonce_len,
+    uint64_t expires_at_ms,
+    std::string_view provider_peer_id,
+    std::string_view error_code,
+    std::string_view error_message) {
+  flatbuffers::FlatBufferBuilder builder(512);
+  const auto request_id_offset = builder.CreateString(request_id.data(), request_id.size());
+  const auto module_id_offset = builder.CreateString(module_id.data(), module_id.size());
+  const auto module_version_offset =
+      module_version.empty() ? 0 : builder.CreateString(module_version.data(), module_version.size());
+  const auto requester_peer_id_offset =
+      requester_peer_id.empty() ? 0 : builder.CreateString(requester_peer_id.data(), requester_peer_id.size());
+  const auto requester_xpub_offset =
+      requester_xpub.empty() ? 0 : builder.CreateString(requester_xpub.data(), requester_xpub.size());
+  const auto requester_signing_pubkey_offset =
+      requester_signing_pubkey_len == 0 ? 0 : builder.CreateVector(requester_signing_pubkey, requester_signing_pubkey_len);
+  const auto requester_ephemeral_pubkey_offset =
+      requester_ephemeral_pubkey_len == 0 ? 0 : builder.CreateVector(requester_ephemeral_pubkey, requester_ephemeral_pubkey_len);
+  const auto requested_domain_offset =
+      requested_domain.empty() ? 0 : builder.CreateString(requested_domain.data(), requested_domain.size());
+  const auto challenge_nonce_offset =
+      challenge_nonce_len == 0 ? 0 : builder.CreateVector(challenge_nonce, challenge_nonce_len);
+  const auto provider_peer_id_offset =
+      provider_peer_id.empty() ? 0 : builder.CreateString(provider_peer_id.data(), provider_peer_id.size());
+  const auto error_code_offset =
+      error_code.empty() ? 0 : builder.CreateString(error_code.data(), error_code.size());
+  const auto error_message_offset =
+      error_message.empty() ? 0 : builder.CreateString(error_message.data(), error_message.size());
+  const auto root = CreateLCH(
+      builder,
+      message_type,
+      role,
+      request_id_offset,
+      module_id_offset,
+      module_version_offset,
+      requester_peer_id_offset,
+      requester_xpub_offset,
+      requester_signing_pubkey_offset,
+      requester_ephemeral_pubkey_offset,
+      requested_domain_offset,
+      requested_timeout_ms,
+      requested_at_ms,
+      challenge_nonce_offset,
+      expires_at_ms,
+      provider_peer_id_offset,
+      error_code_offset,
+      error_message_offset);
+  FinishLCHBuffer(builder, root);
+  return std::vector<uint8_t>(
+      builder.GetBufferPointer(),
+      builder.GetBufferPointer() + builder.GetSize());
+}
+
+std::vector<uint8_t> build_lpf_bytes(
+    std::string_view request_id,
+    std::string_view module_id,
+    std::string_view module_version,
+    std::string_view requester_peer_id,
+    std::string_view requester_xpub,
+    std::string_view requested_domain,
+    uint64_t requested_timeout_ms,
+    const uint8_t* requester_ephemeral_pubkey,
+    size_t requester_ephemeral_pubkey_len,
+    const uint8_t* challenge_nonce,
+    size_t challenge_nonce_len,
+    uint64_t challenge_expires_at,
+    std::string_view provider_peer_id,
+    const uint8_t* signature,
+    size_t signature_len,
+    const uint8_t* signing_pubkey,
+    size_t signing_pubkey_len,
+    uint64_t timestamp_ms) {
+  flatbuffers::FlatBufferBuilder builder(512);
+  const auto request_id_offset = builder.CreateString(request_id.data(), request_id.size());
+  const auto module_id_offset = builder.CreateString(module_id.data(), module_id.size());
+  const auto module_version_offset =
+      module_version.empty() ? 0 : builder.CreateString(module_version.data(), module_version.size());
+  const auto requester_peer_id_offset =
+      requester_peer_id.empty() ? 0 : builder.CreateString(requester_peer_id.data(), requester_peer_id.size());
+  const auto requester_xpub_offset =
+      requester_xpub.empty() ? 0 : builder.CreateString(requester_xpub.data(), requester_xpub.size());
+  const auto requested_domain_offset =
+      requested_domain.empty() ? 0 : builder.CreateString(requested_domain.data(), requested_domain.size());
+  const auto requester_ephemeral_pubkey_offset =
+      requester_ephemeral_pubkey_len == 0 ? 0 : builder.CreateVector(requester_ephemeral_pubkey, requester_ephemeral_pubkey_len);
+  const auto challenge_nonce_offset =
+      challenge_nonce_len == 0 ? 0 : builder.CreateVector(challenge_nonce, challenge_nonce_len);
+  const auto provider_peer_id_offset =
+      provider_peer_id.empty() ? 0 : builder.CreateString(provider_peer_id.data(), provider_peer_id.size());
+  const auto signature_offset =
+      signature_len == 0 ? 0 : builder.CreateVector(signature, signature_len);
+  const auto signing_pubkey_offset =
+      signing_pubkey_len == 0 ? 0 : builder.CreateVector(signing_pubkey, signing_pubkey_len);
+  const auto root = CreateLPF(
+      builder,
+      licensingProofMessageType::ProofRequest,
+      request_id_offset,
+      module_id_offset,
+      module_version_offset,
+      requester_peer_id_offset,
+      requester_xpub_offset,
+      requested_domain_offset,
+      requested_timeout_ms,
+      requester_ephemeral_pubkey_offset,
+      challenge_nonce_offset,
+      challenge_expires_at,
+      provider_peer_id_offset,
+      signature_offset,
+      signing_pubkey_offset,
+      timestamp_ms,
+      0,
+      0);
+  FinishLPFBuffer(builder, root);
+  return std::vector<uint8_t>(
+      builder.GetBufferPointer(),
+      builder.GetBufferPointer() + builder.GetSize());
+}
+
+bool grant_is_success(const LGR* grant) {
+  return grant &&
+         grant->MESSAGE_TYPE() == licensingGrantMessageType::Granted &&
+         grant->WRAPPED_CONTENT_KEY() != nullptr &&
+         grant->MODULE_DESCRIPTOR() != nullptr;
+}
+
 }  // namespace
 
 int32_t license_client_get_dek(
@@ -1169,6 +1428,342 @@ int32_t license_client_get_dek(
   response_out.assign(response_json.begin(), response_json.end());
   secure_zero(session_result.data(), session_result.size());
   return 0;
+}
+
+int32_t license_client_request_grant(
+    const uint8_t* request_bytes,
+    uint32_t request_len,
+    const uint8_t* requester_signing_seed,
+    uint32_t requester_signing_seed_len,
+    std::vector<uint8_t>& response_out) {
+  response_out.clear();
+  if (!request_bytes || request_len == 0 ||
+      !requester_signing_seed || requester_signing_seed_len != 32) {
+    return kClientMalformed;
+  }
+
+  flatbuffers::Verifier verifier(request_bytes, request_len);
+  if (!VerifyLCHBuffer(verifier)) {
+    return kClientMalformed;
+  }
+  const auto* request = GetLCH(request_bytes);
+  if (!request ||
+      request->MESSAGE_TYPE() != licensingChallengeMessageType::Request ||
+      request->ROLE() != licensingChallengeRole::Requester ||
+      !request->REQUEST_ID() ||
+      !request->MODULE_ID() ||
+      !request->REQUESTED_DOMAIN() ||
+      !request->PROVIDER_PEER_ID()) {
+    return kClientMalformed;
+  }
+
+  const std::string request_id = request->REQUEST_ID()->str();
+  const std::string module_id = request->MODULE_ID()->str();
+  const std::string module_version =
+      request->MODULE_VERSION() ? request->MODULE_VERSION()->str() : std::string();
+  const std::string requester_peer_id =
+      request->REQUESTER_PEER_ID() ? request->REQUESTER_PEER_ID()->str() : std::string();
+  const std::string requester_xpub =
+      request->REQUESTER_XPUB() ? request->REQUESTER_XPUB()->str() : std::string();
+  const std::string requester_domain = request->REQUESTED_DOMAIN()->str();
+  const uint64_t requested_timeout_ms = request->REQUESTED_TIMEOUT_MS();
+  const uint64_t requested_at_ms =
+      request->REQUESTED_AT() != 0 ? request->REQUESTED_AT() : static_cast<uint64_t>(now_ms());
+  const std::string provider_peer_id = request->PROVIDER_PEER_ID()->str();
+
+  if (request_id.empty() || module_id.empty() || requester_domain.empty() ||
+      provider_peer_id.empty() || requested_timeout_ms == 0) {
+    return kClientMalformed;
+  }
+
+  std::array<uint8_t, 32> requester_signing_pubkey{};
+  if (!ed25519_public_key_from_seed(
+          requester_signing_seed,
+          requester_signing_seed_len,
+          &requester_signing_pubkey)) {
+    return kClientCryptoError;
+  }
+
+  std::array<uint8_t, 32> requester_ephemeral_private{};
+  std::array<uint8_t, 32> requester_ephemeral_public{};
+  if (!generate_x25519_keypair(
+          &requester_ephemeral_private,
+          &requester_ephemeral_public)) {
+    return kClientCryptoError;
+  }
+
+  const std::vector<uint8_t> outbound_request = build_lch_bytes(
+      licensingChallengeMessageType::Request,
+      licensingChallengeRole::Requester,
+      request_id,
+      module_id,
+      module_version,
+      requester_peer_id,
+      requester_xpub,
+      requester_signing_pubkey.data(),
+      requester_signing_pubkey.size(),
+      requester_ephemeral_public.data(),
+      requester_ephemeral_public.size(),
+      requester_domain,
+      requested_timeout_ms,
+      requested_at_ms,
+      nullptr,
+      0,
+      0,
+      provider_peer_id,
+      {},
+      {});
+
+  std::vector<uint8_t> challenge_bytes;
+  if (!protocol_request(
+          provider_peer_id,
+          kModuleDeliveryProtocolId,
+          outbound_request.data(),
+          outbound_request.size(),
+          &challenge_bytes)) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientInternalError;
+  }
+
+  flatbuffers::Verifier challenge_verifier(
+      challenge_bytes.data(),
+      challenge_bytes.size());
+  if (!VerifyLCHBuffer(challenge_verifier)) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientMalformed;
+  }
+  const auto* challenge = GetLCH(challenge_bytes.data());
+  if (!challenge ||
+      !challenge->REQUEST_ID() ||
+      !challenge->MODULE_ID() ||
+      challenge->REQUEST_ID()->str() != request_id ||
+      challenge->MODULE_ID()->str() != module_id) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientMalformed;
+  }
+  if (challenge->MESSAGE_TYPE() == licensingChallengeMessageType::Error) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    response_out.assign(challenge_bytes.begin(), challenge_bytes.end());
+    return 0;
+  }
+  if (challenge->MESSAGE_TYPE() != licensingChallengeMessageType::Response ||
+      challenge->ROLE() != licensingChallengeRole::Provider ||
+      !challenge->CHALLENGE_NONCE()) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientMalformed;
+  }
+
+  std::array<uint8_t, 64> signature{};
+  if (!ed25519_sign_detached(
+          challenge_bytes.data(),
+          challenge_bytes.size(),
+          requester_signing_seed,
+          requester_signing_seed_len,
+          requester_signing_pubkey.data(),
+          requester_signing_pubkey.size(),
+          &signature)) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientCryptoError;
+  }
+
+  const auto* challenge_nonce = challenge->CHALLENGE_NONCE();
+  const std::vector<uint8_t> proof_bytes = build_lpf_bytes(
+      request_id,
+      module_id,
+      module_version,
+      requester_peer_id,
+      requester_xpub,
+      requester_domain,
+      requested_timeout_ms,
+      requester_ephemeral_public.data(),
+      requester_ephemeral_public.size(),
+      challenge_nonce ? challenge_nonce->Data() : nullptr,
+      challenge_nonce ? challenge_nonce->size() : 0,
+      challenge->EXPIRES_AT(),
+      provider_peer_id,
+      signature.data(),
+      signature.size(),
+      requester_signing_pubkey.data(),
+      requester_signing_pubkey.size(),
+      static_cast<uint64_t>(now_ms()));
+
+  std::vector<uint8_t> grant_bytes;
+  if (!protocol_request(
+          provider_peer_id,
+          kModuleDeliveryProtocolId,
+          proof_bytes.data(),
+          proof_bytes.size(),
+          &grant_bytes)) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientInternalError;
+  }
+
+  flatbuffers::Verifier grant_verifier(grant_bytes.data(), grant_bytes.size());
+  if (!VerifyLGRBuffer(grant_verifier)) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientMalformed;
+  }
+  const auto* grant = GetLGR(grant_bytes.data());
+  if (!grant || !grant->REQUEST_ID() ||
+      grant->REQUEST_ID()->str() != request_id) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientMalformed;
+  }
+
+  if (grant_is_success(grant) &&
+      !store_client_grant_session(request_id, requester_ephemeral_private)) {
+    secure_zero(
+        requester_ephemeral_private.data(),
+        requester_ephemeral_private.size());
+    return kClientInternalError;
+  }
+
+  secure_zero(signature.data(), signature.size());
+  secure_zero(
+      requester_ephemeral_private.data(),
+      requester_ephemeral_private.size());
+  response_out.assign(grant_bytes.begin(), grant_bytes.end());
+  return 0;
+}
+
+int32_t license_client_fetch_and_decrypt(
+    const uint8_t* grant_response_bytes,
+    uint32_t grant_response_len,
+    const uint8_t* protected_content,
+    uint32_t protected_content_len,
+    std::vector<uint8_t>& plaintext_out) {
+  plaintext_out.clear();
+  if (!grant_response_bytes || grant_response_len == 0) {
+    return kClientMalformed;
+  }
+
+  flatbuffers::Verifier verifier(grant_response_bytes, grant_response_len);
+  if (!VerifyLGRBuffer(verifier)) {
+    return kClientMalformed;
+  }
+  const auto* grant = GetLGR(grant_response_bytes);
+  if (!grant_is_success(grant) || !grant->REQUEST_ID()) {
+    return kClientMalformed;
+  }
+
+  ClientGrantSession session{};
+  if (!take_client_grant_session(grant->REQUEST_ID()->string_view(), &session)) {
+    return kClientInternalError;
+  }
+
+  const auto* wrapped = grant->WRAPPED_CONTENT_KEY();
+  const auto* descriptor = grant->MODULE_DESCRIPTOR();
+  if (!wrapped || !descriptor || !descriptor->WASM_CID() ||
+      !wrapped->PROVIDER_EPHEMERAL_PUBKEY() ||
+      !wrapped->HKDF_SALT() ||
+      !wrapped->IV() ||
+      !wrapped->CIPHERTEXT() ||
+      !wrapped->TAG()) {
+    secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+    return kClientMalformed;
+  }
+
+  std::vector<uint8_t> encrypted_content;
+  if (protected_content && protected_content_len > 0) {
+    encrypted_content.assign(
+        protected_content,
+        protected_content + protected_content_len);
+  } else {
+    if (!ipfs_cat(descriptor->WASM_CID()->string_view(), &encrypted_content)) {
+      secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+      return kClientInternalError;
+    }
+  }
+
+  std::array<uint8_t, 32> shared_secret{};
+  CryptoPP::x25519 x25519_scheme;
+  if (!x25519_scheme.Agree(
+          shared_secret.data(),
+          session.ephemeral_private_key.data(),
+          wrapped->PROVIDER_EPHEMERAL_PUBKEY()->Data())) {
+    secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+    secure_zero(shared_secret.data(), shared_secret.size());
+    return kClientCryptoError;
+  }
+
+  uint8_t wrap_key[kAesKeyBytes] = {0};
+  if (!derive_hkdf_key(
+          shared_secret.data(),
+          shared_secret.size(),
+          wrapped->HKDF_SALT()->Data(),
+          wrapped->HKDF_SALT()->size(),
+          kWrappedKeyInfo,
+          wrap_key)) {
+    secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+    secure_zero(shared_secret.data(), shared_secret.size());
+    return kClientCryptoError;
+  }
+
+  std::vector<uint8_t> wrapped_key_and_tag;
+  wrapped_key_and_tag.reserve(
+      wrapped->CIPHERTEXT()->size() + wrapped->TAG()->size());
+  wrapped_key_and_tag.insert(
+      wrapped_key_and_tag.end(),
+      wrapped->CIPHERTEXT()->begin(),
+      wrapped->CIPHERTEXT()->end());
+  wrapped_key_and_tag.insert(
+      wrapped_key_and_tag.end(),
+      wrapped->TAG()->begin(),
+      wrapped->TAG()->end());
+
+  std::vector<uint8_t> content_key(kDekBytes, 0);
+  try {
+    CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
+    dec.SetKeyWithIV(
+        wrap_key,
+        kAesKeyBytes,
+        wrapped->IV()->Data(),
+        wrapped->IV()->size());
+    CryptoPP::ArraySink sink(content_key.data(), content_key.size());
+    CryptoPP::AuthenticatedDecryptionFilter filter(
+        dec,
+        &sink,
+        CryptoPP::AuthenticatedDecryptionFilter::DEFAULT_FLAGS,
+        kGcmTagBytes);
+    filter.Put(wrapped_key_and_tag.data(), wrapped_key_and_tag.size());
+    filter.MessageEnd();
+  } catch (...) {
+    secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+    secure_zero(shared_secret.data(), shared_secret.size());
+    secure_zero(wrap_key, sizeof(wrap_key));
+    secure_zero(content_key.data(), content_key.size());
+    return kClientCryptoError;
+  }
+
+  const int32_t decrypt_status = license_client_decrypt(
+      encrypted_content.data(),
+      static_cast<uint32_t>(encrypted_content.size()),
+      content_key.data(),
+      static_cast<uint32_t>(content_key.size()),
+      plaintext_out);
+  secure_zero(session.ephemeral_private_key.data(), session.ephemeral_private_key.size());
+  secure_zero(shared_secret.data(), shared_secret.size());
+  secure_zero(wrap_key, sizeof(wrap_key));
+  secure_zero(content_key.data(), content_key.size());
+  return decrypt_status;
 }
 
 int32_t license_client_fetch_protected_content(

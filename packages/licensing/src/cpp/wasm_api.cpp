@@ -167,25 +167,7 @@ int licensing_server_publish_module(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int licensing_server_get_public_key(void) {
-    plugin_reset_output_state();
-
-    std::vector<uint8_t> response;
-    const int32_t status = key_server_get_public_key(response);
-    if (status != 0) {
-        plugin_set_error("public-key-failed", "Failed to load licensing public key.");
-        return status;
-    }
-    return emit_output(
-        "response",
-        "OBPK",
-        response,
-        "emit-failed",
-        "Failed to emit licensing public key.");
-}
-
-EMSCRIPTEN_KEEPALIVE
-int licensing_server_issue_challenge(void) {
+int licensing_server_handle_message(void) {
     plugin_reset_output_state();
 
     const plugin_input_frame_t* request_frame = nullptr;
@@ -198,12 +180,12 @@ int licensing_server_issue_challenge(void) {
     }
 
     std::vector<uint8_t> response;
-    const int32_t status = key_server_request_challenge(
+    const int32_t status = key_server_handle_message(
         request_frame->payload,
         request_frame->payload_length,
         response);
     if (status != 0) {
-        plugin_set_error("challenge-failed", "Failed to issue licensing challenge.");
+        plugin_set_error("server-handle-failed", "Failed to handle licensing delivery message.");
         return status;
     }
     return emit_output(
@@ -211,37 +193,7 @@ int licensing_server_issue_challenge(void) {
         nullptr,
         response,
         "emit-failed",
-        "Failed to emit licensing challenge.");
-}
-
-EMSCRIPTEN_KEEPALIVE
-int licensing_server_complete_grant(void) {
-    plugin_reset_output_state();
-
-    const plugin_input_frame_t* request_frame = nullptr;
-    if (require_input(
-            "request",
-            &request_frame,
-            "missing-request-input",
-            "Input port \"request\" is required.") != 0) {
-        return 1;
-    }
-
-    std::vector<uint8_t> response;
-    const int32_t status = key_server_handle_key_request(
-        request_frame->payload,
-        request_frame->payload_length,
-        response);
-    if (status != 0) {
-        plugin_set_error("grant-failed", "Failed to complete licensing grant.");
-        return status;
-    }
-    return emit_output(
-        "response",
-        nullptr,
-        response,
-        "emit-failed",
-        "Failed to emit licensing grant response.");
+        "Failed to emit licensing delivery response.");
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -257,10 +209,21 @@ int licensing_client_request_grant(void) {
         return 1;
     }
 
+    const plugin_input_frame_t* signing_seed_frame = nullptr;
+    if (require_input(
+            "requester_signing_seed",
+            &signing_seed_frame,
+            "missing-requester-signing-seed-input",
+            "Input port \"requester_signing_seed\" is required.") != 0) {
+        return 1;
+    }
+
     std::vector<uint8_t> response;
-    const int32_t status = license_client_get_dek(
+    const int32_t status = license_client_request_grant(
         request_frame->payload,
         request_frame->payload_length,
+        signing_seed_frame->payload,
+        signing_seed_frame->payload_length,
         response);
     if (status != 0) {
         plugin_set_error("grant-request-failed", "Failed to request licensing grant.");
@@ -268,7 +231,7 @@ int licensing_client_request_grant(void) {
     }
     return emit_output(
         "response",
-        nullptr,
+        "$LGR",
         response,
         "emit-failed",
         "Failed to emit grant request response.");
@@ -278,43 +241,21 @@ EMSCRIPTEN_KEEPALIVE
 int licensing_client_fetch_and_decrypt(void) {
     plugin_reset_output_state();
 
-    const auto* module_descriptor = find_input_frame("module_descriptor");
+    const auto* grant_response = find_input_frame("grant_response");
     const auto* protected_content = find_input_frame("protected_content");
-    const auto* dek = find_input_frame("dek");
-    if (!dek || !dek->payload ||
-        ((!module_descriptor || !module_descriptor->payload) &&
-         (!protected_content || !protected_content->payload))) {
+    if (!grant_response || !grant_response->payload) {
         plugin_set_error(
             "missing-input",
-            "Input port \"dek\" and either \"module_descriptor\" or \"protected_content\" are required.");
+            "Input port \"grant_response\" is required.");
         return 1;
     }
 
-    std::vector<uint8_t> fetched_content;
-    const uint8_t* ciphertext = nullptr;
-    uint32_t ciphertext_len = 0;
-    if (module_descriptor && module_descriptor->payload) {
-        const int32_t fetch_status = license_client_fetch_protected_content(
-            module_descriptor->payload,
-            module_descriptor->payload_length,
-            fetched_content);
-        if (fetch_status != 0) {
-            plugin_set_error("fetch-failed", "Failed to fetch protected content from IPFS.");
-            return fetch_status;
-        }
-        ciphertext = fetched_content.data();
-        ciphertext_len = static_cast<uint32_t>(fetched_content.size());
-    } else {
-        ciphertext = protected_content->payload;
-        ciphertext_len = protected_content->payload_length;
-    }
-
     std::vector<uint8_t> plaintext;
-    const int32_t status = license_client_decrypt(
-        ciphertext,
-        ciphertext_len,
-        dek->payload,
-        dek->payload_length,
+    const int32_t status = license_client_fetch_and_decrypt(
+        grant_response->payload,
+        grant_response->payload_length,
+        protected_content ? protected_content->payload : nullptr,
+        protected_content ? protected_content->payload_length : 0,
         plaintext);
     if (status != 0) {
         plugin_set_error("decrypt-failed", "Failed to decrypt fetched content.");
