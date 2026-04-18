@@ -38,6 +38,23 @@ get_filename_component(CRYPTOPP_SRC_DIR "${CRYPTOPP_SRC_DIR}" ABSOLUTE)
 get_filename_component(CRYPTOPP_PARENT_DIR "${CRYPTOPP_PARENT_DIR}" ABSOLUTE)
 get_filename_component(DA_FLATBUFFERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../da-flatbuffers" ABSOLUTE)
 
+set(DA_FLATBUFFERS_ROOT "")
+if(DEFINED ENV{DA_FLATBUFFERS_ROOT})
+    get_filename_component(DA_FLATBUFFERS_ROOT "$ENV{DA_FLATBUFFERS_ROOT}" ABSOLUTE)
+endif()
+if(NOT DA_FLATBUFFERS_ROOT)
+    foreach(candidate
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../flatbuffers"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../da-flatbuffers"
+    )
+        get_filename_component(candidate_root "${candidate}" ABSOLUTE)
+        if(EXISTS "${candidate_root}/include/flatbuffers/encryption.h")
+            set(DA_FLATBUFFERS_ROOT "${candidate_root}")
+            break()
+        endif()
+    endforeach()
+endif()
+
 if(NOT EXISTS "${CRYPTOPP_PARENT_DIR}/cryptopp")
     file(CREATE_LINK "${CRYPTOPP_SRC_DIR}" "${CRYPTOPP_PARENT_DIR}/cryptopp" SYMBOLIC COPY_ON_ERROR)
 endif()

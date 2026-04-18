@@ -66,6 +66,9 @@ int extract_kmf_bytes(
     keyMaterialAlgorithm expected_algorithm,
     keyMaterialEncoding expected_encoding,
     std::vector<uint8_t>* bytes_out,
+    keyMaterialRole* actual_role_out,
+    keyMaterialAlgorithm* actual_algorithm_out,
+    keyMaterialEncoding* actual_encoding_out,
     const char* error_code,
     const char* error_message) {
     if (!frame || !frame->payload || !bytes_out) {
@@ -103,6 +106,15 @@ int extract_kmf_bytes(
     bytes_out->assign(
         key_material->KEY_BYTES()->begin(),
         key_material->KEY_BYTES()->end());
+    if (actual_role_out) {
+        *actual_role_out = key_material->ROLE();
+    }
+    if (actual_algorithm_out) {
+        *actual_algorithm_out = key_material->ALGORITHM();
+    }
+    if (actual_encoding_out) {
+        *actual_encoding_out = key_material->ENCODING();
+    }
     return 0;
 }
 
@@ -193,14 +205,31 @@ int licensing_server_publish_module(void) {
     }
 
     std::vector<uint8_t> content_key_bytes;
+    keyMaterialRole content_key_role = keyMaterialRole::Unknown;
+    keyMaterialAlgorithm content_key_algorithm = keyMaterialAlgorithm::Unknown;
     if (extract_kmf_bytes(
             content_key_frame,
-            keyMaterialRole::PublicationContent,
-            keyMaterialAlgorithm::Aes256Gcm,
+            keyMaterialRole::Unknown,
+            keyMaterialAlgorithm::Unknown,
             keyMaterialEncoding::RawBytes,
             &content_key_bytes,
+            &content_key_role,
+            &content_key_algorithm,
+            nullptr,
             "invalid-content-key-input",
-            "Input port \"content_key\" must carry a $KMF publication content key.") != 0) {
+            "Input port \"content_key\" must carry a raw 32-byte $KMF decrypt key.") != 0) {
+        return 1;
+    }
+    const bool is_aes_content_key =
+        content_key_role == keyMaterialRole::PublicationContent &&
+        content_key_algorithm == keyMaterialAlgorithm::Aes256Gcm;
+    const bool is_x25519_decrypt_key =
+        content_key_role == keyMaterialRole::DecryptKey &&
+        content_key_algorithm == keyMaterialAlgorithm::X25519Private;
+    if (!is_aes_content_key && !is_x25519_decrypt_key) {
+        plugin_set_error(
+            "invalid-content-key-input",
+            "Input port \"content_key\" must carry either a $KMF publication AES-256-GCM key or a $KMF X25519 decrypt key.");
         return 1;
     }
 
@@ -212,6 +241,8 @@ int licensing_server_publish_module(void) {
         protected_content_frame->payload_length,
         content_key_bytes.data(),
         static_cast<uint32_t>(content_key_bytes.size()),
+        content_key_role,
+        content_key_algorithm,
         response);
     if (status != 0) {
         plugin_set_error("publish-failed", "Failed to publish protected module.");
@@ -284,6 +315,9 @@ int licensing_client_request_grant(void) {
             keyMaterialAlgorithm::Ed25519Seed,
             keyMaterialEncoding::Seed32,
             &requester_signing_key_bytes,
+            nullptr,
+            nullptr,
+            nullptr,
             "invalid-requester-signing-key-input",
             "Input port \"requester_signing_key\" must carry a $KMF requester signing seed.") != 0) {
         return 1;
@@ -363,6 +397,9 @@ int licensing_decrypt_and_verify(void) {
             keyMaterialAlgorithm::Aes256Gcm,
             keyMaterialEncoding::RawBytes,
             &dek_bytes,
+            nullptr,
+            nullptr,
+            nullptr,
             "invalid-dek-input",
             "Input port \"dek\" must carry a $KMF decrypt key.") != 0) {
         return 1;
@@ -375,6 +412,9 @@ int licensing_decrypt_and_verify(void) {
             keyMaterialAlgorithm::Ed25519Public,
             keyMaterialEncoding::PublicKey32,
             &signer_key_bytes,
+            nullptr,
+            nullptr,
+            nullptr,
             "invalid-signer-key-input",
             "Input port \"signer_key\" must carry a $KMF verification key.") != 0) {
         return 1;

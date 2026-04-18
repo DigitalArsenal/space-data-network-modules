@@ -5,10 +5,14 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, "../../../..");
-const standardsRoot = path.join(repoRoot, "packages", "spacedatastandards.org");
+const packageRoot = __dirname;
+const standardsRoot = path.join(
+  packageRoot,
+  "node_modules",
+  "spacedatastandards.org",
+);
 const flatcWasmPath = path.join(
-  repoRoot,
+  packageRoot,
   "node_modules",
   "flatc-wasm",
   "dist",
@@ -108,6 +112,8 @@ async function main() {
       "--cpp-std",
       "c++17",
       "--gen-object-api",
+      "--preserve-case",
+      "--no-warnings",
       "-I",
       "/schemas",
       "-o",

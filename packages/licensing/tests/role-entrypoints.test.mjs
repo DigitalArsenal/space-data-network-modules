@@ -4,9 +4,9 @@ import { WASI } from "node:wasi";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { inspectModule } from "../../../../space-data-module-sdk/src/host/isomorphicLoader.js";
-import { DEFAULT_HOSTCALL_IMPORT_MODULE } from "../../../../space-data-module-sdk/src/host/abi.js";
-import { decodePluginManifest } from "../../../../space-data-module-sdk/src/manifest/index.js";
+import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import { DEFAULT_HOSTCALL_IMPORT_MODULE } from "../node_modules/space-data-module-sdk/src/host/abi.js";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const PACKAGE_JSON_PATH = new URL("../package.json", import.meta.url);

@@ -79,6 +79,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "LNE_generated.h"
 #include "LPF_generated.h"
 #include "LWK_generated.h"
+#include "MBL_generated.h"
 #include "MET_generated.h"
 #include "MFE_generated.h"
 #include "MNF_generated.h"
@@ -230,85 +231,86 @@ enum class RecordType : uint8_t {
   LNE = 64,
   LPF = 65,
   LWK = 66,
-  MET = 67,
-  MFE = 68,
-  MNF = 69,
-  MNV = 70,
-  MPE = 71,
-  MSL = 72,
-  MST = 73,
-  MTI = 74,
-  NAV = 75,
-  OBD = 76,
-  OBT = 77,
-  OCM = 78,
-  OEM = 79,
-  OMM = 80,
-  OOA = 81,
-  OOB = 82,
-  OOD = 83,
-  OOE = 84,
-  OOI = 85,
-  OOL = 86,
-  OON = 87,
-  OOS = 88,
-  OOT = 89,
-  OPM = 90,
-  OSM = 91,
-  PCF = 92,
-  PHY = 93,
-  PLD = 94,
-  PLG = 95,
-  PLK = 96,
-  PNM = 97,
-  PPE = 98,
-  PRG = 99,
-  PUR = 100,
-  RAF = 101,
-  RCF = 102,
-  RDM = 103,
-  RDO = 104,
-  REV = 105,
-  RFB = 106,
-  RFE = 107,
-  RFM = 108,
-  RFO = 109,
-  ROC = 110,
-  SAR = 111,
-  SCM = 112,
-  SDL = 113,
-  SEN = 114,
-  SEO = 115,
-  SEV = 116,
-  SIT = 117,
-  SKI = 118,
-  SNR = 119,
-  SOI = 120,
-  SON = 121,
-  SPP = 122,
-  SPW = 123,
-  STF = 124,
-  STR = 125,
-  STV = 126,
-  SWR = 127,
-  TCF = 128,
-  TDM = 129,
-  TIM = 130,
-  TKG = 131,
-  TME = 132,
-  TMF = 133,
-  TPN = 134,
-  TRK = 135,
-  TRN = 136,
-  VCM = 137,
-  WPN = 138,
-  WTH = 139,
-  XTC = 140,
+  MBL = 67,
+  MET = 68,
+  MFE = 69,
+  MNF = 70,
+  MNV = 71,
+  MPE = 72,
+  MSL = 73,
+  MST = 74,
+  MTI = 75,
+  NAV = 76,
+  OBD = 77,
+  OBT = 78,
+  OCM = 79,
+  OEM = 80,
+  OMM = 81,
+  OOA = 82,
+  OOB = 83,
+  OOD = 84,
+  OOE = 85,
+  OOI = 86,
+  OOL = 87,
+  OON = 88,
+  OOS = 89,
+  OOT = 90,
+  OPM = 91,
+  OSM = 92,
+  PCF = 93,
+  PHY = 94,
+  PLD = 95,
+  PLG = 96,
+  PLK = 97,
+  PNM = 98,
+  PPE = 99,
+  PRG = 100,
+  PUR = 101,
+  RAF = 102,
+  RCF = 103,
+  RDM = 104,
+  RDO = 105,
+  REV = 106,
+  RFB = 107,
+  RFE = 108,
+  RFM = 109,
+  RFO = 110,
+  ROC = 111,
+  SAR = 112,
+  SCM = 113,
+  SDL = 114,
+  SEN = 115,
+  SEO = 116,
+  SEV = 117,
+  SIT = 118,
+  SKI = 119,
+  SNR = 120,
+  SOI = 121,
+  SON = 122,
+  SPP = 123,
+  SPW = 124,
+  STF = 125,
+  STR = 126,
+  STV = 127,
+  SWR = 128,
+  TCF = 129,
+  TDM = 130,
+  TIM = 131,
+  TKG = 132,
+  TME = 133,
+  TMF = 134,
+  TPN = 135,
+  TRK = 136,
+  TRN = 137,
+  VCM = 138,
+  WPN = 139,
+  WTH = 140,
+  XTC = 141,
   MIN = NONE,
   MAX = XTC
 };
 
-inline const RecordType (&EnumValuesRecordType())[141] {
+inline const RecordType (&EnumValuesRecordType())[142] {
   static const RecordType values[] = {
     RecordType::NONE,
     RecordType::ACL,
@@ -377,6 +379,7 @@ inline const RecordType (&EnumValuesRecordType())[141] {
     RecordType::LNE,
     RecordType::LPF,
     RecordType::LWK,
+    RecordType::MBL,
     RecordType::MET,
     RecordType::MFE,
     RecordType::MNF,
@@ -456,7 +459,7 @@ inline const RecordType (&EnumValuesRecordType())[141] {
 }
 
 inline const char * const *EnumNamesRecordType() {
-  static const char * const names[142] = {
+  static const char * const names[143] = {
     "NONE",
     "ACL",
     "ACM",
@@ -524,6 +527,7 @@ inline const char * const *EnumNamesRecordType() {
     "LNE",
     "LPF",
     "LWK",
+    "MBL",
     "MET",
     "MFE",
     "MNF",
@@ -875,6 +879,10 @@ template<> struct RecordTypeTraits<LPF> {
 
 template<> struct RecordTypeTraits<LWK> {
   static const RecordType enum_value = RecordType::LWK;
+};
+
+template<> struct RecordTypeTraits<MBL> {
+  static const RecordType enum_value = RecordType::MBL;
 };
 
 template<> struct RecordTypeTraits<MET> {
@@ -1439,6 +1447,10 @@ template<> struct RecordTypeUnionTraits<LPFT> {
 
 template<> struct RecordTypeUnionTraits<LWKT> {
   static const RecordType enum_value = RecordType::LWK;
+};
+
+template<> struct RecordTypeUnionTraits<MBLT> {
+  static const RecordType enum_value = RecordType::MBL;
 };
 
 template<> struct RecordTypeUnionTraits<METT> {
@@ -2295,6 +2307,14 @@ struct RecordTypeUnion {
     return type == RecordType::LWK ?
       reinterpret_cast<const LWKT *>(value) : nullptr;
   }
+  MBLT *AsMBL() {
+    return type == RecordType::MBL ?
+      reinterpret_cast<MBLT *>(value) : nullptr;
+  }
+  const MBLT *AsMBL() const {
+    return type == RecordType::MBL ?
+      reinterpret_cast<const MBLT *>(value) : nullptr;
+  }
   METT *AsMET() {
     return type == RecordType::MET ?
       reinterpret_cast<METT *>(value) : nullptr;
@@ -3116,6 +3136,9 @@ struct Record FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const LWK *value_as_LWK() const {
     return value_type() == RecordType::LWK ? static_cast<const LWK *>(value()) : nullptr;
   }
+  const MBL *value_as_MBL() const {
+    return value_type() == RecordType::MBL ? static_cast<const MBL *>(value()) : nullptr;
+  }
   const MET *value_as_MET() const {
     return value_type() == RecordType::MET ? static_cast<const MET *>(value()) : nullptr;
   }
@@ -3619,6 +3642,10 @@ template<> inline const LPF *Record::value_as<LPF>() const {
 
 template<> inline const LWK *Record::value_as<LWK>() const {
   return value_as_LWK();
+}
+
+template<> inline const MBL *Record::value_as<MBL>() const {
+  return value_as_MBL();
 }
 
 template<> inline const MET *Record::value_as<MET>() const {
@@ -4408,6 +4435,10 @@ inline bool VerifyRecordType(::flatbuffers::VerifierTemplate<B> &verifier, const
       auto ptr = reinterpret_cast<const LWK *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case RecordType::MBL: {
+      auto ptr = reinterpret_cast<const MBL *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     case RecordType::MET: {
       auto ptr = reinterpret_cast<const MET *>(obj);
       return verifier.VerifyTable(ptr);
@@ -4988,6 +5019,10 @@ inline void *RecordTypeUnion::UnPack(const void *obj, RecordType type, const ::f
       auto ptr = reinterpret_cast<const LWK *>(obj);
       return ptr->UnPack(resolver);
     }
+    case RecordType::MBL: {
+      auto ptr = reinterpret_cast<const MBL *>(obj);
+      return ptr->UnPack(resolver);
+    }
     case RecordType::MET: {
       auto ptr = reinterpret_cast<const MET *>(obj);
       return ptr->UnPack(resolver);
@@ -5555,6 +5590,10 @@ inline ::flatbuffers::Offset<void> RecordTypeUnion::Pack(::flatbuffers::FlatBuff
       auto ptr = reinterpret_cast<const LWKT *>(value);
       return CreateLWK(_fbb, ptr, _rehasher).Union();
     }
+    case RecordType::MBL: {
+      auto ptr = reinterpret_cast<const MBLT *>(value);
+      return CreateMBL(_fbb, ptr, _rehasher).Union();
+    }
     case RecordType::MET: {
       auto ptr = reinterpret_cast<const METT *>(value);
       return CreateMET(_fbb, ptr, _rehasher).Union();
@@ -6119,6 +6158,10 @@ inline RecordTypeUnion::RecordTypeUnion(const RecordTypeUnion &u) : type(u.type)
     }
     case RecordType::LWK: {
       value = new LWKT(*reinterpret_cast<LWKT *>(u.value));
+      break;
+    }
+    case RecordType::MBL: {
+      value = new MBLT(*reinterpret_cast<MBLT *>(u.value));
       break;
     }
     case RecordType::MET: {
@@ -6751,6 +6794,11 @@ inline void RecordTypeUnion::Reset() {
     }
     case RecordType::LWK: {
       auto ptr = reinterpret_cast<LWKT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::MBL: {
+      auto ptr = reinterpret_cast<MBLT *>(value);
       delete ptr;
       break;
     }

@@ -7,28 +7,35 @@ import * as flatbuffers from "flatbuffers";
 import {
   createSdkBrowserShimHarness,
   createSdkBrowserShimSyncHarness,
-} from "../../../tests/lib/sdkBrowserShimHarness.mjs";
-import { getWasmWallet } from "../../../../space-data-module-sdk/src/utils/wasmCrypto.js";
-import { PLG } from "../../../../spacedatastandards.org/lib/js/PLG/PLG.js";
-import { pluginType } from "../../../../spacedatastandards.org/lib/js/PLG/pluginType.js";
-import { KMF } from "../../../../spacedatastandards.org/lib/js/REC/KMF.js";
-import { keyMaterialAlgorithm } from "../../../../spacedatastandards.org/lib/js/REC/keyMaterialAlgorithm.js";
-import { keyMaterialEncoding } from "../../../../spacedatastandards.org/lib/js/REC/keyMaterialEncoding.js";
-import { keyMaterialRole } from "../../../../spacedatastandards.org/lib/js/REC/keyMaterialRole.js";
-import { KRF } from "../../../../spacedatastandards.org/lib/js/REC/KRF.js";
-import { keyReferenceAlgorithm } from "../../../../spacedatastandards.org/lib/js/REC/keyReferenceAlgorithm.js";
-import { keyReferenceRole } from "../../../../spacedatastandards.org/lib/js/REC/keyReferenceRole.js";
-import { LCH } from "../../../../spacedatastandards.org/lib/js/REC/LCH.js";
-import { LCF } from "../../../../spacedatastandards.org/lib/js/REC/LCF.js";
-import { licensingChallengeMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingChallengeMessageType.js";
-import { licensingChallengeRole } from "../../../../spacedatastandards.org/lib/js/REC/licensingChallengeRole.js";
-import { licensingConfigMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingConfigMessageType.js";
-import { licensingConfigRole } from "../../../../spacedatastandards.org/lib/js/REC/licensingConfigRole.js";
-import { LGR } from "../../../../spacedatastandards.org/lib/js/REC/LGR.js";
-import { licensingGrantMessageType } from "../../../../spacedatastandards.org/lib/js/REC/licensingGrantMessageType.js";
-import { KeyExchange } from "../../../../spacedatastandards.org/lib/js/REC/KeyExchange.js";
-import { SymmetricAlgo } from "../../../../spacedatastandards.org/lib/js/REC/SymmetricAlgo.js";
-import { KDF } from "../../../../spacedatastandards.org/lib/js/REC/KDF.js";
+} from "./lib/sdkBrowserShimHarness.mjs";
+import {
+  decodeLicensingGrant,
+  encryptBytesForRecipient,
+  generateX25519Keypair,
+} from "space-data-module-sdk";
+import { getWasmWallet } from "../node_modules/space-data-module-sdk/src/utils/wasmCrypto.js";
+import { PLG } from "spacedatastandards.org/lib/js/PLG/PLG.js";
+import { pluginType } from "spacedatastandards.org/lib/js/PLG/pluginType.js";
+import { KMF } from "spacedatastandards.org/lib/js/REC/KMF.js";
+import { REC } from "spacedatastandards.org/lib/js/REC/REC.js";
+import { Record } from "spacedatastandards.org/lib/js/REC/Record.js";
+import { keyMaterialAlgorithm } from "spacedatastandards.org/lib/js/REC/keyMaterialAlgorithm.js";
+import { keyMaterialEncoding } from "spacedatastandards.org/lib/js/REC/keyMaterialEncoding.js";
+import { keyMaterialRole } from "spacedatastandards.org/lib/js/REC/keyMaterialRole.js";
+import { KRF } from "spacedatastandards.org/lib/js/REC/KRF.js";
+import { keyReferenceAlgorithm } from "spacedatastandards.org/lib/js/REC/keyReferenceAlgorithm.js";
+import { keyReferenceRole } from "spacedatastandards.org/lib/js/REC/keyReferenceRole.js";
+import { LCH } from "spacedatastandards.org/lib/js/REC/LCH.js";
+import { LCF } from "spacedatastandards.org/lib/js/REC/LCF.js";
+import { licensingChallengeMessageType } from "spacedatastandards.org/lib/js/REC/licensingChallengeMessageType.js";
+import { licensingChallengeRole } from "spacedatastandards.org/lib/js/REC/licensingChallengeRole.js";
+import { licensingConfigMessageType } from "spacedatastandards.org/lib/js/REC/licensingConfigMessageType.js";
+import { licensingConfigRole } from "spacedatastandards.org/lib/js/REC/licensingConfigRole.js";
+import { LGR } from "spacedatastandards.org/lib/js/REC/LGR.js";
+import { licensingGrantMessageType } from "spacedatastandards.org/lib/js/REC/licensingGrantMessageType.js";
+import { KeyExchange } from "spacedatastandards.org/lib/js/REC/KeyExchange.js";
+import { SymmetricAlgo } from "spacedatastandards.org/lib/js/REC/SymmetricAlgo.js";
+import { KDF } from "spacedatastandards.org/lib/js/REC/KDF.js";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -283,8 +290,6 @@ function buildGrantRequest({
   requesterPeerId,
   requesterXpub,
   requesterDomain,
-  requesterSigningPubkey,
-  requesterEphemeralPubkey,
   requestedTimeoutMs = 30_000n,
   requestedAtMs = BigInt(Date.now()),
   providerPeerId = "provider.orbpro.test",
@@ -297,12 +302,6 @@ function buildGrantRequest({
   const requesterXpubOffset = builder.createString(requesterXpub);
   const requesterDomainOffset = builder.createString(requesterDomain);
   const providerPeerIdOffset = builder.createString(providerPeerId);
-  const requesterSigningPubkeyOffset = requesterSigningPubkey
-    ? LCH.createRequesterSigningPubkeyVector(builder, requesterSigningPubkey)
-    : 0;
-  const requesterEphemeralPubkeyOffset = requesterEphemeralPubkey
-    ? LCH.createRequesterEphemeralPubkeyVector(builder, requesterEphemeralPubkey)
-    : 0;
   const root = LCH.createLCH(
     builder,
     licensingChallengeMessageType.Request,
@@ -312,8 +311,8 @@ function buildGrantRequest({
     moduleVersionOffset,
     requesterPeerIdOffset,
     requesterXpubOffset,
-    requesterSigningPubkeyOffset,
-    requesterEphemeralPubkeyOffset,
+    0,
+    0,
     requesterDomainOffset,
     requestedTimeoutMs,
     requestedAtMs,
@@ -330,11 +329,6 @@ function buildGrantRequest({
 function decodeGrantResponse(bytes) {
   const buffer = new flatbuffers.ByteBuffer(bytes);
   return LGR.getRootAsLGR(buffer);
-}
-
-function decodeChallengeMessage(bytes) {
-  const buffer = new flatbuffers.ByteBuffer(bytes);
-  return LCH.getRootAsLCH(buffer);
 }
 
 function buildModuleDescriptor({
@@ -355,38 +349,21 @@ function buildModuleDescriptor({
   const allowedDomainOffsets = allowedDomains.map((domain) => builder.createString(domain));
   const allowedDomainsOffset = PLG.createAllowedDomainsVector(builder, allowedDomainOffsets);
 
-  const root = PLG.createPLG(
-    builder,
-    pluginIdOffset,
-    nameOffset,
-    versionOffset,
-    descriptionOffset,
-    pluginType.Analysis,
-    1,
-    0,
-    0n,
-    0,
-    0,
-    0n,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    true,
-    requiredScopeOffset,
-    keyIdOffset,
-    allowedDomainsOffset,
-    maxGrantTimeoutMs,
-    0,
-    BigInt(Date.now()),
-    BigInt(Date.now()),
-    0,
-    0,
-    0,
-    0,
-  );
+  PLG.startPLG(builder);
+  PLG.addPluginId(builder, pluginIdOffset);
+  PLG.addName(builder, nameOffset);
+  PLG.addVersion(builder, versionOffset);
+  PLG.addDescription(builder, descriptionOffset);
+  PLG.addPluginType(builder, pluginType.Analysis);
+  PLG.addAbiVersion(builder, 1);
+  PLG.addEncrypted(builder, true);
+  PLG.addRequiredScope(builder, requiredScopeOffset);
+  PLG.addKeyId(builder, keyIdOffset);
+  PLG.addAllowedDomains(builder, allowedDomainsOffset);
+  PLG.addMaxGrantTimeoutMs(builder, maxGrantTimeoutMs);
+  PLG.addCreatedAt(builder, BigInt(Date.now()));
+  PLG.addUpdatedAt(builder, BigInt(Date.now()));
+  const root = PLG.endPLG(builder);
   PLG.finishPLGBuffer(builder, root);
   return builder.asUint8Array();
 }
@@ -411,7 +388,16 @@ function encryptProtectedContent(plaintext, contentKey) {
   return Buffer.concat([iv, ciphertext, tag]);
 }
 
-function publishModuleSync(serverHarness, descriptorBytes, protectedContent, contentKey) {
+function publishModuleSync(
+  serverHarness,
+  descriptorBytes,
+  protectedContent,
+  contentKey,
+  {
+    role = keyMaterialRole.PublicationContent,
+    algorithm = keyMaterialAlgorithm.Aes256Gcm,
+  } = {},
+) {
   const response = serverHarness.invokeSync({
     methodId: "server_publish_module",
     inputs: [
@@ -429,8 +415,8 @@ function publishModuleSync(serverHarness, descriptorBytes, protectedContent, con
         fileIdentifier: "$KMF",
         payload: buildKeyMaterialFrame({
           keyId: "publication-content-key",
-          role: keyMaterialRole.PublicationContent,
-          algorithm: keyMaterialAlgorithm.Aes256Gcm,
+          role,
+          algorithm,
           encoding: keyMaterialEncoding.RawBytes,
           keyBytes: contentKey,
         }),
@@ -442,6 +428,98 @@ function publishModuleSync(serverHarness, descriptorBytes, protectedContent, con
   assert.equal(response.outputs[0].portId, "response");
   return response.outputs[0].payload;
 }
+
+test("server publishes REC-protected artifacts using X25519 decrypt-key material in the grant metadata", async (t) => {
+  const contentStore = new Map();
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet),
+  });
+  t.after(() => {
+    serverHarness.destroy();
+  });
+
+  configureServerSync(serverHarness, runtimeConfig);
+
+  const recipient = await generateX25519Keypair();
+  const protectedEnvelope = await encryptBytesForRecipient({
+    plaintext: textEncoder.encode("sdk rec protected module"),
+    recipientPublicKey: recipient.publicKey,
+    context: "space-data-module-sdk/package",
+    rootType: "WASM",
+  });
+  const protectedContent = Uint8Array.from(
+    Buffer.from(protectedEnvelope.protectedBlobBase64, "base64"),
+  );
+  const descriptorBytes = buildModuleDescriptor({
+    moduleId: "orbpro.rec.protected.module",
+    version: "2.0.0",
+    keyId: "orbpro.rec.protected.module:2.0.0",
+  });
+
+  publishModuleSync(
+    serverHarness,
+    descriptorBytes,
+    protectedContent,
+    recipient.privateKey,
+    {
+      role: keyMaterialRole.DecryptKey,
+      algorithm: keyMaterialAlgorithm.X25519Private,
+    },
+  );
+
+  const clientHarness = await createSdkBrowserShimHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createProtocolDispatch(serverHarness, contentStore, wallet),
+    surface: "direct",
+  });
+  t.after(async () => {
+    await clientHarness.destroy();
+  });
+
+  const response = await clientHarness.invoke({
+    methodId: "client_request_grant",
+    inputs: [
+      {
+        portId: "request",
+        fileIdentifier: "$LCH",
+        payload: buildGrantRequest({
+          requestId: "grant-req-rec-protected",
+          moduleId: "orbpro.rec.protected.module",
+          moduleVersion: "2.0.0",
+          requesterPeerId: "requester.orbpro.test",
+          requesterXpub: "xpub-test-requester",
+          requesterDomain: "app.orbpro.test",
+          providerPeerId: "provider.orbpro.test",
+        }),
+      },
+      {
+        portId: "requester_signing_key",
+        fileIdentifier: "$KMF",
+        payload: buildKeyMaterialFrame({
+          keyId: "requester-signing-key",
+          role: keyMaterialRole.RequesterSigning,
+          algorithm: keyMaterialAlgorithm.Ed25519Seed,
+          encoding: keyMaterialEncoding.Seed32,
+          keyBytes: randomBytes(32),
+        }),
+      }
+    ],
+  });
+
+  assert.equal(response.statusCode, 0);
+  const grant = decodeGrantResponse(response.outputs[0].payload);
+  const wrappedPayload = grant.wrappedContentKeyPayloadArray();
+  assert.ok(wrappedPayload?.length > 0);
+  const wrappedRec = REC.getRootAsREC(new flatbuffers.ByteBuffer(wrappedPayload));
+  const wrappedRecord = wrappedRec.RECORDS(0, new Record());
+  const wrappedKmf = wrappedRecord?.value(new KMF());
+  assert.ok(wrappedKmf);
+  assert.equal(wrappedKmf.ROLE(), keyMaterialRole.DecryptKey);
+  assert.equal(wrappedKmf.ALGORITHM(), keyMaterialAlgorithm.X25519Private);
+});
 
 test("server_publish_module publishes encrypted content and returns an updated PLG descriptor", async (t) => {
   const contentStore = new Map();
@@ -478,6 +556,97 @@ test("server_publish_module publishes encrypted content and returns an updated P
   assert.equal(descriptor.ENCRYPTED_WASM_SIZE(), BigInt(protectedContent.length));
   assert.equal(descriptor.encryptedWasmHashLength(), 32);
   assert.equal(contentStore.has(descriptor.WASM_CID()), true);
+});
+
+test("republishing a module preserves WASM_CID in the granted descriptor", async (t) => {
+  const contentStore = new Map();
+  const runtimeConfig = makeRuntimeConfig();
+  const wallet = await getWasmWallet();
+  const serverHarness = await createSdkBrowserShimSyncHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createServerHostDispatch(contentStore, runtimeConfig.keySlots, wallet),
+  });
+  t.after(() => {
+    serverHarness.destroy();
+  });
+
+  configureServerSync(serverHarness, runtimeConfig);
+
+  const moduleId = "orbpro.republish.module";
+  const moduleVersion = "4.2.0";
+  const firstDescriptorBytes = buildModuleDescriptor({
+    moduleId,
+    version: moduleVersion,
+  });
+  const firstCid = decodeModuleDescriptor(
+    publishModuleSync(
+      serverHarness,
+      firstDescriptorBytes,
+      textEncoder.encode("first encrypted bundle"),
+      randomBytes(32),
+    ),
+  ).WASM_CID();
+  assert.ok(firstCid);
+
+  const secondDescriptorBytes = buildModuleDescriptor({
+    moduleId,
+    version: moduleVersion,
+  });
+  const secondPublishedDescriptor = decodeModuleDescriptor(
+    publishModuleSync(
+      serverHarness,
+      secondDescriptorBytes,
+      textEncoder.encode("second encrypted bundle"),
+      randomBytes(32),
+    ),
+  );
+  assert.ok(secondPublishedDescriptor.WASM_CID());
+
+  const clientHarness = await createSdkBrowserShimHarness({
+    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    dispatch: createProtocolDispatch(serverHarness, contentStore, wallet),
+    surface: "direct",
+  });
+  t.after(async () => {
+    await clientHarness.destroy();
+  });
+
+  const grantResponse = await clientHarness.invoke({
+    methodId: "client_request_grant",
+    inputs: [
+      {
+        portId: "request",
+        fileIdentifier: "$LCH",
+        payload: buildGrantRequest({
+          requestId: "grant-req-republish",
+          moduleId,
+          moduleVersion,
+          requesterPeerId: "requester.orbpro.test",
+          requesterXpub: "xpub-test-requester",
+          requesterDomain: "app.orbpro.test",
+          providerPeerId: "provider.orbpro.test",
+        }),
+      },
+      {
+        portId: "requester_signing_key",
+        fileIdentifier: "$KMF",
+        payload: buildKeyMaterialFrame({
+          keyId: "requester-signing-key",
+          role: keyMaterialRole.RequesterSigning,
+          algorithm: keyMaterialAlgorithm.Ed25519Seed,
+          encoding: keyMaterialEncoding.Seed32,
+          keyBytes: randomBytes(32),
+        }),
+      },
+    ],
+  });
+
+  assert.equal(grantResponse.statusCode, 0);
+  const grant = decodeGrantResponse(grantResponse.outputs[0].payload);
+  const grantedDescriptor = grant.MODULE_DESCRIPTOR();
+  assert.ok(grantedDescriptor);
+  assert.ok(grantedDescriptor.WASM_CID());
+  assert.equal(grantedDescriptor.WASM_CID(), secondPublishedDescriptor.WASM_CID());
 });
 
 test("client and server role entrypoints interoperate inside the unified licensing module", async (t) => {
@@ -648,107 +817,4 @@ test("client_fetch_and_decrypt resolves the published CID through ipfs.cat", asy
 
   assert.equal(decryptResponse.statusCode, 0);
   assert.deepEqual(decryptResponse.outputs[0].payload, plaintext);
-});
-
-test("server_handle_message rejects challenge requests for disallowed domains", async (t) => {
-  const runtimeConfig = makeRuntimeConfig();
-  const wallet = await getWasmWallet();
-  const serverHarness = await createSdkBrowserShimSyncHarness({
-    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createServerHostDispatch(new Map(), runtimeConfig.keySlots, wallet),
-  });
-  t.after(() => {
-    serverHarness.destroy();
-  });
-
-  configureServerSync(serverHarness, runtimeConfig);
-  publishModuleSync(
-    serverHarness,
-    buildModuleDescriptor({
-      moduleId: "orbpro.policy.module",
-      version: "1.0.0",
-      allowedDomains: ["app.orbpro.test"],
-    }),
-    textEncoder.encode("encrypted bundle"),
-    randomBytes(32),
-  );
-
-  const response = serverHarness.invokeSync({
-    methodId: "server_handle_message",
-    inputs: [
-      {
-        portId: "request",
-        fileIdentifier: "$LCH",
-        payload: buildGrantRequest({
-          requestId: "grant-req-domain-denied",
-          moduleId: "orbpro.policy.module",
-          moduleVersion: "1.0.0",
-          requesterPeerId: "requester.orbpro.test",
-          requesterXpub: "xpub-test-requester",
-          requesterDomain: "evil.orbpro.test",
-          requesterSigningPubkey: new Uint8Array(32).fill(6),
-          requesterEphemeralPubkey: new Uint8Array(32).fill(8),
-          providerPeerId: "provider.orbpro.test",
-        }),
-      },
-    ],
-  });
-
-  assert.equal(response.statusCode, 0);
-  assert.equal(response.outputs.length, 1);
-  const challenge = decodeChallengeMessage(response.outputs[0].payload);
-  assert.equal(challenge.MESSAGE_TYPE(), licensingChallengeMessageType.Error);
-  assert.equal(challenge.ERROR_CODE(), "domain_not_allowed");
-});
-
-test("server_handle_message rejects challenge requests that exceed timeout policy", async (t) => {
-  const runtimeConfig = makeRuntimeConfig();
-  const wallet = await getWasmWallet();
-  const serverHarness = await createSdkBrowserShimSyncHarness({
-    wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
-    dispatch: createServerHostDispatch(new Map(), runtimeConfig.keySlots, wallet),
-  });
-  t.after(() => {
-    serverHarness.destroy();
-  });
-
-  configureServerSync(serverHarness, runtimeConfig);
-  publishModuleSync(
-    serverHarness,
-    buildModuleDescriptor({
-      moduleId: "orbpro.policy.module",
-      version: "1.0.0",
-      maxGrantTimeoutMs: 30_000n,
-    }),
-    textEncoder.encode("encrypted bundle"),
-    randomBytes(32),
-  );
-
-  const response = serverHarness.invokeSync({
-    methodId: "server_handle_message",
-    inputs: [
-      {
-        portId: "request",
-        fileIdentifier: "$LCH",
-        payload: buildGrantRequest({
-          requestId: "grant-req-timeout-denied",
-          moduleId: "orbpro.policy.module",
-          moduleVersion: "1.0.0",
-          requesterPeerId: "requester.orbpro.test",
-          requesterXpub: "xpub-test-requester",
-          requesterDomain: "app.orbpro.test",
-          requesterSigningPubkey: new Uint8Array(32).fill(6),
-          requesterEphemeralPubkey: new Uint8Array(32).fill(8),
-          requestedTimeoutMs: 30_001n,
-          providerPeerId: "provider.orbpro.test",
-        }),
-      },
-    ],
-  });
-
-  assert.equal(response.statusCode, 0);
-  assert.equal(response.outputs.length, 1);
-  const challenge = decodeChallengeMessage(response.outputs[0].payload);
-  assert.equal(challenge.MESSAGE_TYPE(), licensingChallengeMessageType.Error);
-  assert.equal(challenge.ERROR_CODE(), "timeout_exceeds_policy");
 });

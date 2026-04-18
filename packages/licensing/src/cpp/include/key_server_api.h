@@ -14,6 +14,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "KMF_generated.h"
+
 /**
  * Initialize the key server with a runtime configuration payload.
  * Returns 0 on success.
@@ -27,7 +29,9 @@ int32_t key_server_configure_runtime(
  * Inputs:
  * - descriptor_bytes: SDS PLG descriptor for the protected module publication
  * - protected_content: encrypted module delivery bytes
- * - content_key: raw 32-byte module content key
+ * - content_key: raw 32-byte module decrypt key
+ * - content_key_role / content_key_algorithm: the SDS key-material semantics
+ *   for the supplied 32-byte key
  * Output:
  * - updated PLG descriptor with CID/hash/size delivery metadata
  */
@@ -35,6 +39,8 @@ int32_t key_server_publish_module(
     const uint8_t *descriptor_bytes, uint32_t descriptor_len,
     const uint8_t *protected_content, uint32_t protected_content_len,
     const uint8_t *content_key, uint32_t content_key_len,
+    keyMaterialRole content_key_role,
+    keyMaterialAlgorithm content_key_algorithm,
     std::vector<uint8_t> &response_out);
 
 /**

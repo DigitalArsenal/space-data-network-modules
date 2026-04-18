@@ -109,6 +109,8 @@ struct ModulePublication {
   PLGT descriptor{};
   std::vector<uint8_t> descriptor_bytes{};
   std::array<uint8_t, kDekBytes> content_key{};
+  keyMaterialRole content_key_role = keyMaterialRole::PublicationContent;
+  keyMaterialAlgorithm content_key_algorithm = keyMaterialAlgorithm::Aes256Gcm;
 };
 
 struct PendingGrantMessage {
@@ -1411,6 +1413,8 @@ bool derive_recipient_key_id(
 bool build_wrapped_content_key_payload(
     std::string_view content_key_id,
     uint64_t expires_at_ms,
+    keyMaterialRole content_key_role,
+    keyMaterialAlgorithm content_key_algorithm,
     const uint8_t* content_key,
     size_t content_key_len,
     std::vector<uint8_t>* payload_out) {
@@ -1427,8 +1431,8 @@ bool build_wrapped_content_key_payload(
   const auto kmf_offset = CreateKMF(
       builder,
       key_id_offset,
-      keyMaterialRole::PublicationContent,
-      keyMaterialAlgorithm::Aes256Gcm,
+      content_key_role,
+      content_key_algorithm,
       keyMaterialEncoding::RawBytes,
       key_bytes_offset,
       0,
@@ -1620,6 +1624,8 @@ bool wrap_content_key_for_requester(
     size_t requester_ephemeral_pubkey_len,
     std::string_view content_key_id,
     uint64_t expires_at_ms,
+    keyMaterialRole content_key_role,
+    keyMaterialAlgorithm content_key_algorithm,
     const uint8_t* content_key,
     size_t content_key_len,
     WrappedGrantPayload* wrapped_out) {
@@ -1639,6 +1645,8 @@ bool wrap_content_key_for_requester(
     if (!build_wrapped_content_key_payload(
             content_key_id,
             expires_at_ms,
+            content_key_role,
+            content_key_algorithm,
             content_key,
             content_key_len,
             &wrapped_out->payload)) {
@@ -2036,6 +2044,8 @@ int32_t key_server_publish_module(
     uint32_t protected_content_len,
     const uint8_t* content_key,
     uint32_t content_key_len,
+    keyMaterialRole content_key_role,
+    keyMaterialAlgorithm content_key_algorithm,
     std::vector<uint8_t>& response_out) {
   response_out.clear();
   if (!g_initialized) {
@@ -2091,6 +2101,8 @@ int32_t key_server_publish_module(
       publication.content_key.data(),
       content_key,
       publication.content_key.size());
+  publication.content_key_role = content_key_role;
+  publication.content_key_algorithm = content_key_algorithm;
 
   {
     std::lock_guard<std::mutex> lock(g_publication_mutex);
@@ -2609,6 +2621,8 @@ int32_t key_server_handle_message(
           pending.requester_ephemeral_pubkey.size(),
           publication.descriptor.KEY_ID,
           pending.expires_at_ms,
+          publication.content_key_role,
+          publication.content_key_algorithm,
           publication.content_key.data(),
           publication.content_key.size(),
           &wrapped)) {
