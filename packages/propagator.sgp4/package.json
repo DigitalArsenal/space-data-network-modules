@@ -1,5 +1,5 @@
 {
-  "name": "space-data-network-plugin-sgp4-propagator",
+  "name": "space-data-network-module-propagator-sgp4",
   "private": true,
   "version": "0.1.0",
   "sdn-module": "./dist/isomorphic/module.wasm",

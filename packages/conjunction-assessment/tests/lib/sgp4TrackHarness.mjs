@@ -6,7 +6,7 @@ import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_PACKAGES_DIR = path.resolve(__dirname, "..", "..", "..");
-const SGP4_PACKAGE_DIR = path.join(REPO_PACKAGES_DIR, "sgp4-propagator");
+const SGP4_PACKAGE_DIR = path.join(REPO_PACKAGES_DIR, "propagator.sgp4");
 const SGP4_ISOMORPHIC_WASM_PATH = path.join(
   SGP4_PACKAGE_DIR,
   "dist",

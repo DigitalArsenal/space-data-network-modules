@@ -1,4 +1,4 @@
-// SDK 0.8.0 compat coverage for the sgp4-propagator plugin.
+// SDK 0.8.0 compat coverage for the propagator.sgp4 module.
 //
 // Exercises the published SDK surfaces — `validatePluginArtifact`,
 // `inspectModule`, `createBrowserModuleHarness`, and the WasmEdge command

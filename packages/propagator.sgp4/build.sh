@@ -133,7 +133,7 @@ emcmake cmake \
     -DCMAKE_BUILD_TYPE=Release
 
 echo ""
-echo "Building sgp4-propagator wasm module..."
+echo "Building propagator.sgp4 wasm module..."
 cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
 cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"

@@ -12,7 +12,7 @@ PACKAGES=(
     hpop
     maneuver
     od
-    sgp4-propagator
+    propagator.sgp4
 )
 
 if [ "$#" -gt 0 ]; then

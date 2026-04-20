@@ -5,7 +5,7 @@
   "nodes": [
     {
       "nodeId": "sgp4",
-      "pluginId": "sgp4-propagator",
+      "pluginId": "propagator.sgp4",
       "methodId": "invoke",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
@@ -28,6 +28,6 @@
       "queueDepth": 16
     }
   ],
-  "requiredPlugins": ["sgp4-propagator"],
+  "requiredPlugins": ["propagator.sgp4"],
   "description": "Minimal sdn-flow example invoking the SGP4 plugin through the canonical command bridge."
 }

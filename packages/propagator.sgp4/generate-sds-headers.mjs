@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Generate C++ FlatBuffer headers for the SDS schema families that the
- * sgp4-propagator consumes at the SDK 0.8.0 invoke bridge layer (OMM / CAT /
+ * propagator.sgp4 consumes at the SDK 0.8.0 invoke bridge layer (OMM / CAT /
  * REC and their transitive dependencies). The files land under
  * src/cpp/generated/sds/{FAMILY}_generated.h with include rewrites so that
  * cross-family references resolve inside our generated tree.

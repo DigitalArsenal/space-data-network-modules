@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(NOT EMSCRIPTEN)
-    message(FATAL_ERROR "sgp4-propagator is expected to be built through Emscripten.")
+    message(FATAL_ERROR "propagator.sgp4 is expected to be built through Emscripten.")
 endif()
 
 # -------- Common flags --------------------------------------------------------

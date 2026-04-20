@@ -40,7 +40,7 @@ Executed and passing in this repo:
 - `cd packages/hpop && node --test tests/sdk_compat.test.mjs`
 - `cd packages/maneuver && node --test tests/sdk_compat.test.mjs`
 - `cd packages/od && node --test tests/sdk_compat.test.mjs tests/test_wasm.mjs`
-- `cd packages/sgp4-propagator && node --test tests/sdk_compat.test.mjs`
+- `cd packages/propagator.sgp4 && node --test tests/sdk_compat.test.mjs`
 
 Important repo-local results:
 

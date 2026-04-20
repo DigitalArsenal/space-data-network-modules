@@ -21,7 +21,7 @@ Included package tests:
 - `packages/od`
 - `packages/protection-key-server`
 - `packages/protection-license-client`
-- `packages/sgp4-propagator`
+- `packages/propagator.sgp4`
 - `packages/plugin-delivery`
 - `packages/client-decrypt`
 

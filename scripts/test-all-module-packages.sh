@@ -16,7 +16,7 @@ PACKAGES=(
     od
     protection-key-server
     protection-license-client
-    sgp4-propagator
+    propagator.sgp4
     plugin-delivery
     client-decrypt
 )

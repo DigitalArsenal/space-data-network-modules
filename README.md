@@ -81,7 +81,7 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 | `packages/satfoot` | `DigitalArsenal/space-data-network-plugin-satfoot` | `Friends-Of-Lobsternaut/satfoot-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/satobs` | `DigitalArsenal/space-data-network-plugin-satobs` | `Friends-Of-Lobsternaut/satobs-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/sda-visualization` | `DigitalArsenal/space-data-network-plugin-sda-visualization` | `Friends-Of-Lobsternaut/sda-visualization-sdn-plugin` | Pending | Not migrated yet. |
-| `packages/sgp4-propagator` | `DigitalArsenal/space-data-network-plugin-sgp4-propagator` | `Friends-Of-Lobsternaut/sgp4-propagator-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, native SGP4 tests, flow example. |
+| `packages/propagator.sgp4` | `DigitalArsenal/space-data-network-module-propagator-sgp4` | `Friends-Of-Lobsternaut/propagator-sgp4-sdn-module` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, native SGP4 tests, flow example. |
 | `packages/small-bodies` | `DigitalArsenal/space-data-network-plugin-small-bodies` | `Friends-Of-Lobsternaut/small-bodies-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/socmint` | `DigitalArsenal/space-data-network-plugin-socmint` | `Friends-Of-Lobsternaut/socmint-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/space-weather-forecast` | `DigitalArsenal/space-data-network-plugin-space-weather-forecast` | `Friends-Of-Lobsternaut/space-weather-forecast-sdn-plugin` | Pending | Not migrated yet. |
@@ -101,8 +101,8 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 
 ## Current State
 
-- `packages/maneuver`, `packages/cislunar`, `packages/od`, `packages/sgp4-propagator`, `packages/atmosphere`, `packages/fred`, `packages/conjunction-assessment`, and `packages/hpop` are migrated and tracked as submodules in this repo.
-- `maneuver`, `cislunar`, `od`, `sgp4-propagator`, `atmosphere`, `fred`, `conjunction-assessment`, and `hpop` now build dual artifacts:
+- `packages/maneuver`, `packages/cislunar`, `packages/od`, `packages/propagator.sgp4`, `packages/atmosphere`, `packages/fred`, `packages/conjunction-assessment`, and `packages/hpop` are migrated and tracked as submodules in this repo.
+- `maneuver`, `cislunar`, `od`, `propagator.sgp4`, `atmosphere`, `fred`, `conjunction-assessment`, and `hpop` now build dual artifacts:
   - browser pthread bundle: `dist/<plugin>_wasm.js` + `dist/<plugin>_wasm.wasm`
   - shared standalone artifact: `dist/<plugin>_standalone.wasm`
 - The shared standalone artifact is the isomorphic contract. It uses only `wasi_snapshot_preview1` imports so the SDK browser harness and the WasmEdge CLI can load the exact same `.wasm` file.

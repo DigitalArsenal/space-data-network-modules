@@ -1,4 +1,4 @@
-// Shared FlatBuffer payload encoders used across the sgp4-propagator tests.
+// Shared FlatBuffer payload encoders used across the propagator.sgp4 tests.
 // OMM/CAT/REC come from the canonical spacedatastandards.org JS bindings so
 // the contract tests mirror what a real OrbPro host would send on the wire.
 // PropagatorBatchRequest, PropagatorState, CatalogQueryRequest, and
