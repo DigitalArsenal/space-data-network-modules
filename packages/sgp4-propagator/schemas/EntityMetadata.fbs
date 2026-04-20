@@ -1,0 +1,105 @@
+// OrbPro Plugin SDK - Shared Entity Metadata Schema
+//
+// Canonical FlatBuffer for generic OrbPro entity metadata that participates in
+// shared FlatSQL/WASM query and mutation paths.
+
+namespace orbpro.entity;
+
+attribute "indexed";
+
+/// Shared high-level entity categories used by the local entity metadata index.
+enum EntityKind : ubyte {
+  ENTITY = 0,
+  SPACE = 1,
+  GROUND = 2,
+  AIRCRAFT = 3,
+  MISSILE = 4,
+  SHIP = 5,
+  VEHICLE = 6,
+  SENSOR = 7,
+  OTHER = 255
+}
+
+/// Generic queryable metadata for an OrbPro entity.
+table EntityMetadata {
+  /// Stable Cesium/OrbPro entity id.
+  entity_id: string (required, key);
+
+  /// Human-readable entity name used for shared query/search surfaces.
+  name: string (indexed);
+
+  /// Broad entity category.
+  entity_kind: EntityKind = ENTITY;
+
+  /// More specific runtime subtype or class name.
+  subtype: string (indexed);
+
+  /// Optional parent entity id for hierarchy/linkage queries.
+  parent_entity_id: string;
+
+  /// Collection-scoped WASM handle used for batch visibility application.
+  wasm_handle: uint32 = 0 (indexed);
+
+  /// Optional NORAD catalog id for standards-backed entities.
+  norad_cat_id: uint32 = 0 (indexed);
+
+  /// Primary object name surfaced by attached standards metadata.
+  object_name: string (indexed);
+
+  /// Primary international/object designator surfaced by attached standards metadata.
+  object_id: string (indexed);
+
+  /// Secondary CAT object name when different from the primary object name.
+  cat_object_name: string (indexed);
+
+  /// Secondary CAT object id when different from the primary object id.
+  cat_object_id: string (indexed);
+
+  /// Ground/facility subtype metadata for non-space entity search.
+  facility_type: string (indexed);
+
+  /// Pre-normalized phrase-search text for collection-wide shared queries.
+  search_text: string;
+
+  /// CAT owner country code.
+  owner: string (indexed);
+
+  /// CAT operational status code.
+  status_code: string (indexed);
+
+  /// CAT launch date.
+  launch_date: string (indexed);
+
+  /// Launch year derived from launch date.
+  launch_year: string (indexed);
+
+  /// Derived orbit regime classification.
+  orbit_regime: string (indexed);
+
+  /// Orbital period in minutes.
+  period: double = 0.0 (indexed);
+
+  /// Inclination in degrees.
+  inclination: double = 0.0 (indexed);
+
+  /// Apogee altitude in kilometers.
+  apogee: double = 0.0 (indexed);
+
+  /// Perigee altitude in kilometers.
+  perigee: double = 0.0 (indexed);
+
+  /// Mean motion in revolutions per day.
+  mean_motion: double = 0.0 (indexed);
+
+  /// Orbital eccentricity.
+  eccentricity: double = 0.0 (indexed);
+
+  /// B* drag term from OMM.
+  bstar: double = 0.0 (indexed);
+
+  /// Whether GP/OMM state is present for the entity.
+  has_gp: bool = false (indexed);
+}
+
+root_type EntityMetadata;
+file_identifier "ENTM";

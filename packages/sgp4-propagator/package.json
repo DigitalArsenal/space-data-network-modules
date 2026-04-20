@@ -1,13 +1,20 @@
 {
   "name": "space-data-network-plugin-sgp4-propagator",
   "private": true,
+  "version": "0.1.0",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/tudat_wasm_derived.test.mjs",
+    "build": "bash build.sh",
+    "test": "node --test tests/*.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
+    "test:contract": "node --test tests/streamInvokeContract.test.mjs tests/catFlatBufferContract.test.mjs tests/manifestContract.test.mjs",
     "test:tudat": "node --test tests/tudat_wasm_derived.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.5.22"
+    "esbuild": "^0.20.2",
+    "flatc-wasm": "^26.1.29",
+    "flatbuffers": "^25.2.10",
+    "space-data-module-sdk": "0.8.0",
+    "spacedatastandards.org": "1.85.0"
   }
 }

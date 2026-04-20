@@ -1,0 +1,18 @@
+// OrbPro Plugin SDK - Catalog Query Request Schema
+//
+// Canonical aligned-binary request envelope for in-memory catalog queries.
+
+include "CatalogQueryBase.fbs";
+
+namespace orbpro.query;
+
+table CatalogQueryRequest {
+  query_kind: CatalogQueryKind = ROWS;
+  query: string;
+  entity_index: uint32 = 0;
+  max_count: uint32 = 0;
+  entity_count: uint32 = 0;
+}
+
+root_type CatalogQueryRequest;
+file_identifier "CQRQ";

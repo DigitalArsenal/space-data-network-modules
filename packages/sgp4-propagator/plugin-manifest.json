@@ -1,8 +1,8 @@
 {
-  "pluginId": "sgp4-propagator",
-  "name": "SGP4 Propagator Plugin",
-  "version": "0.1.0",
-  "description": "SGP4/SDP4 orbital propagation operations exposed through a canonical SDK command bridge.",
+  "pluginId": "com.orbpro.sgp4",
+  "name": "SGP4/SDP4 Propagator",
+  "version": "1.0.0",
+  "description": "SGP4/SDP4 analytical orbit propagator for TLE-based satellite tracking, ported from OrbPro main with a SDK 0.8.0 invoke bridge over the canonical OrbPro StreamInvokeRequest surface.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -10,38 +10,217 @@
   "runtimeTargets": ["browser", "wasi", "wasmedge"],
   "methods": [
     {
-      "methodId": "invoke",
-      "displayName": "Invoke SGP4 Operation",
+      "methodId": "ingest_omm",
+      "displayName": "Ingest OMM",
+      "description": "Loads 1..n OMM frames into the propagator catalog and ephemeris store. Accepts direct $OMM, size-prefixed $OMM streams, or $REC union frames carrying OMM records.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.omm-or-rec",
+              "allowedTypes": [
+                { "schemaName": "orbpro.sds.omm", "fileIdentifier": "$OMM" },
+                { "schemaName": "orbpro.sds.rec", "fileIdentifier": "$REC" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "upsert_cat",
+      "displayName": "Upsert CAT",
+      "description": "Loads 1..n CAT metadata frames into the in-memory catalog index. Accepts direct $CAT, size-prefixed $CAT streams, or $REC union frames carrying CAT records.",
+      "inputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.cat-or-rec",
+              "allowedTypes": [
+                { "schemaName": "orbpro.sds.cat", "fileIdentifier": "$CAT" },
+                { "schemaName": "orbpro.sds.rec", "fileIdentifier": "$REC" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "propagate_state",
+      "displayName": "Propagate State",
+      "description": "Propagates requested objects to requested epochs and emits aligned-binary PropagatorState frames.",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "orbpro.propagator.batch-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.propagator.PropagatorBatchRequest",
+                  "fileIdentifier": "PROP"
+                },
+                {
+                  "schemaName": "orbpro.propagator.PropagatorBatchRequest",
+                  "fileIdentifier": "PROP",
+                  "wireFormat": "aligned-binary",
+                  "rootTypeName": "PropagatorBatchRequest",
+                  "requiredAlignment": 8
+                }
+              ]
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 65535,
           "required": true
         }
       ],
       "outputPorts": [
         {
-          "portId": "response",
+          "portId": "state",
           "acceptedTypeSets": [
             {
-              "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "orbpro.plugins.propagator-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.plugins.PropagatorState",
+                  "fileIdentifier": "PRST"
+                },
+                {
+                  "schemaName": "orbpro.plugins.PropagatorState",
+                  "fileIdentifier": "PRST",
+                  "wireFormat": "aligned-binary",
+                  "rootTypeName": "PropagatorState",
+                  "requiredAlignment": 8
+                }
+              ]
             }
           ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "propagate_path",
+      "displayName": "Propagate Path",
+      "description": "Produces orbit-path samples for requested objects and intervals.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatbuffers.any",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.flatbuffer.any",
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "samples",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatbuffers.any",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.flatbuffer.any",
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "catalog_query",
+      "displayName": "Catalog Query",
+      "description": "Queries in-memory CAT metadata and emits matching catalog rows as CatalogQueryResult frames.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.query.catalog-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.query.CatalogQueryRequest",
+                  "fileIdentifier": "CQRQ"
+                },
+                {
+                  "schemaName": "orbpro.query.CatalogQueryRequest",
+                  "fileIdentifier": "CQRQ",
+                  "wireFormat": "aligned-binary",
+                  "rootTypeName": "CatalogQueryRequest",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "results",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.query.catalog-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.query.CatalogQueryResult",
+                  "fileIdentifier": "CQRS"
+                },
+                {
+                  "schemaName": "orbpro.query.CatalogQueryResult",
+                  "fileIdentifier": "CQRS",
+                  "wireFormat": "aligned-binary",
+                  "rootTypeName": "CatalogQueryResult",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        }
+      ],
+      "maxBatch": 256,
+      "drainPolicy": "drain-until-yield"
     }
   ]
 }

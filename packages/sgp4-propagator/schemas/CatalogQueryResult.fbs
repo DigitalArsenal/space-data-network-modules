@@ -1,0 +1,21 @@
+// OrbPro Plugin SDK - Catalog Query Result Schema
+//
+// Canonical aligned-binary response payload for catalog queries.
+
+include "CatalogQueryBase.fbs";
+include "EntityMetadata.fbs";
+
+namespace orbpro.query;
+
+table CatalogQueryResult {
+  query_kind: CatalogQueryKind = ROWS;
+  rows: [orbpro.entity.EntityMetadata];
+  entity_indices: [uint32];
+  mask: [ubyte];
+  visible_count: uint32 = 0;
+  entity_index: uint32 = 0;
+  row: orbpro.entity.EntityMetadata;
+}
+
+root_type CatalogQueryResult;
+file_identifier "CQRS";

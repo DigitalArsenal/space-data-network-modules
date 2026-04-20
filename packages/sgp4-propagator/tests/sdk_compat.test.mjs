@@ -1,88 +1,75 @@
+// SDK 0.8.0 compat coverage for the sgp4-propagator plugin.
+//
+// Exercises the published SDK surfaces — `validatePluginArtifact`,
+// `inspectModule`, `createBrowserModuleHarness`, and the WasmEdge command
+// harness — against the real FlatBuffer wire (OMM ingest + PropagatorState
+// output). The `plugin_invoke_bridge.cpp` layer rebuilds the request as an
+// OrbPro `StreamInvokeRequest` and dispatches into `plugin_stream_invoke`;
+// success here proves both the SDK and OrbPro wire surfaces stay aligned for
+// every compiled artifact.
+
+import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import test from "node:test";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validatePluginArtifact } from "space-data-module-sdk/compliance";
-import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
 import {
-  createBrowserModuleHarness,
-  generateManifestHarnessPlan,
-  materializeHarnessScenario,
-} from "space-data-module-sdk/testing";
+  inspectModule,
+  loadModule,
+} from "space-data-module-sdk/host/isomorphic";
+import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
-const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
-const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
-const REQUEST_FIXTURE_PATH = new URL(
-  "../tests/fixtures/request.propagate.json",
-  import.meta.url,
+import {
+  decodePropagatorState,
+  encodeOmmPayload,
+  encodePropagatorBatchRequest,
+} from "./lib/payloadEncoders.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageRoot = path.resolve(__dirname, "..");
+const MANIFEST_PATH = path.join(packageRoot, "plugin-manifest.json");
+const ISOMORPHIC_WASM_PATH = path.join(
+  packageRoot,
+  "dist",
+  "isomorphic",
+  "module.wasm",
 );
-const FLOW_EXAMPLE_PATH = new URL(
-  "../tests/fixtures/sdn-flow/sgp4.single-plugin.flow.json",
-  import.meta.url,
+const BROWSER_MODULE_PATH = path.join(
+  packageRoot,
+  "dist",
+  "browser",
+  "module.js",
+);
+const BROWSER_WASM_PATH = path.join(
+  packageRoot,
+  "dist",
+  "browser",
+  "module.wasm",
 );
 
-function readFixtureBytes() {
-  return fs.readFileSync(REQUEST_FIXTURE_PATH);
-}
-
-function createHarnessScenario(surface) {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-  const plan = generateManifestHarnessPlan({
-    manifest,
-    payloadForPort({ portId }) {
-      if (portId !== "request") {
-        return null;
-      }
-      return readFixtureBytes();
-    },
-  });
-  const scenario = plan.generatedCases.find((entry) => entry.surface === surface);
-  assert.ok(scenario, `missing ${surface} harness scenario`);
-  return materializeHarnessScenario(scenario);
-}
-
-function createInvokeRequest() {
-  const scenario = createHarnessScenario("command");
-  return {
-    methodId: scenario.methodId,
-    inputs: scenario.inputs,
-  };
-}
-
-function assertSuccessfulResponse(response) {
-  assert.equal(response.statusCode, 0);
-  assert.ok(response.errorCode === "" || response.errorCode === null);
-  assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "response");
-
-  const payload = JSON.parse(new TextDecoder().decode(response.outputs[0].payload));
-  assert.equal(payload.objectName, "ISS (ZARYA)");
-  assert.equal(payload.noradId, 25544);
-  assert.ok(payload.numStates >= 13);
-  assert.ok(Array.isArray(payload.states));
+function readManifest() {
+  return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
 }
 
 test("build publishes canonical browser and isomorphic artifact paths", () => {
-  assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
-  assert.equal(fs.existsSync(fileURLToPath(BROWSER_MODULE_PATH)), true);
-  assert.equal(fs.existsSync(fileURLToPath(BROWSER_WASM_PATH)), true);
+  assert.equal(fs.existsSync(ISOMORPHIC_WASM_PATH), true);
+  assert.equal(fs.existsSync(BROWSER_MODULE_PATH), true);
+  assert.equal(fs.existsSync(BROWSER_WASM_PATH), true);
 });
 
 test("built artifact passes SDK compliance checks", async () => {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const report = await validatePluginArtifact({
-    manifest,
-    wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
+    manifest: readManifest(),
+    wasmPath: ISOMORPHIC_WASM_PATH,
   });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
 test("built artifact exposes the standalone isomorphic surface", async () => {
   const inspection = await inspectModule(
-    fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    fs.readFileSync(ISOMORPHIC_WASM_PATH),
   );
   const importedModuleNames = Array.from(
     new Set(inspection.imports.map((entry) => entry.module)),
@@ -90,37 +77,92 @@ test("built artifact exposes the standalone isomorphic surface", async () => {
 
   assert.equal(inspection.profile, "standalone");
   assert.deepEqual(importedModuleNames, ["wasi_snapshot_preview1"]);
-  assert.ok(inspection.exports.includes("_start"));
-  assert.ok(inspection.exports.includes("plugin_alloc"));
-  assert.ok(inspection.exports.includes("plugin_free"));
-  assert.ok(inspection.exports.includes("plugin_invoke_stream"));
-  assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer"));
-  assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer_size"));
+
+  for (const required of [
+    "_start",
+    "plugin_alloc",
+    "plugin_free",
+    "plugin_invoke_stream",
+    "plugin_get_input_frame",
+    "plugin_push_output_typed",
+    "plugin_set_error",
+    "plugin_get_manifest_flatbuffer",
+    "plugin_get_manifest_flatbuffer_size",
+  ]) {
+    assert.ok(
+      inspection.exports.includes(required),
+      `expected export ${required} on isomorphic artifact`,
+    );
+  }
 });
 
-test("built artifact loads through the SDK browser harness", async (t) => {
+test("browser harness drives OMM ingest and PropagatorState emit through the SDK invoke surface", async (t) => {
   const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-    surface: "command",
+    wasmSource: fs.readFileSync(ISOMORPHIC_WASM_PATH),
+    surface: "direct",
   });
   t.after(() => {
     harness.destroy();
   });
 
-  const response = await harness.invoke(createInvokeRequest());
-  assertSuccessfulResponse(response);
+  const ingestResponse = await harness.invoke({
+    methodId: "ingest_omm",
+    inputs: [
+      {
+        portId: "omm",
+        payload: encodeOmmPayload(),
+        typeRef: {
+          schemaName: "orbpro.sds.omm",
+          fileIdentifier: "$OMM",
+        },
+      },
+    ],
+  });
+  assert.equal(ingestResponse.statusCode ?? 0, 0);
+
+  const propagateResponse = await harness.invoke({
+    methodId: "propagate_state",
+    inputs: [
+      {
+        portId: "request",
+        payload: encodePropagatorBatchRequest({
+          epoch: 2460310.5,
+          entityHandles: [0],
+          maxCount: 1,
+        }),
+        typeRef: {
+          schemaName: "orbpro.propagator.PropagatorBatchRequest",
+          fileIdentifier: "PROP",
+        },
+      },
+    ],
+    outputStreamCap: 1,
+  });
+  assert.equal(propagateResponse.statusCode ?? 0, 0);
+  assert.equal(propagateResponse.outputs.length, 1);
+  assert.equal(propagateResponse.outputs[0].portId, "state");
+
+  const payload = propagateResponse.outputs[0].payload;
+  const state = decodePropagatorState(new Uint8Array(payload));
+  assert.equal(state.catalogNumber, 25544);
+  assert.equal(state.valid, true);
+  assert.ok(Number.isFinite(state.position[0]));
 });
 
-test("built artifact loads through the WasmEdge server path", async (t) => {
+test("wasmedge command harness accepts SDK invoke requests", async (t) => {
   let harness;
   try {
     harness = await loadModule({
-      wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
+      wasmSource: ISOMORPHIC_WASM_PATH,
       runtimeKind: "wasmedge",
       enableThreads: false,
     });
   } catch (error) {
-    if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
+    if (
+      /spawn wasmedge ENOENT|command not found|Failed to launch/i.test(
+        String(error),
+      )
+    ) {
       t.skip("Install wasmedge to verify the server-path harness.");
       return;
     }
@@ -130,14 +172,22 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
     await harness.destroy();
   });
 
-  const response = await harness.invoke(createInvokeRequest());
-  assertSuccessfulResponse(response);
-});
-
-test("sdn-flow example is wired to the canonical invoke contract", () => {
-  const flow = JSON.parse(fs.readFileSync(FLOW_EXAMPLE_PATH, "utf8"));
-  assert.equal(flow.nodes.length, 1);
-  assert.equal(flow.nodes[0].pluginId, "sgp4-propagator");
-  assert.equal(flow.nodes[0].methodId, "invoke");
-  assert.equal(flow.triggerBindings[0].targetPortId, "request");
+  // WasmEdge's command surface spawns a fresh process per invoke, so state
+  // doesn't persist between calls. The smoke test here drives a single
+  // `ingest_omm` call and verifies the plugin accepts the SDK 0.8.0 wire
+  // format without tripping the FlatBuffer verifier.
+  const response = await harness.invoke({
+    methodId: "ingest_omm",
+    inputs: [
+      {
+        portId: "omm",
+        payload: encodeOmmPayload(),
+        typeRef: {
+          schemaName: "orbpro.sds.omm",
+          fileIdentifier: "$OMM",
+        },
+      },
+    ],
+  });
+  assert.equal(response.statusCode ?? 0, 0);
 });

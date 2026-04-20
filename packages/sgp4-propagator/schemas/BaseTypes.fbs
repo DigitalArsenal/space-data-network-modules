@@ -1,0 +1,340 @@
+// OrbPro Plugin SDK - Base Types Schema
+//
+// Fundamental data types used across all plugin schemas.
+// These are STRUCTS (fixed-size, inline, zero-copy) not tables.
+//
+// Generate with: flatc --gen-all BaseTypes.fbs
+// Or use flatc-wasm: await flatc({ schema: 'BaseTypes.fbs', targets: ['cpp', 'ts'] })
+
+namespace orbpro;
+
+// =============================================================================
+// Scalar Wrappers (for optional primitives in tables)
+// =============================================================================
+
+/// Optional double value
+struct OptionalDouble {
+  value: double;
+  has_value: bool;
+  _pad: [ubyte:7];  // Align to 16 bytes
+}
+
+// =============================================================================
+// 2D/3D/4D Vectors - 8-byte aligned for WASM SIMD
+// Cesium-compatible naming: Cartesian2, Cartesian3, Cartesian4
+// =============================================================================
+
+/// 2D vector (16 bytes, 8-byte aligned)
+/// Cesium equivalent: Cartesian2
+struct Vec2 {
+  x: double;
+  y: double;
+}
+
+/// Cesium Cartesian2 (16 bytes) - alias for Vec2
+struct Cartesian2 {
+  x: double;
+  y: double;
+}
+
+/// 3D vector (24 bytes, 8-byte aligned)
+/// Used for position (meters), velocity (m/s), etc.
+/// Cesium equivalent: Cartesian3
+struct Vec3 {
+  x: double;
+  y: double;
+  z: double;
+}
+
+/// Cesium Cartesian3 (24 bytes) - alias for Vec3
+struct Cartesian3 {
+  x: double;
+  y: double;
+  z: double;
+}
+
+/// 4D vector (32 bytes, 8-byte aligned)
+/// Cesium equivalent: Cartesian4
+struct Vec4 {
+  x: double;
+  y: double;
+  z: double;
+  w: double;
+}
+
+/// Cesium Cartesian4 (32 bytes) - alias for Vec4
+struct Cartesian4 {
+  x: double;
+  y: double;
+  z: double;
+  w: double;
+}
+
+/// Quaternion (32 bytes, 8-byte aligned)
+/// Convention: [x, y, z, w] where w is the scalar component
+/// Cesium equivalent: Quaternion
+struct Quaternion {
+  x: double;
+  y: double;
+  z: double;
+  w: double;
+}
+
+// =============================================================================
+// Float32 Variants (for GPU upload, reduced precision)
+// =============================================================================
+
+/// 2D vector single precision (8 bytes)
+struct Vec2f {
+  x: float;
+  y: float;
+}
+
+/// Cesium Cartesian2 single precision (8 bytes)
+struct Cartesian2f {
+  x: float;
+  y: float;
+}
+
+/// 3D vector single precision (12 bytes)
+struct Vec3f {
+  x: float;
+  y: float;
+  z: float;
+}
+
+/// Cesium Cartesian3 single precision (12 bytes)
+struct Cartesian3f {
+  x: float;
+  y: float;
+  z: float;
+}
+
+/// 4D vector single precision (16 bytes)
+struct Vec4f {
+  x: float;
+  y: float;
+  z: float;
+  w: float;
+}
+
+/// Cesium Cartesian4 single precision (16 bytes)
+struct Cartesian4f {
+  x: float;
+  y: float;
+  z: float;
+  w: float;
+}
+
+/// Quaternion single precision (16 bytes)
+struct Quaternionf {
+  x: float;
+  y: float;
+  z: float;
+  w: float;
+}
+
+/// Encoded Cartesian3 for GPU (24 bytes)
+/// High/low precision split for RTE (Relative To Eye) rendering
+/// Cesium equivalent: EncodedCartesian3
+struct EncodedVec3 {
+  high_x: float;
+  high_y: float;
+  high_z: float;
+  low_x: float;
+  low_y: float;
+  low_z: float;
+}
+
+/// Cesium EncodedCartesian3 (24 bytes) - alias for EncodedVec3
+struct EncodedCartesian3 {
+  high_x: float;
+  high_y: float;
+  high_z: float;
+  low_x: float;
+  low_y: float;
+  low_z: float;
+}
+
+// =============================================================================
+// Color Types
+// =============================================================================
+
+/// RGBA color, 8-bit per channel (4 bytes)
+struct Color8 {
+  r: ubyte;
+  g: ubyte;
+  b: ubyte;
+  a: ubyte;
+}
+
+/// RGBA color, float per channel (16 bytes)
+struct Colorf {
+  r: float;
+  g: float;
+  b: float;
+  a: float;
+}
+
+// =============================================================================
+// Time Types
+// =============================================================================
+
+/// Julian Date as double (8 bytes)
+/// Days since J2000.0 (2000-01-01T12:00:00 TT)
+struct JulianDate {
+  days: double;
+}
+
+/// Time interval (16 bytes)
+struct TimeInterval {
+  start: double;  // Julian date
+  stop: double;   // Julian date
+}
+
+// =============================================================================
+// Matrices - Column-major order (OpenGL/WebGL convention)
+// =============================================================================
+
+/// 3x3 matrix, column-major (72 bytes)
+struct Matrix3 {
+  col0: Vec3;
+  col1: Vec3;
+  col2: Vec3;
+}
+
+/// 4x4 matrix, column-major (128 bytes)
+/// Used for transforms, model matrices, etc.
+struct Matrix4 {
+  col0: Vec4;
+  col1: Vec4;
+  col2: Vec4;
+  col3: Vec4;
+}
+
+// =============================================================================
+// Bounding Volumes
+// =============================================================================
+
+/// Axis-aligned bounding box (48 bytes)
+struct BoundingBox {
+  min: Vec3;
+  max: Vec3;
+}
+
+/// Bounding sphere (32 bytes)
+struct BoundingSphere {
+  center: Vec3;
+  radius: double;
+}
+
+// =============================================================================
+// Entity Identification
+// =============================================================================
+
+/// Entity handle for WASM registry (4 bytes)
+struct EntityHandle {
+  value: uint32;
+}
+
+/// Entity ID with generation counter for ABA problem prevention (8 bytes)
+struct EntityId {
+  index: uint32;      // Slot index
+  generation: uint32; // Generation counter (detects reuse)
+}
+
+// =============================================================================
+// Cesium Rotation Types
+// =============================================================================
+
+/// Heading, Pitch, Roll rotation (24 bytes)
+/// Cesium equivalent: HeadingPitchRoll
+/// All values in radians
+struct HeadingPitchRoll {
+  heading: double;  // Rotation about negative z-axis
+  pitch: double;    // Rotation about negative y-axis
+  roll: double;     // Rotation about positive x-axis
+}
+
+// =============================================================================
+// Cesium Scalar Interpolation Types
+// =============================================================================
+
+/// Near/Far scalar for distance-based interpolation (32 bytes)
+/// Cesium equivalent: NearFarScalar
+struct NearFarScalar {
+  near: double;       // Distance at which near value applies
+  near_value: double; // Value at near distance
+  far: double;        // Distance at which far value applies
+  far_value: double;  // Value at far distance
+}
+
+/// Distance display condition (16 bytes)
+/// Cesium equivalent: DistanceDisplayCondition
+struct DistanceDisplayCondition {
+  near: double;  // Minimum distance to display
+  far: double;   // Maximum distance to display
+}
+
+// =============================================================================
+// Geographic Types
+// =============================================================================
+
+/// Geographic rectangle in radians (32 bytes)
+/// Cesium equivalent: Rectangle
+struct Rectangle {
+  west: double;   // Western longitude in radians
+  south: double;  // Southern latitude in radians
+  east: double;   // Eastern longitude in radians
+  north: double;  // Northern latitude in radians
+}
+
+/// Cartographic position (24 bytes)
+/// Cesium equivalent: Cartographic
+struct Cartographic {
+  longitude: double;  // Longitude in radians
+  latitude: double;   // Latitude in radians
+  height: double;     // Height in meters above ellipsoid
+}
+
+// =============================================================================
+// Screen-Space Types
+// =============================================================================
+
+/// 2D bounding rectangle in pixels (32 bytes)
+/// Cesium equivalent: BoundingRectangle
+struct BoundingRectangle {
+  x: double;      // X coordinate of lower-left corner
+  y: double;      // Y coordinate of lower-left corner
+  width: double;  // Width in pixels
+  height: double; // Height in pixels
+}
+
+// =============================================================================
+// Boolean and Flags
+// =============================================================================
+
+/// Boolean with padding for alignment (4 bytes)
+/// Use for single boolean values in structs
+struct Bool32 {
+  value: uint32;  // 0 = false, non-zero = true
+}
+
+/// Boolean packed into single byte (1 byte)
+struct Bool8 {
+  value: ubyte;  // 0 = false, non-zero = true
+}
+
+// =============================================================================
+// Cesium Color Alias
+// =============================================================================
+
+/// RGBA color with float components (16 bytes)
+/// Cesium equivalent: Color
+/// Values typically in range [0.0, 1.0]
+struct Color {
+  red: float;
+  green: float;
+  blue: float;
+  alpha: float;
+}

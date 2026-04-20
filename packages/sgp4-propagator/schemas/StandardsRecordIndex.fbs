@@ -1,0 +1,31 @@
+// OrbPro Plugin SDK - Shared Standards Record Index Schema
+//
+// Local FlatBuffer wrapper for standards record identity and mutation metadata
+// that participates in shared FlatSQL query and cascade paths.
+
+namespace orbpro.entity;
+
+attribute "indexed";
+
+table StandardsRecordIndex {
+  /// Stable OrbPro-local record key for one standards payload.
+  record_key: string (required, key);
+
+  /// SDS schema family for the record (`OMM`, `CAT`, `OEM`, `CDM`, etc.).
+  schema_name: string (required, indexed);
+
+  /// Attachment role when one standards message produces multiple entity records.
+  role: string (indexed);
+
+  /// Ingest path that registered this record (`stream-*`, `manual-api`, etc.).
+  attached_via: string (indexed);
+
+  /// High-level payload representation retained by the mutation registry.
+  payload_kind: string (indexed);
+
+  /// Milliseconds since epoch when the local mutation record was last refreshed.
+  updated_at_ms: double = 0.0;
+}
+
+root_type StandardsRecordIndex;
+file_identifier "STRI";

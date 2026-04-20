@@ -1,0 +1,13 @@
+// OrbPro Plugin SDK - Catalog Query Shared Types
+//
+// Defines typed catalog query discriminators for propagator/native query
+// surfaces that need aligned binary request/result payloads.
+
+namespace orbpro.query;
+
+enum CatalogQueryKind : ubyte {
+  ROWS = 0,
+  ENTITY_INDICES = 1,
+  VISIBILITY_MASK = 2,
+  CATALOG_ROW = 3
+}

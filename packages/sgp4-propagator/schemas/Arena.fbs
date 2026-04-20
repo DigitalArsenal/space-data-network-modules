@@ -1,0 +1,314 @@
+// OrbPro Plugin SDK - Shared Memory Arena Schema
+//
+// Defines the memory layout for the shared WASM linear memory arena.
+// This schema documents the regions and provides type-safe access.
+//
+// Memory is organized into fixed regions:
+//   [0KB - 4KB)      Null page (unmapped, trap on access)
+//   [4KB - 1MB)      Host stack
+//   [1MB - 2MB)      Plugin stack region
+//   [2MB - 4MB)      Arena header + metadata
+//   [4MB - 32MB)     Input arena (host writes, plugin reads)
+//   [32MB - 64MB)    Output arena (plugin writes, host reads)
+//   [64MB - ...)     Dynamic heap (malloc/free)
+//
+// Generate with: flatc --gen-all Arena.fbs
+
+include "BaseTypes.fbs";
+
+namespace orbpro.arena;
+
+// =============================================================================
+// Arena Region Offsets (compile-time constants)
+// =============================================================================
+
+/// Fixed offsets in the shared memory arena (bytes)
+/// These are conventions, not enforced by FlatBuffers
+///
+/// NULL_PAGE_END     = 4096         (4 KB)
+/// HOST_STACK_END    = 1048576      (1 MB)
+/// PLUGIN_STACK_END  = 2097152      (2 MB)
+/// HEADER_END        = 4194304      (4 MB)
+/// INPUT_ARENA_END   = 33554432     (32 MB)
+/// OUTPUT_ARENA_END  = 67108864     (64 MB)
+/// HEAP_START        = 67108864     (64 MB)
+
+// =============================================================================
+// Arena Header (stored at offset 2MB, 256 bytes)
+// =============================================================================
+
+/// Arena header with version and region pointers.
+/// Lives at fixed offset 2MB in shared memory.
+///
+/// Binary layout (256 bytes):
+///   Offset  Size  Field
+///   0       4     magic ('OARE' = 0x4F415245)
+///   4       4     version (1)
+///   8       4     header_size (256)
+///   12      4     flags
+///   16      8     input_arena_offset
+///   24      8     input_arena_size
+///   32      8     output_arena_offset
+///   40      8     output_arena_size
+///   48      8     heap_offset
+///   56      8     heap_size
+///   64      8     host_stack_pointer
+///   72      8     plugin_stack_pointer
+///   80      4     active_plugin_count
+///   84      4     pending_request_type
+///   88      8     pending_request_offset
+///   96      8     pending_response_offset
+///   104     8     last_update_epoch (Julian date)
+///   112     4     error_code
+///   116     140   reserved
+///
+struct ArenaHeader {
+  /// Magic number: 'OARE' (0x4F415245)
+  magic: uint32;
+
+  /// Arena version (currently 1)
+  version: uint32;
+
+  /// Size of this header in bytes
+  header_size: uint32;
+
+  /// Arena flags (reserved)
+  flags: uint32;
+
+  /// Offset of input arena region (bytes from memory base)
+  input_arena_offset: uint64;
+
+  /// Size of input arena region (bytes)
+  input_arena_size: uint64;
+
+  /// Offset of output arena region
+  output_arena_offset: uint64;
+
+  /// Size of output arena region
+  output_arena_size: uint64;
+
+  /// Offset of dynamic heap region
+  heap_offset: uint64;
+
+  /// Size of dynamic heap region
+  heap_size: uint64;
+
+  /// Current host stack pointer
+  host_stack_pointer: uint64;
+
+  /// Current plugin stack pointer
+  plugin_stack_pointer: uint64;
+
+  /// Number of currently loaded plugins
+  active_plugin_count: uint32;
+
+  /// Type of pending request (PluginRequestType enum)
+  pending_request_type: uint32;
+
+  /// Offset of pending request message in input arena
+  pending_request_offset: uint64;
+
+  /// Offset of response message in output arena
+  pending_response_offset: uint64;
+
+  /// Last update epoch (Julian date)
+  last_update_epoch: double;
+
+  /// Last error code
+  error_code: int32;
+
+  /// Reserved for future use
+  reserved: [ubyte:140];
+}
+
+// =============================================================================
+// Plugin Request Types
+// =============================================================================
+
+/// Type of plugin request
+enum PluginRequestType : uint32 {
+  /// No pending request
+  NONE = 0,
+  /// Initialize plugin
+  INIT = 1,
+  /// Propagate entities to epoch
+  PROPAGATE = 2,
+  /// Propagate batch of entities
+  PROPAGATE_BATCH = 3,
+  /// Detect targets
+  DETECT = 4,
+  /// Detect batch of targets
+  DETECT_BATCH = 5,
+  /// Evaluate SDF
+  SDF_EVALUATE = 6,
+  /// Evaluate SDF batch
+  SDF_EVALUATE_BATCH = 7,
+  /// Get shader source
+  SHADER_GET_SOURCE = 8,
+  /// Compile shader (hardened mode)
+  SHADER_COMPILE = 9,
+  /// Shutdown plugin
+  SHUTDOWN = 10
+}
+
+/// Plugin response status
+enum PluginResponseStatus : uint32 {
+  /// No response yet
+  PENDING = 0,
+  /// Request completed successfully
+  SUCCESS = 1,
+  /// Request failed with error
+  ERROR = 2,
+  /// Request timed out
+  TIMEOUT = 3,
+  /// Request cancelled
+  CANCELLED = 4
+}
+
+// =============================================================================
+// Arena Allocation Tracking
+// =============================================================================
+
+/// Tracks an allocation within the arena (for debugging)
+struct ArenaAllocation {
+  /// Offset from arena base
+  offset: uint64;
+  /// Size in bytes
+  size: uint64;
+  /// Allocation type (user-defined tag)
+  type_tag: uint32;
+  /// Generation counter (for detecting stale pointers)
+  generation: uint32;
+}
+
+/// Arena allocator state (bump allocator)
+struct BumpAllocator {
+  /// Base offset of this allocator's region
+  base_offset: uint64;
+  /// Current allocation pointer (next free byte)
+  current_offset: uint64;
+  /// End of region (current must not exceed this)
+  end_offset: uint64;
+  /// Number of allocations made
+  allocation_count: uint32;
+  /// Reserved
+  reserved: uint32;
+}
+
+// =============================================================================
+// Plugin Slot (per-plugin metadata in arena)
+// =============================================================================
+
+/// Per-plugin metadata stored in arena header region.
+///
+/// Binary layout (64 bytes):
+///   Offset  Size  Field
+///   0       4     plugin_id (hash of plugin manifest ID)
+///   4       4     state (PluginState enum)
+///   8       8     wasm_instance_ptr (opaque handle)
+///   16      8     memory_base (plugin's __memory_base)
+///   24      8     stack_pointer (plugin's __stack_pointer)
+///   32      8     last_call_epoch
+///   40      4     error_code
+///   44      4     entity_count (entities managed by this plugin)
+///   48      16    reserved
+///
+struct PluginSlot {
+  /// Plugin ID (hash of manifest PLUGIN_ID string)
+  plugin_id: uint32;
+
+  /// Plugin state (0=unloaded, 1=loading, 2=ready, 3=error)
+  state: uint32;
+
+  /// Opaque handle to WASM instance (for JS bridge)
+  wasm_instance_ptr: uint64;
+
+  /// Plugin's __memory_base offset
+  memory_base: uint64;
+
+  /// Plugin's stack pointer
+  stack_pointer: uint64;
+
+  /// Julian date of last plugin call
+  last_call_epoch: double;
+
+  /// Last error code from plugin
+  error_code: int32;
+
+  /// Number of entities this plugin is handling
+  entity_count: uint32;
+
+  /// Reserved
+  reserved: [ubyte:16];
+}
+
+// =============================================================================
+// Arena Configuration (table, for initialization)
+// =============================================================================
+
+/// Configuration for arena initialization
+table ArenaConfig {
+  /// Total memory size (bytes), must be power of 2
+  total_size: uint64 = 67108864;  // 64 MB default
+
+  /// Input arena size (bytes)
+  input_arena_size: uint64 = 29360128;  // 28 MB default
+
+  /// Output arena size (bytes)
+  output_arena_size: uint64 = 33554432;  // 32 MB default
+
+  /// Maximum number of plugin slots
+  max_plugins: uint32 = 16;
+
+  /// Enable shared memory (requires COOP/COEP headers)
+  shared: bool = true;
+
+  /// Initial heap size for dynamic allocations
+  initial_heap_size: uint64 = 16777216;  // 16 MB default
+
+  /// Maximum heap size
+  max_heap_size: uint64 = 268435456;  // 256 MB default
+}
+
+// =============================================================================
+// Cross-Plugin Message Header
+// =============================================================================
+
+/// Header for any message in the arena.
+/// Placed at the start of input/output regions.
+///
+/// Binary layout (32 bytes):
+///   Offset  Size  Field
+///   0       4     message_type (FlatBuffers file_identifier)
+///   4       4     message_size (total size including header)
+///   8       4     source_plugin_id
+///   12      4     target_plugin_id (0 = host)
+///   16      8     timestamp (Julian date)
+///   24      4     sequence_number
+///   28      4     flags
+///
+struct MessageHeader {
+  /// FlatBuffers file identifier (e.g., 'PROP', 'SENS', 'SDFD')
+  message_type: uint32;
+
+  /// Total message size including this header
+  message_size: uint32;
+
+  /// Source plugin ID (0 = host)
+  source_plugin_id: uint32;
+
+  /// Target plugin ID (0 = host)
+  target_plugin_id: uint32;
+
+  /// Timestamp as Julian date
+  timestamp: double;
+
+  /// Sequence number for ordering
+  sequence_number: uint32;
+
+  /// Message flags (reserved)
+  flags: uint32;
+}
+
+root_type ArenaConfig;
+file_identifier "AREN";

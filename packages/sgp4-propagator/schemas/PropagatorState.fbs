@@ -1,0 +1,54 @@
+// OrbPro Plugin SDK - Propagator State Schema
+//
+// Defines state vectors for orbital propagation plugins.
+// Generate headers with: flatcc -a PropagatorState.fbs
+
+namespace orbpro.plugins;
+
+/// Reference frame for position/velocity
+enum ReferenceFrame : byte {
+  /// Earth-Centered Inertial (J2000)
+  ECI = 0,
+  /// Earth-Centered Earth-Fixed
+  ECEF = 1,
+  /// True Equator Mean Equinox
+  TEME = 2,
+  /// International Celestial Reference Frame
+  ICRF = 3
+}
+
+/// Orbital state vector
+table PropagatorState {
+  /// Position [x, y, z] in specified reference frame (meters)
+  position: [double];
+
+  /// Velocity [vx, vy, vz] in specified reference frame (m/s)
+  velocity: [double];
+
+  /// Epoch timestamp (milliseconds since J2000)
+  epoch: int64;
+
+  /// Reference frame for position/velocity
+  referenceFrame: ReferenceFrame = TEME;
+
+  /// Covariance matrix (lower triangular, 21 elements for 6x6)
+  covariance: [double];
+
+  /// Ballistic coefficient (m^2/kg) for drag
+  ballisticCoefficient: double;
+
+  /// Solar radiation pressure coefficient
+  srpCoefficient: double;
+
+  /// Satellite ID / NORAD catalog number
+  catalogNumber: uint32;
+
+  /// Entity index in propagator
+  entityIndex: uint32;
+
+  /// Propagation valid flag
+  valid: bool = true;
+}
+
+root_type PropagatorState;
+file_identifier "PRST";

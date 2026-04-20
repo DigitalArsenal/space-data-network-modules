@@ -1,0 +1,176 @@
+// OrbPro Plugin SDK - State Vector Schema
+//
+// Fixed-size struct for orbital state vectors (64 bytes, 8-byte aligned).
+// Used by propagator plugins for zero-copy batch output.
+//
+// Memory layout matches orbpro_propagator.h OrbProStateVector exactly.
+//
+// Generate with: flatc --gen-all StateVector.fbs
+
+include "BaseTypes.fbs";
+
+namespace orbpro.propagator;
+
+// =============================================================================
+// Reference Frames
+// =============================================================================
+
+/// Reference frame for state vectors
+enum ReferenceFrame : ubyte {
+  /// True Equator Mean Equinox (SGP4 native)
+  TEME = 0,
+  /// J2000 equatorial (EME2000)
+  J2000 = 1,
+  /// International Celestial Reference Frame
+  ICRF = 2,
+  /// Earth-Centered Earth-Fixed (ITRF)
+  ECEF = 3,
+  /// Moon-Centered Inertial
+  MCI = 4,
+  /// Moon-Centered Moon-Fixed
+  MCMF = 5
+}
+
+// =============================================================================
+// State Flags (bitfield)
+// =============================================================================
+
+/// State vector validity and status flags
+enum StateFlags : uint32 {
+  NONE = 0,
+  /// State vector data is valid
+  VALID = 1,
+  /// Satellite is in Earth's shadow
+  IN_ECLIPSE = 2,
+  /// Orbit has decayed (re-entry)
+  DECAYED = 4,
+  /// Maneuver detected/predicted
+  MANEUVERING = 8,
+  /// State extrapolated beyond TLE epoch
+  EXTRAPOLATED = 16,
+  /// Covariance available
+  HAS_COVARIANCE = 32
+}
+
+// =============================================================================
+// State Vector Struct (64 bytes, 8-byte aligned)
+// =============================================================================
+
+/// Orbital state vector - the primary output of propagator plugins.
+///
+/// Binary layout (64 bytes total):
+///   Offset  Size  Field
+///   0       8     epoch (Julian date as float64)
+///   8       24    position [x, y, z] in km
+///   32      24    velocity [vx, vy, vz] in km/s
+///   56      1     reference_frame (ReferenceFrame enum)
+///   57      3     _reserved (padding)
+///   60      4     flags (StateFlags bitfield)
+///
+/// Units:
+///   - Position: kilometers (km)
+///   - Velocity: kilometers per second (km/s)
+///   - Epoch: Julian date (days since J2000)
+///
+/// The host converts km → meters for Cesium.
+struct StateVector {
+  /// Julian date of this state
+  epoch: double;
+
+  /// Position [x, y, z] in km (reference frame specified below)
+  position: Vec3;
+
+  /// Velocity [vx, vy, vz] in km/s
+  velocity: Vec3;
+
+  /// Reference frame for position/velocity
+  reference_frame: ReferenceFrame;
+
+  /// Reserved padding for alignment
+  _reserved: [ubyte:3];
+
+  /// Status flags (StateFlags bitfield)
+  flags: uint32;
+}
+
+// Compile-time size check: StateVector must be exactly 64 bytes
+// This is enforced by the generated code's static assertions
+
+// =============================================================================
+// Propagator Input (variable size, for initialization)
+// =============================================================================
+
+/// TLE (Two-Line Element) data for SGP4 initialization
+table TLEData {
+  /// TLE line 1 (69 characters)
+  line1: string (required);
+  /// TLE line 2 (69 characters)
+  line2: string (required);
+  /// Satellite name (optional, from line 0)
+  name: string;
+  /// NORAD catalog number (parsed from TLE)
+  norad_id: uint32;
+}
+
+/// Keplerian orbital elements (alternative to TLE)
+table KeplerianElements {
+  /// Semi-major axis (km)
+  semi_major_axis: double;
+  /// Eccentricity (0 = circular, <1 = ellipse)
+  eccentricity: double;
+  /// Inclination (radians)
+  inclination: double;
+  /// Right ascension of ascending node (radians)
+  raan: double;
+  /// Argument of periapsis (radians)
+  arg_periapsis: double;
+  /// True anomaly (radians)
+  true_anomaly: double;
+  /// Epoch as Julian date
+  epoch: double;
+  /// Gravitational parameter (km³/s²), default Earth
+  mu: double = 398600.4418;
+}
+
+/// Propagator initialization request
+table PropagatorInit {
+  /// TLE data (for SGP4/SDP4 propagators)
+  tle: [TLEData];
+  /// Keplerian elements (for numerical propagators)
+  elements: [KeplerianElements];
+  /// Entity handles to assign results to
+  entity_handles: [uint32];
+}
+
+// =============================================================================
+// Batch Propagation Request/Response
+// =============================================================================
+
+/// Request to propagate multiple entities to a single epoch
+table PropagatorBatchRequest {
+  /// Target epoch as Julian date
+  epoch: double;
+  /// Entity handles to propagate (empty = all)
+  entity_handles: [uint32];
+  /// Output buffer offset in arena (bytes from arena base)
+  output_offset: uint32;
+  /// Maximum entities to process
+  max_count: uint32;
+}
+
+/// Response header for batch propagation
+table PropagatorBatchResponse {
+  /// Number of state vectors written
+  count: uint32;
+  /// Offset in arena where StateVector[] starts
+  output_offset: uint32;
+  /// Reference frame of all output states
+  reference_frame: ReferenceFrame;
+  /// Error code (0 = success)
+  error_code: int32;
+  /// Error message if error_code != 0
+  error_message: string;
+}
+
+root_type PropagatorBatchResponse;
+file_identifier "PROP";
