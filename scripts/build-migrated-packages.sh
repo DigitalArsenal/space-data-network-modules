@@ -2,15 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Paths are family-prefixed to match the submodule's subfolder layout.
 PACKAGES=(
-    atmosphere
-    cislunar
-    conjunction-assessment
-    fred
-    hpop
-    maneuver
-    od
-    propagator.sgp4
+    propagator/atmosphere
+    propagator/cislunar
+    propagator/hpop
+    propagator/sgp4
+    analysis/conjunction-assessment
+    analysis/maneuver
+    analysis/od
+    licensing/core
+    shaders/sensor-shaders
 )
 
 if [ "$#" -gt 0 ]; then
@@ -18,7 +20,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 for package in "${PACKAGES[@]}"; do
-    if [ ! -d "$ROOT_DIR/packages/$package" ]; then
+    if [ ! -d "$ROOT_DIR/$package" ]; then
         echo "Unknown migrated package: $package" >&2
         exit 1
     fi
@@ -27,7 +29,7 @@ done
 for package in "${PACKAGES[@]}"; do
     echo "==> Building $package"
     (
-        cd "$ROOT_DIR/packages/$package"
+        cd "$ROOT_DIR/$package"
         bash build.sh
     )
 done

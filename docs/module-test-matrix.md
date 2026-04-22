@@ -12,25 +12,24 @@ bash scripts/test-all-module-packages.sh
 
 Included package tests:
 
-- `packages/atmosphere`
-- `packages/cislunar`
-- `packages/conjunction-assessment`
-- `packages/fred`
-- `packages/hpop`
-- `packages/maneuver`
-- `packages/od`
-- `packages/protection-key-server`
-- `packages/protection-license-client`
-- `packages/propagator.sgp4`
-- `packages/plugin-delivery`
-- `packages/client-decrypt`
+- `propagator/atmosphere`
+- `propagator/cislunar`
+- `propagator/hpop`
+- `propagator/sgp4`
+- `analysis/conjunction-assessment`
+- `analysis/maneuver`
+- `analysis/od`
+- `licensing/core`
+- `licensing/client-decrypt`
+- `licensing/protection-key-server`
+- `licensing/protection-license-client`
+- `delivery/plugin-delivery`
+- `shaders/sensor-shaders`
 
 Excluded package directories:
 
-- `packages/fastest-path`
-- `packages/sensor-shaders`
-- `packages/sgp4`
-- `packages/viewshed-shader`
+- `analysis/fastest-path`
+- `shaders/viewshed-shader`
 
 These excluded directories do not currently ship a package-local
 `plugin-manifest.json` plus canonical `dist/isomorphic/module.wasm` artifact, so

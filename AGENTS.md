@@ -16,8 +16,9 @@ loads unchanged in both browser and WasmEdge.
 
 ## When Working In This Repository
 
-When creating, migrating, retrofitting, or verifying a package under
-`packages/`:
+Packages are organized by family subfolder (e.g., `propagator/`, `analysis/`,
+`shaders/`, `licensing/`, `delivery/`). When creating, migrating, retrofitting,
+or verifying a package under any family subfolder:
 
 1. Read the SDK AGENTS.md first.
 2. Follow the SDK's canonical build and publication rules.
