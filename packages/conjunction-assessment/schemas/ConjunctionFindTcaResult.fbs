@@ -1,0 +1,6 @@
+include "ConjunctionCommon.fbs";
+
+namespace orbpro.conjunction;
+
+root_type ConjunctionFindTcaResult;
+file_identifier "CATR";

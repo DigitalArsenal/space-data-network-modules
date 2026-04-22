@@ -1,8 +1,8 @@
 {
-  "pluginId": "hpop-propagator",
-  "name": "HPOP Propagator Plugin",
-  "version": "0.1.0",
-  "description": "High-Precision Orbit Propagator exposed through a canonical SDK command bridge.",
+  "pluginId": "com.orbpro.hpop",
+  "name": "HPOP High-Precision Orbit Propagator",
+  "version": "1.0.0",
+  "description": "High-precision numerical orbit propagator with configurable force models, integrators, atmosphere models, and covariance propagation.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],

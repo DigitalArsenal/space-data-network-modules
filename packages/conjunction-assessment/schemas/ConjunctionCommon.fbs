@@ -1,0 +1,178 @@
+namespace orbpro.conjunction;
+
+table TleRecord {
+  name:string;
+  line1:string;
+  line2:string;
+}
+
+table GpRecord {
+  objectName:string;
+  objectId:string;
+  epoch:string;
+  meanMotion:double;
+  eccentricity:double;
+  inclination:double;
+  raOfAscNode:double;
+  argOfPericenter:double;
+  meanAnomaly:double;
+  ephemerisType:int = 0;
+  classificationType:string;
+  noradCatId:int = 0;
+  elementSetNo:int = 0;
+  revAtEpoch:int = 0;
+  bstar:double = 0.0;
+  meanMotionDot:double = 0.0;
+  meanMotionDdot:double = 0.0;
+}
+
+table BPlaneGeometry {
+  xi:double = 0.0;
+  zeta:double = 0.0;
+  sigmaXx:double = 0.0;
+  sigmaXz:double = 0.0;
+  sigmaZz:double = 0.0;
+  combinedRadius:double = 0.01;
+}
+
+table ScreeningStats {
+  totalObjects:uint = 0;
+  pairsScreened:uint = 0;
+  pairsPrefiltered:uint = 0;
+  kdtreeCandidates:uint = 0;
+  tcaRefined:uint = 0;
+  conjunctionsFound:uint = 0;
+  propagations:uint = 0;
+  elapsedMs:double = 0.0;
+}
+
+enum ConjunctionReferenceFrame:ubyte {
+  UNKNOWN = 0,
+  ECI = 1,
+  ECEF = 2,
+  TEME = 3,
+  ICRF = 4
+}
+
+table PropagatedSample {
+  jd:double = 0.0;
+  xKm:double = 0.0;
+  yKm:double = 0.0;
+  zKm:double = 0.0;
+  vxKmS:double = 0.0;
+  vyKmS:double = 0.0;
+  vzKmS:double = 0.0;
+}
+
+table PropagatedTrack {
+  sourcePluginId:string;
+  sourceHandle:uint = 0;
+  objectName:string;
+  objectId:string;
+  noradCatId:int = 0;
+  referenceFrame:ConjunctionReferenceFrame = UNKNOWN;
+  samples:[PropagatedSample];
+}
+
+table ConjunctionEvent {
+  obj1Name:string;
+  obj1Id:string;
+  obj1Norad:int = 0;
+  obj2Name:string;
+  obj2Id:string;
+  obj2Norad:int = 0;
+  tcaJd:double = 0.0;
+  tcaIso:string;
+  minRangeKm:double = 0.0;
+  relSpeedKms:double = 0.0;
+  maxProbability:double = 0.0;
+  dilutionThresholdKm:double = 0.0;
+  probabilityMethod:string;
+  relPosR:double = 0.0;
+  relPosT:double = 0.0;
+  relPosN:double = 0.0;
+  relVelR:double = 0.0;
+  relVelT:double = 0.0;
+  relVelN:double = 0.0;
+  covR1:double = 0.0;
+  covT1:double = 0.0;
+  covN1:double = 0.0;
+  covR2:double = 0.0;
+  covT2:double = 0.0;
+  covN2:double = 0.0;
+  dse1:double = 0.0;
+  dse2:double = 0.0;
+}
+
+table ConjunctionPairRequest {
+  tle1:TleRecord;
+  tle2:TleRecord;
+  primaryTrack:PropagatedTrack;
+  secondaryTrack:PropagatedTrack;
+  startJd:double = 0.0;
+  durationDays:double = 7.0;
+  radius1M:double = 5.0;
+  radius2M:double = 5.0;
+  coarseStepSec:double = 60.0;
+  fineTolSec:double = 0.001;
+}
+
+table ConjunctionFindTcaResult {
+  tcaJd:double = 0.0;
+  tcaIso:string;
+}
+
+table ConjunctionPcRequest {
+  bplane:BPlaneGeometry;
+  method:string;
+}
+
+table ConjunctionPcResult {
+  probability:double = 0.0;
+  method:string;
+  converged:bool = true;
+  iterations:int = 0;
+  maxProbability:double = 0.0;
+  mahalanobis2d:double = 0.0;
+}
+
+table ConjunctionAlfanoRequest {
+  missDistanceKm:double = 0.0;
+  combinedRadiusKm:double = 0.01;
+}
+
+table ConjunctionAlfanoResult {
+  maxProbability:double = 0.0;
+  dilutionThresholdKm:double = 0.0;
+  sigmaStarKm:double = 0.0;
+}
+
+table ConjunctionScreenCatalogRequest {
+  primaryTles:[TleRecord];
+  secondaryTles:[TleRecord];
+  primaryGps:[GpRecord];
+  secondaryGps:[GpRecord];
+  primaryTracks:[PropagatedTrack];
+  secondaryTracks:[PropagatedTrack];
+  startJd:double = 0.0;
+  durationDays:double = 7.0;
+  thresholdKm:double = 5.0;
+  numThreads:int = 1;
+  coarseStepSec:double = 60.0;
+  fineTolSec:double = 0.001;
+  combinedRadiusM:double = 10.0;
+  useKdTree:bool = true;
+  useDynamicWindow:bool = true;
+  usePerigeeFilter:bool = true;
+}
+
+table ConjunctionScreenCatalogResult {
+  objectsParsed:uint = 0;
+  conjunctionsFound:uint = 0;
+  conjunctions:[ConjunctionEvent];
+  stats:ScreeningStats;
+}
+
+table ConjunctionVersionResult {
+  version:string;
+}

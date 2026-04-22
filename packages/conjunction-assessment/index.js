@@ -1,4 +1,7 @@
-import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  decodePlgManifest,
+  isPlgManifestBuffer,
+} from "space-data-module-sdk/manifest";
 import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
 
 export const pluginManifestPath = new URL("./plugin-manifest.json", import.meta.url);
@@ -79,7 +82,12 @@ export async function getConjunctionAssessmentManifest(plugin = null) {
   if (typeof plugin?.readManifest === "function") {
     const bytes = await plugin.readManifest();
     if (bytes instanceof Uint8Array && bytes.length > 0) {
-      return decodePluginManifest(bytes);
+      if (!isPlgManifestBuffer(bytes)) {
+        throw new Error(
+          "Conjunction-assessment wasm did not expose a canonical $PLG manifest buffer.",
+        );
+      }
+      return decodePlgManifest(bytes);
     }
   }
 

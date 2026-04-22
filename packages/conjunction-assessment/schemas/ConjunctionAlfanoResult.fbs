@@ -1,0 +1,6 @@
+include "ConjunctionCommon.fbs";
+
+namespace orbpro.conjunction;
+
+root_type ConjunctionAlfanoResult;
+file_identifier "CAAS";
