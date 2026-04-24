@@ -1,4 +1,4 @@
-// Verifies that the SGP4 wasm artifact exposes the SDK 0.8.0 invoke surface,
+// Verifies that the SGP4 wasm artifact exposes the SDS PIV invoke surface,
 // OrbPro's direct-call surface, and an embedded PluginManifest whose identity
 // matches the authored `plugin-manifest.json`. If this test drifts from the
 // manifest the build is wired up incorrectly (manifest bytes baked in by
@@ -14,14 +14,14 @@ import { fileURLToPath } from "node:url";
 import { inspectModule } from "space-data-module-sdk";
 import { decodePluginManifest } from "space-data-module-sdk/manifest";
 
-import { loadRawSgp4Module } from "./lib/invokeStreamHelper.mjs";
+import { loadRawSgp4Module } from "./lib/pivInvokeHelper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(__dirname, "..");
 const wasmPath = path.join(packageRoot, "dist", "isomorphic", "module.wasm");
 const manifestJsonPath = path.join(packageRoot, "plugin-manifest.json");
 
-test("SGP4 wasm artifact exports the SDK 0.8.0 invoke surface alongside OrbPro direct-call exports", async () => {
+test("SGP4 wasm artifact exports SDS PIV invoke surface alongside OrbPro direct-call exports", async () => {
   const wasmBytes = await readFile(wasmPath);
   const { exports } = await inspectModule(wasmBytes);
   const exportSet = new Set(exports);
@@ -38,12 +38,11 @@ test("SGP4 wasm artifact exports the SDK 0.8.0 invoke surface alongside OrbPro d
   ]) {
     assert.ok(
       exportSet.has(required),
-      `expected SDK 0.8.0 export ${required}`,
+      `expected SDS PIV export ${required}`,
     );
   }
 
   for (const required of [
-    "plugin_stream_invoke",
     "plugin_init",
     "plugin_init_omm",
     "plugin_destroy",
@@ -57,6 +56,12 @@ test("SGP4 wasm artifact exports the SDK 0.8.0 invoke surface alongside OrbPro d
       `expected OrbPro direct-call export ${required}`,
     );
   }
+
+  assert.equal(
+    exportSet.has("plugin_stream_invoke"),
+    false,
+    "legacy StreamInvoke export must not be present",
+  );
 });
 
 test("SGP4 embedded manifest identity matches plugin-manifest.json", async () => {

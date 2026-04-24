@@ -34,7 +34,7 @@ struct STFBuilder;
 struct STFT;
 
 /// Access type for data listings
-enum class accessType : int8_t {
+enum class accessCategory : int8_t {
   /// One-time purchase
   OneTime = 0,
   /// Recurring subscription
@@ -47,17 +47,17 @@ enum class accessType : int8_t {
   MAX = Query
 };
 
-inline const accessType (&EnumValuesaccessType())[4] {
-  static const accessType values[] = {
-    accessType::OneTime,
-    accessType::Subscription,
-    accessType::Streaming,
-    accessType::Query
+inline const accessCategory (&EnumValuesaccessCategory())[4] {
+  static const accessCategory values[] = {
+    accessCategory::OneTime,
+    accessCategory::Subscription,
+    accessCategory::Streaming,
+    accessCategory::Query
   };
   return values;
 }
 
-inline const char * const *EnumNamesaccessType() {
+inline const char * const *EnumNamesaccessCategory() {
   static const char * const names[5] = {
     "OneTime",
     "Subscription",
@@ -68,10 +68,10 @@ inline const char * const *EnumNamesaccessType() {
   return names;
 }
 
-inline const char *EnumNameaccessType(accessType e) {
-  if (::flatbuffers::IsOutRange(e, accessType::OneTime, accessType::Query)) return "";
+inline const char *EnumNameaccessCategory(accessCategory e) {
+  if (::flatbuffers::IsOutRange(e, accessCategory::OneTime, accessCategory::Query)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesaccessType()[index];
+  return EnumNamesaccessCategory()[index];
 }
 
 /// Payment method accepted
@@ -580,7 +580,7 @@ struct STFT : public ::flatbuffers::NativeTable {
   std::vector<std::string> DATA_TYPES{};
   std::unique_ptr<DataCoverageT> COVERAGE{};
   std::string SAMPLE_CID{};
-  accessType ACCESS_TYPE = accessType::OneTime;
+  accessCategory ACCESS_TYPE = accessCategory::OneTime;
   bool ENCRYPTION_REQUIRED = false;
   std::vector<std::unique_ptr<PricingTierT>> PRICING{};
   std::vector<paymentMethod> ACCEPTED_PAYMENTS{};
@@ -650,8 +650,8 @@ struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_SAMPLE_CID);
   }
   /// Type of access offered
-  accessType ACCESS_TYPE() const {
-    return static_cast<accessType>(GetField<int8_t>(VT_ACCESS_TYPE, 0));
+  accessCategory ACCESS_TYPE() const {
+    return static_cast<accessCategory>(GetField<int8_t>(VT_ACCESS_TYPE, 0));
   }
   /// Whether encryption is required for data delivery
   bool ENCRYPTION_REQUIRED() const {
@@ -748,7 +748,7 @@ struct STFBuilder {
   void add_SAMPLE_CID(::flatbuffers::Offset<::flatbuffers::String> SAMPLE_CID) {
     fbb_.AddOffset(STF::VT_SAMPLE_CID, SAMPLE_CID);
   }
-  void add_ACCESS_TYPE(accessType ACCESS_TYPE) {
+  void add_ACCESS_TYPE(accessCategory ACCESS_TYPE) {
     fbb_.AddElement<int8_t>(STF::VT_ACCESS_TYPE, static_cast<int8_t>(ACCESS_TYPE), 0);
   }
   void add_ENCRYPTION_REQUIRED(bool ENCRYPTION_REQUIRED) {
@@ -796,7 +796,7 @@ inline ::flatbuffers::Offset<STF> CreateSTF(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> DATA_TYPES = 0,
     ::flatbuffers::Offset<DataCoverage> COVERAGE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SAMPLE_CID = 0,
-    accessType ACCESS_TYPE = accessType::OneTime,
+    accessCategory ACCESS_TYPE = accessCategory::OneTime,
     bool ENCRYPTION_REQUIRED = false,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PricingTier>>> PRICING = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<paymentMethod>> ACCEPTED_PAYMENTS = 0,
@@ -839,7 +839,7 @@ inline ::flatbuffers::Offset<STF> CreateSTFDirect(
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *DATA_TYPES = nullptr,
     ::flatbuffers::Offset<DataCoverage> COVERAGE = 0,
     const char *SAMPLE_CID = nullptr,
-    accessType ACCESS_TYPE = accessType::OneTime,
+    accessCategory ACCESS_TYPE = accessCategory::OneTime,
     bool ENCRYPTION_REQUIRED = false,
     const std::vector<::flatbuffers::Offset<PricingTier>> *PRICING = nullptr,
     const std::vector<paymentMethod> *ACCEPTED_PAYMENTS = nullptr,

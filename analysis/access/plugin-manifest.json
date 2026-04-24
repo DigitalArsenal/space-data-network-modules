@@ -1,0 +1,82 @@
+{
+  "pluginId": "com.orbpro.access",
+  "name": "Access Analysis",
+  "version": "1.0.0",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "node"],
+  "methods": [
+    {
+      "methodId": "compute_access_windows",
+      "displayName": "Compute Access Windows",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.access-window-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.AccessWindowRequest",
+                  "fileIdentifier": "AWRQ"
+                }
+              ],
+              "description": "Aligned-binary access-window request frames."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Aligned-binary access-window analysis requests."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "results",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.access-window-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.AccessWindowResult",
+                  "fileIdentifier": "AWRS"
+                }
+              ],
+              "description": "Aligned-binary access-window result frames."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Aligned-binary access-window analysis results."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Computes access windows for an asset, target, and time span."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [
+    {
+      "schemaName": "orbpro.analysis.AccessWindowRequest",
+      "fileIdentifier": "AWRQ"
+    },
+    {
+      "schemaName": "orbpro.analysis.AccessWindowResult",
+      "fileIdentifier": "AWRS"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "access-runtime",
+      "kind": "javascript-runtime",
+      "path": "index.js",
+      "target": "web,worker,node"
+    }
+  ],
+  "abiVersion": 1
+}

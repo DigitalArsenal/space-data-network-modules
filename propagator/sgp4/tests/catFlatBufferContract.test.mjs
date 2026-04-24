@@ -17,9 +17,9 @@ import {
   encodeRecWithCat,
 } from "./lib/payloadEncoders.mjs";
 import {
-  invokeStream,
+  invokePiv,
   loadRawSgp4Module,
-} from "./lib/invokeStreamHelper.mjs";
+} from "./lib/pivInvokeHelper.mjs";
 
 function readCatRecordJson(module, noradCatId) {
   const required = module._plugin_get_cat_record_json_size(noradCatId);
@@ -45,7 +45,7 @@ test("upsert_cat ingests direct $CAT frames and exposes them through catalog_que
   const module = await loadRawSgp4Module();
   try {
     // Seed a catalog entry so upsert_cat has something to attach to.
-    const ingestResult = invokeStream(module, {
+    const ingestResult = invokePiv(module, {
       methodId: "ingest_omm",
       inputs: [
         {
@@ -60,9 +60,9 @@ test("upsert_cat ingests direct $CAT frames and exposes them through catalog_que
         },
       ],
     });
-    assert.equal(ingestResult.response.errorCode, 0);
+    assert.equal(ingestResult.response.STATUS_CODE, 0);
 
-    const upsertResult = invokeStream(module, {
+    const upsertResult = invokePiv(module, {
       methodId: "upsert_cat",
       inputs: [
         {
@@ -77,11 +77,11 @@ test("upsert_cat ingests direct $CAT frames and exposes them through catalog_que
         },
       ],
     });
-    assert.equal(upsertResult.response.errorCode, 0);
+    assert.equal(upsertResult.response.STATUS_CODE, 0);
 
     assert.equal(readCatRecordJson(module, 25544).OBJECT_NAME, "ISS CAT");
 
-    const rowResult = invokeStream(module, {
+    const rowResult = invokePiv(module, {
       methodId: "catalog_query",
       inputs: [
         {
@@ -96,7 +96,7 @@ test("upsert_cat ingests direct $CAT frames and exposes them through catalog_que
       ],
       outputStreamCap: 1,
     });
-    assert.equal(rowResult.response.errorCode, 0);
+    assert.equal(rowResult.response.STATUS_CODE, 0);
     const rowPayload = decodeCatalogQueryResult(
       rowResult.outputPayloads[0].bytes,
     );
@@ -111,7 +111,7 @@ test("upsert_cat ingests direct $CAT frames and exposes them through catalog_que
 test("upsert_cat ingests $REC-wrapped CAT records and overwrites earlier CAT metadata", async () => {
   const module = await loadRawSgp4Module();
   try {
-    const ingestResult = invokeStream(module, {
+    const ingestResult = invokePiv(module, {
       methodId: "ingest_omm",
       inputs: [
         {
@@ -126,10 +126,10 @@ test("upsert_cat ingests $REC-wrapped CAT records and overwrites earlier CAT met
         },
       ],
     });
-    assert.equal(ingestResult.response.errorCode, 0);
+    assert.equal(ingestResult.response.STATUS_CODE, 0);
 
     assert.equal(
-      invokeStream(module, {
+      invokePiv(module, {
         methodId: "upsert_cat",
         inputs: [
           {
@@ -143,13 +143,13 @@ test("upsert_cat ingests $REC-wrapped CAT records and overwrites earlier CAT met
             fileIdentifier: "$CAT",
           },
         ],
-      }).response.errorCode,
+      }).response.STATUS_CODE,
       0,
     );
     assert.equal(readCatRecordJson(module, 25544).OBJECT_NAME, "ISS CAT");
 
     assert.equal(
-      invokeStream(module, {
+      invokePiv(module, {
         methodId: "upsert_cat",
         inputs: [
           {
@@ -165,7 +165,7 @@ test("upsert_cat ingests $REC-wrapped CAT records and overwrites earlier CAT met
             fileIdentifier: "$REC",
           },
         ],
-      }).response.errorCode,
+      }).response.STATUS_CODE,
       0,
     );
 

@@ -52,7 +52,7 @@ const propagator = await createHPOPPropagator();
 | Option | Type | Description |
 |--------|------|-------------|
 | `wasmBytes` | `Uint8Array` | Pre-decrypted WASM bytes from the SDN delivery system. |
-| `decryptFn` | `Function` | Legacy AES-256-GCM decrypt function (protection-runtime). |
+| `recipientPrivateKey` | `string` | Optional SDK 0.8 recipient key override for encrypted module envelopes. |
 | `lowMemory` | `boolean` | Use reduced memory configuration. |
 
 ## Verification

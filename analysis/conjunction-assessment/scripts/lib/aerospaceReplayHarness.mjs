@@ -1,9 +1,8 @@
 import path from "node:path";
 
 // Canonical plugin loader for the conjunction-assessment wasm artifact lives
-// at the submodule package root. (Legacy path pointed into OrbPro's
-// `orbpro-plugins/conjunction-assessment/` wrapper which predates the SDK 0.8
-// migration.)
+// at the submodule package root. The old OrbPro wrapper path was retired during
+// the SDK 0.8 module migration.
 import { createConjunctionAssessmentPlugin } from "../../index.js";
 
 import {

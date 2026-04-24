@@ -1,10 +1,10 @@
 #!/bin/bash
-# Build the SGP4/SDP4 propagator plugin as a standalone SDK 0.8.0 wasm module.
+# Build the SGP4/SDP4 propagator plugin as a standalone SDS PIV wasm module.
 #
 # Produces:
 #   dist/browser/module.js      - Emscripten ES module loader
-#   dist/browser/module.wasm    - Wasm artifact (browser harness)
-#   dist/isomorphic/module.wasm - Same wasm artifact (WasmEdge / server)
+#   dist/browser/module.wasm    - Wasm artifact (browser host)
+#   dist/isomorphic/module.wasm - Same wasm artifact (WASI/server)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

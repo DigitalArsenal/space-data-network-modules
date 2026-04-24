@@ -1,0 +1,185 @@
+{
+  "pluginId": "com.orbpro.coverage",
+  "name": "Coverage Analysis",
+  "version": "1.0.0",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "node"],
+  "methods": [
+    {
+      "methodId": "create_grid",
+      "displayName": "Create Grid",
+      "inputPorts": [
+        {
+          "portId": "grid",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.coverage-grid-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.CoverageGridConfig",
+                  "fileIdentifier": "CVGC"
+                }
+              ],
+              "description": "Aligned-binary analytical coverage grid configuration frames."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Aligned-binary analytical coverage grid configuration."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "results",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.coverage-grid-info",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.CoverageGridInfo",
+                  "fileIdentifier": "CVGI"
+                }
+              ],
+              "description": "Aligned-binary analytical coverage grid metadata frames."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Aligned-binary analytical coverage grid metadata."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Creates a coverage grid for analytical accumulation."
+    },
+    {
+      "methodId": "accumulate_footprints",
+      "displayName": "Accumulate Footprints",
+      "inputPorts": [
+        {
+          "portId": "footprints",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.coverage-footprint-batch",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.CoverageFootprintBatch",
+                  "fileIdentifier": "CVFB"
+                }
+              ],
+              "description": "Aligned-binary analytical coverage footprint accumulation frames."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Aligned-binary footprint polygons and time windows for grid accumulation."
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty",
+      "description": "Accumulates explicit footprint polygons into the analytical coverage grid."
+    },
+    {
+      "methodId": "get_statistics",
+      "displayName": "Get Statistics",
+      "inputPorts": [
+        {
+          "portId": "grid",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.coverage-grid-info",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.CoverageGridInfo",
+                  "fileIdentifier": "CVGI"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Coverage grid query frames."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "results",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.coverage-statistics",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.CoverageStatisticsResult",
+                  "fileIdentifier": "CVST"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Coverage statistics result frames."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Computes coverage statistics for a grid."
+    },
+    {
+      "methodId": "get_access_intervals",
+      "displayName": "Get Access Intervals",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Returns access intervals for a coverage grid cell."
+    },
+    {
+      "methodId": "compute_fom",
+      "displayName": "Compute FOM",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Computes a coverage figure of merit."
+    },
+    {
+      "methodId": "generate_heatmap",
+      "displayName": "Generate Heatmap",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Generates a coverage heatmap."
+    },
+    {
+      "methodId": "analyze_sensor_union",
+      "displayName": "Analyze Sensor Union",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Computes union coverage for selected sensors."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "coverage-runtime",
+      "kind": "javascript-runtime",
+      "path": "index.js",
+      "target": "web,worker,node"
+    }
+  ],
+  "abiVersion": 1
+}

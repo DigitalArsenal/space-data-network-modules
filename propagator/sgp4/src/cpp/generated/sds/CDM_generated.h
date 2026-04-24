@@ -56,22 +56,22 @@ inline const char *EnumNamescreeningVolumeShape(screeningVolumeShape e) {
   return EnumNamesscreeningVolumeShape()[index];
 }
 
-enum class covarianceMethod : int8_t {
+enum class covarianceAlgorithm : int8_t {
   CALCULATED = 0,
   DEFAULT = 1,
   MIN = CALCULATED,
   MAX = DEFAULT
 };
 
-inline const covarianceMethod (&EnumValuescovarianceMethod())[2] {
-  static const covarianceMethod values[] = {
-    covarianceMethod::CALCULATED,
-    covarianceMethod::DEFAULT
+inline const covarianceAlgorithm (&EnumValuescovarianceAlgorithm())[2] {
+  static const covarianceAlgorithm values[] = {
+    covarianceAlgorithm::CALCULATED,
+    covarianceAlgorithm::DEFAULT
   };
   return values;
 }
 
-inline const char * const *EnumNamescovarianceMethod() {
+inline const char * const *EnumNamescovarianceAlgorithm() {
   static const char * const names[3] = {
     "CALCULATED",
     "DEFAULT",
@@ -80,10 +80,10 @@ inline const char * const *EnumNamescovarianceMethod() {
   return names;
 }
 
-inline const char *EnumNamecovarianceMethod(covarianceMethod e) {
-  if (::flatbuffers::IsOutRange(e, covarianceMethod::CALCULATED, covarianceMethod::DEFAULT)) return "";
+inline const char *EnumNamecovarianceAlgorithm(covarianceAlgorithm e) {
+  if (::flatbuffers::IsOutRange(e, covarianceAlgorithm::CALCULATED, covarianceAlgorithm::DEFAULT)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamescovarianceMethod()[index];
+  return EnumNamescovarianceAlgorithm()[index];
 }
 
 struct CDMObjectT : public ::flatbuffers::NativeTable {
@@ -94,7 +94,7 @@ struct CDMObjectT : public ::flatbuffers::NativeTable {
   std::string OPERATOR_CONTACT_POSITION{};
   std::string OPERATOR_ORGANIZATION{};
   std::string EPHEMERIS_NAME{};
-  covarianceMethod COVARIANCE_METHOD = covarianceMethod::CALCULATED;
+  covarianceAlgorithm COVARIANCE_METHOD = covarianceAlgorithm::CALCULATED;
   std::unique_ptr<RFMT> REFERENCE_FRAME{};
   std::string GRAVITY_MODEL{};
   std::string ATMOSPHERIC_MODEL{};
@@ -198,8 +198,8 @@ struct CDMObject FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_EPHEMERIS_NAME);
   }
   /// Covariance method
-  covarianceMethod COVARIANCE_METHOD() const {
-    return static_cast<covarianceMethod>(GetField<int8_t>(VT_COVARIANCE_METHOD, 0));
+  covarianceAlgorithm COVARIANCE_METHOD() const {
+    return static_cast<covarianceAlgorithm>(GetField<int8_t>(VT_COVARIANCE_METHOD, 0));
   }
   /// Reference Frame in which the object position is defined
   const RFM *REFERENCE_FRAME() const {
@@ -409,7 +409,7 @@ struct CDMObjectBuilder {
   void add_EPHEMERIS_NAME(::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_NAME) {
     fbb_.AddOffset(CDMObject::VT_EPHEMERIS_NAME, EPHEMERIS_NAME);
   }
-  void add_COVARIANCE_METHOD(covarianceMethod COVARIANCE_METHOD) {
+  void add_COVARIANCE_METHOD(covarianceAlgorithm COVARIANCE_METHOD) {
     fbb_.AddElement<int8_t>(CDMObject::VT_COVARIANCE_METHOD, static_cast<int8_t>(COVARIANCE_METHOD), 0);
   }
   void add_REFERENCE_FRAME(::flatbuffers::Offset<RFM> REFERENCE_FRAME) {
@@ -521,7 +521,7 @@ inline ::flatbuffers::Offset<CDMObject> CreateCDMObject(
     ::flatbuffers::Offset<::flatbuffers::String> OPERATOR_CONTACT_POSITION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> OPERATOR_ORGANIZATION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_NAME = 0,
-    covarianceMethod COVARIANCE_METHOD = covarianceMethod::CALCULATED,
+    covarianceAlgorithm COVARIANCE_METHOD = covarianceAlgorithm::CALCULATED,
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> GRAVITY_MODEL = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ATMOSPHERIC_MODEL = 0,
@@ -606,7 +606,7 @@ inline ::flatbuffers::Offset<CDMObject> CreateCDMObjectDirect(
     const char *OPERATOR_CONTACT_POSITION = nullptr,
     const char *OPERATOR_ORGANIZATION = nullptr,
     const char *EPHEMERIS_NAME = nullptr,
-    covarianceMethod COVARIANCE_METHOD = covarianceMethod::CALCULATED,
+    covarianceAlgorithm COVARIANCE_METHOD = covarianceAlgorithm::CALCULATED,
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
     const char *GRAVITY_MODEL = nullptr,
     const char *ATMOSPHERIC_MODEL = nullptr,

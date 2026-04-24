@@ -606,7 +606,7 @@ struct ephemerisDataBlockT : public ::flatbuffers::NativeTable {
   std::unique_ptr<RFMT> REFERENCE_FRAME{};
   std::string REFERENCE_FRAME_EPOCH{};
   std::unique_ptr<RFMT> COV_REFERENCE_FRAME{};
-  timeSystem TIME_SYSTEM = timeSystem::GMST;
+  timingStandard TIME_SYSTEM = timingStandard::GMST;
   std::string START_TIME{};
   std::string USEABLE_START_TIME{};
   std::string USEABLE_STOP_TIME{};
@@ -676,8 +676,8 @@ struct ephemerisDataBlock FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     return GetPointer<const RFM *>(VT_COV_REFERENCE_FRAME);
   }
   /// Time system used for the orbit state and covariance matrix. (UTC)
-  timeSystem TIME_SYSTEM() const {
-    return static_cast<timeSystem>(GetField<int8_t>(VT_TIME_SYSTEM, 0));
+  timingStandard TIME_SYSTEM() const {
+    return static_cast<timingStandard>(GetField<int8_t>(VT_TIME_SYSTEM, 0));
   }
   /// Start of TOTAL time span covered by ephemeris data and covariance data (ISO 8601)
   const ::flatbuffers::String *START_TIME() const {
@@ -815,7 +815,7 @@ struct ephemerisDataBlockBuilder {
   void add_COV_REFERENCE_FRAME(::flatbuffers::Offset<RFM> COV_REFERENCE_FRAME) {
     fbb_.AddOffset(ephemerisDataBlock::VT_COV_REFERENCE_FRAME, COV_REFERENCE_FRAME);
   }
-  void add_TIME_SYSTEM(timeSystem TIME_SYSTEM) {
+  void add_TIME_SYSTEM(timingStandard TIME_SYSTEM) {
     fbb_.AddElement<int8_t>(ephemerisDataBlock::VT_TIME_SYSTEM, static_cast<int8_t>(TIME_SYSTEM), 0);
   }
   void add_START_TIME(::flatbuffers::Offset<::flatbuffers::String> START_TIME) {
@@ -873,7 +873,7 @@ inline ::flatbuffers::Offset<ephemerisDataBlock> CreateephemerisDataBlock(
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> REFERENCE_FRAME_EPOCH = 0,
     ::flatbuffers::Offset<RFM> COV_REFERENCE_FRAME = 0,
-    timeSystem TIME_SYSTEM = timeSystem::GMST,
+    timingStandard TIME_SYSTEM = timingStandard::GMST,
     ::flatbuffers::Offset<::flatbuffers::String> START_TIME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> USEABLE_START_TIME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> USEABLE_STOP_TIME = 0,
@@ -922,7 +922,7 @@ inline ::flatbuffers::Offset<ephemerisDataBlock> CreateephemerisDataBlockDirect(
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
     const char *REFERENCE_FRAME_EPOCH = nullptr,
     ::flatbuffers::Offset<RFM> COV_REFERENCE_FRAME = 0,
-    timeSystem TIME_SYSTEM = timeSystem::GMST,
+    timingStandard TIME_SYSTEM = timingStandard::GMST,
     const char *START_TIME = nullptr,
     const char *USEABLE_START_TIME = nullptr,
     const char *USEABLE_STOP_TIME = nullptr,

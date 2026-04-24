@@ -134,6 +134,7 @@ if(EMSCRIPTEN)
         include
         include/conjunction
         generated
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../propagator/sgp4/src/cpp/generated/sds"
         "${FLATBUFFERS_INCLUDE_DIR}"
         "${SGP4_DIR}"
     )
@@ -147,6 +148,7 @@ if(EMSCRIPTEN)
             -s MODULARIZE=1 \
             -s EXPORT_NAME='ConjunctionAssessmentModule' \
             -s STANDALONE_WASM=1 \
+            -Wl,--export=__wasm_call_ctors \
             -s INITIAL_MEMORY=67108864 \
             -s STACK_SIZE=2097152 \
             -s MALLOC='emmalloc' \
@@ -169,6 +171,7 @@ elseif(WASI_SDK)
         include
         include/conjunction
         generated
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../propagator/sgp4/src/cpp/generated/sds"
         "${FLATBUFFERS_INCLUDE_DIR}"
         "${SGP4_DIR}"
     )

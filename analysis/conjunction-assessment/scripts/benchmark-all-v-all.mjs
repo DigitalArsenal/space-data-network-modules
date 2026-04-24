@@ -1,25 +1,12 @@
-// -----------------------------------------------------------------------------
-// WARNING: Cross-plugin benchmark — OrbPro-side deps not yet ported to submodule.
-// -----------------------------------------------------------------------------
-// This benchmark compares screening output against HPOP + SGP4 ground truth
-// sourced from the OrbPro-side wrappers (`orbpro-plugins/propagator.{hpop,sgp4}`)
-// and an OrbPro test utility for decrypting DEK-protected build artifacts.
-// Post-migration, the equivalent wiring needs to:
-//   1. Use this submodule's `packages/propagator.sgp4/` loader directly.
-//   2. Use `packages/hpop/` (submodule) — note: its API is `loadHPOPPlugin`,
-//      not `createHPOPPropagator`.
-//   3. Replace `decryptWithBuildDek` with the SDK 0.8 artifact path (no DEK
-//      encryption in isomorphic builds).
-// Until that port lands, this script fails at import — run it from the legacy
-// wrapper at packages/conjunction-assessment-sdn-plugin/ for the time being.
-// -----------------------------------------------------------------------------
+// Cross-plugin benchmark. This script is intended to run from the OrbPro
+// workspace, where the package exports below bridge to the canonical SDN module
+// artifacts under packages/space-data-network-modules/.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createHPOPPropagator } from "../../orbpro-plugins/propagator.hpop/index.js";
-import { createSGP4Propagator } from "../../orbpro-plugins/propagator.sgp4/index.js";
-import { decryptWithBuildDek } from "../../orbpro-plugins/test/buildArtifactTestUtils.mjs";
+import { createHPOPPropagator } from "@orbpro/integration/hpop";
+import { createSGP4Propagator } from "@orbpro/integration/sgp4";
 import {
   extractEpochState,
   isoToJulianDate,
@@ -67,15 +54,22 @@ function splitCsvList(value, transform = (item) => item) {
 async function loadSgp4Scenario(options) {
   const mode = String(options.mode ?? "sgp4-gp");
   const propagator = await createSGP4Propagator({
-    decryptFn: decryptWithBuildDek,
     requireEmbeddedManifest: true,
   });
 
   const inputPath =
     options.input ??
     (mode === "sgp4-tle"
-      ? "/Users/tj/software/OrbPro/packages/conjunction-assessment-sdn-plugin/tests/data/tle_61721_67298.json"
-      : "/Users/tj/software/OrbPro/packages/conjunction-assessment-sdn-plugin/tests/data/gp_61721,67298.json");
+      ? null
+      : new URL(
+          "../tests/fixtures/socrates/gp_61721,67298.json",
+          import.meta.url,
+        ));
+  if (!inputPath) {
+    throw new Error(
+      "--input is required for sgp4-tle mode; bundled SOCRATES fixtures are GP/OMM records.",
+    );
+  }
   const inputText = await readFile(inputPath, "utf8");
 
   if (mode === "sgp4-tle") {
@@ -148,7 +142,6 @@ async function loadHpopScenario(options) {
   }
 
   const propagator = await createHPOPPropagator({
-    decryptFn: decryptWithBuildDek,
     requireEmbeddedManifest: true,
   });
   propagator.initFromState(states);

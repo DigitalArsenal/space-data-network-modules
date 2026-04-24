@@ -4,10 +4,10 @@
  *
  * The original Tudat coverage validates the Vallado canonical SGP4 benchmark
  * and a basic ISS-like orbit sanity check. This package-local variant drives
- * the SDK 0.8.0 browser harness through the same `ingest_omm` +
- * `propagate_state` path that every downstream host uses, so a green run here
- * means the OrbPro native propagator still matches the textbook reference
- * inside the SDK-compliant WASM envelope.
+ * the module through the same SDS PIV `ingest_omm` + `propagate_state` path
+ * that every downstream OrbPro host uses, so a green run here means the native
+ * propagator still matches the textbook reference inside the canonical WASM
+ * envelope.
  *
  * Tudat compares the Vallado benchmark in J2000 after converting from TEME.
  * This plugin's public contract returns TEME state vectors, so the numeric
@@ -20,21 +20,14 @@
  */
 
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
-
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 import {
   decodePropagatorState,
   encodeOmmPayload,
   encodePropagatorBatchRequest,
 } from "./lib/payloadEncoders.mjs";
-
-const ISOMORPHIC_WASM_PATH = fileURLToPath(
-  new URL("../dist/isomorphic/module.wasm", import.meta.url),
-);
+import { invokePiv, loadRawSgp4Module } from "./lib/pivInvokeHelper.mjs";
 
 const VALLADO_OMM = {
   noradId: 5,
@@ -94,19 +87,16 @@ function magnitude3([x, y, z]) {
   return Math.sqrt(x * x + y * y + z * z);
 }
 
-async function createHarness(t) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(ISOMORPHIC_WASM_PATH),
-    surface: "direct",
-  });
+async function createModule(t) {
+  const module = await loadRawSgp4Module();
   t.after(() => {
-    harness.destroy();
+    module._plugin_destroy();
   });
-  return harness;
+  return module;
 }
 
-async function ingestOmm(harness, ommOverrides) {
-  const response = await harness.invoke({
+function ingestOmm(module, ommOverrides) {
+  const response = invokePiv(module, {
     methodId: "ingest_omm",
     inputs: [
       {
@@ -119,11 +109,11 @@ async function ingestOmm(harness, ommOverrides) {
       },
     ],
   });
-  assert.equal(response.statusCode ?? 0, 0, response.errorMessage ?? "");
+  assert.equal(response.response.STATUS_CODE ?? 0, 0);
 }
 
-async function propagateAtJd(harness, targetJd) {
-  const response = await harness.invoke({
+function propagateAtJd(module, targetJd) {
+  const response = invokePiv(module, {
     methodId: "propagate_state",
     inputs: [
       {
@@ -141,16 +131,16 @@ async function propagateAtJd(harness, targetJd) {
     ],
     outputStreamCap: 1,
   });
-  assert.equal(response.statusCode ?? 0, 0, response.errorMessage ?? "");
-  assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "state");
-  return decodePropagatorState(new Uint8Array(response.outputs[0].payload));
+  assert.equal(response.response.STATUS_CODE ?? 0, 0);
+  assert.equal(response.outputPayloads.length, 1);
+  assert.equal(response.outputPayloads[0].portId, "state");
+  return decodePropagatorState(response.outputPayloads[0].bytes);
 }
 
 test("tudat vallado sgp4 benchmark stays within textbook tolerance", async (t) => {
-  const harness = await createHarness(t);
-  await ingestOmm(harness, VALLADO_OMM);
-  const state = await propagateAtJd(harness, VALLADO_TARGET_JD);
+  const module = await createModule(t);
+  ingestOmm(module, VALLADO_OMM);
+  const state = propagateAtJd(module, VALLADO_TARGET_JD);
 
   assert.equal(state.catalogNumber, VALLADO_OMM.noradId);
   assert.equal(state.valid, true);
@@ -175,9 +165,9 @@ test("tudat vallado sgp4 benchmark stays within textbook tolerance", async (t) =
 });
 
 test("tudat iss-like sgp4 sanity orbit stays in expected bounds", async (t) => {
-  const harness = await createHarness(t);
-  await ingestOmm(harness, ISS_LIKE_OMM);
-  const state = await propagateAtJd(harness, ISS_TARGET_JD);
+  const module = await createModule(t);
+  ingestOmm(module, ISS_LIKE_OMM);
+  const state = propagateAtJd(module, ISS_TARGET_JD);
 
   assert.equal(state.catalogNumber, ISS_LIKE_OMM.noradId);
   assert.equal(state.valid, true);

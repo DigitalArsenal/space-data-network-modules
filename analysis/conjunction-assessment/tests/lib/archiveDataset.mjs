@@ -301,39 +301,13 @@ export async function listAerospaceArchiveDirectory(root) {
 // SOCRATES / CelesTrak dataset discovery.
 //
 // The full SOCRATES catalog (~120k conjunction rows) and per-pair GP records
-// currently live alongside the legacy OrbPro plugin wrapper at
-// `packages/conjunction-assessment-sdn-plugin/tests/data/`. That tree is
-// outside the submodule and will move as part of the broader migration, but
-// for now it's the source of truth for local SOCRATES validation runs.
+// are external validation data. Point CONJUNCTION_ASSESSMENT_SOCRATES_ROOT or
+// SOCRATES_LOCAL_ROOT at a local extracted catalog when running corpus checks.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_SOCRATES_ROOT_CANDIDATES = Object.freeze([
   process.env.CONJUNCTION_ASSESSMENT_SOCRATES_ROOT ?? "",
   process.env.SOCRATES_LOCAL_ROOT ?? "",
-  // Monorepo-relative fallbacks — relative to this file's location within
-  // `<submodule>/packages/conjunction-assessment/tests/lib/`, walk up to the
-  // OrbPro workspace and land on the legacy plugin wrapper.
-  path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
-    "..",
-    "..",
-    "..",
-    "..",
-    "..",
-    "..",
-    "conjunction-assessment-sdn-plugin",
-    "tests",
-    "data",
-  ),
-  path.join(
-    os.homedir(),
-    "software",
-    "OrbPro",
-    "packages",
-    "conjunction-assessment-sdn-plugin",
-    "tests",
-    "data",
-  ),
 ]);
 
 export const SOCRATES_FILENAMES = Object.freeze({

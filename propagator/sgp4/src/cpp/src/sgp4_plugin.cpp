@@ -40,10 +40,9 @@
 #include "generated/CatalogQueryRequest_generated.h"
 #include "generated/CatalogQueryResult_generated.h"
 #include "generated/EntityMetadata_generated.h"
-#include "generated/PluginMessage_generated.h"
 #include "generated/PropagatorState_generated.h"
 #include "generated/StateVector_generated.h"
-#include "generated/TypedArenaBuffer_generated.h"
+#include "generated/sds/PIV_generated.h"
 #include <flatbuffers/flatbuffers.h>
 #include <sqlite3.h>
 #include <cstdlib>
@@ -2083,36 +2082,160 @@ uint8_t* copyFlatBufferToHeap(const flatbuffers::FlatBufferBuilder& builder, uin
     return bytes;
 }
 
-uint8_t* buildErrorStreamInvokeResponse(
-    int32_t errorCode,
+struct PivOutputFrame {
+    const char* portId;
+    const char* schemaName;
+    const char* fileIdentifier;
+    const char* rootType;
+    payloadWireFormat wireFormat;
+    uint32_t alignment;
+    uint64_t frameId;
+    uint8_t* payload;
+    uint32_t payloadSize;
+};
+
+uint32_t alignArenaOffset(uint32_t offset, uint32_t alignment) {
+    if (alignment <= 1u) {
+        return offset;
+    }
+    const uint32_t remainder = offset % alignment;
+    return remainder == 0u ? offset : offset + alignment - remainder;
+}
+
+uint8_t* buildPivInvokeResponse(
+    int32_t statusCode,
+    pivStatus status,
+    const char* errorCode,
     const char* errorMessage,
+    uint64_t traceId,
+    const std::vector<PivOutputFrame>* outputFrames,
     uint32_t* responseSizeOut
 ) {
-    flatbuffers::FlatBufferBuilder builder(256);
-    const auto response = orbpro::plugin::CreateStreamInvokeResponseDirect(
+    flatbuffers::FlatBufferBuilder builder(1024);
+    std::vector<uint8_t> payloadArena;
+    std::vector<flatbuffers::Offset<TAB>> outputs;
+
+    if (outputFrames != nullptr && !outputFrames->empty()) {
+        outputs.reserve(outputFrames->size());
+        for (const PivOutputFrame& output : *outputFrames) {
+            const uint32_t alignment = output.alignment > 0u ? output.alignment : 8u;
+            const uint32_t offset = alignArenaOffset(
+                static_cast<uint32_t>(payloadArena.size()),
+                alignment
+            );
+            payloadArena.resize(offset, 0);
+            if (output.payload != nullptr && output.payloadSize > 0u) {
+                payloadArena.insert(
+                    payloadArena.end(),
+                    output.payload,
+                    output.payload + output.payloadSize
+                );
+            }
+
+            const auto typeRef = CreateFlatBufferTypeRefDirect(
+                builder,
+                output.schemaName,
+                output.fileIdentifier,
+                nullptr,
+                output.rootType
+            );
+            outputs.push_back(CreateTABDirect(
+                builder,
+                offset,
+                output.payloadSize,
+                alignment,
+                output.wireFormat,
+                typeRef,
+                bufferMutability::IMMUTABLE,
+                bufferOwnership::HOST_OWNED,
+                output.frameId,
+                output.portId
+            ));
+        }
+    }
+
+    const auto response = CreatePIVResponseDirect(
         builder,
-        nullptr,
-        0,
+        statusCode,
+        status,
         false,
+        0,
+        outputs.empty() ? nullptr : &outputs,
+        payloadArena.empty() ? nullptr : &payloadArena,
         errorCode,
-        errorMessage
+        errorMessage,
+        traceId
     );
-    builder.Finish(response);
+    const auto envelope = CreatePIV(builder, 0, response);
+    FinishPIVBuffer(builder, envelope);
     return copyFlatBufferToHeap(builder, responseSizeOut);
 }
 
-uint8_t* buildEmptyStreamInvokeResponse(uint32_t* responseSizeOut) {
-    flatbuffers::FlatBufferBuilder builder(128);
-    const auto response = orbpro::plugin::CreateStreamInvokeResponseDirect(
-        builder,
+uint8_t* buildErrorPivInvokeResponse(
+    int32_t statusCode,
+    pivStatus status,
+    const char* errorCode,
+    const char* errorMessage,
+    uint64_t traceId,
+    uint32_t* responseSizeOut
+) {
+    return buildPivInvokeResponse(
+        statusCode,
+        status,
+        errorCode,
+        errorMessage,
+        traceId,
         nullptr,
-        0,
-        false,
-        0,
-        nullptr
+        responseSizeOut
     );
-    builder.Finish(response);
-    return copyFlatBufferToHeap(builder, responseSizeOut);
+}
+
+uint8_t* buildEmptyPivInvokeResponse(uint64_t traceId, uint32_t* responseSizeOut) {
+    return buildPivInvokeResponse(
+        0,
+        pivStatus::OK,
+        nullptr,
+        nullptr,
+        traceId,
+        nullptr,
+        responseSizeOut
+    );
+}
+
+bool resolvePivInputPayload(
+    const PIVRequest* request,
+    const TAB* input,
+    const uint8_t*& payloadOut,
+    uint32_t& payloadSizeOut
+) {
+    payloadOut = nullptr;
+    payloadSizeOut = 0;
+    if (request == nullptr || input == nullptr || input->SIZE() == 0u) {
+        return false;
+    }
+
+    payloadSizeOut = input->SIZE();
+    const uint32_t payloadOffset = input->OFFSET();
+    const auto* arena = request->PAYLOAD_ARENA();
+    if (arena == nullptr || arena->size() == 0u) {
+        return false;
+    }
+    const uint64_t endOffset =
+        static_cast<uint64_t>(payloadOffset) + static_cast<uint64_t>(payloadSizeOut);
+    if (endOffset > arena->size()) {
+        return false;
+    }
+    payloadOut = arena->Data() + payloadOffset;
+    return true;
+}
+
+void releasePivOutputFrames(std::vector<PivOutputFrame>& outputFrames) {
+    for (PivOutputFrame& output : outputFrames) {
+        if (output.payload != nullptr) {
+            orbpro_free(output.payload);
+            output.payload = nullptr;
+        }
+    }
 }
 
 bool decodePropagatorBatchRequest(
@@ -2554,7 +2677,7 @@ int32_t plugin_init_omm_flatbuffer_stream(const uint8_t* data, size_t len) {
 }
 
 // -----------------------------------------------------------------------------
-// plugin_stream_invoke — Canonical stream-based method entrypoint.
+// sgp4_dispatch_piv — Canonical SDS PIV method dispatcher.
 // Supported methods:
 //   - ingest_omm: accepts direct `$OMM`, size-prefixed `$OMM` streams, or
 //                 `$REC` payloads containing OMM records
@@ -2562,9 +2685,10 @@ int32_t plugin_init_omm_flatbuffer_stream(const uint8_t* data, size_t len) {
 //                 `$REC` payloads containing CAT records
 //   - propagate_state: accepts PropagatorBatchRequest frames and emits
 //                      PropagatorState frames
+//   - catalog_query: accepts CatalogQueryRequest frames and emits
+//                    CatalogQueryResult frames
 // -----------------------------------------------------------------------------
-ORBPRO_EXPORT
-uint8_t* plugin_stream_invoke(
+uint8_t* sgp4_dispatch_piv(
     const uint8_t* request_data,
     size_t request_size,
     uint32_t* response_size_out
@@ -2573,21 +2697,44 @@ uint8_t* plugin_stream_invoke(
         *response_size_out = 0;
     }
     if (request_data == nullptr || request_size == 0) {
-        return buildErrorStreamInvokeResponse(-1, "Missing stream invoke request bytes.", response_size_out);
+        return buildErrorPivInvokeResponse(
+            400,
+            pivStatus::FAILED,
+            "invalid-request",
+            "Missing PIV invoke request bytes.",
+            0,
+            response_size_out
+        );
     }
 
     flatbuffers::Verifier verifier(request_data, request_size);
-    if (!verifier.VerifyBuffer<orbpro::plugin::StreamInvokeRequest>(nullptr)) {
-        return buildErrorStreamInvokeResponse(-1, "Invalid StreamInvokeRequest payload.", response_size_out);
+    if (!VerifyPIVBuffer(verifier)) {
+        return buildErrorPivInvokeResponse(
+            400,
+            pivStatus::FAILED,
+            "invalid-request",
+            "Invalid PIV invoke request payload.",
+            0,
+            response_size_out
+        );
     }
 
-    const auto* request = flatbuffers::GetRoot<orbpro::plugin::StreamInvokeRequest>(request_data);
-    if (request == nullptr || request->method_id() == nullptr) {
-        return buildErrorStreamInvokeResponse(-1, "StreamInvokeRequest is missing method_id.", response_size_out);
+    const auto* envelope = GetPIV(request_data);
+    const auto* request = envelope != nullptr ? envelope->REQUEST() : nullptr;
+    const uint64_t traceId = request != nullptr ? request->TRACE_ID() : 0;
+    if (request == nullptr || request->METHOD_ID() == nullptr) {
+        return buildErrorPivInvokeResponse(
+            400,
+            pivStatus::FAILED,
+            "invalid-request",
+            "PIV envelope is missing REQUEST.METHOD_ID.",
+            traceId,
+            response_size_out
+        );
     }
 
-    const std::string methodId = request->method_id()->str();
-    const auto* inputs = request->inputs();
+    const std::string methodId = request->METHOD_ID()->str();
+    const auto* inputs = request->INPUTS();
 
     if (methodId == "ingest_omm") {
         std::vector<OrbProOMMRecord> records;
@@ -2595,20 +2742,22 @@ uint8_t* plugin_stream_invoke(
         if (inputs != nullptr) {
             for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
                 const auto* input = inputs->Get(inputIndex);
-                if (input == nullptr || input->size() == 0 || input->offset() == 0) {
+                const uint8_t* payload = nullptr;
+                uint32_t payloadSize = 0;
+                if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
                     continue;
                 }
 
-                const auto* payload = reinterpret_cast<const uint8_t*>(
-                    static_cast<uintptr_t>(input->offset())
-                );
                 std::vector<OrbProOMMRecord> inputRecords;
-                if (!parseOmmFlatBufferStream(payload, input->size(), inputRecords)) {
+                if (!parseOmmFlatBufferStream(payload, payloadSize, inputRecords)) {
                     g_pendingEntityMetadataByNorad.clear();
                     g_pendingEntityNamesFromFlatbuffer = false;
-                    return buildErrorStreamInvokeResponse(
-                        -1,
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        "invalid-input",
                         "ingest_omm expects direct $OMM, size-prefixed OMM stream, or $REC payloads.",
+                        traceId,
                         response_size_out
                     );
                 }
@@ -2623,9 +2772,16 @@ uint8_t* plugin_stream_invoke(
         }
 
         if (!ingestOmmRecords(records, metadataByNorad)) {
-            return buildErrorStreamInvokeResponse(-1, "ingest_omm failed to apply any OMM records.", response_size_out);
+            return buildErrorPivInvokeResponse(
+                500,
+                pivStatus::FAILED,
+                "ingest-failed",
+                "ingest_omm failed to apply any OMM records.",
+                traceId,
+                response_size_out
+            );
         }
-        return buildEmptyStreamInvokeResponse(response_size_out);
+        return buildEmptyPivInvokeResponse(traceId, response_size_out);
     }
 
     if (methodId == "upsert_cat") {
@@ -2633,18 +2789,20 @@ uint8_t* plugin_stream_invoke(
         if (inputs != nullptr) {
             for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
                 const auto* input = inputs->Get(inputIndex);
-                if (input == nullptr || input->size() == 0 || input->offset() == 0) {
+                const uint8_t* payload = nullptr;
+                uint32_t payloadSize = 0;
+                if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
                     continue;
                 }
 
-                const auto* payload = reinterpret_cast<const uint8_t*>(
-                    static_cast<uintptr_t>(input->offset())
-                );
                 std::vector<PendingCatCatalogRecord> inputRecords;
-                if (!parseCatFlatBufferStream(payload, input->size(), inputRecords)) {
-                    return buildErrorStreamInvokeResponse(
-                        -1,
+                if (!parseCatFlatBufferStream(payload, payloadSize, inputRecords)) {
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        "invalid-input",
                         "upsert_cat expects direct $CAT, size-prefixed CAT stream, or $REC payloads.",
+                        traceId,
                         response_size_out
                     );
                 }
@@ -2653,7 +2811,7 @@ uint8_t* plugin_stream_invoke(
         }
 
         if (records.empty()) {
-            return buildEmptyStreamInvokeResponse(response_size_out);
+            return buildEmptyPivInvokeResponse(traceId, response_size_out);
         }
 
         bool inTransaction = false;
@@ -2673,9 +2831,12 @@ uint8_t* plugin_stream_invoke(
                 if (inTransaction) {
                     plugin_catalog_rollback_transaction();
                 }
-                return buildErrorStreamInvokeResponse(
-                    -1,
+                return buildErrorPivInvokeResponse(
+                    500,
+                    pivStatus::FAILED,
+                    "upsert-failed",
                     "upsert_cat failed to apply one or more CAT records.",
+                    traceId,
                     response_size_out
                 );
             }
@@ -2683,46 +2844,41 @@ uint8_t* plugin_stream_invoke(
 
         if (inTransaction && plugin_catalog_commit_transaction() != 0) {
             plugin_catalog_rollback_transaction();
-            return buildErrorStreamInvokeResponse(
-                -1,
+            return buildErrorPivInvokeResponse(
+                500,
+                pivStatus::FAILED,
+                "upsert-commit-failed",
                 "upsert_cat failed to commit CAT transaction.",
+                traceId,
                 response_size_out
             );
         }
 
-        return buildEmptyStreamInvokeResponse(response_size_out);
+        return buildEmptyPivInvokeResponse(traceId, response_size_out);
     }
 
     if (methodId == "propagate_state") {
-        struct OutputFrame {
-            uint8_t* payload;
-            uint32_t payloadSize;
-            uint64_t traceId;
-            uint32_t streamId;
-            uint64_t sequence;
-        };
-
-        std::vector<OutputFrame> outputFrames;
-        const uint32_t outputCap = request->output_stream_cap();
+        std::vector<PivOutputFrame> outputFrames;
+        const uint32_t outputCap = request->OUTPUT_STREAM_CAP();
 
         if (inputs != nullptr) {
             for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
                 const auto* input = inputs->Get(inputIndex);
-                if (input == nullptr || input->size() == 0 || input->offset() == 0) {
+                const uint8_t* payload = nullptr;
+                uint32_t payloadSize = 0;
+                if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
                     continue;
                 }
 
-                const auto* payload = reinterpret_cast<const uint8_t*>(
-                    static_cast<uintptr_t>(input->offset())
-                );
                 const orbpro::propagator::PropagatorBatchRequest* batchRequest = nullptr;
-                if (!decodePropagatorBatchRequest(payload, input->size(), batchRequest) || batchRequest == nullptr) {
-                    for (const auto& output : outputFrames) {
-                        orbpro_free(output.payload);
-                    }
-                    return buildErrorStreamInvokeResponse(
-                        -1,
+                if (!decodePropagatorBatchRequest(payload, payloadSize, batchRequest) || batchRequest == nullptr) {
+                    releasePivOutputFrames(outputFrames);
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        "invalid-input",
                         "propagate_state expects PropagatorBatchRequest input frames.",
+                        traceId,
                         response_size_out
                     );
                 }
@@ -2747,12 +2903,13 @@ uint8_t* plugin_stream_invoke(
 
                 if (outputCap > 0 &&
                     outputFrames.size() + handles.size() > static_cast<size_t>(outputCap)) {
-                    for (const auto& output : outputFrames) {
-                        orbpro_free(output.payload);
-                    }
-                    return buildErrorStreamInvokeResponse(
-                        -1,
+                    releasePivOutputFrames(outputFrames);
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        "output-cap-exceeded",
                         "propagate_state output_stream_cap is smaller than the requested state count.",
+                        traceId,
                         response_size_out
                     );
                 }
@@ -2782,119 +2939,80 @@ uint8_t* plugin_stream_invoke(
                         &payloadSize
                     );
                     if (statePayload == nullptr) {
-                        for (const auto& output : outputFrames) {
-                            orbpro_free(output.payload);
-                        }
-                        return buildErrorStreamInvokeResponse(-1, "Failed to encode PropagatorState output.", response_size_out);
+                        releasePivOutputFrames(outputFrames);
+                        return buildErrorPivInvokeResponse(
+                            500,
+                            pivStatus::FAILED,
+                            "encode-failed",
+                            "Failed to encode PropagatorState output.",
+                            traceId,
+                            response_size_out
+                        );
                     }
 
                     outputFrames.push_back({
+                        "state",
+                        "orbpro.plugins.PropagatorState",
+                        orbpro::plugins::PropagatorStateIdentifier(),
+                        "PropagatorState",
+                        payloadWireFormat::ALIGNED_BINARY,
+                        8,
+                        input->FRAME_ID() + static_cast<uint64_t>(handleIndex),
                         statePayload,
-                        payloadSize,
-                        input->trace_id(),
-                        input->stream_id(),
-                        input->sequence() + static_cast<uint64_t>(handleIndex),
+                        payloadSize
                     });
                 }
             }
         }
 
-        flatbuffers::FlatBufferBuilder builder(1024);
-        std::vector<flatbuffers::Offset<orbpro::stream::TypedArenaBuffer>> outputs;
-        outputs.reserve(outputFrames.size());
-        const auto typeRef = orbpro::stream::CreateFlatBufferTypeRefDirect(
-            builder,
-            "orbpro.plugins.PropagatorState",
-            orbpro::plugins::PropagatorStateIdentifier(),
+        uint8_t* responseBytes = buildPivInvokeResponse(
+            0,
+            pivStatus::OK,
             nullptr,
-            false,
-            orbpro::stream::PayloadWireFormat_AlignedBinary,
-            "PropagatorState",
-            0,
-            0,
-            8
+            nullptr,
+            traceId,
+            &outputFrames,
+            response_size_out
         );
-        for (const auto& output : outputFrames) {
-            outputs.push_back(orbpro::stream::CreateTypedArenaBufferDirect(
-                builder,
-                typeRef,
-                "state",
-                8,
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(output.payload)),
-                output.payloadSize,
-                orbpro::stream::BufferOwnership_BORROWED,
-                0,
-                orbpro::stream::BufferMutability_IMMUTABLE,
-                output.traceId,
-                output.streamId,
-                output.sequence,
-                false
-            ));
-        }
-
-        const auto outputsVector = builder.CreateVector(outputs);
-        const auto response = orbpro::plugin::CreateStreamInvokeResponse(
-            builder,
-            outputsVector,
-            0,
-            false,
-            0,
-            0
-        );
-        builder.Finish(response);
-        uint8_t* responseBytes = copyFlatBufferToHeap(builder, response_size_out);
-        if (responseBytes == nullptr) {
-            for (const auto& output : outputFrames) {
-                orbpro_free(output.payload);
-            }
-            return nullptr;
-        }
+        releasePivOutputFrames(outputFrames);
         return responseBytes;
     }
 
     if (methodId == "catalog_query") {
-        struct OutputFrame {
-            uint8_t* payload;
-            uint32_t payloadSize;
-            uint64_t traceId;
-            uint32_t streamId;
-            uint64_t sequence;
-        };
-
-        std::vector<OutputFrame> outputFrames;
-        const uint32_t outputCap = request->output_stream_cap();
-        const auto releaseOutputFrames = [&outputFrames]() {
-            for (const auto& output : outputFrames) {
-                orbpro_free(output.payload);
-            }
-        };
+        std::vector<PivOutputFrame> outputFrames;
+        const uint32_t outputCap = request->OUTPUT_STREAM_CAP();
 
         if (inputs != nullptr) {
             for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
                 const auto* input = inputs->Get(inputIndex);
-                if (input == nullptr || input->size() == 0 || input->offset() == 0) {
+                const uint8_t* payload = nullptr;
+                uint32_t payloadSize = 0;
+                if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
                     continue;
                 }
                 if (outputCap > 0 &&
                     outputFrames.size() >= static_cast<size_t>(outputCap)) {
-                    releaseOutputFrames();
-                    return buildErrorStreamInvokeResponse(
-                        -1,
+                    releasePivOutputFrames(outputFrames);
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        "output-cap-exceeded",
                         "catalog_query output_stream_cap is smaller than the requested query count.",
+                        traceId,
                         response_size_out
                     );
                 }
 
-                const auto* payload = reinterpret_cast<const uint8_t*>(
-                    static_cast<uintptr_t>(input->offset())
-                );
                 const orbpro::query::CatalogQueryRequest* queryRequest = nullptr;
-                if (!decodeCatalogQueryRequest(payload, input->size(), queryRequest) ||
+                if (!decodeCatalogQueryRequest(payload, payloadSize, queryRequest) ||
                     queryRequest == nullptr) {
-                    releaseOutputFrames();
-                    return buildErrorStreamInvokeResponse(
-                        -1,
+                    releasePivOutputFrames(outputFrames);
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        "invalid-input",
                         "catalog_query expects CatalogQueryRequest input frames.",
+                        traceId,
                         response_size_out
                     );
                 }
@@ -2905,7 +3023,7 @@ uint8_t* plugin_stream_invoke(
                         : std::string();
                 const uint32_t entityCount =
                     static_cast<uint32_t>(g_satellites.size());
-                uint32_t payloadSize = 0;
+                uint32_t resultPayloadSize = 0;
                 uint8_t* resultPayload = nullptr;
 
                 switch (queryRequest->query_kind()) {
@@ -2923,10 +3041,13 @@ uint8_t* plugin_stream_invoke(
                                 maxCount
                             );
                             if (written < 0) {
-                                releaseOutputFrames();
-                                return buildErrorStreamInvokeResponse(
-                                    -1,
+                                releasePivOutputFrames(outputFrames);
+                                return buildErrorPivInvokeResponse(
+                                    500,
+                                    pivStatus::FAILED,
+                                    "query-failed",
                                     "catalog_query rows lookup failed.",
+                                    traceId,
                                     response_size_out
                                 );
                             }
@@ -2940,7 +3061,7 @@ uint8_t* plugin_stream_invoke(
                             0,
                             0,
                             nullptr,
-                            &payloadSize
+                            &resultPayloadSize
                         );
                         break;
                     }
@@ -2958,10 +3079,13 @@ uint8_t* plugin_stream_invoke(
                                 maxCount
                             );
                             if (written < 0) {
-                                releaseOutputFrames();
-                                return buildErrorStreamInvokeResponse(
-                                    -1,
+                                releasePivOutputFrames(outputFrames);
+                                return buildErrorPivInvokeResponse(
+                                    500,
+                                    pivStatus::FAILED,
+                                    "query-failed",
                                     "catalog_query entity-index lookup failed.",
+                                    traceId,
                                     response_size_out
                                 );
                             }
@@ -2975,7 +3099,7 @@ uint8_t* plugin_stream_invoke(
                             0,
                             0,
                             nullptr,
-                            &payloadSize
+                            &resultPayloadSize
                         );
                         break;
                     }
@@ -2993,10 +3117,13 @@ uint8_t* plugin_stream_invoke(
                                 maskCount
                             );
                             if (visibleCount < 0) {
-                                releaseOutputFrames();
-                                return buildErrorStreamInvokeResponse(
-                                    -1,
+                                releasePivOutputFrames(outputFrames);
+                                return buildErrorPivInvokeResponse(
+                                    500,
+                                    pivStatus::FAILED,
+                                    "query-failed",
                                     "catalog_query visibility-mask lookup failed.",
+                                    traceId,
                                     response_size_out
                                 );
                             }
@@ -3009,7 +3136,7 @@ uint8_t* plugin_stream_invoke(
                             static_cast<uint32_t>(visibleCount),
                             0,
                             nullptr,
-                            &payloadSize
+                            &resultPayloadSize
                         );
                         break;
                     }
@@ -3028,90 +3155,69 @@ uint8_t* plugin_stream_invoke(
                             0,
                             queryRequest->entity_index(),
                             found ? &row : nullptr,
-                            &payloadSize
+                            &resultPayloadSize
                         );
                         break;
                     }
                     default:
-                        releaseOutputFrames();
-                        return buildErrorStreamInvokeResponse(
-                            -1,
+                        releasePivOutputFrames(outputFrames);
+                        return buildErrorPivInvokeResponse(
+                            400,
+                            pivStatus::FAILED,
+                            "unsupported-query-kind",
                             "catalog_query received an unsupported query kind.",
+                            traceId,
                             response_size_out
                         );
                 }
 
                 if (resultPayload == nullptr) {
-                    releaseOutputFrames();
-                    return buildErrorStreamInvokeResponse(
-                        -1,
+                    releasePivOutputFrames(outputFrames);
+                    return buildErrorPivInvokeResponse(
+                        500,
+                        pivStatus::FAILED,
+                        "encode-failed",
                         "Failed to encode CatalogQueryResult output.",
+                        traceId,
                         response_size_out
                     );
                 }
 
                 outputFrames.push_back({
+                    "results",
+                    "orbpro.query.CatalogQueryResult",
+                    orbpro::query::CatalogQueryResultIdentifier(),
+                    "CatalogQueryResult",
+                    payloadWireFormat::ALIGNED_BINARY,
+                    8,
+                    input->FRAME_ID(),
                     resultPayload,
-                    payloadSize,
-                    input->trace_id(),
-                    input->stream_id(),
-                    input->sequence(),
+                    resultPayloadSize
                 });
             }
         }
 
-        flatbuffers::FlatBufferBuilder builder(1024);
-        std::vector<flatbuffers::Offset<orbpro::stream::TypedArenaBuffer>> outputs;
-        outputs.reserve(outputFrames.size());
-        const auto typeRef = orbpro::stream::CreateFlatBufferTypeRefDirect(
-            builder,
-            "orbpro.query.CatalogQueryResult",
-            orbpro::query::CatalogQueryResultIdentifier(),
+        uint8_t* responseBytes = buildPivInvokeResponse(
+            0,
+            pivStatus::OK,
             nullptr,
-            false,
-            orbpro::stream::PayloadWireFormat_AlignedBinary,
-            "CatalogQueryResult",
-            0,
-            0,
-            8
+            nullptr,
+            traceId,
+            &outputFrames,
+            response_size_out
         );
-        for (const auto& output : outputFrames) {
-            outputs.push_back(orbpro::stream::CreateTypedArenaBufferDirect(
-                builder,
-                typeRef,
-                "results",
-                8,
-                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(output.payload)),
-                output.payloadSize,
-                orbpro::stream::BufferOwnership_BORROWED,
-                0,
-                orbpro::stream::BufferMutability_IMMUTABLE,
-                output.traceId,
-                output.streamId,
-                output.sequence,
-                false
-            ));
-        }
-
-        const auto outputsVector = builder.CreateVector(outputs);
-        const auto response = orbpro::plugin::CreateStreamInvokeResponse(
-            builder,
-            outputsVector,
-            0,
-            false,
-            0,
-            0
-        );
-        builder.Finish(response);
-        uint8_t* responseBytes = copyFlatBufferToHeap(builder, response_size_out);
-        if (responseBytes == nullptr) {
-            releaseOutputFrames();
-            return nullptr;
-        }
+        releasePivOutputFrames(outputFrames);
         return responseBytes;
     }
 
-    return buildErrorStreamInvokeResponse(-1, "Unsupported stream method for SGP4 plugin.", response_size_out);
+    return buildErrorPivInvokeResponse(
+        404,
+        pivStatus::NOT_FOUND,
+        "unknown-method",
+        "Unsupported PIV method for SGP4 plugin.",
+        traceId,
+        response_size_out
+    );
 }
 
 // -----------------------------------------------------------------------------

@@ -66,7 +66,7 @@ target_compile_definitions(
 target_compile_options(sgp4_sqlite3 PRIVATE -Wno-everything)
 
 # -------- Core propagator library --------------------------------------------
-# SGP4 (Vallado) + OrbPro's direct-call wasm surface.
+# SGP4 (Vallado) + OrbPro's SDS PIV wasm surface.
 add_library(
     sgp4_core STATIC
     src/SGP4.cpp
@@ -85,8 +85,8 @@ target_include_directories(
 target_link_libraries(sgp4_core PUBLIC sgp4_sqlite3)
 
 # -------- Wasm adapter executable --------------------------------------------
-# The bridge implements the SDK 0.8.0 invoke surface and dispatches into
-# OrbPro's native `plugin_stream_invoke` exported from sgp4_plugin.cpp.
+# The bridge implements the SDS PIV invoke surface and dispatches into
+# SGP4 native method handlers without a second invoke FlatBuffer dialect.
 add_executable(
     sgp4_wasm
     src/plugin_invoke_bridge.cpp
@@ -102,8 +102,9 @@ target_include_directories(
 )
 target_link_libraries(sgp4_wasm PRIVATE sgp4_core)
 
-# Keep the full OrbPro direct-call surface exported alongside the SDK 0.8.0
-# invoke/manifest exports so the artifact can be consumed by either runtime.
+# Keep the full OrbPro native surface exported alongside the SDS PIV
+# invoke/manifest exports so the artifact can be consumed by browser and WASI
+# runtimes.
 set(SGP4_EXPORTED_FUNCTIONS "\
 \"__initialize\",\
 \"_plugin_alloc\",\
@@ -114,7 +115,6 @@ set(SGP4_EXPORTED_FUNCTIONS "\
 \"_plugin_init\",\
 \"_plugin_init_omm\",\
 \"_plugin_init_omm_flatbuffer_stream\",\
-\"_plugin_stream_invoke\",\
 \"_plugin_propagate\",\
 \"_plugin_propagate_batch\",\
 \"_plugin_propagate_all_positions\",\

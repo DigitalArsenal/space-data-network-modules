@@ -174,7 +174,7 @@ test(
     const root = await discoverSocratesRoot();
     if (!root) {
       t.skip(
-        "Local SOCRATES root not found. Set CONJUNCTION_ASSESSMENT_SOCRATES_ROOT or populate packages/conjunction-assessment-sdn-plugin/tests/data/.",
+        "Local SOCRATES root not found. Set CONJUNCTION_ASSESSMENT_SOCRATES_ROOT or SOCRATES_LOCAL_ROOT.",
       );
       return;
     }

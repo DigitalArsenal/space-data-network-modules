@@ -117,7 +117,7 @@ inline const char *EnumNameppeAnomalyType(ppeAnomalyType e) {
 }
 
 /// Orbital element parameterization for the first element (size/shape).
-enum class sizeShapeType : int8_t {
+enum class sizeShapeProfile : int8_t {
   /// Semi-major axis (km). Standard for elliptical orbits.
   SMA = 0,
   /// Radius of periapsis (km). Preferred for hyperbolic orbits.
@@ -126,15 +126,15 @@ enum class sizeShapeType : int8_t {
   MAX = R_PERIAPSIS
 };
 
-inline const sizeShapeType (&EnumValuessizeShapeType())[2] {
-  static const sizeShapeType values[] = {
-    sizeShapeType::SMA,
-    sizeShapeType::R_PERIAPSIS
+inline const sizeShapeProfile (&EnumValuessizeShapeProfile())[2] {
+  static const sizeShapeProfile values[] = {
+    sizeShapeProfile::SMA,
+    sizeShapeProfile::R_PERIAPSIS
   };
   return values;
 }
 
-inline const char * const *EnumNamessizeShapeType() {
+inline const char * const *EnumNamessizeShapeProfile() {
   static const char * const names[3] = {
     "SMA",
     "R_PERIAPSIS",
@@ -143,10 +143,10 @@ inline const char * const *EnumNamessizeShapeType() {
   return names;
 }
 
-inline const char *EnumNamesizeShapeType(sizeShapeType e) {
-  if (::flatbuffers::IsOutRange(e, sizeShapeType::SMA, sizeShapeType::R_PERIAPSIS)) return "";
+inline const char *EnumNamesizeShapeProfile(sizeShapeProfile e) {
+  if (::flatbuffers::IsOutRange(e, sizeShapeProfile::SMA, sizeShapeProfile::R_PERIAPSIS)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamessizeShapeType()[index];
+  return EnumNamessizeShapeProfile()[index];
 }
 
 struct PPEPositionRecordT : public ::flatbuffers::NativeTable {
@@ -431,7 +431,7 @@ struct PPEOrbitalElementRecordT : public ::flatbuffers::NativeTable {
   double EPOCH_HALF_SPAN = 0.0;
   uint16_t NUM_COEFFICIENTS = 0;
   polynomialBasisType BASIS_TYPE = polynomialBasisType::CHEBYSHEV;
-  sizeShapeType SIZE_SHAPE_TYPE = sizeShapeType::SMA;
+  sizeShapeProfile SIZE_SHAPE_TYPE = sizeShapeProfile::SMA;
   ppeAnomalyType ANOMALY_TYPE = ppeAnomalyType::TRUE_ANOMALY;
   std::vector<double> COEFF_SIZE_SHAPE{};
   std::vector<double> COEFF_ECCENTRICITY{};
@@ -491,8 +491,8 @@ struct PPEOrbitalElementRecord FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::
     return static_cast<polynomialBasisType>(GetField<int8_t>(VT_BASIS_TYPE, 0));
   }
   /// Parameterization of the first orbital element (SMA vs R_PERIAPSIS).
-  sizeShapeType SIZE_SHAPE_TYPE() const {
-    return static_cast<sizeShapeType>(GetField<int8_t>(VT_SIZE_SHAPE_TYPE, 0));
+  sizeShapeProfile SIZE_SHAPE_TYPE() const {
+    return static_cast<sizeShapeProfile>(GetField<int8_t>(VT_SIZE_SHAPE_TYPE, 0));
   }
   /// Anomaly type for the sixth orbital element.
   ppeAnomalyType ANOMALY_TYPE() const {
@@ -584,7 +584,7 @@ struct PPEOrbitalElementRecordBuilder {
   void add_BASIS_TYPE(polynomialBasisType BASIS_TYPE) {
     fbb_.AddElement<int8_t>(PPEOrbitalElementRecord::VT_BASIS_TYPE, static_cast<int8_t>(BASIS_TYPE), 0);
   }
-  void add_SIZE_SHAPE_TYPE(sizeShapeType SIZE_SHAPE_TYPE) {
+  void add_SIZE_SHAPE_TYPE(sizeShapeProfile SIZE_SHAPE_TYPE) {
     fbb_.AddElement<int8_t>(PPEOrbitalElementRecord::VT_SIZE_SHAPE_TYPE, static_cast<int8_t>(SIZE_SHAPE_TYPE), 0);
   }
   void add_ANOMALY_TYPE(ppeAnomalyType ANOMALY_TYPE) {
@@ -638,7 +638,7 @@ inline ::flatbuffers::Offset<PPEOrbitalElementRecord> CreatePPEOrbitalElementRec
     double EPOCH_HALF_SPAN = 0.0,
     uint16_t NUM_COEFFICIENTS = 0,
     polynomialBasisType BASIS_TYPE = polynomialBasisType::CHEBYSHEV,
-    sizeShapeType SIZE_SHAPE_TYPE = sizeShapeType::SMA,
+    sizeShapeProfile SIZE_SHAPE_TYPE = sizeShapeProfile::SMA,
     ppeAnomalyType ANOMALY_TYPE = ppeAnomalyType::TRUE_ANOMALY,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> COEFF_SIZE_SHAPE = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> COEFF_ECCENTRICITY = 0,
@@ -677,7 +677,7 @@ inline ::flatbuffers::Offset<PPEOrbitalElementRecord> CreatePPEOrbitalElementRec
     double EPOCH_HALF_SPAN = 0.0,
     uint16_t NUM_COEFFICIENTS = 0,
     polynomialBasisType BASIS_TYPE = polynomialBasisType::CHEBYSHEV,
-    sizeShapeType SIZE_SHAPE_TYPE = sizeShapeType::SMA,
+    sizeShapeProfile SIZE_SHAPE_TYPE = sizeShapeProfile::SMA,
     ppeAnomalyType ANOMALY_TYPE = ppeAnomalyType::TRUE_ANOMALY,
     const std::vector<double> *COEFF_SIZE_SHAPE = nullptr,
     const std::vector<double> *COEFF_ECCENTRICITY = nullptr,
@@ -720,7 +720,7 @@ struct PPET : public ::flatbuffers::NativeTable {
   std::unique_ptr<CATT> OBJECT{};
   std::string CENTER_NAME{};
   std::unique_ptr<RFMT> REFERENCE_FRAME{};
-  timeSystem TIME_SYSTEM = timeSystem::GMST;
+  timingStandard TIME_SYSTEM = timingStandard::GMST;
   std::string START_TIME{};
   std::string STOP_TIME{};
   polynomialBasisType DEFAULT_BASIS_TYPE = polynomialBasisType::CHEBYSHEV;
@@ -777,8 +777,8 @@ struct PPE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const RFM *>(VT_REFERENCE_FRAME);
   }
   /// Time system used for all epochs in this message.
-  timeSystem TIME_SYSTEM() const {
-    return static_cast<timeSystem>(GetField<int8_t>(VT_TIME_SYSTEM, 0));
+  timingStandard TIME_SYSTEM() const {
+    return static_cast<timingStandard>(GetField<int8_t>(VT_TIME_SYSTEM, 0));
   }
   /// Start of the total time span covered by this ephemeris (ISO 8601).
   const ::flatbuffers::String *START_TIME() const {
@@ -868,7 +868,7 @@ struct PPEBuilder {
   void add_REFERENCE_FRAME(::flatbuffers::Offset<RFM> REFERENCE_FRAME) {
     fbb_.AddOffset(PPE::VT_REFERENCE_FRAME, REFERENCE_FRAME);
   }
-  void add_TIME_SYSTEM(timeSystem TIME_SYSTEM) {
+  void add_TIME_SYSTEM(timingStandard TIME_SYSTEM) {
     fbb_.AddElement<int8_t>(PPE::VT_TIME_SYSTEM, static_cast<int8_t>(TIME_SYSTEM), 0);
   }
   void add_START_TIME(::flatbuffers::Offset<::flatbuffers::String> START_TIME) {
@@ -912,7 +912,7 @@ inline ::flatbuffers::Offset<PPE> CreatePPE(
     ::flatbuffers::Offset<CAT> OBJECT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME = 0,
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
-    timeSystem TIME_SYSTEM = timeSystem::GMST,
+    timingStandard TIME_SYSTEM = timingStandard::GMST,
     ::flatbuffers::Offset<::flatbuffers::String> START_TIME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> STOP_TIME = 0,
     polynomialBasisType DEFAULT_BASIS_TYPE = polynomialBasisType::CHEBYSHEV,
@@ -949,7 +949,7 @@ inline ::flatbuffers::Offset<PPE> CreatePPEDirect(
     ::flatbuffers::Offset<CAT> OBJECT = 0,
     const char *CENTER_NAME = nullptr,
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
-    timeSystem TIME_SYSTEM = timeSystem::GMST,
+    timingStandard TIME_SYSTEM = timingStandard::GMST,
     const char *START_TIME = nullptr,
     const char *STOP_TIME = nullptr,
     polynomialBasisType DEFAULT_BASIS_TYPE = polynomialBasisType::CHEBYSHEV,

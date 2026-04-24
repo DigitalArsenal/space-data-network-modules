@@ -1,0 +1,69 @@
+{
+  "pluginId": "com.orbpro.swath",
+  "name": "Swath Analysis",
+  "version": "1.0.0",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "node"],
+  "methods": [
+    {
+      "methodId": "project_footprint",
+      "displayName": "Project Footprint",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Projects a sensor footprint onto the WGS84 ellipsoid."
+    },
+    {
+      "methodId": "ground_track",
+      "displayName": "Ground Track",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-until-yield",
+      "description": "Computes geodetic ground-track points from state vectors."
+    },
+    {
+      "methodId": "generate_swath",
+      "displayName": "Generate Swath",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Generates swath footprint segments across a propagated path."
+    },
+    {
+      "methodId": "point_in_footprint",
+      "displayName": "Point In Footprint",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Tests whether a geodetic point is inside a sensor footprint."
+    },
+    {
+      "methodId": "access_geometry",
+      "displayName": "Access Geometry",
+      "inputPorts": [],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Computes instantaneous range, elevation, azimuth, and visibility."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "swath-runtime",
+      "kind": "javascript-runtime",
+      "path": "index.js",
+      "target": "web,worker,node"
+    }
+  ],
+  "abiVersion": 1
+}

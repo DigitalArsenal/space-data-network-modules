@@ -1,9 +1,11 @@
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -15,9 +17,11 @@
 #include "conjunction/conjunction_engine.h"
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/generated/all_generated.h"
+#include "conjunction/gp_json.h"
 #include "conjunction/pc_method.h"
 #include "conjunction/resident_screening_index.h"
 #include "conjunction/screening.h"
+#include "OMM_generated.h"
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
 #include "TypedArenaBuffer_generated.h"
@@ -102,6 +106,10 @@ static const PortRequirement kMethod_invoke_input_ports[] = {
 static const PortRequirement kMethod_pair_request_input_ports[] = {
   { "request", true },
 };
+static const PortRequirement kMethod_screen_catalog_input_ports[] = {
+  { "request", true },
+  { "catalog", false },
+};
 static const PortRequirement kMethod_prepare_screening_index_input_ports[] = {
   { "request", true },
   { "sources", true },
@@ -128,6 +136,10 @@ static const char *kMethod_invoke_output_ports[] = {
 static const char *kMethod_result_output_ports[] = {
   "result",
 };
+static const char *kMethod_screen_catalog_output_ports[] = {
+  "result",
+  "cdm",
+};
 static const char *kMethod_cdm_output_ports[] = {
   "cdm",
 };
@@ -137,6 +149,7 @@ static int HandleEmitCdm(void);
 static int HandleFindTca(void);
 static int HandleAlfanoMaxProbability(void);
 static int HandleComputePc(void);
+static int HandleScreenCatalog(void);
 static int HandlePrepareScreeningIndex(void);
 static int HandlePrepareSegmentScreeningIndex(void);
 static int HandlePrepareSampleScreeningIndex(void);
@@ -207,6 +220,17 @@ static const MethodDescriptor kMethodTable[] = {
     1u,
     kMethod_result_output_ports,
     1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "screen_catalog",
+    &HandleScreenCatalog,
+    kMethod_screen_catalog_input_ports,
+    2u,
+    kMethod_screen_catalog_output_ports,
+    2u,
     false,
     nullptr,
     nullptr
@@ -736,6 +760,329 @@ static std::shared_ptr<conjunction::EphemerisSource> DecodePropagatedTrack(
   );
 }
 
+static std::string ReadFlatbufferString(const ::flatbuffers::String *value) {
+  return value ? value->str() : std::string();
+}
+
+static conjunction::GPElement DecodeGpRecord(const orbpro::conjunction::GpRecord *record) {
+  if (!record) {
+    throw std::runtime_error("Conjunction screen_catalog request is missing a GP record.");
+  }
+
+  conjunction::GPElement gp{};
+  gp.object_name = ReadFlatbufferString(record->objectName());
+  gp.object_id = ReadFlatbufferString(record->objectId());
+  gp.epoch_iso = ReadFlatbufferString(record->epoch());
+  gp.epoch_jd = gp.epoch_iso.empty() ? 0.0 : conjunction::iso_to_jd(gp.epoch_iso);
+  gp.mean_motion = record->meanMotion();
+  gp.eccentricity = record->eccentricity();
+  gp.inclination = record->inclination();
+  gp.ra_of_asc_node = record->raOfAscNode();
+  gp.arg_of_pericenter = record->argOfPericenter();
+  gp.mean_anomaly = record->meanAnomaly();
+  gp.ephemeris_type = record->ephemerisType();
+  const auto classification = ReadFlatbufferString(record->classificationType());
+  gp.classification_type = classification.empty() ? 'U' : classification.front();
+  gp.norad_cat_id = record->noradCatId();
+  gp.element_set_no = record->elementSetNo();
+  gp.rev_at_epoch = record->revAtEpoch();
+  gp.bstar = record->bstar();
+  gp.mean_motion_dot = record->meanMotionDot();
+  gp.mean_motion_ddot = record->meanMotionDdot();
+  conjunction::compute_derived(gp);
+  return gp;
+}
+
+static conjunction::GPElement DecodeTleRecordAsGp(
+  const orbpro::conjunction::TleRecord *record
+) {
+  const auto tle = DecodeTleRecord(record);
+  conjunction::GPElement gp{};
+  gp.object_name = tle.name;
+  gp.epoch_jd = tle.epoch_jd;
+  gp.epoch_iso = tle.epoch_jd > 0.0 ? conjunction::jd_to_iso(tle.epoch_jd) : std::string();
+  gp.mean_motion = tle.mean_motion;
+  gp.eccentricity = tle.eccentricity;
+  gp.inclination = tle.inclination;
+  gp.ra_of_asc_node = tle.raan;
+  gp.arg_of_pericenter = tle.arg_perigee;
+  gp.mean_anomaly = tle.mean_anomaly;
+  gp.ephemeris_type = 0;
+  gp.classification_type =
+    (tle.line1.size() > 7 && std::isspace(static_cast<unsigned char>(tle.line1[7])) == 0)
+      ? tle.line1[7]
+      : 'U';
+  gp.norad_cat_id = tle.norad_cat_id;
+  gp.bstar = tle.bstar;
+  conjunction::compute_derived(gp);
+  return gp;
+}
+
+static conjunction::GPElement DecodeOmmRecord(const OMM *record) {
+  if (!record) {
+    throw std::runtime_error("Conjunction screen_catalog request is missing an OMM record.");
+  }
+
+  conjunction::GPElement gp{};
+  gp.object_name = ReadFlatbufferString(record->OBJECT_NAME());
+  gp.object_id = ReadFlatbufferString(record->OBJECT_ID());
+  gp.epoch_iso = ReadFlatbufferString(record->EPOCH());
+  gp.epoch_jd = gp.epoch_iso.empty() ? 0.0 : conjunction::iso_to_jd(gp.epoch_iso);
+  gp.mean_motion = record->MEAN_MOTION();
+  gp.eccentricity = record->ECCENTRICITY();
+  gp.inclination = record->INCLINATION();
+  gp.ra_of_asc_node = record->RA_OF_ASC_NODE();
+  gp.arg_of_pericenter = record->ARG_OF_PERICENTER();
+  gp.mean_anomaly = record->MEAN_ANOMALY();
+  gp.ephemeris_type = static_cast<int>(record->EPHEMERIS_TYPE());
+  const auto classification = ReadFlatbufferString(record->CLASSIFICATION_TYPE());
+  gp.classification_type = classification.empty() ? 'U' : classification.front();
+  gp.norad_cat_id = static_cast<int>(record->NORAD_CAT_ID());
+  gp.element_set_no = static_cast<int>(record->ELEMENT_SET_NO());
+  gp.rev_at_epoch = static_cast<int>(record->REV_AT_EPOCH());
+  gp.bstar = record->BSTAR();
+  gp.mean_motion_dot = record->MEAN_MOTION_DOT();
+  gp.mean_motion_ddot = record->MEAN_MOTION_DDOT();
+  conjunction::compute_derived(gp);
+  return gp;
+}
+
+static bool AppendOmmPayload(
+  const uint8_t *payload,
+  size_t payload_size,
+  std::vector<conjunction::GPElement> *catalog
+) {
+  if (!payload || payload_size == 0u || !catalog) {
+    return false;
+  }
+  if (payload_size < sizeof(flatbuffers::uoffset_t) + flatbuffers::kFileIdentifierLength ||
+      !OMMBufferHasIdentifier(payload)) {
+    return false;
+  }
+  ::flatbuffers::Verifier verifier(payload, payload_size);
+  if (!VerifyOMMBuffer(verifier)) {
+    return false;
+  }
+  catalog->push_back(DecodeOmmRecord(GetOMM(payload)));
+  return true;
+}
+
+static bool DecodeOmmCatalogFrame(
+  const InputFrameOwned *frame,
+  std::vector<conjunction::GPElement> *catalog
+) {
+  if (!frame || frame->payload.empty() || !catalog) {
+    SetError("missing-catalog-input", "screen_catalog direct catalog mode requires a catalog input frame.");
+    return false;
+  }
+
+  const auto *bytes = frame->payload.data();
+  const size_t size = frame->payload.size();
+  catalog->clear();
+
+  if (AppendOmmPayload(bytes, size, catalog)) {
+    return true;
+  }
+
+  size_t offset = 0u;
+  while (offset + sizeof(uint32_t) <= size) {
+    const uint32_t payload_size =
+      static_cast<uint32_t>(bytes[offset]) |
+      (static_cast<uint32_t>(bytes[offset + 1]) << 8u) |
+      (static_cast<uint32_t>(bytes[offset + 2]) << 16u) |
+      (static_cast<uint32_t>(bytes[offset + 3]) << 24u);
+    offset += sizeof(uint32_t);
+    if (payload_size == 0u || offset + payload_size > size) {
+      SetError("invalid-catalog-frame", "screen_catalog catalog stream has an invalid size prefix.");
+      return false;
+    }
+    if (!AppendOmmPayload(bytes + offset, payload_size, catalog)) {
+      SetError("invalid-catalog-frame", "screen_catalog catalog stream contains a non-OMM payload.");
+      return false;
+    }
+    offset += payload_size;
+  }
+
+  if (offset != size || catalog->empty()) {
+    SetError("invalid-catalog-frame", "screen_catalog catalog frame did not contain OMM payloads.");
+    return false;
+  }
+  return true;
+}
+
+static void AppendGpRecords(
+  std::vector<conjunction::GPElement> *target,
+  const flatbuffers::Vector<flatbuffers::Offset<orbpro::conjunction::GpRecord>> *records
+) {
+  if (!target || !records) {
+    return;
+  }
+  target->reserve(target->size() + records->size());
+  for (const auto *record : *records) {
+    target->push_back(DecodeGpRecord(record));
+  }
+}
+
+static void AppendTleRecordsAsGps(
+  std::vector<conjunction::GPElement> *target,
+  const flatbuffers::Vector<flatbuffers::Offset<orbpro::conjunction::TleRecord>> *records
+) {
+  if (!target || !records) {
+    return;
+  }
+  target->reserve(target->size() + records->size());
+  for (const auto *record : *records) {
+    target->push_back(DecodeTleRecordAsGp(record));
+  }
+}
+
+static void AppendTrackSources(
+  std::vector<std::shared_ptr<conjunction::EphemerisSource>> *target,
+  const flatbuffers::Vector<flatbuffers::Offset<orbpro::conjunction::PropagatedTrack>> *tracks
+) {
+  if (!target || !tracks) {
+    return;
+  }
+  target->reserve(target->size() + tracks->size());
+  for (const auto *track : *tracks) {
+    auto source = DecodePropagatedTrack(track);
+    if (source) {
+      target->push_back(std::move(source));
+    }
+  }
+}
+
+static void AppendGpSources(
+  std::vector<std::shared_ptr<conjunction::EphemerisSource>> *target,
+  const std::vector<conjunction::GPElement> &records
+) {
+  if (!target) {
+    return;
+  }
+  target->reserve(target->size() + records.size());
+  for (const auto &record : records) {
+    target->push_back(std::make_shared<conjunction::GPEphemerisSource>(record));
+  }
+}
+
+static void AppendOrderedCatalogRange(
+  std::vector<conjunction::GPElement> *target,
+  const std::vector<conjunction::GPElement> &catalog,
+  const flatbuffers::Vector<uint32_t> *ordered_indices,
+  uint32_t start,
+  uint32_t end
+) {
+  if (!target || !ordered_indices || catalog.empty()) {
+    return;
+  }
+  const uint32_t clamped_start = std::min<uint32_t>(start, ordered_indices->size());
+  const uint32_t clamped_end = std::max<uint32_t>(
+    clamped_start,
+    std::min<uint32_t>(end, ordered_indices->size())
+  );
+  target->reserve(target->size() + (clamped_end - clamped_start));
+  for (uint32_t order_index = clamped_start; order_index < clamped_end; order_index += 1u) {
+    const uint32_t catalog_index = ordered_indices->Get(order_index);
+    if (catalog_index < catalog.size()) {
+      target->push_back(catalog[catalog_index]);
+    }
+  }
+}
+
+static conjunction::ScreeningConfig DecodeScreeningConfig(
+  const orbpro::conjunction::ConjunctionScreenCatalogRequest *request
+) {
+  conjunction::ScreeningConfig config{};
+  config.start_jd = request->startJd();
+  config.duration_days = request->durationDays();
+  config.threshold_km = request->thresholdKm();
+  config.coarse_step_sec = request->coarseStepSec();
+  config.fine_tol_sec = request->fineTolSec();
+  config.combined_radius_m = request->combinedRadiusM();
+  config.num_threads = std::max(1, request->numThreads());
+  config.use_kdtree = request->useKdTree();
+  config.use_dynamic_window = request->useDynamicWindow();
+  config.use_perigee_filter = request->usePerigeeFilter();
+  return config;
+}
+
+static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
+  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &primaries,
+  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &secondaries,
+  const conjunction::ScreeningConfig &config,
+  conjunction::ScreeningStats *stats_out
+) {
+  conjunction::ConjunctionEngine engine;
+  std::vector<conjunction::ConjunctionEvent2> events;
+
+  uint64_t pairs_screened = 0u;
+  if (secondaries.empty()) {
+    for (size_t left = 0u; left < primaries.size(); left += 1u) {
+      for (size_t right = left + 1u; right < primaries.size(); right += 1u) {
+        pairs_screened += 1u;
+        try {
+          const auto event = engine.assess(
+            *primaries[left],
+            *primaries[right],
+            config.start_jd,
+            config.duration_days
+          );
+          if (event.miss_distance_km <= config.threshold_km) {
+            events.push_back(event);
+          }
+        } catch (...) {
+        }
+      }
+    }
+  } else {
+    for (const auto &primary : primaries) {
+      for (const auto &secondary : secondaries) {
+        if (!primary || !secondary) {
+          continue;
+        }
+        if (primary->norad_id() != 0 && primary->norad_id() == secondary->norad_id()) {
+          continue;
+        }
+        pairs_screened += 1u;
+        try {
+          const auto event = engine.assess(
+            *primary,
+            *secondary,
+            config.start_jd,
+            config.duration_days
+          );
+          if (event.miss_distance_km <= config.threshold_km) {
+            events.push_back(event);
+          }
+        } catch (...) {
+        }
+      }
+    }
+  }
+
+  std::sort(
+    events.begin(),
+    events.end(),
+    [](const conjunction::ConjunctionEvent2 &left,
+       const conjunction::ConjunctionEvent2 &right) {
+      return left.pc.max_probability > right.pc.max_probability;
+    }
+  );
+
+  if (stats_out) {
+    stats_out->total_objects = primaries.size() + secondaries.size();
+    stats_out->pairs_screened = pairs_screened;
+    stats_out->pairs_prefiltered = 0u;
+    stats_out->kdtree_candidates = pairs_screened;
+    stats_out->tca_refined = pairs_screened;
+    stats_out->conjunctions_found = events.size();
+    stats_out->propagations = 0u;
+    stats_out->elapsed_ms = 0.0;
+  }
+
+  return events;
+}
+
 static std::unique_ptr<orbpro::conjunction::ConjunctionEventT> ToFlatbufferEvent(
   const conjunction::ConjunctionEvent &event
 ) {
@@ -901,6 +1248,29 @@ static ::flatbuffers::FlatBufferBuilder BuildPrepareScreeningIndexPayload(
 static ::flatbuffers::FlatBufferBuilder BuildScreenCatalogResultPayload(
   uint32_t objects_parsed,
   const std::vector<conjunction::ConjunctionEvent> &events,
+  const conjunction::ScreeningStats &stats
+) {
+  orbpro::conjunction::ConjunctionScreenCatalogResultT result{};
+  result.objectsParsed = objects_parsed;
+  result.conjunctionsFound = static_cast<uint32_t>(events.size());
+  result.stats = ToFlatbufferStats(stats);
+  result.conjunctions.reserve(events.size());
+  for (const auto &event : events) {
+    result.conjunctions.emplace_back(ToFlatbufferEvent(event));
+  }
+
+  ::flatbuffers::FlatBufferBuilder builder(4096);
+  const auto root = orbpro::conjunction::ConjunctionScreenCatalogResult::Pack(
+    builder,
+    &result
+  );
+  builder.Finish(root, "CASS");
+  return builder;
+}
+
+static ::flatbuffers::FlatBufferBuilder BuildScreenCatalogResultPayload(
+  uint32_t objects_parsed,
+  const std::vector<conjunction::ConjunctionEvent2> &events,
   const conjunction::ScreeningStats &stats
 ) {
   orbpro::conjunction::ConjunctionScreenCatalogResultT result{};
@@ -1182,6 +1552,130 @@ static int HandleComputePc(void) {
     return 0;
   } catch (const std::exception &ex) {
     SetError("compute-pc-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleScreenCatalog(void) {
+  try {
+    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionScreenCatalogRequest>(
+      FindInputFrame("request"),
+      "request",
+      "CASQ",
+      "ConjunctionScreenCatalogRequest"
+    );
+    if (!request) {
+      return 400;
+    }
+
+    std::vector<conjunction::GPElement> primary_gps;
+    std::vector<conjunction::GPElement> secondary_gps;
+    std::vector<std::shared_ptr<conjunction::EphemerisSource>> primary_sources;
+    std::vector<std::shared_ptr<conjunction::EphemerisSource>> secondary_sources;
+    uint32_t objects_parsed = 0u;
+
+    const auto *catalog_frame = FindInputFrame("catalog");
+    if (catalog_frame && !catalog_frame->payload.empty()) {
+      std::vector<conjunction::GPElement> catalog;
+      if (!DecodeOmmCatalogFrame(catalog_frame, &catalog)) {
+        return 400;
+      }
+      objects_parsed = static_cast<uint32_t>(catalog.size());
+
+      const auto *ordered_indices = request->orderedCatalogIndices();
+      if (ordered_indices && ordered_indices->size() > 0u) {
+        const uint32_t order_count = ordered_indices->size();
+        const uint32_t start = std::min<uint32_t>(request->startOrderIndex(), order_count);
+        const uint32_t requested_end =
+          request->endOrderIndex() > start ? request->endOrderIndex() : order_count;
+        const uint32_t end = std::min<uint32_t>(requested_end, order_count);
+        AppendOrderedCatalogRange(&primary_gps, catalog, ordered_indices, start, end);
+        const uint32_t secondary_start = std::min<uint32_t>(start + 1u, order_count);
+        AppendOrderedCatalogRange(&secondary_gps, catalog, ordered_indices, secondary_start, order_count);
+      } else {
+        primary_gps = catalog;
+      }
+    } else {
+      const uint32_t primary_count =
+        (request->primaryGps() ? request->primaryGps()->size() : 0u) +
+        (request->primaryTles() ? request->primaryTles()->size() : 0u) +
+        (request->primaryTracks() ? request->primaryTracks()->size() : 0u);
+      const uint32_t secondary_count =
+        (request->secondaryGps() ? request->secondaryGps()->size() : 0u) +
+        (request->secondaryTles() ? request->secondaryTles()->size() : 0u) +
+        (request->secondaryTracks() ? request->secondaryTracks()->size() : 0u);
+      objects_parsed = primary_count + secondary_count;
+
+      AppendGpRecords(&primary_gps, request->primaryGps());
+      AppendGpRecords(&secondary_gps, request->secondaryGps());
+      AppendTleRecordsAsGps(&primary_gps, request->primaryTles());
+      AppendTleRecordsAsGps(&secondary_gps, request->secondaryTles());
+      AppendTrackSources(&primary_sources, request->primaryTracks());
+      AppendTrackSources(&secondary_sources, request->secondaryTracks());
+
+      if (primary_count == 0u && (!secondary_gps.empty() || !secondary_sources.empty())) {
+        primary_gps = secondary_gps;
+        secondary_gps.clear();
+        primary_sources = std::move(secondary_sources);
+        secondary_sources.clear();
+      }
+    }
+
+    if (objects_parsed == 0u) {
+      SetError("invalid-request-frame", "screen_catalog requires at least one OMM, GP, or TLE object.");
+      return 400;
+    }
+
+    conjunction::ScreeningStats stats{};
+    const auto config = DecodeScreeningConfig(request);
+    if (!primary_sources.empty() || !secondary_sources.empty()) {
+      AppendGpSources(&primary_sources, primary_gps);
+      AppendGpSources(&secondary_sources, secondary_gps);
+      std::vector<conjunction::ConjunctionEvent2> source_events;
+      if (primary_sources.size() > 1u || (!primary_sources.empty() && !secondary_sources.empty())) {
+        source_events = ScreenEphemerisSources(primary_sources, secondary_sources, config, &stats);
+      }
+      stats.total_objects = objects_parsed;
+      stats.conjunctions_found = source_events.size();
+      const auto payload = BuildScreenCatalogResultPayload(objects_parsed, source_events, stats);
+      if (!PushAlignedBinaryOutput(
+            "result",
+            "orbpro.conjunction.ConjunctionScreenCatalogResult",
+            "CASS",
+            "ConjunctionScreenCatalogResult",
+            payload
+          )) {
+        SetError("output-failed", "Failed to push screen_catalog result.");
+        return 500;
+      }
+      return 0;
+    }
+
+    std::vector<conjunction::ConjunctionEvent> events;
+    if (primary_gps.size() > 1u || (!primary_gps.empty() && !secondary_gps.empty())) {
+      conjunction::ConjunctionScreener screener(config);
+      events = secondary_gps.empty()
+        ? screener.screen(primary_gps)
+        : screener.screen(primary_gps, secondary_gps);
+      stats = screener.stats();
+    }
+    stats.total_objects = objects_parsed;
+    stats.conjunctions_found = events.size();
+
+    const auto payload = BuildScreenCatalogResultPayload(objects_parsed, events, stats);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionScreenCatalogResult",
+          "CASS",
+          "ConjunctionScreenCatalogResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push screen_catalog result.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("screen-catalog-failed", ex.what());
     return 500;
   }
 }

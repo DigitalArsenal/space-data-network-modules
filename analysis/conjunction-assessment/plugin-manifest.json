@@ -2,7 +2,7 @@
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
   "version": "0.2.0",
-  "description": "Conjunction assessment and collision probability analysis through a canonical SDK command bridge.",
+  "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -10,15 +10,18 @@
   "runtimeTargets": ["browser", "wasi", "wasmedge"],
   "methods": [
     {
-      "methodId": "invoke",
-      "displayName": "Invoke Conjunction Assessment",
+      "methodId": "assess_conjunction",
+      "displayName": "Assess Conjunction",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "orbpro.conjunction.pair-request",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ" },
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPairRequest", "requiredAlignment": 8 }
+              ]
             }
           ],
           "minStreams": 1,
@@ -28,11 +31,29 @@
       ],
       "outputPorts": [
         {
-          "portId": "response",
+          "portId": "result",
           "acceptedTypeSets": [
             {
-              "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "orbpro.conjunction.event-result",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionEvent", "fileIdentifier": "CAEV" },
+                { "schemaName": "orbpro.conjunction.ConjunctionEvent", "fileIdentifier": "CAEV", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionEvent", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
             }
           ],
           "minStreams": 0,
@@ -42,6 +63,236 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "emit_cdm",
+      "displayName": "Emit CDM",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.pair-request",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ" },
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPairRequest", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "find_tca",
+      "displayName": "Find Time Of Closest Approach",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.pair-request",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ" },
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPairRequest", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.find-tca-result",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionFindTcaResult", "fileIdentifier": "CATR" },
+                { "schemaName": "orbpro.conjunction.ConjunctionFindTcaResult", "fileIdentifier": "CATR", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionFindTcaResult", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "alfano_max_probability",
+      "displayName": "Alfano Max Probability",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.alfano-request",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionAlfanoRequest", "fileIdentifier": "CAAR" },
+                { "schemaName": "orbpro.conjunction.ConjunctionAlfanoRequest", "fileIdentifier": "CAAR", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionAlfanoRequest", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.alfano-result",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionAlfanoResult", "fileIdentifier": "CAAL" },
+                { "schemaName": "orbpro.conjunction.ConjunctionAlfanoResult", "fileIdentifier": "CAAL", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionAlfanoResult", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "compute_pc",
+      "displayName": "Compute Collision Probability",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.pc-request",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionPcRequest", "fileIdentifier": "CAPR" },
+                { "schemaName": "orbpro.conjunction.ConjunctionPcRequest", "fileIdentifier": "CAPR", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPcRequest", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.pc-result",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionPcResult", "fileIdentifier": "CAPC" },
+                { "schemaName": "orbpro.conjunction.ConjunctionPcResult", "fileIdentifier": "CAPC", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPcResult", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "screen_catalog",
+      "displayName": "Screen Catalog",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.screen-request",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionScreenCatalogRequest", "fileIdentifier": "CASQ" },
+                { "schemaName": "orbpro.conjunction.ConjunctionScreenCatalogRequest", "fileIdentifier": "CASQ", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionScreenCatalogRequest", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.omm-catalog",
+              "allowedTypes": [
+                { "schemaName": "OMM/main.fbs", "fileIdentifier": "$OMM" },
+                { "schemaName": "OMM/main.fbs", "fileIdentifier": "$OMM", "wireFormat": "aligned-binary", "rootTypeName": "OMM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.screen-result",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionScreenCatalogResult", "fileIdentifier": "CASS" },
+                { "schemaName": "orbpro.conjunction.ConjunctionScreenCatalogResult", "fileIdentifier": "CASS", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionScreenCatalogResult", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-to-empty"
     }
   ]
 }

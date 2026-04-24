@@ -56,7 +56,7 @@ inline const char *EnumNameorbitObjectType(orbitObjectType e) {
   return EnumNamesorbitObjectType()[index];
 }
 
-enum class aouType : int8_t {
+enum class aouCategory : int8_t {
   CIRCULAR = 0,
   ELLIPTICAL = 1,
   RECTANGULAR = 2,
@@ -65,17 +65,17 @@ enum class aouType : int8_t {
   MAX = NONE
 };
 
-inline const aouType (&EnumValuesaouType())[4] {
-  static const aouType values[] = {
-    aouType::CIRCULAR,
-    aouType::ELLIPTICAL,
-    aouType::RECTANGULAR,
-    aouType::NONE
+inline const aouCategory (&EnumValuesaouCategory())[4] {
+  static const aouCategory values[] = {
+    aouCategory::CIRCULAR,
+    aouCategory::ELLIPTICAL,
+    aouCategory::RECTANGULAR,
+    aouCategory::NONE
   };
   return values;
 }
 
-inline const char * const *EnumNamesaouType() {
+inline const char * const *EnumNamesaouCategory() {
   static const char * const names[5] = {
     "CIRCULAR",
     "ELLIPTICAL",
@@ -86,10 +86,10 @@ inline const char * const *EnumNamesaouType() {
   return names;
 }
 
-inline const char *EnumNameaouType(aouType e) {
-  if (::flatbuffers::IsOutRange(e, aouType::CIRCULAR, aouType::NONE)) return "";
+inline const char *EnumNameaouCategory(aouCategory e) {
+  if (::flatbuffers::IsOutRange(e, aouCategory::CIRCULAR, aouCategory::NONE)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesaouType()[index];
+  return EnumNamesaouCategory()[index];
 }
 
 struct OBTT : public ::flatbuffers::NativeTable {
@@ -115,7 +115,7 @@ struct OBTT : public ::flatbuffers::NativeTable {
   std::string COUNTRY_CODE{};
   double DECAY = 0.0;
   std::string CHARLIE_LINE{};
-  aouType AOU_TYPE = aouType::CIRCULAR;
+  aouCategory AOU_TYPE = aouCategory::CIRCULAR;
   std::vector<double> AOU_DATA{};
   double CNTNMNT = 0.0;
   std::string XREF{};
@@ -262,8 +262,8 @@ struct OBT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_CHARLIE_LINE);
   }
   /// Area of uncertainty type
-  aouType AOU_TYPE() const {
-    return static_cast<aouType>(GetField<int8_t>(VT_AOU_TYPE, 0));
+  aouCategory AOU_TYPE() const {
+    return static_cast<aouCategory>(GetField<int8_t>(VT_AOU_TYPE, 0));
   }
   /// Area of uncertainty data
   const ::flatbuffers::Vector<double> *AOU_DATA() const {
@@ -459,7 +459,7 @@ struct OBTBuilder {
   void add_CHARLIE_LINE(::flatbuffers::Offset<::flatbuffers::String> CHARLIE_LINE) {
     fbb_.AddOffset(OBT::VT_CHARLIE_LINE, CHARLIE_LINE);
   }
-  void add_AOU_TYPE(aouType AOU_TYPE) {
+  void add_AOU_TYPE(aouCategory AOU_TYPE) {
     fbb_.AddElement<int8_t>(OBT::VT_AOU_TYPE, static_cast<int8_t>(AOU_TYPE), 0);
   }
   void add_AOU_DATA(::flatbuffers::Offset<::flatbuffers::Vector<double>> AOU_DATA) {
@@ -541,7 +541,7 @@ inline ::flatbuffers::Offset<OBT> CreateOBT(
     ::flatbuffers::Offset<::flatbuffers::String> COUNTRY_CODE = 0,
     double DECAY = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> CHARLIE_LINE = 0,
-    aouType AOU_TYPE = aouType::CIRCULAR,
+    aouCategory AOU_TYPE = aouCategory::CIRCULAR,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> AOU_DATA = 0,
     double CNTNMNT = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> XREF = 0,
@@ -626,7 +626,7 @@ inline ::flatbuffers::Offset<OBT> CreateOBTDirect(
     const char *COUNTRY_CODE = nullptr,
     double DECAY = 0.0,
     const char *CHARLIE_LINE = nullptr,
-    aouType AOU_TYPE = aouType::CIRCULAR,
+    aouCategory AOU_TYPE = aouCategory::CIRCULAR,
     const std::vector<double> *AOU_DATA = nullptr,
     double CNTNMNT = 0.0,
     const char *XREF = nullptr,

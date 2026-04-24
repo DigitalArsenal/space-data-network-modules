@@ -1,12 +1,8 @@
-// SDK 0.8.0 compat coverage for the propagator.sgp4 module.
+// SDK artifact coverage for the propagator.sgp4 module.
 //
-// Exercises the published SDK surfaces — `validatePluginArtifact`,
-// `inspectModule`, `createBrowserModuleHarness`, and the WasmEdge command
-// harness — against the real FlatBuffer wire (OMM ingest + PropagatorState
-// output). The `plugin_invoke_bridge.cpp` layer rebuilds the request as an
-// OrbPro `StreamInvokeRequest` and dispatches into `plugin_stream_invoke`;
-// success here proves both the SDK and OrbPro wire surfaces stay aligned for
-// every compiled artifact.
+// The SDK still owns artifact validation and wasm inspection. Invocation is
+// driven directly through the canonical SDS PIV envelope because OrbPro does
+// not keep the SDK's legacy StreamInvoke request dialect.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -15,17 +11,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validatePluginArtifact } from "space-data-module-sdk/compliance";
-import {
-  inspectModule,
-  loadModule,
-} from "space-data-module-sdk/host/isomorphic";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 
 import {
   decodePropagatorState,
   encodeOmmPayload,
   encodePropagatorBatchRequest,
 } from "./lib/payloadEncoders.mjs";
+import { invokePiv, loadRawSgp4Module } from "./lib/pivInvokeHelper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(__dirname, "..");
@@ -96,98 +89,51 @@ test("built artifact exposes the standalone isomorphic surface", async () => {
   }
 });
 
-test("browser harness drives OMM ingest and PropagatorState emit through the SDK invoke surface", async (t) => {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(ISOMORPHIC_WASM_PATH),
-    surface: "direct",
-  });
-  t.after(() => {
-    harness.destroy();
-  });
-
-  const ingestResponse = await harness.invoke({
-    methodId: "ingest_omm",
-    inputs: [
-      {
-        portId: "omm",
-        payload: encodeOmmPayload(),
-        typeRef: {
-          schemaName: "orbpro.sds.omm",
-          fileIdentifier: "$OMM",
-        },
-      },
-    ],
-  });
-  assert.equal(ingestResponse.statusCode ?? 0, 0);
-
-  const propagateResponse = await harness.invoke({
-    methodId: "propagate_state",
-    inputs: [
-      {
-        portId: "request",
-        payload: encodePropagatorBatchRequest({
-          epoch: 2460310.5,
-          entityHandles: [0],
-          maxCount: 1,
-        }),
-        typeRef: {
-          schemaName: "orbpro.propagator.PropagatorBatchRequest",
-          fileIdentifier: "PROP",
-        },
-      },
-    ],
-    outputStreamCap: 1,
-  });
-  assert.equal(propagateResponse.statusCode ?? 0, 0);
-  assert.equal(propagateResponse.outputs.length, 1);
-  assert.equal(propagateResponse.outputs[0].portId, "state");
-
-  const payload = propagateResponse.outputs[0].payload;
-  const state = decodePropagatorState(new Uint8Array(payload));
-  assert.equal(state.catalogNumber, 25544);
-  assert.equal(state.valid, true);
-  assert.ok(Number.isFinite(state.position[0]));
-});
-
-test("wasmedge command harness accepts SDK invoke requests", async (t) => {
-  let harness;
+test("raw browser module drives OMM ingest and PropagatorState emit through SDS PIV", async () => {
+  const module = await loadRawSgp4Module();
   try {
-    harness = await loadModule({
-      wasmSource: ISOMORPHIC_WASM_PATH,
-      runtimeKind: "wasmedge",
-      enableThreads: false,
-    });
-  } catch (error) {
-    if (
-      /spawn wasmedge ENOENT|command not found|Failed to launch/i.test(
-        String(error),
-      )
-    ) {
-      t.skip("Install wasmedge to verify the server-path harness.");
-      return;
-    }
-    throw error;
-  }
-  t.after(async () => {
-    await harness.destroy();
-  });
-
-  // WasmEdge's command surface spawns a fresh process per invoke, so state
-  // doesn't persist between calls. The smoke test here drives a single
-  // `ingest_omm` call and verifies the plugin accepts the SDK 0.8.0 wire
-  // format without tripping the FlatBuffer verifier.
-  const response = await harness.invoke({
-    methodId: "ingest_omm",
-    inputs: [
-      {
-        portId: "omm",
-        payload: encodeOmmPayload(),
-        typeRef: {
-          schemaName: "orbpro.sds.omm",
-          fileIdentifier: "$OMM",
+    const ingestResponse = invokePiv(module, {
+      methodId: "ingest_omm",
+      inputs: [
+        {
+          portId: "omm",
+          payload: encodeOmmPayload(),
+          typeRef: {
+            schemaName: "orbpro.sds.omm",
+            fileIdentifier: "$OMM",
+          },
         },
-      },
-    ],
-  });
-  assert.equal(response.statusCode ?? 0, 0);
+      ],
+    });
+    assert.equal(ingestResponse.response.STATUS_CODE ?? 0, 0);
+
+    const propagateResponse = invokePiv(module, {
+      methodId: "propagate_state",
+      inputs: [
+        {
+          portId: "request",
+          payload: encodePropagatorBatchRequest({
+            epoch: 2460310.5,
+            entityHandles: [0],
+            maxCount: 1,
+          }),
+          typeRef: {
+            schemaName: "orbpro.propagator.PropagatorBatchRequest",
+            fileIdentifier: "PROP",
+          },
+        },
+      ],
+      outputStreamCap: 1,
+    });
+    assert.equal(propagateResponse.response.STATUS_CODE ?? 0, 0);
+    assert.equal(propagateResponse.outputPayloads.length, 1);
+    assert.equal(propagateResponse.outputPayloads[0].portId, "state");
+
+    const state = decodePropagatorState(propagateResponse.outputPayloads[0].bytes);
+    assert.equal(state.catalogNumber, 25544);
+    assert.equal(state.valid, true);
+    assert.ok(Number.isFinite(state.position[0]));
+  } finally {
+    module._plugin_destroy();
+  }
 });

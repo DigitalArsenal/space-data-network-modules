@@ -75,22 +75,22 @@ inline const char *EnumNameelementType(elementType e) {
   return EnumNameselementType()[index];
 }
 
-enum class anomalyType : int8_t {
+enum class anomalyConvention : int8_t {
   TRUE_ANOMALY = 0,
   MEAN_ANOMALY = 1,
   MIN = TRUE_ANOMALY,
   MAX = MEAN_ANOMALY
 };
 
-inline const anomalyType (&EnumValuesanomalyType())[2] {
-  static const anomalyType values[] = {
-    anomalyType::TRUE_ANOMALY,
-    anomalyType::MEAN_ANOMALY
+inline const anomalyConvention (&EnumValuesanomalyConvention())[2] {
+  static const anomalyConvention values[] = {
+    anomalyConvention::TRUE_ANOMALY,
+    anomalyConvention::MEAN_ANOMALY
   };
   return values;
 }
 
-inline const char * const *EnumNamesanomalyType() {
+inline const char * const *EnumNamesanomalyConvention() {
   static const char * const names[3] = {
     "TRUE_ANOMALY",
     "MEAN_ANOMALY",
@@ -99,14 +99,14 @@ inline const char * const *EnumNamesanomalyType() {
   return names;
 }
 
-inline const char *EnumNameanomalyType(anomalyType e) {
-  if (::flatbuffers::IsOutRange(e, anomalyType::TRUE_ANOMALY, anomalyType::MEAN_ANOMALY)) return "";
+inline const char *EnumNameanomalyConvention(anomalyConvention e) {
+  if (::flatbuffers::IsOutRange(e, anomalyConvention::TRUE_ANOMALY, anomalyConvention::MEAN_ANOMALY)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesanomalyType()[index];
+  return EnumNamesanomalyConvention()[index];
 }
 
 /// Enum to represent common atmospheric models
-enum class atmosphericModel : int8_t {
+enum class atmosphericSource : int8_t {
   NONE = 0,
   JACCHIA_70 = 1,
   JB2008 = 2,
@@ -118,20 +118,20 @@ enum class atmosphericModel : int8_t {
   MAX = HASDM
 };
 
-inline const atmosphericModel (&EnumValuesatmosphericModel())[7] {
-  static const atmosphericModel values[] = {
-    atmosphericModel::NONE,
-    atmosphericModel::JACCHIA_70,
-    atmosphericModel::JB2008,
-    atmosphericModel::NRLMSISE_00,
-    atmosphericModel::DTM_2000,
-    atmosphericModel::HWM14,
-    atmosphericModel::HASDM
+inline const atmosphericSource (&EnumValuesatmosphericSource())[7] {
+  static const atmosphericSource values[] = {
+    atmosphericSource::NONE,
+    atmosphericSource::JACCHIA_70,
+    atmosphericSource::JB2008,
+    atmosphericSource::NRLMSISE_00,
+    atmosphericSource::DTM_2000,
+    atmosphericSource::HWM14,
+    atmosphericSource::HASDM
   };
   return values;
 }
 
-inline const char * const *EnumNamesatmosphericModel() {
+inline const char * const *EnumNamesatmosphericSource() {
   static const char * const names[8] = {
     "NONE",
     "JACCHIA_70",
@@ -145,14 +145,14 @@ inline const char * const *EnumNamesatmosphericModel() {
   return names;
 }
 
-inline const char *EnumNameatmosphericModel(atmosphericModel e) {
-  if (::flatbuffers::IsOutRange(e, atmosphericModel::NONE, atmosphericModel::HASDM)) return "";
+inline const char *EnumNameatmosphericSource(atmosphericSource e) {
+  if (::flatbuffers::IsOutRange(e, atmosphericSource::NONE, atmosphericSource::HASDM)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesatmosphericModel()[index];
+  return EnumNamesatmosphericSource()[index];
 }
 
 /// Enum to represent common geopotential models
-enum class geopotentialModel : int8_t {
+enum class geopotentialSource : int8_t {
   NONE = 0,
   EGM96 = 1,
   WGS84 = 2,
@@ -163,19 +163,19 @@ enum class geopotentialModel : int8_t {
   MAX = EGM96_J5
 };
 
-inline const geopotentialModel (&EnumValuesgeopotentialModel())[6] {
-  static const geopotentialModel values[] = {
-    geopotentialModel::NONE,
-    geopotentialModel::EGM96,
-    geopotentialModel::WGS84,
-    geopotentialModel::JGM2,
-    geopotentialModel::GEMT3,
-    geopotentialModel::EGM96_J5
+inline const geopotentialSource (&EnumValuesgeopotentialSource())[6] {
+  static const geopotentialSource values[] = {
+    geopotentialSource::NONE,
+    geopotentialSource::EGM96,
+    geopotentialSource::WGS84,
+    geopotentialSource::JGM2,
+    geopotentialSource::GEMT3,
+    geopotentialSource::EGM96_J5
   };
   return values;
 }
 
-inline const char * const *EnumNamesgeopotentialModel() {
+inline const char * const *EnumNamesgeopotentialSource() {
   static const char * const names[7] = {
     "NONE",
     "EGM96",
@@ -188,10 +188,10 @@ inline const char * const *EnumNamesgeopotentialModel() {
   return names;
 }
 
-inline const char *EnumNamegeopotentialModel(geopotentialModel e) {
-  if (::flatbuffers::IsOutRange(e, geopotentialModel::NONE, geopotentialModel::EGM96_J5)) return "";
+inline const char *EnumNamegeopotentialSource(geopotentialSource e) {
+  if (::flatbuffers::IsOutRange(e, geopotentialSource::NONE, geopotentialSource::EGM96_J5)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesgeopotentialModel()[index];
+  return EnumNamesgeopotentialSource()[index];
 }
 
 /// Enum to represent zonal harmonics
@@ -290,7 +290,7 @@ inline const char *EnumNamesolarRadiationPressureModel(solarRadiationPressureMod
 }
 
 /// Enum to represent common lunar perturbation models
-enum class lunarPerturbationModel : int8_t {
+enum class lunarPerturbationSource : int8_t {
   NONE = 0,
   DE430 = 1,
   DE431 = 2,
@@ -299,17 +299,17 @@ enum class lunarPerturbationModel : int8_t {
   MAX = LP150Q
 };
 
-inline const lunarPerturbationModel (&EnumValueslunarPerturbationModel())[4] {
-  static const lunarPerturbationModel values[] = {
-    lunarPerturbationModel::NONE,
-    lunarPerturbationModel::DE430,
-    lunarPerturbationModel::DE431,
-    lunarPerturbationModel::LP150Q
+inline const lunarPerturbationSource (&EnumValueslunarPerturbationSource())[4] {
+  static const lunarPerturbationSource values[] = {
+    lunarPerturbationSource::NONE,
+    lunarPerturbationSource::DE430,
+    lunarPerturbationSource::DE431,
+    lunarPerturbationSource::LP150Q
   };
   return values;
 }
 
-inline const char * const *EnumNameslunarPerturbationModel() {
+inline const char * const *EnumNameslunarPerturbationSource() {
   static const char * const names[5] = {
     "NONE",
     "DE430",
@@ -320,14 +320,14 @@ inline const char * const *EnumNameslunarPerturbationModel() {
   return names;
 }
 
-inline const char *EnumNamelunarPerturbationModel(lunarPerturbationModel e) {
-  if (::flatbuffers::IsOutRange(e, lunarPerturbationModel::NONE, lunarPerturbationModel::LP150Q)) return "";
+inline const char *EnumNamelunarPerturbationSource(lunarPerturbationSource e) {
+  if (::flatbuffers::IsOutRange(e, lunarPerturbationSource::NONE, lunarPerturbationSource::LP150Q)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNameslunarPerturbationModel()[index];
+  return EnumNameslunarPerturbationSource()[index];
 }
 
 /// Enum to represent various solar perturbation models
-enum class solarPerturbationModel : int8_t {
+enum class solarPerturbationSource : int8_t {
   NONE = 0,
   DE430 = 1,
   DE431 = 2,
@@ -335,16 +335,16 @@ enum class solarPerturbationModel : int8_t {
   MAX = DE431
 };
 
-inline const solarPerturbationModel (&EnumValuessolarPerturbationModel())[3] {
-  static const solarPerturbationModel values[] = {
-    solarPerturbationModel::NONE,
-    solarPerturbationModel::DE430,
-    solarPerturbationModel::DE431
+inline const solarPerturbationSource (&EnumValuessolarPerturbationSource())[3] {
+  static const solarPerturbationSource values[] = {
+    solarPerturbationSource::NONE,
+    solarPerturbationSource::DE430,
+    solarPerturbationSource::DE431
   };
   return values;
 }
 
-inline const char * const *EnumNamessolarPerturbationModel() {
+inline const char * const *EnumNamessolarPerturbationSource() {
   static const char * const names[4] = {
     "NONE",
     "DE430",
@@ -354,14 +354,14 @@ inline const char * const *EnumNamessolarPerturbationModel() {
   return names;
 }
 
-inline const char *EnumNamesolarPerturbationModel(solarPerturbationModel e) {
-  if (::flatbuffers::IsOutRange(e, solarPerturbationModel::NONE, solarPerturbationModel::DE431)) return "";
+inline const char *EnumNamesolarPerturbationSource(solarPerturbationSource e) {
+  if (::flatbuffers::IsOutRange(e, solarPerturbationSource::NONE, solarPerturbationSource::DE431)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamessolarPerturbationModel()[index];
+  return EnumNamessolarPerturbationSource()[index];
 }
 
 /// Enum to represent resonance models
-enum class resonanceModel : int8_t {
+enum class resonanceSource : int8_t {
   NONE = 0,
   HIGH_ALTITUDE_RESONANCE = 1,
   LOW_ALTITUDE_RESONANCE = 2,
@@ -371,18 +371,18 @@ enum class resonanceModel : int8_t {
   MAX = SOLAR_RESONANCE
 };
 
-inline const resonanceModel (&EnumValuesresonanceModel())[5] {
-  static const resonanceModel values[] = {
-    resonanceModel::NONE,
-    resonanceModel::HIGH_ALTITUDE_RESONANCE,
-    resonanceModel::LOW_ALTITUDE_RESONANCE,
-    resonanceModel::LUNAR_RESONANCE,
-    resonanceModel::SOLAR_RESONANCE
+inline const resonanceSource (&EnumValuesresonanceSource())[5] {
+  static const resonanceSource values[] = {
+    resonanceSource::NONE,
+    resonanceSource::HIGH_ALTITUDE_RESONANCE,
+    resonanceSource::LOW_ALTITUDE_RESONANCE,
+    resonanceSource::LUNAR_RESONANCE,
+    resonanceSource::SOLAR_RESONANCE
   };
   return values;
 }
 
-inline const char * const *EnumNamesresonanceModel() {
+inline const char * const *EnumNamesresonanceSource() {
   static const char * const names[6] = {
     "NONE",
     "HIGH_ALTITUDE_RESONANCE",
@@ -394,10 +394,10 @@ inline const char * const *EnumNamesresonanceModel() {
   return names;
 }
 
-inline const char *EnumNameresonanceModel(resonanceModel e) {
-  if (::flatbuffers::IsOutRange(e, resonanceModel::NONE, resonanceModel::SOLAR_RESONANCE)) return "";
+inline const char *EnumNameresonanceSource(resonanceSource e) {
+  if (::flatbuffers::IsOutRange(e, resonanceSource::NONE, resonanceSource::SOLAR_RESONANCE)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesresonanceModel()[index];
+  return EnumNamesresonanceSource()[index];
 }
 
 /// Enum to represent the status of various perturbations (ON/OFF)
@@ -432,7 +432,7 @@ inline const char *EnumNameperturbationStatus(perturbationStatus e) {
 }
 
 /// Enum to represent propagator types
-enum class propagatorType : int8_t {
+enum class propagatorFamily : int8_t {
   NONE = 0,
   SEMI_ANALYTICAL = 1,
   VINTI = 2,
@@ -450,26 +450,26 @@ enum class propagatorType : int8_t {
   MAX = SDP8
 };
 
-inline const propagatorType (&EnumValuespropagatorType())[13] {
-  static const propagatorType values[] = {
-    propagatorType::NONE,
-    propagatorType::SEMI_ANALYTICAL,
-    propagatorType::VINTI,
-    propagatorType::SGP4,
-    propagatorType::COWELL,
-    propagatorType::RK4,
-    propagatorType::NYX,
-    propagatorType::GMAT,
-    propagatorType::SPICE,
-    propagatorType::SGP,
-    propagatorType::SDP4,
-    propagatorType::SGP8,
-    propagatorType::SDP8
+inline const propagatorFamily (&EnumValuespropagatorFamily())[13] {
+  static const propagatorFamily values[] = {
+    propagatorFamily::NONE,
+    propagatorFamily::SEMI_ANALYTICAL,
+    propagatorFamily::VINTI,
+    propagatorFamily::SGP4,
+    propagatorFamily::COWELL,
+    propagatorFamily::RK4,
+    propagatorFamily::NYX,
+    propagatorFamily::GMAT,
+    propagatorFamily::SPICE,
+    propagatorFamily::SGP,
+    propagatorFamily::SDP4,
+    propagatorFamily::SGP8,
+    propagatorFamily::SDP8
   };
   return values;
 }
 
-inline const char * const *EnumNamespropagatorType() {
+inline const char * const *EnumNamespropagatorFamily() {
   static const char * const names[14] = {
     "NONE",
     "SEMI_ANALYTICAL",
@@ -489,16 +489,16 @@ inline const char * const *EnumNamespropagatorType() {
   return names;
 }
 
-inline const char *EnumNamepropagatorType(propagatorType e) {
-  if (::flatbuffers::IsOutRange(e, propagatorType::NONE, propagatorType::SDP8)) return "";
+inline const char *EnumNamepropagatorFamily(propagatorFamily e) {
+  if (::flatbuffers::IsOutRange(e, propagatorFamily::NONE, propagatorFamily::SDP8)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamespropagatorType()[index];
+  return EnumNamespropagatorFamily()[index];
 }
 
 struct propagatorConfigT : public ::flatbuffers::NativeTable {
   typedef propagatorConfig TableType;
   std::string PROPAGATOR_NAME{};
-  propagatorType PROPAGATOR_TYPE = propagatorType::NONE;
+  propagatorFamily PROPAGATOR_TYPE = propagatorFamily::NONE;
   std::vector<std::string> FORCE_MODELS{};
   std::string EPOCH{};
   double TIME_STEP = 0.0;
@@ -521,8 +521,8 @@ struct propagatorConfig FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *PROPAGATOR_NAME() const {
     return GetPointer<const ::flatbuffers::String *>(VT_PROPAGATOR_NAME);
   }
-  propagatorType PROPAGATOR_TYPE() const {
-    return static_cast<propagatorType>(GetField<int8_t>(VT_PROPAGATOR_TYPE, 0));
+  propagatorFamily PROPAGATOR_TYPE() const {
+    return static_cast<propagatorFamily>(GetField<int8_t>(VT_PROPAGATOR_TYPE, 0));
   }
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *FORCE_MODELS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_FORCE_MODELS);
@@ -564,7 +564,7 @@ struct propagatorConfigBuilder {
   void add_PROPAGATOR_NAME(::flatbuffers::Offset<::flatbuffers::String> PROPAGATOR_NAME) {
     fbb_.AddOffset(propagatorConfig::VT_PROPAGATOR_NAME, PROPAGATOR_NAME);
   }
-  void add_PROPAGATOR_TYPE(propagatorType PROPAGATOR_TYPE) {
+  void add_PROPAGATOR_TYPE(propagatorFamily PROPAGATOR_TYPE) {
     fbb_.AddElement<int8_t>(propagatorConfig::VT_PROPAGATOR_TYPE, static_cast<int8_t>(PROPAGATOR_TYPE), 0);
   }
   void add_FORCE_MODELS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> FORCE_MODELS) {
@@ -593,7 +593,7 @@ struct propagatorConfigBuilder {
 inline ::flatbuffers::Offset<propagatorConfig> CreatepropagatorConfig(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> PROPAGATOR_NAME = 0,
-    propagatorType PROPAGATOR_TYPE = propagatorType::NONE,
+    propagatorFamily PROPAGATOR_TYPE = propagatorFamily::NONE,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> FORCE_MODELS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> EPOCH = 0,
     double TIME_STEP = 0.0,
@@ -616,7 +616,7 @@ struct propagatorConfig::Traits {
 inline ::flatbuffers::Offset<propagatorConfig> CreatepropagatorConfigDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *PROPAGATOR_NAME = nullptr,
-    propagatorType PROPAGATOR_TYPE = propagatorType::NONE,
+    propagatorFamily PROPAGATOR_TYPE = propagatorFamily::NONE,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *FORCE_MODELS = nullptr,
     const char *EPOCH = nullptr,
     double TIME_STEP = 0.0,
@@ -792,7 +792,7 @@ struct keplerianElementsT : public ::flatbuffers::NativeTable {
   double INCLINATION = 0.0;
   double RA_OF_ASC_NODE = 0.0;
   double ARG_OF_PERICENTER = 0.0;
-  anomalyType ANOMALY_TYPE = anomalyType::TRUE_ANOMALY;
+  anomalyConvention ANOMALY_TYPE = anomalyConvention::TRUE_ANOMALY;
   double ANOMALY = 0.0;
 };
 
@@ -825,8 +825,8 @@ struct keplerianElements FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   double ARG_OF_PERICENTER() const {
     return GetField<double>(VT_ARG_OF_PERICENTER, 0.0);
   }
-  anomalyType ANOMALY_TYPE() const {
-    return static_cast<anomalyType>(GetField<int8_t>(VT_ANOMALY_TYPE, 0));
+  anomalyConvention ANOMALY_TYPE() const {
+    return static_cast<anomalyConvention>(GetField<int8_t>(VT_ANOMALY_TYPE, 0));
   }
   double ANOMALY() const {
     return GetField<double>(VT_ANOMALY, 0.0);
@@ -867,7 +867,7 @@ struct keplerianElementsBuilder {
   void add_ARG_OF_PERICENTER(double ARG_OF_PERICENTER) {
     fbb_.AddElement<double>(keplerianElements::VT_ARG_OF_PERICENTER, ARG_OF_PERICENTER, 0.0);
   }
-  void add_ANOMALY_TYPE(anomalyType ANOMALY_TYPE) {
+  void add_ANOMALY_TYPE(anomalyConvention ANOMALY_TYPE) {
     fbb_.AddElement<int8_t>(keplerianElements::VT_ANOMALY_TYPE, static_cast<int8_t>(ANOMALY_TYPE), 0);
   }
   void add_ANOMALY(double ANOMALY) {
@@ -891,7 +891,7 @@ inline ::flatbuffers::Offset<keplerianElements> CreatekeplerianElements(
     double INCLINATION = 0.0,
     double RA_OF_ASC_NODE = 0.0,
     double ARG_OF_PERICENTER = 0.0,
-    anomalyType ANOMALY_TYPE = anomalyType::TRUE_ANOMALY,
+    anomalyConvention ANOMALY_TYPE = anomalyConvention::TRUE_ANOMALY,
     double ANOMALY = 0.0) {
   keplerianElementsBuilder builder_(_fbb);
   builder_.add_ANOMALY(ANOMALY);
@@ -1143,14 +1143,14 @@ struct uvwSigmas::Traits {
 
 struct VCMAtmosphericModelDataT : public ::flatbuffers::NativeTable {
   typedef VCMAtmosphericModelData TableType;
-  atmosphericModel ATMOSPHERIC_MODEL = atmosphericModel::NONE;
-  geopotentialModel GEOPOTENTIAL_MODEL = geopotentialModel::NONE;
+  atmosphericSource ATMOSPHERIC_MODEL = atmosphericSource::NONE;
+  geopotentialSource GEOPOTENTIAL_MODEL = geopotentialSource::NONE;
   perturbationStatus LUNAR_SOLAR_PERTURBATION = perturbationStatus::OFF;
-  lunarPerturbationModel LUNAR_PERTURBATION_MODEL = lunarPerturbationModel::NONE;
-  solarPerturbationModel SOLAR_PERTURBATION_MODEL = solarPerturbationModel::NONE;
+  lunarPerturbationSource LUNAR_PERTURBATION_MODEL = lunarPerturbationSource::NONE;
+  solarPerturbationSource SOLAR_PERTURBATION_MODEL = solarPerturbationSource::NONE;
   perturbationStatus SOLAR_RADIATION_PRESSURE = perturbationStatus::OFF;
   solarRadiationPressureModel SRP_MODEL = solarRadiationPressureModel::NONE;
-  resonanceModel RESONANCE_MODEL = resonanceModel::NONE;
+  resonanceSource RESONANCE_MODEL = resonanceSource::NONE;
 };
 
 /// VCM Atmospheric and Perturbation Model Data
@@ -1168,20 +1168,20 @@ struct VCMAtmosphericModelData FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::
     VT_SRP_MODEL = 16,
     VT_RESONANCE_MODEL = 18
   };
-  atmosphericModel ATMOSPHERIC_MODEL() const {
-    return static_cast<atmosphericModel>(GetField<int8_t>(VT_ATMOSPHERIC_MODEL, 0));
+  atmosphericSource ATMOSPHERIC_MODEL() const {
+    return static_cast<atmosphericSource>(GetField<int8_t>(VT_ATMOSPHERIC_MODEL, 0));
   }
-  geopotentialModel GEOPOTENTIAL_MODEL() const {
-    return static_cast<geopotentialModel>(GetField<int8_t>(VT_GEOPOTENTIAL_MODEL, 0));
+  geopotentialSource GEOPOTENTIAL_MODEL() const {
+    return static_cast<geopotentialSource>(GetField<int8_t>(VT_GEOPOTENTIAL_MODEL, 0));
   }
   perturbationStatus LUNAR_SOLAR_PERTURBATION() const {
     return static_cast<perturbationStatus>(GetField<int8_t>(VT_LUNAR_SOLAR_PERTURBATION, 0));
   }
-  lunarPerturbationModel LUNAR_PERTURBATION_MODEL() const {
-    return static_cast<lunarPerturbationModel>(GetField<int8_t>(VT_LUNAR_PERTURBATION_MODEL, 0));
+  lunarPerturbationSource LUNAR_PERTURBATION_MODEL() const {
+    return static_cast<lunarPerturbationSource>(GetField<int8_t>(VT_LUNAR_PERTURBATION_MODEL, 0));
   }
-  solarPerturbationModel SOLAR_PERTURBATION_MODEL() const {
-    return static_cast<solarPerturbationModel>(GetField<int8_t>(VT_SOLAR_PERTURBATION_MODEL, 0));
+  solarPerturbationSource SOLAR_PERTURBATION_MODEL() const {
+    return static_cast<solarPerturbationSource>(GetField<int8_t>(VT_SOLAR_PERTURBATION_MODEL, 0));
   }
   perturbationStatus SOLAR_RADIATION_PRESSURE() const {
     return static_cast<perturbationStatus>(GetField<int8_t>(VT_SOLAR_RADIATION_PRESSURE, 0));
@@ -1189,8 +1189,8 @@ struct VCMAtmosphericModelData FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::
   solarRadiationPressureModel SRP_MODEL() const {
     return static_cast<solarRadiationPressureModel>(GetField<int8_t>(VT_SRP_MODEL, 0));
   }
-  resonanceModel RESONANCE_MODEL() const {
-    return static_cast<resonanceModel>(GetField<int8_t>(VT_RESONANCE_MODEL, 0));
+  resonanceSource RESONANCE_MODEL() const {
+    return static_cast<resonanceSource>(GetField<int8_t>(VT_RESONANCE_MODEL, 0));
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -1214,19 +1214,19 @@ struct VCMAtmosphericModelDataBuilder {
   typedef VCMAtmosphericModelData Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_ATMOSPHERIC_MODEL(atmosphericModel ATMOSPHERIC_MODEL) {
+  void add_ATMOSPHERIC_MODEL(atmosphericSource ATMOSPHERIC_MODEL) {
     fbb_.AddElement<int8_t>(VCMAtmosphericModelData::VT_ATMOSPHERIC_MODEL, static_cast<int8_t>(ATMOSPHERIC_MODEL), 0);
   }
-  void add_GEOPOTENTIAL_MODEL(geopotentialModel GEOPOTENTIAL_MODEL) {
+  void add_GEOPOTENTIAL_MODEL(geopotentialSource GEOPOTENTIAL_MODEL) {
     fbb_.AddElement<int8_t>(VCMAtmosphericModelData::VT_GEOPOTENTIAL_MODEL, static_cast<int8_t>(GEOPOTENTIAL_MODEL), 0);
   }
   void add_LUNAR_SOLAR_PERTURBATION(perturbationStatus LUNAR_SOLAR_PERTURBATION) {
     fbb_.AddElement<int8_t>(VCMAtmosphericModelData::VT_LUNAR_SOLAR_PERTURBATION, static_cast<int8_t>(LUNAR_SOLAR_PERTURBATION), 0);
   }
-  void add_LUNAR_PERTURBATION_MODEL(lunarPerturbationModel LUNAR_PERTURBATION_MODEL) {
+  void add_LUNAR_PERTURBATION_MODEL(lunarPerturbationSource LUNAR_PERTURBATION_MODEL) {
     fbb_.AddElement<int8_t>(VCMAtmosphericModelData::VT_LUNAR_PERTURBATION_MODEL, static_cast<int8_t>(LUNAR_PERTURBATION_MODEL), 0);
   }
-  void add_SOLAR_PERTURBATION_MODEL(solarPerturbationModel SOLAR_PERTURBATION_MODEL) {
+  void add_SOLAR_PERTURBATION_MODEL(solarPerturbationSource SOLAR_PERTURBATION_MODEL) {
     fbb_.AddElement<int8_t>(VCMAtmosphericModelData::VT_SOLAR_PERTURBATION_MODEL, static_cast<int8_t>(SOLAR_PERTURBATION_MODEL), 0);
   }
   void add_SOLAR_RADIATION_PRESSURE(perturbationStatus SOLAR_RADIATION_PRESSURE) {
@@ -1235,7 +1235,7 @@ struct VCMAtmosphericModelDataBuilder {
   void add_SRP_MODEL(solarRadiationPressureModel SRP_MODEL) {
     fbb_.AddElement<int8_t>(VCMAtmosphericModelData::VT_SRP_MODEL, static_cast<int8_t>(SRP_MODEL), 0);
   }
-  void add_RESONANCE_MODEL(resonanceModel RESONANCE_MODEL) {
+  void add_RESONANCE_MODEL(resonanceSource RESONANCE_MODEL) {
     fbb_.AddElement<int8_t>(VCMAtmosphericModelData::VT_RESONANCE_MODEL, static_cast<int8_t>(RESONANCE_MODEL), 0);
   }
   explicit VCMAtmosphericModelDataBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
@@ -1251,14 +1251,14 @@ struct VCMAtmosphericModelDataBuilder {
 
 inline ::flatbuffers::Offset<VCMAtmosphericModelData> CreateVCMAtmosphericModelData(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    atmosphericModel ATMOSPHERIC_MODEL = atmosphericModel::NONE,
-    geopotentialModel GEOPOTENTIAL_MODEL = geopotentialModel::NONE,
+    atmosphericSource ATMOSPHERIC_MODEL = atmosphericSource::NONE,
+    geopotentialSource GEOPOTENTIAL_MODEL = geopotentialSource::NONE,
     perturbationStatus LUNAR_SOLAR_PERTURBATION = perturbationStatus::OFF,
-    lunarPerturbationModel LUNAR_PERTURBATION_MODEL = lunarPerturbationModel::NONE,
-    solarPerturbationModel SOLAR_PERTURBATION_MODEL = solarPerturbationModel::NONE,
+    lunarPerturbationSource LUNAR_PERTURBATION_MODEL = lunarPerturbationSource::NONE,
+    solarPerturbationSource SOLAR_PERTURBATION_MODEL = solarPerturbationSource::NONE,
     perturbationStatus SOLAR_RADIATION_PRESSURE = perturbationStatus::OFF,
     solarRadiationPressureModel SRP_MODEL = solarRadiationPressureModel::NONE,
-    resonanceModel RESONANCE_MODEL = resonanceModel::NONE) {
+    resonanceSource RESONANCE_MODEL = resonanceSource::NONE) {
   VCMAtmosphericModelDataBuilder builder_(_fbb);
   builder_.add_RESONANCE_MODEL(RESONANCE_MODEL);
   builder_.add_SRP_MODEL(SRP_MODEL);

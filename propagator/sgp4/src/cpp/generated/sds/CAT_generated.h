@@ -20,7 +20,7 @@ struct CAT;
 struct CATBuilder;
 struct CATT;
 
-enum class objectType : int8_t {
+enum class spaceObjectClass : int8_t {
   /// 0
   PAYLOAD = 0,
   /// 1
@@ -33,17 +33,17 @@ enum class objectType : int8_t {
   MAX = UNKNOWN
 };
 
-inline const objectType (&EnumValuesobjectType())[4] {
-  static const objectType values[] = {
-    objectType::PAYLOAD,
-    objectType::ROCKET_BODY,
-    objectType::DEBRIS,
-    objectType::UNKNOWN
+inline const spaceObjectClass (&EnumValuesspaceObjectClass())[4] {
+  static const spaceObjectClass values[] = {
+    spaceObjectClass::PAYLOAD,
+    spaceObjectClass::ROCKET_BODY,
+    spaceObjectClass::DEBRIS,
+    spaceObjectClass::UNKNOWN
   };
   return values;
 }
 
-inline const char * const *EnumNamesobjectType() {
+inline const char * const *EnumNamesspaceObjectClass() {
   static const char * const names[5] = {
     "PAYLOAD",
     "ROCKET_BODY",
@@ -54,13 +54,13 @@ inline const char * const *EnumNamesobjectType() {
   return names;
 }
 
-inline const char *EnumNameobjectType(objectType e) {
-  if (::flatbuffers::IsOutRange(e, objectType::PAYLOAD, objectType::UNKNOWN)) return "";
+inline const char *EnumNamespaceObjectClass(spaceObjectClass e) {
+  if (::flatbuffers::IsOutRange(e, spaceObjectClass::PAYLOAD, spaceObjectClass::UNKNOWN)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesobjectType()[index];
+  return EnumNamesspaceObjectClass()[index];
 }
 
-enum class opsStatusCode : int8_t {
+enum class operationalState : int8_t {
   /// +
   OPERATIONAL = 0,
   /// -
@@ -81,21 +81,21 @@ enum class opsStatusCode : int8_t {
   MAX = UNKNOWN
 };
 
-inline const opsStatusCode (&EnumValuesopsStatusCode())[8] {
-  static const opsStatusCode values[] = {
-    opsStatusCode::OPERATIONAL,
-    opsStatusCode::NONOPERATIONAL,
-    opsStatusCode::PARTIALLY_OPERATIONAL,
-    opsStatusCode::BACKUP_STANDBY,
-    opsStatusCode::SPARE,
-    opsStatusCode::EXTENDED_MISSION,
-    opsStatusCode::DECAYED,
-    opsStatusCode::UNKNOWN
+inline const operationalState (&EnumValuesoperationalState())[8] {
+  static const operationalState values[] = {
+    operationalState::OPERATIONAL,
+    operationalState::NONOPERATIONAL,
+    operationalState::PARTIALLY_OPERATIONAL,
+    operationalState::BACKUP_STANDBY,
+    operationalState::SPARE,
+    operationalState::EXTENDED_MISSION,
+    operationalState::DECAYED,
+    operationalState::UNKNOWN
   };
   return values;
 }
 
-inline const char * const *EnumNamesopsStatusCode() {
+inline const char * const *EnumNamesoperationalState() {
   static const char * const names[9] = {
     "OPERATIONAL",
     "NONOPERATIONAL",
@@ -110,13 +110,13 @@ inline const char * const *EnumNamesopsStatusCode() {
   return names;
 }
 
-inline const char *EnumNameopsStatusCode(opsStatusCode e) {
-  if (::flatbuffers::IsOutRange(e, opsStatusCode::OPERATIONAL, opsStatusCode::UNKNOWN)) return "";
+inline const char *EnumNameoperationalState(operationalState e) {
+  if (::flatbuffers::IsOutRange(e, operationalState::OPERATIONAL, operationalState::UNKNOWN)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesopsStatusCode()[index];
+  return EnumNamesoperationalState()[index];
 }
 
-enum class dataStatusCode : int8_t {
+enum class dataAvailability : int8_t {
   /// NCE
   NO_CURRENT_ELEMENTS = 0,
   /// NIE
@@ -129,17 +129,17 @@ enum class dataStatusCode : int8_t {
   MAX = OK
 };
 
-inline const dataStatusCode (&EnumValuesdataStatusCode())[4] {
-  static const dataStatusCode values[] = {
-    dataStatusCode::NO_CURRENT_ELEMENTS,
-    dataStatusCode::NO_INITIAL_ELEMENTS,
-    dataStatusCode::NO_ELEMENTS_AVAILABLE,
-    dataStatusCode::OK
+inline const dataAvailability (&EnumValuesdataAvailability())[4] {
+  static const dataAvailability values[] = {
+    dataAvailability::NO_CURRENT_ELEMENTS,
+    dataAvailability::NO_INITIAL_ELEMENTS,
+    dataAvailability::NO_ELEMENTS_AVAILABLE,
+    dataAvailability::OK
   };
   return values;
 }
 
-inline const char * const *EnumNamesdataStatusCode() {
+inline const char * const *EnumNamesdataAvailability() {
   static const char * const names[5] = {
     "NO_CURRENT_ELEMENTS",
     "NO_INITIAL_ELEMENTS",
@@ -150,13 +150,13 @@ inline const char * const *EnumNamesdataStatusCode() {
   return names;
 }
 
-inline const char *EnumNamedataStatusCode(dataStatusCode e) {
-  if (::flatbuffers::IsOutRange(e, dataStatusCode::NO_CURRENT_ELEMENTS, dataStatusCode::OK)) return "";
+inline const char *EnumNamedataAvailability(dataAvailability e) {
+  if (::flatbuffers::IsOutRange(e, dataAvailability::NO_CURRENT_ELEMENTS, dataAvailability::OK)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesdataStatusCode()[index];
+  return EnumNamesdataAvailability()[index];
 }
 
-enum class orbitType : int8_t {
+enum class orbitRegime : int8_t {
   /// 0
   ORBIT = 0,
   /// 1
@@ -171,18 +171,18 @@ enum class orbitType : int8_t {
   MAX = ROUNDTRIP
 };
 
-inline const orbitType (&EnumValuesorbitType())[5] {
-  static const orbitType values[] = {
-    orbitType::ORBIT,
-    orbitType::LANDING,
-    orbitType::IMPACT,
-    orbitType::DOCKED,
-    orbitType::ROUNDTRIP
+inline const orbitRegime (&EnumValuesorbitRegime())[5] {
+  static const orbitRegime values[] = {
+    orbitRegime::ORBIT,
+    orbitRegime::LANDING,
+    orbitRegime::IMPACT,
+    orbitRegime::DOCKED,
+    orbitRegime::ROUNDTRIP
   };
   return values;
 }
 
-inline const char * const *EnumNamesorbitType() {
+inline const char * const *EnumNamesorbitRegime() {
   static const char * const names[6] = {
     "ORBIT",
     "LANDING",
@@ -194,28 +194,28 @@ inline const char * const *EnumNamesorbitType() {
   return names;
 }
 
-inline const char *EnumNameorbitType(orbitType e) {
-  if (::flatbuffers::IsOutRange(e, orbitType::ORBIT, orbitType::ROUNDTRIP)) return "";
+inline const char *EnumNameorbitRegime(orbitRegime e) {
+  if (::flatbuffers::IsOutRange(e, orbitRegime::ORBIT, orbitRegime::ROUNDTRIP)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesorbitType()[index];
+  return EnumNamesorbitRegime()[index];
 }
 
-enum class massType : int8_t {
+enum class massCategory : int8_t {
   DRY = 0,
   WET = 1,
   MIN = DRY,
   MAX = WET
 };
 
-inline const massType (&EnumValuesmassType())[2] {
-  static const massType values[] = {
-    massType::DRY,
-    massType::WET
+inline const massCategory (&EnumValuesmassCategory())[2] {
+  static const massCategory values[] = {
+    massCategory::DRY,
+    massCategory::WET
   };
   return values;
 }
 
-inline const char * const *EnumNamesmassType() {
+inline const char * const *EnumNamesmassCategory() {
   static const char * const names[3] = {
     "DRY",
     "WET",
@@ -224,10 +224,10 @@ inline const char * const *EnumNamesmassType() {
   return names;
 }
 
-inline const char *EnumNamemassType(massType e) {
-  if (::flatbuffers::IsOutRange(e, massType::DRY, massType::WET)) return "";
+inline const char *EnumNamemassCategory(massCategory e) {
+  if (::flatbuffers::IsOutRange(e, massCategory::DRY, massCategory::WET)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesmassType()[index];
+  return EnumNamesmassCategory()[index];
 }
 
 struct CATT : public ::flatbuffers::NativeTable {
@@ -235,8 +235,8 @@ struct CATT : public ::flatbuffers::NativeTable {
   std::string OBJECT_NAME{};
   std::string OBJECT_ID{};
   uint32_t NORAD_CAT_ID = 0;
-  objectType OBJECT_TYPE = objectType::UNKNOWN;
-  opsStatusCode OPS_STATUS_CODE = opsStatusCode::UNKNOWN;
+  spaceObjectClass OBJECT_TYPE = spaceObjectClass::UNKNOWN;
+  operationalState OPS_STATUS_CODE = operationalState::UNKNOWN;
   legacyCountryCode OWNER = legacyCountryCode::AB;
   std::string LAUNCH_DATE{};
   std::string LAUNCH_SITE{};
@@ -246,14 +246,14 @@ struct CATT : public ::flatbuffers::NativeTable {
   double APOGEE = 0.0;
   double PERIGEE = 0.0;
   double RCS = 0.0;
-  dataStatusCode DATA_STATUS_CODE = dataStatusCode::NO_CURRENT_ELEMENTS;
+  dataAvailability DATA_STATUS_CODE = dataAvailability::NO_CURRENT_ELEMENTS;
   std::string ORBIT_CENTER{};
-  orbitType ORBIT_TYPE = orbitType::ORBIT;
+  orbitRegime ORBIT_TYPE = orbitRegime::ORBIT;
   std::string DEPLOYMENT_DATE{};
   bool MANEUVERABLE = false;
   double SIZE = 0.0;
   double MASS = 0.0;
-  massType MASS_TYPE = massType::DRY;
+  massCategory MASS_TYPE = massCategory::DRY;
   std::vector<std::unique_ptr<PLDT>> PAYLOADS{};
   CATT() = default;
   CATT(const CATT &o);
@@ -304,12 +304,12 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
   }
   /// Object type (Payload, Rocket body, Debris, Unknown)
-  objectType OBJECT_TYPE() const {
-    return static_cast<objectType>(GetField<int8_t>(VT_OBJECT_TYPE, 3));
+  spaceObjectClass OBJECT_TYPE() const {
+    return static_cast<spaceObjectClass>(GetField<int8_t>(VT_OBJECT_TYPE, 3));
   }
   /// Operational Status Code
-  opsStatusCode OPS_STATUS_CODE() const {
-    return static_cast<opsStatusCode>(GetField<int8_t>(VT_OPS_STATUS_CODE, 7));
+  operationalState OPS_STATUS_CODE() const {
+    return static_cast<operationalState>(GetField<int8_t>(VT_OPS_STATUS_CODE, 7));
   }
   /// Ownership, typically country or company
   legacyCountryCode OWNER() const {
@@ -348,16 +348,16 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<double>(VT_RCS, 0.0);
   }
   /// Data status code; blank otherwise
-  dataStatusCode DATA_STATUS_CODE() const {
-    return static_cast<dataStatusCode>(GetField<int8_t>(VT_DATA_STATUS_CODE, 0));
+  dataAvailability DATA_STATUS_CODE() const {
+    return static_cast<dataAvailability>(GetField<int8_t>(VT_DATA_STATUS_CODE, 0));
   }
   /// Orbit center
   const ::flatbuffers::String *ORBIT_CENTER() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ORBIT_CENTER);
   }
   /// Orbit type (Orbit, Landing, Impact, Docked to RSO, roundtrip)
-  orbitType ORBIT_TYPE() const {
-    return static_cast<orbitType>(GetField<int8_t>(VT_ORBIT_TYPE, 0));
+  orbitRegime ORBIT_TYPE() const {
+    return static_cast<orbitRegime>(GetField<int8_t>(VT_ORBIT_TYPE, 0));
   }
   /// Deployment Date [year-month-day] (ISO 8601)
   const ::flatbuffers::String *DEPLOYMENT_DATE() const {
@@ -376,8 +376,8 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<double>(VT_MASS, 0.0);
   }
   /// Mass type (Dry, Wet)
-  massType MASS_TYPE() const {
-    return static_cast<massType>(GetField<int8_t>(VT_MASS_TYPE, 0));
+  massCategory MASS_TYPE() const {
+    return static_cast<massCategory>(GetField<int8_t>(VT_MASS_TYPE, 0));
   }
   /// Vector of PAYLOADS
   const ::flatbuffers::Vector<::flatbuffers::Offset<PLD>> *PAYLOADS() const {
@@ -438,10 +438,10 @@ struct CATBuilder {
   void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
     fbb_.AddElement<uint32_t>(CAT::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
   }
-  void add_OBJECT_TYPE(objectType OBJECT_TYPE) {
+  void add_OBJECT_TYPE(spaceObjectClass OBJECT_TYPE) {
     fbb_.AddElement<int8_t>(CAT::VT_OBJECT_TYPE, static_cast<int8_t>(OBJECT_TYPE), 3);
   }
-  void add_OPS_STATUS_CODE(opsStatusCode OPS_STATUS_CODE) {
+  void add_OPS_STATUS_CODE(operationalState OPS_STATUS_CODE) {
     fbb_.AddElement<int8_t>(CAT::VT_OPS_STATUS_CODE, static_cast<int8_t>(OPS_STATUS_CODE), 7);
   }
   void add_OWNER(legacyCountryCode OWNER) {
@@ -471,13 +471,13 @@ struct CATBuilder {
   void add_RCS(double RCS) {
     fbb_.AddElement<double>(CAT::VT_RCS, RCS, 0.0);
   }
-  void add_DATA_STATUS_CODE(dataStatusCode DATA_STATUS_CODE) {
+  void add_DATA_STATUS_CODE(dataAvailability DATA_STATUS_CODE) {
     fbb_.AddElement<int8_t>(CAT::VT_DATA_STATUS_CODE, static_cast<int8_t>(DATA_STATUS_CODE), 0);
   }
   void add_ORBIT_CENTER(::flatbuffers::Offset<::flatbuffers::String> ORBIT_CENTER) {
     fbb_.AddOffset(CAT::VT_ORBIT_CENTER, ORBIT_CENTER);
   }
-  void add_ORBIT_TYPE(orbitType ORBIT_TYPE) {
+  void add_ORBIT_TYPE(orbitRegime ORBIT_TYPE) {
     fbb_.AddElement<int8_t>(CAT::VT_ORBIT_TYPE, static_cast<int8_t>(ORBIT_TYPE), 0);
   }
   void add_DEPLOYMENT_DATE(::flatbuffers::Offset<::flatbuffers::String> DEPLOYMENT_DATE) {
@@ -492,7 +492,7 @@ struct CATBuilder {
   void add_MASS(double MASS) {
     fbb_.AddElement<double>(CAT::VT_MASS, MASS, 0.0);
   }
-  void add_MASS_TYPE(massType MASS_TYPE) {
+  void add_MASS_TYPE(massCategory MASS_TYPE) {
     fbb_.AddElement<int8_t>(CAT::VT_MASS_TYPE, static_cast<int8_t>(MASS_TYPE), 0);
   }
   void add_PAYLOADS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLD>>> PAYLOADS) {
@@ -514,8 +514,8 @@ inline ::flatbuffers::Offset<CAT> CreateCAT(
     ::flatbuffers::Offset<::flatbuffers::String> OBJECT_NAME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
     uint32_t NORAD_CAT_ID = 0,
-    objectType OBJECT_TYPE = objectType::UNKNOWN,
-    opsStatusCode OPS_STATUS_CODE = opsStatusCode::UNKNOWN,
+    spaceObjectClass OBJECT_TYPE = spaceObjectClass::UNKNOWN,
+    operationalState OPS_STATUS_CODE = operationalState::UNKNOWN,
     legacyCountryCode OWNER = legacyCountryCode::AB,
     ::flatbuffers::Offset<::flatbuffers::String> LAUNCH_DATE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> LAUNCH_SITE = 0,
@@ -525,14 +525,14 @@ inline ::flatbuffers::Offset<CAT> CreateCAT(
     double APOGEE = 0.0,
     double PERIGEE = 0.0,
     double RCS = 0.0,
-    dataStatusCode DATA_STATUS_CODE = dataStatusCode::NO_CURRENT_ELEMENTS,
+    dataAvailability DATA_STATUS_CODE = dataAvailability::NO_CURRENT_ELEMENTS,
     ::flatbuffers::Offset<::flatbuffers::String> ORBIT_CENTER = 0,
-    orbitType ORBIT_TYPE = orbitType::ORBIT,
+    orbitRegime ORBIT_TYPE = orbitRegime::ORBIT,
     ::flatbuffers::Offset<::flatbuffers::String> DEPLOYMENT_DATE = 0,
     bool MANEUVERABLE = false,
     double SIZE = 0.0,
     double MASS = 0.0,
-    massType MASS_TYPE = massType::DRY,
+    massCategory MASS_TYPE = massCategory::DRY,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLD>>> PAYLOADS = 0) {
   CATBuilder builder_(_fbb);
   builder_.add_MASS(MASS);
@@ -571,8 +571,8 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
     const char *OBJECT_NAME = nullptr,
     const char *OBJECT_ID = nullptr,
     uint32_t NORAD_CAT_ID = 0,
-    objectType OBJECT_TYPE = objectType::UNKNOWN,
-    opsStatusCode OPS_STATUS_CODE = opsStatusCode::UNKNOWN,
+    spaceObjectClass OBJECT_TYPE = spaceObjectClass::UNKNOWN,
+    operationalState OPS_STATUS_CODE = operationalState::UNKNOWN,
     legacyCountryCode OWNER = legacyCountryCode::AB,
     const char *LAUNCH_DATE = nullptr,
     const char *LAUNCH_SITE = nullptr,
@@ -582,14 +582,14 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
     double APOGEE = 0.0,
     double PERIGEE = 0.0,
     double RCS = 0.0,
-    dataStatusCode DATA_STATUS_CODE = dataStatusCode::NO_CURRENT_ELEMENTS,
+    dataAvailability DATA_STATUS_CODE = dataAvailability::NO_CURRENT_ELEMENTS,
     const char *ORBIT_CENTER = nullptr,
-    orbitType ORBIT_TYPE = orbitType::ORBIT,
+    orbitRegime ORBIT_TYPE = orbitRegime::ORBIT,
     const char *DEPLOYMENT_DATE = nullptr,
     bool MANEUVERABLE = false,
     double SIZE = 0.0,
     double MASS = 0.0,
-    massType MASS_TYPE = massType::DRY,
+    massCategory MASS_TYPE = massCategory::DRY,
     const std::vector<::flatbuffers::Offset<PLD>> *PAYLOADS = nullptr) {
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;

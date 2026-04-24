@@ -1,0 +1,27 @@
+{
+  "name": "space-data-network-plugin-access",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "index.js",
+    "flowHandlers.js",
+    "manifest.js",
+    "plugin-manifest.json"
+  ],
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test test/*.test.mjs",
+    "test:sdk-compat": "node --test test/manifestContract.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.8.0"
+  }
+}

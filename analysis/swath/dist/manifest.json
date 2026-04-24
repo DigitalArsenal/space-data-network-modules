@@ -1,0 +1,56 @@
+{
+  "pluginId": "com.orbpro.swath",
+  "name": "Swath Analysis",
+  "version": "1.0.0",
+  "type": "Analysis",
+  "encrypted": false,
+  "requiresProtection": false,
+  "description": "Sensor footprint projection, ground-track generation, access geometry, and swath analytics for mission planning.",
+  "methods": [
+    {
+      "methodId": "project_footprint",
+      "inputs": [
+        "request"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "ground_track",
+      "inputs": [
+        "request"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "generate_swath",
+      "inputs": [
+        "request"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "point_in_footprint",
+      "inputs": [
+        "request"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "access_geometry",
+      "inputs": [
+        "request"
+      ],
+      "outputs": [
+        "results"
+      ]
+    }
+  ]
+}

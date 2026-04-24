@@ -34,7 +34,6 @@ const rootSchemas = [
   "StateVector.fbs", // Contains PropagatorBatchRequest + StateVector struct
   "CatalogQueryRequest.fbs",
   "CatalogQueryResult.fbs",
-  "StreamInvoke.fbs", // OrbPro direct-call wire format (test-only subset)
 ];
 
 function ensureFileExists(filePath, label) {

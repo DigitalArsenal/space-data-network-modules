@@ -1,0 +1,72 @@
+{
+  "pluginId": "com.orbpro.coverage",
+  "name": "Coverage Analysis",
+  "version": "1.0.0",
+  "type": "Analysis",
+  "encrypted": false,
+  "requiresProtection": false,
+  "description": "Analytical ground-grid coverage accumulation, figure-of-merit computation, interval tracking, and heatmap generation.",
+  "methods": [
+    {
+      "methodId": "create_grid",
+      "inputs": [
+        "grid"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "accumulate_footprints",
+      "inputs": [
+        "footprints"
+      ],
+      "outputs": []
+    },
+    {
+      "methodId": "get_statistics",
+      "inputs": [
+        "grid"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "get_access_intervals",
+      "inputs": [
+        "cell"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "compute_fom",
+      "inputs": [
+        "grid"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "generate_heatmap",
+      "inputs": [
+        "heatmap"
+      ],
+      "outputs": [
+        "results"
+      ]
+    },
+    {
+      "methodId": "analyze_sensor_union",
+      "inputs": [
+        "union"
+      ],
+      "outputs": [
+        "results"
+      ]
+    }
+  ]
+}
