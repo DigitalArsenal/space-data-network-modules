@@ -41,11 +41,9 @@ const PLUGIN_SDK_INCLUDE = path.join(
 );
 
 async function build() {
-  const isDev =
-    process.argv.includes("--dev") || process.env.ORBPRO_DEV === "1";
   const force = process.argv.includes("--force");
 
-  if (!shouldRebuild(__dirname, { isDev, noEncrypt: true, force })) {
+  if (!shouldRebuild(__dirname, { noEncrypt: true, force })) {
     console.log(
       `[${path.basename(__dirname)}] Sources unchanged — skipping build.`,
     );
@@ -234,7 +232,7 @@ async function build() {
   fs.writeFileSync(MANIFEST_JSON_PATH, json, "utf8");
   fs.writeFileSync(DIST_MANIFEST_JSON_PATH, json, "utf8");
 
-  writeBuildHash(__dirname, { isDev, noEncrypt: true });
+  writeBuildHash(__dirname, { noEncrypt: true });
 
   console.log("Build complete.");
   console.log(`  WASM: ${wasmPath} (${wasmBinary.length} bytes)`);
