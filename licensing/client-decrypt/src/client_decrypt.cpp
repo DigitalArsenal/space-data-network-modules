@@ -12,20 +12,31 @@
 #include <stdlib.h>
 
 #include <memory>
+#include <array>
 #include <string>
+#include <string_view>
 #include <vector>
+
+// Emscripten's sysroot defines TIME_UTC as a macro; SDS generated headers also
+// contain fields with that exact name.
+#ifdef TIME_UTC
+#undef TIME_UTC
+#endif
 
 #include <flatbuffers/flatbuffers.h>
 #include "BundleDescriptor_generated.h"
+#include "ENC_generated.h"
 #include "GrantResponse_generated.h"
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
+#include "REC_generated.h"
 #include "TypedArenaBuffer_generated.h"
 #include "WrappedContentKey_generated.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/hkdf.h>
+#include <cryptopp/modes.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/xed25519.h>
 #include <cryptopp/secblock.h>
@@ -36,9 +47,14 @@ static const char WRAP_INFOS[][64] = {
 };
 static const size_t WRAP_INFO_COUNT = 2;
 static const char MODULE_DELIVERY_WRAP_INFO[] = "space-data-network/module-delivery/wrap/v1";
+static const char MODULE_DELIVERY_GRANT_CONTEXT[] = "space-data-network/module-delivery/grant/v1";
 static const size_t KEY_BYTES = 32;
 static const size_t GCM_IV_BYTES = 12;
 static const size_t GCM_TAG_BYTES = 16;
+static const size_t CTR_IV_BYTES = 16;
+static const uint16_t KMF_KEY_BYTES_FIELD_ID = 4;
+static const uint8_t REC_TRAILER_MAGIC[4] = {'$', 'R', 'E', 'C'};
+static const size_t REC_TRAILER_FOOTER_BYTES = 8;
 
 #if defined(SDN_WASI_PLUGIN)
 extern "C" __attribute__((import_module("sdn_host"), import_name("call_json")))
@@ -297,6 +313,267 @@ static bool fetch_ipfs_bytes(const char*, size_t, std::vector<uint8_t>&) {
 
 namespace module_delivery = space_data_network::module_delivery::v1;
 
+static void derive_hkdf_key(
+    const uint8_t* ikm,
+    size_t ikm_len,
+    const uint8_t* info,
+    size_t info_len,
+    uint8_t* out,
+    size_t out_len)
+{
+    CryptoPP::HKDF<CryptoPP::SHA256> hkdf;
+    hkdf.DeriveKey(out, out_len, ikm, ikm_len, nullptr, 0, info, info_len);
+}
+
+static void derive_field_key(
+    const uint8_t* master_key,
+    uint16_t field_id,
+    uint32_t record_index,
+    uint8_t* out_key)
+{
+    uint8_t info[32] = "flatbuffers-field";
+    info[17] = static_cast<uint8_t>(field_id >> 8);
+    info[18] = static_cast<uint8_t>(field_id & 0xff);
+    info[19] = static_cast<uint8_t>((record_index >> 24) & 0xff);
+    info[20] = static_cast<uint8_t>((record_index >> 16) & 0xff);
+    info[21] = static_cast<uint8_t>((record_index >> 8) & 0xff);
+    info[22] = static_cast<uint8_t>(record_index & 0xff);
+    derive_hkdf_key(master_key, KEY_BYTES, info, 23, out_key, KEY_BYTES);
+}
+
+static void derive_field_iv(
+    const uint8_t* master_key,
+    uint16_t field_id,
+    uint32_t record_index,
+    uint8_t* out_iv)
+{
+    uint8_t info[32] = "flatbuffers-iv";
+    info[14] = static_cast<uint8_t>(field_id >> 8);
+    info[15] = static_cast<uint8_t>(field_id & 0xff);
+    info[16] = static_cast<uint8_t>((record_index >> 24) & 0xff);
+    info[17] = static_cast<uint8_t>((record_index >> 16) & 0xff);
+    info[18] = static_cast<uint8_t>((record_index >> 8) & 0xff);
+    info[19] = static_cast<uint8_t>(record_index & 0xff);
+    derive_hkdf_key(master_key, KEY_BYTES, info, 20, out_iv, CTR_IV_BYTES);
+}
+
+static void aes_ctr_xor(
+    uint8_t* data,
+    size_t data_len,
+    const uint8_t* key,
+    const uint8_t* iv)
+{
+    CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption ctr;
+    ctr.SetKeyWithIV(key, KEY_BYTES, iv, CTR_IV_BYTES);
+    ctr.ProcessData(data, data, data_len);
+}
+
+static bool record_standard_is(const Record* record, const char* expected) {
+    return record && record->standard() &&
+        record->standard()->string_view() == std::string_view(expected);
+}
+
+static const ENC* record_value_as_enc(const Record* record) {
+    const auto* typed = record ? record->value_as_ENC() : nullptr;
+    if (typed) {
+        return typed;
+    }
+    return record_standard_is(record, "ENC") && record->value()
+        ? static_cast<const ENC*>(record->value())
+        : nullptr;
+}
+
+static const KMF* record_value_as_kmf(const Record* record) {
+    const auto* typed = record ? record->value_as_KMF() : nullptr;
+    if (typed) {
+        return typed;
+    }
+    return record_standard_is(record, "KMF") && record->value()
+        ? static_cast<const KMF*>(record->value())
+        : nullptr;
+}
+
+static uint32_t read_u32_le(const uint8_t* bytes) {
+    return static_cast<uint32_t>(bytes[0]) |
+        (static_cast<uint32_t>(bytes[1]) << 8) |
+        (static_cast<uint32_t>(bytes[2]) << 16) |
+        (static_cast<uint32_t>(bytes[3]) << 24);
+}
+
+static int decrypt_protected_publication_bundle(
+    const std::vector<uint8_t>& protected_bundle,
+    const uint8_t* recipient_private_key,
+    size_t recipient_private_key_len,
+    std::vector<uint8_t>& plaintext_out,
+    std::string& error_out)
+{
+    plaintext_out.clear();
+    error_out.clear();
+    if (protected_bundle.size() < REC_TRAILER_FOOTER_BYTES) {
+        return 0;
+    }
+
+    const size_t footer_offset = protected_bundle.size() - REC_TRAILER_FOOTER_BYTES;
+    const uint8_t* footer = protected_bundle.data() + footer_offset;
+    if (memcmp(footer + 4, REC_TRAILER_MAGIC, sizeof(REC_TRAILER_MAGIC)) != 0) {
+        return 0;
+    }
+
+    const uint32_t record_collection_len = read_u32_le(footer);
+    if (record_collection_len == 0 || record_collection_len > footer_offset) {
+        error_out = "protected publication REC trailer length is invalid";
+        return -1;
+    }
+    const size_t record_collection_offset =
+        footer_offset - static_cast<size_t>(record_collection_len);
+    const uint8_t* record_collection =
+        protected_bundle.data() + record_collection_offset;
+
+    flatbuffers::Verifier verifier(record_collection, record_collection_len);
+    if (!VerifyRECBuffer(verifier)) {
+        error_out = "protected publication REC trailer is invalid";
+        return -1;
+    }
+
+    const REC* rec = GetREC(record_collection);
+    if (!rec || !rec->RECORDS() || rec->RECORDS()->size() == 0) {
+        error_out = "protected publication REC trailer is empty";
+        return -1;
+    }
+
+    const ENC* enc = nullptr;
+    for (uint32_t index = 0; index < rec->RECORDS()->size(); index++) {
+        const auto* record = rec->RECORDS()->Get(index);
+        const auto* candidate = record_value_as_enc(record);
+        if (candidate) {
+            enc = candidate;
+            break;
+        }
+    }
+    if (!enc) {
+        return 0;
+    }
+
+    const auto* ephemeral_public_key = enc->EPHEMERAL_PUBLIC_KEY();
+    const auto* nonce_start = enc->NONCE_START();
+    if (recipient_private_key_len != KEY_BYTES ||
+        !ephemeral_public_key || ephemeral_public_key->size() != KEY_BYTES ||
+        !nonce_start || nonce_start->size() != GCM_IV_BYTES) {
+        error_out = "protected publication ENC record is missing required bytes";
+        return -1;
+    }
+    if (enc->KEY_EXCHANGE() != KeyExchange::X25519 ||
+        enc->SYMMETRIC() != SymmetricAlgo::AES_256_CTR ||
+        enc->KEY_DERIVATION() != KDF::HKDF_SHA256) {
+        error_out = "protected publication ENC record uses an unsupported cipher suite";
+        return -1;
+    }
+
+    CryptoPP::x25519 x25519_scheme;
+    CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
+    if (!x25519_scheme.Agree(
+            shared_secret,
+            recipient_private_key,
+            ephemeral_public_key->Data())) {
+        error_out = "protected publication X25519 key agreement failed";
+        return -1;
+    }
+
+    const auto* context_string = enc->CONTEXT();
+    const uint8_t* context = context_string
+        ? reinterpret_cast<const uint8_t*>(context_string->c_str())
+        : reinterpret_cast<const uint8_t*>("");
+    const size_t context_len = context_string ? context_string->size() : 0;
+    std::array<uint8_t, KEY_BYTES> aes_key{};
+    derive_hkdf_key(
+        shared_secret,
+        KEY_BYTES,
+        context,
+        context_len,
+        aes_key.data(),
+        aes_key.size());
+
+    std::array<uint8_t, CTR_IV_BYTES> ctr_iv{};
+    memcpy(ctr_iv.data(), nonce_start->Data(), nonce_start->size());
+    plaintext_out.assign(
+        protected_bundle.data(),
+        protected_bundle.data() + record_collection_offset);
+    aes_ctr_xor(plaintext_out.data(), plaintext_out.size(), aes_key.data(), ctr_iv.data());
+    memset(aes_key.data(), 0, aes_key.size());
+    memset(shared_secret.BytePtr(), 0, shared_secret.size());
+    memset(ctr_iv.data(), 0, ctr_iv.size());
+    return 1;
+}
+
+static bool unwrap_rec_content_key(
+    const module_delivery::WrappedContentKey* wrapped,
+    const uint8_t* requester_private_key,
+    std::vector<uint8_t>& content_key_out,
+    std::string& error_out)
+{
+    const auto* ephemeral_public_key = wrapped ? wrapped->ephemeral_public_key() : nullptr;
+    const auto* payload = wrapped ? wrapped->ciphertext() : nullptr;
+    if (!ephemeral_public_key || ephemeral_public_key->size() != KEY_BYTES ||
+        !payload || payload->size() == 0) {
+        error_out = "wrapped REC content key missing required bytes";
+        return false;
+    }
+
+    CryptoPP::x25519 x25519_scheme;
+    CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
+    if (!x25519_scheme.Agree(
+            shared_secret,
+            requester_private_key,
+            ephemeral_public_key->Data())) {
+        error_out = "X25519 key agreement failed";
+        return false;
+    }
+
+    std::array<uint8_t, KEY_BYTES> payload_key{};
+    derive_hkdf_key(
+        shared_secret,
+        KEY_BYTES,
+        reinterpret_cast<const uint8_t*>(MODULE_DELIVERY_GRANT_CONTEXT),
+        sizeof(MODULE_DELIVERY_GRANT_CONTEXT) - 1,
+        payload_key.data(),
+        payload_key.size());
+
+    std::vector<uint8_t> rec_payload(payload->begin(), payload->end());
+    flatbuffers::Verifier verifier(rec_payload.data(), rec_payload.size());
+    if (!VerifyRECBuffer(verifier)) {
+        error_out = "wrapped content key REC payload is invalid";
+        return false;
+    }
+
+    auto* rec = const_cast<REC*>(GetREC(rec_payload.data()));
+    if (!rec || !rec->RECORDS() || rec->RECORDS()->size() != 1) {
+        error_out = "wrapped content key REC payload is malformed";
+        return false;
+    }
+    const auto* record = rec->RECORDS()->Get(0);
+    const auto* kmf = record_value_as_kmf(record);
+    auto* key_bytes = kmf
+        ? const_cast<::flatbuffers::Vector<uint8_t>*>(kmf->KEY_BYTES())
+        : nullptr;
+    if (!key_bytes || key_bytes->size() != KEY_BYTES) {
+        error_out = "wrapped content key KMF payload is missing key bytes";
+        return false;
+    }
+
+    std::array<uint8_t, KEY_BYTES> field_key{};
+    std::array<uint8_t, CTR_IV_BYTES> field_iv{};
+    derive_field_key(payload_key.data(), KMF_KEY_BYTES_FIELD_ID, 0, field_key.data());
+    derive_field_iv(payload_key.data(), KMF_KEY_BYTES_FIELD_ID, 0, field_iv.data());
+    aes_ctr_xor(key_bytes->Data(), key_bytes->size(), field_key.data(), field_iv.data());
+
+    content_key_out.assign(key_bytes->begin(), key_bytes->end());
+    memset(payload_key.data(), 0, payload_key.size());
+    memset(field_key.data(), 0, field_key.size());
+    memset(field_iv.data(), 0, field_iv.size());
+    memset(rec_payload.data(), 0, rec_payload.size());
+    return true;
+}
+
 static DecryptResult decrypt_grant_response(
     const uint8_t* grant_bytes,
     size_t grant_len,
@@ -334,7 +611,7 @@ static DecryptResult decrypt_grant_response(
     const auto* nonce = wrapped->nonce();
     const auto* ciphertext = wrapped->ciphertext();
     const auto* tag = wrapped->tag();
-    if (!ephemeral_public_key || !nonce || !ciphertext || !tag) {
+    if (!ephemeral_public_key || !nonce || !ciphertext) {
         result.error = "wrapped content key missing required bytes";
         return result;
     }
@@ -362,38 +639,38 @@ static DecryptResult decrypt_grant_response(
     }
 
     try {
-        CryptoPP::x25519 x25519_scheme;
-        CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
-        if (!x25519_scheme.Agree(shared_secret, priv_key, ephemeral_public_key->Data())) {
-            result.error = "X25519 key agreement failed";
-            return result;
-        }
-
-        CryptoPP::SecByteBlock wrap_key(KEY_BYTES);
-        CryptoPP::HKDF<CryptoPP::SHA256> hkdf;
-        hkdf.DeriveKey(
-            wrap_key, KEY_BYTES,
-            shared_secret, KEY_BYTES,
-            nullptr, 0,
-            reinterpret_cast<const uint8_t*>(MODULE_DELIVERY_WRAP_INFO),
-            sizeof(MODULE_DELIVERY_WRAP_INFO) - 1
-        );
-
-        std::vector<uint8_t> wrapped_key_and_tag;
-        wrapped_key_and_tag.reserve(ciphertext->size() + tag->size());
-        wrapped_key_and_tag.insert(
-            wrapped_key_and_tag.end(),
-            ciphertext->begin(),
-            ciphertext->end()
-        );
-        wrapped_key_and_tag.insert(
-            wrapped_key_and_tag.end(),
-            tag->begin(),
-            tag->end()
-        );
-
         std::vector<uint8_t> content_key(KEY_BYTES);
-        {
+        if (tag && tag->size() > 0) {
+            CryptoPP::x25519 x25519_scheme;
+            CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
+            if (!x25519_scheme.Agree(shared_secret, priv_key, ephemeral_public_key->Data())) {
+                result.error = "X25519 key agreement failed";
+                return result;
+            }
+
+            CryptoPP::SecByteBlock wrap_key(KEY_BYTES);
+            CryptoPP::HKDF<CryptoPP::SHA256> hkdf;
+            hkdf.DeriveKey(
+                wrap_key, KEY_BYTES,
+                shared_secret, KEY_BYTES,
+                nullptr, 0,
+                reinterpret_cast<const uint8_t*>(MODULE_DELIVERY_WRAP_INFO),
+                sizeof(MODULE_DELIVERY_WRAP_INFO) - 1
+            );
+
+            std::vector<uint8_t> wrapped_key_and_tag;
+            wrapped_key_and_tag.reserve(ciphertext->size() + tag->size());
+            wrapped_key_and_tag.insert(
+                wrapped_key_and_tag.end(),
+                ciphertext->begin(),
+                ciphertext->end()
+            );
+            wrapped_key_and_tag.insert(
+                wrapped_key_and_tag.end(),
+                tag->begin(),
+                tag->end()
+            );
+
             CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
             dec.SetKeyWithIV(wrap_key, KEY_BYTES, nonce->Data(), nonce->size());
             CryptoPP::ArraySink sink(content_key.data(), content_key.size());
@@ -405,6 +682,30 @@ static DecryptResult decrypt_grant_response(
             );
             filter.Put(wrapped_key_and_tag.data(), wrapped_key_and_tag.size());
             filter.MessageEnd();
+        } else {
+            std::string unwrap_error;
+            if (!unwrap_rec_content_key(wrapped, priv_key, content_key, unwrap_error)) {
+                result.error = unwrap_error;
+                return result;
+            }
+        }
+
+        std::vector<uint8_t> publication_plaintext;
+        std::string publication_error;
+        const int publication_status = decrypt_protected_publication_bundle(
+            encrypted_bundle,
+            content_key.data(),
+            content_key.size(),
+            publication_plaintext,
+            publication_error);
+        if (publication_status < 0) {
+            result.error = publication_error;
+            return result;
+        }
+        if (publication_status > 0) {
+            result.plaintext = std::move(publication_plaintext);
+            result.ok = true;
+            return result;
         }
 
         const uint8_t* content_iv = encrypted_bundle.data();

@@ -295,7 +295,7 @@ import {
 } from "./lib/sdkBrowserShimHarness.mjs";
 import {
   encodeGrantResponse,
-} from "../../plugin-delivery/lib/module-delivery-codec.mjs";
+} from "../../../delivery/plugin-delivery/lib/module-delivery-codec.mjs";
 
 // ── Test runner ─────────────────────────────────────────────────────────────
 

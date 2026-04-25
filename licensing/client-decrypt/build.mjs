@@ -34,6 +34,10 @@ const DIST_DIR = path.join(__dirname, "dist");
 const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
 const SRC_DIR = path.join(__dirname, "src");
 const TOOLCHAIN_STAMP_PATH = path.join(BUILD_DIR, ".emsdk-path");
+const CORE_SDS_GENERATED_DIR = path.resolve(
+  __dirname,
+  "../core/src/cpp/generated/sds",
+);
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -321,6 +325,9 @@ async function main() {
   fs.mkdirSync(ISOMORPHIC_DIST_DIR, { recursive: true });
 
   const flatbuffersInclude = resolveFlatbuffersInclude();
+  if (!fs.existsSync(path.join(CORE_SDS_GENERATED_DIR, "REC_generated.h"))) {
+    throw new Error(`Core SDS generated headers not found at ${CORE_SDS_GENERATED_DIR}`);
+  }
 
   // Generate invoke FlatBuffer headers
   const fbbHeadersDir = path.join(BUILD_DIR, "fbb-headers");
@@ -357,7 +364,7 @@ uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
     `${shellQuote(emxx)} -O2 -std=c++17 -fwasm-exceptions ` +
       `-DSDN_WASI_PLUGIN=1 ` +
       `-DCRYPTOPP_DISABLE_ASM=1 -DCRYPTOPP_DISABLE_SSSE3=1 -DCRYPTOPP_DISABLE_AESNI=1 ` +
-      `-I${shellQuote(cryptoppParent)} -I${shellQuote(cryptoppSrc)} -I${shellQuote(fbbHeadersDir)} -I${shellQuote(flatbuffersInclude)} ` +
+      `-I${shellQuote(cryptoppParent)} -I${shellQuote(cryptoppSrc)} -I${shellQuote(fbbHeadersDir)} -I${shellQuote(CORE_SDS_GENERATED_DIR)} -I${shellQuote(flatbuffersInclude)} ` +
       `${shellQuote(srcPath)} ${shellQuote(manifestExportsPath)} ${shellQuote(cryptoppLib)} ` +
       `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 ` +
       `-sINITIAL_MEMORY=16777216 -sALLOW_MEMORY_GROWTH=1 ` +
