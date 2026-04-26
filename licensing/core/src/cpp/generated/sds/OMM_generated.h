@@ -21,7 +21,7 @@ struct OMM;
 struct OMMBuilder;
 struct OMMT;
 
-enum class ephemerisType : int8_t {
+enum class ephemerisFormat : int8_t {
   /// Simplified General Perturbation Model
   SGP = 0,
   /// Simplified General Perturbation Model 4
@@ -36,18 +36,18 @@ enum class ephemerisType : int8_t {
   MAX = SDP8
 };
 
-inline const ephemerisType (&EnumValuesephemerisType())[5] {
-  static const ephemerisType values[] = {
-    ephemerisType::SGP,
-    ephemerisType::SGP4,
-    ephemerisType::SDP4,
-    ephemerisType::SGP8,
-    ephemerisType::SDP8
+inline const ephemerisFormat (&EnumValuesephemerisFormat())[5] {
+  static const ephemerisFormat values[] = {
+    ephemerisFormat::SGP,
+    ephemerisFormat::SGP4,
+    ephemerisFormat::SDP4,
+    ephemerisFormat::SGP8,
+    ephemerisFormat::SDP8
   };
   return values;
 }
 
-inline const char * const *EnumNamesephemerisType() {
+inline const char * const *EnumNamesephemerisFormat() {
   static const char * const names[6] = {
     "SGP",
     "SGP4",
@@ -59,10 +59,10 @@ inline const char * const *EnumNamesephemerisType() {
   return names;
 }
 
-inline const char *EnumNameephemerisType(ephemerisType e) {
-  if (::flatbuffers::IsOutRange(e, ephemerisType::SGP, ephemerisType::SDP8)) return "";
+inline const char *EnumNameephemerisFormat(ephemerisFormat e) {
+  if (::flatbuffers::IsOutRange(e, ephemerisFormat::SGP, ephemerisFormat::SDP8)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesephemerisType()[index];
+  return EnumNamesephemerisFormat()[index];
 }
 
 struct OMMT : public ::flatbuffers::NativeTable {
@@ -75,8 +75,8 @@ struct OMMT : public ::flatbuffers::NativeTable {
   std::string CENTER_NAME{};
   std::unique_ptr<RFMT> REFERENCE_FRAME{};
   std::string REFERENCE_FRAME_EPOCH{};
-  timeSystem TIME_SYSTEM = timeSystem::UTC;
-  meanElementTheory MEAN_ELEMENT_THEORY = meanElementTheory::SGP4;
+  timingStandard TIME_SYSTEM = timingStandard::UTC;
+  meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::SGP4;
   std::string COMMENT{};
   std::string EPOCH{};
   double SEMI_MAJOR_AXIS = 0.0;
@@ -92,7 +92,7 @@ struct OMMT : public ::flatbuffers::NativeTable {
   double SOLAR_RAD_COEFF = 0.0;
   double DRAG_AREA = 0.0;
   double DRAG_COEFF = 0.0;
-  ephemerisType EPHEMERIS_TYPE = ephemerisType::SGP4;
+  ephemerisFormat EPHEMERIS_TYPE = ephemerisFormat::SGP4;
   std::string CLASSIFICATION_TYPE{};
   uint32_t NORAD_CAT_ID = 0;
   uint32_t ELEMENT_SET_NO = 0;
@@ -194,12 +194,12 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_REFERENCE_FRAME_EPOCH);
   }
   /// Time System [M, UTC]
-  timeSystem TIME_SYSTEM() const {
-    return static_cast<timeSystem>(GetField<int8_t>(VT_TIME_SYSTEM, 11));
+  timingStandard TIME_SYSTEM() const {
+    return static_cast<timingStandard>(GetField<int8_t>(VT_TIME_SYSTEM, 11));
   }
   /// Mean Element Theory
-  meanElementTheory MEAN_ELEMENT_THEORY() const {
-    return static_cast<meanElementTheory>(GetField<int8_t>(VT_MEAN_ELEMENT_THEORY, 0));
+  meanElementSource MEAN_ELEMENT_THEORY() const {
+    return static_cast<meanElementSource>(GetField<int8_t>(VT_MEAN_ELEMENT_THEORY, 0));
   }
   /// COMMENT (O)
   const ::flatbuffers::String *COMMENT() const {
@@ -263,8 +263,8 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   /// TLE Related Parameters (Only if MEAN_ELEMENT_THEORY=SGP/SGP4)
   /// EPHEMERIS_TYPE Default=0
-  ephemerisType EPHEMERIS_TYPE() const {
-    return static_cast<ephemerisType>(GetField<int8_t>(VT_EPHEMERIS_TYPE, 1));
+  ephemerisFormat EPHEMERIS_TYPE() const {
+    return static_cast<ephemerisFormat>(GetField<int8_t>(VT_EPHEMERIS_TYPE, 1));
   }
   /// CLASSIFICATION_TYPE Default=U
   const ::flatbuffers::String *CLASSIFICATION_TYPE() const {
@@ -421,10 +421,10 @@ struct OMMBuilder {
   void add_REFERENCE_FRAME_EPOCH(::flatbuffers::Offset<::flatbuffers::String> REFERENCE_FRAME_EPOCH) {
     fbb_.AddOffset(OMM::VT_REFERENCE_FRAME_EPOCH, REFERENCE_FRAME_EPOCH);
   }
-  void add_TIME_SYSTEM(timeSystem TIME_SYSTEM) {
+  void add_TIME_SYSTEM(timingStandard TIME_SYSTEM) {
     fbb_.AddElement<int8_t>(OMM::VT_TIME_SYSTEM, static_cast<int8_t>(TIME_SYSTEM), 11);
   }
-  void add_MEAN_ELEMENT_THEORY(meanElementTheory MEAN_ELEMENT_THEORY) {
+  void add_MEAN_ELEMENT_THEORY(meanElementSource MEAN_ELEMENT_THEORY) {
     fbb_.AddElement<int8_t>(OMM::VT_MEAN_ELEMENT_THEORY, static_cast<int8_t>(MEAN_ELEMENT_THEORY), 0);
   }
   void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
@@ -472,7 +472,7 @@ struct OMMBuilder {
   void add_DRAG_COEFF(double DRAG_COEFF) {
     fbb_.AddElement<double>(OMM::VT_DRAG_COEFF, DRAG_COEFF, 0.0);
   }
-  void add_EPHEMERIS_TYPE(ephemerisType EPHEMERIS_TYPE) {
+  void add_EPHEMERIS_TYPE(ephemerisFormat EPHEMERIS_TYPE) {
     fbb_.AddElement<int8_t>(OMM::VT_EPHEMERIS_TYPE, static_cast<int8_t>(EPHEMERIS_TYPE), 1);
   }
   void add_CLASSIFICATION_TYPE(::flatbuffers::Offset<::flatbuffers::String> CLASSIFICATION_TYPE) {
@@ -538,8 +538,8 @@ inline ::flatbuffers::Offset<OMM> CreateOMM(
     ::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME = 0,
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> REFERENCE_FRAME_EPOCH = 0,
-    timeSystem TIME_SYSTEM = timeSystem::UTC,
-    meanElementTheory MEAN_ELEMENT_THEORY = meanElementTheory::SGP4,
+    timingStandard TIME_SYSTEM = timingStandard::UTC,
+    meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::SGP4,
     ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> EPOCH = 0,
     double SEMI_MAJOR_AXIS = 0.0,
@@ -555,7 +555,7 @@ inline ::flatbuffers::Offset<OMM> CreateOMM(
     double SOLAR_RAD_COEFF = 0.0,
     double DRAG_AREA = 0.0,
     double DRAG_COEFF = 0.0,
-    ephemerisType EPHEMERIS_TYPE = ephemerisType::SGP4,
+    ephemerisFormat EPHEMERIS_TYPE = ephemerisFormat::SGP4,
     ::flatbuffers::Offset<::flatbuffers::String> CLASSIFICATION_TYPE = 0,
     uint32_t NORAD_CAT_ID = 0,
     uint32_t ELEMENT_SET_NO = 0,
@@ -629,8 +629,8 @@ inline ::flatbuffers::Offset<OMM> CreateOMMDirect(
     const char *CENTER_NAME = nullptr,
     ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
     const char *REFERENCE_FRAME_EPOCH = nullptr,
-    timeSystem TIME_SYSTEM = timeSystem::UTC,
-    meanElementTheory MEAN_ELEMENT_THEORY = meanElementTheory::SGP4,
+    timingStandard TIME_SYSTEM = timingStandard::UTC,
+    meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::SGP4,
     const char *COMMENT = nullptr,
     const char *EPOCH = nullptr,
     double SEMI_MAJOR_AXIS = 0.0,
@@ -646,7 +646,7 @@ inline ::flatbuffers::Offset<OMM> CreateOMMDirect(
     double SOLAR_RAD_COEFF = 0.0,
     double DRAG_AREA = 0.0,
     double DRAG_COEFF = 0.0,
-    ephemerisType EPHEMERIS_TYPE = ephemerisType::SGP4,
+    ephemerisFormat EPHEMERIS_TYPE = ephemerisFormat::SGP4,
     const char *CLASSIFICATION_TYPE = nullptr,
     uint32_t NORAD_CAT_ID = 0,
     uint32_t ELEMENT_SET_NO = 0,

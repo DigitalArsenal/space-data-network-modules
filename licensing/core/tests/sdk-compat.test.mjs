@@ -15,7 +15,7 @@ import {
 } from "space-data-module-sdk";
 import { getWasmWallet } from "../node_modules/space-data-module-sdk/src/utils/wasmCrypto.js";
 import { PLG } from "spacedatastandards.org/lib/js/PLG/PLG.js";
-import { pluginType } from "spacedatastandards.org/lib/js/PLG/pluginType.js";
+import { pluginCategory } from "spacedatastandards.org/lib/js/PLG/pluginCategory.js";
 import { KMF } from "spacedatastandards.org/lib/js/REC/KMF.js";
 import { REC } from "spacedatastandards.org/lib/js/REC/REC.js";
 import { Record } from "spacedatastandards.org/lib/js/REC/Record.js";
@@ -354,7 +354,7 @@ function buildModuleDescriptor({
   PLG.addName(builder, nameOffset);
   PLG.addVersion(builder, versionOffset);
   PLG.addDescription(builder, descriptionOffset);
-  PLG.addPluginType(builder, pluginType.Analysis);
+  PLG.addPluginType(builder, pluginCategory.Analysis);
   PLG.addAbiVersion(builder, 1);
   PLG.addEncrypted(builder, true);
   PLG.addRequiredScope(builder, requiredScopeOffset);

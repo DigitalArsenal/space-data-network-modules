@@ -17,22 +17,22 @@ struct CFP;
 struct CFPBuilder;
 struct CFPT;
 
-enum class pduType : int8_t {
+enum class pduKind : int8_t {
   FILE_DIRECTIVE = 0,
   FILE_DATA = 1,
   MIN = FILE_DIRECTIVE,
   MAX = FILE_DATA
 };
 
-inline const pduType (&EnumValuespduType())[2] {
-  static const pduType values[] = {
-    pduType::FILE_DIRECTIVE,
-    pduType::FILE_DATA
+inline const pduKind (&EnumValuespduKind())[2] {
+  static const pduKind values[] = {
+    pduKind::FILE_DIRECTIVE,
+    pduKind::FILE_DATA
   };
   return values;
 }
 
-inline const char * const *EnumNamespduType() {
+inline const char * const *EnumNamespduKind() {
   static const char * const names[3] = {
     "FILE_DIRECTIVE",
     "FILE_DATA",
@@ -41,28 +41,28 @@ inline const char * const *EnumNamespduType() {
   return names;
 }
 
-inline const char *EnumNamepduType(pduType e) {
-  if (::flatbuffers::IsOutRange(e, pduType::FILE_DIRECTIVE, pduType::FILE_DATA)) return "";
+inline const char *EnumNamepduKind(pduKind e) {
+  if (::flatbuffers::IsOutRange(e, pduKind::FILE_DIRECTIVE, pduKind::FILE_DATA)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamespduType()[index];
+  return EnumNamespduKind()[index];
 }
 
-enum class transmissionMode : int8_t {
+enum class transmissionClass : int8_t {
   ACKNOWLEDGED = 0,
   UNACKNOWLEDGED = 1,
   MIN = ACKNOWLEDGED,
   MAX = UNACKNOWLEDGED
 };
 
-inline const transmissionMode (&EnumValuestransmissionMode())[2] {
-  static const transmissionMode values[] = {
-    transmissionMode::ACKNOWLEDGED,
-    transmissionMode::UNACKNOWLEDGED
+inline const transmissionClass (&EnumValuestransmissionClass())[2] {
+  static const transmissionClass values[] = {
+    transmissionClass::ACKNOWLEDGED,
+    transmissionClass::UNACKNOWLEDGED
   };
   return values;
 }
 
-inline const char * const *EnumNamestransmissionMode() {
+inline const char * const *EnumNamestransmissionClass() {
   static const char * const names[3] = {
     "ACKNOWLEDGED",
     "UNACKNOWLEDGED",
@@ -71,18 +71,18 @@ inline const char * const *EnumNamestransmissionMode() {
   return names;
 }
 
-inline const char *EnumNametransmissionMode(transmissionMode e) {
-  if (::flatbuffers::IsOutRange(e, transmissionMode::ACKNOWLEDGED, transmissionMode::UNACKNOWLEDGED)) return "";
+inline const char *EnumNametransmissionClass(transmissionClass e) {
+  if (::flatbuffers::IsOutRange(e, transmissionClass::ACKNOWLEDGED, transmissionClass::UNACKNOWLEDGED)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamestransmissionMode()[index];
+  return EnumNamestransmissionClass()[index];
 }
 
 struct CFPT : public ::flatbuffers::NativeTable {
   typedef CFP TableType;
   uint8_t VERSION = 0;
-  pduType PDU_TYPE = pduType::FILE_DIRECTIVE;
+  pduKind PDU_TYPE = pduKind::FILE_DIRECTIVE;
   uint8_t DIRECTION = 0;
-  transmissionMode TRANSMISSION_MODE = transmissionMode::ACKNOWLEDGED;
+  transmissionClass TRANSMISSION_MODE = transmissionClass::ACKNOWLEDGED;
   bool CRC_FLAG = false;
   bool LARGE_FILE_FLAG = false;
   uint16_t DATA_FIELD_LENGTH = 0;
@@ -123,16 +123,16 @@ struct CFP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<uint8_t>(VT_VERSION, 0);
   }
   /// PDU type
-  pduType PDU_TYPE() const {
-    return static_cast<pduType>(GetField<int8_t>(VT_PDU_TYPE, 0));
+  pduKind PDU_TYPE() const {
+    return static_cast<pduKind>(GetField<int8_t>(VT_PDU_TYPE, 0));
   }
   /// Direction (toward receiver or sender)
   uint8_t DIRECTION() const {
     return GetField<uint8_t>(VT_DIRECTION, 0);
   }
   /// Transmission mode
-  transmissionMode TRANSMISSION_MODE() const {
-    return static_cast<transmissionMode>(GetField<int8_t>(VT_TRANSMISSION_MODE, 0));
+  transmissionClass TRANSMISSION_MODE() const {
+    return static_cast<transmissionClass>(GetField<int8_t>(VT_TRANSMISSION_MODE, 0));
   }
   /// CRC present flag
   bool CRC_FLAG() const {
@@ -213,13 +213,13 @@ struct CFPBuilder {
   void add_VERSION(uint8_t VERSION) {
     fbb_.AddElement<uint8_t>(CFP::VT_VERSION, VERSION, 0);
   }
-  void add_PDU_TYPE(pduType PDU_TYPE) {
+  void add_PDU_TYPE(pduKind PDU_TYPE) {
     fbb_.AddElement<int8_t>(CFP::VT_PDU_TYPE, static_cast<int8_t>(PDU_TYPE), 0);
   }
   void add_DIRECTION(uint8_t DIRECTION) {
     fbb_.AddElement<uint8_t>(CFP::VT_DIRECTION, DIRECTION, 0);
   }
-  void add_TRANSMISSION_MODE(transmissionMode TRANSMISSION_MODE) {
+  void add_TRANSMISSION_MODE(transmissionClass TRANSMISSION_MODE) {
     fbb_.AddElement<int8_t>(CFP::VT_TRANSMISSION_MODE, static_cast<int8_t>(TRANSMISSION_MODE), 0);
   }
   void add_CRC_FLAG(bool CRC_FLAG) {
@@ -269,9 +269,9 @@ struct CFPBuilder {
 inline ::flatbuffers::Offset<CFP> CreateCFP(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint8_t VERSION = 0,
-    pduType PDU_TYPE = pduType::FILE_DIRECTIVE,
+    pduKind PDU_TYPE = pduKind::FILE_DIRECTIVE,
     uint8_t DIRECTION = 0,
-    transmissionMode TRANSMISSION_MODE = transmissionMode::ACKNOWLEDGED,
+    transmissionClass TRANSMISSION_MODE = transmissionClass::ACKNOWLEDGED,
     bool CRC_FLAG = false,
     bool LARGE_FILE_FLAG = false,
     uint16_t DATA_FIELD_LENGTH = 0,
@@ -310,9 +310,9 @@ struct CFP::Traits {
 inline ::flatbuffers::Offset<CFP> CreateCFPDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint8_t VERSION = 0,
-    pduType PDU_TYPE = pduType::FILE_DIRECTIVE,
+    pduKind PDU_TYPE = pduKind::FILE_DIRECTIVE,
     uint8_t DIRECTION = 0,
-    transmissionMode TRANSMISSION_MODE = transmissionMode::ACKNOWLEDGED,
+    transmissionClass TRANSMISSION_MODE = transmissionClass::ACKNOWLEDGED,
     bool CRC_FLAG = false,
     bool LARGE_FILE_FLAG = false,
     uint16_t DATA_FIELD_LENGTH = 0,

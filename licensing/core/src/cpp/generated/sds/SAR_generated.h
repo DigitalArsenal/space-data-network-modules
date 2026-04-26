@@ -17,7 +17,7 @@ struct SAR;
 struct SARBuilder;
 struct SART;
 
-enum class sarMode : int8_t {
+enum class sarMission : int8_t {
   STRIPMAP = 0,
   SPOTLIGHT = 1,
   SCANSAR = 2,
@@ -30,21 +30,21 @@ enum class sarMode : int8_t {
   MAX = UNKNOWN
 };
 
-inline const sarMode (&EnumValuessarMode())[8] {
-  static const sarMode values[] = {
-    sarMode::STRIPMAP,
-    sarMode::SPOTLIGHT,
-    sarMode::SCANSAR,
-    sarMode::TOPSAR,
-    sarMode::ISAR,
-    sarMode::GMTI,
-    sarMode::MARITIME,
-    sarMode::UNKNOWN
+inline const sarMission (&EnumValuessarMission())[8] {
+  static const sarMission values[] = {
+    sarMission::STRIPMAP,
+    sarMission::SPOTLIGHT,
+    sarMission::SCANSAR,
+    sarMission::TOPSAR,
+    sarMission::ISAR,
+    sarMission::GMTI,
+    sarMission::MARITIME,
+    sarMission::UNKNOWN
   };
   return values;
 }
 
-inline const char * const *EnumNamessarMode() {
+inline const char * const *EnumNamessarMission() {
   static const char * const names[9] = {
     "STRIPMAP",
     "SPOTLIGHT",
@@ -59,10 +59,10 @@ inline const char * const *EnumNamessarMode() {
   return names;
 }
 
-inline const char *EnumNamesarMode(sarMode e) {
-  if (::flatbuffers::IsOutRange(e, sarMode::STRIPMAP, sarMode::UNKNOWN)) return "";
+inline const char *EnumNamesarMission(sarMission e) {
+  if (::flatbuffers::IsOutRange(e, sarMission::STRIPMAP, sarMission::UNKNOWN)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamessarMode()[index];
+  return EnumNamessarMission()[index];
 }
 
 enum class sarPolarization : int8_t {
@@ -134,7 +134,7 @@ struct SART : public ::flatbuffers::NativeTable {
   std::string DETECTION_END{};
   double DWELL_TIME = 0.0;
   std::string ORBIT_STATE{};
-  sarMode SAR_MODE = sarMode::STRIPMAP;
+  sarMission SAR_MODE = sarMission::STRIPMAP;
   std::string OPERATING_BAND{};
   double OPERATING_FREQ = 0.0;
   double SNR = 0.0;
@@ -308,8 +308,8 @@ struct SAR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_ORBIT_STATE);
   }
   /// SAR imaging mode
-  sarMode SAR_MODE() const {
-    return static_cast<sarMode>(GetField<int8_t>(VT_SAR_MODE, 0));
+  sarMission SAR_MODE() const {
+    return static_cast<sarMission>(GetField<int8_t>(VT_SAR_MODE, 0));
   }
   /// Operating RF band (e.g., X, C, L, S, P)
   const ::flatbuffers::String *OPERATING_BAND() const {
@@ -622,7 +622,7 @@ struct SARBuilder {
   void add_ORBIT_STATE(::flatbuffers::Offset<::flatbuffers::String> ORBIT_STATE) {
     fbb_.AddOffset(SAR::VT_ORBIT_STATE, ORBIT_STATE);
   }
-  void add_SAR_MODE(sarMode SAR_MODE) {
+  void add_SAR_MODE(sarMission SAR_MODE) {
     fbb_.AddElement<int8_t>(SAR::VT_SAR_MODE, static_cast<int8_t>(SAR_MODE), 0);
   }
   void add_OPERATING_BAND(::flatbuffers::Offset<::flatbuffers::String> OPERATING_BAND) {
@@ -777,7 +777,7 @@ inline ::flatbuffers::Offset<SAR> CreateSAR(
     ::flatbuffers::Offset<::flatbuffers::String> DETECTION_END = 0,
     double DWELL_TIME = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> ORBIT_STATE = 0,
-    sarMode SAR_MODE = sarMode::STRIPMAP,
+    sarMission SAR_MODE = sarMission::STRIPMAP,
     ::flatbuffers::Offset<::flatbuffers::String> OPERATING_BAND = 0,
     double OPERATING_FREQ = 0.0,
     double SNR = 0.0,
@@ -904,7 +904,7 @@ inline ::flatbuffers::Offset<SAR> CreateSARDirect(
     const char *DETECTION_END = nullptr,
     double DWELL_TIME = 0.0,
     const char *ORBIT_STATE = nullptr,
-    sarMode SAR_MODE = sarMode::STRIPMAP,
+    sarMission SAR_MODE = sarMission::STRIPMAP,
     const char *OPERATING_BAND = nullptr,
     double OPERATING_FREQ = 0.0,
     double SNR = 0.0,

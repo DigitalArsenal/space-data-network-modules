@@ -30,7 +30,7 @@ struct MPET : public ::flatbuffers::NativeTable {
   double ARG_OF_PERICENTER = 0.0;
   double MEAN_ANOMALY = 0.0;
   double BSTAR = 0.0;
-  meanElementTheory MEAN_ELEMENT_THEORY = meanElementTheory::SGP4;
+  meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::SGP4;
 };
 
 /// Minimum Propagatable Element Set
@@ -87,8 +87,8 @@ struct MPE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<double>(VT_BSTAR, 0.0);
   }
   /// Description of the Mean Element Theory (SGP4, DSST, USM)
-  meanElementTheory MEAN_ELEMENT_THEORY() const {
-    return static_cast<meanElementTheory>(GetField<int8_t>(VT_MEAN_ELEMENT_THEORY, 0));
+  meanElementSource MEAN_ELEMENT_THEORY() const {
+    return static_cast<meanElementSource>(GetField<int8_t>(VT_MEAN_ELEMENT_THEORY, 0));
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -142,7 +142,7 @@ struct MPEBuilder {
   void add_BSTAR(double BSTAR) {
     fbb_.AddElement<double>(MPE::VT_BSTAR, BSTAR, 0.0);
   }
-  void add_MEAN_ELEMENT_THEORY(meanElementTheory MEAN_ELEMENT_THEORY) {
+  void add_MEAN_ELEMENT_THEORY(meanElementSource MEAN_ELEMENT_THEORY) {
     fbb_.AddElement<int8_t>(MPE::VT_MEAN_ELEMENT_THEORY, static_cast<int8_t>(MEAN_ELEMENT_THEORY), 0);
   }
   explicit MPEBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
@@ -167,7 +167,7 @@ inline ::flatbuffers::Offset<MPE> CreateMPE(
     double ARG_OF_PERICENTER = 0.0,
     double MEAN_ANOMALY = 0.0,
     double BSTAR = 0.0,
-    meanElementTheory MEAN_ELEMENT_THEORY = meanElementTheory::SGP4) {
+    meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::SGP4) {
   MPEBuilder builder_(_fbb);
   builder_.add_BSTAR(BSTAR);
   builder_.add_MEAN_ANOMALY(MEAN_ANOMALY);
@@ -198,7 +198,7 @@ inline ::flatbuffers::Offset<MPE> CreateMPEDirect(
     double ARG_OF_PERICENTER = 0.0,
     double MEAN_ANOMALY = 0.0,
     double BSTAR = 0.0,
-    meanElementTheory MEAN_ELEMENT_THEORY = meanElementTheory::SGP4) {
+    meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::SGP4) {
   auto ENTITY_ID__ = ENTITY_ID ? _fbb.CreateString(ENTITY_ID) : 0;
   return CreateMPE(
       _fbb,

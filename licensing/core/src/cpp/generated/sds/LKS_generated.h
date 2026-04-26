@@ -17,7 +17,7 @@ struct LKS;
 struct LKSBuilder;
 struct LKST;
 
-enum class linkType : int8_t {
+enum class linkCategory : int8_t {
   UPLINK = 0,
   DOWNLINK = 1,
   CROSSLINK = 2,
@@ -28,19 +28,19 @@ enum class linkType : int8_t {
   MAX = RELAY
 };
 
-inline const linkType (&EnumValueslinkType())[6] {
-  static const linkType values[] = {
-    linkType::UPLINK,
-    linkType::DOWNLINK,
-    linkType::CROSSLINK,
-    linkType::INTER_SATELLITE,
-    linkType::GROUND_TO_GROUND,
-    linkType::RELAY
+inline const linkCategory (&EnumValueslinkCategory())[6] {
+  static const linkCategory values[] = {
+    linkCategory::UPLINK,
+    linkCategory::DOWNLINK,
+    linkCategory::CROSSLINK,
+    linkCategory::INTER_SATELLITE,
+    linkCategory::GROUND_TO_GROUND,
+    linkCategory::RELAY
   };
   return values;
 }
 
-inline const char * const *EnumNameslinkType() {
+inline const char * const *EnumNameslinkCategory() {
   static const char * const names[7] = {
     "UPLINK",
     "DOWNLINK",
@@ -53,13 +53,13 @@ inline const char * const *EnumNameslinkType() {
   return names;
 }
 
-inline const char *EnumNamelinkType(linkType e) {
-  if (::flatbuffers::IsOutRange(e, linkType::UPLINK, linkType::RELAY)) return "";
+inline const char *EnumNamelinkCategory(linkCategory e) {
+  if (::flatbuffers::IsOutRange(e, linkCategory::UPLINK, linkCategory::RELAY)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNameslinkType()[index];
+  return EnumNameslinkCategory()[index];
 }
 
-enum class linkState : int8_t {
+enum class linkCondition : int8_t {
   ESTABLISHED = 0,
   DEGRADED = 1,
   INTERRUPTED = 2,
@@ -70,19 +70,19 @@ enum class linkState : int8_t {
   MAX = UNKNOWN
 };
 
-inline const linkState (&EnumValueslinkState())[6] {
-  static const linkState values[] = {
-    linkState::ESTABLISHED,
-    linkState::DEGRADED,
-    linkState::INTERRUPTED,
-    linkState::PLANNED,
-    linkState::TERMINATED,
-    linkState::UNKNOWN
+inline const linkCondition (&EnumValueslinkCondition())[6] {
+  static const linkCondition values[] = {
+    linkCondition::ESTABLISHED,
+    linkCondition::DEGRADED,
+    linkCondition::INTERRUPTED,
+    linkCondition::PLANNED,
+    linkCondition::TERMINATED,
+    linkCondition::UNKNOWN
   };
   return values;
 }
 
-inline const char * const *EnumNameslinkState() {
+inline const char * const *EnumNameslinkCondition() {
   static const char * const names[7] = {
     "ESTABLISHED",
     "DEGRADED",
@@ -95,10 +95,10 @@ inline const char * const *EnumNameslinkState() {
   return names;
 }
 
-inline const char *EnumNamelinkState(linkState e) {
-  if (::flatbuffers::IsOutRange(e, linkState::ESTABLISHED, linkState::UNKNOWN)) return "";
+inline const char *EnumNamelinkCondition(linkCondition e) {
+  if (::flatbuffers::IsOutRange(e, linkCondition::ESTABLISHED, linkCondition::UNKNOWN)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNameslinkState()[index];
+  return EnumNameslinkCondition()[index];
 }
 
 struct LKST : public ::flatbuffers::NativeTable {
@@ -110,8 +110,8 @@ struct LKST : public ::flatbuffers::NativeTable {
   uint32_t SAT_NO2 = 0;
   std::string CONSTELLATION{};
   std::string LINK_NAME{};
-  linkType LINK_TYPE = linkType::UPLINK;
-  linkState LINK_STATE = linkState::ESTABLISHED;
+  linkCategory LINK_TYPE = linkCategory::UPLINK;
+  linkCondition LINK_STATE = linkCondition::ESTABLISHED;
   std::string BAND{};
   std::string LINK_START_TIME{};
   std::string LINK_STOP_TIME{};
@@ -189,12 +189,12 @@ struct LKS FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_LINK_NAME);
   }
   /// Link type
-  linkType LINK_TYPE() const {
-    return static_cast<linkType>(GetField<int8_t>(VT_LINK_TYPE, 0));
+  linkCategory LINK_TYPE() const {
+    return static_cast<linkCategory>(GetField<int8_t>(VT_LINK_TYPE, 0));
   }
   /// Link state
-  linkState LINK_STATE() const {
-    return static_cast<linkState>(GetField<int8_t>(VT_LINK_STATE, 0));
+  linkCondition LINK_STATE() const {
+    return static_cast<linkCondition>(GetField<int8_t>(VT_LINK_STATE, 0));
   }
   /// RF band
   const ::flatbuffers::String *BAND() const {
@@ -329,10 +329,10 @@ struct LKSBuilder {
   void add_LINK_NAME(::flatbuffers::Offset<::flatbuffers::String> LINK_NAME) {
     fbb_.AddOffset(LKS::VT_LINK_NAME, LINK_NAME);
   }
-  void add_LINK_TYPE(linkType LINK_TYPE) {
+  void add_LINK_TYPE(linkCategory LINK_TYPE) {
     fbb_.AddElement<int8_t>(LKS::VT_LINK_TYPE, static_cast<int8_t>(LINK_TYPE), 0);
   }
-  void add_LINK_STATE(linkState LINK_STATE) {
+  void add_LINK_STATE(linkCondition LINK_STATE) {
     fbb_.AddElement<int8_t>(LKS::VT_LINK_STATE, static_cast<int8_t>(LINK_STATE), 0);
   }
   void add_BAND(::flatbuffers::Offset<::flatbuffers::String> BAND) {
@@ -400,8 +400,8 @@ inline ::flatbuffers::Offset<LKS> CreateLKS(
     uint32_t SAT_NO2 = 0,
     ::flatbuffers::Offset<::flatbuffers::String> CONSTELLATION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> LINK_NAME = 0,
-    linkType LINK_TYPE = linkType::UPLINK,
-    linkState LINK_STATE = linkState::ESTABLISHED,
+    linkCategory LINK_TYPE = linkCategory::UPLINK,
+    linkCondition LINK_STATE = linkCondition::ESTABLISHED,
     ::flatbuffers::Offset<::flatbuffers::String> BAND = 0,
     ::flatbuffers::Offset<::flatbuffers::String> LINK_START_TIME = 0,
     ::flatbuffers::Offset<::flatbuffers::String> LINK_STOP_TIME = 0,
@@ -459,8 +459,8 @@ inline ::flatbuffers::Offset<LKS> CreateLKSDirect(
     uint32_t SAT_NO2 = 0,
     const char *CONSTELLATION = nullptr,
     const char *LINK_NAME = nullptr,
-    linkType LINK_TYPE = linkType::UPLINK,
-    linkState LINK_STATE = linkState::ESTABLISHED,
+    linkCategory LINK_TYPE = linkCategory::UPLINK,
+    linkCondition LINK_STATE = linkCondition::ESTABLISHED,
     const char *BAND = nullptr,
     const char *LINK_START_TIME = nullptr,
     const char *LINK_STOP_TIME = nullptr,

@@ -18,7 +18,7 @@ struct PLKBuilder;
 struct PLKT;
 
 /// License type for plugin access
-enum class licenseType : int8_t {
+enum class licenseCategory : int8_t {
   /// Evaluation/trial license
   Trial = 0,
   /// Standard commercial license
@@ -35,19 +35,19 @@ enum class licenseType : int8_t {
   MAX = Internal
 };
 
-inline const licenseType (&EnumValueslicenseType())[6] {
-  static const licenseType values[] = {
-    licenseType::Trial,
-    licenseType::Commercial,
-    licenseType::Enterprise,
-    licenseType::Educational,
-    licenseType::OpenSource,
-    licenseType::Internal
+inline const licenseCategory (&EnumValueslicenseCategory())[6] {
+  static const licenseCategory values[] = {
+    licenseCategory::Trial,
+    licenseCategory::Commercial,
+    licenseCategory::Enterprise,
+    licenseCategory::Educational,
+    licenseCategory::OpenSource,
+    licenseCategory::Internal
   };
   return values;
 }
 
-inline const char * const *EnumNameslicenseType() {
+inline const char * const *EnumNameslicenseCategory() {
   static const char * const names[7] = {
     "Trial",
     "Commercial",
@@ -60,10 +60,10 @@ inline const char * const *EnumNameslicenseType() {
   return names;
 }
 
-inline const char *EnumNamelicenseType(licenseType e) {
-  if (::flatbuffers::IsOutRange(e, licenseType::Trial, licenseType::Internal)) return "";
+inline const char *EnumNamelicenseCategory(licenseCategory e) {
+  if (::flatbuffers::IsOutRange(e, licenseCategory::Trial, licenseCategory::Internal)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNameslicenseType()[index];
+  return EnumNameslicenseCategory()[index];
 }
 
 struct PLKT : public ::flatbuffers::NativeTable {
@@ -78,7 +78,7 @@ struct PLKT : public ::flatbuffers::NativeTable {
   std::vector<uint8_t> ISSUER_PUBKEY{};
   std::vector<std::string> ALLOWED_DOMAINS{};
   std::vector<std::string> ALLOWED_TLDS{};
-  licenseType LICENSE_TYPE = licenseType::Trial;
+  licenseCategory LICENSE_TYPE = licenseCategory::Trial;
   uint32_t MAX_ACTIVATIONS = 0;
   uint64_t ISSUED_AT = 0;
   uint64_t VALID_FROM = 0;
@@ -155,8 +155,8 @@ struct PLK FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_ALLOWED_TLDS);
   }
   /// Type of license
-  licenseType LICENSE_TYPE() const {
-    return static_cast<licenseType>(GetField<int8_t>(VT_LICENSE_TYPE, 0));
+  licenseCategory LICENSE_TYPE() const {
+    return static_cast<licenseCategory>(GetField<int8_t>(VT_LICENSE_TYPE, 0));
   }
   /// Maximum concurrent activations (0 = unlimited)
   uint32_t MAX_ACTIVATIONS() const {
@@ -257,7 +257,7 @@ struct PLKBuilder {
   void add_ALLOWED_TLDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_TLDS) {
     fbb_.AddOffset(PLK::VT_ALLOWED_TLDS, ALLOWED_TLDS);
   }
-  void add_LICENSE_TYPE(licenseType LICENSE_TYPE) {
+  void add_LICENSE_TYPE(licenseCategory LICENSE_TYPE) {
     fbb_.AddElement<int8_t>(PLK::VT_LICENSE_TYPE, static_cast<int8_t>(LICENSE_TYPE), 0);
   }
   void add_MAX_ACTIVATIONS(uint32_t MAX_ACTIVATIONS) {
@@ -304,7 +304,7 @@ inline ::flatbuffers::Offset<PLK> CreatePLK(
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> ISSUER_PUBKEY = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_DOMAINS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_TLDS = 0,
-    licenseType LICENSE_TYPE = licenseType::Trial,
+    licenseCategory LICENSE_TYPE = licenseCategory::Trial,
     uint32_t MAX_ACTIVATIONS = 0,
     uint64_t ISSUED_AT = 0,
     uint64_t VALID_FROM = 0,
@@ -349,7 +349,7 @@ inline ::flatbuffers::Offset<PLK> CreatePLKDirect(
     const std::vector<uint8_t> *ISSUER_PUBKEY = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_DOMAINS = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_TLDS = nullptr,
-    licenseType LICENSE_TYPE = licenseType::Trial,
+    licenseCategory LICENSE_TYPE = licenseCategory::Trial,
     uint32_t MAX_ACTIVATIONS = 0,
     uint64_t ISSUED_AT = 0,
     uint64_t VALID_FROM = 0,

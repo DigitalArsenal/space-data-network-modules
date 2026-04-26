@@ -13,6 +13,9 @@ import {
 import {
   encryptBytesForRecipient,
 } from "space-data-module-sdk/transport";
+import {
+  encryptBytesForRecipient as encryptBytesForRecipientFromWorkspace,
+} from "../../../../space-data-module-sdk/src/transport/index.js";
 
 function hexToBytes(hex) {
   const normalized = hex.replace(/^0x/i, "");
@@ -152,14 +155,22 @@ async function buildGrantResponseFixture(plaintext, recipientPublicKey) {
   };
 }
 
-async function buildProtectedPublicationGrantResponseFixture(plaintext, recipientPublicKey) {
+async function buildProtectedPublicationGrantResponseFixture(
+  plaintext,
+  recipientPublicKey,
+  options = {},
+) {
+  const {
+    context = "orbpro.plugin/com.orbpro.client-decrypt-protected",
+    encrypt = encryptBytesForRecipient,
+  } = options;
   const ephemeral = await generateX25519KeyPair();
   const publicationRecipient = await generateX25519KeyPair();
   const contentKey = publicationRecipient.privateKey;
-  const protectedEnvelope = await encryptBytesForRecipient({
+  const protectedEnvelope = await encrypt({
     plaintext,
     recipientPublicKey: publicationRecipient.publicKey,
-    context: "orbpro.plugin/com.orbpro.client-decrypt-protected",
+    context,
   });
   const encryptedBundleBytes = fromBase64(protectedEnvelope.protectedBlobBase64);
 
@@ -329,6 +340,45 @@ test("package entrypoint decrypts SDK protected publication bundles", async (t) 
     ...crypto.getRandomValues(new Uint8Array(160)),
   ]);
   const fixture = await buildProtectedPublicationGrantResponseFixture(plaintext, publicKey);
+  assert.deepEqual(Array.from(fixture.encryptedBundleBytes.slice(-4)), [36, 82, 69, 67]);
+
+  const decryptor = await createClientDecrypt({
+    dispatch(operation) {
+      if (operation === "host.runtimeTarget") return "node";
+      if (operation === "host.listCapabilities") return [];
+      if (operation === "host.hasCapability") return false;
+      if (operation === "host.listOperations") return [];
+      throw new Error(`Unsupported operation: ${operation}`);
+    },
+  });
+  t.after(async () => {
+    await decryptor.destroy();
+  });
+
+  const decrypted = await decryptor.decryptArtifact({
+    payload: fixture.grantResponseBytes,
+    privateKey,
+    encryptedBundleBytes: fixture.encryptedBundleBytes,
+  });
+
+  assert.deepEqual(decrypted, plaintext);
+});
+
+test("package entrypoint decrypts protected publication bundles created with current SDS schemas", async (t) => {
+  const { publicKey, privateKey } = await generateX25519KeyPair();
+  const plaintext = new TextEncoder().encode(
+    JSON.stringify({
+      SensorVolumeVS: "#version 300 es\nvoid main() {}",
+    }),
+  );
+  const fixture = await buildProtectedPublicationGrantResponseFixture(
+    plaintext,
+    publicKey,
+    {
+      context: "orbpro.plugin/com.orbpro.sensor-shaders/glsl-bundle",
+      encrypt: encryptBytesForRecipientFromWorkspace,
+    },
+  );
   assert.deepEqual(Array.from(fixture.encryptedBundleBytes.slice(-4)), [36, 82, 69, 67]);
 
   const decryptor = await createClientDecrypt({

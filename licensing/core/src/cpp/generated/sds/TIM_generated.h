@@ -17,7 +17,7 @@ struct TIM;
 struct TIMBuilder;
 struct TIMT;
 
-enum class timeSystem : int8_t {
+enum class timingStandard : int8_t {
   /// Greenwich Mean Sidereal Time
   GMST = 0,
   /// Global Positioning System
@@ -46,25 +46,25 @@ enum class timeSystem : int8_t {
   MAX = UTC
 };
 
-inline const timeSystem (&EnumValuestimeSystem())[12] {
-  static const timeSystem values[] = {
-    timeSystem::GMST,
-    timeSystem::GPS,
-    timeSystem::MET,
-    timeSystem::MRT,
-    timeSystem::SCLK,
-    timeSystem::TAI,
-    timeSystem::TCB,
-    timeSystem::TDB,
-    timeSystem::TCG,
-    timeSystem::TT,
-    timeSystem::UT1,
-    timeSystem::UTC
+inline const timingStandard (&EnumValuestimingStandard())[12] {
+  static const timingStandard values[] = {
+    timingStandard::GMST,
+    timingStandard::GPS,
+    timingStandard::MET,
+    timingStandard::MRT,
+    timingStandard::SCLK,
+    timingStandard::TAI,
+    timingStandard::TCB,
+    timingStandard::TDB,
+    timingStandard::TCG,
+    timingStandard::TT,
+    timingStandard::UT1,
+    timingStandard::UTC
   };
   return values;
 }
 
-inline const char * const *EnumNamestimeSystem() {
+inline const char * const *EnumNamestimingStandard() {
   static const char * const names[13] = {
     "GMST",
     "GPS",
@@ -83,15 +83,15 @@ inline const char * const *EnumNamestimeSystem() {
   return names;
 }
 
-inline const char *EnumNametimeSystem(timeSystem e) {
-  if (::flatbuffers::IsOutRange(e, timeSystem::GMST, timeSystem::UTC)) return "";
+inline const char *EnumNametimingStandard(timingStandard e) {
+  if (::flatbuffers::IsOutRange(e, timingStandard::GMST, timingStandard::UTC)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamestimeSystem()[index];
+  return EnumNamestimingStandard()[index];
 }
 
 struct TIMT : public ::flatbuffers::NativeTable {
   typedef TIM TableType;
-  timeSystem TIME_SYSTEM = timeSystem::GMST;
+  timingStandard TIME_SYSTEM = timingStandard::GMST;
 };
 
 /// Time System
@@ -102,8 +102,8 @@ struct TIM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_TIME_SYSTEM = 4
   };
-  timeSystem TIME_SYSTEM() const {
-    return static_cast<timeSystem>(GetField<int8_t>(VT_TIME_SYSTEM, 0));
+  timingStandard TIME_SYSTEM() const {
+    return static_cast<timingStandard>(GetField<int8_t>(VT_TIME_SYSTEM, 0));
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -120,7 +120,7 @@ struct TIMBuilder {
   typedef TIM Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_TIME_SYSTEM(timeSystem TIME_SYSTEM) {
+  void add_TIME_SYSTEM(timingStandard TIME_SYSTEM) {
     fbb_.AddElement<int8_t>(TIM::VT_TIME_SYSTEM, static_cast<int8_t>(TIME_SYSTEM), 0);
   }
   explicit TIMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
@@ -136,7 +136,7 @@ struct TIMBuilder {
 
 inline ::flatbuffers::Offset<TIM> CreateTIM(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    timeSystem TIME_SYSTEM = timeSystem::GMST) {
+    timingStandard TIME_SYSTEM = timingStandard::GMST) {
   TIMBuilder builder_(_fbb);
   builder_.add_TIME_SYSTEM(TIME_SYSTEM);
   return builder_.Finish();

@@ -62,7 +62,7 @@ struct PNM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   /// Concatenated Content Identifier (CID)
   /// This field is a unique ID for distributed systems (CID).
-  /// The CID provides a unique identifier within distributed systems, as detailed at https://github.com/multiformats/cid.
+  /// The CID provides a unique identifier within distributed systems, as detailed at https://github.com/multiformats/cid. 
   const ::flatbuffers::String *CID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CID);
   }

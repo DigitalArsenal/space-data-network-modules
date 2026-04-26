@@ -17,7 +17,7 @@ struct ANI;
 struct ANIBuilder;
 struct ANIT;
 
-enum class analyticType : int8_t {
+enum class analyticProfile : int8_t {
   SPECTRAL = 0,
   PHOTOMETRIC = 1,
   ASTROMETRIC = 2,
@@ -31,22 +31,22 @@ enum class analyticType : int8_t {
   MAX = FUSION
 };
 
-inline const analyticType (&EnumValuesanalyticType())[9] {
-  static const analyticType values[] = {
-    analyticType::SPECTRAL,
-    analyticType::PHOTOMETRIC,
-    analyticType::ASTROMETRIC,
-    analyticType::RADIOMETRIC,
-    analyticType::SIGNATURE,
-    analyticType::FEATURE_EXTRACTION,
-    analyticType::CHANGE_DETECTION,
-    analyticType::CLASSIFICATION,
-    analyticType::FUSION
+inline const analyticProfile (&EnumValuesanalyticProfile())[9] {
+  static const analyticProfile values[] = {
+    analyticProfile::SPECTRAL,
+    analyticProfile::PHOTOMETRIC,
+    analyticProfile::ASTROMETRIC,
+    analyticProfile::RADIOMETRIC,
+    analyticProfile::SIGNATURE,
+    analyticProfile::FEATURE_EXTRACTION,
+    analyticProfile::CHANGE_DETECTION,
+    analyticProfile::CLASSIFICATION,
+    analyticProfile::FUSION
   };
   return values;
 }
 
-inline const char * const *EnumNamesanalyticType() {
+inline const char * const *EnumNamesanalyticProfile() {
   static const char * const names[10] = {
     "SPECTRAL",
     "PHOTOMETRIC",
@@ -62,10 +62,10 @@ inline const char * const *EnumNamesanalyticType() {
   return names;
 }
 
-inline const char *EnumNameanalyticType(analyticType e) {
-  if (::flatbuffers::IsOutRange(e, analyticType::SPECTRAL, analyticType::FUSION)) return "";
+inline const char *EnumNameanalyticProfile(analyticProfile e) {
+  if (::flatbuffers::IsOutRange(e, analyticProfile::SPECTRAL, analyticProfile::FUSION)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesanalyticType()[index];
+  return EnumNamesanalyticProfile()[index];
 }
 
 struct ANIT : public ::flatbuffers::NativeTable {
@@ -73,7 +73,7 @@ struct ANIT : public ::flatbuffers::NativeTable {
   std::string ID{};
   std::string SOURCE_ID{};
   std::string SOURCE_TYPE{};
-  analyticType ANALYTIC_TYPE = analyticType::SPECTRAL;
+  analyticProfile ANALYTIC_TYPE = analyticProfile::SPECTRAL;
   std::string ALGORITHM{};
   std::string ALGORITHM_VERSION{};
   std::string PROCESSING_TIME{};
@@ -134,8 +134,8 @@ struct ANI FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_TYPE);
   }
   /// Analytic product type
-  analyticType ANALYTIC_TYPE() const {
-    return static_cast<analyticType>(GetField<int8_t>(VT_ANALYTIC_TYPE, 0));
+  analyticProfile ANALYTIC_TYPE() const {
+    return static_cast<analyticProfile>(GetField<int8_t>(VT_ANALYTIC_TYPE, 0));
   }
   /// Processing algorithm or pipeline name
   const ::flatbuffers::String *ALGORITHM() const {
@@ -262,7 +262,7 @@ struct ANIBuilder {
   void add_SOURCE_TYPE(::flatbuffers::Offset<::flatbuffers::String> SOURCE_TYPE) {
     fbb_.AddOffset(ANI::VT_SOURCE_TYPE, SOURCE_TYPE);
   }
-  void add_ANALYTIC_TYPE(analyticType ANALYTIC_TYPE) {
+  void add_ANALYTIC_TYPE(analyticProfile ANALYTIC_TYPE) {
     fbb_.AddElement<int8_t>(ANI::VT_ANALYTIC_TYPE, static_cast<int8_t>(ANALYTIC_TYPE), 0);
   }
   void add_ALGORITHM(::flatbuffers::Offset<::flatbuffers::String> ALGORITHM) {
@@ -332,7 +332,7 @@ inline ::flatbuffers::Offset<ANI> CreateANI(
     ::flatbuffers::Offset<::flatbuffers::String> ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SOURCE_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SOURCE_TYPE = 0,
-    analyticType ANALYTIC_TYPE = analyticType::SPECTRAL,
+    analyticProfile ANALYTIC_TYPE = analyticProfile::SPECTRAL,
     ::flatbuffers::Offset<::flatbuffers::String> ALGORITHM = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ALGORITHM_VERSION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PROCESSING_TIME = 0,
@@ -385,7 +385,7 @@ inline ::flatbuffers::Offset<ANI> CreateANIDirect(
     const char *ID = nullptr,
     const char *SOURCE_ID = nullptr,
     const char *SOURCE_TYPE = nullptr,
-    analyticType ANALYTIC_TYPE = analyticType::SPECTRAL,
+    analyticProfile ANALYTIC_TYPE = analyticProfile::SPECTRAL,
     const char *ALGORITHM = nullptr,
     const char *ALGORITHM_VERSION = nullptr,
     const char *PROCESSING_TIME = nullptr,

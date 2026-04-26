@@ -25,7 +25,7 @@ struct ACLT : public ::flatbuffers::NativeTable {
   std::string LISTING_ID{};
   std::string BUYER_PEER_ID{};
   std::vector<uint8_t> BUYER_ENCRYPTION_PUBKEY{};
-  accessType ACCESS_TYPE = accessType::OneTime;
+  accessCategory ACCESS_TYPE = accessCategory::OneTime;
   std::string TIER_NAME{};
   uint64_t GRANTED_AT = 0;
   uint64_t EXPIRES_AT = 0;
@@ -69,8 +69,8 @@ struct ACL FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_BUYER_ENCRYPTION_PUBKEY);
   }
   /// Type of access granted
-  accessType ACCESS_TYPE() const {
-    return static_cast<accessType>(GetField<int8_t>(VT_ACCESS_TYPE, 0));
+  accessCategory ACCESS_TYPE() const {
+    return static_cast<accessCategory>(GetField<int8_t>(VT_ACCESS_TYPE, 0));
   }
   /// Name of the pricing tier purchased
   const ::flatbuffers::String *TIER_NAME() const {
@@ -140,7 +140,7 @@ struct ACLBuilder {
   void add_BUYER_ENCRYPTION_PUBKEY(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> BUYER_ENCRYPTION_PUBKEY) {
     fbb_.AddOffset(ACL::VT_BUYER_ENCRYPTION_PUBKEY, BUYER_ENCRYPTION_PUBKEY);
   }
-  void add_ACCESS_TYPE(accessType ACCESS_TYPE) {
+  void add_ACCESS_TYPE(accessCategory ACCESS_TYPE) {
     fbb_.AddElement<int8_t>(ACL::VT_ACCESS_TYPE, static_cast<int8_t>(ACCESS_TYPE), 0);
   }
   void add_TIER_NAME(::flatbuffers::Offset<::flatbuffers::String> TIER_NAME) {
@@ -181,7 +181,7 @@ inline ::flatbuffers::Offset<ACL> CreateACL(
     ::flatbuffers::Offset<::flatbuffers::String> LISTING_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> BUYER_PEER_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> BUYER_ENCRYPTION_PUBKEY = 0,
-    accessType ACCESS_TYPE = accessType::OneTime,
+    accessCategory ACCESS_TYPE = accessCategory::OneTime,
     ::flatbuffers::Offset<::flatbuffers::String> TIER_NAME = 0,
     uint64_t GRANTED_AT = 0,
     uint64_t EXPIRES_AT = 0,
@@ -214,7 +214,7 @@ inline ::flatbuffers::Offset<ACL> CreateACLDirect(
     const char *LISTING_ID = nullptr,
     const char *BUYER_PEER_ID = nullptr,
     const std::vector<uint8_t> *BUYER_ENCRYPTION_PUBKEY = nullptr,
-    accessType ACCESS_TYPE = accessType::OneTime,
+    accessCategory ACCESS_TYPE = accessCategory::OneTime,
     const char *TIER_NAME = nullptr,
     uint64_t GRANTED_AT = 0,
     uint64_t EXPIRES_AT = 0,
