@@ -6,6 +6,12 @@
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
+  "dependencies": [
+    {
+      "pluginId": "com.orbpro.sgp4",
+      "minVersion": "1.0.0"
+    }
+  ],
   "invokeSurfaces": ["command"],
   "runtimeTargets": ["browser", "wasi", "wasmedge"],
   "methods": [

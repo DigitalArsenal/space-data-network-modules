@@ -6,7 +6,7 @@
     {
       "nodeId": "conjunction",
       "pluginId": "conjunction-assessment",
-      "methodId": "invoke",
+      "methodId": "screen_catalog",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
     }
@@ -28,6 +28,6 @@
       "queueDepth": 16
     }
   ],
-  "requiredPlugins": ["conjunction-assessment"],
+  "requiredPlugins": ["conjunction-assessment", "com.orbpro.sgp4"],
   "description": "Minimal sdn-flow example invoking the conjunction assessment plugin through the canonical command bridge."
 }

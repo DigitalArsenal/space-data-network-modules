@@ -40,6 +40,7 @@ namespace {
 
 constexpr size_t MAX_PAIRWISE_PRIMARY_SCAN_COUNT = 64;
 constexpr size_t MAX_PAIRWISE_CANDIDATE_SCAN_COUNT = 250000;
+constexpr size_t MIN_EXPLICIT_PAIRS_FOR_KDTREE = 8192;
 
 double evaluate_chebyshev_coefficients(
     const std::vector<double>& coefficients,
@@ -984,7 +985,12 @@ ScreeningThreadWork process_time_steps(
 
         const double coarse_threshold = config.threshold_km * 200.0;
 
-        if (config.use_kdtree && secondary_points.size() > 50) {
+        const bool use_kdtree_for_explicit_pairs =
+            config.use_kdtree &&
+            secondary_points.size() > 50 &&
+            valid_pairs.size() > MIN_EXPLICIT_PAIRS_FOR_KDTREE;
+
+        if (use_kdtree_for_explicit_pairs) {
             KDTree tree;
             tree.build(secondary_points);
             std::vector<uint32_t> neighbor_indexes;
