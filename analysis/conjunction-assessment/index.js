@@ -2,7 +2,6 @@ import {
   decodePlgManifest,
   isPlgManifestBuffer,
 } from "space-data-module-sdk/manifest";
-import { loadModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
 
 export const pluginManifestPath = new URL(
@@ -152,8 +151,19 @@ function bindConjunctionAssessmentApi(harness, manifest, manifestSource) {
   });
 }
 
+async function loadIsomorphicModuleLoader() {
+  const namespace = await import("space-data-module-sdk/host/isomorphic");
+  if (typeof namespace.loadModule !== "function") {
+    throw new Error(
+      "space-data-module-sdk/host/isomorphic did not export loadModule.",
+    );
+  }
+  return namespace.loadModule;
+}
+
 export async function loadConjunctionAssessmentPlugin(options = {}) {
   if (options.runtimeKind === "wasmedge" || options.wasmEdgeRunnerBinary) {
+    const loadModule = await loadIsomorphicModuleLoader();
     const harness = await loadModule({
       wasmSource: await resolveConjunctionWasmPath(options),
       runtimeKind: "wasmedge",
