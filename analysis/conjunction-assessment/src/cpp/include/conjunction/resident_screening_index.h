@@ -5,6 +5,8 @@
 #include "conjunction/generated/ConjunctionCommon_generated.h"
 #include "conjunction/screening.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -19,18 +21,20 @@ struct PropagatorSampleTrajectoryStatesResult;
 
 namespace conjunction {
 
+static constexpr size_t RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT = 13;
+
 struct ResidentTrajectorySegment {
     uint32_t source_handle = 0;
     double start_jd = 0.0;
     double end_jd = 0.0;
     uint32_t degree = 0;
     uint8_t reference_frame = 0;
-    std::vector<double> x_coefficients;
-    std::vector<double> y_coefficients;
-    std::vector<double> z_coefficients;
-    std::vector<double> vx_coefficients;
-    std::vector<double> vy_coefficients;
-    std::vector<double> vz_coefficients;
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT> x_coefficients = {};
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT> y_coefficients = {};
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT> z_coefficients = {};
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT> vx_coefficients = {};
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT> vy_coefficients = {};
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT> vz_coefficients = {};
     double max_position_error_km = 0.0;
     double max_velocity_error_km_s = 0.0;
 };

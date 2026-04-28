@@ -80,7 +80,7 @@ void test_oem_source() {
         points.push_back({jd, sv.x, sv.y, sv.z, sv.vx, sv.vy, sv.vz});
     }
 
-    OEMEphemerisSource oem_src(points, "ISS-OEM", 25544);
+    OEMEphemerisSource oem_src(points, "ISS-OEM", "25544");
 
     // Check interpolation at a point between samples (30.5 minutes)
     double test_jd = epoch + 30.5 * 60.0 / 86400.0;
@@ -332,7 +332,7 @@ void test_mixed_sources() {
         auto sv = propagate_sgp4(tle2, jd);
         points.push_back({jd, sv.x, sv.y, sv.z, sv.vx, sv.vy, sv.vz});
     }
-    OEMEphemerisSource oem_src(points, "DEBRIS-OEM", 99999);
+    OEMEphemerisSource oem_src(points, "DEBRIS-OEM", "99999");
 
     ConjunctionEngine engine;
     engine.set_pc_method("foster");

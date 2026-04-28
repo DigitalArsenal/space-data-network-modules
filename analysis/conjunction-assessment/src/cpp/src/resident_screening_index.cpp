@@ -76,53 +76,10 @@ GPElement decode_source_description(
     return gp;
 }
 
-ResidentTrajectorySegment decode_trajectory_segment(
-    const orbpro::propagator::PropagatorTrajectorySegment& segment) {
-    ResidentTrajectorySegment decoded;
-    decoded.source_handle = segment.sourceHandle();
-    decoded.start_jd = segment.startJd();
-    decoded.end_jd = segment.endJd();
-    decoded.degree = segment.degree();
-    decoded.reference_frame = static_cast<uint8_t>(segment.referenceFrame());
-    if (segment.xCoefficients() != nullptr) {
-        decoded.x_coefficients.assign(
-            segment.xCoefficients()->begin(),
-            segment.xCoefficients()->end());
-    }
-    if (segment.yCoefficients() != nullptr) {
-        decoded.y_coefficients.assign(
-            segment.yCoefficients()->begin(),
-            segment.yCoefficients()->end());
-    }
-    if (segment.zCoefficients() != nullptr) {
-        decoded.z_coefficients.assign(
-            segment.zCoefficients()->begin(),
-            segment.zCoefficients()->end());
-    }
-    if (segment.vxCoefficients() != nullptr) {
-        decoded.vx_coefficients.assign(
-            segment.vxCoefficients()->begin(),
-            segment.vxCoefficients()->end());
-    }
-    if (segment.vyCoefficients() != nullptr) {
-        decoded.vy_coefficients.assign(
-            segment.vyCoefficients()->begin(),
-            segment.vyCoefficients()->end());
-    }
-    if (segment.vzCoefficients() != nullptr) {
-        decoded.vz_coefficients.assign(
-            segment.vzCoefficients()->begin(),
-            segment.vzCoefficients()->end());
-    }
-    decoded.max_position_error_km = segment.maxPositionErrorKm();
-    decoded.max_velocity_error_km_s = segment.maxVelocityErrorKmS();
-    return decoded;
-}
-
 void chebyshev_fit(
     const std::array<double, CHEBY_NPTS>& values,
-    std::vector<double>& coefficients_out) {
-    coefficients_out.assign(CHEBY_NPTS, 0.0);
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT>& coefficients_out) {
+    coefficients_out.fill(0.0);
     for (int j = 0; j <= CHEBY_N; j++) {
         double sum = 0.0;
         for (int k = 0; k <= CHEBY_N; k++) {
@@ -137,6 +94,40 @@ void chebyshev_fit(
     }
     coefficients_out[0] *= 0.5;
     coefficients_out[CHEBY_N] *= 0.5;
+}
+
+void copy_coefficients(
+    const flatbuffers::Vector<double>* values,
+    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT>& coefficients_out) {
+    coefficients_out.fill(0.0);
+    if (values == nullptr) {
+        return;
+    }
+    const size_t count = std::min(
+        static_cast<size_t>(values->size()),
+        RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT);
+    for (size_t index = 0; index < count; index++) {
+        coefficients_out[index] = values->Get(index);
+    }
+}
+
+ResidentTrajectorySegment decode_trajectory_segment(
+    const orbpro::propagator::PropagatorTrajectorySegment& segment) {
+    ResidentTrajectorySegment decoded;
+    decoded.source_handle = segment.sourceHandle();
+    decoded.start_jd = segment.startJd();
+    decoded.end_jd = segment.endJd();
+    decoded.degree = segment.degree();
+    decoded.reference_frame = static_cast<uint8_t>(segment.referenceFrame());
+    copy_coefficients(segment.xCoefficients(), decoded.x_coefficients);
+    copy_coefficients(segment.yCoefficients(), decoded.y_coefficients);
+    copy_coefficients(segment.zCoefficients(), decoded.z_coefficients);
+    copy_coefficients(segment.vxCoefficients(), decoded.vx_coefficients);
+    copy_coefficients(segment.vyCoefficients(), decoded.vy_coefficients);
+    copy_coefficients(segment.vzCoefficients(), decoded.vz_coefficients);
+    decoded.max_position_error_km = segment.maxPositionErrorKm();
+    decoded.max_velocity_error_km_s = segment.maxVelocityErrorKmS();
+    return decoded;
 }
 
 ResidentTrajectorySegment build_sampled_resident_segment(
@@ -524,12 +515,9 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
         index.source_handles.push_back(source->sourceHandle());
         index.perigee_km.push_back(static_cast<float>(gp.perigee_km));
         index.apogee_km.push_back(static_cast<float>(gp.apogee_km));
-        const double speed_bound_km_s = compute_conservative_speed_bound_km_s(gp);
-        index.max_speed_km_s.push_back(static_cast<float>(speed_bound_km_s));
+        index.max_speed_km_s.push_back(0.0f);
         index.tles.push_back(gp_to_tle(gp));
-        conservative_motion_margin_km.push_back(
-            static_cast<float>(
-                speed_bound_km_s * max_half_sample_gap_sec));
+        conservative_motion_margin_km.push_back(0.0f);
         source_handle_to_index[source->sourceHandle()] =
             static_cast<uint32_t>(index.tles.size() - 1);
     }
@@ -579,6 +567,15 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
                     *sample_states->Get(
                         base_index + segment_sample_offset + sample_index);
                 const auto& sample_state = source_samples[sample_index];
+                const double sample_speed_km_s = std::sqrt(
+                    sample_state.velocity().x() * sample_state.velocity().x() +
+                    sample_state.velocity().y() * sample_state.velocity().y() +
+                    sample_state.velocity().z() * sample_state.velocity().z());
+                if (std::isfinite(sample_speed_km_s)) {
+                    index.max_speed_km_s[found->second] = std::max(
+                        index.max_speed_km_s[found->second],
+                        static_cast<float>(sample_speed_km_s));
+                }
                 index.sample_min_x_km[found->second] = std::min(
                     index.sample_min_x_km[found->second],
                     static_cast<float>(sample_state.position().x()));
@@ -606,6 +603,13 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
                     samples->referenceFrame(),
                     source_samples));
         }
+    }
+    for (size_t object_index = 0; object_index < index.max_speed_km_s.size();
+         object_index++) {
+        index.sample_motion_margin_km[object_index] =
+            static_cast<float>(
+                static_cast<double>(index.max_speed_km_s[object_index]) *
+                max_half_sample_gap_sec);
     }
 
     const uint32_t n = static_cast<uint32_t>(index.tles.size());

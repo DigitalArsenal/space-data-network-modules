@@ -4,14 +4,44 @@ project(conjunction_assessment_sdn_plugin LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(CONJUNCTION_ENABLE_PTHREADS "Enable browser WebAssembly pthreads" OFF)
+
 if(EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -fwasm-exceptions -DNDEBUG -DCONJUNCTION_SINGLE_THREAD")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -fwasm-exceptions -DNDEBUG")
+    if(CONJUNCTION_ENABLE_PTHREADS)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pthread")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCONJUNCTION_SINGLE_THREAD")
+    endif()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto -fwasm-exceptions")
 elseif(WASI_SDK)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG -DCONJUNCTION_SINGLE_THREAD")
 else()
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto -ffast-math -march=native -mtune=native")
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+
+if(EMSCRIPTEN AND CONJUNCTION_ENABLE_PTHREADS)
+    set(CONJUNCTION_BROWSER_LINK_FLAGS "\
+            -s USE_PTHREADS=1 \
+            -s PTHREAD_POOL_SIZE=8 \
+            -s EXPORT_ES6=1 \
+            -s ENVIRONMENT='web,worker' \
+            -s INITIAL_MEMORY=1610612736 \
+            -s ABORTING_MALLOC=0 \
+            -s STACK_SIZE=2097152 \
+            -s MALLOC='emmalloc' \
+            -s FILESYSTEM=0 \
+        ")
+else()
+    set(CONJUNCTION_BROWSER_LINK_FLAGS "\
+            -s STANDALONE_WASM=1 \
+            -s INITIAL_MEMORY=67108864 \
+            -s STACK_SIZE=2097152 \
+            -s MALLOC='emmalloc' \
+            -s FILESYSTEM=0 \
+        ")
 endif()
 
 find_path(
@@ -144,15 +174,11 @@ if(EMSCRIPTEN)
         SUFFIX ".js"
         LINK_FLAGS "\
             -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
-            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
+            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\",\"HEAPU8\"]' \
             -s MODULARIZE=1 \
             -s EXPORT_NAME='ConjunctionAssessmentModule' \
-            -s STANDALONE_WASM=1 \
             -Wl,--export=__wasm_call_ctors \
-            -s INITIAL_MEMORY=67108864 \
-            -s STACK_SIZE=2097152 \
-            -s MALLOC='emmalloc' \
-            -s FILESYSTEM=0 \
+            ${CONJUNCTION_BROWSER_LINK_FLAGS} \
         "
     )
 

@@ -4,7 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EMSDK_DIR="${SDN_LOCAL_EMSDK_DIR:-$SCRIPT_DIR/deps/emsdk}"
 SRC_DIR="$SCRIPT_DIR/src/cpp"
-EMSCRIPTEN_BUILD_DIR="$SRC_DIR/build-wasm"
+BROWSER_BUILD_DIR="$SRC_DIR/build-browser"
+ISOMORPHIC_BUILD_DIR="$SRC_DIR/build-isomorphic"
 DIST_DIR="$SCRIPT_DIR/dist"
 BROWSER_DIST_DIR="$DIST_DIR/browser"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
@@ -61,20 +62,39 @@ ensure_emscripten
 
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
 
-rm -rf "$EMSCRIPTEN_BUILD_DIR"
+rm -rf "$BROWSER_BUILD_DIR" "$ISOMORPHIC_BUILD_DIR"
 rm -rf "$DIST_DIR"
 mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
 
-echo "Configuring Emscripten build..."
-emcmake cmake -S "$SRC_DIR" -B "$EMSCRIPTEN_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+echo "Configuring Emscripten browser pthread build..."
+emcmake cmake \
+    -S "$SRC_DIR" \
+    -B "$BROWSER_BUILD_DIR" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCONJUNCTION_ENABLE_PTHREADS=ON
 
 echo ""
 echo "Building browser adapter..."
-cmake --build "$EMSCRIPTEN_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
+cmake --build "$BROWSER_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
-cp "$EMSCRIPTEN_BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
-cp "$EMSCRIPTEN_BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
-cp "$EMSCRIPTEN_BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+cp "$BROWSER_BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
+cp "$BROWSER_BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
+find "$BROWSER_BUILD_DIR" -maxdepth 1 -name "${BROWSER_TARGET}*.worker.js" \
+    -exec cp {} "$BROWSER_DIST_DIR/" \;
+
+echo ""
+echo "Configuring Emscripten standalone SDK build..."
+emcmake cmake \
+    -S "$SRC_DIR" \
+    -B "$ISOMORPHIC_BUILD_DIR" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCONJUNCTION_ENABLE_PTHREADS=OFF
+
+echo ""
+echo "Building standalone SDK artifact..."
+cmake --build "$ISOMORPHIC_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
+
+cp "$ISOMORPHIC_BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
 
 echo ""
 echo "=== Build Complete ==="

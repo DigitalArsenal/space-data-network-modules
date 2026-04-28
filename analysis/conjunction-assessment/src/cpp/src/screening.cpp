@@ -24,8 +24,10 @@
 #endif
 #include <chrono>
 #include <cmath>
+#include <exception>
 #include <cstdio>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 #include <algorithm>
 #include <numeric>
@@ -41,17 +43,22 @@ namespace {
 constexpr size_t MAX_PAIRWISE_PRIMARY_SCAN_COUNT = 64;
 constexpr size_t MAX_PAIRWISE_CANDIDATE_SCAN_COUNT = 250000;
 constexpr size_t MIN_EXPLICIT_PAIRS_FOR_KDTREE = 8192;
+constexpr double MAX_RESIDENT_SPEED_BOUND_KM_S = 16.0;
 
 double evaluate_chebyshev_coefficients(
-    const std::vector<double>& coefficients,
+    const std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT>& coefficients,
+    uint32_t degree,
     double tau)
 {
-    if (coefficients.empty()) {
+    const size_t coefficient_count = std::min(
+        static_cast<size_t>(degree) + 1,
+        coefficients.size());
+    if (coefficient_count == 0) {
         return 0.0;
     }
     double b_k_plus_one = 0.0;
     double b_k_plus_two = 0.0;
-    for (int i = static_cast<int>(coefficients.size()) - 1; i >= 1; i--) {
+    for (int i = static_cast<int>(coefficient_count) - 1; i >= 1; i--) {
         const double b_k = 2.0 * tau * b_k_plus_one - b_k_plus_two + coefficients[static_cast<size_t>(i)];
         b_k_plus_two = b_k_plus_one;
         b_k_plus_one = b_k;
@@ -118,12 +125,12 @@ bool evaluate_resident_polynomial_state(
     const double tau = half_span > 0.0 ? (jd - mid) / half_span : 0.0;
 
     state_out.epoch_jd = jd;
-    state_out.x = evaluate_chebyshev_coefficients(segment->x_coefficients, tau);
-    state_out.y = evaluate_chebyshev_coefficients(segment->y_coefficients, tau);
-    state_out.z = evaluate_chebyshev_coefficients(segment->z_coefficients, tau);
-    state_out.vx = evaluate_chebyshev_coefficients(segment->vx_coefficients, tau);
-    state_out.vy = evaluate_chebyshev_coefficients(segment->vy_coefficients, tau);
-    state_out.vz = evaluate_chebyshev_coefficients(segment->vz_coefficients, tau);
+    state_out.x = evaluate_chebyshev_coefficients(segment->x_coefficients, segment->degree, tau);
+    state_out.y = evaluate_chebyshev_coefficients(segment->y_coefficients, segment->degree, tau);
+    state_out.z = evaluate_chebyshev_coefficients(segment->z_coefficients, segment->degree, tau);
+    state_out.vx = evaluate_chebyshev_coefficients(segment->vx_coefficients, segment->degree, tau);
+    state_out.vy = evaluate_chebyshev_coefficients(segment->vy_coefficients, segment->degree, tau);
+    state_out.vz = evaluate_chebyshev_coefficients(segment->vz_coefficients, segment->degree, tau);
     return true;
 }
 
@@ -182,7 +189,9 @@ double resident_object_speed_bound_km_s(
     }
     return std::max(
         0.0,
-        static_cast<double>(resident_index->max_speed_km_s[object_index]));
+        std::min(
+            static_cast<double>(resident_index->max_speed_km_s[object_index]),
+            MAX_RESIDENT_SPEED_BOUND_KM_S));
 }
 
 double conservative_pair_coarse_radius_km(
@@ -244,12 +253,12 @@ bool evaluate_resident_polynomial_state(
     const double tau = half_span > 0.0 ? (jd - mid) / half_span : 0.0;
 
     state_out.epoch_jd = jd;
-    state_out.x = evaluate_chebyshev_coefficients(segment->x_coefficients, tau);
-    state_out.y = evaluate_chebyshev_coefficients(segment->y_coefficients, tau);
-    state_out.z = evaluate_chebyshev_coefficients(segment->z_coefficients, tau);
-    state_out.vx = evaluate_chebyshev_coefficients(segment->vx_coefficients, tau);
-    state_out.vy = evaluate_chebyshev_coefficients(segment->vy_coefficients, tau);
-    state_out.vz = evaluate_chebyshev_coefficients(segment->vz_coefficients, tau);
+    state_out.x = evaluate_chebyshev_coefficients(segment->x_coefficients, segment->degree, tau);
+    state_out.y = evaluate_chebyshev_coefficients(segment->y_coefficients, segment->degree, tau);
+    state_out.z = evaluate_chebyshev_coefficients(segment->z_coefficients, segment->degree, tau);
+    state_out.vx = evaluate_chebyshev_coefficients(segment->vx_coefficients, segment->degree, tau);
+    state_out.vy = evaluate_chebyshev_coefficients(segment->vy_coefficients, segment->degree, tau);
+    state_out.vz = evaluate_chebyshev_coefficients(segment->vz_coefficients, segment->degree, tau);
     return true;
 }
 
@@ -712,12 +721,10 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
 
 namespace {
 
-// Maximum coarse steps processed in a single threaded window.
-// When Emscripten pthreads are used, each chunk creates and joins threads.
-// Between chunks the JS event loop never runs, so pthread workers are not
-// returned to the pool — every chunk allocates NEW Web Workers.  Keep this
-// large enough that a single JS-level time segment (typically 1 hour at
-// 10-sec steps = 360 steps) fits comfortably in one chunk.
+// Maximum coarse steps processed in a single threaded window. Keep browser
+// pthread screening in one native window where possible; repeated native chunks
+// can exhaust Emscripten's pthread worker pool before the JS event loop recycles
+// workers.
 constexpr int MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK = 10000;
 
 void reset_implicit_stats(ScreeningStats& stats) {
@@ -1476,10 +1483,12 @@ ScreeningThreadWork process_time_steps_implicit(
         for (uint32_t obj_id : active_ids) {
             try {
                 StateVector state = {};
-                bool has_polynomial_state =
+                const bool requires_resident_polynomial =
                     resident_index != nullptr &&
                     resident_index->screening_mode !=
-                        orbpro::conjunction::ConjunctionScreeningMode::exact_only &&
+                        orbpro::conjunction::ConjunctionScreeningMode::exact_only;
+                bool has_polynomial_state =
+                    requires_resident_polynomial &&
                     evaluate_resident_polynomial_state(
                         *resident_index,
                         obj_id,
@@ -1487,6 +1496,9 @@ ScreeningThreadWork process_time_steps_implicit(
                         segment_cursors[obj_id],
                         state);
                 if (!has_polynomial_state) {
+                    if (requires_resident_polynomial) {
+                        continue;
+                    }
                     state = propagate_sgp4(tles[obj_id], jd);
                     work.propagations++;
                 }
@@ -1687,7 +1699,7 @@ ScreeningThreadWork process_time_steps_implicit(
 }
 
 struct ImplicitCoarseHitWindowResult {
-    std::map<uint64_t, CoarseHitRecord> coarse_hits;
+    std::unordered_map<uint64_t, CoarseHitRecord> coarse_hits;
     ScreeningStats stats;
 };
 
@@ -1868,6 +1880,11 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         1, static_cast<int>(std::ceil(config.duration_days / interval_days)));
 
     auto merge_thread_results = [&]() {
+        size_t incoming_hits = 0;
+        for (const auto& tw : thread_results) {
+            incoming_hits += tw.coarse_hits.size();
+        }
+        result.coarse_hits.reserve(result.coarse_hits.size() + incoming_hits);
         for (const auto& tw : thread_results) {
             stats.propagations += tw.propagations;
             for (const auto& hit : tw.coarse_hits) {
@@ -1902,14 +1919,29 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     if (num_batches <= 1) {
         // Single batch — simple create/join, no barriers needed.
         std::vector<std::thread> threads;
+        std::exception_ptr thread_exception = nullptr;
+        std::mutex thread_exception_mutex;
+        auto capture_thread_exception = [&]() {
+            std::lock_guard<std::mutex> lock(thread_exception_mutex);
+            if (thread_exception == nullptr) {
+                thread_exception = std::current_exception();
+            }
+        };
         for (int t = 0; t < num_threads; t++) {
             threads.emplace_back([&, t]() {
-                thread_results[t] = process_time_steps_implicit(
-                    config, tles, perigee_km, apogee_km, is_primary, participates,
-                    start_jd, end_jd, config.coarse_step_sec, t, num_threads, resident_index);
+                try {
+                    thread_results[t] = process_time_steps_implicit(
+                        config, tles, perigee_km, apogee_km, is_primary, participates,
+                        start_jd, end_jd, config.coarse_step_sec, t, num_threads, resident_index);
+                } catch (...) {
+                    capture_thread_exception();
+                }
             });
         }
         for (auto& t : threads) t.join();
+        if (thread_exception != nullptr) {
+            std::rethrow_exception(thread_exception);
+        }
         merge_thread_results();
         if (progress) progress(0.7, "Screening complete...");
     } else {

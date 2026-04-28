@@ -1,5 +1,6 @@
 node_modules/
 src/cpp/build/
+src/cpp/build-browser/
 src/cpp/build-isomorphic/
 src/cpp/build-wasm/
 src/cpp/build-wasi/

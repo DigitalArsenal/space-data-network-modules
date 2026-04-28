@@ -1,10 +1,13 @@
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <thread>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1006,44 +1009,37 @@ static conjunction::ScreeningConfig DecodeScreeningConfig(
   return config;
 }
 
-static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
+static void ScreenEphemerisSourceRange(
   const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &primaries,
   const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &secondaries,
   const conjunction::ScreeningConfig &config,
-  conjunction::ScreeningStats *stats_out
+  std::atomic<size_t> *next_primary_index,
+  std::vector<conjunction::ConjunctionEvent2> *events_out,
+  uint64_t *pairs_screened_out
 ) {
   conjunction::ConjunctionEngine engine;
-  std::vector<conjunction::ConjunctionEvent2> events;
+  std::vector<conjunction::ConjunctionEvent2> local_events;
+  uint64_t local_pairs_screened = 0u;
 
-  uint64_t pairs_screened = 0u;
-  if (secondaries.empty()) {
-    for (size_t left = 0u; left < primaries.size(); left += 1u) {
-      for (size_t right = left + 1u; right < primaries.size(); right += 1u) {
-        pairs_screened += 1u;
-        try {
-          const auto event = engine.assess(
-            *primaries[left],
-            *primaries[right],
-            config.start_jd,
-            config.duration_days
-          );
-          if (event.miss_distance_km <= config.threshold_km) {
-            events.push_back(event);
-          }
-        } catch (...) {
-        }
-      }
+  while (true) {
+    const size_t primary_index = next_primary_index->fetch_add(1u, std::memory_order_relaxed);
+    if (primary_index >= primaries.size()) {
+      break;
     }
-  } else {
-    for (const auto &primary : primaries) {
-      for (const auto &secondary : secondaries) {
-        if (!primary || !secondary) {
+    const auto &primary = primaries[primary_index];
+    if (!primary) {
+      continue;
+    }
+
+    if (secondaries.empty()) {
+      for (size_t secondary_index = primary_index + 1u;
+           secondary_index < primaries.size();
+           secondary_index += 1u) {
+        const auto &secondary = primaries[secondary_index];
+        if (!secondary) {
           continue;
         }
-        if (primary->norad_id() != 0 && primary->norad_id() == secondary->norad_id()) {
-          continue;
-        }
-        pairs_screened += 1u;
+        local_pairs_screened += 1u;
         try {
           const auto event = engine.assess(
             *primary,
@@ -1052,11 +1048,114 @@ static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
             config.duration_days
           );
           if (event.miss_distance_km <= config.threshold_km) {
-            events.push_back(event);
+            local_events.push_back(event);
           }
         } catch (...) {
         }
       }
+    } else {
+      for (const auto &secondary : secondaries) {
+        if (!secondary) {
+          continue;
+        }
+        if (primary->norad_id() != 0 && primary->norad_id() == secondary->norad_id()) {
+          continue;
+        }
+        local_pairs_screened += 1u;
+        try {
+          const auto event = engine.assess(
+            *primary,
+            *secondary,
+            config.start_jd,
+            config.duration_days
+          );
+          if (event.miss_distance_km <= config.threshold_km) {
+            local_events.push_back(event);
+          }
+        } catch (...) {
+        }
+      }
+    }
+  }
+
+  if (events_out) {
+    *events_out = std::move(local_events);
+  }
+  if (pairs_screened_out) {
+    *pairs_screened_out = local_pairs_screened;
+  }
+}
+
+static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
+  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &primaries,
+  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &secondaries,
+  const conjunction::ScreeningConfig &config,
+  conjunction::ScreeningStats *stats_out
+) {
+  const auto start_time = std::chrono::high_resolution_clock::now();
+  std::vector<conjunction::ConjunctionEvent2> events;
+  uint64_t pairs_screened = 0u;
+
+  const size_t schedulable_primary_count = primaries.size();
+  if (schedulable_primary_count > 0u) {
+    const int requested_threads = std::max(1, config.num_threads);
+    const int worker_count =
+#ifdef CONJUNCTION_SINGLE_THREAD
+      1;
+#else
+      std::max(
+        1,
+        std::min(
+          requested_threads,
+          static_cast<int>(schedulable_primary_count)
+        )
+      );
+#endif
+    std::atomic<size_t> next_primary_index{0u};
+    std::vector<std::vector<conjunction::ConjunctionEvent2>> thread_events(worker_count);
+    std::vector<uint64_t> thread_pair_counts(worker_count, 0u);
+
+#ifdef CONJUNCTION_SINGLE_THREAD
+    ScreenEphemerisSourceRange(
+      primaries,
+      secondaries,
+      config,
+      &next_primary_index,
+      &thread_events[0],
+      &thread_pair_counts[0]
+    );
+#else
+    std::vector<std::thread> threads;
+    threads.reserve(static_cast<size_t>(worker_count));
+    for (int worker_index = 0; worker_index < worker_count; worker_index += 1) {
+      threads.emplace_back([&, worker_index]() {
+        ScreenEphemerisSourceRange(
+          primaries,
+          secondaries,
+          config,
+          &next_primary_index,
+          &thread_events[worker_index],
+          &thread_pair_counts[worker_index]
+        );
+      });
+    }
+    for (auto &thread : threads) {
+      thread.join();
+    }
+#endif
+
+    size_t event_count = 0u;
+    for (int worker_index = 0; worker_index < worker_count; worker_index += 1) {
+      pairs_screened += thread_pair_counts[worker_index];
+      event_count += thread_events[worker_index].size();
+    }
+    events.reserve(event_count);
+    for (auto &worker_events : thread_events) {
+      events.insert(
+        events.end(),
+        std::make_move_iterator(worker_events.begin()),
+        std::make_move_iterator(worker_events.end())
+      );
     }
   }
 
@@ -1070,6 +1169,7 @@ static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
   );
 
   if (stats_out) {
+    const auto end_time = std::chrono::high_resolution_clock::now();
     stats_out->total_objects = primaries.size() + secondaries.size();
     stats_out->pairs_screened = pairs_screened;
     stats_out->pairs_prefiltered = 0u;
@@ -1077,7 +1177,8 @@ static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
     stats_out->tca_refined = pairs_screened;
     stats_out->conjunctions_found = events.size();
     stats_out->propagations = 0u;
-    stats_out->elapsed_ms = 0.0;
+    stats_out->elapsed_ms =
+      std::chrono::duration<double, std::milli>(end_time - start_time).count();
   }
 
   return events;
