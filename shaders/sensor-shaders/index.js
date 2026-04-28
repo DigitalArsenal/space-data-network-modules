@@ -6,7 +6,10 @@ import {
   decodePluginInvokeResponse,
   encodePluginInvokeRequest,
 } from "space-data-module-sdk/invoke";
-import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  decodePlgManifest,
+  isPlgManifestBuffer,
+} from "space-data-module-sdk/manifest";
 import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
 
 export const pluginManifestPath = new URL("./plugin-manifest.json", import.meta.url);
@@ -16,6 +19,18 @@ export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", impor
 
 const EXPECTED_MANIFEST_SOURCE = "embedded-flatbuffer";
 const textEncoder = new TextEncoder();
+
+function decodeEmbeddedManifest(bytes) {
+  if (!bytes) {
+    return null;
+  }
+  if (!isPlgManifestBuffer(bytes)) {
+    throw new Error(
+      "Sensor Shaders wasm did not expose a canonical $PLG manifest buffer.",
+    );
+  }
+  return decodePlgManifest(bytes);
+}
 
 function toUint8Array(value) {
   if (value instanceof Uint8Array) {
@@ -299,9 +314,7 @@ export async function loadSensorShaders(options = {}) {
   });
 
   const embeddedManifestBytes = harness.readManifest();
-  const embeddedManifest = embeddedManifestBytes
-    ? decodePluginManifest(embeddedManifestBytes)
-    : null;
+  const embeddedManifest = decodeEmbeddedManifest(embeddedManifestBytes);
   if (options.requireEmbeddedManifest === true && !embeddedManifest) {
     harness.destroy();
     throw new Error(

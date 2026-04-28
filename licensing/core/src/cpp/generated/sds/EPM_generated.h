@@ -59,6 +59,36 @@ inline const char *EnumNameKeyType(KeyType e) {
   return EnumNamesKeyType()[index];
 }
 
+enum class EntityType : int8_t {
+  User = 0,
+  Node = 1,
+  MIN = User,
+  MAX = Node
+};
+
+inline const EntityType (&EnumValuesEntityType())[2] {
+  static const EntityType values[] = {
+    EntityType::User,
+    EntityType::Node
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesEntityType() {
+  static const char * const names[3] = {
+    "User",
+    "Node",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameEntityType(EntityType e) {
+  if (::flatbuffers::IsOutRange(e, EntityType::User, EntityType::Node)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesEntityType()[index];
+}
+
 struct CryptoKeyT : public ::flatbuffers::NativeTable {
   typedef CryptoKey TableType;
   std::string PUBLIC_KEY{};
@@ -578,6 +608,7 @@ struct EPMT : public ::flatbuffers::NativeTable {
   std::string SIGNATURE{};
   int64_t SIGNATURE_TIMESTAMP = 0;
   std::vector<std::unique_ptr<ChainProofT>> CHAIN_PROOFS{};
+  EntityType ENTITY_TYPE = EntityType::User;
   EPMT() = default;
   EPMT(const EPMT &o);
   EPMT(EPMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -607,7 +638,8 @@ struct EPM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_MULTIFORMAT_ADDRESS = 32,
     VT_SIGNATURE = 34,
     VT_SIGNATURE_TIMESTAMP = 36,
-    VT_CHAIN_PROOFS = 38
+    VT_CHAIN_PROOFS = 38,
+    VT_ENTITY_TYPE = 40
   };
   /// Distinguished Name of the entity
   const ::flatbuffers::String *DN() const {
@@ -681,6 +713,10 @@ struct EPM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<ChainProof>> *CHAIN_PROOFS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ChainProof>> *>(VT_CHAIN_PROOFS);
   }
+  /// Type of entity represented by this profile
+  EntityType ENTITY_TYPE() const {
+    return static_cast<EntityType>(GetField<int8_t>(VT_ENTITY_TYPE, 0));
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -723,6 +759,7 @@ struct EPM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_CHAIN_PROOFS) &&
            verifier.VerifyVector(CHAIN_PROOFS()) &&
            verifier.VerifyVectorOfTables(CHAIN_PROOFS()) &&
+           VerifyField<int8_t>(verifier, VT_ENTITY_TYPE, 1) &&
            verifier.EndTable();
   }
   EPMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -788,6 +825,9 @@ struct EPMBuilder {
   void add_CHAIN_PROOFS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ChainProof>>> CHAIN_PROOFS) {
     fbb_.AddOffset(EPM::VT_CHAIN_PROOFS, CHAIN_PROOFS);
   }
+  void add_ENTITY_TYPE(EntityType ENTITY_TYPE) {
+    fbb_.AddElement<int8_t>(EPM::VT_ENTITY_TYPE, static_cast<int8_t>(ENTITY_TYPE), 0);
+  }
   explicit EPMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -818,7 +858,8 @@ inline ::flatbuffers::Offset<EPM> CreateEPM(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> MULTIFORMAT_ADDRESS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SIGNATURE = 0,
     int64_t SIGNATURE_TIMESTAMP = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ChainProof>>> CHAIN_PROOFS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ChainProof>>> CHAIN_PROOFS = 0,
+    EntityType ENTITY_TYPE = EntityType::User) {
   EPMBuilder builder_(_fbb);
   builder_.add_SIGNATURE_TIMESTAMP(SIGNATURE_TIMESTAMP);
   builder_.add_CHAIN_PROOFS(CHAIN_PROOFS);
@@ -838,6 +879,7 @@ inline ::flatbuffers::Offset<EPM> CreateEPM(
   builder_.add_FAMILY_NAME(FAMILY_NAME);
   builder_.add_LEGAL_NAME(LEGAL_NAME);
   builder_.add_DN(DN);
+  builder_.add_ENTITY_TYPE(ENTITY_TYPE);
   return builder_.Finish();
 }
 
@@ -865,7 +907,8 @@ inline ::flatbuffers::Offset<EPM> CreateEPMDirect(
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *MULTIFORMAT_ADDRESS = nullptr,
     const char *SIGNATURE = nullptr,
     int64_t SIGNATURE_TIMESTAMP = 0,
-    const std::vector<::flatbuffers::Offset<ChainProof>> *CHAIN_PROOFS = nullptr) {
+    const std::vector<::flatbuffers::Offset<ChainProof>> *CHAIN_PROOFS = nullptr,
+    EntityType ENTITY_TYPE = EntityType::User) {
   auto DN__ = DN ? _fbb.CreateString(DN) : 0;
   auto LEGAL_NAME__ = LEGAL_NAME ? _fbb.CreateString(LEGAL_NAME) : 0;
   auto FAMILY_NAME__ = FAMILY_NAME ? _fbb.CreateString(FAMILY_NAME) : 0;
@@ -901,7 +944,8 @@ inline ::flatbuffers::Offset<EPM> CreateEPMDirect(
       MULTIFORMAT_ADDRESS__,
       SIGNATURE__,
       SIGNATURE_TIMESTAMP,
-      CHAIN_PROOFS__);
+      CHAIN_PROOFS__,
+      ENTITY_TYPE);
 }
 
 ::flatbuffers::Offset<EPM> CreateEPM(::flatbuffers::FlatBufferBuilder &_fbb, const EPMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1054,7 +1098,8 @@ inline EPMT::EPMT(const EPMT &o)
         TELEPHONE(o.TELEPHONE),
         MULTIFORMAT_ADDRESS(o.MULTIFORMAT_ADDRESS),
         SIGNATURE(o.SIGNATURE),
-        SIGNATURE_TIMESTAMP(o.SIGNATURE_TIMESTAMP) {
+        SIGNATURE_TIMESTAMP(o.SIGNATURE_TIMESTAMP),
+        ENTITY_TYPE(o.ENTITY_TYPE) {
   KEYS.reserve(o.KEYS.size());
   for (const auto &KEYS_ : o.KEYS) { KEYS.emplace_back((KEYS_) ? new CryptoKeyT(*KEYS_) : nullptr); }
   CHAIN_PROOFS.reserve(o.CHAIN_PROOFS.size());
@@ -1080,6 +1125,7 @@ inline EPMT &EPMT::operator=(EPMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(SIGNATURE, o.SIGNATURE);
   std::swap(SIGNATURE_TIMESTAMP, o.SIGNATURE_TIMESTAMP);
   std::swap(CHAIN_PROOFS, o.CHAIN_PROOFS);
+  std::swap(ENTITY_TYPE, o.ENTITY_TYPE);
   return *this;
 }
 
@@ -1110,6 +1156,7 @@ inline void EPM::UnPackTo(EPMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = SIGNATURE(); if (_e) _o->SIGNATURE = _e->str(); }
   { auto _e = SIGNATURE_TIMESTAMP(); _o->SIGNATURE_TIMESTAMP = _e; }
   { auto _e = CHAIN_PROOFS(); if (_e) { _o->CHAIN_PROOFS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->CHAIN_PROOFS[_i]) { _e->Get(_i)->UnPackTo(_o->CHAIN_PROOFS[_i].get(), _resolver); } else { _o->CHAIN_PROOFS[_i] = std::unique_ptr<ChainProofT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->CHAIN_PROOFS.resize(0); } }
+  { auto _e = ENTITY_TYPE(); _o->ENTITY_TYPE = _e; }
 }
 
 inline ::flatbuffers::Offset<EPM> CreateEPM(::flatbuffers::FlatBufferBuilder &_fbb, const EPMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1138,6 +1185,7 @@ inline ::flatbuffers::Offset<EPM> EPM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _SIGNATURE = _o->SIGNATURE.empty() ? 0 : _fbb.CreateString(_o->SIGNATURE);
   auto _SIGNATURE_TIMESTAMP = _o->SIGNATURE_TIMESTAMP;
   auto _CHAIN_PROOFS = _o->CHAIN_PROOFS.size() ? _fbb.CreateVector<::flatbuffers::Offset<ChainProof>> (_o->CHAIN_PROOFS.size(), [](size_t i, _VectorArgs *__va) { return CreateChainProof(*__va->__fbb, __va->__o->CHAIN_PROOFS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _ENTITY_TYPE = _o->ENTITY_TYPE;
   return CreateEPM(
       _fbb,
       _DN,
@@ -1157,7 +1205,8 @@ inline ::flatbuffers::Offset<EPM> EPM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _MULTIFORMAT_ADDRESS,
       _SIGNATURE,
       _SIGNATURE_TIMESTAMP,
-      _CHAIN_PROOFS);
+      _CHAIN_PROOFS,
+      _ENTITY_TYPE);
 }
 
 inline const EPM *GetEPM(const void *buf) {

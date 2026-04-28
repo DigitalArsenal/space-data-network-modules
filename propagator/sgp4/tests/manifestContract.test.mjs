@@ -1,5 +1,5 @@
 // Verifies that the SGP4 wasm artifact exposes the SDS PIV invoke surface,
-// OrbPro's direct-call surface, and an embedded PluginManifest whose identity
+// OrbPro's direct-call surface, and an embedded PLG manifest whose identity
 // matches the authored `plugin-manifest.json`. If this test drifts from the
 // manifest the build is wired up incorrectly (manifest bytes baked in by
 // `generate-manifest-header.mjs` didn't match what the plugin reports at
@@ -12,7 +12,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { inspectModule } from "space-data-module-sdk";
-import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  decodePlgManifest,
+  isPlgManifestBuffer,
+} from "space-data-module-sdk/manifest";
 
 import { loadRawSgp4Module } from "./lib/pivInvokeHelper.mjs";
 
@@ -72,8 +75,9 @@ test("SGP4 embedded manifest identity matches plugin-manifest.json", async () =>
     const pointer = module._plugin_get_manifest_flatbuffer();
     assert.ok(pointer > 0, "embedded manifest pointer should be non-zero");
     const bytes = new Uint8Array(module.HEAPU8.slice(pointer, pointer + size));
+    assert.equal(isPlgManifestBuffer(bytes), true);
 
-    const runtimeManifest = decodePluginManifest(bytes);
+    const runtimeManifest = decodePlgManifest(bytes);
     const authoredManifest = JSON.parse(
       await readFile(manifestJsonPath, "utf8"),
     );
@@ -82,9 +86,13 @@ test("SGP4 embedded manifest identity matches plugin-manifest.json", async () =>
     assert.equal(runtimeManifest.pluginId, authoredManifest.pluginId);
     assert.equal(runtimeManifest.name, authoredManifest.name);
     assert.equal(runtimeManifest.version, authoredManifest.version);
+    assert.deepEqual(
+      runtimeManifest.entryFunctions.map((entry) => entry.name),
+      authoredManifest.methods.map((method) => method.methodId),
+    );
 
-    const runtimeMethodIds = runtimeManifest.methods
-      .map((method) => method.methodId)
+    const runtimeMethodIds = runtimeManifest.entryFunctions
+      .map((entry) => entry.name)
       .sort();
     const authoredMethodIds = authoredManifest.methods
       .map((method) => method.methodId)

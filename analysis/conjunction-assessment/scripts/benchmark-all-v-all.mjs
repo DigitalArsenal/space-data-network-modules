@@ -4,6 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createHPOPPropagator } from "@orbpro/integration/hpop";
 import { createSGP4Propagator } from "@orbpro/integration/sgp4";
@@ -23,6 +24,19 @@ import {
   runAllVsAllBenchmark,
   scoreEventsAgainstReference,
 } from "./lib/allVsAllHarness.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(__dirname, "..");
+const LOCAL_AEROSPACE_ARCHIVE_ROOT = path.join(
+  PACKAGE_ROOT,
+  "tests",
+  "data",
+  "aerospace-archives",
+);
+const DEFAULT_AEROSPACE_ARCHIVE_ROOT =
+  process.env.CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT ||
+  process.env.AEROSPACE_IVV_ARCHIVE_ROOT ||
+  LOCAL_AEROSPACE_ARCHIVE_ROOT;
 
 function parseArgs(argv) {
   const options = {};
@@ -104,7 +118,10 @@ async function loadSgp4Scenario(options) {
 async function loadHpopScenario(options) {
   const datasetTarPath =
     options["dataset-tar"] ??
-    "/Users/tj/Documents/Conjunctions/AerospaceIVVDataset_20251009a.tar.gz";
+    path.join(
+      DEFAULT_AEROSPACE_ARCHIVE_ROOT,
+      "AerospaceIVVDataset_20251009a.tar.gz",
+    );
   const objectIds = splitCsvList(options["object-ids"], (item) => item);
   const maxObjects = Number(options["max-objects"] ?? 8);
   const ocmEntries = await listOcmEntries(datasetTarPath, {

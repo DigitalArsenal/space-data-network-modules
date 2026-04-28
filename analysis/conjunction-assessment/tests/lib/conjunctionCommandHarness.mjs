@@ -25,7 +25,7 @@ export async function createConjunctionCommandHarness(options = {}) {
   return loadModule({
     wasmSource: options.wasmSource ?? ISOMORPHIC_WASM_PATH,
     runtimeKind: options.runtimeKind ?? "wasmedge",
-    enableThreads: options.enableThreads ?? false,
+    enableThreads: options.enableThreads ?? true,
     wasmEdgeBinary: options.wasmEdgeBinary,
     wasmEdgeRunnerBinary: options.wasmEdgeRunnerBinary,
     cwd: options.cwd ?? PACKAGE_ROOT,

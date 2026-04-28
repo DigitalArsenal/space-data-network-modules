@@ -103,19 +103,46 @@ Coverage:
 - a public SOCRATES replay harness using vendored CelesTrak GP fixtures
 - an Aerospace V&V replay harness that uses an extracted local dataset path
 
+## Local validation data map
+
+Large validation datasets are deliberately kept outside git. Put them under
+the package-local ignored test-data directory:
+
+- `tests/data/`
+- Detailed layout: `tests/data/README.md`
+
+Place SOCRATES/CelesTrak catalog files directly under `tests/data/`:
+
+- `socrates_current.csv`
+- `socrates_full.csv`
+- `socrates_maxprob.csv`
+- `socrates_minrange_current.csv`
+- `socrates_norad_ids.txt`
+- `socrates_gp/gp_*.json`
+
+Place Aerospace IVV archive files under `tests/data/aerospace-archives/`:
+
+- `aerospace-archives/AerospaceIVVDataset_20251009a.tar.gz`
+- `aerospace-archives/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv.gz`
+- `aerospace-archives/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv.gz`
+- `aerospace-archives/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv.gz`
+- `aerospace-archives/Conjunction_Screening_Testset_Users_Guide.pdf`
+
 ## Aerospace V&V dataset
 
-The protected Aerospace dataset is intentionally not vendored here. The package now expects the extracted dataset under this gitignored local directory by default:
+The protected Aerospace dataset is intentionally not vendored here. The package
+now expects the extracted dataset under this gitignored local directory by
+default:
 
-- `.private/aerospace-ivv/`
+- `tests/data/aerospace-ivv/`
 
 The tests run against that location automatically. The extracted directory placed there must contain this structure:
 
-- `.private/aerospace-ivv/docs/Conjunction_Screening_Testset_Users_Guide.txt`
-- `.private/aerospace-ivv/csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv`
-- `.private/aerospace-ivv/csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv`
-- `.private/aerospace-ivv/csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv`
-- `.private/aerospace-ivv/ocm/AerospaceIVVDataset_20251009/...`
+- `tests/data/aerospace-ivv/docs/Conjunction_Screening_Testset_Users_Guide.txt`
+- `tests/data/aerospace-ivv/csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv`
+- `tests/data/aerospace-ivv/csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv`
+- `tests/data/aerospace-ivv/csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv`
+- `tests/data/aerospace-ivv/ocm/AerospaceIVVDataset_20251009/...`
 
 If you want to keep the extracted dataset somewhere else, override the root explicitly:
 
@@ -124,7 +151,9 @@ export AEROSPACE_IVV_EXTRACTED_ROOT=/absolute/path/to/extracted
 npm run test:aerospace
 ```
 
-`AEROSPACE_IVV_EXTRACTED_ROOT` and `CONJUNCTION_AEROSPACE_IVV_EXTRACTED_ROOT` are both supported, but the package-local `.private/aerospace-ivv/` location is the default.
+`AEROSPACE_IVV_EXTRACTED_ROOT` and
+`CONJUNCTION_AEROSPACE_IVV_EXTRACTED_ROOT` are both supported, but the
+package-local `tests/data/aerospace-ivv/` location is the default.
 
 ## sdn-flow example
 

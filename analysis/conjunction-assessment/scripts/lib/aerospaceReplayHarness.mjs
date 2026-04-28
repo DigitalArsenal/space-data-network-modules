@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Canonical plugin loader for the conjunction-assessment wasm artifact lives
 // at the submodule package root. The old OrbPro wrapper path was retired during
@@ -12,7 +13,18 @@ import {
 } from "./aerospaceDataset.mjs";
 import { parseAerospaceOcmText } from "./aerospaceOcm.mjs";
 
-const DEFAULT_AEROSPACE_EXTRACTED_ROOT = "/Users/tj/Documents/Conjunctions/extracted";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(__dirname, "..", "..");
+const LOCAL_AEROSPACE_EXTRACTED_ROOT = path.join(
+  PACKAGE_ROOT,
+  "tests",
+  "data",
+  "aerospace-ivv",
+);
+const DEFAULT_AEROSPACE_EXTRACTED_ROOT =
+  process.env.AEROSPACE_IVV_EXTRACTED_ROOT ||
+  process.env.CONJUNCTION_AEROSPACE_IVV_EXTRACTED_ROOT ||
+  LOCAL_AEROSPACE_EXTRACTED_ROOT;
 const DEFAULT_PLUGIN_BATCH_SIZE = 10;
 const DEFAULT_TRACK_CACHE_SIZE = 32;
 const DEFAULT_WINDOW_LEAD_SEC = 2 * 60;

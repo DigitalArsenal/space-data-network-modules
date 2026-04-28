@@ -11,14 +11,22 @@
     "test": "node test/delivery.test.mjs && node test/e2e-ipfs.test.mjs"
   },
   "devDependencies": {
+    "@helia/unixfs": "^7.1.0",
     "blockstore-core": "^6.1.2",
     "datastore-core": "^11.0.2",
-    "@helia/unixfs": "^7.1.0",
-    "helia": "^6.0.22",
+    "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.29",
-    "space-data-module-sdk": "^0.5.22"
+    "helia": "^6.0.22",
+    "space-data-module-sdk": "0.8.1"
   },
-  "keywords": ["sdn", "wasm", "ipfs", "encryption", "x25519", "ecies"],
+  "keywords": [
+    "sdn",
+    "wasm",
+    "ipfs",
+    "encryption",
+    "x25519",
+    "ecies"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/DigitalArsenal/space-data-network-plugin-delivery"

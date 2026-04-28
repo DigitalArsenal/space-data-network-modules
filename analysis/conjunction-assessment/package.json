@@ -23,6 +23,7 @@
     "check:compliance": "node scripts/check-compliance.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.0"
+    "space-data-module-sdk": "0.8.1",
+    "tar": "^7.5.13"
   }
 }

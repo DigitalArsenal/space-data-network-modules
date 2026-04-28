@@ -25,6 +25,37 @@ or verifying a package under any family subfolder:
 3. Use `dist/isomorphic/module.wasm` as the single compiled artifact path.
 4. Verify with `node --test tests/sdk_compat.test.mjs` after building.
 
+## Local Validation Data For Agents
+
+Do not rediscover the conjunction validation datasets from scratch or hardcode
+machine-specific paths. Large local validation data belongs in the
+conjunction-assessment module's ignored test-data directory:
+
+- `analysis/conjunction-assessment/tests/data/`
+- Detailed layout: `analysis/conjunction-assessment/tests/data/README.md`
+
+Place SOCRATES/CelesTrak catalog files directly under
+`analysis/conjunction-assessment/tests/data/`, including
+`socrates_current.csv`, `socrates_full.csv`, `socrates_maxprob.csv`,
+`socrates_minrange_current.csv`, `socrates_norad_ids.txt`, and
+`socrates_gp/gp_*.json`.
+
+Place Aerospace IVV archive files under
+`analysis/conjunction-assessment/tests/data/aerospace-archives/`.
+
+The Aerospace archive root contains:
+
+- `AerospaceIVVDataset_20251009a.tar.gz`
+- `AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv.gz`
+- `IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv.gz`
+- `IVV_Releasable_Dataset_Spherical_DefaultHBR.csv.gz`
+- `Conjunction_Screening_Testset_Users_Guide.pdf`
+
+The Aerospace extracted replay layout, when needed, is still
+`analysis/conjunction-assessment/tests/data/aerospace-ivv/` by default or
+whatever `AEROSPACE_IVV_EXTRACTED_ROOT` points to. The archive smoke tests use
+`tests/data/aerospace-archives/` directly and do not require extraction.
+
 ## Build Rules (Inherited From SDK)
 
 - One isomorphic `.wasm` artifact per package: `dist/isomorphic/module.wasm`.

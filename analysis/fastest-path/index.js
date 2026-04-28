@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  decodePlgManifest,
+  isPlgManifestBuffer,
+} from "space-data-module-sdk/manifest";
 import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
 
 export const pluginManifestPath = new URL("./plugin-manifest.json", import.meta.url);
@@ -11,6 +14,18 @@ export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", impor
 
 const EXPECTED_MANIFEST_SOURCE = "embedded-flatbuffer";
 const EDGE_RECORD_SIZE = 16;
+
+function decodeEmbeddedManifest(bytes) {
+  if (!bytes) {
+    return null;
+  }
+  if (!isPlgManifestBuffer(bytes)) {
+    throw new Error(
+      "Fastest Path wasm did not expose a canonical $PLG manifest buffer.",
+    );
+  }
+  return decodePlgManifest(bytes);
+}
 
 function toUint8Array(value) {
   if (value instanceof Uint8Array) {
@@ -340,7 +355,7 @@ export async function createFastestPathSolver(options = {}) {
     logOutput: options.logOutput === true,
   });
   const manifestBytes = harness.readManifest();
-  const manifest = manifestBytes ? decodePluginManifest(manifestBytes) : null;
+  const manifest = decodeEmbeddedManifest(manifestBytes);
   if (options.requireEmbeddedManifest === true && !manifest) {
     harness.destroy();
     throw new Error(

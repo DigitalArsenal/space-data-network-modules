@@ -3,7 +3,10 @@ import * as fs from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { encodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  encodePlgManifest,
+  legacyManifestToPlg,
+} from "space-data-module-sdk/manifest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const manifestPath = resolve(__dirname, "plugin-manifest.json");
@@ -13,7 +16,15 @@ const outputPath = resolve(
 );
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const bytes = encodePluginManifest(manifest);
+const bytes = encodePlgManifest(legacyManifestToPlg(manifest));
+const identifier = new TextDecoder().decode(bytes.slice(4, 8));
+if (identifier !== "$PLG") {
+  throw new Error(
+    `Embedded manifest is not a PLG buffer; identifier at offset 4-7 was ${JSON.stringify(
+      identifier,
+    )}.`,
+  );
+}
 
 await fs.mkdir(dirname(outputPath), { recursive: true });
 

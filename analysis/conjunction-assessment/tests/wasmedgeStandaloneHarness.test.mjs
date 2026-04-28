@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { spawnSync } from "node:child_process";
 
 import {
   conjunctionArtifactExists,
@@ -13,6 +12,7 @@ import {
   sampleTrackWindowFromReference,
   sgp4ArtifactExists,
 } from "./lib/sgp4TrackHarness.mjs";
+import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 
 const CLOSE_PAIR_FIXTURE_PATH = new URL(
   "./fixtures/socrates/gp_61721,67298.json",
@@ -23,18 +23,7 @@ const SOCRATES_REFERENCE_PATH = new URL(
   import.meta.url,
 );
 
-function wasmedgeAvailable() {
-  const probe = spawnSync("wasmedge", ["--version"], {
-    stdio: "ignore",
-  });
-  return probe.status === 0;
-}
-
 test("conjunction WasmEdge harness accepts SGP4-sampled tracks for the known close pair", async (t) => {
-  if (!wasmedgeAvailable()) {
-    t.skip("Install wasmedge to verify the server-path conjunction harness.");
-    return;
-  }
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the WasmEdge harness test.");
     return;
@@ -43,11 +32,20 @@ test("conjunction WasmEdge harness accepts SGP4-sampled tracks for the known clo
     t.skip("Build the local SGP4 plugin before running the WasmEdge harness test.");
     return;
   }
+  const runnerBinary = await buildThreadedWasmEdgeRunner(
+    t,
+    "conjunction-wasmedge-replay-runner-",
+  );
+  if (!runnerBinary) {
+    return;
+  }
 
   const gpRecords = JSON.parse(fs.readFileSync(CLOSE_PAIR_FIXTURE_PATH, "utf8"));
   const reference = JSON.parse(fs.readFileSync(SOCRATES_REFERENCE_PATH, "utf8"))
     .conjunctions[0];
-  const harness = await createConjunctionCommandHarness();
+  const harness = await createConjunctionCommandHarness({
+    wasmEdgeRunnerBinary: runnerBinary,
+  });
   const sgp4 = await createLocalSgp4Plugin();
 
   t.after(async () => {

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   AEROSPACE_MAX_OD_AGE_DAYS,
@@ -14,6 +15,19 @@ import {
   readGzipCsvRows,
   readTarEntryText,
 } from "./lib/aerospaceDataset.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(__dirname, "..");
+const LOCAL_AEROSPACE_ARCHIVE_ROOT = path.join(
+  PACKAGE_ROOT,
+  "tests",
+  "data",
+  "aerospace-archives",
+);
+const DEFAULT_AEROSPACE_ARCHIVE_ROOT =
+  process.env.CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT ||
+  process.env.AEROSPACE_IVV_ARCHIVE_ROOT ||
+  LOCAL_AEROSPACE_ARCHIVE_ROOT;
 
 function parseArgs(argv) {
   const options = {};
@@ -139,16 +153,28 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const datasetTarPath =
     args["dataset-tar"] ??
-    "/Users/tj/Documents/Conjunctions/AerospaceIVVDataset_20251009a.tar.gz";
+    path.join(
+      DEFAULT_AEROSPACE_ARCHIVE_ROOT,
+      "AerospaceIVVDataset_20251009a.tar.gz",
+    );
   const sphericalPath =
     args["spherical-gz"] ??
-    "/Users/tj/Documents/Conjunctions/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv.gz";
+    path.join(
+      DEFAULT_AEROSPACE_ARCHIVE_ROOT,
+      "IVV_Releasable_Dataset_Spherical_DefaultHBR.csv.gz",
+    );
   const sfshPath =
     args["sfsh-gz"] ??
-    "/Users/tj/Documents/Conjunctions/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv.gz";
+    path.join(
+      DEFAULT_AEROSPACE_ARCHIVE_ROOT,
+      "IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv.gz",
+    );
   const screeningMapPath =
     args["screening-map-gz"] ??
-    "/Users/tj/Documents/Conjunctions/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv.gz";
+    path.join(
+      DEFAULT_AEROSPACE_ARCHIVE_ROOT,
+      "AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv.gz",
+    );
   const sampleCount = Number(args["sample-count"] ?? 12);
 
   const ocmEntries = await listOcmEntries(datasetTarPath);

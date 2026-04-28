@@ -27,7 +27,10 @@ if(NOT FLATBUFFERS_INCLUDE_DIR)
 endif()
 
 set(FASTEST_PATH_PACKAGE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-set(INVOKE_GENERATED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../protection-license-client/src/cpp/generated")
+set(SDN_PLUGINS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
+set(INVOKE_GENERATED_DIR "${SDN_PLUGINS_ROOT}/licensing/protection-license-client/src/cpp/generated")
+set(SGP4_GENERATED_DIR "${SDN_PLUGINS_ROOT}/propagator/sgp4/src/cpp/generated")
+set(SGP4_INCLUDE_DIR "${SDN_PLUGINS_ROOT}/propagator/sgp4/src/cpp/include")
 
 add_executable(
     fastest_path_wasm
@@ -42,6 +45,8 @@ target_include_directories(
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${FASTEST_PATH_PACKAGE_ROOT}/src"
     "${INVOKE_GENERATED_DIR}"
+    "${SGP4_GENERATED_DIR}"
+    "${SGP4_INCLUDE_DIR}"
 )
 set_target_properties(
     fastest_path_wasm PROPERTIES

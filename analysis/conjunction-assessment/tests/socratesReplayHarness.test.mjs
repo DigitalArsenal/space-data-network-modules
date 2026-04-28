@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { spawnSync } from "node:child_process";
 
 import {
   createConjunctionCommandHarness,
@@ -13,19 +12,13 @@ import {
   sampleTrackWindowFromReference,
   sgp4ArtifactExists,
 } from "./lib/sgp4TrackHarness.mjs";
+import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 
 const SOCRATES_REFERENCE_PATH = new URL(
   "./fixtures/socrates/reference.top3.json",
   import.meta.url,
 );
 const GP_FIXTURE_DIR = new URL("./fixtures/socrates/", import.meta.url);
-
-function wasmedgeAvailable() {
-  const probe = spawnSync("wasmedge", ["--version"], {
-    stdio: "ignore",
-  });
-  return probe.status === 0;
-}
 
 function loadGpFixture(gpFile) {
   const jsonFile = gpFile.replace(/\.txt$/i, ".json");
@@ -47,10 +40,6 @@ function probabilityRatio(actual, expected) {
 }
 
 test("WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs", async (t) => {
-  if (!wasmedgeAvailable()) {
-    t.skip("Install wasmedge to verify the server-path conjunction harness.");
-    return;
-  }
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the SOCRATES replay test.");
     return;
@@ -59,11 +48,20 @@ test("WasmEdge conjunction replay stays within the public SOCRATES tolerance env
     t.skip("Build the local SGP4 plugin before running the SOCRATES replay test.");
     return;
   }
+  const runnerBinary = await buildThreadedWasmEdgeRunner(
+    t,
+    "conjunction-socrates-replay-runner-",
+  );
+  if (!runnerBinary) {
+    return;
+  }
 
   const referenceRows = JSON.parse(
     fs.readFileSync(SOCRATES_REFERENCE_PATH, "utf8"),
   ).conjunctions;
-  const harness = await createConjunctionCommandHarness();
+  const harness = await createConjunctionCommandHarness({
+    wasmEdgeRunnerBinary: runnerBinary,
+  });
   t.after(async () => {
     await harness.destroy();
   });

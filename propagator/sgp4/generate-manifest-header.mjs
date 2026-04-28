@@ -9,12 +9,23 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const { encodePluginManifest } = await import("space-data-module-sdk/manifest");
+const { encodePlgManifest, legacyManifestToPlg } = await import(
+  "space-data-module-sdk/manifest"
+);
 
 const manifestJson = JSON.parse(
   await readFile(resolve(__dirname, "plugin-manifest.json"), "utf8"),
 );
-const manifestBytes = encodePluginManifest(manifestJson);
+const manifestBytes = encodePlgManifest(legacyManifestToPlg(manifestJson));
+
+const identifier = new TextDecoder().decode(manifestBytes.slice(4, 8));
+if (identifier !== "$PLG") {
+  throw new Error(
+    `Embedded manifest is not a PLG buffer; identifier at offset 4-7 was ${JSON.stringify(
+      identifier,
+    )}.`,
+  );
+}
 
 const varName = "sgp4_plugin_manifest_bytes";
 const guardName = "SGP4_PLUGIN_MANIFEST_BYTES_H";

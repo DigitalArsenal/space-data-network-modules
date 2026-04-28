@@ -59,6 +59,11 @@ ensure_emscripten() {
 
 ensure_emscripten
 
+node "$SCRIPT_DIR/../../scripts/generate-plugin-manifest-header.mjs" \
+    --package-dir "$SCRIPT_DIR" \
+    --var maneuver_plugin_manifest_bytes \
+    --guard MANEUVER_PLUGIN_MANIFEST_BYTES_H
+
 rm -rf "$BUILD_DIR"
 rm -rf "$DIST_DIR"
 mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"

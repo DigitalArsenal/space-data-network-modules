@@ -1,4 +1,7 @@
-import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  decodePlgManifest,
+  isPlgManifestBuffer,
+} from "space-data-module-sdk/manifest";
 import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
 
 export const pluginManifestPath = new URL("./plugin-manifest.json", import.meta.url);
@@ -7,9 +10,9 @@ export const browserWasmPath = new URL("./dist/browser/module.wasm", import.meta
 export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", import.meta.url);
 
 export const metadata = Object.freeze({
-  id: "hpop-propagator",
-  name: "HPOP Propagator Plugin",
-  version: "0.1.0",
+  id: "com.orbpro.hpop",
+  name: "HPOP High-Precision Orbit Propagator",
+  version: "1.0.0",
   type: "Propagator",
   encrypted: false,
   requiresProtection: false,
@@ -79,7 +82,12 @@ export async function getHPOPManifest(plugin = null) {
   if (typeof plugin?.readManifest === "function") {
     const bytes = await plugin.readManifest();
     if (bytes instanceof Uint8Array && bytes.length > 0) {
-      return decodePluginManifest(bytes);
+      if (!isPlgManifestBuffer(bytes)) {
+        throw new Error(
+          "HPOP wasm did not expose a canonical $PLG manifest buffer.",
+        );
+      }
+      return decodePlgManifest(bytes);
     }
   }
 

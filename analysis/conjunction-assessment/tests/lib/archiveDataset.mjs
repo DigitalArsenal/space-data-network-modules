@@ -3,7 +3,7 @@
  *
  * The raw Aerospace distribution lands on disk as an archive bundle:
  *
- *   ~/Documents/Conjunctions/
+ *   tests/data/aerospace-archives/
  *     AerospaceIVVDataset_20251009a.tar.gz                   (~22 GB, all OCMs)
  *     AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv.gz
  *     IVV_Releasable_Dataset_Spherical_DefaultHBR.csv.gz
@@ -12,8 +12,8 @@
  *
  * Extracting the tar.gz materializes ~26k OCM files onto disk. That's
  * expensive to re-do on every test run, so this module lets callers stream
- * the archives straight from `~/Documents/Conjunctions/` (or wherever
- * `CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT` points).
+ * the archives straight from the package-local ignored test-data directory
+ * (or wherever `CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT` points).
  *
  * Two streaming surfaces are exposed:
  *   - `streamAnswerKeyCsv(archivePath)` – pipes `.csv.gz` through gunzip and
@@ -30,17 +30,25 @@
 
 import { createReadStream } from "node:fs";
 import { access, readFile, readdir, stat } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import * as tar from "tar";
 
 import { readCsvRows } from "./aerospaceDataset.mjs";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(__dirname, "..", "..");
+const LOCAL_TEST_DATA_ROOT = path.join(PACKAGE_ROOT, "tests", "data");
+const LOCAL_AEROSPACE_ARCHIVE_ROOT = path.join(
+  LOCAL_TEST_DATA_ROOT,
+  "aerospace-archives",
+);
+
 const DEFAULT_ARCHIVE_ROOT_CANDIDATES = Object.freeze([
   process.env.CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT ?? "",
   process.env.AEROSPACE_IVV_ARCHIVE_ROOT ?? "",
-  path.join(os.homedir(), "Documents", "Conjunctions"),
+  LOCAL_AEROSPACE_ARCHIVE_ROOT,
 ]);
 
 export const AEROSPACE_ARCHIVE_FILENAMES = Object.freeze({
@@ -301,13 +309,15 @@ export async function listAerospaceArchiveDirectory(root) {
 // SOCRATES / CelesTrak dataset discovery.
 //
 // The full SOCRATES catalog (~120k conjunction rows) and per-pair GP records
-// are external validation data. Point CONJUNCTION_ASSESSMENT_SOCRATES_ROOT or
-// SOCRATES_LOCAL_ROOT at a local extracted catalog when running corpus checks.
+// are external validation data. Place them under tests/data or point
+// CONJUNCTION_ASSESSMENT_SOCRATES_ROOT / SOCRATES_LOCAL_ROOT at a local
+// extracted catalog when running corpus checks.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_SOCRATES_ROOT_CANDIDATES = Object.freeze([
   process.env.CONJUNCTION_ASSESSMENT_SOCRATES_ROOT ?? "",
   process.env.SOCRATES_LOCAL_ROOT ?? "",
+  LOCAL_TEST_DATA_ROOT,
 ]);
 
 export const SOCRATES_FILENAMES = Object.freeze({

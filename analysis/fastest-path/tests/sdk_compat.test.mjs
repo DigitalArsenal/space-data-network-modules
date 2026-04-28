@@ -4,7 +4,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { validatePluginArtifact } from "space-data-module-sdk/compliance";
-import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  decodePlgManifest,
+  isPlgManifestBuffer,
+} from "space-data-module-sdk/manifest";
 import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import * as fastestPathPackage from "../index.js";
@@ -134,11 +137,12 @@ test("embedded manifest round-trips through the SDK codec", async (t) => {
 
   const embeddedManifest = harness.readManifest();
   assert.ok(embeddedManifest?.length > 0);
+  assert.equal(isPlgManifestBuffer(embeddedManifest), true);
 
-  const decoded = decodePluginManifest(embeddedManifest);
+  const decoded = decodePlgManifest(embeddedManifest);
   assert.equal(decoded.pluginId, "com.orbpro.fastest-path");
   assert.deepEqual(
-    decoded.methods.map((method) => method.methodId),
+    decoded.entryFunctions.map((entry) => entry.name),
     EXPECTED_METHOD_IDS,
   );
 });

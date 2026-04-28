@@ -1,10 +1,10 @@
 /**
  * Smoke test for the archive-streaming dataset surface.
  *
- * This test skips gracefully when the raw archives are not present. On a
- * developer machine with `~/Documents/Conjunctions/` populated, it walks the
- * CSV answer keys and locates matching OCM files inside the tar.gz *without*
- * a prior extraction pass.
+ * This test skips gracefully when the raw archives are not present. When
+ * `tests/data/aerospace-archives/` is populated, it walks the CSV answer keys
+ * and locates matching OCM files inside the tar.gz *without* a prior
+ * extraction pass.
  *
  * Scope is intentionally small — streaming through the 22 GB tar.gz is slow.
  * Bulk replay still belongs in the extracted-dataset harness.
@@ -54,7 +54,7 @@ test(
     const context = await prepareArchiveContext();
     if (!context) {
       t.skip(
-        "Aerospace archive root not found. Set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT or place archives at ~/Documents/Conjunctions/.",
+        "Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.",
       );
       return;
     }
@@ -86,7 +86,7 @@ test(
     const context = await prepareArchiveContext();
     if (!context) {
       t.skip(
-        "Aerospace archive root not found. Set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT or place archives at ~/Documents/Conjunctions/.",
+        "Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.",
       );
       return;
     }
@@ -174,7 +174,7 @@ test(
     const root = await discoverSocratesRoot();
     if (!root) {
       t.skip(
-        "Local SOCRATES root not found. Set CONJUNCTION_ASSESSMENT_SOCRATES_ROOT or SOCRATES_LOCAL_ROOT.",
+        "Local SOCRATES root not found. Put catalog files under tests/data or set CONJUNCTION_ASSESSMENT_SOCRATES_ROOT.",
       );
       return;
     }

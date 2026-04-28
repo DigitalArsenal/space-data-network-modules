@@ -12,9 +12,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..", "..");
 export const LOCAL_AEROSPACE_DATASET_ROOT = path.join(
   PACKAGE_ROOT,
-  ".private",
+  "tests",
+  "data",
   "aerospace-ivv",
 );
+const LOCAL_AEROSPACE_DATASET_DISPLAY_ROOT = "tests/data/aerospace-ivv";
 const DEFAULT_AEROSPACE_EXTRACTED_ROOT =
   process.env.AEROSPACE_IVV_EXTRACTED_ROOT ||
   process.env.CONJUNCTION_AEROSPACE_IVV_EXTRACTED_ROOT ||
@@ -35,8 +37,12 @@ const REQUIRED_AEROSPACE_LAYOUT = [
 ];
 
 export function formatAerospaceDatasetSetupMessage(root = DEFAULT_AEROSPACE_EXTRACTED_ROOT) {
+  const displayRoot =
+    root === LOCAL_AEROSPACE_DATASET_ROOT
+      ? LOCAL_AEROSPACE_DATASET_DISPLAY_ROOT
+      : root;
   return [
-    `Place the extracted Aerospace dataset under ${root} or override with AEROSPACE_IVV_EXTRACTED_ROOT.`,
+    `Place the extracted Aerospace dataset under ${displayRoot} or override with AEROSPACE_IVV_EXTRACTED_ROOT.`,
     "Expected layout:",
     ...REQUIRED_AEROSPACE_LAYOUT.map((entry) => `- ${entry}`),
   ].join("\n");

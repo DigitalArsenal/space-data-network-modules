@@ -5,7 +5,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
-import { decodePluginManifest } from "space-data-module-sdk/manifest";
+import {
+  decodePlgManifest,
+  isPlgManifestBuffer,
+} from "space-data-module-sdk/manifest";
 import { DEFAULT_HOSTCALL_IMPORT_MODULE } from "../node_modules/space-data-module-sdk/src/host/abi.js";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
@@ -116,13 +119,17 @@ test("embedded manifest in the built wasm matches the licensing package manifest
     instance.exports.plugin_get_manifest_flatbuffer_size(),
   );
   const memory = instance.exports.memory;
-  const embeddedManifest = decodePluginManifest(
-    new Uint8Array(memory.buffer, manifestPtr, manifestSize).slice(),
-  );
+  const embeddedManifestBytes = new Uint8Array(
+    memory.buffer,
+    manifestPtr,
+    manifestSize,
+  ).slice();
+  assert.equal(isPlgManifestBuffer(embeddedManifestBytes), true);
+  const embeddedManifest = decodePlgManifest(embeddedManifestBytes);
 
   assert.equal(embeddedManifest.pluginId, manifest.pluginId);
   assert.deepEqual(
-    embeddedManifest.methods.map((entry) => entry.methodId),
+    embeddedManifest.entryFunctions.map((entry) => entry.name),
     manifest.methods.map((entry) => entry.methodId),
   );
 });
