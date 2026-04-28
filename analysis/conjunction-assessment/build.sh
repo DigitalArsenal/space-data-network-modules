@@ -71,7 +71,8 @@ emcmake cmake \
     -S "$SRC_DIR" \
     -B "$BROWSER_BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCONJUNCTION_ENABLE_PTHREADS=ON
+    -DCONJUNCTION_ENABLE_PTHREADS=ON \
+    -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=ON
 
 echo ""
 echo "Building browser adapter..."
@@ -83,12 +84,13 @@ find "$BROWSER_BUILD_DIR" -maxdepth 1 -name "${BROWSER_TARGET}*.worker.js" \
     -exec cp {} "$BROWSER_DIST_DIR/" \;
 
 echo ""
-echo "Configuring Emscripten standalone SDK build..."
+echo "Configuring Emscripten pthread WasmEdge SDK build..."
 emcmake cmake \
     -S "$SRC_DIR" \
     -B "$ISOMORPHIC_BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCONJUNCTION_ENABLE_PTHREADS=OFF
+    -DCONJUNCTION_ENABLE_PTHREADS=ON \
+    -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF
 
 echo ""
 echo "Building standalone SDK artifact..."

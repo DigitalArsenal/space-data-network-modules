@@ -2,12 +2,25 @@ import {
   decodePlgManifest,
   isPlgManifestBuffer,
 } from "space-data-module-sdk/manifest";
+import { loadModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
 
-export const pluginManifestPath = new URL("./plugin-manifest.json", import.meta.url);
-export const browserModulePath = new URL("./dist/browser/module.js", import.meta.url);
-export const browserWasmPath = new URL("./dist/browser/module.wasm", import.meta.url);
-export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", import.meta.url);
+export const pluginManifestPath = new URL(
+  "./plugin-manifest.json",
+  import.meta.url,
+);
+export const browserModulePath = new URL(
+  "./dist/browser/module.js",
+  import.meta.url,
+);
+export const browserWasmPath = new URL(
+  "./dist/browser/module.wasm",
+  import.meta.url,
+);
+export const isomorphicWasmPath = new URL(
+  "./dist/isomorphic/module.wasm",
+  import.meta.url,
+);
 
 export const metadata = Object.freeze({
   id: "conjunction-assessment",
@@ -78,6 +91,29 @@ async function resolveConjunctionWasmBytes(options = {}) {
   return readUrlBytes(isomorphicWasmPath);
 }
 
+async function resolveConjunctionWasmPath(options = {}) {
+  if (
+    typeof options.wasmPath === "string" &&
+    options.wasmPath.trim().length > 0
+  ) {
+    return options.wasmPath;
+  }
+
+  if (options.wasmUrl !== undefined) {
+    const resolvedUrl =
+      options.wasmUrl instanceof URL
+        ? options.wasmUrl
+        : new URL(String(options.wasmUrl), import.meta.url);
+    if (resolvedUrl.protocol === "file:") {
+      const { fileURLToPath } = await import("node:url");
+      return fileURLToPath(resolvedUrl);
+    }
+  }
+
+  const { fileURLToPath } = await import("node:url");
+  return fileURLToPath(isomorphicWasmPath);
+}
+
 export async function getConjunctionAssessmentManifest(plugin = null) {
   if (typeof plugin?.readManifest === "function") {
     const bytes = await plugin.readManifest();
@@ -100,7 +136,7 @@ export async function getConjunctionAssessmentWorkerBootstrap() {
 }
 
 function bindConjunctionAssessmentApi(harness, manifest, manifestSource) {
-  const module = harness.instance.exports;
+  const module = harness.instance?.exports ?? harness.exports ?? null;
   return Object.freeze({
     ...harness,
     manifest,
@@ -117,6 +153,28 @@ function bindConjunctionAssessmentApi(harness, manifest, manifestSource) {
 }
 
 export async function loadConjunctionAssessmentPlugin(options = {}) {
+  if (options.runtimeKind === "wasmedge" || options.wasmEdgeRunnerBinary) {
+    const harness = await loadModule({
+      wasmSource: await resolveConjunctionWasmPath(options),
+      runtimeKind: "wasmedge",
+      wasmEdgeBinary: options.wasmEdgeBinary,
+      wasmEdgeRunnerBinary: options.wasmEdgeRunnerBinary,
+      enableThreads: options.enableThreads ?? true,
+      env: options.env,
+      cwd: options.cwd,
+      hostProfile: options.hostProfile,
+      modules: options.modules,
+      defaultModuleId: options.defaultModuleId,
+      metadata: options.metadata ?? metadata,
+    });
+    const manifest = await getConjunctionAssessmentManifest(harness);
+    return bindConjunctionAssessmentApi(
+      harness,
+      manifest,
+      "embedded-flatbuffer",
+    );
+  }
+
   const wasmBytes = await resolveConjunctionWasmBytes(options);
   const harness = await createBrowserModuleHarness({
     wasmSource: wasmBytes,

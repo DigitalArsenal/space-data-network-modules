@@ -4,17 +4,29 @@ project(conjunction_assessment_sdn_plugin LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(CONJUNCTION_ENABLE_PTHREADS "Enable browser WebAssembly pthreads" OFF)
+option(CONJUNCTION_ENABLE_PTHREADS "Enable WebAssembly pthreads" OFF)
+option(
+    CONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER
+    "Emit Emscripten browser JS glue instead of a standalone pthread guest wasm"
+    OFF
+)
 
 if(EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -fwasm-exceptions -DNDEBUG")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG")
+    if(CONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fwasm-exceptions")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fwasm-exceptions")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fexceptions")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fexceptions -s DISABLE_EXCEPTION_CATCHING=0")
+    endif()
     if(CONJUNCTION_ENABLE_PTHREADS)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pthread")
     else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCONJUNCTION_SINGLE_THREAD")
     endif()
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto -fwasm-exceptions")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto")
 elseif(WASI_SDK)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG -DCONJUNCTION_SINGLE_THREAD")
 else()
@@ -22,7 +34,13 @@ else()
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
-if(EMSCRIPTEN AND CONJUNCTION_ENABLE_PTHREADS)
+if(EMSCRIPTEN AND CONJUNCTION_ENABLE_PTHREADS AND CONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER)
+    set(CONJUNCTION_EMSCRIPTEN_TARGET_SUFFIX ".js")
+    set(CONJUNCTION_EMSCRIPTEN_JS_LINK_FLAGS "\
+            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\",\"HEAPU8\"]' \
+            -s MODULARIZE=1 \
+            -s EXPORT_NAME='ConjunctionAssessmentModule' \
+        ")
     set(CONJUNCTION_BROWSER_LINK_FLAGS "\
             -s USE_PTHREADS=1 \
             -s PTHREAD_POOL_SIZE=8 \
@@ -34,7 +52,20 @@ if(EMSCRIPTEN AND CONJUNCTION_ENABLE_PTHREADS)
             -s MALLOC='emmalloc' \
             -s FILESYSTEM=0 \
         ")
+elseif(EMSCRIPTEN AND CONJUNCTION_ENABLE_PTHREADS)
+    set(CONJUNCTION_EMSCRIPTEN_TARGET_SUFFIX ".wasm")
+    set(CONJUNCTION_EMSCRIPTEN_JS_LINK_FLAGS "")
+    set(CONJUNCTION_BROWSER_LINK_FLAGS "\
+            -s STANDALONE_WASM=1 \
+            -s INITIAL_MEMORY=1610612736 \
+            -s ABORTING_MALLOC=0 \
+            -s STACK_SIZE=2097152 \
+            -s MALLOC='emmalloc' \
+            -s FILESYSTEM=0 \
+        ")
 else()
+    set(CONJUNCTION_EMSCRIPTEN_TARGET_SUFFIX ".wasm")
+    set(CONJUNCTION_EMSCRIPTEN_JS_LINK_FLAGS "")
     set(CONJUNCTION_BROWSER_LINK_FLAGS "\
             -s STANDALONE_WASM=1 \
             -s INITIAL_MEMORY=67108864 \
@@ -171,13 +202,11 @@ if(EMSCRIPTEN)
     target_link_libraries(conjunction_assessment_wasm conjunction_assessment)
     set_target_properties(
         conjunction_assessment_wasm PROPERTIES
-        SUFFIX ".js"
+        SUFFIX "${CONJUNCTION_EMSCRIPTEN_TARGET_SUFFIX}"
         LINK_FLAGS "\
             -s EXPORTED_FUNCTIONS='[\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
-            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\",\"HEAPU8\"]' \
-            -s MODULARIZE=1 \
-            -s EXPORT_NAME='ConjunctionAssessmentModule' \
             -Wl,--export=__wasm_call_ctors \
+            ${CONJUNCTION_EMSCRIPTEN_JS_LINK_FLAGS} \
             ${CONJUNCTION_BROWSER_LINK_FLAGS} \
         "
     )
