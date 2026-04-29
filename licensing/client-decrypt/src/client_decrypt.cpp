@@ -393,6 +393,33 @@ static const KMF* record_value_as_kmf(const Record* record) {
         : nullptr;
 }
 
+static bool decode_kmf_content_key(
+    const uint8_t* payload,
+    size_t payload_len,
+    std::vector<uint8_t>& content_key_out,
+    std::string& error_out)
+{
+    if (!payload || payload_len < 8 || !KMFBufferHasIdentifier(payload)) {
+        return false;
+    }
+
+    flatbuffers::Verifier verifier(payload, payload_len);
+    if (!VerifyKMFBuffer(verifier)) {
+        error_out = "wrapped content key KMF payload is invalid";
+        return false;
+    }
+
+    const auto* kmf = GetKMF(payload);
+    const auto* key_bytes = kmf ? kmf->KEY_BYTES() : nullptr;
+    if (!key_bytes || key_bytes->size() != KEY_BYTES) {
+        error_out = "wrapped content key KMF payload is missing key bytes";
+        return false;
+    }
+
+    content_key_out.assign(key_bytes->begin(), key_bytes->end());
+    return true;
+}
+
 static uint32_t read_u32_le(const uint8_t* bytes) {
     return static_cast<uint32_t>(bytes[0]) |
         (static_cast<uint32_t>(bytes[1]) << 8) |
@@ -539,6 +566,23 @@ static bool unwrap_rec_content_key(
         payload_key.size());
 
     std::vector<uint8_t> rec_payload(payload->begin(), payload->end());
+    if (decode_kmf_content_key(
+            rec_payload.data(),
+            rec_payload.size(),
+            content_key_out,
+            error_out)) {
+        memset(payload_key.data(), 0, payload_key.size());
+        memset(shared_secret.BytePtr(), 0, shared_secret.size());
+        memset(rec_payload.data(), 0, rec_payload.size());
+        return true;
+    }
+    if (!error_out.empty()) {
+        memset(payload_key.data(), 0, payload_key.size());
+        memset(shared_secret.BytePtr(), 0, shared_secret.size());
+        memset(rec_payload.data(), 0, rec_payload.size());
+        return false;
+    }
+
     flatbuffers::Verifier verifier(rec_payload.data(), rec_payload.size());
     if (!VerifyRECBuffer(verifier)) {
         error_out = "wrapped content key REC payload is invalid";
