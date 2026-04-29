@@ -79,6 +79,9 @@ find_path(
     FLATBUFFERS_INCLUDE_DIR
     NAMES flatbuffers/flatbuffers.h
     PATHS
+        "$ENV{SDN_FLATBUFFERS_INCLUDE_DIR}"
+        "$ENV{FLATBUFFERS_INCLUDE_DIR}"
+        "${CMAKE_SOURCE_DIR}/../../../../../da-flatbuffers/include"
         /opt/homebrew/include
         /opt/homebrew/opt/flatbuffers/include
         /usr/local/include

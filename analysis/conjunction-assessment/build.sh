@@ -10,6 +10,23 @@ DIST_DIR="$SCRIPT_DIR/dist"
 BROWSER_DIST_DIR="$DIST_DIR/browser"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
 BROWSER_TARGET="conjunction_assessment_wasm"
+FLATBUFFERS_INCLUDE_DIR="${SDN_FLATBUFFERS_INCLUDE_DIR:-${FLATBUFFERS_INCLUDE_DIR:-}}"
+
+if [ -z "$FLATBUFFERS_INCLUDE_DIR" ]; then
+    for candidate in \
+        "$SCRIPT_DIR/../../../da-flatbuffers/include" \
+        "$SCRIPT_DIR/../../../../da-flatbuffers/include"; do
+        if [ -f "$candidate/flatbuffers/flatbuffers.h" ]; then
+            FLATBUFFERS_INCLUDE_DIR="$candidate"
+            break
+        fi
+    done
+fi
+
+FLATBUFFERS_CMAKE_ARGS=()
+if [ -n "$FLATBUFFERS_INCLUDE_DIR" ]; then
+    FLATBUFFERS_CMAKE_ARGS=(-DFLATBUFFERS_INCLUDE_DIR="$FLATBUFFERS_INCLUDE_DIR")
+fi
 
 cpu_count() {
     if command -v nproc >/dev/null 2>&1; then
@@ -72,7 +89,8 @@ emcmake cmake \
     -B "$BROWSER_BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCONJUNCTION_ENABLE_PTHREADS=ON \
-    -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=ON
+    -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=ON \
+    "${FLATBUFFERS_CMAKE_ARGS[@]}"
 
 echo ""
 echo "Building browser adapter..."
@@ -90,7 +108,8 @@ emcmake cmake \
     -B "$ISOMORPHIC_BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCONJUNCTION_ENABLE_PTHREADS=ON \
-    -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF
+    -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF \
+    "${FLATBUFFERS_CMAKE_ARGS[@]}"
 
 echo ""
 echo "Building standalone SDK artifact..."
