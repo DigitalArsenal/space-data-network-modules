@@ -36,6 +36,10 @@ const DIST_DIR = path.join(__dirname, "dist");
 const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
 const SRC_DIR = path.join(__dirname, "src");
 const TOOLCHAIN_STAMP_PATH = path.join(BUILD_DIR, ".emsdk-path");
+const CORE_SDS_GENERATED_DIR = path.resolve(
+  __dirname,
+  "../../licensing/core/src/cpp/generated/sds",
+);
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -139,16 +143,6 @@ async function generateFlatbufferHeaders(outDir) {
       `space-data-module-sdk schemas not found.\nRun: npm install`,
     );
   }
-  const moduleDeliverySchemasDir = path.resolve(
-    __dirname,
-    "../../schemas/space-data-network/module-delivery/v1",
-  );
-  if (!fs.existsSync(moduleDeliverySchemasDir)) {
-    throw new Error(
-      `module-delivery schemas not found at ${moduleDeliverySchemasDir}`,
-    );
-  }
-
   const { default: createFlatc } = await import(`file://${flatcWasmPath}`);
   const flatc = await createFlatc();
 
@@ -157,16 +151,9 @@ async function generateFlatbufferHeaders(outDir) {
     "PluginInvokeResponse.fbs",
     "TypedArenaBuffer.fbs",
   ];
-  const moduleDeliverySchemaFiles = [
-    "BundleDescriptor.fbs",
-    "WrappedContentKey.fbs",
-    "GrantResponse.fbs",
-  ];
-
   const ensureDir = (p) => { try { flatc.FS.mkdir(p); } catch {} };
   ensureDir("/schemas");
   ensureDir("/schemas/sdk");
-  ensureDir("/schemas/module_delivery");
   ensureDir("/out_cpp");
 
   for (const sf of sdkSchemaFiles) {
@@ -175,30 +162,10 @@ async function generateFlatbufferHeaders(outDir) {
       fs.readFileSync(path.join(sdkSchemasDir, sf), "utf8"),
     );
   }
-  for (const sf of moduleDeliverySchemaFiles) {
-    flatc.FS.writeFile(
-      `/schemas/module_delivery/${sf}`,
-      fs.readFileSync(path.join(moduleDeliverySchemasDir, sf), "utf8"),
-    );
-  }
-
   for (const sf of sdkSchemaFiles) {
     const rc = flatc.callMain([
       "--cpp", "--cpp-std", "c++17", "--gen-object-api",
       "-I", "/schemas/sdk", "-o", "/out_cpp", `/schemas/sdk/${sf}`,
-    ]);
-    if (rc !== 0) throw new Error(`flatc failed for ${sf}`);
-    const hdr = `${path.basename(sf, ".fbs")}_generated.h`;
-    fs.writeFileSync(
-      path.join(outDir, hdr),
-      flatc.FS.readFile(`/out_cpp/${hdr}`, { encoding: "utf8" }),
-    );
-  }
-
-  for (const sf of moduleDeliverySchemaFiles) {
-    const rc = flatc.callMain([
-      "--cpp", "--cpp-std", "c++17", "--gen-object-api",
-      "-I", "/schemas/module_delivery", "-o", "/out_cpp", `/schemas/module_delivery/${sf}`,
     ]);
     if (rc !== 0) throw new Error(`flatc failed for ${sf}`);
     const hdr = `${path.basename(sf, ".fbs")}_generated.h`;
@@ -331,6 +298,17 @@ async function main() {
   fs.mkdirSync(ISOMORPHIC_DIST_DIR, { recursive: true });
 
   const flatbuffersInclude = resolveFlatbuffersInclude();
+  for (const requiredHeader of [
+    "ENC_generated.h",
+    "KMF_generated.h",
+    "LGR_generated.h",
+    "PLG_generated.h",
+    "REC_generated.h",
+  ]) {
+    if (!fs.existsSync(path.join(CORE_SDS_GENERATED_DIR, requiredHeader))) {
+      throw new Error(`Core SDS generated header not found: ${path.join(CORE_SDS_GENERATED_DIR, requiredHeader)}`);
+    }
+  }
 
   // Generate invoke FlatBuffer headers
   const fbbHeadersDir = path.join(BUILD_DIR, "fbb-headers");
@@ -386,7 +364,7 @@ uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
     `${shellQuote(emxx)} -O2 -std=c++17 -fignore-exceptions ` +
       `-DSDN_WASI_PLUGIN=1 ` +
       `-DCRYPTOPP_DISABLE_ASM=1 -DCRYPTOPP_DISABLE_SSSE3=1 -DCRYPTOPP_DISABLE_AESNI=1 ` +
-      `-I${shellQuote(cryptoppParent)} -I${shellQuote(cryptoppSrc)} -I${shellQuote(fbbHeadersDir)} -I${shellQuote(flatbuffersInclude)} ` +
+      `-I${shellQuote(cryptoppParent)} -I${shellQuote(cryptoppSrc)} -I${shellQuote(fbbHeadersDir)} -I${shellQuote(CORE_SDS_GENERATED_DIR)} -I${shellQuote(flatbuffersInclude)} ` +
       `${shellQuote(buildCppPath)} ${shellQuote(manifestExportsPath)} ${shellQuote(cryptoppLib)} ` +
       `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 ` +
       `-sINITIAL_MEMORY=33554432 -sALLOW_MEMORY_GROWTH=1 ` +

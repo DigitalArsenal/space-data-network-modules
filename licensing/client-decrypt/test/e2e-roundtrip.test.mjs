@@ -8,7 +8,7 @@
  *   3. client-decrypt WASM decrypts the envelope
  *   4. Verify decrypted bytes match original
  *
- * Also tests JS WebCrypto encrypt → C++ WASM decrypt cross-validation.
+ * Also tests hd-wallet-wasm encrypt → C++ WASM decrypt cross-validation.
  *
  * Requires plugin-delivery WASM — set PLUGIN_DELIVERY_WASM env var or
  * have space-data-network-plugin-delivery cloned as a sibling directory.
@@ -25,6 +25,15 @@ import { fileURLToPath } from "node:url";
 import {
   createBrowserModuleHarness,
 } from "space-data-module-sdk/testing";
+import {
+  generateX25519Keypair,
+} from "space-data-module-sdk/transport";
+import {
+  aesGcmEncrypt,
+  hkdfBytes,
+  randomBytes,
+  x25519SharedSecret,
+} from "space-data-module-sdk/utils/wasm-crypto";
 import {
   createSdkBrowserShimHarness,
 } from "./lib/sdkBrowserShimHarness.mjs";
@@ -51,14 +60,7 @@ function findDeliveryWasm() {
 }
 const DELIVERY_WASM_PATH = findDeliveryWasm();
 
-// ── Inline WebCrypto helpers ────────────────────────────────────────────────
-
-function hexToBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++)
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
+// ── Inline WASM crypto helpers ──────────────────────────────────────────────
 
 function bytesToHex(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -91,43 +93,28 @@ function concat(...arrays) {
   return out;
 }
 
-const PKCS8_HEADER = hexToBytes("302e020100300506032b656e04220420");
-const SPKI_HEADER = hexToBytes("302a300506032b656e032100");
-
 async function generateX25519KeyPair() {
-  const pair = await crypto.subtle.generateKey("X25519", true, ["deriveBits"]);
-  const spki = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
-  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
-  return { publicKey: spki.slice(12), privateKey: pkcs8.slice(16) };
+  return generateX25519Keypair();
 }
 
 async function encryptArtifact(plaintext, recipientPublicKey, wrapInfo = "orbpro-key-server-artifact-wrap-v1") {
   const ephemeral = await generateX25519KeyPair();
-  const priv = await crypto.subtle.importKey("pkcs8", concat(PKCS8_HEADER, ephemeral.privateKey), "X25519", false, ["deriveBits"]);
-  const pub = await crypto.subtle.importKey("spki", concat(SPKI_HEADER, recipientPublicKey), "X25519", false, []);
-  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: pub }, priv, 256));
+  const shared = await x25519SharedSecret(ephemeral.privateKey, recipientPublicKey);
 
-  const hkdfSalt = crypto.getRandomValues(new Uint8Array(32));
-  const hkdfKey = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveBits"]);
-  const wrapKey = new Uint8Array(await crypto.subtle.deriveBits({
-    name: "HKDF", hash: "SHA-256", salt: hkdfSalt,
-    info: new TextEncoder().encode(wrapInfo),
-  }, hkdfKey, 256));
+  const hkdfSalt = await randomBytes(32);
+  const wrapKey = await hkdfBytes(
+    shared,
+    hkdfSalt,
+    new TextEncoder().encode(wrapInfo),
+    32,
+  );
 
-  const contentKey = crypto.getRandomValues(new Uint8Array(32));
-  const wrapIV = crypto.getRandomValues(new Uint8Array(12));
-  const wrapped = new Uint8Array(await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: wrapIV },
-    await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, ["encrypt"]),
-    contentKey,
-  ));
+  const contentKey = await randomBytes(32);
+  const wrapIV = await randomBytes(12);
+  const wrapped = await aesGcmEncrypt(wrapKey, contentKey, wrapIV);
 
-  const contentIV = crypto.getRandomValues(new Uint8Array(12));
-  const enc = new Uint8Array(await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: contentIV },
-    await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, ["encrypt"]),
-    plaintext,
-  ));
+  const contentIV = await randomBytes(12);
+  const encrypted = await aesGcmEncrypt(contentKey, plaintext, contentIV);
 
   return {
     keyEncryption: {
@@ -135,14 +122,14 @@ async function encryptArtifact(plaintext, recipientPublicKey, wrapInfo = "orbpro
       ephemeralPublicKeyHex: bytesToHex(ephemeral.publicKey),
       hkdfSaltB64: toBase64(hkdfSalt),
       wrapIvB64: toBase64(wrapIV),
-      wrappedKeyB64: toBase64(wrapped.slice(0, 32)),
-      wrappedKeyTagB64: toBase64(wrapped.slice(32)),
+      wrappedKeyB64: toBase64(wrapped.ciphertext),
+      wrappedKeyTagB64: toBase64(wrapped.tag),
     },
     contentEncryption: {
       algorithm: "aes-256-gcm",
       ivB64: toBase64(contentIV),
-      tagB64: toBase64(enc.slice(enc.length - 16)),
-      ciphertextB64: toBase64(enc.slice(0, enc.length - 16)),
+      tagB64: toBase64(encrypted.tag),
+      ciphertextB64: toBase64(encrypted.ciphertext),
     },
   };
 }
@@ -239,7 +226,7 @@ await test("load client-decrypt WASM", async () => {
   assert.ok(decryptHarness);
 });
 
-await test("e2e: JS encrypt → C++ WASM decrypt (orbpro info)", async () => {
+await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (orbpro info)", async () => {
   const { publicKey, privateKey } = await generateX25519KeyPair();
   const artifact = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
@@ -257,7 +244,7 @@ await test("e2e: JS encrypt → C++ WASM decrypt (orbpro info)", async () => {
   assert.deepEqual(result.outputs[0].payload, artifact);
 });
 
-await test("e2e: JS encrypt → C++ WASM decrypt (plugin info)", async () => {
+await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (plugin info)", async () => {
   const { publicKey, privateKey } = await generateX25519KeyPair();
   const artifact = crypto.getRandomValues(new Uint8Array(1024));
 
@@ -318,7 +305,8 @@ if (hasDeliveryWasm) {
     });
     assert.ok(deliverResult.outputs?.length >= 1, `deliver failed: ${deliverResult.errorMessage}`);
     const grant = decodeGrantResponse(deliverResult.outputs[0].payload);
-    assert.equal(grant.bundleDescriptor.publicationCid, cidStr);
+    assert.equal(grant.bundleDescriptor.moduleId, "com.orbpro.fastest-path");
+    assert.equal(grant.bundleDescriptor.encrypted, true);
     assert.ok(contentStore.has(grant.bundleDescriptor.cid));
 
     // Client decrypts (C++ → C++)

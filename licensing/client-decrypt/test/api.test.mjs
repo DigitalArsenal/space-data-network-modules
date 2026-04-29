@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import test from "node:test";
 
-import * as flatbuffers from "flatbuffers";
 import { Builder } from "flatbuffers";
 import clientDecrypt, {
   createClientDecrypt,
@@ -15,28 +14,22 @@ import {
   keyMaterialEncoding,
   keyMaterialRole,
 } from "../../../../spacedatastandards.org/lib/js/KMF/main.js";
-import { KMF as RecordKMF } from "../../../../spacedatastandards.org/lib/js/REC/KMF.js";
-import { REC } from "../../../../spacedatastandards.org/lib/js/REC/REC.js";
-import { Record } from "../../../../spacedatastandards.org/lib/js/REC/Record.js";
-import { RecordType } from "../../../../spacedatastandards.org/lib/js/REC/RecordType.js";
 import {
+  buildRecWrappedKmfContentKeyFrame,
   encodeGrantResponse,
 } from "../../../delivery/plugin-delivery/lib/module-delivery-codec.mjs";
 import {
   encryptBytesForRecipient,
+  generateX25519Keypair,
 } from "space-data-module-sdk/transport";
+import {
+  aesGcmEncrypt,
+  randomBytes,
+  x25519SharedSecret,
+} from "space-data-module-sdk/utils/wasm-crypto";
 import {
   encryptBytesForRecipient as encryptBytesForRecipientFromWorkspace,
 } from "../../../../space-data-module-sdk/src/transport/index.js";
-
-function hexToBytes(hex) {
-  const normalized = hex.replace(/^0x/i, "");
-  const bytes = new Uint8Array(normalized.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
 
 function concat(...arrays) {
   const total = arrays.reduce((sum, array) => sum + array.length, 0);
@@ -75,229 +68,31 @@ function buildRawKmfContentKeyFrame(keyBytes) {
   return builder.asUint8Array();
 }
 
-const PKCS8_HEADER = hexToBytes("302e020100300506032b656e04220420");
-const SPKI_HEADER = hexToBytes("302a300506032b656e032100");
-const GRANT_PAYLOAD_CONTEXT = "space-data-network/module-delivery/grant/v1";
-const KMF_KEY_BYTES_FIELD_ID = 4;
-
 async function generateX25519KeyPair() {
-  const pair = await crypto.subtle.generateKey("X25519", true, ["deriveBits"]);
-  const spki = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
-  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
-  return {
-    publicKey: spki.slice(12),
-    privateKey: pkcs8.slice(16),
-  };
-}
-
-async function deriveX25519Secret(privateKeyBytes, publicKeyBytes) {
-  const privateKey = await crypto.subtle.importKey(
-    "pkcs8",
-    concat(PKCS8_HEADER, privateKeyBytes),
-    "X25519",
-    false,
-    ["deriveBits"],
-  );
-  const publicKey = await crypto.subtle.importKey(
-    "spki",
-    concat(SPKI_HEADER, publicKeyBytes),
-    "X25519",
-    false,
-    [],
-  );
-  return new Uint8Array(
-    await crypto.subtle.deriveBits(
-      { name: "X25519", public: publicKey },
-      privateKey,
-      256,
-    ),
-  );
-}
-
-async function hkdfBytes(inputKeyMaterial, info, outputLength) {
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    inputKeyMaterial,
-    "HKDF",
-    false,
-    ["deriveBits"],
-  );
-  return new Uint8Array(
-    await crypto.subtle.deriveBits(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: new Uint8Array(),
-        info,
-      },
-      keyMaterial,
-      outputLength * 8,
-    ),
-  );
-}
-
-async function deriveFlatbufferFieldBytes(
-  payloadKey,
-  label,
-  fieldId,
-  recordIndex,
-  outputLength,
-) {
-  const labelBytes = new TextEncoder().encode(label);
-  const info = new Uint8Array(labelBytes.length + 2 + 4);
-  info.set(labelBytes, 0);
-  const view = new DataView(info.buffer);
-  view.setUint16(labelBytes.length, fieldId, false);
-  view.setUint32(labelBytes.length + 2, recordIndex >>> 0, false);
-  return hkdfBytes(payloadKey, info, outputLength);
-}
-
-async function cryptFlatbufferVectorInPlace(
-  bytes,
-  payloadKey,
-  fieldId,
-  recordIndex,
-) {
-  const fieldKey = await deriveFlatbufferFieldBytes(
-    payloadKey,
-    "flatbuffers-field",
-    fieldId,
-    recordIndex,
-    32,
-  );
-  const fieldIv = await deriveFlatbufferFieldBytes(
-    payloadKey,
-    "flatbuffers-iv",
-    fieldId,
-    recordIndex,
-    16,
-  );
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    fieldKey,
-    "AES-CTR",
-    false,
-    ["encrypt"],
-  );
-  const encrypted = await crypto.subtle.encrypt(
-    {
-      name: "AES-CTR",
-      counter: fieldIv,
-      length: 128,
-    },
-    cryptoKey,
-    bytes,
-  );
-  bytes.set(new Uint8Array(encrypted));
-}
-
-async function buildRecWrappedKmfContentKeyFrame(contentKey, sharedSecret) {
-  const builder = new Builder(256);
-  const versionOffset = builder.createString("1.0.0");
-  const keyIdOffset = builder.createString("test-protected-publication-key");
-  const keyBytesOffset = RecordKMF.createKeyBytesVector(builder, contentKey);
-  const kmfOffset = RecordKMF.createKMF(
-    builder,
-    keyIdOffset,
-    keyMaterialRole.DecryptKey,
-    keyMaterialAlgorithm.X25519Private,
-    keyMaterialEncoding.RawBytes,
-    keyBytesOffset,
-    0,
-    0n,
-  );
-  const standardOffset = builder.createString("KMF");
-  const recordOffset = Record.createRecord(
-    builder,
-    RecordType.KMF,
-    kmfOffset,
-    standardOffset,
-  );
-  const recordsOffset = REC.createRecordsVector(builder, [recordOffset]);
-  const recOffset = REC.createREC(builder, versionOffset, recordsOffset);
-  REC.finishRECBuffer(builder, recOffset);
-
-  const encryptedPayload = builder.asUint8Array();
-  const rec = REC.getRootAsREC(new flatbuffers.ByteBuffer(encryptedPayload));
-  const record = rec.RECORDS(0, new Record());
-  const kmf = record?.value(new RecordKMF());
-  const keyBytesView = kmf?.keyBytesArray();
-  if (!keyBytesView) {
-    throw new Error("REC KMF fixture key bytes missing");
-  }
-  const payloadKey = await hkdfBytes(
-    sharedSecret,
-    new TextEncoder().encode(GRANT_PAYLOAD_CONTEXT),
-    32,
-  );
-  await cryptFlatbufferVectorInPlace(
-    keyBytesView,
-    payloadKey,
-    KMF_KEY_BYTES_FIELD_ID,
-    0,
-  );
-  return encryptedPayload;
+  return generateX25519Keypair();
 }
 
 async function buildGrantResponseFixture(plaintext, recipientPublicKey) {
   const ephemeral = await generateX25519KeyPair();
-  const contentKey = crypto.getRandomValues(new Uint8Array(32));
-  const contentIv = crypto.getRandomValues(new Uint8Array(12));
-  const encryptedContent = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: contentIv },
-      await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, ["encrypt"]),
-      plaintext,
-    ),
+  const contentKey = await randomBytes(32);
+  const contentIv = await randomBytes(12);
+  const encryptedContent = await aesGcmEncrypt(
+    contentKey,
+    plaintext,
+    contentIv,
+  );
+  const sharedSecret = await x25519SharedSecret(
+    ephemeral.privateKey,
+    recipientPublicKey,
+  );
+  const wrapIv = await randomBytes(12);
+  const wrappedContentKeyPayload = await buildRecWrappedKmfContentKeyFrame(
+    contentKey,
+    sharedSecret,
   );
 
-  const ephemeralPrivateKey = await crypto.subtle.importKey(
-    "pkcs8",
-    concat(PKCS8_HEADER, ephemeral.privateKey),
-    "X25519",
-    false,
-    ["deriveBits"],
-  );
-  const recipientPublicCryptoKey = await crypto.subtle.importKey(
-    "spki",
-    concat(SPKI_HEADER, recipientPublicKey),
-    "X25519",
-    false,
-    [],
-  );
-  const sharedSecret = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      { name: "X25519", public: recipientPublicCryptoKey },
-      ephemeralPrivateKey,
-      256,
-    ),
-  );
-  const hkdfKey = await crypto.subtle.importKey("raw", sharedSecret, "HKDF", false, ["deriveBits"]);
-  const wrapKey = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: new Uint8Array(),
-        info: new TextEncoder().encode("space-data-network/module-delivery/wrap/v1"),
-      },
-      hkdfKey,
-      256,
-    ),
-  );
-  const wrapIv = crypto.getRandomValues(new Uint8Array(12));
-  const wrappedContentKeyRaw = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: wrapIv },
-      await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, ["encrypt"]),
-      contentKey,
-    ),
-  );
-
-  const ciphertext = encryptedContent.slice(0, encryptedContent.length - 16);
-  const contentTag = encryptedContent.slice(encryptedContent.length - 16);
-  const wrappedKey = wrappedContentKeyRaw.slice(0, 32);
-  const wrappedTag = wrappedContentKeyRaw.slice(32);
+  const ciphertext = encryptedContent.ciphertext;
+  const contentTag = encryptedContent.tag;
   const encryptedBundleBytes = concat(contentIv, ciphertext, contentTag);
   const bundleHash = sha256Bytes(encryptedBundleBytes);
   const bundleCid = `bafy-api-${Buffer.from(bundleHash).toString("hex").slice(0, 24)}`;
@@ -325,12 +120,13 @@ async function buildGrantResponseFixture(plaintext, recipientPublicKey) {
         encryptionCodec: "x25519-hkdf-sha256-aes-256-gcm",
       },
       wrappedContentKey: {
-        wrappingAlgorithm: "ecies-x25519-hkdf-sha256-aes-256-gcm",
+        wrappingAlgorithm: "x25519-hkdf-sha256-aes-256-ctr-rec",
         recipientPublicKey,
         ephemeralPublicKey: ephemeral.publicKey,
         nonce: wrapIv,
-        ciphertext: wrappedKey,
-        tag: wrappedTag,
+        ciphertext: wrappedContentKeyPayload,
+        tag: new Uint8Array(),
+        keyMaterialRootType: "REC",
       },
     }),
   };
@@ -357,60 +153,14 @@ async function buildProtectedPublicationGrantResponseFixture(
   });
   const encryptedBundleBytes = fromBase64(protectedEnvelope.protectedBlobBase64);
 
-  const ephemeralPrivateKey = await crypto.subtle.importKey(
-    "pkcs8",
-    concat(PKCS8_HEADER, ephemeral.privateKey),
-    "X25519",
-    false,
-    ["deriveBits"],
+  const sharedSecret = await x25519SharedSecret(
+    ephemeral.privateKey,
+    recipientPublicKey,
   );
-  const recipientPublicCryptoKey = await crypto.subtle.importKey(
-    "spki",
-    concat(SPKI_HEADER, recipientPublicKey),
-    "X25519",
-    false,
-    [],
-  );
-  const sharedSecret = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      { name: "X25519", public: recipientPublicCryptoKey },
-      ephemeralPrivateKey,
-      256,
-    ),
-  );
-  const hkdfKey = await crypto.subtle.importKey("raw", sharedSecret, "HKDF", false, ["deriveBits"]);
-  const wrapKey = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: new Uint8Array(),
-        info: new TextEncoder().encode("space-data-network/module-delivery/wrap/v1"),
-      },
-      hkdfKey,
-      256,
-    ),
-  );
-  const wrapIv = crypto.getRandomValues(new Uint8Array(12));
-  const wrappedContentKeyRaw =
-    wrapContentKeyAsRawKmf || wrapContentKeyAsRecKmf
-      ? wrapContentKeyAsRecKmf
-        ? await buildRecWrappedKmfContentKeyFrame(contentKey, sharedSecret)
-        : buildRawKmfContentKeyFrame(contentKey)
-      : new Uint8Array(
-          await crypto.subtle.encrypt(
-            { name: "AES-GCM", iv: wrapIv },
-            await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, ["encrypt"]),
-            contentKey,
-          ),
-        );
-
-  const wrappedKey = wrapContentKeyAsRawKmf || wrapContentKeyAsRecKmf
-    ? wrappedContentKeyRaw
-    : wrappedContentKeyRaw.slice(0, 32);
-  const wrappedTag = wrapContentKeyAsRawKmf || wrapContentKeyAsRecKmf
-    ? new Uint8Array()
-    : wrappedContentKeyRaw.slice(32);
+  const wrapIv = await randomBytes(12);
+  const wrappedKey = wrapContentKeyAsRawKmf
+    ? buildRawKmfContentKeyFrame(contentKey)
+    : await buildRecWrappedKmfContentKeyFrame(contentKey, sharedSecret);
   const bundleHash = sha256Bytes(encryptedBundleBytes);
   const bundleCid = `bafy-protected-${Buffer.from(bundleHash).toString("hex").slice(0, 24)}`;
 
@@ -437,16 +187,13 @@ async function buildProtectedPublicationGrantResponseFixture(
         encryptionCodec: "x25519-hkdf-sha256-aes-256-ctr-rec",
       },
       wrappedContentKey: {
-        wrappingAlgorithm: wrapContentKeyAsRecKmf
-          ? "x25519-hkdf-sha256-aes-256-ctr-rec"
-          : wrapContentKeyAsRawKmf
-            ? "ecies-x25519-hkdf-sha256-aes-256-ctr-rec"
-            : "ecies-x25519-hkdf-sha256-aes-256-gcm",
+        wrappingAlgorithm: "x25519-hkdf-sha256-aes-256-ctr-rec",
         recipientPublicKey,
         ephemeralPublicKey: ephemeral.publicKey,
         nonce: wrapIv,
         ciphertext: wrappedKey,
-        tag: wrappedTag,
+        tag: new Uint8Array(),
+        keyMaterialRootType: wrapContentKeyAsRawKmf ? "KMF" : "REC",
       },
     }),
   };
@@ -599,7 +346,7 @@ test("package entrypoint decrypts protected publication bundles created with cur
   assert.deepEqual(decrypted, plaintext);
 });
 
-test("package entrypoint decrypts protected publications with raw KMF grant keys", async (t) => {
+test("package entrypoint rejects protected publications with raw KMF grant keys", async (t) => {
   const { publicKey, privateKey } = await generateX25519KeyPair();
   const plaintext = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
@@ -626,13 +373,15 @@ test("package entrypoint decrypts protected publications with raw KMF grant keys
     await decryptor.destroy();
   });
 
-  const decrypted = await decryptor.decryptArtifact({
-    payload: fixture.grantResponseBytes,
-    privateKey,
-    encryptedBundleBytes: fixture.encryptedBundleBytes,
-  });
-
-  assert.deepEqual(decrypted, plaintext);
+  await assert.rejects(
+    () =>
+      decryptor.decryptArtifact({
+        payload: fixture.grantResponseBytes,
+        privateKey,
+        encryptedBundleBytes: fixture.encryptedBundleBytes,
+      }),
+    /REC payload is invalid|wrapped content key/i,
+  );
 });
 
 test("package entrypoint decrypts protected publications with SDK REC-wrapped KMF grant keys", async (t) => {

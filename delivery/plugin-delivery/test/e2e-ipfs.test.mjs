@@ -6,7 +6,7 @@
  *   1. Helia stores a test WASM artifact
  *   2. plugin-delivery WASM fetches it via ipfs.cat host bridge
  *   3. Encrypts with ECIES for the client's X25519 public key
- *   4. JS WebCrypto decrypts the envelope
+ *   4. hd-wallet-wasm decrypts the envelope through the SDK crypto surface
  *   5. Verify decrypted bytes match original
  *
  * Run: node test/e2e-ipfs.test.mjs
@@ -23,43 +23,26 @@ import {
 } from "./lib/sdkBrowserShimHarness.mjs";
 import {
   decodeGrantResponse,
+  decryptRecWrappedKmfContentKeyFrame,
 } from "../lib/module-delivery-codec.mjs";
+import {
+  generateX25519Keypair,
+} from "space-data-module-sdk/transport";
+import {
+  aesGcmDecrypt,
+  x25519SharedSecret,
+} from "space-data-module-sdk/utils/wasm-crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
 
-// ── Inline WebCrypto ECIES decrypt ──────────────────────────────────────────
-
-function hexToBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++)
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
+// ── WASM ECIES decrypt helpers ──────────────────────────────────────────────
 
 function fromBase64(b64) {
   const raw = atob(b64.replace(/-/g, "+").replace(/_/g, "/"));
   const out = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
   return out;
-}
-
-function concat(...arrays) {
-  const total = arrays.reduce((n, a) => n + a.length, 0);
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const a of arrays) { out.set(a, off); off += a.length; }
-  return out;
-}
-
-const PKCS8_HEADER = hexToBytes("302e020100300506032b656e04220420");
-const SPKI_HEADER = hexToBytes("302a300506032b656e032100");
-
-async function generateX25519KeyPair() {
-  const pair = await crypto.subtle.generateKey("X25519", true, ["deriveBits"]);
-  const spki = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
-  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
-  return { publicKey: spki.slice(12), privateKey: pkcs8.slice(16) };
 }
 
 function sha256Bytes(bytes) {
@@ -74,40 +57,20 @@ function storeIpfsBytes(contentStore, bytes) {
 
 async function decryptDeliveredBundle(grant, encryptedBundleBytes, recipientPrivateKey) {
   const wrappedContentKey = grant.wrappedContentKey;
-  const priv = await crypto.subtle.importKey("pkcs8", concat(PKCS8_HEADER, recipientPrivateKey), "X25519", false, ["deriveBits"]);
-  const pub = await crypto.subtle.importKey(
-    "spki",
-    concat(SPKI_HEADER, wrappedContentKey.ephemeralPublicKey),
-    "X25519",
-    false,
-    [],
+  const shared = await x25519SharedSecret(
+    recipientPrivateKey,
+    wrappedContentKey.ephemeralPublicKey,
   );
-  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: pub }, priv, 256));
-
-  const hkdfKey = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveBits"]);
-  const wrapKey = new Uint8Array(await crypto.subtle.deriveBits({
-    name: "HKDF",
-    hash: "SHA-256",
-    salt: new Uint8Array(),
-    info: new TextEncoder().encode("space-data-network/module-delivery/wrap/v1"),
-  }, hkdfKey, 256));
-
-  const wrapCk = await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, ["decrypt"]);
-  const contentKey = new Uint8Array(await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: wrappedContentKey.nonce },
-    wrapCk,
-    concat(wrappedContentKey.ciphertext, wrappedContentKey.tag),
-  ));
+  const contentKey = await decryptRecWrappedKmfContentKeyFrame(
+    wrappedContentKey.encryptedPayload,
+    shared,
+    { context: wrappedContentKey.header?.context },
+  );
 
   const contentIv = encryptedBundleBytes.slice(0, 12);
   const ciphertext = encryptedBundleBytes.slice(12, encryptedBundleBytes.length - 16);
   const tag = encryptedBundleBytes.slice(encryptedBundleBytes.length - 16);
-  const ck = await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, ["decrypt"]);
-  return new Uint8Array(await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: contentIv },
-    ck,
-    concat(ciphertext, tag),
-  ));
+  return aesGcmDecrypt(contentKey, ciphertext, tag, contentIv);
 }
 
 // ── Test runner ─────────────────────────────────────────────────────────────
@@ -203,7 +166,7 @@ await test("e2e: deliver_plugin returns GrantResponse metadata and encrypted bun
   const cidStr = storeIpfsBytes(contentStore, artifact);
 
   // 2. Client generates keypair
-  const { publicKey, privateKey } = await generateX25519KeyPair();
+  const { publicKey, privateKey } = await generateX25519Keypair();
   operationLog.length = 0;
 
   // 3. Invoke deliver_plugin
@@ -235,17 +198,14 @@ await test("e2e: deliver_plugin returns GrantResponse metadata and encrypted bun
   assert.ok(encryptedBundleBytes, "plugin-delivery should publish an encrypted bundle CID");
   assert.equal(grant.reqId, "req-plugin-delivery-e2e");
   assert.equal(grant.bundleDescriptor.moduleId, "com.orbpro.fastest-path");
-  assert.equal(grant.bundleDescriptor.publicationCid, cidStr);
-  assert.equal(grant.bundleDescriptor.contentCodec, "application/wasm+encrypted");
-  assert.equal(
-    grant.bundleDescriptor.encryptionCodec,
-    "x25519-hkdf-sha256-aes-256-gcm",
-  );
-  assert.equal(grant.wrappedContentKey.wrappingAlgorithm, "ecies-x25519-hkdf-sha256-aes-256-gcm");
+  assert.equal(grant.bundleDescriptor.encrypted, true);
+  assert.equal(grant.bundleDescriptor.requiredScope, "orbpro:module:use");
+  assert.equal(grant.wrappedContentKey.keyMaterialRootType, "REC");
+  assert.equal(grant.wrappedContentKey.wrappingAlgorithm, "x25519-hkdf-sha256-aes-256-ctr-rec");
   assert.equal(grant.bundleDescriptor.sizeBytes, encryptedBundleBytes.length);
   assert.deepEqual(grant.bundleDescriptor.contentHash, sha256Bytes(encryptedBundleBytes));
 
-  // 4. Decrypt with JS WebCrypto
+  // 4. Decrypt with hd-wallet-wasm
   const decrypted = await decryptDeliveredBundle(grant, encryptedBundleBytes, privateKey);
   assert.deepEqual(decrypted, artifact, "decrypted bytes must match original IPFS artifact");
   assert.equal(decrypted[0], 0x00);
@@ -269,7 +229,7 @@ await test("e2e: large artifact (64 KB)", async () => {
   const artifact = crypto.getRandomValues(new Uint8Array(65536));
   const cidStr = storeIpfsBytes(contentStore, artifact);
 
-  const { publicKey, privateKey } = await generateX25519KeyPair();
+  const { publicKey, privateKey } = await generateX25519Keypair();
   operationLog.length = 0;
   const harness = await createHarness();
   const result = await harness.invoke({
@@ -291,8 +251,8 @@ await test("e2e: different clients get different ciphertexts", async () => {
   const artifact = new TextEncoder().encode("shared secret plugin");
   const cidStr = storeIpfsBytes(contentStore, artifact);
 
-  const client1 = await generateX25519KeyPair();
-  const client2 = await generateX25519KeyPair();
+  const client1 = await generateX25519Keypair();
+  const client2 = await generateX25519Keypair();
   operationLog.length = 0;
   const harness = await createHarness();
 
@@ -330,7 +290,7 @@ await test("e2e: different clients get different ciphertexts", async () => {
 });
 
 await test("e2e: wrong CID returns error", async () => {
-  const { publicKey } = await generateX25519KeyPair();
+  const { publicKey } = await generateX25519Keypair();
   const harness = await createHarness();
   const result = await harness.invoke({
     methodId: "deliver_plugin",

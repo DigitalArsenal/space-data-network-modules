@@ -2,8 +2,8 @@
  * SDN Plugin Delivery Module (C++ / Crypto++)
  *
  * Fetches a plugin artifact from IPFS, encrypts it for the recipient, publishes
- * the encrypted bundle over IPFS, and returns a canonical module-delivery
- * GrantResponse FlatBuffer.
+ * the encrypted bundle over IPFS, and returns a canonical SDS `$LGR`
+ * module-delivery grant FlatBuffer.
  */
 
 #include <stdint.h>
@@ -11,23 +11,33 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
 
+// Emscripten's sysroot defines TIME_UTC as a macro; SDS generated headers also
+// contain fields with that exact name.
+#ifdef TIME_UTC
+#undef TIME_UTC
+#endif
+
 #include <flatbuffers/flatbuffers.h>
-#include "BundleDescriptor_generated.h"
-#include "GrantResponse_generated.h"
+#include "ENC_generated.h"
+#include "KMF_generated.h"
+#include "LGR_generated.h"
+#include "PLG_generated.h"
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
+#include "REC_generated.h"
 #include "TypedArenaBuffer_generated.h"
-#include "WrappedContentKey_generated.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/hkdf.h>
+#include <cryptopp/modes.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/xed25519.h>
 #include <cryptopp/secblock.h>
@@ -74,10 +84,10 @@ int32_t sdn_host_clear_response(void);
 
 static const uint8_t SERVER_PRIVATE_KEY[32] = { SDN_BAKED_SERVER_PRIVATE_KEY };
 
-static const char HKDF_WRAP_INFO[] = "space-data-network/module-delivery/wrap/v1";
-static const char WRAP_ALGORITHM[] = "ecies-x25519-hkdf-sha256-aes-256-gcm";
+static const char GRANT_PAYLOAD_CONTEXT[] = "space-data-network/module-delivery/grant/v1";
 static const char DEFAULT_REQ_ID[] = "deliver_plugin";
 static const char DEFAULT_MODULE_ID[] = "module";
+static const char DEFAULT_REQUIRED_SCOPE[] = "orbpro:module:use";
 static const char DEFAULT_RUNTIME[] = "wasm";
 static const char DEFAULT_ABI[] = "module-sdk/async-host-v1";
 static const char DEFAULT_ENTRYPOINT[] = "plugin_invoke_stream";
@@ -86,6 +96,8 @@ static const char DEFAULT_ENCRYPTION_CODEC[] = "x25519-hkdf-sha256-aes-256-gcm";
 static const size_t KEY_BYTES = 32;
 static const size_t GCM_IV_BYTES = 12;
 static const size_t GCM_TAG_BYTES = 16;
+static const size_t RECIPIENT_KEY_ID_BYTES = 8;
+static const uint16_t KMF_KEY_BYTES_FIELD_ID = 4;
 
 static const char B64_CHARS[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -231,14 +243,133 @@ static void sha256_bytes(const uint8_t* data, size_t len, uint8_t out[32]) {
     hash.Final(out);
 }
 
+static void derive_hkdf_key(
+    const uint8_t* ikm,
+    size_t ikm_len,
+    const uint8_t* info,
+    size_t info_len,
+    uint8_t* out,
+    size_t out_len)
+{
+    CryptoPP::HKDF<CryptoPP::SHA256> hkdf;
+    hkdf.DeriveKey(out, out_len, ikm, ikm_len, nullptr, 0, info, info_len);
+}
+
+static void derive_field_key(
+    const uint8_t* master_key,
+    uint16_t field_id,
+    uint32_t record_index,
+    uint8_t* out_key)
+{
+    uint8_t info[32] = "flatbuffers-field";
+    info[17] = static_cast<uint8_t>(field_id >> 8);
+    info[18] = static_cast<uint8_t>(field_id & 0xff);
+    info[19] = static_cast<uint8_t>((record_index >> 24) & 0xff);
+    info[20] = static_cast<uint8_t>((record_index >> 16) & 0xff);
+    info[21] = static_cast<uint8_t>((record_index >> 8) & 0xff);
+    info[22] = static_cast<uint8_t>(record_index & 0xff);
+    derive_hkdf_key(master_key, KEY_BYTES, info, 23, out_key, KEY_BYTES);
+}
+
+static void derive_field_iv(
+    const uint8_t* master_key,
+    uint16_t field_id,
+    uint32_t record_index,
+    uint8_t* out_iv)
+{
+    uint8_t info[32] = "flatbuffers-iv";
+    info[14] = static_cast<uint8_t>(field_id >> 8);
+    info[15] = static_cast<uint8_t>(field_id & 0xff);
+    info[16] = static_cast<uint8_t>((record_index >> 24) & 0xff);
+    info[17] = static_cast<uint8_t>((record_index >> 16) & 0xff);
+    info[18] = static_cast<uint8_t>((record_index >> 8) & 0xff);
+    info[19] = static_cast<uint8_t>(record_index & 0xff);
+    derive_hkdf_key(master_key, KEY_BYTES, info, 20, out_iv, 16);
+}
+
+static void aes_ctr_xor(
+    uint8_t* data,
+    size_t data_len,
+    const uint8_t* key,
+    const uint8_t* iv)
+{
+    CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption ctr;
+    ctr.SetKeyWithIV(key, KEY_BYTES, iv, 16);
+    ctr.ProcessData(data, data, data_len);
+}
+
+static std::vector<uint8_t> build_wrapped_content_key_payload(
+    const char* key_id,
+    const uint8_t* content_key,
+    size_t content_key_len,
+    uint64_t expires_at_ms,
+    const uint8_t* payload_key)
+{
+    std::vector<uint8_t> payload;
+    if (!content_key || content_key_len != KEY_BYTES || !payload_key) {
+        return payload;
+    }
+
+    flatbuffers::FlatBufferBuilder builder(512);
+    const auto key_id_offset = builder.CreateString(key_id ? key_id : "content");
+    const auto key_bytes_offset = builder.CreateVector(content_key, content_key_len);
+    const auto kmf_offset = CreateKMF(
+        builder,
+        key_id_offset,
+        keyMaterialRole::PublicationContent,
+        keyMaterialAlgorithm::Aes256Gcm,
+        keyMaterialEncoding::RawBytes,
+        key_bytes_offset,
+        1,
+        expires_at_ms);
+    const auto standard_offset = builder.CreateString("KMF");
+    const auto record_offset = CreateRecord(
+        builder,
+        RecordType::KMF,
+        kmf_offset.Union(),
+        standard_offset);
+    const std::array<flatbuffers::Offset<Record>, 1> records = {record_offset};
+    const auto records_offset = builder.CreateVector(records.data(), records.size());
+    const auto version_offset = builder.CreateString("1.0");
+    const auto rec_offset = CreateREC(builder, version_offset, records_offset);
+    FinishRECBuffer(builder, rec_offset);
+
+    payload.assign(
+        builder.GetBufferPointer(),
+        builder.GetBufferPointer() + builder.GetSize());
+
+    auto* rec = const_cast<REC*>(GetREC(payload.data()));
+    const auto* record = rec && rec->RECORDS() && rec->RECORDS()->size() == 1
+        ? rec->RECORDS()->Get(0)
+        : nullptr;
+    const auto* kmf = record ? record->value_as_KMF() : nullptr;
+    auto* key_bytes = kmf
+        ? const_cast<flatbuffers::Vector<uint8_t>*>(kmf->KEY_BYTES())
+        : nullptr;
+    if (!key_bytes || key_bytes->size() != KEY_BYTES) {
+        payload.clear();
+        return payload;
+    }
+
+    std::array<uint8_t, KEY_BYTES> field_key{};
+    std::array<uint8_t, 16> field_iv{};
+    derive_field_key(payload_key, KMF_KEY_BYTES_FIELD_ID, 0, field_key.data());
+    derive_field_iv(payload_key, KMF_KEY_BYTES_FIELD_ID, 0, field_iv.data());
+    aes_ctr_xor(key_bytes->Data(), key_bytes->size(), field_key.data(), field_iv.data());
+    memset(field_key.data(), 0, field_key.size());
+    memset(field_iv.data(), 0, field_iv.size());
+    return payload;
+}
+
 struct EncryptedBundle {
     bool ok = false;
     std::vector<uint8_t> encrypted_bundle;
-    std::array<uint8_t, 32> content_hash{};
-    std::array<uint8_t, 32> ephemeral_public_key{};
-    std::vector<uint8_t> wrap_nonce;
-    std::vector<uint8_t> wrapped_ciphertext;
-    std::vector<uint8_t> wrapped_tag;
+    std::array<uint8_t, 32> encrypted_content_hash{};
+    std::array<uint8_t, 32> plaintext_content_hash{};
+    std::array<uint8_t, 32> provider_ephemeral_public_key{};
+    std::array<uint8_t, GCM_IV_BYTES> nonce_start{};
+    std::array<uint8_t, RECIPIENT_KEY_ID_BYTES> recipient_key_id{};
+    std::vector<uint8_t> wrapped_payload;
     std::string error;
 };
 
@@ -267,31 +398,17 @@ static EncryptedBundle encrypt_bundle_for_recipient(
         return out;
     }
 
-    CryptoPP::SecByteBlock wrap_key(KEY_BYTES);
-    CryptoPP::HKDF<CryptoPP::SHA256> hkdf;
-    hkdf.DeriveKey(
-        wrap_key, KEY_BYTES,
-        shared_secret, shared_secret.size(),
-        nullptr, 0,
-        reinterpret_cast<const uint8_t*>(HKDF_WRAP_INFO),
-        sizeof(HKDF_WRAP_INFO) - 1
-    );
+    std::array<uint8_t, KEY_BYTES> payload_key{};
+    derive_hkdf_key(
+        shared_secret,
+        shared_secret.size(),
+        reinterpret_cast<const uint8_t*>(GRANT_PAYLOAD_CONTEXT),
+        sizeof(GRANT_PAYLOAD_CONTEXT) - 1,
+        payload_key.data(),
+        payload_key.size());
 
     CryptoPP::SecByteBlock content_key(KEY_BYTES);
     rng.GenerateBlock(content_key, KEY_BYTES);
-
-    std::array<uint8_t, GCM_IV_BYTES> wrap_iv{};
-    rng.GenerateBlock(wrap_iv.data(), wrap_iv.size());
-
-    std::vector<uint8_t> wrapped_key_and_tag(KEY_BYTES + GCM_TAG_BYTES);
-    {
-        CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
-        enc.SetKeyWithIV(wrap_key, KEY_BYTES, wrap_iv.data(), wrap_iv.size());
-        CryptoPP::ArraySink sink(wrapped_key_and_tag.data(), wrapped_key_and_tag.size());
-        CryptoPP::AuthenticatedEncryptionFilter filter(enc, &sink, false, GCM_TAG_BYTES);
-        filter.Put(content_key, KEY_BYTES);
-        filter.MessageEnd();
-    }
 
     std::array<uint8_t, GCM_IV_BYTES> content_iv{};
     rng.GenerateBlock(content_iv.data(), content_iv.size());
@@ -313,17 +430,40 @@ static EncryptedBundle encrypt_bundle_for_recipient(
         ciphertext_and_tag.begin(),
         ciphertext_and_tag.end()
     );
-    sha256_bytes(out.encrypted_bundle.data(), out.encrypted_bundle.size(), out.content_hash.data());
-    std::copy(ephemeral_public.begin(), ephemeral_public.end(), out.ephemeral_public_key.begin());
-    out.wrap_nonce.assign(wrap_iv.begin(), wrap_iv.end());
-    out.wrapped_ciphertext.assign(
-        wrapped_key_and_tag.begin(),
-        wrapped_key_and_tag.begin() + KEY_BYTES
-    );
-    out.wrapped_tag.assign(
-        wrapped_key_and_tag.begin() + KEY_BYTES,
-        wrapped_key_and_tag.end()
-    );
+    rng.GenerateBlock(out.nonce_start.data(), out.nonce_start.size());
+    sha256_bytes(plaintext, plaintext_len, out.plaintext_content_hash.data());
+    sha256_bytes(
+        out.encrypted_bundle.data(),
+        out.encrypted_bundle.size(),
+        out.encrypted_content_hash.data());
+    std::array<uint8_t, 32> recipient_hash{};
+    sha256_bytes(recipient_pub_key, recipient_pub_len, recipient_hash.data());
+    std::copy_n(
+        recipient_hash.begin(),
+        out.recipient_key_id.size(),
+        out.recipient_key_id.begin());
+    std::copy(
+        ephemeral_public.begin(),
+        ephemeral_public.end(),
+        out.provider_ephemeral_public_key.begin());
+    out.wrapped_payload = build_wrapped_content_key_payload(
+        "publication-content",
+        content_key.BytePtr(),
+        KEY_BYTES,
+        0,
+        payload_key.data());
+    if (out.wrapped_payload.empty()) {
+        out.error = "failed to build SDS wrapped content key payload";
+        memset(payload_key.data(), 0, payload_key.size());
+        memset(content_key.BytePtr(), 0, content_key.size());
+        memset(shared_secret.BytePtr(), 0, shared_secret.size());
+        memset(ephemeral_private.BytePtr(), 0, ephemeral_private.size());
+        return out;
+    }
+    memset(payload_key.data(), 0, payload_key.size());
+    memset(content_key.BytePtr(), 0, content_key.size());
+    memset(shared_secret.BytePtr(), 0, shared_secret.size());
+    memset(ephemeral_private.BytePtr(), 0, ephemeral_private.size());
     out.ok = true;
     return out;
 }
@@ -450,7 +590,6 @@ static bool publish_ipfs_bytes(const std::vector<uint8_t>&, std::string&) {
 #endif
 
 using namespace orbpro::invoke;
-namespace module_delivery = space_data_network::module_delivery::v1;
 
 static flatbuffers::DetachedBuffer build_error_response(const char* msg) {
     flatbuffers::FlatBufferBuilder fbb(256);
@@ -549,76 +688,92 @@ static flatbuffers::DetachedBuffer handle_deliver_plugin(const PluginInvokeReque
         return build_error_response("IPFS publish failed");
     }
 
-    flatbuffers::FlatBufferBuilder builder(2048);
+    flatbuffers::FlatBufferBuilder builder(4096);
+    PLGT descriptor{};
+    descriptor.PLUGIN_ID = metadata.module_id;
+    descriptor.NAME = metadata.module_id;
+    descriptor.VERSION = metadata.module_version.empty() ? "1.0.0" : metadata.module_version;
+    descriptor.WASM_HASH.assign(
+        encrypted.plaintext_content_hash.begin(),
+        encrypted.plaintext_content_hash.end());
+    descriptor.WASM_SIZE = static_cast<uint64_t>(plugin_bytes.size());
+    descriptor.WASM_CID = encrypted_cid;
+    descriptor.ENCRYPTED_WASM_HASH.assign(
+        encrypted.encrypted_content_hash.begin(),
+        encrypted.encrypted_content_hash.end());
+    descriptor.ENCRYPTED_WASM_SIZE =
+        static_cast<uint64_t>(encrypted.encrypted_bundle.size());
+    descriptor.ENCRYPTED = true;
+    descriptor.REQUIRED_SCOPE = DEFAULT_REQUIRED_SCOPE;
+    descriptor.KEY_ID = "publication-content";
+    descriptor.ALLOWED_DOMAINS = {metadata.granted_domain};
+    descriptor.MAX_GRANT_TIMEOUT_MS = metadata.granted_timeout_ms;
+    const auto descriptor_offset = CreatePLG(builder, &descriptor);
+
+    const auto provider_ephemeral_public_key = builder.CreateVector(
+        encrypted.provider_ephemeral_public_key.data(),
+        encrypted.provider_ephemeral_public_key.size());
+    const auto nonce_start = builder.CreateVector(
+        encrypted.nonce_start.data(),
+        encrypted.nonce_start.size());
+    const auto recipient_key_id = builder.CreateVector(
+        encrypted.recipient_key_id.data(),
+        encrypted.recipient_key_id.size());
+    const auto context = builder.CreateString(GRANT_PAYLOAD_CONTEXT);
+    const auto root_type = builder.CreateString("REC");
+    const auto wrapped_header = CreateENC(
+        builder,
+        1,
+        KeyExchange::X25519,
+        SymmetricAlgo::AES_256_CTR,
+        KDF::HKDF_SHA256,
+        provider_ephemeral_public_key,
+        nonce_start,
+        recipient_key_id,
+        context,
+        0,
+        root_type,
+        0);
+    const auto wrapped_payload = builder.CreateVector(
+        encrypted.wrapped_payload.data(),
+        encrypted.wrapped_payload.size());
+
+    uint8_t provider_public_key[KEY_BYTES];
+    derive_server_public_key(provider_public_key);
+    const auto verifier_public_key = builder.CreateVector(
+        provider_public_key,
+        sizeof(provider_public_key));
     const auto req_id = builder.CreateString(metadata.req_id);
-    const auto cid = builder.CreateString(encrypted_cid);
-    const auto content_hash = builder.CreateVector(encrypted.content_hash.data(), encrypted.content_hash.size());
     const auto module_id = builder.CreateString(metadata.module_id);
-    flatbuffers::Offset<flatbuffers::String> module_version;
-    if (!metadata.module_version.empty()) {
-        module_version = builder.CreateString(metadata.module_version);
-    }
-    const auto runtime = builder.CreateString(metadata.runtime);
-    const auto abi = builder.CreateString(metadata.abi);
-    const auto entrypoint = builder.CreateString(metadata.entrypoint);
-    const auto publication_cid = builder.CreateString(metadata.publication_cid);
-    const auto content_codec = builder.CreateString(metadata.content_codec);
-    const auto encryption_codec = builder.CreateString(metadata.encryption_codec);
+    const auto module_version = metadata.module_version.empty()
+        ? flatbuffers::Offset<flatbuffers::String>()
+        : builder.CreateString(metadata.module_version);
     const auto granted_domain = builder.CreateString(metadata.granted_domain);
-    const auto wrapping_algorithm = builder.CreateString(WRAP_ALGORITHM);
-    const auto recipient_key_id = builder.CreateString(bytes_to_hex(client_pub, KEY_BYTES));
-    const auto recipient_public_key = builder.CreateVector(client_pub, KEY_BYTES);
-    const auto ephemeral_public_key = builder.CreateVector(
-        encrypted.ephemeral_public_key.data(),
-        encrypted.ephemeral_public_key.size()
-    );
-    const auto wrap_nonce = builder.CreateVector(encrypted.wrap_nonce.data(), encrypted.wrap_nonce.size());
-    const auto wrapped_ciphertext = builder.CreateVector(
-        encrypted.wrapped_ciphertext.data(),
-        encrypted.wrapped_ciphertext.size()
-    );
-    const auto wrapped_tag = builder.CreateVector(
-        encrypted.wrapped_tag.data(),
-        encrypted.wrapped_tag.size()
-    );
-
-    module_delivery::BundleDescriptorBuilder descriptor_builder(builder);
-    descriptor_builder.add_schema_version(1);
-    descriptor_builder.add_cid(cid);
-    descriptor_builder.add_content_hash(content_hash);
-    descriptor_builder.add_size_bytes(encrypted.encrypted_bundle.size());
-    descriptor_builder.add_module_id(module_id);
-    if (!metadata.module_version.empty()) descriptor_builder.add_module_version(module_version);
-    descriptor_builder.add_runtime(runtime);
-    descriptor_builder.add_abi(abi);
-    descriptor_builder.add_entrypoint(entrypoint);
-    descriptor_builder.add_publication_cid(publication_cid);
-    descriptor_builder.add_content_codec(content_codec);
-    descriptor_builder.add_encryption_codec(encryption_codec);
-    const auto descriptor = descriptor_builder.Finish();
-
-    module_delivery::WrappedContentKeyBuilder wrapped_builder(builder);
-    wrapped_builder.add_schema_version(1);
-    wrapped_builder.add_wrapping_algorithm(wrapping_algorithm);
-    wrapped_builder.add_recipient_key_id(recipient_key_id);
-    wrapped_builder.add_recipient_public_key(recipient_public_key);
-    wrapped_builder.add_ephemeral_public_key(ephemeral_public_key);
-    wrapped_builder.add_nonce(wrap_nonce);
-    wrapped_builder.add_ciphertext(wrapped_ciphertext);
-    wrapped_builder.add_tag(wrapped_tag);
-    const auto wrapped_content_key = wrapped_builder.Finish();
-
-    module_delivery::GrantResponseBuilder grant_builder(builder);
-    grant_builder.add_schema_version(1);
-    grant_builder.add_req_id(req_id);
-    grant_builder.add_expires_at_ms(metadata.expires_at_ms);
-    grant_builder.add_granted_domain(granted_domain);
-    grant_builder.add_granted_timeout_ms(metadata.granted_timeout_ms);
-    grant_builder.add_grant_verifier_public_key(recipient_public_key);
-    grant_builder.add_bundle_descriptor(descriptor);
-    grant_builder.add_wrapped_content_key(wrapped_content_key);
-    const auto grant = grant_builder.Finish();
-    module_delivery::FinishGrantResponseBuffer(builder, grant);
+    const auto grant_status = builder.CreateString("granted");
+    const auto required_scope = builder.CreateString(DEFAULT_REQUIRED_SCOPE);
+    const auto root = CreateLGR(
+        builder,
+        licensingGrantMessageType::Granted,
+        req_id,
+        module_id,
+        module_version,
+        0,
+        0,
+        granted_domain,
+        metadata.granted_timeout_ms,
+        granted_domain,
+        metadata.granted_timeout_ms,
+        metadata.expires_at_ms,
+        required_scope,
+        grant_status,
+        0,
+        0,
+        descriptor_offset,
+        wrapped_header,
+        wrapped_payload,
+        verifier_public_key,
+        0);
+    FinishLGRBuffer(builder, root);
 
     return build_bytes_response(builder.GetBufferPointer(), builder.GetSize());
 }

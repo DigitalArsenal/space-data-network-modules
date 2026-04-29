@@ -135,16 +135,6 @@ async function generateFlatbufferHeaders(outDir) {
       `space-data-module-sdk schemas not found.\nRun: npm install`,
     );
   }
-  const moduleDeliverySchemasDir = path.resolve(
-    __dirname,
-    "../../schemas/space-data-network/module-delivery/v1",
-  );
-  if (!fs.existsSync(moduleDeliverySchemasDir)) {
-    throw new Error(
-      `module-delivery schemas not found at ${moduleDeliverySchemasDir}`,
-    );
-  }
-
   const { default: createFlatc } = await import(`file://${flatcWasmPath}`);
   const flatc = await createFlatc();
 
@@ -153,16 +143,9 @@ async function generateFlatbufferHeaders(outDir) {
     "PluginInvokeResponse.fbs",
     "TypedArenaBuffer.fbs",
   ];
-  const moduleDeliverySchemaFiles = [
-    "BundleDescriptor.fbs",
-    "WrappedContentKey.fbs",
-    "GrantResponse.fbs",
-  ];
-
   const ensureDir = (p) => { try { flatc.FS.mkdir(p); } catch {} };
   ensureDir("/schemas");
   ensureDir("/schemas/sdk");
-  ensureDir("/schemas/module_delivery");
   ensureDir("/out_cpp");
 
   for (const sf of sdkSchemaFiles) {
@@ -171,30 +154,10 @@ async function generateFlatbufferHeaders(outDir) {
       fs.readFileSync(path.join(sdkSchemasDir, sf), "utf8"),
     );
   }
-  for (const sf of moduleDeliverySchemaFiles) {
-    flatc.FS.writeFile(
-      `/schemas/module_delivery/${sf}`,
-      fs.readFileSync(path.join(moduleDeliverySchemasDir, sf), "utf8"),
-    );
-  }
-
   for (const sf of sdkSchemaFiles) {
     const rc = flatc.callMain([
       "--cpp", "--cpp-std", "c++17", "--gen-object-api",
       "-I", "/schemas/sdk", "-o", "/out_cpp", `/schemas/sdk/${sf}`,
-    ]);
-    if (rc !== 0) throw new Error(`flatc failed for ${sf}`);
-    const hdr = `${path.basename(sf, ".fbs")}_generated.h`;
-    fs.writeFileSync(
-      path.join(outDir, hdr),
-      flatc.FS.readFile(`/out_cpp/${hdr}`, { encoding: "utf8" }),
-    );
-  }
-
-  for (const sf of moduleDeliverySchemaFiles) {
-    const rc = flatc.callMain([
-      "--cpp", "--cpp-std", "c++17", "--gen-object-api",
-      "-I", "/schemas/module_delivery", "-o", "/out_cpp", `/schemas/module_delivery/${sf}`,
     ]);
     if (rc !== 0) throw new Error(`flatc failed for ${sf}`);
     const hdr = `${path.basename(sf, ".fbs")}_generated.h`;
@@ -325,8 +288,16 @@ async function main() {
   fs.mkdirSync(ISOMORPHIC_DIST_DIR, { recursive: true });
 
   const flatbuffersInclude = resolveFlatbuffersInclude();
-  if (!fs.existsSync(path.join(CORE_SDS_GENERATED_DIR, "REC_generated.h"))) {
-    throw new Error(`Core SDS generated headers not found at ${CORE_SDS_GENERATED_DIR}`);
+  for (const requiredHeader of [
+    "ENC_generated.h",
+    "KMF_generated.h",
+    "LGR_generated.h",
+    "PLG_generated.h",
+    "REC_generated.h",
+  ]) {
+    if (!fs.existsSync(path.join(CORE_SDS_GENERATED_DIR, requiredHeader))) {
+      throw new Error(`Core SDS generated header not found: ${path.join(CORE_SDS_GENERATED_DIR, requiredHeader)}`);
+    }
   }
 
   // Generate invoke FlatBuffer headers

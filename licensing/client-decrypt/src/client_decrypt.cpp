@@ -1,9 +1,10 @@
 /**
  * SDN Client Decrypt Module (C++ / Crypto++)
  *
- * Decrypts either the legacy JSON envelope format or the canonical
- * module-delivery GrantResponse format. For GrantResponse inputs the module
- * fetches the encrypted bundle over IPFS through the sync sdn_host bridge.
+ * Decrypts either the legacy JSON envelope format or the canonical SDS `$LGR`
+ * module-delivery grant format. For `$LGR` inputs the module fetches the
+ * encrypted bundle over IPFS through the sync sdn_host bridge when the host has
+ * not already supplied the encrypted bundle bytes.
  */
 
 #include <stdint.h>
@@ -24,14 +25,12 @@
 #endif
 
 #include <flatbuffers/flatbuffers.h>
-#include "BundleDescriptor_generated.h"
 #include "ENC_generated.h"
-#include "GrantResponse_generated.h"
+#include "LGR_generated.h"
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
 #include "REC_generated.h"
 #include "TypedArenaBuffer_generated.h"
-#include "WrappedContentKey_generated.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -46,7 +45,6 @@ static const char WRAP_INFOS[][64] = {
     "plugin-key-server-artifact-wrap-v1",
 };
 static const size_t WRAP_INFO_COUNT = 2;
-static const char MODULE_DELIVERY_WRAP_INFO[] = "space-data-network/module-delivery/wrap/v1";
 static const char MODULE_DELIVERY_GRANT_CONTEXT[] = "space-data-network/module-delivery/grant/v1";
 static const size_t KEY_BYTES = 32;
 static const size_t GCM_IV_BYTES = 12;
@@ -311,8 +309,6 @@ static bool fetch_ipfs_bytes(const char*, size_t, std::vector<uint8_t>&) {
 }
 #endif
 
-namespace module_delivery = space_data_network::module_delivery::v1;
-
 static void derive_hkdf_key(
     const uint8_t* ikm,
     size_t ikm_len,
@@ -391,33 +387,6 @@ static const KMF* record_value_as_kmf(const Record* record) {
     return record_standard_is(record, "KMF") && record->value()
         ? static_cast<const KMF*>(record->value())
         : nullptr;
-}
-
-static bool decode_kmf_content_key(
-    const uint8_t* payload,
-    size_t payload_len,
-    std::vector<uint8_t>& content_key_out,
-    std::string& error_out)
-{
-    if (!payload || payload_len < 8 || !KMFBufferHasIdentifier(payload)) {
-        return false;
-    }
-
-    flatbuffers::Verifier verifier(payload, payload_len);
-    if (!VerifyKMFBuffer(verifier)) {
-        error_out = "wrapped content key KMF payload is invalid";
-        return false;
-    }
-
-    const auto* kmf = GetKMF(payload);
-    const auto* key_bytes = kmf ? kmf->KEY_BYTES() : nullptr;
-    if (!key_bytes || key_bytes->size() != KEY_BYTES) {
-        error_out = "wrapped content key KMF payload is missing key bytes";
-        return false;
-    }
-
-    content_key_out.assign(key_bytes->begin(), key_bytes->end());
-    return true;
 }
 
 static uint32_t read_u32_le(const uint8_t* bytes) {
@@ -532,17 +501,25 @@ static int decrypt_protected_publication_bundle(
     return 1;
 }
 
-static bool unwrap_rec_content_key(
-    const module_delivery::WrappedContentKey* wrapped,
+static bool unwrap_sds_wrapped_content_key(
+    const ENC* wrapped_header,
+    const flatbuffers::Vector<uint8_t>* wrapped_payload,
     const uint8_t* requester_private_key,
     std::vector<uint8_t>& content_key_out,
     std::string& error_out)
 {
-    const auto* ephemeral_public_key = wrapped ? wrapped->ephemeral_public_key() : nullptr;
-    const auto* payload = wrapped ? wrapped->ciphertext() : nullptr;
+    const auto* ephemeral_public_key =
+        wrapped_header ? wrapped_header->EPHEMERAL_PUBLIC_KEY() : nullptr;
+    const auto* payload = wrapped_payload;
     if (!ephemeral_public_key || ephemeral_public_key->size() != KEY_BYTES ||
         !payload || payload->size() == 0) {
-        error_out = "wrapped REC content key missing required bytes";
+        error_out = "wrapped SDS content key missing required bytes";
+        return false;
+    }
+    if (wrapped_header->KEY_EXCHANGE() != KeyExchange::X25519 ||
+        wrapped_header->SYMMETRIC() != SymmetricAlgo::AES_256_CTR ||
+        wrapped_header->KEY_DERIVATION() != KDF::HKDF_SHA256) {
+        error_out = "wrapped SDS content key uses an unsupported cipher suite";
         return false;
     }
 
@@ -557,32 +534,22 @@ static bool unwrap_rec_content_key(
     }
 
     std::array<uint8_t, KEY_BYTES> payload_key{};
+    const auto* context_string = wrapped_header->CONTEXT();
+    const uint8_t* context = context_string
+        ? reinterpret_cast<const uint8_t*>(context_string->c_str())
+        : reinterpret_cast<const uint8_t*>(MODULE_DELIVERY_GRANT_CONTEXT);
+    const size_t context_len = context_string
+        ? context_string->size()
+        : sizeof(MODULE_DELIVERY_GRANT_CONTEXT) - 1;
     derive_hkdf_key(
         shared_secret,
         KEY_BYTES,
-        reinterpret_cast<const uint8_t*>(MODULE_DELIVERY_GRANT_CONTEXT),
-        sizeof(MODULE_DELIVERY_GRANT_CONTEXT) - 1,
+        context,
+        context_len,
         payload_key.data(),
         payload_key.size());
 
     std::vector<uint8_t> rec_payload(payload->begin(), payload->end());
-    if (decode_kmf_content_key(
-            rec_payload.data(),
-            rec_payload.size(),
-            content_key_out,
-            error_out)) {
-        memset(payload_key.data(), 0, payload_key.size());
-        memset(shared_secret.BytePtr(), 0, shared_secret.size());
-        memset(rec_payload.data(), 0, rec_payload.size());
-        return true;
-    }
-    if (!error_out.empty()) {
-        memset(payload_key.data(), 0, payload_key.size());
-        memset(shared_secret.BytePtr(), 0, shared_secret.size());
-        memset(rec_payload.data(), 0, rec_payload.size());
-        return false;
-    }
-
     flatbuffers::Verifier verifier(rec_payload.data(), rec_payload.size());
     if (!VerifyRECBuffer(verifier)) {
         error_out = "wrapped content key REC payload is invalid";
@@ -618,7 +585,7 @@ static bool unwrap_rec_content_key(
     return true;
 }
 
-static DecryptResult decrypt_grant_response(
+static DecryptResult decrypt_lgr_grant(
     const uint8_t* grant_bytes,
     size_t grant_len,
     const uint8_t* encrypted_bundle_bytes,
@@ -631,36 +598,28 @@ static DecryptResult decrypt_grant_response(
         result.error = "private key must be 32 bytes";
         return result;
     }
-    if (!module_delivery::GrantResponseBufferHasIdentifier(grant_bytes)) {
-        result.error = "invalid grant response identifier";
+    if (!LGRBufferHasIdentifier(grant_bytes)) {
+        result.error = "invalid SDS LGR grant identifier";
         return result;
     }
 
     flatbuffers::Verifier verifier(grant_bytes, grant_len);
-    if (!module_delivery::VerifyGrantResponseBuffer(verifier)) {
-        result.error = "invalid grant response buffer";
+    if (!VerifyLGRBuffer(verifier)) {
+        result.error = "invalid SDS LGR grant buffer";
         return result;
     }
 
-    const module_delivery::GrantResponse* grant =
-        module_delivery::GetGrantResponse(grant_bytes);
-    const module_delivery::BundleDescriptor* descriptor = grant->bundle_descriptor();
-    const module_delivery::WrappedContentKey* wrapped = grant->wrapped_content_key();
-    if (!descriptor || !wrapped || !descriptor->cid()) {
-        result.error = "grant response missing required fields";
-        return result;
-    }
-
-    const auto* ephemeral_public_key = wrapped->ephemeral_public_key();
-    const auto* nonce = wrapped->nonce();
-    const auto* ciphertext = wrapped->ciphertext();
-    const auto* tag = wrapped->tag();
-    if (!ephemeral_public_key || !nonce || !ciphertext) {
-        result.error = "wrapped content key missing required bytes";
-        return result;
-    }
-    if (ephemeral_public_key->size() != KEY_BYTES) {
-        result.error = "wrapped ephemeral public key must be 32 bytes";
+    const LGR* grant = GetLGR(grant_bytes);
+    const PLG* descriptor = grant ? grant->MODULE_DESCRIPTOR() : nullptr;
+    const ENC* wrapped_header = grant ? grant->WRAPPED_CONTENT_KEY_HEADER() : nullptr;
+    const auto* wrapped_payload = grant ? grant->WRAPPED_CONTENT_KEY_PAYLOAD() : nullptr;
+    if (!grant ||
+        grant->MESSAGE_TYPE() != licensingGrantMessageType::Granted ||
+        !descriptor ||
+        !wrapped_header ||
+        !wrapped_payload ||
+        !descriptor->WASM_CID()) {
+        result.error = "SDS LGR grant missing required fields";
         return result;
     }
 
@@ -671,7 +630,7 @@ static DecryptResult decrypt_grant_response(
             encrypted_bundle_bytes + encrypted_bundle_len
         );
     } else {
-        const auto* cid = descriptor->cid();
+        const auto* cid = descriptor->WASM_CID();
         if (!fetch_ipfs_bytes(cid->c_str(), cid->size(), encrypted_bundle)) {
             result.error = "IPFS fetch failed";
             return result;
@@ -684,54 +643,15 @@ static DecryptResult decrypt_grant_response(
 
     try {
         std::vector<uint8_t> content_key(KEY_BYTES);
-        if (tag && tag->size() > 0) {
-            CryptoPP::x25519 x25519_scheme;
-            CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
-            if (!x25519_scheme.Agree(shared_secret, priv_key, ephemeral_public_key->Data())) {
-                result.error = "X25519 key agreement failed";
-                return result;
-            }
-
-            CryptoPP::SecByteBlock wrap_key(KEY_BYTES);
-            CryptoPP::HKDF<CryptoPP::SHA256> hkdf;
-            hkdf.DeriveKey(
-                wrap_key, KEY_BYTES,
-                shared_secret, KEY_BYTES,
-                nullptr, 0,
-                reinterpret_cast<const uint8_t*>(MODULE_DELIVERY_WRAP_INFO),
-                sizeof(MODULE_DELIVERY_WRAP_INFO) - 1
-            );
-
-            std::vector<uint8_t> wrapped_key_and_tag;
-            wrapped_key_and_tag.reserve(ciphertext->size() + tag->size());
-            wrapped_key_and_tag.insert(
-                wrapped_key_and_tag.end(),
-                ciphertext->begin(),
-                ciphertext->end()
-            );
-            wrapped_key_and_tag.insert(
-                wrapped_key_and_tag.end(),
-                tag->begin(),
-                tag->end()
-            );
-
-            CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
-            dec.SetKeyWithIV(wrap_key, KEY_BYTES, nonce->Data(), nonce->size());
-            CryptoPP::ArraySink sink(content_key.data(), content_key.size());
-            CryptoPP::AuthenticatedDecryptionFilter filter(
-                dec,
-                &sink,
-                CryptoPP::AuthenticatedDecryptionFilter::DEFAULT_FLAGS,
-                GCM_TAG_BYTES
-            );
-            filter.Put(wrapped_key_and_tag.data(), wrapped_key_and_tag.size());
-            filter.MessageEnd();
-        } else {
-            std::string unwrap_error;
-            if (!unwrap_rec_content_key(wrapped, priv_key, content_key, unwrap_error)) {
-                result.error = unwrap_error;
-                return result;
-            }
+        std::string unwrap_error;
+        if (!unwrap_sds_wrapped_content_key(
+                wrapped_header,
+                wrapped_payload,
+                priv_key,
+                content_key,
+                unwrap_error)) {
+            result.error = unwrap_error;
+            return result;
         }
 
         std::vector<uint8_t> publication_plaintext;
@@ -854,8 +774,8 @@ static flatbuffers::DetachedBuffer handle_decrypt_artifact(const PluginInvokeReq
         : 0;
 
     DecryptResult decrypted;
-    if (payload_len >= 8 && module_delivery::GrantResponseBufferHasIdentifier(payload)) {
-        decrypted = decrypt_grant_response(
+    if (payload_len >= 8 && LGRBufferHasIdentifier(payload)) {
+        decrypted = decrypt_lgr_grant(
             payload,
             payload_len,
             encrypted_bundle,

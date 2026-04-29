@@ -15,9 +15,9 @@
     "blockstore-core": "^6.1.2",
     "datastore-core": "^11.0.2",
     "flatbuffers": "^25.9.23",
-    "flatc-wasm": "^26.1.29",
+    "flatc-wasm": "^26.1.32",
     "helia": "^6.0.22",
-    "space-data-module-sdk": "0.8.1"
+    "space-data-module-sdk": "^0.8.4"
   },
   "keywords": [
     "sdn",

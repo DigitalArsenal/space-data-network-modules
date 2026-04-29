@@ -1,6 +1,31 @@
 import { Builder, ByteBuffer } from "flatbuffers";
+import {
+  getWasmWallet,
+  hkdfBytes as wasmHkdfBytes,
+} from "space-data-module-sdk/utils/wasm-crypto";
 
-const GRANT_RESPONSE_FILE_IDENTIFIER = "SDGS";
+import {
+  ENC,
+  KDF,
+  KeyExchange,
+  LGR,
+  PLG,
+  SymmetricAlgo,
+  licensingGrantMessageType,
+} from "../../../../spacedatastandards.org/lib/js/LGR/main.js";
+import {
+  keyMaterialAlgorithm,
+  keyMaterialEncoding,
+  keyMaterialRole,
+} from "../../../../spacedatastandards.org/lib/js/KMF/main.js";
+import { KMF as RecordKMF } from "../../../../spacedatastandards.org/lib/js/REC/KMF.js";
+import { REC } from "../../../../spacedatastandards.org/lib/js/REC/REC.js";
+import { Record } from "../../../../spacedatastandards.org/lib/js/REC/Record.js";
+import { RecordType } from "../../../../spacedatastandards.org/lib/js/REC/RecordType.js";
+
+export const GRANT_RESPONSE_FILE_IDENTIFIER = "$LGR";
+export const GRANT_PAYLOAD_CONTEXT = "space-data-network/module-delivery/grant/v1";
+const KMF_KEY_BYTES_FIELD_ID = 4;
 
 function toUint8Array(value) {
   if (value instanceof Uint8Array) return value;
@@ -11,9 +36,13 @@ function toUint8Array(value) {
   return new Uint8Array();
 }
 
-function createByteVector(builder, value) {
+function cloneBytes(value) {
+  return toUint8Array(value).slice();
+}
+
+function createByteVector(builder, value, createVector) {
   const bytes = toUint8Array(value);
-  return bytes.length > 0 ? builder.createByteVector(bytes) : 0;
+  return bytes.length > 0 ? createVector.call(null, builder, bytes) : 0;
 }
 
 function createString(builder, value) {
@@ -21,181 +50,414 @@ function createString(builder, value) {
   return text.length > 0 ? builder.createString(text) : 0;
 }
 
-function addUint64Field(builder, slot, value) {
-  const numeric = Number(value);
-  builder.addFieldInt64(
-    slot,
-    BigInt(Number.isFinite(numeric) && numeric > 0 ? Math.trunc(numeric) : 0),
-    BigInt(0),
+function numberFromUint64(value) {
+  return Number(value ?? 0n);
+}
+
+function firstNonEmptyBytes(...values) {
+  for (const value of values) {
+    const bytes = toUint8Array(value);
+    if (bytes.length > 0) {
+      return bytes;
+    }
+  }
+  return new Uint8Array();
+}
+
+function buildPluginDescriptor(builder, payload = {}) {
+  const descriptor = payload.bundleDescriptor ?? {};
+  const moduleId = String(descriptor.moduleId ?? payload.moduleId ?? "module");
+  const moduleVersion = String(descriptor.moduleVersion ?? payload.moduleVersion ?? "1.0.0");
+  const contentHash = firstNonEmptyBytes(
+    descriptor.encryptedWasmHash,
+    descriptor.encryptedContentHash,
+    descriptor.contentHash,
   );
-}
-
-function createBundleDescriptor(builder, descriptor = {}) {
-  const cidOffset = createString(builder, descriptor.cid);
-  const contentHashOffset = createByteVector(builder, descriptor.contentHash);
-  const moduleIdOffset = createString(builder, descriptor.moduleId);
-  const moduleVersionOffset = createString(builder, descriptor.moduleVersion);
-  const runtimeOffset = createString(builder, descriptor.runtime);
-  const abiOffset = createString(builder, descriptor.abi);
-  const entrypointOffset = createString(builder, descriptor.entrypoint);
-  const publicationCidOffset = createString(builder, descriptor.publicationCid);
-  const contentCodecOffset = createString(builder, descriptor.contentCodec);
-  const encryptionCodecOffset = createString(builder, descriptor.encryptionCodec);
-
-  builder.startObject(12);
-  builder.addFieldInt32(0, 1, 1);
-  builder.addFieldOffset(1, cidOffset, 0);
-  builder.addFieldOffset(2, contentHashOffset, 0);
-  addUint64Field(builder, 3, descriptor.sizeBytes);
-  builder.addFieldOffset(4, moduleIdOffset, 0);
-  builder.addFieldOffset(5, moduleVersionOffset, 0);
-  builder.addFieldOffset(6, runtimeOffset, 0);
-  builder.addFieldOffset(7, abiOffset, 0);
-  builder.addFieldOffset(8, entrypointOffset, 0);
-  builder.addFieldOffset(9, publicationCidOffset, 0);
-  builder.addFieldOffset(10, contentCodecOffset, 0);
-  builder.addFieldOffset(11, encryptionCodecOffset, 0);
-  return builder.endObject();
-}
-
-function createWrappedContentKey(builder, wrapped = {}) {
-  const wrappingAlgorithmOffset = createString(builder, wrapped.wrappingAlgorithm);
-  const recipientKeyIdOffset = createString(builder, wrapped.recipientKeyId);
-  const recipientPublicKeyOffset = createByteVector(builder, wrapped.recipientPublicKey);
-  const ephemeralPublicKeyOffset = createByteVector(
+  const wasmHash = firstNonEmptyBytes(descriptor.wasmHash);
+  const pluginIdOffset = builder.createString(moduleId);
+  const nameOffset = builder.createString(moduleId);
+  const versionOffset = builder.createString(moduleVersion);
+  const wasmHashOffset = createByteVector(builder, wasmHash, PLG.createWasmHashVector);
+  const wasmCidOffset = createString(builder, descriptor.cid);
+  const encryptedWasmHashOffset = createByteVector(
     builder,
-    wrapped.ephemeralPublicKey || wrapped.providerEphemeralPublicKey,
+    contentHash,
+    PLG.createEncryptedWasmHashVector,
   );
-  const nonceOffset = createByteVector(builder, wrapped.nonce || wrapped.iv);
-  const ciphertextOffset = createByteVector(builder, wrapped.ciphertext);
-  const tagOffset = createByteVector(builder, wrapped.tag);
+  const requiredScopeOffset = createString(
+    builder,
+    descriptor.requiredScope ?? "orbpro:module:use",
+  );
+  const keyIdOffset = createString(
+    builder,
+    descriptor.keyId ?? "publication-content",
+  );
+  const allowedDomain = String(payload.grantedDomain ?? descriptor.allowedDomain ?? "localhost");
+  const allowedDomainOffset = createString(builder, allowedDomain);
+  const allowedDomainsOffset = allowedDomainOffset
+    ? PLG.createAllowedDomainsVector(builder, [allowedDomainOffset])
+    : 0;
 
-  builder.startObject(8);
-  builder.addFieldInt32(0, 1, 1);
-  builder.addFieldOffset(1, wrappingAlgorithmOffset, 0);
-  builder.addFieldOffset(2, recipientKeyIdOffset, 0);
-  builder.addFieldOffset(3, recipientPublicKeyOffset, 0);
-  builder.addFieldOffset(4, ephemeralPublicKeyOffset, 0);
-  builder.addFieldOffset(5, nonceOffset, 0);
-  builder.addFieldOffset(6, ciphertextOffset, 0);
-  builder.addFieldOffset(7, tagOffset, 0);
-  return builder.endObject();
+  PLG.startPLG(builder);
+  PLG.addPluginId(builder, pluginIdOffset);
+  PLG.addName(builder, nameOffset);
+  PLG.addVersion(builder, versionOffset);
+  PLG.addWasmHash(builder, wasmHashOffset);
+  PLG.addWasmSize(builder, BigInt(Number(descriptor.wasmSize ?? 0)));
+  PLG.addWasmCid(builder, wasmCidOffset);
+  PLG.addEncryptedWasmHash(builder, encryptedWasmHashOffset);
+  PLG.addEncryptedWasmSize(
+    builder,
+    BigInt(Number(descriptor.sizeBytes ?? descriptor.encryptedWasmSize ?? 0)),
+  );
+  PLG.addEncrypted(builder, descriptor.encrypted ?? true);
+  PLG.addRequiredScope(builder, requiredScopeOffset);
+  PLG.addKeyId(builder, keyIdOffset);
+  PLG.addAllowedDomains(builder, allowedDomainsOffset);
+  PLG.addMaxGrantTimeoutMs(
+    builder,
+    BigInt(Number(descriptor.maxGrantTimeoutMs ?? payload.grantedTimeoutMs ?? 0)),
+  );
+  return PLG.endPLG(builder);
+}
+
+function buildWrappedContentKeyHeader(builder, wrapped = {}) {
+  const header = wrapped.header ?? {};
+  const ephemeralPublicKey = firstNonEmptyBytes(
+    header.ephemeralPublicKey,
+    wrapped.ephemeralPublicKey,
+    wrapped.providerEphemeralPublicKey,
+  );
+  const nonceStart = firstNonEmptyBytes(header.nonceStart, wrapped.nonce, wrapped.iv);
+  const recipientKeyId = firstNonEmptyBytes(
+    header.recipientKeyId,
+    wrapped.recipientKeyIdBytes,
+  );
+  const schemaHash = firstNonEmptyBytes(header.schemaHash, wrapped.schemaHash);
+  const ephemeralPublicKeyOffset = ENC.createEphemeralPublicKeyVector(
+    builder,
+    ephemeralPublicKey,
+  );
+  const nonceStartOffset = ENC.createNonceStartVector(builder, nonceStart);
+  const recipientKeyIdOffset = createByteVector(
+    builder,
+    recipientKeyId,
+    ENC.createRecipientKeyIdVector,
+  );
+  const contextOffset = createString(builder, header.context ?? GRANT_PAYLOAD_CONTEXT);
+  const schemaHashOffset = createByteVector(
+    builder,
+    schemaHash,
+    ENC.createSchemaHashVector,
+  );
+  const rootTypeOffset = createString(
+    builder,
+    header.rootType ?? wrapped.keyMaterialRootType ?? "REC",
+  );
+
+  ENC.startENC(builder);
+  ENC.addKeyExchange(builder, KeyExchange.X25519);
+  ENC.addSymmetric(builder, SymmetricAlgo.AES_256_CTR);
+  ENC.addKeyDerivation(builder, KDF.HKDF_SHA256);
+  ENC.addEphemeralPublicKey(builder, ephemeralPublicKeyOffset);
+  ENC.addNonceStart(builder, nonceStartOffset);
+  ENC.addRecipientKeyId(builder, recipientKeyIdOffset);
+  ENC.addContext(builder, contextOffset);
+  ENC.addSchemaHash(builder, schemaHashOffset);
+  ENC.addRootType(builder, rootTypeOffset);
+  return ENC.endENC(builder);
 }
 
 export function encodeGrantResponse(payload = {}) {
-  const builder = new Builder(1024);
-  const bundleDescriptorOffset = createBundleDescriptor(builder, payload.bundleDescriptor);
-  const wrappedContentKeyOffset = createWrappedContentKey(builder, payload.wrappedContentKey);
-  const reqIdOffset = createString(builder, payload.reqId);
-  const entitlementStatusOffset = createString(
-    builder,
-    payload.entitlementStatus || payload.grantStatus || "granted",
+  const builder = new Builder(2048);
+  const descriptorOffset = buildPluginDescriptor(builder, payload);
+  const wrapped = payload.wrappedContentKey ?? {};
+  const wrappedHeaderOffset = buildWrappedContentKeyHeader(builder, wrapped);
+  const wrappedPayload = firstNonEmptyBytes(
+    wrapped.encryptedPayload,
+    wrapped.ciphertext,
   );
-  const capabilityTokenOffset = createString(builder, payload.capabilityToken);
-  const grantedDomainOffset = createString(builder, payload.grantedDomain);
-  const grantSignatureOffset = createByteVector(builder, payload.grantSignature);
-  const verifierPublicKeyOffset = createByteVector(builder, payload.grantVerifierPublicKey);
+  const wrappedPayloadOffset = LGR.createWrappedContentKeyPayloadVector(
+    builder,
+    wrappedPayload,
+  );
+  const verifierPublicKeyOffset = createByteVector(
+    builder,
+    payload.grantVerifierPublicKey,
+    LGR.createGrantVerifierPubkeyVector,
+  );
+  const signatureOffset = createByteVector(
+    builder,
+    payload.providerSignature ?? payload.grantSignature,
+    LGR.createProviderSignatureVector,
+  );
+  const capabilityTokenOffset = createByteVector(
+    builder,
+    payload.capabilityToken,
+    LGR.createCapabilityTokenVector,
+  );
+  const requestIdOffset = createString(builder, payload.reqId ?? "deliver_plugin");
+  const moduleIdOffset = createString(
+    builder,
+    payload.moduleId ?? payload.bundleDescriptor?.moduleId ?? "module",
+  );
+  const moduleVersionOffset = createString(
+    builder,
+    payload.moduleVersion ?? payload.bundleDescriptor?.moduleVersion,
+  );
+  const requestedDomainOffset = createString(
+    builder,
+    payload.requestedDomain ?? payload.grantedDomain,
+  );
+  const grantedDomainOffset = createString(builder, payload.grantedDomain ?? "localhost");
+  const requiredScopeOffset = createString(
+    builder,
+    payload.requiredScope ?? payload.bundleDescriptor?.requiredScope,
+  );
+  const grantStatusOffset = createString(
+    builder,
+    payload.grantStatus ?? payload.entitlementStatus ?? "granted",
+  );
 
-  builder.startObject(11);
-  builder.addFieldInt32(0, 1, 1);
-  builder.addFieldOffset(1, reqIdOffset, 0);
-  builder.addFieldOffset(2, entitlementStatusOffset, 0);
-  builder.addFieldOffset(3, capabilityTokenOffset, 0);
-  addUint64Field(builder, 4, payload.expiresAtMs);
-  builder.addFieldOffset(5, grantedDomainOffset, 0);
-  addUint64Field(builder, 6, payload.grantedTimeoutMs);
-  builder.addFieldOffset(7, grantSignatureOffset, 0);
-  builder.addFieldOffset(8, verifierPublicKeyOffset, 0);
-  builder.addFieldOffset(9, bundleDescriptorOffset, 0);
-  builder.addFieldOffset(10, wrappedContentKeyOffset, 0);
-  const root = builder.endObject();
-  builder.finish(root, GRANT_RESPONSE_FILE_IDENTIFIER);
+  LGR.startLGR(builder);
+  LGR.addMessageType(builder, licensingGrantMessageType.Granted);
+  LGR.addRequestId(builder, requestIdOffset);
+  LGR.addModuleId(builder, moduleIdOffset);
+  LGR.addModuleVersion(builder, moduleVersionOffset);
+  LGR.addRequestedDomain(builder, requestedDomainOffset);
+  LGR.addRequestedTimeoutMs(builder, BigInt(Number(payload.requestedTimeoutMs ?? payload.grantedTimeoutMs ?? 0)));
+  LGR.addGrantedDomain(builder, grantedDomainOffset);
+  LGR.addGrantedTimeoutMs(builder, BigInt(Number(payload.grantedTimeoutMs ?? 0)));
+  LGR.addExpiresAt(builder, BigInt(Number(payload.expiresAtMs ?? 0)));
+  LGR.addRequiredScope(builder, requiredScopeOffset);
+  LGR.addGrantStatus(builder, grantStatusOffset);
+  LGR.addCapabilityToken(builder, capabilityTokenOffset);
+  LGR.addModuleDescriptor(builder, descriptorOffset);
+  LGR.addWrappedContentKeyHeader(builder, wrappedHeaderOffset);
+  LGR.addWrappedContentKeyPayload(builder, wrappedPayloadOffset);
+  LGR.addGrantVerifierPubkey(builder, verifierPublicKeyOffset);
+  LGR.addProviderSignature(builder, signatureOffset);
+  const root = LGR.endLGR(builder);
+  LGR.finishLGRBuffer(builder, root);
   return builder.asUint8Array();
 }
 
-function getRootTable(bytes, identifier) {
-  const buffer = toUint8Array(bytes);
-  const bb = new ByteBuffer(buffer);
-  if (!bb.__has_identifier(identifier)) {
-    throw new Error(`expected ${identifier} FlatBuffer`);
+function decodeDescriptor(descriptor) {
+  if (!descriptor) {
+    throw new Error("grant response is missing the SDS PLG descriptor");
   }
-  return { bb, pos: bb.readInt32(bb.position()) + bb.position() };
-}
-
-function tableField(table, vtableOffset) {
-  const offset = table.bb.__offset(table.pos, vtableOffset);
-  return offset ? { bb: table.bb, pos: table.bb.__indirect(table.pos + offset) } : null;
-}
-
-function stringField(table, vtableOffset) {
-  const offset = table.bb.__offset(table.pos, vtableOffset);
-  return offset ? table.bb.__string(table.pos + offset) : undefined;
-}
-
-function bytesField(table, vtableOffset) {
-  const offset = table.bb.__offset(table.pos, vtableOffset);
-  if (!offset) return new Uint8Array();
-  const vectorStart = table.bb.__vector(table.pos + offset);
-  const vectorLength = table.bb.__vector_len(table.pos + offset);
-  return new Uint8Array(
-    table.bb.bytes().buffer,
-    table.bb.bytes().byteOffset + vectorStart,
-    vectorLength,
-  ).slice();
-}
-
-function uint64Field(table, vtableOffset) {
-  const offset = table.bb.__offset(table.pos, vtableOffset);
-  if (!offset) return 0;
-  const value = table.bb.readUint64(table.pos + offset);
-  return Number(value);
-}
-
-function decodeBundleDescriptor(table) {
+  const encrypted = descriptor.ENCRYPTED();
+  const contentHash = encrypted
+    ? cloneBytes(descriptor.encryptedWasmHashArray() ?? descriptor.wasmHashArray())
+    : cloneBytes(descriptor.wasmHashArray());
+  const sizeBytes = encrypted && descriptor.ENCRYPTED_WASM_SIZE() > 0n
+    ? numberFromUint64(descriptor.ENCRYPTED_WASM_SIZE())
+    : numberFromUint64(descriptor.WASM_SIZE());
   return {
-    cid: stringField(table, 6) || "",
-    contentHash: bytesField(table, 8),
-    sizeBytes: uint64Field(table, 10),
-    moduleId: stringField(table, 12) || "",
-    moduleVersion: stringField(table, 14),
-    runtime: stringField(table, 16),
-    abi: stringField(table, 18),
-    entrypoint: stringField(table, 20),
-    publicationCid: stringField(table, 22),
-    contentCodec: stringField(table, 24),
-    encryptionCodec: stringField(table, 26),
+    cid: descriptor.WASM_CID() ?? "",
+    contentHash,
+    sizeBytes,
+    moduleId: descriptor.PLUGIN_ID() ?? "",
+    moduleVersion: descriptor.VERSION() ?? undefined,
+    keyId: descriptor.KEY_ID() ?? undefined,
+    requiredScope: descriptor.REQUIRED_SCOPE() ?? undefined,
+    allowedDomains: Array.from(
+      { length: descriptor.allowedDomainsLength?.() ?? 0 },
+      (_, index) => descriptor.ALLOWED_DOMAINS(index),
+    ).filter(Boolean),
+    maxGrantTimeoutMs: numberFromUint64(descriptor.MAX_GRANT_TIMEOUT_MS()),
+    encrypted,
   };
 }
 
-function decodeWrappedContentKey(table) {
+function decodeWrappedContentKey(header, payload) {
+  if (!header) {
+    throw new Error("grant response is missing the SDS ENC wrapped key header");
+  }
+  const encryptedPayload = cloneBytes(payload);
+  const providerEphemeralPublicKey = cloneBytes(header.ephemeralPublicKeyArray());
+  const nonceStart = cloneBytes(header.nonceStartArray());
+  const recipientKeyIdBytes = cloneBytes(header.recipientKeyIdArray());
   return {
-    wrappingAlgorithm: stringField(table, 6) || "",
-    recipientKeyId: stringField(table, 8),
-    recipientPublicKey: bytesField(table, 10),
-    ephemeralPublicKey: bytesField(table, 12),
-    nonce: bytesField(table, 14),
-    ciphertext: bytesField(table, 16),
-    tag: bytesField(table, 18),
+    wrappingAlgorithm: "x25519-hkdf-sha256-aes-256-ctr-rec",
+    recipientKeyIdBytes,
+    providerEphemeralPublicKey,
+    ephemeralPublicKey: providerEphemeralPublicKey,
+    nonce: nonceStart,
+    iv: nonceStart,
+    ciphertext: encryptedPayload,
+    tag: new Uint8Array(),
+    encryptedPayload,
+    keyMaterialRootType: header.ROOT_TYPE() ?? "REC",
+    header: {
+      version: header.VERSION(),
+      keyExchange: "X25519",
+      symmetric: "AES_256_CTR",
+      keyDerivation: "HKDF_SHA256",
+      ephemeralPublicKey: providerEphemeralPublicKey,
+      nonceStart,
+      recipientKeyId: recipientKeyIdBytes,
+      context: header.CONTEXT() ?? undefined,
+      schemaHash: cloneBytes(header.schemaHashArray()),
+      rootType: header.ROOT_TYPE() ?? undefined,
+    },
   };
 }
 
 export function decodeGrantResponse(messageBytes) {
-  const grant = getRootTable(messageBytes, GRANT_RESPONSE_FILE_IDENTIFIER);
-  const bundleDescriptor = tableField(grant, 22);
-  const wrappedContentKey = tableField(grant, 24);
-  if (!bundleDescriptor || !wrappedContentKey) {
-    throw new Error("grant response is missing required module-delivery tables");
+  const bytes = toUint8Array(messageBytes);
+  const bb = new ByteBuffer(bytes);
+  if (!LGR.bufferHasIdentifier(bb)) {
+    throw new Error("expected $LGR FlatBuffer");
   }
+  const grant = LGR.getRootAsLGR(bb);
+  const payload = grant.wrappedContentKeyPayloadArray() ?? new Uint8Array();
   return {
-    reqId: stringField(grant, 6) || "",
-    entitlementStatus: stringField(grant, 8),
-    capabilityToken: stringField(grant, 10),
-    expiresAtMs: uint64Field(grant, 12),
-    grantedDomain: stringField(grant, 14) || "",
-    grantedTimeoutMs: uint64Field(grant, 16),
-    grantSignature: bytesField(grant, 18),
-    grantVerifierPublicKey: bytesField(grant, 20),
-    bundleDescriptor: decodeBundleDescriptor(bundleDescriptor),
-    wrappedContentKey: decodeWrappedContentKey(wrappedContentKey),
+    reqId: grant.REQUEST_ID() ?? "",
+    moduleId: grant.MODULE_ID() ?? "",
+    moduleVersion: grant.MODULE_VERSION() ?? undefined,
+    requestedDomain: grant.REQUESTED_DOMAIN() ?? undefined,
+    requestedTimeoutMs: numberFromUint64(grant.REQUESTED_TIMEOUT_MS()),
+    grantedDomain: grant.GRANTED_DOMAIN() ?? "",
+    grantedTimeoutMs: numberFromUint64(grant.GRANTED_TIMEOUT_MS()),
+    expiresAtMs: numberFromUint64(grant.EXPIRES_AT()),
+    requiredScope: grant.REQUIRED_SCOPE() ?? undefined,
+    grantStatus: grant.GRANT_STATUS() ?? undefined,
+    capabilityToken: cloneBytes(grant.capabilityTokenArray()),
+    grantVerifierPublicKey: cloneBytes(grant.grantVerifierPubkeyArray()),
+    providerSignature: cloneBytes(grant.providerSignatureArray()),
+    bundleDescriptor: decodeDescriptor(grant.MODULE_DESCRIPTOR()),
+    wrappedContentKey: decodeWrappedContentKey(
+      grant.WRAPPED_CONTENT_KEY_HEADER(),
+      payload,
+    ),
   };
+}
+
+async function hkdfBytes(inputKeyMaterial, info, outputLength) {
+  return wasmHkdfBytes(
+    inputKeyMaterial,
+    new Uint8Array(),
+    info,
+    outputLength,
+  );
+}
+
+async function deriveFlatbufferFieldBytes(
+  masterKey,
+  label,
+  fieldId,
+  recordIndex,
+  outputLength,
+) {
+  const info = new Uint8Array(label.length + 6);
+  info.set(new TextEncoder().encode(label), 0);
+  const offset = label.length;
+  info[offset] = (fieldId >> 8) & 0xff;
+  info[offset + 1] = fieldId & 0xff;
+  info[offset + 2] = (recordIndex >> 24) & 0xff;
+  info[offset + 3] = (recordIndex >> 16) & 0xff;
+  info[offset + 4] = (recordIndex >> 8) & 0xff;
+  info[offset + 5] = recordIndex & 0xff;
+  return hkdfBytes(masterKey, info, outputLength);
+}
+
+async function cryptFlatbufferVectorInPlace(bytes, payloadKey, fieldId, recordIndex) {
+  const fieldKey = await deriveFlatbufferFieldBytes(
+    payloadKey,
+    "flatbuffers-field",
+    fieldId,
+    recordIndex,
+    32,
+  );
+  const fieldIv = await deriveFlatbufferFieldBytes(
+    payloadKey,
+    "flatbuffers-iv",
+    fieldId,
+    recordIndex,
+    16,
+  );
+  const wallet = await getWasmWallet();
+  const encrypted = wallet.aesCtr.encrypt(fieldKey, bytes, fieldIv);
+  bytes.set(encrypted);
+}
+
+export async function buildRecWrappedKmfContentKeyFrame(
+  contentKey,
+  sharedSecret,
+  options = {},
+) {
+  const keyBytes = toUint8Array(contentKey);
+  const builder = new Builder(256);
+  const versionOffset = builder.createString("1.0");
+  const keyIdOffset = builder.createString(options.keyId ?? "publication-content");
+  const keyBytesOffset = RecordKMF.createKeyBytesVector(builder, keyBytes);
+  const kmfOffset = RecordKMF.createKMF(
+    builder,
+    keyIdOffset,
+    options.role ?? keyMaterialRole.PublicationContent,
+    options.algorithm ?? keyMaterialAlgorithm.Aes256Gcm,
+    keyMaterialEncoding.RawBytes,
+    keyBytesOffset,
+    options.version ?? 1,
+    BigInt(Number(options.expiresAtMs ?? 0)),
+  );
+  const standardOffset = builder.createString("KMF");
+  const recordOffset = Record.createRecord(
+    builder,
+    RecordType.KMF,
+    kmfOffset,
+    standardOffset,
+  );
+  const recordsOffset = REC.createRecordsVector(builder, [recordOffset]);
+  const recOffset = REC.createREC(builder, versionOffset, recordsOffset);
+  REC.finishRECBuffer(builder, recOffset);
+
+  const encryptedPayload = builder.asUint8Array();
+  const rec = REC.getRootAsREC(new ByteBuffer(encryptedPayload));
+  const record = rec.RECORDS(0, new Record());
+  const kmf = record?.value(new RecordKMF());
+  const keyBytesView = kmf?.keyBytesArray();
+  if (!keyBytesView) {
+    throw new Error("REC KMF key bytes missing");
+  }
+  const payloadKey = await hkdfBytes(
+    toUint8Array(sharedSecret),
+    new TextEncoder().encode(options.context ?? GRANT_PAYLOAD_CONTEXT),
+    32,
+  );
+  await cryptFlatbufferVectorInPlace(
+    keyBytesView,
+    payloadKey,
+    KMF_KEY_BYTES_FIELD_ID,
+    0,
+  );
+  return encryptedPayload;
+}
+
+export async function decryptRecWrappedKmfContentKeyFrame(
+  encryptedPayload,
+  sharedSecret,
+  options = {},
+) {
+  const payload = cloneBytes(encryptedPayload);
+  const rec = REC.getRootAsREC(new ByteBuffer(payload));
+  const record = rec.RECORDS(0, new Record());
+  const kmf = record?.value(new RecordKMF());
+  const keyBytesView = kmf?.keyBytesArray();
+  if (!keyBytesView) {
+    throw new Error("REC KMF key bytes missing");
+  }
+  const payloadKey = await hkdfBytes(
+    toUint8Array(sharedSecret),
+    new TextEncoder().encode(options.context ?? GRANT_PAYLOAD_CONTEXT),
+    32,
+  );
+  await cryptFlatbufferVectorInPlace(
+    keyBytesView,
+    payloadKey,
+    KMF_KEY_BYTES_FIELD_ID,
+    0,
+  );
+  return keyBytesView.slice();
 }

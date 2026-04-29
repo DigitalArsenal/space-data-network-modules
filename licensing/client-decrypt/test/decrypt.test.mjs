@@ -2,7 +2,7 @@
 /**
  * Integration test: client-decrypt WASM module (standalone repo)
  *
- * Verifies the C++ Crypto++ ECIES decryption matches the WebCrypto
+ * Verifies the C++ Crypto++ ECIES decryption matches the WASM crypto
  * encryption end-to-end via the space-data-module-sdk browser harness.
  *
  * Run: node test/decrypt.test.mjs
@@ -18,15 +18,8 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
 
-// ── Inline WebCrypto artifact-crypto (self-contained, no external dep) ──────
+// ── Inline artifact-crypto fixtures using hd-wallet-wasm via SDK ────────────
 
-function hexToBytes(hex) {
-  const h = hex.replace(/^0x/i, "");
-  const bytes = new Uint8Array(h.length / 2);
-  for (let i = 0; i < bytes.length; i++)
-    bytes[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
-  return bytes;
-}
 
 function bytesToHex(bytes) {
   return Array.from(bytes)
@@ -52,21 +45,8 @@ function concat(...arrays) {
   return out;
 }
 
-const PKCS8_HEADER = hexToBytes("302e020100300506032b656e04220420");
-const SPKI_HEADER = hexToBytes("302a300506032b656e032100");
-
 async function generateX25519KeyPair() {
-  const pair = await crypto.subtle.generateKey("X25519", true, ["deriveBits"]);
-  const spki = new Uint8Array(
-    await crypto.subtle.exportKey("spki", pair.publicKey),
-  );
-  const pkcs8 = new Uint8Array(
-    await crypto.subtle.exportKey("pkcs8", pair.privateKey),
-  );
-  return {
-    publicKey: spki.slice(12),
-    privateKey: pkcs8.slice(16),
-  };
+  return generateX25519Keypair();
 }
 
 async function encryptArtifact(
@@ -75,70 +55,24 @@ async function encryptArtifact(
   wrapInfo = "orbpro-key-server-artifact-wrap-v1",
 ) {
   const ephemeral = await generateX25519KeyPair();
-  const privKey = await crypto.subtle.importKey(
-    "pkcs8",
-    concat(PKCS8_HEADER, ephemeral.privateKey),
-    "X25519",
-    false,
-    ["deriveBits"],
-  );
-  const pubKey = await crypto.subtle.importKey(
-    "spki",
-    concat(SPKI_HEADER, recipientPublicKey),
-    "X25519",
-    false,
-    [],
-  );
-  const sharedSecret = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      { name: "X25519", public: pubKey },
-      privKey,
-      256,
-    ),
+  const sharedSecret = await x25519SharedSecret(
+    ephemeral.privateKey,
+    recipientPublicKey,
   );
 
-  const hkdfSalt = crypto.getRandomValues(new Uint8Array(32));
-  const hkdfKey = await crypto.subtle.importKey(
-    "raw",
+  const hkdfSalt = await randomBytes(32);
+  const wrapKey = await hkdfBytes(
     sharedSecret,
-    "HKDF",
-    false,
-    ["deriveBits"],
+    hkdfSalt,
+    new TextEncoder().encode(wrapInfo),
+    32,
   );
-  const wrapKeyBits = await crypto.subtle.deriveBits(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: hkdfSalt,
-      info: new TextEncoder().encode(wrapInfo),
-    },
-    hkdfKey,
-    256,
-  );
-  const wrapKey = new Uint8Array(wrapKeyBits);
+  const contentKey = await randomBytes(32);
+  const wrapIV = await randomBytes(12);
+  const wrapped = await aesGcmEncrypt(wrapKey, contentKey, wrapIV);
 
-  const contentKey = crypto.getRandomValues(new Uint8Array(32));
-  const wrapIV = crypto.getRandomValues(new Uint8Array(12));
-  const wrappedRaw = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: wrapIV },
-      await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, [
-        "encrypt",
-      ]),
-      contentKey,
-    ),
-  );
-
-  const contentIV = crypto.getRandomValues(new Uint8Array(12));
-  const encRaw = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: contentIV },
-      await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, [
-        "encrypt",
-      ]),
-      plaintext,
-    ),
-  );
+  const contentIV = await randomBytes(12);
+  const encrypted = await aesGcmEncrypt(contentKey, plaintext, contentIV);
 
   return {
     keyEncryption: {
@@ -146,14 +80,14 @@ async function encryptArtifact(
       ephemeralPublicKeyHex: bytesToHex(ephemeral.publicKey),
       hkdfSaltB64: toBase64(hkdfSalt),
       wrapIvB64: toBase64(wrapIV),
-      wrappedKeyB64: toBase64(wrappedRaw.slice(0, 32)),
-      wrappedKeyTagB64: toBase64(wrappedRaw.slice(32)),
+      wrappedKeyB64: toBase64(wrapped.ciphertext),
+      wrappedKeyTagB64: toBase64(wrapped.tag),
     },
     contentEncryption: {
       algorithm: "aes-256-gcm",
       ivB64: toBase64(contentIV),
-      tagB64: toBase64(encRaw.slice(encRaw.length - 16)),
-      ciphertextB64: toBase64(encRaw.slice(0, encRaw.length - 16)),
+      tagB64: toBase64(encrypted.tag),
+      ciphertextB64: toBase64(encrypted.ciphertext),
     },
   };
 }
@@ -177,73 +111,22 @@ async function buildGrantResponseFixture(
   metadata = {},
 ) {
   const ephemeral = await generateX25519KeyPair();
-  const contentKey = crypto.getRandomValues(new Uint8Array(32));
-  const contentIv = crypto.getRandomValues(new Uint8Array(12));
-  const encryptedContent = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: contentIv },
-      await crypto.subtle.importKey("raw", contentKey, "AES-GCM", false, [
-        "encrypt",
-      ]),
-      plaintext,
-    ),
-  );
+  const contentKey = await randomBytes(32);
+  const contentIv = await randomBytes(12);
+  const encryptedContent = await aesGcmEncrypt(contentKey, plaintext, contentIv);
 
-  const ephemeralPrivateKey = await crypto.subtle.importKey(
-    "pkcs8",
-    concat(PKCS8_HEADER, ephemeral.privateKey),
-    "X25519",
-    false,
-    ["deriveBits"],
+  const sharedSecret = await x25519SharedSecret(
+    ephemeral.privateKey,
+    recipientPublicKey,
   );
-  const recipientPublicCryptoKey = await crypto.subtle.importKey(
-    "spki",
-    concat(SPKI_HEADER, recipientPublicKey),
-    "X25519",
-    false,
-    [],
-  );
-  const sharedSecret = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      { name: "X25519", public: recipientPublicCryptoKey },
-      ephemeralPrivateKey,
-      256,
-    ),
-  );
-  const hkdfKey = await crypto.subtle.importKey(
-    "raw",
+  const wrapIv = await randomBytes(12);
+  const wrappedContentKeyPayload = await buildRecWrappedKmfContentKeyFrame(
+    contentKey,
     sharedSecret,
-    "HKDF",
-    false,
-    ["deriveBits"],
-  );
-  const wrapKey = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: new Uint8Array(),
-        info: new TextEncoder().encode("space-data-network/module-delivery/wrap/v1"),
-      },
-      hkdfKey,
-      256,
-    ),
-  );
-  const wrapIv = crypto.getRandomValues(new Uint8Array(12));
-  const wrappedContentKeyRaw = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: wrapIv },
-      await crypto.subtle.importKey("raw", wrapKey, "AES-GCM", false, [
-        "encrypt",
-      ]),
-      contentKey,
-    ),
   );
 
-  const ciphertext = encryptedContent.slice(0, encryptedContent.length - 16);
-  const contentTag = encryptedContent.slice(encryptedContent.length - 16);
-  const wrappedKey = wrappedContentKeyRaw.slice(0, 32);
-  const wrappedTag = wrappedContentKeyRaw.slice(32);
+  const ciphertext = encryptedContent.ciphertext;
+  const contentTag = encryptedContent.tag;
   const packedEncryptedBundle = concat(contentIv, ciphertext, contentTag);
   const bundleHash = sha256Bytes(packedEncryptedBundle);
   const bundleCid =
@@ -274,12 +157,13 @@ async function buildGrantResponseFixture(
           metadata.encryptionCodec ?? "x25519-hkdf-sha256-aes-256-gcm",
       },
       wrappedContentKey: {
-        wrappingAlgorithm: "ecies-x25519-hkdf-sha256-aes-256-gcm",
+        wrappingAlgorithm: "x25519-hkdf-sha256-aes-256-ctr-rec",
         recipientPublicKey,
         ephemeralPublicKey: ephemeral.publicKey,
         nonce: wrapIv,
-        ciphertext: wrappedKey,
-        tag: wrappedTag,
+        ciphertext: wrappedContentKeyPayload,
+        tag: new Uint8Array(),
+        keyMaterialRootType: "REC",
       },
     }),
   };
@@ -291,9 +175,19 @@ import {
   createBrowserModuleHarness,
 } from "space-data-module-sdk/testing";
 import {
+  generateX25519Keypair,
+} from "space-data-module-sdk/transport";
+import {
+  aesGcmEncrypt,
+  hkdfBytes,
+  randomBytes,
+  x25519SharedSecret,
+} from "space-data-module-sdk/utils/wasm-crypto";
+import {
   createSdkBrowserShimHarness,
 } from "./lib/sdkBrowserShimHarness.mjs";
 import {
+  buildRecWrappedKmfContentKeyFrame,
   encodeGrantResponse,
 } from "../../../delivery/plugin-delivery/lib/module-delivery-codec.mjs";
 
