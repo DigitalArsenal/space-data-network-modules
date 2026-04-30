@@ -95,10 +95,10 @@ whatever `AEROSPACE_IVV_EXTRACTED_ROOT` points to. The archive smoke tests use
 ## What Belongs Here
 
 - Individual SDN module packages and their published `dist/` outputs.
-- Plugin-specific C++/WASM source, manifests, build scripts, and tests.
+- Module-specific C++/WASM source, manifests, build scripts, and tests.
 - Basilisk-derived runtime seeds, module plans, standards maps, and thin
   wrappers that use `../basilisk` as the upstream source of truth.
-- Each plugin is a standalone, isomorphic WASM module that runs on both
+- Each module is a standalone, isomorphic WASM module that runs on both
   WasmEdge (server) and browser (via `browserModuleHarness` + WASI shim).
 
 ## What Does Not Belong Here

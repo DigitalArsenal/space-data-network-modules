@@ -9,7 +9,7 @@
     "payloadFrame": "TAB"
   },
   "migrationDecision": {
-    "canonicalModulesMigration": "migrate stable modules from space-data-network-plugins after Basilisk runtime/family contracts are checked into space-data-network-modules; do not block Basilisk work on that migration",
+    "canonicalModulesMigration": "keep stable modules and Basilisk runtime/family contracts together in space-data-network-modules; do not split Basilisk work into standalone module repos",
     "stackPinRule": "do not update orbpro-stack submodule pins until affected component commits are pushed"
   },
   "families": [

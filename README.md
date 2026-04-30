@@ -1,8 +1,8 @@
-# Space Data Network Plugins
+# Space Data Network Modules
 
-Private super-repo for DigitalArsenal Space Data Network modules/plugins. This
+Private super-repo for DigitalArsenal Space Data Network modules. This
 repository is the canonical home for SDK-compliant module implementations,
-including migrated plugin families and Basilisk-derived module families.
+including migrated module families and Basilisk-derived module families.
 
 ## Structure
 
@@ -12,13 +12,12 @@ including migrated plugin families and Basilisk-derived module families.
 - `packages/<domain>`: pending legacy migration targets when a package has not
   yet been moved into a family folder
 - `README.md`: migration catalog and package status board
-- `AGENTS.md`: repo-level Codex entry point for plugin migration and build work
-- `skills/building-space-data-network-plugins/`: repo-local Codex skill and references for the plugin build contract
+- `AGENTS.md`: repo-level Codex entry point for module migration and build work
 
 ## Naming Convention
 
 - Source repo: `Friends-Of-Lobsternaut/<domain>-sdn-plugin`
-- Target repo: `DigitalArsenal/space-data-network-plugin-<domain>`
+- Historical split target repo: `DigitalArsenal/space-data-network-plugin-<domain>`
 - Package path: `packages/<domain>`
 
 ## Migration Catalog
@@ -186,7 +185,7 @@ The SDK repo owns the real-plugin signing and encrypted-delivery regression. Run
 this from `space-data-module-sdk` after building the migrated packages here:
 
 ```bash
-SPACE_DATA_NETWORK_PLUGINS_ROOT=../space-data-network-plugins \
+SPACE_DATA_NETWORK_PLUGINS_ROOT=../space-data-network-modules \
 node --test test/isomorphic-plugin-loading.test.js
 ```
 
