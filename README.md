@@ -34,7 +34,7 @@ including migrated module families and Basilisk-derived module families.
 | `packages/bls` | `DigitalArsenal/space-data-network-plugin-bls` | `Friends-Of-Lobsternaut/bls-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/bolide` | `DigitalArsenal/space-data-network-plugin-bolide` | `Friends-Of-Lobsternaut/bolide-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/cell-towers-worldwide` | `DigitalArsenal/space-data-network-plugin-cell-towers-worldwide` | `Friends-Of-Lobsternaut/cell-towers-worldwide-sdn-plugin` | Pending | Not migrated yet. |
-| `propagator/cislunar` | `DigitalArsenal/space-data-network-plugin-cislunar` | `Friends-Of-Lobsternaut/cislunar-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, sdn-flow example, native CR3BP coverage. |
+| `propagator/cislunar` | `DigitalArsenal/space-data-network-plugin-cislunar` | `Friends-Of-Lobsternaut/cislunar-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, hosted-runtime example, native CR3BP coverage. |
 | `packages/comtrade` | `DigitalArsenal/space-data-network-plugin-comtrade` | `Friends-Of-Lobsternaut/comtrade-sdn-plugin` | Pending | Not migrated yet. |
 | `analysis/conjunction-assessment` | `DigitalArsenal/space-data-network-plugin-conjunction-assessment` | Migrated legacy source | Completed | Isomorphic plugin: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke. |
 | `packages/da-asat-predictor` | `DigitalArsenal/space-data-network-plugin-da-asat-predictor` | `Friends-Of-Lobsternaut/da-asat-predictor-sdn-plugin` | Pending | Not migrated yet. |
@@ -61,7 +61,7 @@ including migrated module families and Basilisk-derived module families.
 | `packages/link-analysis` | `DigitalArsenal/space-data-network-plugin-link-analysis` | `Friends-Of-Lobsternaut/link-analysis-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/linkanalysis` | `DigitalArsenal/space-data-network-plugin-linkanalysis` | `Friends-Of-Lobsternaut/linkanalysis-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/lst` | `DigitalArsenal/space-data-network-plugin-lst` | `Friends-Of-Lobsternaut/lst-sdn-plugin` | Pending | Not migrated yet. |
-| `analysis/maneuver` | `DigitalArsenal/space-data-network-plugin-maneuver` | `Friends-Of-Lobsternaut/maneuver-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, sdn-flow example. |
+| `analysis/maneuver` | `DigitalArsenal/space-data-network-plugin-maneuver` | `Friends-Of-Lobsternaut/maneuver-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, hosted-runtime example. |
 | `packages/mediameta` | `DigitalArsenal/space-data-network-plugin-mediameta` | `Friends-Of-Lobsternaut/mediameta-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/meteorite-falls` | `DigitalArsenal/space-data-network-plugin-meteorite-falls` | `Friends-Of-Lobsternaut/meteorite-falls-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/missile` | `DigitalArsenal/space-data-network-plugin-missile` | `Friends-Of-Lobsternaut/missile-sdn-plugin` | Pending | Not migrated yet. |

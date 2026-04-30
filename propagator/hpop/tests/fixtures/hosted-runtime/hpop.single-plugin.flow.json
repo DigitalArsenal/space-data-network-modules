@@ -1,11 +1,11 @@
 {
-  "programId": "com.digitalarsenal.examples.sgp4-single-plugin-flow",
-  "name": "SGP4 Single Plugin Flow",
+  "programId": "com.digitalarsenal.examples.hpop-single-plugin-flow",
+  "name": "HPOP Single Plugin Flow",
   "version": "0.1.0",
   "nodes": [
     {
-      "nodeId": "sgp4",
-      "pluginId": "propagator.sgp4",
+      "nodeId": "hpop",
+      "pluginId": "hpop-propagator",
       "methodId": "invoke",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
@@ -22,12 +22,12 @@
   "triggerBindings": [
     {
       "triggerId": "manual-request",
-      "targetNodeId": "sgp4",
+      "targetNodeId": "hpop",
       "targetPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     }
   ],
-  "requiredPlugins": ["propagator.sgp4"],
-  "description": "Minimal sdn-flow example invoking the SGP4 plugin through the canonical command bridge."
+  "requiredPlugins": ["hpop-propagator"],
+  "description": "Minimal hosted-runtime example invoking the HPOP propagator plugin through the canonical command bridge."
 }

@@ -29,5 +29,5 @@
     }
   ],
   "requiredPlugins": ["conjunction-assessment", "com.orbpro.sgp4"],
-  "description": "Minimal sdn-flow example invoking the conjunction assessment plugin through the canonical command bridge."
+  "description": "Minimal hosted-runtime example invoking the conjunction assessment plugin through the canonical command bridge."
 }

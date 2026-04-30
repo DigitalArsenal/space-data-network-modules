@@ -1,6 +1,6 @@
 # Atmosphere Plugin
 
-Atmospheric model queries packaged as a canonical `space-data-module-sdk` command-surface plugin for `sdn-flow`, WasmEdge, and browser runtimes.
+Atmospheric model queries packaged as a canonical `space-data-module-sdk` command-surface plugin for hosted SDN runtimes, WasmEdge, and browser runtimes.
 
 ## What it does
 
@@ -78,13 +78,13 @@ That test covers:
 - SDK artifact compliance
 - browser wrapper smoke via `dist/atmosphere_wasm.js`
 - WasmEdge command invoke smoke via `dist/atmosphere_wasm.wasm`
-- an `sdn-flow` example contract check
+- a hosted-runtime example contract check
 
-## sdn-flow example
+## hosted-runtime example
 
 A minimal single-plugin flow example lives at:
 
-- `tests/fixtures/sdn-flow/atmosphere.single-plugin.flow.json`
+- `tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json`
 
 It binds a manual trigger to the plugin's canonical `request` port and invokes method `invoke`.
 

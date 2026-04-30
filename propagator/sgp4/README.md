@@ -1,6 +1,6 @@
 # SGP4 Propagator Plugin
 
-SGP4/SDP4 orbital propagation operations packaged as a canonical `space-data-module-sdk` command-surface plugin for `sdn-flow`, WasmEdge, and browser runtimes.
+SGP4/SDP4 orbital propagation operations packaged as a canonical `space-data-module-sdk` command-surface plugin for hosted SDN runtimes, WasmEdge, and browser runtimes.
 
 ## What it does
 
@@ -82,7 +82,7 @@ That test covers:
 - SDK artifact compliance
 - browser wrapper smoke via `dist/browser/module.js`
 - WasmEdge command invoke smoke via `dist/isomorphic/module.wasm`
-- an `sdn-flow` example contract check
+- a hosted-runtime example contract check
 - Tudat-derived SGP4 regression coverage in `tests/tudat_wasm_derived.test.mjs`
 
 ## Tudat-Derived Verification
@@ -103,11 +103,11 @@ The local test therefore uses the same Vallado case against the vendored
 `libsgp4` TEME verification vector from `src/cpp/deps/sgp4/SGP4-VER.TLE`, and
 keeps the Tudat source links in the test header for provenance.
 
-## sdn-flow example
+## hosted-runtime example
 
 A minimal single-plugin flow example lives at:
 
-- `tests/fixtures/sdn-flow/sgp4.single-plugin.flow.json`
+- `tests/fixtures/hosted-runtime/sgp4.single-plugin.flow.json`
 
 It binds a manual trigger to the plugin's canonical `request` port and invokes method `invoke`.
 

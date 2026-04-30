@@ -1,11 +1,11 @@
 {
-  "programId": "com.digitalarsenal.examples.maneuver-single-plugin-flow",
-  "name": "Maneuver Single Plugin Flow",
+  "programId": "com.digitalarsenal.examples.sgp4-single-plugin-flow",
+  "name": "SGP4 Single Plugin Flow",
   "version": "0.1.0",
   "nodes": [
     {
-      "nodeId": "maneuver",
-      "pluginId": "maneuver-planner",
+      "nodeId": "sgp4",
+      "pluginId": "propagator.sgp4",
       "methodId": "invoke",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
@@ -22,12 +22,12 @@
   "triggerBindings": [
     {
       "triggerId": "manual-request",
-      "targetNodeId": "maneuver",
+      "targetNodeId": "sgp4",
       "targetPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     }
   ],
-  "requiredPlugins": ["maneuver-planner"],
-  "description": "Minimal sdn-flow example invoking the maneuver plugin through the canonical command bridge."
+  "requiredPlugins": ["propagator.sgp4"],
+  "description": "Minimal hosted-runtime example invoking the SGP4 plugin through the canonical command bridge."
 }

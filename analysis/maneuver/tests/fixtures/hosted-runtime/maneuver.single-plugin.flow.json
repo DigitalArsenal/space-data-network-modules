@@ -1,11 +1,11 @@
 {
-  "programId": "com.digitalarsenal.examples.hpop-single-plugin-flow",
-  "name": "HPOP Single Plugin Flow",
+  "programId": "com.digitalarsenal.examples.maneuver-single-plugin-flow",
+  "name": "Maneuver Single Plugin Flow",
   "version": "0.1.0",
   "nodes": [
     {
-      "nodeId": "hpop",
-      "pluginId": "hpop-propagator",
+      "nodeId": "maneuver",
+      "pluginId": "maneuver-planner",
       "methodId": "invoke",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
@@ -22,12 +22,12 @@
   "triggerBindings": [
     {
       "triggerId": "manual-request",
-      "targetNodeId": "hpop",
+      "targetNodeId": "maneuver",
       "targetPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     }
   ],
-  "requiredPlugins": ["hpop-propagator"],
-  "description": "Minimal sdn-flow example invoking the HPOP propagator plugin through the canonical command bridge."
+  "requiredPlugins": ["maneuver-planner"],
+  "description": "Minimal hosted-runtime example invoking the maneuver plugin through the canonical command bridge."
 }

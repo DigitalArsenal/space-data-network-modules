@@ -1,11 +1,11 @@
 {
-  "programId": "com.digitalarsenal.examples.cislunar-single-plugin-flow",
-  "name": "Cislunar Single Plugin Flow",
+  "programId": "com.digitalarsenal.examples.atmosphere-single-plugin-flow",
+  "name": "Atmosphere Single Plugin Flow",
   "version": "0.1.0",
   "nodes": [
     {
-      "nodeId": "cislunar",
-      "pluginId": "cislunar-propagator",
+      "nodeId": "atmosphere",
+      "pluginId": "atmosphere-model",
       "methodId": "invoke",
       "kind": "transform",
       "drainPolicy": "drain-to-empty"
@@ -22,12 +22,12 @@
   "triggerBindings": [
     {
       "triggerId": "manual-request",
-      "targetNodeId": "cislunar",
+      "targetNodeId": "atmosphere",
       "targetPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     }
   ],
-  "requiredPlugins": ["cislunar-propagator"],
-  "description": "Minimal sdn-flow example invoking the cislunar plugin through the canonical command bridge."
+  "requiredPlugins": ["atmosphere-model"],
+  "description": "Minimal hosted-runtime example invoking the atmosphere plugin through the canonical command bridge."
 }

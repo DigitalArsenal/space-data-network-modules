@@ -106,4 +106,4 @@ whatever `AEROSPACE_IVV_EXTRACTED_ROOT` points to. The archive smoke tests use
 - SDK internals — those live in `space-data-module-sdk`.
 - Application-specific host behavior — that belongs in the host repo (OrbPro,
   `sdn-js`, Go SDN).
-- Flow composition and runtime orchestration — those belong in `sdn-flow`.
+- Flow composition and runtime orchestration belong in host repos such as OrbPro and Space Data Network.

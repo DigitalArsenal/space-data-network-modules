@@ -29,5 +29,5 @@
     }
   ],
   "requiredPlugins": ["orbit-determination"],
-  "description": "Minimal sdn-flow example invoking the orbit determination plugin through the canonical MEME fit bridge."
+  "description": "Minimal hosted-runtime example invoking the orbit determination plugin through the canonical MEME fit bridge."
 }

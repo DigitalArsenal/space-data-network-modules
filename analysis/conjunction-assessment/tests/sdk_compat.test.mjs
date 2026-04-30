@@ -18,7 +18,7 @@ const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.me
 const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
 const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
 const FLOW_EXAMPLE_PATH = new URL(
-  "../tests/fixtures/sdn-flow/conjunction.single-plugin.flow.json",
+  "../tests/fixtures/hosted-runtime/conjunction.single-plugin.flow.json",
   import.meta.url,
 );
 const textDecoder = new TextDecoder();
@@ -166,7 +166,7 @@ test("pthread isomorphic artifact is not routed through the browser WASI harness
   );
 });
 
-test("sdn-flow example is wired to the screen catalog command surface", () => {
+test("hosted-runtime example is wired to the screen catalog command surface", () => {
   const flow = JSON.parse(fs.readFileSync(FLOW_EXAMPLE_PATH, "utf8"));
   assert.equal(flow.nodes.length, 1);
   assert.equal(flow.nodes[0].pluginId, "conjunction-assessment");

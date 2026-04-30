@@ -20,7 +20,7 @@ const REQUEST_FIXTURE_PATH = new URL(
   import.meta.url,
 );
 const FLOW_EXAMPLE_PATH = new URL(
-  "../tests/fixtures/sdn-flow/atmosphere.single-plugin.flow.json",
+  "../tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json",
   import.meta.url,
 );
 
@@ -134,7 +134,7 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
   assertSuccessfulResponse(response);
 });
 
-test("sdn-flow example is wired to the canonical invoke contract", () => {
+test("hosted-runtime example is wired to the canonical invoke contract", () => {
   const flow = JSON.parse(fs.readFileSync(FLOW_EXAMPLE_PATH, "utf8"));
   assert.equal(flow.nodes.length, 1);
   assert.equal(flow.nodes[0].pluginId, "atmosphere-model");
