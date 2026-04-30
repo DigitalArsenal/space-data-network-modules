@@ -6,9 +6,11 @@ EMSDK_DIR="${SDN_LOCAL_EMSDK_DIR:-$SCRIPT_DIR/deps/emsdk}"
 SRC_DIR="$SCRIPT_DIR/src/cpp"
 BROWSER_BUILD_DIR="$SRC_DIR/build-browser"
 ISOMORPHIC_BUILD_DIR="$SRC_DIR/build-isomorphic"
+SINGLETHREAD_BUILD_DIR="$SRC_DIR/build-isomorphic-singlethread"
 DIST_DIR="$SCRIPT_DIR/dist"
 BROWSER_DIST_DIR="$DIST_DIR/browser"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
+SINGLETHREAD_DIST_DIR="$DIST_DIR/isomorphic-singlethread"
 BROWSER_TARGET="conjunction_assessment_wasm"
 FLATBUFFERS_INCLUDE_DIR="${SDN_FLATBUFFERS_INCLUDE_DIR:-${FLATBUFFERS_INCLUDE_DIR:-}}"
 
@@ -79,9 +81,9 @@ ensure_emscripten
 
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
 
-rm -rf "$BROWSER_BUILD_DIR" "$ISOMORPHIC_BUILD_DIR"
+rm -rf "$BROWSER_BUILD_DIR" "$ISOMORPHIC_BUILD_DIR" "$SINGLETHREAD_BUILD_DIR"
 rm -rf "$DIST_DIR"
-mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
+mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR" "$SINGLETHREAD_DIST_DIR"
 
 echo "Configuring Emscripten browser pthread build..."
 emcmake cmake \
@@ -118,5 +120,21 @@ cmake --build "$ISOMORPHIC_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)
 cp "$ISOMORPHIC_BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
 
 echo ""
+echo "Configuring Emscripten single-thread SDK build..."
+emcmake cmake \
+    -S "$SRC_DIR" \
+    -B "$SINGLETHREAD_BUILD_DIR" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCONJUNCTION_ENABLE_PTHREADS=OFF \
+    -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF \
+    "${FLATBUFFERS_CMAKE_ARGS[@]}"
+
+echo ""
+echo "Building single-thread SDK artifact..."
+cmake --build "$SINGLETHREAD_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
+
+cp "$SINGLETHREAD_BUILD_DIR/${BROWSER_TARGET}.wasm" "$SINGLETHREAD_DIST_DIR/module.wasm"
+
+echo ""
 echo "=== Build Complete ==="
-ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm" "$SINGLETHREAD_DIST_DIR/module.wasm"

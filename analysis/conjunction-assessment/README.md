@@ -76,7 +76,8 @@ Artifacts:
 
 - `dist/browser/module.js`
 - `dist/browser/module.wasm`
-- `dist/isomorphic/module.wasm`
+- `dist/isomorphic/module.wasm` (pthread-enabled WasmEdge SDK artifact)
+- `dist/isomorphic-singlethread/module.wasm` (single-thread SDK artifact for synchronous Node recovery tests)
 
 ## Verification
 

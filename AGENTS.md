@@ -22,7 +22,10 @@ or verifying a package under any family subfolder:
 
 1. Read the SDK AGENTS.md first.
 2. Follow the SDK's canonical build and publication rules.
-3. Use `dist/isomorphic/module.wasm` as the single compiled artifact path.
+3. Use `dist/isomorphic/module.wasm` as the primary compiled SDK artifact path.
+   Conjunction-assessment also ships
+   `dist/isomorphic-singlethread/module.wasm` as a Node recovery-test artifact
+   because its primary isomorphic artifact is pthread-enabled for WasmEdge.
 4. Verify with `node --test tests/sdk_compat.test.mjs` after building.
 
 ## Local Validation Data For Agents
