@@ -92,7 +92,7 @@ emcmake cmake \
     -DCMAKE_BUILD_TYPE=Release \
     -DCONJUNCTION_ENABLE_PTHREADS=ON \
     -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=ON \
-    "${FLATBUFFERS_CMAKE_ARGS[@]}"
+    ${FLATBUFFERS_CMAKE_ARGS[@]+"${FLATBUFFERS_CMAKE_ARGS[@]}"}
 
 echo ""
 echo "Building browser adapter..."
@@ -111,7 +111,7 @@ emcmake cmake \
     -DCMAKE_BUILD_TYPE=Release \
     -DCONJUNCTION_ENABLE_PTHREADS=ON \
     -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF \
-    "${FLATBUFFERS_CMAKE_ARGS[@]}"
+    ${FLATBUFFERS_CMAKE_ARGS[@]+"${FLATBUFFERS_CMAKE_ARGS[@]}"}
 
 echo ""
 echo "Building standalone SDK artifact..."
@@ -127,7 +127,7 @@ emcmake cmake \
     -DCMAKE_BUILD_TYPE=Release \
     -DCONJUNCTION_ENABLE_PTHREADS=OFF \
     -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF \
-    "${FLATBUFFERS_CMAKE_ARGS[@]}"
+    ${FLATBUFFERS_CMAKE_ARGS[@]+"${FLATBUFFERS_CMAKE_ARGS[@]}"}
 
 echo ""
 echo "Building single-thread SDK artifact..."
