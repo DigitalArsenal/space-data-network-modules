@@ -1,0 +1,57 @@
+{
+  "pluginId": "com.digitalarsenal.basilisk.runtime",
+  "name": "Basilisk Runtime Module",
+  "version": "0.1.0",
+  "description": "Seed SDN module for Basilisk runtime scenario execution, message dictionaries, and deterministic replay.",
+  "pluginFamily": "basilisk",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "echo_xtc_dictionary",
+      "displayName": "Echo XTCE Dictionary",
+      "inputPorts": [
+        {
+          "portId": "dictionary",
+          "acceptedTypeSets": [
+            {
+              "setId": "xtc-flatbuffer",
+              "allowedTypes": [
+                {
+                  "schemaName": "XTC.fbs",
+                  "fileIdentifier": "$XTC"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "dictionary",
+          "acceptedTypeSets": [
+            {
+              "setId": "xtc-flatbuffer",
+              "allowedTypes": [
+                {
+                  "schemaName": "XTC.fbs",
+                  "fileIdentifier": "$XTC"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
