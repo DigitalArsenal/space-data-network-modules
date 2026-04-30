@@ -11,6 +11,7 @@ PACKAGES=(
     analysis/conjunction-assessment
     analysis/maneuver
     analysis/od
+    basilisk/runtime
     licensing/core
     shaders/sensor-shaders
 )

@@ -13,6 +13,7 @@ PACKAGES=(
     analysis/conjunction-assessment
     analysis/maneuver
     analysis/od
+    basilisk/runtime
 )
 
 if [ "$#" -gt 0 ]; then
@@ -24,6 +25,7 @@ if [ ! -f "$SDK_ROOT/package.json" ]; then
     echo "Resolved SDK root: $SDK_ROOT" >&2
     exit 1
 fi
+SDK_ROOT="$(cd "$SDK_ROOT" && pwd)"
 
 if ! command -v wasmedge >/dev/null 2>&1; then
     echo "Install the wasmedge CLI before running SDK compatibility tests." >&2

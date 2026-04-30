@@ -1,10 +1,16 @@
 # Space Data Network Plugins
 
-Private super-repo for DigitalArsenal Space Data Network plugins. Each package is added as a git submodule under `packages/` and tracks a migrated plugin repo named `space-data-network-plugin-<domain>`.
+Private super-repo for DigitalArsenal Space Data Network modules/plugins. This
+repository is the canonical home for SDK-compliant module implementations,
+including migrated plugin families and Basilisk-derived module families.
 
 ## Structure
 
-- `packages/<domain>`: git submodule for one migrated plugin repo
+- `analysis/`, `propagator/`, `shaders/`, `licensing/`, `delivery/`: migrated
+  SDK-compliant module families
+- `basilisk/`: Basilisk-derived module plans and runtime seed modules
+- `packages/<domain>`: pending legacy migration targets when a package has not
+  yet been moved into a family folder
 - `README.md`: migration catalog and package status board
 - `AGENTS.md`: repo-level Codex entry point for plugin migration and build work
 - `skills/building-space-data-network-plugins/`: repo-local Codex skill and references for the plugin build contract
@@ -104,6 +110,7 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 - Packages are organized by family under top-level subfolders:
   - `propagator/` — `sgp4`, `hpop`, `atmosphere`, `cislunar`
   - `analysis/` — `conjunction-assessment`, `maneuver`, `od`, `fastest-path`
+  - `basilisk/` — runtime seed package plus generated Basilisk module plan
   - `shaders/` — `sensor-shaders`, `viewshed-shader`
   - `licensing/` — `core`, `client-decrypt`, `protection-key-server`, `protection-license-client`
   - `delivery/` — `plugin-delivery`
@@ -113,6 +120,26 @@ Private super-repo for DigitalArsenal Space Data Network plugins. Each package i
 - The shared standalone artifact is the isomorphic contract. It uses only `wasi_snapshot_preview1` imports so the SDK browser harness and the WasmEdge CLI can load the exact same `.wasm` file.
 - The browser pthread bundle remains available for direct JS wrapper integration where `SharedArrayBuffer` and cross-origin isolation are available.
 - Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under the appropriate family subfolder.
+
+## Basilisk Modules
+
+Basilisk-derived module work lives under `basilisk/` in this repository. The
+checked-in planning artifacts are:
+
+- `docs/basilisk-module-plan.json`
+- `docs/basilisk-message-standards.json`
+- `docs/basilisk-inventory.md`
+- `docs/basilisk-standards-map.md`
+
+Regenerate and verify them with:
+
+```bash
+npm run generate:basilisk-plan
+npm run check:basilisk-plan
+```
+
+The runtime seed module is `basilisk/runtime` and follows the same
+`dist/isomorphic/module.wasm` SDK artifact contract as the migrated modules.
 
 ## Working With Packages
 

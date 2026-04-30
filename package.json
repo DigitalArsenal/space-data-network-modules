@@ -1,0 +1,11 @@
+{
+  "name": "space-data-network-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate:basilisk-plan": "node scripts/generate-basilisk-module-plan.mjs && node scripts/generate-basilisk-message-map.mjs",
+    "check:basilisk-plan": "node scripts/check-basilisk-plan.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

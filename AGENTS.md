@@ -17,8 +17,8 @@ loads unchanged in both browser and WasmEdge.
 ## When Working In This Repository
 
 Packages are organized by family subfolder (e.g., `propagator/`, `analysis/`,
-`shaders/`, `licensing/`, `delivery/`). When creating, migrating, retrofitting,
-or verifying a package under any family subfolder:
+`basilisk/`, `shaders/`, `licensing/`, `delivery/`). When creating, migrating,
+retrofitting, or verifying a package under any family subfolder:
 
 1. Read the SDK AGENTS.md first.
 2. Follow the SDK's canonical build and publication rules.
@@ -27,6 +27,23 @@ or verifying a package under any family subfolder:
    `dist/isomorphic-singlethread/module.wasm` as a Node recovery-test artifact
    because its primary isomorphic artifact is pthread-enabled for WasmEdge.
 4. Verify with `node --test tests/sdk_compat.test.mjs` after building.
+
+## Authoritative Tests Are Required
+
+Do not mark a module complete unless it has authoritative tests based on public
+standards examples, published numerical values, upstream Basilisk expected
+values, or closed-form physics cases with independently calculated results.
+
+Every numerical test must state source, units, reference frame, epoch or time
+scale, tolerance, and the tolerance rationale. Golden outputs generated only by
+the new module do not count.
+
+For Basilisk-wide planning or standards-map changes:
+
+```sh
+npm run generate:basilisk-plan
+npm run check:basilisk-plan
+```
 
 ## Local Validation Data For Agents
 
@@ -79,6 +96,8 @@ whatever `AEROSPACE_IVV_EXTRACTED_ROOT` points to. The archive smoke tests use
 
 - Individual SDN module packages and their published `dist/` outputs.
 - Plugin-specific C++/WASM source, manifests, build scripts, and tests.
+- Basilisk-derived runtime seeds, module plans, standards maps, and thin
+  wrappers that use `../basilisk` as the upstream source of truth.
 - Each plugin is a standalone, isomorphic WASM module that runs on both
   WasmEdge (server) and browser (via `browserModuleHarness` + WASI shim).
 

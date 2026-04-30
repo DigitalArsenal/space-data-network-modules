@@ -1,0 +1,2807 @@
+{
+  "generatedAt": "2026-04-30T03:24:49.647Z",
+  "upstreamBasiliskRoot": "../basilisk",
+  "payloadCount": 132,
+  "payloads": [
+    {
+      "basiliskPayload": "AccDataMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AccDataMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "AccessMsgPayload",
+      "basiliskOwner": "ground, tracking, and RF/environment interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AccessMsgPayload.h",
+      "sdsSchemas": [
+        "TDM",
+        "TRK",
+        "RFM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TDM",
+        "$TRK",
+        "$RFM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "AccPktDataMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AccPktDataMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "AlbedoMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AlbedoMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ArrayEffectorLockMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ArrayEffectorLockMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ArrayMotorForceMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ArrayMotorForceMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ArrayMotorTorqueMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ArrayMotorTorqueMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ArrayMotorVoltageMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ArrayMotorVoltageMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "AtmoPropsMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AtmoPropsMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "AttGuidMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AttGuidMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "AttRefMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AttRefMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "AttStateMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/AttStateMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "BodyHeadingMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/BodyHeadingMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "BoreAngleMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/BoreAngleMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CameraConfigMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CameraConfigMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CameraImageMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CameraImageMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ChargeMsmMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/ChargeMsmMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ClassicElementsMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ClassicElementsMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CmdForceBodyMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CmdForceBodyMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CmdForceInertialMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CmdForceInertialMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CmdTorqueBodyMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CmdTorqueBodyMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CMEstDataMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CMEstDataMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CModuleTemplateMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CModuleTemplateMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ColorMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ColorMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ConstDynEffectorMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ConstDynEffectorMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CSSArraySensorMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CSSArraySensorMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CSSConfigLogMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/CSSConfigLogMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CSSConfigMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CSSConfigMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CSSRawDataMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CSSRawDataMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "CSSUnitConfigMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/CSSUnitConfigMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DataNodeUsageMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/DataNodeUsageMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DataStorageStatusMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/DataStorageStatusMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DesiredVelocityMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/DesiredVelocityMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DeviceCmdMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/DeviceCmdMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DeviceStatusMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/DeviceStatusMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DipoleRequestBodyMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/DipoleRequestBodyMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DvBurnCmdMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/DvBurnCmdMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "DvExecutionDataMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/DvExecutionDataMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "EclipseMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/EclipseMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "EphemerisMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/EphemerisMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "EpochMsgPayload",
+      "basiliskOwner": "time and clock interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/EpochMsgPayload.h",
+      "sdsSchemas": [
+        "TIM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TIM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ForceAtSiteMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ForceAtSiteMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "FuelTankMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/FuelTankMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "GravityGradientMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/GravityGradientMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "GroundStateMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/GroundStateMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "HeadingFilterMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/HeadingFilterMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "HillRelStateMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/HillRelStateMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "HingedRigidBodyMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/HingedRigidBodyMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "IMUSensorBodyMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/IMUSensorBodyMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "IMUSensorMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/IMUSensorMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "InertialFilterMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/InertialFilterMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "InertialHeadingMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/InertialHeadingMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "JointArrayStateMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/JointArrayStateMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "LambertPerformanceMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/LambertPerformanceMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "LambertProblemMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/LambertProblemMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "LambertSolutionMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/LambertSolutionMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "LambertValidatorMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/LambertValidatorMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "LandmarkMsgPayload",
+      "basiliskOwner": "ground, tracking, and RF/environment interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/LandmarkMsgPayload.h",
+      "sdsSchemas": [
+        "TDM",
+        "TRK",
+        "RFM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TDM",
+        "$TRK",
+        "$RFM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "LinearTranslationRigidBodyMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/LinearTranslationRigidBodyMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MagneticFieldMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/MagneticFieldMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MJJointReactionsMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/MJJointReactionsMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MJSceneStateMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/MJSceneStateMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MJSysMassMatrixMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/MJSysMassMatrixMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MotorStepCommandMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/MotorStepCommandMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MTBArrayConfigMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/MTBArrayConfigMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MTBCmdMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/MTBCmdMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "MTBMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/MTBMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "NavAttMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/NavAttMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "NavTransMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/NavTransMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "OpNavCirclesMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/OpNavCirclesMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "OpNavFilterMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/OpNavFilterMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "OpNavLimbMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/OpNavLimbMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "OpNavMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/OpNavMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PixelLineFilterMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PixelLineFilterMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PlasmaFluxMsgPayload",
+      "basiliskOwner": "ground, tracking, and RF/environment interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PlasmaFluxMsgPayload.h",
+      "sdsSchemas": [
+        "TDM",
+        "TRK",
+        "RFM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TDM",
+        "$TRK",
+        "$RFM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PowerNodeStatusMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PowerNodeStatusMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PowerNodeUsageMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PowerNodeUsageMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PowerStorageFaultMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PowerStorageFaultMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PowerStorageStatusMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PowerStorageStatusMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PrescribedMotionMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PrescribedMotionMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PrescribedRotationMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PrescribedRotationMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PrescribedTranslationMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PrescribedTranslationMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "PyBatteryMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/PyBatteryMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RateCmdMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RateCmdMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RealTimeFactorMsgPayload",
+      "basiliskOwner": "time and clock interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RealTimeFactorMsgPayload.h",
+      "sdsSchemas": [
+        "TIM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TIM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ReconfigBurnArrayInfoMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ReconfigBurnArrayInfoMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ReconfigBurnInfoMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ReconfigBurnInfoMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RWArrayConfigMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RWArrayConfigMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RWAvailabilityMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RWAvailabilityMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RWCmdMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RWCmdMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RWConfigElementMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RWConfigElementMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RWConfigLogMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RWConfigLogMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RWConstellationMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RWConstellationMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "RWSpeedMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/RWSpeedMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "ScalarJointStateMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/ScalarJointStateMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SCEnergyMomentumMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SCEnergyMomentumMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SCMassPropsMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SCMassPropsMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SCStatesMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SCStatesMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SingleActuatorMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SingleActuatorMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SmallBodyNavMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SmallBodyNavMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SmallBodyNavUKFMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SmallBodyNavUKFMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SolarFluxMsgPayload",
+      "basiliskOwner": "ground, tracking, and RF/environment interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SolarFluxMsgPayload.h",
+      "sdsSchemas": [
+        "TDM",
+        "TRK",
+        "RFM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TDM",
+        "$TRK",
+        "$RFM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SpicePlanetStateMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SpicePlanetStateMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SpiceTimeMsgPayload",
+      "basiliskOwner": "time and clock interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SpiceTimeMsgPayload.h",
+      "sdsSchemas": [
+        "TIM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TIM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "STAttMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/STAttMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "StepperMotorMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/StepperMotorMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "STSensorMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/STSensorMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SunlineFilterMsgPayload",
+      "basiliskOwner": "attitude, sensor, and optical-navigation interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SunlineFilterMsgPayload.h",
+      "sdsSchemas": [
+        "AEM",
+        "APM",
+        "ACM",
+        "ATD",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$AEM",
+        "$APM",
+        "$ACM",
+        "$ATD",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SwDataMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SwDataMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "SynchClockMsgPayload",
+      "basiliskOwner": "time and clock interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/SynchClockMsgPayload.h",
+      "sdsSchemas": [
+        "TIM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TIM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "TAMSensorBodyMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/TAMSensorBodyMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "TAMSensorMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/TAMSensorMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "TDBVehicleClockCorrelationMsgPayload",
+      "basiliskOwner": "time and clock interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/TDBVehicleClockCorrelationMsgPayload.h",
+      "sdsSchemas": [
+        "TIM",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$TIM",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "TemperatureMsgPayload",
+      "basiliskOwner": "power, thermal, device, and data-handling interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/TemperatureMsgPayload.h",
+      "sdsSchemas": [
+        "XTC",
+        "ENV",
+        "PHY",
+        "TIM"
+      ],
+      "fileIdentifiers": [
+        "$XTC",
+        "$ENV",
+        "$PHY",
+        "$TIM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "THRArrayCmdForceMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/THRArrayCmdForceMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "THRArrayConfigMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/THRArrayConfigMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "THRArrayOnTimeCmdMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/THRArrayOnTimeCmdMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "THRConfigMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/THRConfigMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "THROutputMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/THROutputMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "TorqueAtSiteMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/TorqueAtSiteMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "TransRefMsgPayload",
+      "basiliskOwner": "orbit, translation, and ephemeris interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/TransRefMsgPayload.h",
+      "sdsSchemas": [
+        "OMM",
+        "OPM",
+        "OEM",
+        "OCM",
+        "OSM"
+      ],
+      "fileIdentifiers": [
+        "$OMM",
+        "$OPM",
+        "$OEM",
+        "$OCM",
+        "$OSM"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": false,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "TypesTestMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/TypesTestMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VehicleConfigMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VehicleConfigMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VizUserInputMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/VizUserInputMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VoltMsgPayload",
+      "basiliskOwner": "Basilisk runtime/message interface",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VoltMsgPayload.h",
+      "sdsSchemas": [
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VSCMGArrayConfigMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VSCMGArrayConfigMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VSCMGArrayTorqueMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VSCMGArrayTorqueMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VSCMGCmdMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VSCMGCmdMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VSCMGConfigElementMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VSCMGConfigElementMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VSCMGConfigMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefCpp/VSCMGConfigMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VSCMGRefStatesMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VSCMGRefStatesMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    },
+    {
+      "basiliskPayload": "VSCMGSpeedMsgPayload",
+      "basiliskOwner": "actuator and maneuver interfaces",
+      "upstreamPath": "src/architecture/msgPayloadDefC/VSCMGSpeedMsgPayload.h",
+      "sdsSchemas": [
+        "MNV",
+        "MET",
+        "MPE",
+        "XTC"
+      ],
+      "fileIdentifiers": [
+        "$MNV",
+        "$MET",
+        "$MPE",
+        "$XTC"
+      ],
+      "wireFormat": "SDS FlatBuffer payload in TAB frame under PIV invoke envelope",
+      "xtceRequired": true,
+      "unitsFrameEpochTimeScale": "derive from Basilisk header fields and document in module fixture before implementation",
+      "validationFixture": "Basilisk upstream expected values or public standards vector required before module completion",
+      "standardsGapPolicy": "add SDS-first backlog item before porting if no canonical schema covers durable exchange data"
+    }
+  ]
+}

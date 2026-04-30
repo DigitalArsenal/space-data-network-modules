@@ -17,6 +17,7 @@ PACKAGES=(
     analysis/conjunction-assessment
     analysis/maneuver
     analysis/od
+    basilisk/runtime
     licensing/core
     licensing/client-decrypt
     licensing/protection-key-server
