@@ -81,6 +81,9 @@ namespace {
 constexpr int DEFAULT_MAX_ITERATIONS = 50;
 constexpr double DEFAULT_POSITION_TOLERANCE = 0.1;  // meters
 constexpr double JACOBIAN_PERTURBATION = 1e-4;      // m/s
+constexpr double MAX_INITIAL_DV = 10.0;             // m/s
+constexpr double MAX_NEWTON_CORRECTION = 1.0;       // m/s per iteration
+constexpr double MAX_SOLVER_DV = 25.0;              // m/s
 
 struct PropBurnResult {
     RelativeState arrivalRIC;
@@ -146,13 +149,35 @@ Vector3 computeInitialGuess(const RelativeState& initialState,
                      ? ((dz - z0 * cnt) * n) / snt - vz0
                      : -vz0;
 
-    constexpr double maxDv = 10.0;
     auto clamp = [&](double v) {
         return std::isnan(v) ? 0.0
-                             : std::max(-maxDv, std::min(maxDv, v));
+                             : std::max(-MAX_INITIAL_DV, std::min(MAX_INITIAL_DV, v));
     };
 
     return {clamp(dvx), clamp(dvy), clamp(dvz)};
+}
+
+bool isFiniteVector(const Vector3& vector) {
+    return std::isfinite(vector[0]) && std::isfinite(vector[1]) &&
+           std::isfinite(vector[2]);
+}
+
+Vector3 clampMagnitude(const Vector3& vector, double maxMagnitude) {
+    if (!isFiniteVector(vector)) {
+        return ZERO_VECTOR3;
+    }
+
+    double magnitude = norm3(vector);
+    if (!std::isfinite(magnitude) || magnitude <= maxMagnitude) {
+        return vector;
+    }
+
+    if (magnitude <= 0.0) {
+        return ZERO_VECTOR3;
+    }
+
+    double scale = maxMagnitude / magnitude;
+    return {vector[0] * scale, vector[1] * scale, vector[2] * scale};
 }
 
 /// Compute arrival position partial derivative via central differences.
@@ -196,6 +221,28 @@ Matrix3x3 computeJacobian(const ROEVector& initialROE, const Vector3& dv1,
     }};
 }
 
+bool tryInvert3x3NoThrow(const Matrix3x3& A, Matrix3x3& inv) {
+    double a = A[0][0], b = A[0][1], c = A[0][2];
+    double d = A[1][0], e = A[1][1], f = A[1][2];
+    double g = A[2][0], h = A[2][1], ii = A[2][2];
+
+    double det = a * (e * ii - f * h) - b * (d * ii - f * g) +
+                 c * (d * h - e * g);
+
+    if (std::abs(det) < 1e-15) {
+        return false;
+    }
+
+    double invDet = 1.0 / det;
+    inv[0] = {(e * ii - f * h) * invDet, (c * h - b * ii) * invDet,
+              (b * f - c * e) * invDet};
+    inv[1] = {(f * g - d * ii) * invDet, (a * ii - c * g) * invDet,
+              (c * d - a * f) * invDet};
+    inv[2] = {(d * h - e * g) * invDet, (b * g - a * h) * invDet,
+              (a * e - b * d) * invDet};
+    return true;
+}
+
 }  // anonymous namespace
 
 // ===========================================================================
@@ -231,7 +278,14 @@ ManeuverLeg solveRendezvous(const RelativeState& initialState,
         arrivalRIC = result.arrivalRIC;
         finalPosition = arrivalRIC.position;
 
+        if (!isFiniteVector(finalPosition) || !isFiniteVector(arrivalRIC.velocity)) {
+            break;
+        }
+
         double posError = norm3(sub3(targetPosition, finalPosition));
+        if (!std::isfinite(posError)) {
+            break;
+        }
 
         if (posError < posTol) {
             converged = true;
@@ -244,12 +298,13 @@ ManeuverLeg solveRendezvous(const RelativeState& initialState,
         Vector3 positionError = sub3(targetPosition, finalPosition);
 
         Vector3 dv1Correction;
-        try {
-            Matrix3x3 jacobianInv = invert3x3(jacobian);
+        Matrix3x3 jacobianInv{};
+        if (tryInvert3x3NoThrow(jacobian, jacobianInv)) {
             dv1Correction = matMul3x3_3x1(jacobianInv, positionError);
-        } catch (...) {
-            dv1Correction = positionError;
+        } else {
+            dv1Correction = ZERO_VECTOR3;
         }
+        dv1Correction = clampMagnitude(dv1Correction, MAX_NEWTON_CORRECTION);
 
         double damping;
         if (iter < 3)
@@ -262,12 +317,19 @@ ManeuverLeg solveRendezvous(const RelativeState& initialState,
         dv1 = add3(dv1, {damping * dv1Correction[0],
                          damping * dv1Correction[1],
                          damping * dv1Correction[2]});
+        dv1 = clampMagnitude(dv1, MAX_SOLVER_DV);
     }
 
     Vector3 targetVelocity = options.targetVelocity;
     dv2 = sub3(targetVelocity, arrivalRIC.velocity);
+    if (!isFiniteVector(dv2)) {
+        dv2 = ZERO_VECTOR3;
+    }
 
     double finalPositionError = norm3(sub3(targetPosition, finalPosition));
+    if (!std::isfinite(finalPositionError)) {
+        finalPositionError = std::numeric_limits<double>::infinity();
+    }
 
     ManeuverLeg leg;
     leg.from = initialState.position;

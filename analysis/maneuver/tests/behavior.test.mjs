@@ -147,4 +147,95 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(Math.abs(result.magnitude - magnitude) < 1e-12);
     assert.ok(result.magnitude <= 10);
   });
+
+  test(`KGD ROE STM propagation returns finite J2 state transition data on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(harness, {
+      operation: "computeRoeStateTransition",
+      params: {
+        model: "j2",
+        deltaTime: 1200,
+        initialRoe: [1e-5, 2e-5, 1e-6, 2e-6, 3e-6, 4e-6],
+        chief: {
+          semiMajorAxis: 6_778_000,
+          eccentricity: 0.001,
+          inclination: 51.6 * Math.PI / 180,
+          raan: 0,
+          argumentOfPerigee: 0,
+          meanAnomaly: 0,
+          mu: MU_EARTH,
+        },
+      },
+    });
+
+    assert.equal(result.model, "j2");
+    assert.equal(result.reference, "Koenig-Guffanti-D'Amico ROE STM");
+    assert.equal(result.stm.length, 6);
+    assert.equal(result.stm[0].length, 6);
+    assert.equal(result.propagatedRoe.length, 6);
+    assert.ok(Math.abs(result.stm[0][0] - 1) < 1e-12);
+    assert.ok(result.propagatedRoe.every(Number.isFinite));
+  });
+
+  test(`relative waypoint mission planning returns finite burns and trajectory on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const period =
+      2 * Math.PI * Math.sqrt((6_778_000 ** 3) / MU_EARTH);
+    const legTof = 0.75 * period;
+    const result = await invokeJsonRequest(harness, {
+      operation: "planRelativeWaypointMission",
+      params: {
+        initialState: {
+          position: [0, -200, 0],
+          velocity: [0, 0, 0],
+        },
+        chief: {
+          semiMajorAxis: 6_778_000,
+          eccentricity: 0.001,
+          inclination: 51.6 * Math.PI / 180,
+          raan: 0,
+          argumentOfPerigee: 0,
+          meanAnomaly: 0,
+          mu: MU_EARTH,
+        },
+        waypoints: [
+          { position: [40, -120, 20], tof: legTof },
+          { position: [0, -60, 0], tof: legTof },
+          { position: [0, 0, 0], tof: legTof },
+        ],
+        options: {
+          includeJ2: true,
+          positionTolerance: 5,
+          pointsPerLeg: 24,
+        },
+      },
+    });
+
+    assert.equal(result.reference, "Koenig-Guffanti-D'Amico ROE STM");
+    assert.equal(result.converged, true);
+    assert.equal(result.legs.length, 3);
+    assert.equal(result.trajectory.length, 72);
+    assert.ok(result.totalDeltaV > 0);
+    assert.ok(result.totalTime > 0);
+    assert.ok(result.legs.every((leg) => leg.converged));
+    assert.ok(result.legs.every((leg) => Number.isFinite(leg.totalDeltaV)));
+    assert.ok(result.trajectory.every((point) =>
+      point.position.every(Number.isFinite) &&
+      point.velocity.every(Number.isFinite),
+    ));
+  });
 }

@@ -3,10 +3,16 @@
 #include "maneuver/approach.h"
 #include "maneuver/classical.h"
 #include "maneuver/constants.h"
+#include "maneuver/math.h"
+#include "maneuver/propagation.h"
+#include "maneuver/stm.h"
+#include "maneuver/targeting.h"
+#include "maneuver/transforms.h"
 #include "maneuver/types.h"
 
 #include <nlohmann/json.hpp>
 
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -24,6 +30,130 @@ json vec3_to_json(const Vector3& v) {
 
 Vector3 json_to_vec3(const json& j) {
     return {j[0].get<double>(), j[1].get<double>(), j[2].get<double>()};
+}
+
+json roe_to_json(const ROEVector& roe) {
+    return json::array({roe[0], roe[1], roe[2], roe[3], roe[4], roe[5]});
+}
+
+json stm6_to_json(const STM6& stm) {
+    json rows = json::array();
+    for (const auto& row : stm) {
+        rows.push_back(json::array(
+            {row[0], row[1], row[2], row[3], row[4], row[5]}));
+    }
+    return rows;
+}
+
+json trajectory_to_json(const std::vector<TrajectoryPoint>& trajectory) {
+    json out = json::array();
+    for (const auto& point : trajectory) {
+        out.push_back({
+            {"time", point.time},
+            {"position", vec3_to_json(point.position)},
+            {"velocity", vec3_to_json(point.velocity)},
+        });
+    }
+    return out;
+}
+
+json maneuver_to_json(const Maneuver& maneuver) {
+    return json({
+        {"deltaV", vec3_to_json(maneuver.deltaV)},
+        {"magnitude", maneuver.magnitude},
+        {"chief", {
+            {"semiMajorAxis", maneuver.chief.semiMajorAxis},
+            {"eccentricity", maneuver.chief.eccentricity},
+            {"inclination", maneuver.chief.inclination},
+            {"raan", maneuver.chief.raan},
+            {"argumentOfPerigee", maneuver.chief.argumentOfPerigee},
+            {"meanAnomaly", maneuver.chief.meanAnomaly},
+            {"mu", maneuver.chief.gravitationalParameter},
+        }},
+    });
+}
+
+json leg_to_json(const ManeuverLeg& leg, int index) {
+    return json({
+        {"index", index},
+        {"from", vec3_to_json(leg.from)},
+        {"to", vec3_to_json(leg.to)},
+        {"targetVelocity", vec3_to_json(leg.targetVelocity)},
+        {"tof", leg.tof},
+        {"burn1", maneuver_to_json(leg.burn1)},
+        {"burn2", maneuver_to_json(leg.burn2)},
+        {"totalDeltaV", leg.totalDeltaV},
+        {"converged", leg.converged},
+        {"iterations", leg.iterations},
+        {"positionError", leg.positionError},
+    });
+}
+
+ClassicalOrbitalElements json_to_chief(const json& j) {
+    ClassicalOrbitalElements chief{};
+    chief.semiMajorAxis = j.at("semiMajorAxis").get<double>();
+    chief.eccentricity = j.value("eccentricity", 0.0);
+    chief.inclination = j.value("inclination", 0.0);
+    chief.raan = j.value("raan", 0.0);
+    chief.argumentOfPerigee = j.value("argumentOfPerigee", 0.0);
+    chief.meanAnomaly = j.value("meanAnomaly", 0.0);
+    chief.gravitationalParameter = j.value("mu", MU_EARTH);
+    chief.angularMomentum = j.value(
+        "angularMomentum",
+        std::sqrt(chief.gravitationalParameter * chief.semiMajorAxis *
+                  (1.0 - chief.eccentricity * chief.eccentricity)));
+    return chief;
+}
+
+ROEVector json_to_roe_vector(const json& j) {
+    return {
+        j[0].get<double>(),
+        j[1].get<double>(),
+        j[2].get<double>(),
+        j[3].get<double>(),
+        j[4].get<double>(),
+        j[5].get<double>(),
+    };
+}
+
+TargetingOptions json_to_targeting_options(const json& j) {
+    TargetingOptions options{};
+    options.includeJ2 = j.value("includeJ2", true);
+    options.includeDrag = j.value("includeDrag", false);
+    options.maxIterations = j.value("maxIterations", 50);
+    options.positionTolerance = j.value("positionTolerance", 1.0);
+    options.velocityTolerance = j.value("velocityTolerance", 0.001);
+    options.tofMinOrbits = j.value("tofMinOrbits", 0.5);
+    options.tofMaxOrbits = j.value("tofMaxOrbits", 3.0);
+    if (j.contains("targetVelocity")) {
+        options.targetVelocity = json_to_vec3(j.at("targetVelocity"));
+    }
+    if (j.contains("dragConfig")) {
+        const auto& drag = j.at("dragConfig");
+        const auto type = drag.value("type", std::string("eccentric"));
+        options.dragConfig.type =
+            type == "arbitrary" ? DragType::ARBITRARY : DragType::ECCENTRIC;
+        options.dragConfig.daDotDrag = drag.value("daDotDrag", 0.0);
+        options.dragConfig.dexDotDrag = drag.value("dexDotDrag", 0.0);
+        options.dragConfig.deyDotDrag = drag.value("deyDotDrag", 0.0);
+    }
+    return options;
+}
+
+ROEPropagationOptions json_to_propagation_options(const json& j) {
+    ROEPropagationOptions options{};
+    options.includeJ2 = j.value("includeJ2", true);
+    options.includeDrag = j.value("includeDrag", false);
+    if (j.contains("dragConfig")) {
+        const auto& drag = j.at("dragConfig");
+        const auto type = drag.value("type", std::string("eccentric"));
+        options.dragConfig.type =
+            type == "arbitrary" ? DragType::ARBITRARY : DragType::ECCENTRIC;
+        options.dragConfig.daDotDrag = drag.value("daDotDrag", 0.0);
+        options.dragConfig.dexDotDrag = drag.value("dexDotDrag", 0.0);
+        options.dragConfig.deyDotDrag = drag.value("deyDotDrag", 0.0);
+    }
+    return options;
 }
 
 PluginInvokeResult make_error_result(
@@ -170,6 +300,118 @@ std::string combined_maneuver_json(const std::string& input) {
     }).dump();
 }
 
+std::string compute_roe_state_transition_json(const std::string& input) {
+    const auto j = json::parse(input);
+    const auto chief = json_to_chief(j.at("chief"));
+    const double delta_time = j.at("deltaTime").get<double>();
+    const auto model = j.value("model", std::string("j2"));
+
+    STM6 stm{};
+    json extras = json::object();
+    if (model == "keplerian") {
+        stm = computeKeplerianSTM(chief, delta_time);
+    } else if (model == "j2") {
+        stm = computeJ2STM(chief, delta_time);
+    } else if (model == "j2-drag-eccentric") {
+        const auto result = computeJ2DragSTMEccentric(chief, delta_time);
+        for (int r = 0; r < 6; ++r) {
+            for (int c = 0; c < 6; ++c) {
+                stm[r][c] = result.stm[r][c];
+            }
+        }
+        extras["dragColumn"] = roe_to_json(result.dragColumn);
+    } else if (model == "j2-drag-arbitrary") {
+        const auto result = computeJ2DragSTMArbitrary(chief, delta_time);
+        for (int r = 0; r < 6; ++r) {
+            for (int c = 0; c < 6; ++c) {
+                stm[r][c] = result.stm[r][c];
+            }
+        }
+        json columns = json::array();
+        for (const auto& row : result.dragColumns) {
+            columns.push_back(json::array({row[0], row[1], row[2]}));
+        }
+        extras["dragColumns"] = columns;
+    } else {
+        throw std::runtime_error("Unsupported ROE STM model: " + model);
+    }
+
+    json response({
+        {"reference", "Koenig-Guffanti-D'Amico ROE STM"},
+        {"model", model},
+        {"deltaTime", delta_time},
+        {"stm", stm6_to_json(stm)},
+    });
+
+    if (j.contains("initialRoe")) {
+        const auto initial_roe = json_to_roe_vector(j.at("initialRoe"));
+        const auto options = json_to_propagation_options(j);
+        const auto propagated =
+            propagateROE(vectorToROE(initial_roe), chief, delta_time, options);
+        response["initialRoe"] = roe_to_json(initial_roe);
+        response["propagatedRoe"] = roe_to_json(roeToVector(propagated));
+    }
+
+    for (auto it = extras.begin(); it != extras.end(); ++it) {
+        response[it.key()] = it.value();
+    }
+    return response.dump();
+}
+
+std::string plan_relative_waypoint_mission_json(const std::string& input) {
+    const auto j = json::parse(input);
+
+    RelativeState state{};
+    state.position = json_to_vec3(j.at("initialState").at("position"));
+    state.velocity = json_to_vec3(j.at("initialState").at("velocity"));
+
+    const auto chief = json_to_chief(j.at("chief"));
+    const auto options_json =
+        j.contains("options") ? j.at("options") : json::object();
+    const auto options = json_to_targeting_options(options_json);
+    const int points_per_leg = options_json.value("pointsPerLeg", 48);
+
+    std::vector<Waypoint> waypoints;
+    for (const auto& item : j.at("waypoints")) {
+        Waypoint waypoint{};
+        waypoint.position = json_to_vec3(item.at("position"));
+        if (item.contains("velocity")) {
+            waypoint.velocity = json_to_vec3(item.at("velocity"));
+            waypoint.hasVelocity = true;
+        }
+        if (item.contains("tof")) {
+            waypoint.tofHint = item.at("tof").get<double>();
+            waypoint.hasTofHint = true;
+        }
+        waypoints.push_back(waypoint);
+    }
+
+    const auto plan = planMission(state, waypoints, chief, options);
+    const auto trajectory = generateMissionTrajectory(
+        plan,
+        chief,
+        state.position,
+        state.velocity,
+        options,
+        points_per_leg);
+
+    json legs = json::array();
+    for (size_t index = 0; index < plan.legs.size(); ++index) {
+        legs.push_back(leg_to_json(plan.legs[index], static_cast<int>(index)));
+    }
+
+    return json({
+        {"reference", "Koenig-Guffanti-D'Amico ROE STM"},
+        {"model", options.includeJ2 ? "j2" : "keplerian"},
+        {"includeDrag", options.includeDrag},
+        {"converged", plan.converged},
+        {"totalDeltaV", plan.totalDeltaV},
+        {"totalTime", plan.totalTime},
+        {"legs", legs},
+        {"trajectory", trajectory_to_json(trajectory)},
+    }).dump();
+}
+
 std::string compute_cam_json(const std::string& input) {
     const auto j = json::parse(input);
 
@@ -177,12 +419,7 @@ std::string compute_cam_json(const std::string& input) {
     state.position = json_to_vec3(j.at("initialState").at("position"));
     state.velocity = json_to_vec3(j.at("initialState").at("velocity"));
 
-    ClassicalOrbitalElements chief{};
-    const auto& chief_json = j.at("chief");
-    chief.semiMajorAxis = chief_json.at("semiMajorAxis").get<double>();
-    chief.eccentricity = chief_json.value("eccentricity", 0.0);
-    chief.inclination = chief_json.value("inclination", 0.0);
-    chief.gravitationalParameter = chief_json.value("mu", MU_EARTH);
+    const auto chief = json_to_chief(j.at("chief"));
 
     CAMConfig config{};
     if (j.contains("config")) {
@@ -210,12 +447,7 @@ std::string compute_approach_json(const std::string& input) {
     state.position = json_to_vec3(j.at("initialState").at("position"));
     state.velocity = json_to_vec3(j.at("initialState").at("velocity"));
 
-    ClassicalOrbitalElements chief{};
-    const auto& chief_json = j.at("chief");
-    chief.semiMajorAxis = chief_json.at("semiMajorAxis").get<double>();
-    chief.eccentricity = chief_json.value("eccentricity", 0.0);
-    chief.inclination = chief_json.value("inclination", 0.0);
-    chief.gravitationalParameter = chief_json.value("mu", MU_EARTH);
+    const auto chief = json_to_chief(j.at("chief"));
 
     ApproachConfig config{};
     if (j.contains("config")) {
@@ -264,6 +496,12 @@ std::string dispatch_operation(const std::string& operation, const json& params)
     }
     if (operation == "combinedManeuver") {
         return combined_maneuver_json(payload);
+    }
+    if (operation == "computeRoeStateTransition") {
+        return compute_roe_state_transition_json(payload);
+    }
+    if (operation == "planRelativeWaypointMission") {
+        return plan_relative_waypoint_mission_json(payload);
     }
     if (operation == "computeCAM") {
         return compute_cam_json(payload);
