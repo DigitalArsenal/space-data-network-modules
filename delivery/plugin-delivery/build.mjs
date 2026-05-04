@@ -25,6 +25,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import createFlatc from "flatc-wasm/module";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMSDK_DIR = path.resolve(
@@ -130,20 +131,12 @@ async function generateFlatbufferHeaders(outDir) {
   console.log("  Generating FlatBuffer C++ headers...");
   fs.mkdirSync(outDir, { recursive: true });
 
-  const flatcWasmPath = path.join(__dirname, "node_modules", "flatc-wasm", "dist", "flatc-wasm.js");
-  if (!fs.existsSync(flatcWasmPath)) {
-    throw new Error(
-      `flatc-wasm not found at ${flatcWasmPath}.\nRun: npm install`,
-    );
-  }
-
   const sdkSchemasDir = path.join(__dirname, "node_modules", "space-data-module-sdk", "schemas");
   if (!fs.existsSync(sdkSchemasDir)) {
     throw new Error(
       `space-data-module-sdk schemas not found.\nRun: npm install`,
     );
   }
-  const { default: createFlatc } = await import(`file://${flatcWasmPath}`);
   const flatc = await createFlatc();
 
   const sdkSchemaFiles = [

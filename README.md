@@ -113,11 +113,13 @@ including migrated module families and Basilisk-derived module families.
   - `shaders/` — `sensor-shaders`, `viewshed-shader`
   - `licensing/` — `core`, `client-decrypt`, `protection-key-server`, `protection-license-client`
   - `delivery/` — `plugin-delivery`
-- Completed packages build dual artifacts:
-  - browser pthread bundle: `dist/<plugin>_wasm.js` + `dist/<plugin>_wasm.wasm`
-  - shared standalone artifact: `dist/<plugin>_standalone.wasm`
-- The shared standalone artifact is the isomorphic contract. It uses only `wasi_snapshot_preview1` imports so the SDK browser harness and the WasmEdge CLI can load the exact same `.wasm` file.
-- The browser pthread bundle remains available for direct JS wrapper integration where `SharedArrayBuffer` and cross-origin isolation are available.
+- Completed packages publish the shared isomorphic SDK artifact at
+  `dist/isomorphic/module.wasm`.
+- Optional browser adapters may live under `dist/browser/`, but they are not the
+  canonical module contract.
+- The isomorphic artifact is the contract. It must load unchanged in the SDK
+  browser harness and WasmEdge, with embedded manifest exports as the runtime
+  source of truth.
 - Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under the appropriate family subfolder.
 
 ## Basilisk Modules

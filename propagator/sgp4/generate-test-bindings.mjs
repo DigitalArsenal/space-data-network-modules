@@ -12,19 +12,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import createFlatc from "flatc-wasm/module";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = __dirname;
 const schemasDir = path.join(packageRoot, "schemas");
 const outDir = path.join(packageRoot, "tests", "lib", "generated");
-const flatcWasmPath = path.join(
-  packageRoot,
-  "node_modules",
-  "flatc-wasm",
-  "dist",
-  "flatc-wasm.js",
-);
 
 // Schemas whose root tables live on the contract-test wire. flatc-wasm
 // transitively pulls in the included schemas (CatalogQueryBase, EntityMetadata,
@@ -55,13 +49,9 @@ function walkWasmFs(flatc, root, visitor) {
 }
 
 async function main() {
-  ensureFileExists(flatcWasmPath, "flatc-wasm");
   ensureFileExists(schemasDir, "schemas directory");
 
-  const [{ default: createFlatc }, { transform }] = await Promise.all([
-    import(pathToFileURL(flatcWasmPath).href),
-    import("esbuild"),
-  ]);
+  const { transform } = await import("esbuild");
   const flatc = await createFlatc();
 
   const ensureWasmDir = (dirPath) => {
