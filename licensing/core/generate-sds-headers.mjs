@@ -2,7 +2,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import createFlatc from "flatc-wasm/module";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = __dirname;
@@ -10,13 +11,6 @@ const standardsRoot = path.join(
   packageRoot,
   "node_modules",
   "spacedatastandards.org",
-);
-const flatcWasmPath = path.join(
-  packageRoot,
-  "node_modules",
-  "flatc-wasm",
-  "dist",
-  "flatc-wasm.js",
 );
 const outDir = path.join(__dirname, "src", "cpp", "generated", "sds");
 
@@ -70,10 +64,8 @@ function ensureFileExists(filePath, label) {
 }
 
 async function main() {
-  ensureFileExists(flatcWasmPath, "flatc-wasm");
   ensureFileExists(standardsRoot, "spacedatastandards.org");
 
-  const { default: createFlatc } = await import(pathToFileURL(flatcWasmPath).href);
   const flatc = await createFlatc();
 
   fs.mkdirSync(outDir, { recursive: true });

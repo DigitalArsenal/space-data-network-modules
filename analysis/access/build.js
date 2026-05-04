@@ -101,9 +101,9 @@ async function build() {
     const stagedSrcDir = path.posix.join(workDir, "src");
     const stagedGeneratedDir = path.posix.join(workDir, "generated");
     const stagedIncludeDir = path.posix.join(workDir, "include");
-    const stagedPluginSdkInclude = path.posix.join(
+    const stagedIntegrationSdkInclude = path.posix.join(
       stagedIncludeDir,
-      "plugin-sdk",
+      "integration-sdk",
     );
     const stagedFlatbuffersInclude = path.posix.join(
       stagedIncludeDir,
@@ -116,7 +116,7 @@ async function build() {
     const stagedOutputDir = path.posix.join(workDir, "out");
 
     await stageHostDirectory(srcDir, stagedSrcDir);
-    await stageHostDirectory(PLUGIN_SDK_INCLUDE, stagedPluginSdkInclude);
+    await stageHostDirectory(PLUGIN_SDK_INCLUDE, stagedIntegrationSdkInclude);
     await stageHostDirectory(flatbuffersCppInclude, stagedFlatbuffersInclude);
     await stageHostFile(
       embeddedManifestArtifacts.sourcePath,
@@ -140,7 +140,7 @@ async function build() {
       ],
       includeDirs: [
         stagedFlatbuffersInclude,
-        stagedPluginSdkInclude,
+        stagedIntegrationSdkInclude,
         stagedSrcDir,
       ],
       compileFlags: ["-O3", "-std=c++17", "-Wno-dangling-else", "-Wno-format"],

@@ -16,8 +16,11 @@ FLATBUFFERS_INCLUDE_DIR="${SDN_FLATBUFFERS_INCLUDE_DIR:-${FLATBUFFERS_INCLUDE_DI
 
 if [ -z "$FLATBUFFERS_INCLUDE_DIR" ]; then
     for candidate in \
-        "$SCRIPT_DIR/../../../da-flatbuffers/include" \
-        "$SCRIPT_DIR/../../../../da-flatbuffers/include"; do
+        /opt/homebrew/include \
+        /opt/homebrew/opt/flatbuffers/include \
+        /usr/local/include \
+        /usr/local/opt/flatbuffers/include \
+        /usr/include; do
         if [ -f "$candidate/flatbuffers/flatbuffers.h" ]; then
             FLATBUFFERS_INCLUDE_DIR="$candidate"
             break
