@@ -141,6 +141,201 @@ export function normalizeConjunctionSourceSelection(sources) {
   });
 }
 
+const JULIAN_UNIX_EPOCH = 2440587.5;
+const MILLIS_PER_DAY = 86400000;
+const SECONDS_PER_DAY = 86400;
+
+function isoToJulianDate(isoString, fieldName) {
+  const millis = Date.parse(String(isoString ?? "").trim());
+  if (!Number.isFinite(millis)) {
+    throw new TypeError(`${fieldName} must be an ISO-8601 timestamp.`);
+  }
+  return millis / MILLIS_PER_DAY + JULIAN_UNIX_EPOCH;
+}
+
+function finiteNumber(value, fieldName) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new TypeError(`${fieldName} must be finite.`);
+  }
+  return number;
+}
+
+function optionalPositiveInteger(value, fallback, fieldName) {
+  const number = value == null ? fallback : Number(value);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new TypeError(`${fieldName} must be a positive integer.`);
+  }
+  return number;
+}
+
+function integerFromDesignator(value) {
+  if (value == null) {
+    return 0;
+  }
+  const match = String(value).trim().match(/^\d+$/);
+  return match ? Number(match[0]) : 0;
+}
+
+function normalizeReferenceFrame(value) {
+  const frame = String(value ?? "").trim().toUpperCase();
+  if (frame === "TEME") {
+    return "TEME";
+  }
+  if (frame === "ICRF" || frame === "EME2000" || frame === "J2000") {
+    return "ICRF";
+  }
+  if (frame === "ECI" || frame === "GCRF") {
+    return "ECI";
+  }
+  if (frame === "ECEF" || frame === "ITRF") {
+    return "ECEF";
+  }
+  return "UNKNOWN";
+}
+
+function buildCompactSamples({
+  data,
+  vectorSize,
+  startIso,
+  stepSeconds,
+  dataFieldName,
+}) {
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new TypeError(`${dataFieldName} must contain compact Cartesian state data.`);
+  }
+  const safeVectorSize = optionalPositiveInteger(
+    vectorSize,
+    6,
+    `${dataFieldName} state vector size`,
+  );
+  if (safeVectorSize < 6) {
+    throw new TypeError(`${dataFieldName} state vector size must be at least 6.`);
+  }
+  if (data.length % safeVectorSize !== 0) {
+    throw new TypeError(`${dataFieldName} length must divide evenly by state vector size.`);
+  }
+  const safeStepSeconds = finiteNumber(stepSeconds, `${dataFieldName} step size`);
+  if (safeStepSeconds <= 0) {
+    throw new TypeError(`${dataFieldName} step size must be positive.`);
+  }
+  const startJd = isoToJulianDate(startIso, `${dataFieldName} start time`);
+
+  const samples = [];
+  for (let offset = 0; offset < data.length; offset += safeVectorSize) {
+    samples.push({
+      jd: startJd + (offset / safeVectorSize) * safeStepSeconds / SECONDS_PER_DAY,
+      xKm: finiteNumber(data[offset], `${dataFieldName}[${offset}]`),
+      yKm: finiteNumber(data[offset + 1], `${dataFieldName}[${offset + 1}]`),
+      zKm: finiteNumber(data[offset + 2], `${dataFieldName}[${offset + 2}]`),
+      vxKmS: finiteNumber(data[offset + 3], `${dataFieldName}[${offset + 3}]`),
+      vyKmS: finiteNumber(data[offset + 4], `${dataFieldName}[${offset + 4}]`),
+      vzKmS: finiteNumber(data[offset + 5], `${dataFieldName}[${offset + 5}]`),
+    });
+  }
+  if (samples.length < 2) {
+    throw new TypeError(`${dataFieldName} must provide at least two samples.`);
+  }
+  return samples;
+}
+
+function buildVerboseOemSamples(lines) {
+  if (!Array.isArray(lines) || lines.length < 2) {
+    throw new TypeError("OEM EPHEMERIS_DATA_LINES must provide at least two samples.");
+  }
+  return lines.map((line, index) => ({
+    jd: isoToJulianDate(line?.EPOCH, `OEM EPHEMERIS_DATA_LINES[${index}].EPOCH`),
+    xKm: finiteNumber(line?.X, `OEM EPHEMERIS_DATA_LINES[${index}].X`),
+    yKm: finiteNumber(line?.Y, `OEM EPHEMERIS_DATA_LINES[${index}].Y`),
+    zKm: finiteNumber(line?.Z, `OEM EPHEMERIS_DATA_LINES[${index}].Z`),
+    vxKmS: finiteNumber(line?.X_DOT, `OEM EPHEMERIS_DATA_LINES[${index}].X_DOT`),
+    vyKmS: finiteNumber(line?.Y_DOT, `OEM EPHEMERIS_DATA_LINES[${index}].Y_DOT`),
+    vzKmS: finiteNumber(line?.Z_DOT, `OEM EPHEMERIS_DATA_LINES[${index}].Z_DOT`),
+  }));
+}
+
+function objectNameFromCat(cat) {
+  return normalizeOptionalString(
+    cat?.OBJECT_NAME ?? cat?.objectName ?? cat?.name ?? cat?.NAME,
+  );
+}
+
+export function adaptOcmToPropagatedTrack(ocm, options = {}) {
+  if (ocm == null || typeof ocm !== "object" || Array.isArray(ocm)) {
+    throw new TypeError("OCM source must be a decoded SDS OCM object.");
+  }
+  const metadata = ocm.METADATA ?? ocm.metadata ?? {};
+  const samples = buildCompactSamples({
+    data: ocm.STATE_DATA ?? ocm.stateData,
+    vectorSize: ocm.STATE_VECTOR_SIZE ?? ocm.stateVectorSize,
+    startIso: metadata.START_TIME ?? metadata.startTime ?? metadata.EPOCH_TZERO,
+    stepSeconds: ocm.STATE_STEP_SIZE ?? ocm.stateStepSize,
+    dataFieldName: "OCM STATE_DATA",
+  });
+  return {
+    sourcePluginId: normalizeOptionalString(options.sourcePluginId),
+    sourceHandle: Number(options.sourceHandle ?? 0),
+    objectName:
+      normalizeOptionalString(options.objectName) ??
+      normalizeOptionalString(metadata.OBJECT_NAME ?? metadata.objectName),
+    objectId:
+      normalizeOptionalString(options.objectId) ??
+      normalizeOptionalString(
+        metadata.INTERNATIONAL_DESIGNATOR ??
+          metadata.internationalDesignator ??
+          metadata.OBJECT_DESIGNATOR,
+      ),
+    noradCatId:
+      Number(options.noradCatId ?? 0) ||
+      integerFromDesignator(metadata.OBJECT_DESIGNATOR ?? metadata.objectDesignator),
+    referenceFrame: normalizeReferenceFrame(
+      options.referenceFrame ?? ocm.REFERENCE_FRAME ?? ocm.referenceFrame,
+    ),
+    samples,
+  };
+}
+
+export function adaptOemToPropagatedTrack(oem, options = {}) {
+  if (oem == null || typeof oem !== "object" || Array.isArray(oem)) {
+    throw new TypeError("OEM source must be a decoded SDS OEM object.");
+  }
+  const blocks = oem.EPHEMERIS_DATA_BLOCK ?? oem.ephemerisDataBlock;
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    throw new TypeError("OEM source requires at least one EPHEMERIS_DATA_BLOCK.");
+  }
+  const block = blocks[Number(options.blockIndex ?? 0)] ?? blocks[0];
+  const stepSeconds = Number(block.STEP_SIZE ?? block.stepSize ?? 0);
+  const samples =
+    stepSeconds > 0
+      ? buildCompactSamples({
+          data: block.EPHEMERIS_DATA ?? block.ephemerisData,
+          vectorSize: block.STATE_VECTOR_SIZE ?? block.stateVectorSize,
+          startIso: block.START_TIME ?? block.startTime,
+          stepSeconds,
+          dataFieldName: "OEM EPHEMERIS_DATA",
+        })
+      : buildVerboseOemSamples(
+          block.EPHEMERIS_DATA_LINES ?? block.ephemerisDataLines,
+        );
+  const object = block.OBJECT ?? block.object ?? {};
+  return {
+    sourcePluginId: normalizeOptionalString(options.sourcePluginId),
+    sourceHandle: Number(options.sourceHandle ?? 0),
+    objectName:
+      normalizeOptionalString(options.objectName) ?? objectNameFromCat(object),
+    objectId:
+      normalizeOptionalString(options.objectId) ??
+      normalizeOptionalString(object.OBJECT_ID ?? object.objectId),
+    noradCatId:
+      Number(options.noradCatId ?? 0) ||
+      Number(object.NORAD_CAT_ID ?? object.noradCatId ?? 0),
+    referenceFrame: normalizeReferenceFrame(
+      options.referenceFrame ?? block.REFERENCE_FRAME ?? block.referenceFrame,
+    ),
+    samples,
+  };
+}
+
 const textDecoder = new TextDecoder();
 
 function toUint8Array(value) {
