@@ -119,6 +119,42 @@ function assertVectorNear(actual, expected, toleranceKmPerSec) {
   }
 }
 
+function singleBranchSnapshot(result) {
+  const branch = result.SINGLE();
+  assert.ok(branch, "missing single-revolution branch");
+  return {
+    requestId: result.REQUEST_ID(),
+    status: result.STATUS(),
+    multiLength: result.multiLength(),
+    maxFeasibleRevs: result.MAX_FEASIBLE_REVS(),
+    nRevs: branch.N_REVS(),
+    iterations: branch.ITERATIONS(),
+    v1: [branch.V1().X(), branch.V1().Y(), branch.V1().Z()],
+    v2: [branch.V2().X(), branch.V2().Y(), branch.V2().Z()],
+  };
+}
+
+function createClosedFormCircularQuarterOrbitInvokeRequest() {
+  const mu = 398600.4418;
+  const radiusKm = 7000;
+  const quarterPeriodSeconds =
+    (Math.PI / 2) * Math.sqrt((radiusKm ** 3) / mu);
+  return createLambertInvokeRequest(
+    createLambertRequestPayload({
+      requestId: "closed-form-quarter-circle",
+      r1x: radiusKm,
+      r1y: 0,
+      r1z: 0,
+      r2x: 0,
+      r2y: radiusKm,
+      r2z: 0,
+      tofSec: quarterPeriodSeconds,
+      muKm3S2: mu,
+      maxRevs: 0,
+    }),
+  );
+}
+
 test("build publishes canonical isomorphic artifact path", () => {
   assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
 });
@@ -293,22 +329,7 @@ test("built artifact solves the closed-form circular quarter-orbit benchmark", a
   const circularSpeedKmPerSec = Math.sqrt(mu / radiusKm);
   const quarterPeriodSeconds =
     (Math.PI / 2) * Math.sqrt((radiusKm ** 3) / mu);
-  const response = await harness.invoke(
-    createLambertInvokeRequest(
-      createLambertRequestPayload({
-        requestId: "closed-form-quarter-circle",
-        r1x: radiusKm,
-        r1y: 0,
-        r1z: 0,
-        r2x: 0,
-        r2y: radiusKm,
-        r2z: 0,
-        tofSec: quarterPeriodSeconds,
-        muKm3S2: mu,
-        maxRevs: 0,
-      }),
-    ),
-  );
+  const response = await harness.invoke(createClosedFormCircularQuarterOrbitInvokeRequest());
   const result = decodeLambertOutputFrame(response);
   const branch = result.SINGLE();
 
@@ -321,4 +342,46 @@ test("built artifact solves the closed-form circular quarter-orbit benchmark", a
   assert.ok(branch.ITERATIONS() > 0);
   assertVectorNear(branch.V1(), { X: 0, Y: circularSpeedKmPerSec, Z: 0 }, 1e-6);
   assertVectorNear(branch.V2(), { X: -circularSpeedKmPerSec, Y: 0, Z: 0 }, 1e-6);
+});
+
+test("built artifact returns deterministic circular benchmark output in browser and WasmEdge", async (t) => {
+  const wasmPath = fileURLToPath(ISOMORPHIC_WASM_PATH);
+  const browserHarness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(wasmPath),
+    surface: "direct",
+  });
+  t.after(() => {
+    browserHarness.destroy();
+  });
+
+  let wasmedgeHarness;
+  try {
+    wasmedgeHarness = await loadModule({
+      wasmSource: wasmPath,
+      runtimeKind: "wasmedge",
+      enableThreads: false,
+    });
+  } catch (error) {
+    if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
+      t.skip("Install wasmedge to verify browser/WasmEdge numerical determinism.");
+      return;
+    }
+    throw error;
+  }
+  t.after(async () => {
+    await wasmedgeHarness.destroy();
+  });
+
+  const request = createClosedFormCircularQuarterOrbitInvokeRequest();
+  const browserResult = decodeLambertOutputFrame(
+    await browserHarness.invoke(request),
+  );
+  const wasmedgeResult = decodeLambertOutputFrame(
+    await wasmedgeHarness.invoke(request),
+  );
+
+  assert.deepEqual(
+    singleBranchSnapshot(wasmedgeResult),
+    singleBranchSnapshot(browserResult),
+  );
 });
