@@ -54,6 +54,30 @@ enum ConjunctionReferenceFrame:ubyte {
   ICRF = 4
 }
 
+enum ConjunctionSourceKind:ubyte {
+  UNKNOWN = 0,
+  OMM = 1,
+  OCM = 2,
+  OEM = 3,
+  CDM = 4,
+  FLATSQL_QUERY = 5,
+  PNM = 6,
+  PUBSUB = 7
+}
+
+table ConjunctionSelectedSource {
+  sourceKind:ConjunctionSourceKind = UNKNOWN;
+  sourceId:string;
+  providerId:string;
+  schemaName:string;
+  fileIdentifier:string;
+  query:string;
+  queryHash:string;
+  pnmCid:string;
+  manifestCid:string;
+  topic:string;
+}
+
 table PropagatedSample {
   jd:double = 0.0;
   xKm:double = 0.0;
@@ -148,6 +172,7 @@ table ConjunctionAlfanoResult {
 }
 
 table ConjunctionScreenCatalogRequest {
+  selectedSources:[ConjunctionSelectedSource];
   primaryTles:[TleRecord];
   secondaryTles:[TleRecord];
   primaryGps:[GpRecord];

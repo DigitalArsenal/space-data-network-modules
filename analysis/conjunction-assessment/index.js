@@ -30,6 +30,117 @@ export const metadata = Object.freeze({
   requiresProtection: false,
 });
 
+export const CA_SOURCE_KINDS = Object.freeze([
+  "OMM",
+  "OCM",
+  "OEM",
+  "CDM",
+  "FLATSQL_QUERY",
+  "PNM",
+  "PUBSUB",
+]);
+
+const CA_SOURCE_KIND_ALIASES = new Map([
+  ["OMM", "OMM"],
+  ["OCM", "OCM"],
+  ["OEM", "OEM"],
+  ["CDM", "CDM"],
+  ["FLATSQL_QUERY", "FLATSQL_QUERY"],
+  ["FLATSQL-QUERY", "FLATSQL_QUERY"],
+  ["FLATSQLQUERY", "FLATSQL_QUERY"],
+  ["FLATSQL", "FLATSQL_QUERY"],
+  ["PNM", "PNM"],
+  ["PUBSUB", "PUBSUB"],
+  ["PUB-SUB", "PUBSUB"],
+  ["PUB/SUB", "PUBSUB"],
+]);
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function normalizeSourceKind(value) {
+  if (!nonEmptyString(value)) {
+    throw new TypeError("Conjunction source requires a sourceKind or kind.");
+  }
+  const key = value.trim().replace(/\s+/g, "_").toUpperCase();
+  return CA_SOURCE_KIND_ALIASES.get(key) ?? key;
+}
+
+function normalizeOptionalString(value) {
+  return nonEmptyString(value) ? value.trim() : undefined;
+}
+
+function requireSchemaDescriptor(source) {
+  if (!nonEmptyString(source.schemaName) || !nonEmptyString(source.fileIdentifier)) {
+    throw new TypeError(
+      `${source.sourceKind} source requires schemaName and fileIdentifier.`,
+    );
+  }
+}
+
+function requireAnyString(source, fields, message) {
+  if (!fields.some((field) => nonEmptyString(source[field]))) {
+    throw new TypeError(message);
+  }
+}
+
+export function normalizeConjunctionSourceSelection(sources) {
+  if (sources == null) {
+    return [];
+  }
+  if (!Array.isArray(sources)) {
+    throw new TypeError("Conjunction source selection must be an array.");
+  }
+
+  const allowedKinds = new Set(CA_SOURCE_KINDS);
+  return sources.map((source, index) => {
+    if (source == null || typeof source !== "object" || Array.isArray(source)) {
+      throw new TypeError(`Conjunction source at index ${index} must be an object.`);
+    }
+
+    const sourceKind = normalizeSourceKind(source.sourceKind ?? source.kind);
+    if (!allowedKinds.has(sourceKind)) {
+      throw new TypeError(`Unsupported conjunction source kind "${sourceKind}".`);
+    }
+
+    const normalized = {
+      sourceKind,
+      sourceId: normalizeOptionalString(source.sourceId ?? source.id),
+      providerId: normalizeOptionalString(source.providerId),
+      schemaName: normalizeOptionalString(source.schemaName),
+      fileIdentifier: normalizeOptionalString(source.fileIdentifier),
+      query: normalizeOptionalString(source.query),
+      queryHash: normalizeOptionalString(source.queryHash),
+      pnmCid: normalizeOptionalString(source.pnmCid),
+      manifestCid: normalizeOptionalString(source.manifestCid),
+      topic: normalizeOptionalString(source.topic),
+    };
+
+    if (["OMM", "OCM", "OEM", "CDM"].includes(sourceKind)) {
+      requireSchemaDescriptor(normalized);
+    } else if (sourceKind === "FLATSQL_QUERY") {
+      requireAnyString(
+        normalized,
+        ["query", "queryHash"],
+        "FLATSQL_QUERY source requires query or queryHash.",
+      );
+    } else if (sourceKind === "PNM") {
+      requireAnyString(
+        normalized,
+        ["pnmCid", "manifestCid"],
+        "PNM source requires pnmCid or manifestCid.",
+      );
+    } else if (sourceKind === "PUBSUB") {
+      requireAnyString(normalized, ["topic"], "PUBSUB source requires topic.");
+    }
+
+    return Object.fromEntries(
+      Object.entries(normalized).filter(([, value]) => value !== undefined),
+    );
+  });
+}
+
 const textDecoder = new TextDecoder();
 
 function toUint8Array(value) {
