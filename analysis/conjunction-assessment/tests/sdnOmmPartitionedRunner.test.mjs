@@ -13,6 +13,8 @@ import { conjunctionArtifactExists } from "./lib/conjunctionCommandHarness.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 import {
   buildPartitionedRunProvenance,
+  loadPartitionCheckpoints,
+  planPartitionWork,
   canonicalJson,
   canonicalSha256Hex,
   signPartitionedRunProvenance,
@@ -20,6 +22,68 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
+
+test("partitioned runner can resume from successful checkpoints and schedule only pending work", async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-resume-"));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await writeFile(
+    path.join(tempDir, "partition-000001-000002-000004.json"),
+    JSON.stringify({
+      partitionIndex: 1,
+      startOrderIndex: 2,
+      endOrderIndex: 4,
+      statusCode: 0,
+      objectsParsed: 6,
+      conjunctionsFound: 1,
+      stats: { pairsScreened: 8 },
+    }),
+  );
+  await writeFile(
+    path.join(tempDir, "partition-000002-000004-000006.json"),
+    JSON.stringify({
+      partitionIndex: 2,
+      startOrderIndex: 4,
+      endOrderIndex: 6,
+      statusCode: 2,
+      objectsParsed: 0,
+      conjunctionsFound: 0,
+      stats: { pairsScreened: 0 },
+    }),
+  );
+
+  const checkpoints = await loadPartitionCheckpoints(tempDir);
+  const plan = planPartitionWork({
+    objectCount: 6,
+    startOrderIndex: 0,
+    endOrderIndex: 6,
+    partitionSize: 2,
+    resume: true,
+    maxPartitions: 1,
+    completedPartitions: checkpoints.completedPartitions,
+  });
+
+  assert.deepEqual(
+    plan.completedPartitions.map((partition) => [
+      partition.partitionIndex,
+      partition.startOrderIndex,
+      partition.endOrderIndex,
+    ]),
+    [[1, 2, 4]],
+  );
+  assert.deepEqual(
+    plan.pendingRanges.map((partition) => [
+      partition.partitionIndex,
+      partition.startOrderIndex,
+      partition.endOrderIndex,
+    ]),
+    [[0, 0, 2]],
+  );
+  assert.equal(plan.deferredRanges.length, 1);
+  assert.equal(plan.deferredRanges[0].partitionIndex, 2);
+});
 
 test("partitioned runner provenance hashes and Ed25519 signatures are deterministic and verifiable", () => {
   const summary = {
