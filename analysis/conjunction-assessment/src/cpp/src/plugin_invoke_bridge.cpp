@@ -871,6 +871,52 @@ static bool AppendOmmPayload(
   return true;
 }
 
+static uint32_t ReadUint32LengthPrefix(const uint8_t *bytes, bool big_endian) {
+  if (big_endian) {
+    return (static_cast<uint32_t>(bytes[0]) << 24u) |
+           (static_cast<uint32_t>(bytes[1]) << 16u) |
+           (static_cast<uint32_t>(bytes[2]) << 8u) |
+           static_cast<uint32_t>(bytes[3]);
+  }
+  return static_cast<uint32_t>(bytes[0]) |
+         (static_cast<uint32_t>(bytes[1]) << 8u) |
+         (static_cast<uint32_t>(bytes[2]) << 16u) |
+         (static_cast<uint32_t>(bytes[3]) << 24u);
+}
+
+static bool DecodeOmmLengthPrefixedStream(
+  const uint8_t *bytes,
+  size_t size,
+  bool big_endian,
+  std::vector<conjunction::GPElement> *catalog
+) {
+  if (!bytes || size == 0u || !catalog) {
+    return false;
+  }
+
+  std::vector<conjunction::GPElement> decoded;
+  size_t offset = 0u;
+  while (offset + sizeof(uint32_t) <= size) {
+    const uint32_t payload_size =
+      ReadUint32LengthPrefix(bytes + offset, big_endian);
+    offset += sizeof(uint32_t);
+    if (payload_size == 0u || offset + payload_size > size) {
+      return false;
+    }
+    if (!AppendOmmPayload(bytes + offset, payload_size, &decoded)) {
+      return false;
+    }
+    offset += payload_size;
+  }
+
+  if (offset != size || decoded.empty()) {
+    return false;
+  }
+
+  catalog->swap(decoded);
+  return true;
+}
+
 static bool DecodeOmmCatalogFrame(
   const InputFrameOwned *frame,
   std::vector<conjunction::GPElement> *catalog
@@ -888,30 +934,16 @@ static bool DecodeOmmCatalogFrame(
     return true;
   }
 
-  size_t offset = 0u;
-  while (offset + sizeof(uint32_t) <= size) {
-    const uint32_t payload_size =
-      static_cast<uint32_t>(bytes[offset]) |
-      (static_cast<uint32_t>(bytes[offset + 1]) << 8u) |
-      (static_cast<uint32_t>(bytes[offset + 2]) << 16u) |
-      (static_cast<uint32_t>(bytes[offset + 3]) << 24u);
-    offset += sizeof(uint32_t);
-    if (payload_size == 0u || offset + payload_size > size) {
-      SetError("invalid-catalog-frame", "screen_catalog catalog stream has an invalid size prefix.");
-      return false;
-    }
-    if (!AppendOmmPayload(bytes + offset, payload_size, catalog)) {
-      SetError("invalid-catalog-frame", "screen_catalog catalog stream contains a non-OMM payload.");
-      return false;
-    }
-    offset += payload_size;
+  if (DecodeOmmLengthPrefixedStream(bytes, size, false, catalog) ||
+      DecodeOmmLengthPrefixedStream(bytes, size, true, catalog)) {
+    return true;
   }
 
-  if (offset != size || catalog->empty()) {
-    SetError("invalid-catalog-frame", "screen_catalog catalog frame did not contain OMM payloads.");
-    return false;
-  }
-  return true;
+  SetError(
+    "invalid-catalog-frame",
+    "screen_catalog catalog frame did not contain OMM payloads in single-buffer, uint32le stream, or uint32be SDN data API stream format."
+  );
+  return false;
 }
 
 static void AppendGpRecords(
