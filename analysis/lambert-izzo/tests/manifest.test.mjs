@@ -20,12 +20,12 @@ test("Lambert package declares the planned SDK solve surface", () => {
   assert.equal(method.inputPorts[0].portId, "request");
   assert.equal(
     method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "LMSR",
+    "LMS",
   );
   assert.equal(method.outputPorts[0].portId, "solutions");
   assert.equal(
     method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "LMSO",
+    "LMO",
   );
 });
 
@@ -36,5 +36,5 @@ test("Lambert package pins upstream source and avoids nested submodules", () => 
   assert.equal(pkg.dependencies.lambert_izzo, "2.0.0");
   assert.match(readme, /65b561b745a0f1afe6a2d73f46f70a3a382e67aa/);
   assert.match(readme, /Do not add a nested upstream submodule/);
-  assert.match(readme, /must add canonical SDS records first/);
+  assert.match(readme, /SDS identifiers/);
 });

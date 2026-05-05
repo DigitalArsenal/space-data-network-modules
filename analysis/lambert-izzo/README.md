@@ -45,16 +45,13 @@ Output result fields:
 
 ## Standards Status
 
-`STV` covers a state vector, but the current SDS tree does not contain a
-canonical Lambert request/result record carrying time of flight, `mu`, transfer
-way, revolution budget, branch metadata, and diagnostics. The implementation
-must add canonical SDS records first rather than adding repo-local `.fbs`
-schemas here.
+`STV` covers a state vector. The Lambert-specific request/result data uses the
+SDS-first records below rather than repo-local `.fbs` files in this package.
 
-Proposed SDS identifiers:
+SDS identifiers:
 
-- `LMSR`: `orbpro.analysis.LambertSolveRequest`
-- `LMSO`: `orbpro.analysis.LambertSolveResult`
+- `LMS`: `spacedata.LMS` Lambert solve request.
+- `LMO`: `spacedata.LMO` Lambert solve output.
 
 ## Verification Plan
 

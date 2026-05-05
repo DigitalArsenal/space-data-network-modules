@@ -20,8 +20,8 @@
               "setId": "analysis.lambert-solve-request",
               "allowedTypes": [
                 {
-                  "schemaName": "orbpro.analysis.LambertSolveRequest",
-                  "fileIdentifier": "LMSR"
+                  "schemaName": "spacedata.LMS",
+                  "fileIdentifier": "LMS"
                 }
               ],
               "description": "Canonical Lambert boundary-value request: r1, r2, time of flight, gravitational parameter, transfer way, and revolution budget."
@@ -41,8 +41,8 @@
               "setId": "analysis.lambert-solve-result",
               "allowedTypes": [
                 {
-                  "schemaName": "orbpro.analysis.LambertSolveResult",
-                  "fileIdentifier": "LMSO"
+                  "schemaName": "spacedata.LMO",
+                  "fileIdentifier": "LMO"
                 }
               ],
               "description": "Canonical Lambert solve result with departure/arrival velocities, multi-revolution branch metadata, and solver diagnostics."
@@ -63,12 +63,12 @@
   "protocols": [],
   "schemasUsed": [
     {
-      "schemaName": "orbpro.analysis.LambertSolveRequest",
-      "fileIdentifier": "LMSR"
+      "schemaName": "spacedata.LMS",
+      "fileIdentifier": "LMS"
     },
     {
-      "schemaName": "orbpro.analysis.LambertSolveResult",
-      "fileIdentifier": "LMSO"
+      "schemaName": "spacedata.LMO",
+      "fileIdentifier": "LMO"
     }
   ],
   "buildArtifacts": [
