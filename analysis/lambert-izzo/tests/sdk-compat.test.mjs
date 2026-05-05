@@ -198,3 +198,68 @@ test("built artifact returns a typed LMO error for invalid time of flight", asyn
   assert.equal(result.ERROR_CODE(), "invalid-time-of-flight");
   assert.match(result.ERROR_MESSAGE(), /time of flight/i);
 });
+
+const invalidRequestCases = [
+  {
+    name: "non-finite input",
+    requestId: "non-finite",
+    overrides: { r1x: Number.NaN },
+    errorCode: "non-finite-input",
+    errorMessage: /non-finite/i,
+  },
+  {
+    name: "zero initial position vector",
+    requestId: "zero-r1",
+    overrides: { r1x: 0, r1y: 0, r1z: 0 },
+    errorCode: "invalid-position-vector",
+    errorMessage: /position vector/i,
+  },
+  {
+    name: "invalid gravitational parameter",
+    requestId: "invalid-mu",
+    overrides: { muKm3S2: 0 },
+    errorCode: "invalid-gravitational-parameter",
+    errorMessage: /gravitational parameter/i,
+  },
+  {
+    name: "impossible revolution budget",
+    requestId: "invalid-revs",
+    overrides: { maxRevs: 33 },
+    errorCode: "invalid-revolution-budget",
+    errorMessage: /revolution/i,
+  },
+  {
+    name: "collinear transfer geometry",
+    requestId: "collinear",
+    overrides: { r1x: 7000, r1y: 0, r1z: 0, r2x: 8000, r2y: 0, r2z: 0 },
+    errorCode: "unsupported-geometry",
+    errorMessage: /collinear/i,
+  },
+];
+
+for (const entry of invalidRequestCases) {
+  test(`built artifact returns a typed LMO error for ${entry.name}`, async (t) => {
+    const harness = await createBrowserModuleHarness({
+      wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+      surface: "direct",
+    });
+    t.after(() => {
+      harness.destroy();
+    });
+
+    const response = await harness.invoke(
+      createLambertInvokeRequest(
+        createLambertRequestPayload({
+          requestId: entry.requestId,
+          ...entry.overrides,
+        }),
+      ),
+    );
+    const result = decodeLambertOutputFrame(response);
+
+    assert.equal(result.REQUEST_ID(), entry.requestId);
+    assert.equal(result.STATUS(), lambertSolveState.ERROR);
+    assert.equal(result.ERROR_CODE(), entry.errorCode);
+    assert.match(result.ERROR_MESSAGE(), entry.errorMessage);
+  });
+}
