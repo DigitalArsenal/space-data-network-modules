@@ -274,3 +274,114 @@ test(
     assert.equal(decoded.objectsParsed, 1200);
   },
 );
+
+test("screen_catalog accepts mixed primary GP and secondary track source families", async (t) => {
+  if (!conjunctionArtifactExists()) {
+    t.skip("Build conjunction-assessment before running the mixed source screen_catalog test.");
+    return;
+  }
+  const runnerBinary = await buildThreadedWasmEdgeRunner(
+    t,
+    "conjunction-mixed-source-runner-",
+  );
+  if (!runnerBinary) {
+    return;
+  }
+
+  const flatc = await FlatcRunner.init();
+  const requestPayload = createScreenCatalogRequest(flatc, {
+    selectedSources: [
+      {
+        sourceKind: "OMM",
+        sourceId: "celestrak-primary",
+        providerId: "celestrak.eth",
+        schemaName: "OMM/main.fbs",
+        fileIdentifier: "$OMM",
+      },
+      {
+        sourceKind: "OCM",
+        sourceId: "operator-secondary",
+        providerId: "operator.example",
+        schemaName: "OCM/main.fbs",
+        fileIdentifier: "$OCM",
+      },
+    ],
+    primaryGps: [
+      {
+        objectName: "PRIMARY-GP",
+        objectId: "2026-PRIMARY",
+        epoch: "2026-03-09T00:00:00.000000",
+        meanMotion: 15.1,
+        eccentricity: 0.001,
+        inclination: 53.0,
+        raOfAscNode: 1.0,
+        argOfPericenter: 2.0,
+        meanAnomaly: 3.0,
+        ephemerisType: 0,
+        classificationType: "U",
+        noradCatId: 96001,
+        elementSetNo: 1,
+        revAtEpoch: 1,
+        bstar: 0.0,
+        meanMotionDot: 0.0,
+        meanMotionDdot: 0.0,
+      },
+    ],
+    secondaryTracks: [
+      {
+        sourcePluginId: "operator-ocm-adapter",
+        sourceHandle: 42,
+        objectName: "SECONDARY-TRACK",
+        objectId: "2026-SECONDARY",
+        noradCatId: 96002,
+        referenceFrame: "ICRF",
+        samples: [
+          {
+            jd: 2461108.5,
+            xKm: 7000.02,
+            yKm: 0,
+            zKm: 0,
+            vxKmS: 0,
+            vyKmS: 7.49,
+            vzKmS: 0,
+          },
+          {
+            jd: 2461108.5 + 60 / 86400,
+            xKm: 7000.005,
+            yKm: 449.4,
+            zKm: 0,
+            vxKmS: -0.478,
+            vyKmS: 7.48998,
+            vzKmS: 0,
+          },
+        ],
+      },
+    ],
+    durationDays: 0.0,
+    coarseStepSec: 600.0,
+  });
+  const harness = await createConjunctionCommandHarness({
+    wasmEdgeRunnerBinary: runnerBinary,
+  });
+  t.after(async () => {
+    await harness.destroy();
+  });
+
+  const response = await harness.invoke({
+    methodId: "screen_catalog",
+    inputs: [{ portId: "request", payload: requestPayload }],
+  });
+
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const result = response.outputs?.find((frame) => frame.portId === "result");
+  assert.ok(result?.payload instanceof Uint8Array, "result payload is emitted");
+  const decoded = JSON.parse(
+    flatc.generateJSON(
+      screenCatalogResultSchema(),
+      { path: "/result.bin", data: result.payload },
+      { defaultsJson: true },
+    ),
+  );
+  assert.equal(decoded.objectsParsed, 2);
+  assert.equal(decoded.stats.totalObjects, 2);
+});
