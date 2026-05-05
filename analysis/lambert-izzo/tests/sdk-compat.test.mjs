@@ -92,6 +92,13 @@ function assertInvalidRequestBufferResponse(response) {
   assert.match(response.errorMessage, /valid LMS FlatBuffer/i);
 }
 
+function assertPluginErrorResponse(response, { statusCode, errorCode, errorMessage }) {
+  assert.equal(response.statusCode, statusCode);
+  assert.equal(response.outputs.length, 0);
+  assert.equal(response.errorCode, errorCode);
+  assert.match(response.errorMessage, errorMessage);
+}
+
 function decodeLambertOutputFrame(response) {
   assert.equal(response.statusCode, 0);
   assert.equal(response.outputs.length, 1);
@@ -272,6 +279,27 @@ test("built artifact returns a typed LMO error for invalid time of flight", asyn
   assert.match(result.ERROR_MESSAGE(), /time of flight/i);
 });
 
+test("built artifact fails closed when the LMS request frame is missing", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "direct",
+  });
+  t.after(() => {
+    harness.destroy();
+  });
+
+  const response = await harness.invoke({
+    methodId: "solve_lambert",
+    inputs: [],
+  });
+
+  assertPluginErrorResponse(response, {
+    statusCode: 400,
+    errorCode: "missing-required-input",
+    errorMessage: /missing required input port: request/i,
+  });
+});
+
 const invalidRequestCases = [
   {
     name: "non-finite input",
@@ -430,4 +458,30 @@ test("built artifact solves the closed-form circular long-way benchmark", async 
   assert.equal(branch.N_REVS(), 0);
   assertVectorNear(branch.V1(), { X: 0, Y: -circularSpeedKmPerSec, Z: 0 }, 1e-6);
   assertVectorNear(branch.V2(), { X: circularSpeedKmPerSec, Y: 0, Z: 0 }, 1e-6);
+});
+
+test("built artifact reports multi-revolution branch enumeration as not implemented", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "direct",
+  });
+  t.after(() => {
+    harness.destroy();
+  });
+
+  const response = await harness.invoke(
+    createLambertInvokeRequest(
+      createLambertRequestPayload({
+        requestId: "multi-rev-unsupported",
+        maxRevs: 1,
+        tofSec: 20000,
+      }),
+    ),
+  );
+
+  assertPluginErrorResponse(response, {
+    statusCode: 501,
+    errorCode: "solver-not-implemented",
+    errorMessage: /runtime is not implemented/i,
+  });
 });
