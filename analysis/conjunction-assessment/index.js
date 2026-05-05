@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 import {
   decodePlgManifest,
   isPlgManifestBuffer,
@@ -29,6 +31,114 @@ export const metadata = Object.freeze({
   encrypted: false,
   requiresProtection: false,
 });
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+    .join(",")}}`;
+}
+
+function requireNonEmptyString(value, fieldName) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${fieldName} is required.`);
+  }
+  return value.trim();
+}
+
+function normalizeCdmPayload(cdmPayload) {
+  if (cdmPayload instanceof Uint8Array) {
+    return Buffer.from(cdmPayload.buffer, cdmPayload.byteOffset, cdmPayload.byteLength);
+  }
+  throw new TypeError("cdmPayload must be a Uint8Array.");
+}
+
+function normalizeSigningKey(key, fieldName) {
+  if (!key) {
+    throw new TypeError(`${fieldName} is required.`);
+  }
+  return typeof key === "string" || Buffer.isBuffer(key)
+    ? crypto.createPrivateKey(key)
+    : key;
+}
+
+function normalizeVerificationKey(key, fieldName) {
+  if (!key) {
+    throw new TypeError(`${fieldName} is required.`);
+  }
+  return typeof key === "string" || Buffer.isBuffer(key)
+    ? crypto.createPublicKey(key)
+    : key;
+}
+
+export function signCdmOutput(cdmPayload, options = {}) {
+  const payload = normalizeCdmPayload(cdmPayload);
+  const privateKey = normalizeSigningKey(options.privateKey, "privateKey");
+  const publicKey = crypto
+    .createPublicKey(privateKey)
+    .export({ type: "spki", format: "pem" })
+    .toString();
+  const cdmHash = `sha256:${crypto.createHash("sha256").update(payload).digest("hex")}`;
+  const signedPayload = {
+    schemaVersion: 1,
+    artifactKind: "signed-cdm",
+    schemaName: "CDM/main.fbs",
+    fileIdentifier: "$CDM",
+    cdmHash,
+    providerId: requireNonEmptyString(options.providerId, "providerId"),
+    sourcePnmCid: requireNonEmptyString(options.sourcePnmCid, "sourcePnmCid"),
+    moduleArtifactHash: requireNonEmptyString(
+      options.moduleArtifactHash,
+      "moduleArtifactHash",
+    ),
+    moduleVersion: requireNonEmptyString(options.moduleVersion, "moduleVersion"),
+    cdmOutputId: requireNonEmptyString(options.cdmOutputId, "cdmOutputId"),
+  };
+  const signaturePayload = Buffer.from(canonicalJson(signedPayload), "utf8");
+  return {
+    ...signedPayload,
+    signedPayload,
+    signature: {
+      algorithm: "Ed25519",
+      payloadEncoding: "canonical-json",
+      signature: crypto.sign(null, signaturePayload, privateKey).toString("base64"),
+      publicKeyPem: publicKey,
+    },
+  };
+}
+
+export function verifySignedCdmOutput(cdmPayload, signedCdmOutput, publicKey) {
+  const payload = normalizeCdmPayload(cdmPayload);
+  const expectedHash = `sha256:${crypto
+    .createHash("sha256")
+    .update(payload)
+    .digest("hex")}`;
+  if (
+    !signedCdmOutput ||
+    signedCdmOutput.cdmHash !== expectedHash ||
+    signedCdmOutput.signedPayload?.cdmHash !== expectedHash ||
+    signedCdmOutput.signature?.algorithm !== "Ed25519"
+  ) {
+    return false;
+  }
+  const verificationKey = normalizeVerificationKey(publicKey, "publicKey");
+  const signaturePayload = Buffer.from(
+    canonicalJson(signedCdmOutput.signedPayload),
+    "utf8",
+  );
+  return crypto.verify(
+    null,
+    signaturePayload,
+    verificationKey,
+    Buffer.from(signedCdmOutput.signature.signature, "base64"),
+  );
+}
 
 export const CA_SOURCE_KINDS = Object.freeze([
   "OMM",
