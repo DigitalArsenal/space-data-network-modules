@@ -1309,6 +1309,41 @@ static std::unique_ptr<orbpro::conjunction::ConjunctionEventT> ToFlatbufferEvent
   return output;
 }
 
+static conjunction::ConjunctionEvent ToLegacyConjunctionEvent(
+  const conjunction::ConjunctionEvent2 &event
+) {
+  conjunction::ConjunctionEvent legacy{};
+  legacy.obj1.name = event.obj1_name;
+  legacy.obj1.object_id = event.obj1_id;
+  legacy.obj1.norad_cat_id = event.obj1_norad;
+  legacy.obj2.name = event.obj2_name;
+  legacy.obj2.object_id = event.obj2_id;
+  legacy.obj2.norad_cat_id = event.obj2_norad;
+  legacy.tca_jd = event.tca_jd;
+  legacy.tca_iso = event.tca_iso.empty() ? conjunction::jd_to_iso(event.tca_jd) : event.tca_iso;
+  legacy.state1 = event.state1;
+  legacy.state2 = event.state2;
+  legacy.min_range_km = event.miss_distance_km;
+  legacy.rel_speed_kms = event.relative_speed_kms;
+  legacy.max_probability = event.pc.max_probability;
+  legacy.probability_method = event.pc.method;
+  legacy.rel_pos_r = event.rel_r;
+  legacy.rel_pos_t = event.rel_t;
+  legacy.rel_pos_n = event.rel_n;
+  legacy.rel_vel_r = event.rel_vr;
+  legacy.rel_vel_t = event.rel_vt;
+  legacy.rel_vel_n = event.rel_vn;
+  legacy.cov_r1 = std::sqrt(std::max(0.0, event.cov1.data[0])) * 1000.0;
+  legacy.cov_t1 = std::sqrt(std::max(0.0, event.cov1.data[4])) * 1000.0;
+  legacy.cov_n1 = std::sqrt(std::max(0.0, event.cov1.data[8])) * 1000.0;
+  legacy.cov_r2 = std::sqrt(std::max(0.0, event.cov2.data[0])) * 1000.0;
+  legacy.cov_t2 = std::sqrt(std::max(0.0, event.cov2.data[4])) * 1000.0;
+  legacy.cov_n2 = std::sqrt(std::max(0.0, event.cov2.data[8])) * 1000.0;
+  legacy.dse1 = event.dse1;
+  legacy.dse2 = event.dse2;
+  return legacy;
+}
+
 static std::unique_ptr<orbpro::conjunction::ScreeningStatsT> ToFlatbufferStats(
   const conjunction::ScreeningStats &stats
 ) {
@@ -1527,19 +1562,38 @@ static int HandleEmitCdm(void) {
     if (!request) {
       return 400;
     }
+    conjunction::ConjunctionEvent event{};
     if (request->primaryTrack() || request->secondaryTrack()) {
-      SetError("unsupported-request", "emit_cdm currently requires TLE-backed conjunction requests.");
-      return 400;
-    }
+      if (!request->primaryTrack() || !request->secondaryTrack()) {
+        SetError("invalid-track", "emit_cdm requires both primaryTrack and secondaryTrack when using propagated tracks.");
+        return 400;
+      }
+      auto primary = DecodePropagatedTrack(request->primaryTrack());
+      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
+      if (!primary || !secondary) {
+        SetError("invalid-track", "Propagated CDM requests require at least two samples per track.");
+        return 400;
+      }
 
-    const auto event = conjunction::assess_conjunction(
-      DecodeTleRecord(request->tle1()),
-      DecodeTleRecord(request->tle2()),
-      request->startJd(),
-      request->durationDays(),
-      request->radius1M(),
-      request->radius2M()
-    );
+      conjunction::ConjunctionEngine engine;
+      engine.set_pc_method("alfano");
+      engine.set_combined_radius_m(request->radius1M(), request->radius2M());
+      event = ToLegacyConjunctionEvent(engine.assess(
+        *primary,
+        *secondary,
+        request->startJd(),
+        request->durationDays()
+      ));
+    } else {
+      event = conjunction::assess_conjunction(
+        DecodeTleRecord(request->tle1()),
+        DecodeTleRecord(request->tle2()),
+        request->startJd(),
+        request->durationDays(),
+        request->radius1M(),
+        request->radius2M()
+      );
+    }
 
     std::vector<uint8_t> payload(4096u);
     int32_t written = conjunction::conjunction_to_cdm(
