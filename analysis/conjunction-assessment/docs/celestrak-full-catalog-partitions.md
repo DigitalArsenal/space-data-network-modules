@@ -96,6 +96,26 @@ For a 100,000-object catalog and `--catalog-block-size 1000`, the exact plan has
 directory and repeat with `--resume` until all shards report no deferred ranges.
 This is the current supported exact full-catalog execution path.
 
+To generate resumable worker commands without loading WASM, use
+`--write-shard-script`:
+
+```bash
+node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
+  --catalog /path/to/celestrak-full-catalog.OMM.uint32be.bin \
+  --catalog-block-size 1000 \
+  --checkpoint-dir /shared/ca-celestrak-block-pairs \
+  --resume \
+  --partition-shard-count 16 \
+  --max-partitions 4 \
+  --shard-output-dir /shared/ca-celestrak-block-pair-summaries \
+  --write-shard-script /shared/ca-celestrak-block-pair-run.sh
+```
+
+The command prints a plan summary with total, completed, and pending partitions
+per shard, then writes one command per shard to the script. Re-run the generated
+script as workers finish; successful partition checkpoints are skipped and
+failed or missing partitions remain eligible for retry.
+
 ## Evidence
 
 The summary JSON records:

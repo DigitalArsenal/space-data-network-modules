@@ -9,6 +9,7 @@ import {
   readFile,
   rename,
   rm,
+  chmod,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -346,6 +347,8 @@ function parseCliOptions(rawOptions) {
               0,
             ),
           ),
+    writeShardScript: rawOptions["write-shard-script"],
+    shardOutputDir: rawOptions["shard-output-dir"],
     startOrderIndex: Math.trunc(
       requiredNumber(rawOptions["start-order-index"], "start-order-index", 0),
     ),
@@ -668,6 +671,214 @@ export async function loadPartitionCheckpoints(checkpointDir) {
     return left.endOrderIndex - right.endOrderIndex;
   });
   return { completedPartitions };
+}
+
+function shellQuote(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(text)) {
+    return text;
+  }
+  return `'${text.replaceAll("'", "'\\''")}'`;
+}
+
+function addCommandArg(parts, name, value) {
+  if (value === undefined || value === null || value === false) {
+    return;
+  }
+  if (value === true) {
+    parts.push(`--${name}`);
+    return;
+  }
+  parts.push(`--${name}`, shellQuote(value));
+}
+
+async function writeShardScript(options, summary) {
+  if (!options.writeShardScript) {
+    return null;
+  }
+  const scriptPath = path.resolve(options.writeShardScript);
+  const outputDir = path.resolve(
+    options.shardOutputDir ?? path.dirname(scriptPath),
+  );
+  await mkdir(path.dirname(scriptPath), { recursive: true });
+  await mkdir(outputDir, { recursive: true });
+
+  const scriptRelative = path.relative(process.cwd(), fileURLToPath(import.meta.url));
+  const scriptEntrypoint = scriptRelative.startsWith("..")
+    ? fileURLToPath(import.meta.url)
+    : scriptRelative;
+  const lines = [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "",
+  ];
+  for (const shard of summary.shards) {
+    const parts = [
+      "node",
+      shellQuote(scriptEntrypoint),
+    ];
+    addCommandArg(parts, "catalog", options.catalog);
+    addCommandArg(parts, "catalog-block-size", options.catalogBlockSize);
+    addCommandArg(parts, "partition-size", options.partitionSize);
+    addCommandArg(parts, "checkpoint-dir", options.checkpointDir);
+    addCommandArg(parts, "resume", true);
+    addCommandArg(parts, "partition-shard-count", summary.partitionShardCount);
+    addCommandArg(parts, "partition-shard-index", shard.partitionShardIndex);
+    addCommandArg(parts, "max-partitions", options.maxPartitions);
+    addCommandArg(parts, "provider-id", options.providerId);
+    addCommandArg(parts, "source-id", options.sourceId);
+    addCommandArg(parts, "source-pnm-cid", options.sourcePnmCids?.join(","));
+    addCommandArg(parts, "module-artifact-hash", options.moduleArtifactHash);
+    addCommandArg(parts, "module-version", options.moduleVersion);
+    addCommandArg(parts, "signing-private-key", options.signingPrivateKey);
+    addCommandArg(parts, "start-jd", options.startJd);
+    addCommandArg(parts, "duration-days", options.durationDays);
+    addCommandArg(parts, "threshold-km", options.thresholdKm);
+    addCommandArg(parts, "num-threads", options.numThreads);
+    addCommandArg(parts, "coarse-step-sec", options.coarseStepSec);
+    addCommandArg(parts, "fine-tol-sec", options.fineTolSec);
+    addCommandArg(parts, "combined-radius-m", options.combinedRadiusM);
+    addCommandArg(parts, "start-order-index", options.startOrderIndex);
+    addCommandArg(parts, "end-order-index", options.endOrderIndex);
+    addCommandArg(parts, "catalog-start-frame", options.catalogStartFrame);
+    addCommandArg(parts, "catalog-end-frame", options.catalogEndFrame);
+    addCommandArg(parts, "catalog-frame-limit", options.catalogFrameLimit);
+    addCommandArg(parts, "wasm", options.wasm);
+    addCommandArg(parts, "wasmedge-binary", options.wasmEdgeBinary);
+    addCommandArg(parts, "wasmedge-runner-binary", options.wasmEdgeRunnerBinary);
+    if (options.useKdTree === false) {
+      addCommandArg(parts, "no-kdtree", true);
+    }
+    if (options.useDynamicWindow === false) {
+      addCommandArg(parts, "no-dynamic-window", true);
+    }
+    if (options.usePerigeeFilter === false) {
+      addCommandArg(parts, "no-perigee-filter", true);
+    }
+    addCommandArg(
+      parts,
+      "output",
+      path.join(
+        outputDir,
+        `summary-shard-${String(shard.partitionShardIndex).padStart(3, "0")}.json`,
+      ),
+    );
+    lines.push(parts.join(" "));
+    lines.push("");
+  }
+  await writeFile(scriptPath, `${lines.join("\n")}\n`, { mode: 0o755 });
+  await chmod(scriptPath, 0o755);
+  return scriptPath;
+}
+
+async function planShardExecution(options) {
+  if (!options.catalog) {
+    throw new Error("--catalog is required.");
+  }
+  if (options.partitionShardCount <= 0) {
+    throw new Error("--partition-shard-count must be greater than zero.");
+  }
+  const sourceCatalogPayload = fs.readFileSync(options.catalog);
+  const requestedCatalogEnd =
+    options.catalogFrameLimit !== null
+      ? options.catalogStartFrame + options.catalogFrameLimit
+      : options.catalogEndFrame;
+  const catalogWindow =
+    options.catalogStartFrame > 0 || requestedCatalogEnd !== null
+      ? sliceUint32beFrames(
+          sourceCatalogPayload,
+          options.catalogStartFrame,
+          requestedCatalogEnd ?? Number.MAX_SAFE_INTEGER,
+        )
+      : {
+          payload: sourceCatalogPayload,
+          objectCount: countUint32beFrames(sourceCatalogPayload),
+          sourceObjectCount: null,
+          startFrame: 0,
+          endFrame: null,
+        };
+  const objectCount = catalogWindow.objectCount;
+  const startOrderIndex = Math.min(options.startOrderIndex, objectCount);
+  const endOrderIndex = Math.min(options.endOrderIndex ?? objectCount, objectCount);
+  if (endOrderIndex < startOrderIndex) {
+    throw new Error("--end-order-index must be greater than or equal to --start-order-index.");
+  }
+  const checkpointState =
+    options.resume && options.checkpointDir
+      ? await loadPartitionCheckpoints(options.checkpointDir)
+      : { completedPartitions: [] };
+  const partitionMode =
+    options.catalogBlockSize === null ? "ordered-primary" : "catalog-block-pair";
+  const shardCount = options.partitionShardCount;
+  const shards = [];
+  let totalPartitions = 0;
+  let completedPartitions = 0;
+  let pendingPartitions = 0;
+  for (let shardIndex = 0; shardIndex < shardCount; shardIndex += 1) {
+    const plan =
+      partitionMode === "catalog-block-pair"
+        ? planCatalogBlockPairWork({
+            objectCount,
+            startOrderIndex,
+            endOrderIndex,
+            catalogBlockSize: options.catalogBlockSize,
+            resume: options.resume,
+            maxPartitions: null,
+            partitionShardCount: shardCount,
+            partitionShardIndex: shardIndex,
+            completedPartitions: checkpointState.completedPartitions,
+          })
+        : planPartitionWork({
+            objectCount,
+            startOrderIndex,
+            endOrderIndex,
+            partitionSize: options.partitionSize,
+            resume: options.resume,
+            maxPartitions: null,
+            partitionShardCount: shardCount,
+            partitionShardIndex: shardIndex,
+            completedPartitions: checkpointState.completedPartitions,
+          });
+    const shard = {
+      partitionShardIndex: shardIndex,
+      totalPartitions: plan.allRanges.length,
+      completedPartitions: plan.completedPartitions.length,
+      pendingPartitions: plan.pendingRanges.length,
+      firstPartitionIndex: plan.allRanges[0]?.partitionIndex ?? null,
+      lastPartitionIndex: plan.allRanges.at(-1)?.partitionIndex ?? null,
+    };
+    totalPartitions += shard.totalPartitions;
+    completedPartitions += shard.completedPartitions;
+    pendingPartitions += shard.pendingPartitions;
+    shards.push(shard);
+  }
+  const summary = {
+    catalogPath: path.resolve(options.catalog),
+    catalogBytes: catalogWindow.payload.byteLength,
+    sourceCatalogBytes: sourceCatalogPayload.byteLength,
+    sourceObjectCount: catalogWindow.sourceObjectCount ?? objectCount,
+    catalogStartFrame: catalogWindow.startFrame,
+    catalogEndFrame: catalogWindow.endFrame ?? objectCount,
+    objectCount,
+    partitionMode,
+    partitionSize: options.partitionSize,
+    catalogBlockSize: options.catalogBlockSize,
+    startOrderIndex,
+    endOrderIndex,
+    checkpointDir: options.checkpointDir ? path.resolve(options.checkpointDir) : null,
+    resume: options.resume,
+    partitionShardCount: shardCount,
+    maxPartitionsPerShardRun: options.maxPartitions,
+    totalPartitions,
+    completedPartitions,
+    pendingPartitions,
+    shards,
+  };
+  const shardScriptPath = await writeShardScript(options, summary);
+  return {
+    ...summary,
+    shardScriptPath,
+  };
 }
 
 export function planCatalogBlockPairWork({
@@ -1012,7 +1223,9 @@ export async function runPartitionedSdnOmmCatalog(options) {
 
 async function main() {
   const options = parseCliOptions(parseArgs(process.argv.slice(2)));
-  const summary = await runPartitionedSdnOmmCatalog(options);
+  const summary = options.writeShardScript
+    ? await planShardExecution(options)
+    : await runPartitionedSdnOmmCatalog(options);
   const json = JSON.stringify(summary, null, 2);
   if (options.output) {
     await writeFile(options.output, `${json}\n`);

@@ -381,6 +381,76 @@ test("catalog block-pair slicer builds minimal diagonal and off-diagonal streams
   );
 });
 
+test("partitioned runner can write resumable block-pair shard commands without invoking WASM", async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-shard-commands-"));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  const catalogPath = path.join(tempDir, "catalog.uint32be.bin");
+  const scriptPath = path.join(tempDir, "run-shards.sh");
+  const outputDir = path.join(tempDir, "summaries");
+  await writeFile(
+    catalogPath,
+    encodeUint32beFramedStream([
+      Uint8Array.from([1]),
+      Uint8Array.from([2]),
+      Uint8Array.from([3]),
+      Uint8Array.from([4]),
+      Uint8Array.from([5]),
+      Uint8Array.from([6]),
+    ]),
+  );
+
+  const result = await runNodeScript([
+    "scripts/run-sdn-omm-partitioned-screen-catalog.mjs",
+    "--catalog",
+    catalogPath,
+    "--catalog-block-size",
+    "2",
+    "--partition-shard-count",
+    "3",
+    "--checkpoint-dir",
+    path.join(tempDir, "checkpoints"),
+    "--resume",
+    "--max-partitions",
+    "4",
+    "--shard-output-dir",
+    outputDir,
+    "--write-shard-script",
+    scriptPath,
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.partitionMode, "catalog-block-pair");
+  assert.equal(summary.objectCount, 6);
+  assert.equal(summary.totalPartitions, 6);
+  assert.equal(summary.partitionShardCount, 3);
+  assert.deepEqual(
+    summary.shards.map((shard) => [
+      shard.partitionShardIndex,
+      shard.totalPartitions,
+      shard.pendingPartitions,
+    ]),
+    [
+      [0, 2, 2],
+      [1, 2, 2],
+      [2, 2, 2],
+    ],
+  );
+  assert.equal(summary.shardScriptPath, scriptPath);
+
+  const script = await readFile(scriptPath, "utf8");
+  assert.match(script, /set -euo pipefail/);
+  assert.match(script, /--partition-shard-index 0/);
+  assert.match(script, /--partition-shard-index 1/);
+  assert.match(script, /--partition-shard-index 2/);
+  assert.match(script, /--catalog-block-size 2/);
+  assert.match(script, /--resume/);
+  assert.match(script, /summary-shard-000.json/);
+});
+
 function runNodeScript(args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
