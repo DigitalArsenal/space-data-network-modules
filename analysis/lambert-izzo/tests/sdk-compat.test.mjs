@@ -3,6 +3,9 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
+import { LMS } from "../../../../spacedatastandards.org/lib/js/LMS/main.js";
+import { LMO, lambertSolveState } from "../../../../spacedatastandards.org/lib/js/LMO/main.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
 import {
@@ -40,11 +43,65 @@ function createInvokeRequest() {
   return materializeHarnessScenario(scenario);
 }
 
-function assertFailClosedResponse(response) {
+function createLambertRequestPayload(overrides = {}) {
+  const builder = new flatbuffers.Builder(256);
+  const requestId = builder.createString(overrides.requestId ?? "lambert-test");
+  const refFrame = builder.createString(overrides.refFrame ?? "GCRF");
+  const epoch = builder.createString(overrides.epoch ?? "2026-05-05T00:00:00Z");
+  const request = LMS.createLMS(
+    builder,
+    requestId,
+    overrides.r1x ?? 7000,
+    overrides.r1y ?? 0,
+    overrides.r1z ?? 0,
+    overrides.r2x ?? 0,
+    overrides.r2y ?? 8000,
+    overrides.r2z ?? 0,
+    overrides.tofSec ?? 3600,
+    overrides.muKm3S2 ?? 398600.4418,
+    overrides.transferWay ?? 0,
+    overrides.maxRevs ?? 0,
+    refFrame,
+    epoch,
+    overrides.flags ?? 0,
+  );
+  LMS.finishLMSBuffer(builder, request);
+  return builder.asUint8Array();
+}
+
+function createLambertInvokeRequest(payload) {
+  return {
+    methodId: "solve_lambert",
+    inputs: [
+      {
+        portId: "request",
+        typeRef: {
+          schemaName: "spacedata.LMS",
+          fileIdentifier: "LMS",
+        },
+        payload,
+      },
+    ],
+  };
+}
+
+function assertInvalidRequestBufferResponse(response) {
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.outputs.length, 0);
-  assert.equal(response.errorCode, "solver-not-implemented");
-  assert.match(response.errorMessage, /Lambert solver runtime is not implemented/i);
+  assert.equal(response.errorCode, "invalid-request-buffer");
+  assert.match(response.errorMessage, /valid LMS FlatBuffer/i);
+}
+
+function decodeLambertOutputFrame(response) {
+  assert.equal(response.statusCode, 0);
+  assert.equal(response.outputs.length, 1);
+  const [frame] = response.outputs;
+  assert.equal(frame.portId, "solutions");
+  assert.equal(frame.typeRef?.schemaName, "spacedata.LMO");
+  assert.equal(frame.typeRef?.fileIdentifier, "LMO");
+  const bb = new flatbuffers.ByteBuffer(frame.payload);
+  assert.equal(LMO.bufferHasIdentifier(bb), true);
+  return LMO.getRootAsLMO(bb);
 }
 
 test("build publishes canonical isomorphic artifact path", () => {
@@ -88,7 +145,7 @@ test("built artifact loads through the SDK browser harness and fails closed", as
   });
 
   const response = await harness.invoke(createInvokeRequest());
-  assertFailClosedResponse(response);
+  assertInvalidRequestBufferResponse(response);
 });
 
 test("built artifact loads through the WasmEdge server path when available", async (t) => {
@@ -114,5 +171,30 @@ test("built artifact loads through the WasmEdge server path when available", asy
     methodId: "solve_lambert",
     inputs: createInvokeRequest().inputs,
   });
-  assertFailClosedResponse(response);
+  assertInvalidRequestBufferResponse(response);
+});
+
+test("built artifact returns a typed LMO error for invalid time of flight", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "direct",
+  });
+  t.after(() => {
+    harness.destroy();
+  });
+
+  const response = await harness.invoke(
+    createLambertInvokeRequest(
+      createLambertRequestPayload({
+        requestId: "invalid-tof",
+        tofSec: 0,
+      }),
+    ),
+  );
+  const result = decodeLambertOutputFrame(response);
+
+  assert.equal(result.REQUEST_ID(), "invalid-tof");
+  assert.equal(result.STATUS(), lambertSolveState.ERROR);
+  assert.equal(result.ERROR_CODE(), "invalid-time-of-flight");
+  assert.match(result.ERROR_MESSAGE(), /time of flight/i);
 });
