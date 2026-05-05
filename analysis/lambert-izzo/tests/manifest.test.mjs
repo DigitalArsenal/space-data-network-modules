@@ -33,7 +33,7 @@ test("Lambert package pins upstream source and avoids nested submodules", () => 
   const pkg = readJson(packagePath);
   const readme = fs.readFileSync(readmePath, "utf8");
 
-  assert.equal(pkg.dependencies.lambert_izzo, "2.0.0");
+  assert.equal(pkg.upstreamCrates.lambert_izzo, "2.0.0");
   assert.match(readme, /65b561b745a0f1afe6a2d73f46f70a3a382e67aa/);
   assert.match(readme, /Do not add a nested upstream submodule/);
   assert.match(readme, /SDS identifiers/);
