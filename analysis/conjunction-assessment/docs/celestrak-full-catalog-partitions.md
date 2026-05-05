@@ -25,6 +25,28 @@ node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
 `--resume` until the summary reports `"complete": true` and
 `aggregate.failedPartitions` is `0`.
 
+## Catalog Windows
+
+For launch verification against a production-scale export, the runner can slice
+deterministic frame windows from one downloaded full-catalog stream before
+screening:
+
+```bash
+node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
+  --catalog /path/to/celestrak-full-catalog.OMM.uint32be.bin \
+  --catalog-start-frame 50000 \
+  --catalog-frame-limit 1000 \
+  --partition-size 50 \
+  --checkpoint-dir /path/to/ca-celestrak-window-50000 \
+  --output /path/to/ca-celestrak-window-50000-summary.json
+```
+
+The summary records both the source catalog size and the screened window:
+`sourceObjectCount`, `sourceCatalogBytes`, `catalogStartFrame`,
+`catalogEndFrame`, `objectCount`, and `catalogBytes`. Windowed runs are exact
+inside the selected frame range; they are not a substitute for the complete
+all-catalog pair sweep.
+
 ## Distributed Shards
 
 For private-node or worker-pool execution, split the ordered partition plan by

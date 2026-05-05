@@ -115,27 +115,62 @@ function requiredNumber(value, name, defaultValue) {
   return numeric;
 }
 
-function countUint32beFrames(buffer) {
+function readUint32beFrameRanges(buffer) {
   let offset = 0;
-  let frames = 0;
+  const ranges = [];
   while (offset < buffer.length) {
     if (offset + 4 > buffer.length) {
       throw new Error(`Truncated uint32be frame length at byte ${offset}.`);
     }
+    const frameStart = offset;
     const frameLength = buffer.readUInt32BE(offset);
     offset += 4;
     if (frameLength <= 0) {
-      throw new Error(`Invalid zero-length frame at index ${frames}.`);
+      throw new Error(`Invalid zero-length frame at index ${ranges.length}.`);
     }
     if (offset + frameLength > buffer.length) {
       throw new Error(
-        `Truncated uint32be frame ${frames}: length ${frameLength} exceeds remaining bytes.`,
+        `Truncated uint32be frame ${ranges.length}: length ${frameLength} exceeds remaining bytes.`,
       );
     }
     offset += frameLength;
-    frames++;
+    ranges.push({ start: frameStart, end: offset });
   }
-  return frames;
+  return ranges;
+}
+
+function countUint32beFrames(buffer) {
+  return readUint32beFrameRanges(buffer).length;
+}
+
+export function sliceUint32beFrames(buffer, startFrame, endFrame) {
+  if (startFrame < 0) {
+    throw new Error("catalog window start must be greater than or equal to zero.");
+  }
+  if (endFrame < startFrame) {
+    throw new Error("catalog window end must be greater than or equal to start.");
+  }
+  const ranges = readUint32beFrameRanges(buffer);
+  const clampedStart = Math.min(startFrame, ranges.length);
+  const clampedEnd = Math.min(endFrame, ranges.length);
+  const selected = ranges.slice(clampedStart, clampedEnd);
+  const byteLength = selected.reduce(
+    (sum, range) => sum + range.end - range.start,
+    0,
+  );
+  const payload = Buffer.alloc(byteLength);
+  let offset = 0;
+  for (const range of selected) {
+    buffer.copy(payload, offset, range.start, range.end);
+    offset += range.end - range.start;
+  }
+  return {
+    payload,
+    objectCount: selected.length,
+    sourceObjectCount: ranges.length,
+    startFrame: clampedStart,
+    endFrame: clampedEnd,
+  };
 }
 
 function makeRange(start, end, step) {
@@ -246,6 +281,25 @@ function parseCliOptions(rawOptions) {
         ? null
         : Math.trunc(
             requiredNumber(rawOptions["end-order-index"], "end-order-index", 0),
+          ),
+    catalogStartFrame: Math.trunc(
+      requiredNumber(rawOptions["catalog-start-frame"], "catalog-start-frame", 0),
+    ),
+    catalogEndFrame:
+      rawOptions["catalog-end-frame"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(rawOptions["catalog-end-frame"], "catalog-end-frame", 0),
+          ),
+    catalogFrameLimit:
+      rawOptions["catalog-frame-limit"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["catalog-frame-limit"],
+              "catalog-frame-limit",
+              0,
+            ),
           ),
     sourceId: rawOptions["source-id"],
     providerId: rawOptions["provider-id"],
@@ -594,8 +648,27 @@ export async function runPartitionedSdnOmmCatalog(options) {
     throw new Error("--partition-size must be greater than zero.");
   }
 
-  const catalogPayload = fs.readFileSync(options.catalog);
-  const objectCount = countUint32beFrames(catalogPayload);
+  const sourceCatalogPayload = fs.readFileSync(options.catalog);
+  const requestedCatalogEnd =
+    options.catalogFrameLimit !== null
+      ? options.catalogStartFrame + options.catalogFrameLimit
+      : options.catalogEndFrame;
+  const catalogWindow =
+    options.catalogStartFrame > 0 || requestedCatalogEnd !== null
+      ? sliceUint32beFrames(
+          sourceCatalogPayload,
+          options.catalogStartFrame,
+          requestedCatalogEnd ?? Number.MAX_SAFE_INTEGER,
+        )
+      : {
+          payload: sourceCatalogPayload,
+          objectCount: countUint32beFrames(sourceCatalogPayload),
+          sourceObjectCount: null,
+          startFrame: 0,
+          endFrame: null,
+        };
+  const catalogPayload = catalogWindow.payload;
+  const objectCount = catalogWindow.objectCount;
   const startOrderIndex = Math.min(options.startOrderIndex, objectCount);
   const endOrderIndex = Math.min(options.endOrderIndex ?? objectCount, objectCount);
   if (endOrderIndex < startOrderIndex) {
@@ -699,6 +772,10 @@ export async function runPartitionedSdnOmmCatalog(options) {
   const summary = {
     catalogPath: path.resolve(options.catalog),
     catalogBytes: catalogPayload.byteLength,
+    sourceCatalogBytes: sourceCatalogPayload.byteLength,
+    sourceObjectCount: catalogWindow.sourceObjectCount ?? objectCount,
+    catalogStartFrame: catalogWindow.startFrame,
+    catalogEndFrame: catalogWindow.endFrame ?? objectCount,
     objectCount,
     partitionSize: options.partitionSize,
     startOrderIndex,

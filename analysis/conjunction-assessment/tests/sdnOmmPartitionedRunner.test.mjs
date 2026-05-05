@@ -15,6 +15,7 @@ import {
   buildPartitionedRunProvenance,
   loadPartitionCheckpoints,
   planPartitionWork,
+  sliceUint32beFrames,
   canonicalJson,
   canonicalSha256Hex,
   signPartitionedRunProvenance,
@@ -250,6 +251,32 @@ function encodeUint32beFramedStream(records) {
   }
   return stream;
 }
+
+test("partitioned runner can slice deterministic windows from uint32be OMM streams", () => {
+  const first = Uint8Array.from([1, 2, 3]);
+  const second = Uint8Array.from([4, 5]);
+  const third = Uint8Array.from([6, 7, 8, 9]);
+  const stream = Buffer.from(encodeUint32beFramedStream([first, second, third]));
+
+  const sliced = sliceUint32beFrames(stream, 1, 3);
+  assert.equal(sliced.objectCount, 2);
+  assert.equal(sliced.sourceObjectCount, 3);
+  assert.equal(sliced.startFrame, 1);
+  assert.equal(sliced.endFrame, 3);
+  assert.deepEqual(
+    [...sliced.payload],
+    [...encodeUint32beFramedStream([second, third])],
+  );
+
+  assert.throws(
+    () => sliceUint32beFrames(stream, -1, 2),
+    /catalog window start must be greater than or equal to zero/,
+  );
+  assert.throws(
+    () => sliceUint32beFrames(stream.subarray(0, stream.length - 1), 0, 3),
+    /Truncated uint32be frame/,
+  );
+});
 
 function runNodeScript(args, options = {}) {
   return new Promise((resolve, reject) => {
