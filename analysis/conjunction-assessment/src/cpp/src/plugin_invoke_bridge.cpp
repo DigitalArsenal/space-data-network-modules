@@ -861,6 +861,24 @@ static bool AppendOmmPayload(
   }
   if (payload_size < sizeof(flatbuffers::uoffset_t) + flatbuffers::kFileIdentifierLength ||
       !OMMBufferHasIdentifier(payload)) {
+    if (payload_size < (sizeof(flatbuffers::uoffset_t) * 2u) + flatbuffers::kFileIdentifierLength ||
+        !SizePrefixedOMMBufferHasIdentifier(payload)) {
+      return false;
+    }
+    {
+      ::flatbuffers::Verifier verifier(payload, payload_size);
+      if (VerifySizePrefixedOMMBuffer(verifier)) {
+        catalog->push_back(DecodeOmmRecord(GetSizePrefixedOMM(payload)));
+        return true;
+      }
+    }
+    const uint8_t *inner_payload = payload + sizeof(flatbuffers::uoffset_t);
+    const size_t inner_size = payload_size - sizeof(flatbuffers::uoffset_t);
+    ::flatbuffers::Verifier verifier(inner_payload, inner_size);
+    if (OMMBufferHasIdentifier(inner_payload) && VerifyOMMBuffer(verifier)) {
+      catalog->push_back(DecodeOmmRecord(GetOMM(inner_payload)));
+      return true;
+    }
     return false;
   }
   ::flatbuffers::Verifier verifier(payload, payload_size);

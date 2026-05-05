@@ -48,7 +48,7 @@ function ommSchema() {
   };
 }
 
-function createOmmRecord(flatc, noradCatId) {
+function createOmmRecord(flatc, noradCatId, options = {}) {
   return flatc.generateBinary(
     ommSchema(),
     JSON.stringify({
@@ -70,7 +70,7 @@ function createOmmRecord(flatc, noradCatId) {
       MEAN_MOTION_DOT: 0.0,
       MEAN_MOTION_DDOT: 0.0,
     }),
-    { sizePrefix: false },
+    { sizePrefix: options.sizePrefix === true },
   );
 }
 
@@ -78,6 +78,15 @@ function createScreenCatalogRequest(flatc) {
   return flatc.generateBinary(
     conjunctionRequestSchema(),
     JSON.stringify({
+      selectedSources: [
+        {
+          sourceKind: "OMM",
+          sourceId: "celestrak-full-catalog",
+          providerId: "celestrak.eth",
+          schemaName: "OMM/main.fbs",
+          fileIdentifier: "$OMM",
+        },
+      ],
       startJd: 2460743.5,
       durationDays: 0.01,
       thresholdKm: 15.0,
@@ -122,6 +131,46 @@ test("screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams", asyn
   const catalogPayload = encodeUint32beFramedStream([
     createOmmRecord(flatc, 90001),
     createOmmRecord(flatc, 90002),
+  ]);
+  const harness = await createConjunctionCommandHarness({
+    wasmEdgeRunnerBinary: runnerBinary,
+  });
+  t.after(async () => {
+    await harness.destroy();
+  });
+
+  const response = await harness.invoke({
+    methodId: "screen_catalog",
+    inputs: [
+      { portId: "request", payload: requestPayload },
+      { portId: "catalog", payload: catalogPayload },
+    ],
+  });
+
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const result = response.outputs?.find((frame) => frame.portId === "result");
+  assert.ok(result?.payload instanceof Uint8Array, "result payload is emitted");
+  assert.ok(result.payload.byteLength > 0, "result payload is non-empty");
+});
+
+test("screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records", async (t) => {
+  if (!conjunctionArtifactExists()) {
+    t.skip("Build conjunction-assessment before running the SDN stream adapter test.");
+    return;
+  }
+  const runnerBinary = await buildThreadedWasmEdgeRunner(
+    t,
+    "conjunction-sdn-size-prefixed-stream-runner-",
+  );
+  if (!runnerBinary) {
+    return;
+  }
+
+  const flatc = await FlatcRunner.init();
+  const requestPayload = createScreenCatalogRequest(flatc);
+  const catalogPayload = encodeUint32beFramedStream([
+    createOmmRecord(flatc, 91001, { sizePrefix: true }),
+    createOmmRecord(flatc, 91002, { sizePrefix: true }),
   ]);
   const harness = await createConjunctionCommandHarness({
     wasmEdgeRunnerBinary: runnerBinary,
