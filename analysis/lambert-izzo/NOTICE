@@ -1,0 +1,12 @@
+This package wraps the upstream `lambert_izzo` solver:
+
+  Repository: https://github.com/sakobu/izzos-lambert
+  Version: v2.0.0
+  Commit: 65b561b745a0f1afe6a2d73f46f70a3a382e67aa
+  License: MIT OR Apache-2.0
+
+Copyright (c) 2026 Sarkis Melkonian
+
+The SDN module wrapper code is distributed under the repository license for
+Space Data Network modules. Upstream license notices must be preserved when
+publishing artifacts that include or derive from `lambert_izzo`.
