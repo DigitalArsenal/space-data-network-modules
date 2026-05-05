@@ -55,12 +55,12 @@ function createOmmRecord(flatc, noradCatId, options = {}) {
       OBJECT_NAME: `TEST-${noradCatId}`,
       OBJECT_ID: `2026-001${noradCatId}`,
       EPOCH: "2026-03-09T00:00:00.000000",
-      MEAN_MOTION: 15.1,
-      ECCENTRICITY: 0.001,
-      INCLINATION: 53.0,
-      RA_OF_ASC_NODE: 1.0,
-      ARG_OF_PERICENTER: 2.0,
-      MEAN_ANOMALY: 3.0,
+      MEAN_MOTION: options.meanMotion ?? 15.1,
+      ECCENTRICITY: options.eccentricity ?? 0.001,
+      INCLINATION: options.inclination ?? 53.0,
+      RA_OF_ASC_NODE: options.raOfAscNode ?? 1.0,
+      ARG_OF_PERICENTER: options.argOfPericenter ?? 2.0,
+      MEAN_ANOMALY: options.meanAnomaly ?? 3.0,
       EPHEMERIS_TYPE: "SGP4",
       CLASSIFICATION_TYPE: "U",
       NORAD_CAT_ID: noradCatId,
@@ -74,7 +74,7 @@ function createOmmRecord(flatc, noradCatId, options = {}) {
   );
 }
 
-function createScreenCatalogRequest(flatc) {
+function createScreenCatalogRequest(flatc, overrides = {}) {
   return flatc.generateBinary(
     conjunctionRequestSchema(),
     JSON.stringify({
@@ -94,9 +94,24 @@ function createScreenCatalogRequest(flatc) {
       coarseStepSec: 300.0,
       fineTolSec: 0.01,
       combinedRadiusM: 10.0,
+      ...overrides,
     }),
     { sizePrefix: false },
   );
+}
+
+function screenCatalogResultSchema() {
+  return {
+    entry: "/schemas/ConjunctionScreenCatalogResult.fbs",
+    files: {
+      "/schemas/ConjunctionScreenCatalogResult.fbs": readText(
+        "../schemas/ConjunctionScreenCatalogResult.fbs",
+      ),
+      "/schemas/ConjunctionCommon.fbs": readText(
+        "../schemas/ConjunctionCommon.fbs",
+      ),
+    },
+  };
 }
 
 function encodeUint32beFramedStream(records) {
@@ -192,3 +207,70 @@ test("screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM 
   assert.ok(result?.payload instanceof Uint8Array, "result payload is emitted");
   assert.ok(result.payload.byteLength > 0, "result payload is non-empty");
 });
+
+test(
+  "screen_catalog keeps direct SDN catalog screening bounded for larger streams",
+  { timeout: 30000 },
+  async (t) => {
+    if (!conjunctionArtifactExists()) {
+      t.skip("Build conjunction-assessment before running the SDN stream adapter test.");
+      return;
+    }
+    const runnerBinary = await buildThreadedWasmEdgeRunner(
+      t,
+      "conjunction-sdn-bounded-stream-runner-",
+    );
+    if (!runnerBinary) {
+      return;
+    }
+
+    const flatc = await FlatcRunner.init();
+    const requestPayload = createScreenCatalogRequest(flatc, {
+      durationDays: 0.0,
+      coarseStepSec: 600.0,
+      numThreads: 1,
+      usePerigeeFilter: false,
+    });
+    const records = Array.from({ length: 1200 }, (_, index) =>
+      createOmmRecord(flatc, 92000 + index, {
+        sizePrefix: true,
+        meanMotion: 14.0 + (index % 40) * 0.02,
+        inclination: 20.0 + (index % 80) * 0.25,
+        meanAnomaly: index % 360,
+      }),
+    );
+    const catalogPayload = encodeUint32beFramedStream(records);
+    const harness = await createConjunctionCommandHarness({
+      wasmEdgeRunnerBinary: runnerBinary,
+    });
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const invokeStartedAt = performance.now();
+    const response = await harness.invoke({
+      methodId: "screen_catalog",
+      inputs: [
+        { portId: "request", payload: requestPayload },
+        { portId: "catalog", payload: catalogPayload },
+      ],
+    });
+    const invokeElapsedMs = performance.now() - invokeStartedAt;
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.ok(
+      invokeElapsedMs < 8000,
+      `screen_catalog invocation should stay bounded, took ${invokeElapsedMs}ms`,
+    );
+    const result = response.outputs?.find((frame) => frame.portId === "result");
+    assert.ok(result?.payload instanceof Uint8Array, "result payload is emitted");
+    const decoded = JSON.parse(
+      flatc.generateJSON(
+        screenCatalogResultSchema(),
+        { path: "/result.bin", data: result.payload },
+        { defaultsJson: true },
+      ),
+    );
+    assert.equal(decoded.objectsParsed, 1200);
+  },
+);

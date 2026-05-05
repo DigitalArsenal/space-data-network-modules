@@ -43,6 +43,7 @@ namespace {
 constexpr size_t MAX_PAIRWISE_PRIMARY_SCAN_COUNT = 64;
 constexpr size_t MAX_PAIRWISE_CANDIDATE_SCAN_COUNT = 250000;
 constexpr size_t MIN_EXPLICIT_PAIRS_FOR_KDTREE = 8192;
+constexpr uint64_t MIN_IMPLICIT_ALL_VS_ALL_PAIR_ESTIMATE = 250000;
 constexpr double MAX_RESIDENT_SPEED_BOUND_KM_S = 16.0;
 
 double evaluate_chebyshev_coefficients(
@@ -2412,6 +2413,51 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
     const std::vector<GPElement>& catalog,
     ProgressCallback progress)
 {
+    const uint64_t pair_estimate =
+        catalog.size() < 2
+            ? 0u
+            : (static_cast<uint64_t>(catalog.size()) *
+               static_cast<uint64_t>(catalog.size() - 1u)) / 2u;
+    if (pair_estimate >= MIN_IMPLICIT_ALL_VS_ALL_PAIR_ESTIMATE) {
+        stats_ = {};
+        stats_.total_objects = catalog.size();
+        if (progress) progress(0.1, "Converting GP to TLE...");
+
+        std::vector<TLE> tles;
+        std::vector<float> perigee_km;
+        std::vector<float> apogee_km;
+        tles.reserve(catalog.size());
+        perigee_km.reserve(catalog.size());
+        apogee_km.reserve(catalog.size());
+        for (const auto& gp : catalog) {
+            try {
+                tles.push_back(gp_to_tle(gp));
+            } catch (...) {
+                TLE dummy;
+                dummy.norad_cat_id = gp.norad_cat_id;
+                tles.push_back(dummy);
+            }
+            perigee_km.push_back(static_cast<float>(gp.perigee_km));
+            apogee_km.push_back(static_cast<float>(gp.apogee_km));
+        }
+
+        if (progress) progress(0.15, "Screening large catalog...");
+        auto events = screen_precomputed_tles_implicit(
+            tles,
+            perigee_km,
+            apogee_km,
+            {},
+            {},
+            config_,
+            stats_,
+            progress,
+            nullptr);
+        stats_.total_objects = catalog.size();
+        if (stats_.pairs_screened == 0) {
+            stats_.pairs_screened = pair_estimate;
+        }
+        return events;
+    }
     return screen(catalog, catalog, progress);
 }
 
@@ -2474,20 +2520,6 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
         secondary_indices.end());
 
     stats_.total_objects = catalog.size();
-    if (progress) progress(0.05, "Prefiltering pairs by altitude...");
-
-    uint64_t total_cross_pairs = 0;
-    auto valid_pairs = prefilter_cross_pairs(
-        catalog,
-        primary_indices,
-        secondary_indices,
-        &total_cross_pairs);
-    stats_.pairs_prefiltered =
-        total_cross_pairs >= valid_pairs.size()
-            ? total_cross_pairs - valid_pairs.size()
-            : 0;
-    stats_.pairs_screened = valid_pairs.size();
-
     if (progress) progress(0.1, "Converting GP to TLE...");
 
     std::vector<TLE> tles;
@@ -2501,6 +2533,61 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
             tles.push_back(dummy);
         }
     }
+
+    const bool all_vs_all =
+        primary_indices.size() == catalog.size() &&
+        secondary_indices.size() == catalog.size() &&
+        std::equal(
+            primary_indices.begin(),
+            primary_indices.end(),
+            secondary_indices.begin());
+    const uint64_t pair_estimate =
+        catalog.size() < 2
+            ? 0u
+            : (static_cast<uint64_t>(catalog.size()) *
+               static_cast<uint64_t>(catalog.size() - 1u)) / 2u;
+
+    if (all_vs_all && pair_estimate >= MIN_IMPLICIT_ALL_VS_ALL_PAIR_ESTIMATE) {
+        std::vector<float> perigee_km;
+        std::vector<float> apogee_km;
+        perigee_km.reserve(catalog.size());
+        apogee_km.reserve(catalog.size());
+        for (const auto& gp : catalog) {
+            perigee_km.push_back(static_cast<float>(gp.perigee_km));
+            apogee_km.push_back(static_cast<float>(gp.apogee_km));
+        }
+
+        if (progress) progress(0.15, "Screening large catalog...");
+        auto events = screen_precomputed_tles_implicit(
+            tles,
+            perigee_km,
+            apogee_km,
+            {},
+            {},
+            config_,
+            stats_,
+            progress,
+            nullptr);
+        stats_.total_objects = catalog.size();
+        if (stats_.pairs_screened == 0) {
+            stats_.pairs_screened = pair_estimate;
+        }
+        return events;
+    }
+
+    if (progress) progress(0.15, "Prefiltering pairs by altitude...");
+
+    uint64_t total_cross_pairs = 0;
+    auto valid_pairs = prefilter_cross_pairs(
+        catalog,
+        primary_indices,
+        secondary_indices,
+        &total_cross_pairs);
+    stats_.pairs_prefiltered =
+        total_cross_pairs >= valid_pairs.size()
+            ? total_cross_pairs - valid_pairs.size()
+            : 0;
+    stats_.pairs_screened = valid_pairs.size();
 
     return screen_precomputed_tles(tles, valid_pairs, config_, stats_, progress);
 }
