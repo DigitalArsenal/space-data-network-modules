@@ -42,6 +42,26 @@ These operations route the conjunction assessment engine through the canonical S
 
 The replay tests in this package use `packages/propagator.sgp4` to generate those sampled tracks from GP/OMM inputs.
 
+## OCM/OEM adapter boundary
+
+Host code can convert decoded SDS `OCM` and `OEM` records into the same
+`PropagatedTrack` shape with:
+
+- `adaptOcmToPropagatedTrack(ocm, options)`
+- `adaptOemToPropagatedTrack(oem, options)`
+
+The adapters support compact Cartesian position/velocity arrays:
+
+- OCM: `METADATA.START_TIME`, `STATE_STEP_SIZE`, `STATE_VECTOR_SIZE`, and `STATE_DATA`
+- OEM: `EPHEMERIS_DATA_BLOCK[].START_TIME`, `STEP_SIZE`, `STATE_VECTOR_SIZE`, and `EPHEMERIS_DATA`
+
+OEM `EPHEMERIS_DATA_LINES` is also accepted for non-uniform samples. The
+module still consumes propagated-track requests for `assess_conjunction`,
+`find_tca`, and `emit_cdm`; hosts should decode SDS `OCM`/`OEM` bytes and adapt
+them before invoking those methods. Signed CDM output policy remains separate:
+`emit_cdm` can emit a CDM payload for OCM/OEM-derived tracks, but this package
+does not yet sign those CDMs.
+
 ## Runtime contract
 
 - Embedded manifest exports:
