@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -10,9 +11,117 @@ import { FlatcRunner } from "flatc-wasm";
 
 import { conjunctionArtifactExists } from "./lib/conjunctionCommandHarness.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
+import {
+  buildPartitionedRunProvenance,
+  canonicalJson,
+  canonicalSha256Hex,
+  signPartitionedRunProvenance,
+} from "../scripts/run-sdn-omm-partitioned-screen-catalog.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
+
+test("partitioned runner provenance hashes and Ed25519 signatures are deterministic and verifiable", () => {
+  const summary = {
+    catalogPath: "/tmp/catalog.uint32be.bin",
+    catalogBytes: 24,
+    objectCount: 2,
+    partitionSize: 1,
+    startOrderIndex: 0,
+    endOrderIndex: 2,
+    partitions: [
+      {
+        partitionIndex: 0,
+        startOrderIndex: 0,
+        endOrderIndex: 1,
+        statusCode: 0,
+        errorMessage: "",
+        elapsedMs: 12.5,
+        objectsParsed: 2,
+        conjunctionsFound: 1,
+        stats: {
+          elapsedMs: 12.5,
+          pairsScreened: 1,
+          pairsPrefiltered: 0,
+          kdtreeCandidates: 1,
+          tcaRefined: 1,
+          propagations: 2,
+        },
+      },
+    ],
+    aggregate: {
+      partitions: 1,
+      failedPartitions: 0,
+      objectsParsed: 2,
+      conjunctionsFound: 1,
+      pairsScreened: 1,
+      pairsPrefiltered: 0,
+      kdtreeCandidates: 1,
+      tcaRefined: 1,
+      propagations: 2,
+      elapsedMs: 12.5,
+      wallElapsedMs: 18.75,
+    },
+  };
+  const options = {
+    catalog: "/tmp/catalog.uint32be.bin",
+    providerId: "celestrak.eth",
+    sourceId: "celestrak-full-catalog",
+    sourcePnmCids: ["bafybeipnm1", "bafybeipnm2"],
+    moduleArtifactHash: "sha256:" + "a".repeat(64),
+    moduleVersion: "0.2.0",
+    startJd: "2460743.5",
+    durationDays: "0.01",
+    thresholdKm: "15",
+    numThreads: "1",
+    coarseStepSec: "300",
+    fineTolSec: "0.01",
+    combinedRadiusM: "10",
+    partitionSize: 1,
+    startOrderIndex: 0,
+    endOrderIndex: 2,
+    useKdTree: true,
+    useDynamicWindow: true,
+    usePerigeeFilter: true,
+  };
+
+  const provenance = buildPartitionedRunProvenance(summary, options);
+  const repeated = buildPartitionedRunProvenance(
+    {
+      ...summary,
+      partitions: [{ ...summary.partitions[0], elapsedMs: 999 }],
+      aggregate: { ...summary.aggregate, elapsedMs: 999, wallElapsedMs: 999 },
+    },
+    options,
+  );
+  assert.deepEqual(provenance, repeated);
+  assert.equal(provenance.sourcePnmCids.length, 2);
+  assert.equal(
+    provenance.configHash,
+    canonicalSha256Hex(provenance.canonicalConfig),
+  );
+  assert.equal(
+    provenance.queryHash,
+    canonicalSha256Hex(provenance.canonicalQuery),
+  );
+  assert.equal(
+    provenance.resultHash,
+    canonicalSha256Hex(provenance.canonicalResult),
+  );
+  assert.equal(provenance.cdmOutputMetadata.available, false);
+
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");
+  const signed = signPartitionedRunProvenance(provenance, privateKey);
+  assert.ok(
+    crypto.verify(
+      null,
+      Buffer.from(canonicalJson(signed.signedPayload), "utf8"),
+      publicKey,
+      Buffer.from(signed.resultSignature.signature, "base64"),
+    ),
+  );
+  assert.equal(signed.resultSignature.algorithm, "Ed25519");
+});
 
 function readText(relativePath) {
   return readFile(new URL(relativePath, import.meta.url), "utf8");
@@ -130,7 +239,13 @@ test(
 
     const catalogPath = path.join(tempDir, "catalog.uint32be.bin");
     const outputPath = path.join(tempDir, "summary.json");
+    const privateKeyPath = path.join(tempDir, "test-ed25519-private.pem");
+    const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");
     await writeFile(catalogPath, encodeUint32beFramedStream(records));
+    await writeFile(
+      privateKeyPath,
+      privateKey.export({ type: "pkcs8", format: "pem" }),
+    );
 
     const result = await runNodeScript([
       "scripts/run-sdn-omm-partitioned-screen-catalog.mjs",
@@ -144,6 +259,10 @@ test(
       "600",
       "--wasmedge-runner-binary",
       runnerBinary,
+      "--source-pnm-cid",
+      "bafybeipnmfixture",
+      "--signing-private-key",
+      privateKeyPath,
       "--output",
       outputPath,
     ]);
@@ -169,6 +288,19 @@ test(
     assert.ok(
       summary.partitions.every((partition) => partition.statusCode === 0),
       "every partition completed successfully",
+    );
+    assert.equal(summary.provenance.sourcePnmCids[0], "bafybeipnmfixture");
+    assert.match(summary.provenance.moduleArtifactHash, /^sha256:[0-9a-f]{64}$/);
+    assert.equal(summary.provenance.moduleVersion, "0.2.0");
+    assert.ok(summary.provenance.resultHash);
+    assert.ok(
+      crypto.verify(
+        null,
+        Buffer.from(canonicalJson(summary.provenance.signedPayload), "utf8"),
+        publicKey,
+        Buffer.from(summary.provenance.resultSignature.signature, "base64"),
+      ),
+      "runner output signature verifies against the test public key",
     );
   },
 );

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -64,10 +65,37 @@ function parseArgs(argv) {
       options[key] = true;
       continue;
     }
-    options[key] = next;
+    if (options[key] === undefined) {
+      options[key] = next;
+    } else if (Array.isArray(options[key])) {
+      options[key].push(next);
+    } else {
+      options[key] = [options[key], next];
+    }
     index++;
   }
   return options;
+}
+
+export function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function canonicalSha256Hex(value) {
+  const payload =
+    typeof value === "string" || Buffer.isBuffer(value) || value instanceof Uint8Array
+      ? value
+      : canonicalJson(value);
+  return crypto.createHash("sha256").update(payload).digest("hex");
 }
 
 function requiredNumber(value, name, defaultValue) {
@@ -146,6 +174,15 @@ function createScreenCatalogRequest(flatc, options, range, orderedCatalogIndices
   );
 }
 
+function splitList(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .filter((entry) => entry !== undefined && entry !== null && entry !== true)
+    .flatMap((entry) => String(entry).split(","))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function parseCliOptions(rawOptions) {
   return {
     catalog: rawOptions.catalog,
@@ -167,6 +204,10 @@ function parseCliOptions(rawOptions) {
           ),
     sourceId: rawOptions["source-id"],
     providerId: rawOptions["provider-id"],
+    sourcePnmCids: splitList(rawOptions["source-pnm-cid"]),
+    moduleArtifactHash: rawOptions["module-artifact-hash"],
+    moduleVersion: rawOptions["module-version"],
+    signingPrivateKey: rawOptions["signing-private-key"],
     startJd: rawOptions["start-jd"],
     durationDays: rawOptions["duration-days"],
     thresholdKm: rawOptions["threshold-km"],
@@ -177,6 +218,171 @@ function parseCliOptions(rawOptions) {
     useKdTree: rawOptions["no-kdtree"] ? false : undefined,
     useDynamicWindow: rawOptions["no-dynamic-window"] ? false : undefined,
     usePerigeeFilter: rawOptions["no-perigee-filter"] ? false : undefined,
+  };
+}
+
+function configuredSelectedSources(options) {
+  return [
+    {
+      sourceKind: "OMM",
+      sourceId: String(options.sourceId ?? "celestrak-full-catalog"),
+      providerId: String(options.providerId ?? "celestrak.eth"),
+      schemaName: "OMM/main.fbs",
+      fileIdentifier: "$OMM",
+    },
+  ];
+}
+
+function resolvedRunConfig(options, summary) {
+  return {
+    methodId: "screen_catalog",
+    catalogFrameFormat: "uint32be",
+    partitionSize: options.partitionSize,
+    startOrderIndex: summary.startOrderIndex,
+    endOrderIndex: summary.endOrderIndex,
+    selectedSources: configuredSelectedSources(options),
+    startJd: requiredNumber(options.startJd, "start-jd", 2460743.5),
+    durationDays: requiredNumber(options.durationDays, "duration-days", 0.01),
+    thresholdKm: requiredNumber(options.thresholdKm, "threshold-km", 15.0),
+    numThreads: Math.trunc(requiredNumber(options.numThreads, "num-threads", 1)),
+    coarseStepSec: requiredNumber(options.coarseStepSec, "coarse-step-sec", 300.0),
+    fineTolSec: requiredNumber(options.fineTolSec, "fine-tol-sec", 0.01),
+    combinedRadiusM: requiredNumber(
+      options.combinedRadiusM,
+      "combined-radius-m",
+      10.0,
+    ),
+    useKdTree: options.useKdTree !== false,
+    useDynamicWindow: options.useDynamicWindow !== false,
+    usePerigeeFilter: options.usePerigeeFilter !== false,
+  };
+}
+
+function canonicalQueryFromConfig(config) {
+  return {
+    sourceFamilies: config.selectedSources.map((source) => source.sourceKind),
+    selectedSources: config.selectedSources,
+    catalogFrameFormat: config.catalogFrameFormat,
+    startOrderIndex: config.startOrderIndex,
+    endOrderIndex: config.endOrderIndex,
+    startJd: config.startJd,
+    durationDays: config.durationDays,
+    thresholdKm: config.thresholdKm,
+  };
+}
+
+function canonicalResultFromSummary(summary) {
+  return {
+    catalogBytes: summary.catalogBytes,
+    objectCount: summary.objectCount,
+    partitionSize: summary.partitionSize,
+    startOrderIndex: summary.startOrderIndex,
+    endOrderIndex: summary.endOrderIndex,
+    partitions: summary.partitions.map((partition) => ({
+      partitionIndex: partition.partitionIndex,
+      startOrderIndex: partition.startOrderIndex,
+      endOrderIndex: partition.endOrderIndex,
+      statusCode: partition.statusCode,
+      errorMessage: partition.errorMessage ?? "",
+      objectsParsed: partition.objectsParsed ?? 0,
+      conjunctionsFound: partition.conjunctionsFound ?? 0,
+      stats: partition.stats
+        ? {
+            pairsScreened: partition.stats.pairsScreened ?? 0,
+            pairsPrefiltered: partition.stats.pairsPrefiltered ?? 0,
+            kdtreeCandidates: partition.stats.kdtreeCandidates ?? 0,
+            tcaRefined: partition.stats.tcaRefined ?? 0,
+            propagations: partition.stats.propagations ?? 0,
+          }
+        : null,
+    })),
+    aggregate: {
+      partitions: summary.aggregate.partitions,
+      failedPartitions: summary.aggregate.failedPartitions,
+      objectsParsed: summary.aggregate.objectsParsed,
+      conjunctionsFound: summary.aggregate.conjunctionsFound,
+      pairsScreened: summary.aggregate.pairsScreened,
+      pairsPrefiltered: summary.aggregate.pairsPrefiltered,
+      kdtreeCandidates: summary.aggregate.kdtreeCandidates,
+      tcaRefined: summary.aggregate.tcaRefined,
+      propagations: summary.aggregate.propagations,
+    },
+  };
+}
+
+function readPluginVersion() {
+  const manifest = JSON.parse(readText("plugin-manifest.json"));
+  return manifest.version ?? "unknown";
+}
+
+function hashFileSha256(pathname) {
+  return crypto.createHash("sha256").update(fs.readFileSync(pathname)).digest("hex");
+}
+
+export function buildPartitionedRunProvenance(summary, options) {
+  const canonicalConfig = resolvedRunConfig(options, summary);
+  const canonicalQuery = canonicalQueryFromConfig(canonicalConfig);
+  const canonicalResult = canonicalResultFromSummary(summary);
+  const moduleArtifactHash =
+    options.moduleArtifactHash ??
+    `sha256:${hashFileSha256(options.wasm ?? DEFAULT_WASM_PATH)}`;
+
+  return {
+    schemaVersion: 1,
+    sourcePnmCids: [...(options.sourcePnmCids ?? [])].sort(),
+    canonicalQuery,
+    queryHash: canonicalSha256Hex(canonicalQuery),
+    canonicalConfig,
+    configHash: canonicalSha256Hex(canonicalConfig),
+    moduleArtifactHash,
+    moduleVersion: String(options.moduleVersion ?? readPluginVersion()),
+    canonicalResult,
+    resultHash: canonicalSha256Hex(canonicalResult),
+    cdmOutputMetadata: {
+      available: false,
+      reason:
+        "partitioned screen_catalog emits aggregate conjunction counts; signed CDM bytes remain limited to emit_cdm for TLE-backed pair requests",
+      sourceTypes: ["OMM"],
+    },
+  };
+}
+
+function readPrivateKey(options) {
+  const keyText =
+    options.signingPrivateKey !== undefined
+      ? fs.readFileSync(options.signingPrivateKey, "utf8")
+      : process.env.CA_RESULT_ED25519_PRIVATE_KEY;
+  if (!keyText) {
+    return null;
+  }
+  return crypto.createPrivateKey(keyText);
+}
+
+export function signPartitionedRunProvenance(provenance, privateKey) {
+  const signedPayload = {
+    schemaVersion: provenance.schemaVersion,
+    sourcePnmCids: provenance.sourcePnmCids,
+    queryHash: provenance.queryHash,
+    configHash: provenance.configHash,
+    moduleArtifactHash: provenance.moduleArtifactHash,
+    moduleVersion: provenance.moduleVersion,
+    resultHash: provenance.resultHash,
+    cdmOutputMetadata: provenance.cdmOutputMetadata,
+  };
+  const payload = Buffer.from(canonicalJson(signedPayload), "utf8");
+  const signature = crypto.sign(null, payload, privateKey);
+  const publicKey = crypto
+    .createPublicKey(privateKey)
+    .export({ type: "spki", format: "pem" });
+  return {
+    ...provenance,
+    signedPayload,
+    resultSignature: {
+      algorithm: "Ed25519",
+      payloadEncoding: "canonical-json",
+      signature: signature.toString("base64"),
+      publicKeyPem: publicKey.toString(),
+    },
   };
 }
 
@@ -308,7 +514,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
   }
 
   const wallElapsedMs = performance.now() - startedAt;
-  return {
+  const summary = {
     catalogPath: path.resolve(options.catalog),
     catalogBytes: catalogPayload.byteLength,
     objectCount,
@@ -318,6 +524,12 @@ export async function runPartitionedSdnOmmCatalog(options) {
     partitions,
     aggregate: aggregatePartitions(partitions, objectCount, wallElapsedMs),
   };
+  const provenance = buildPartitionedRunProvenance(summary, options);
+  const privateKey = readPrivateKey(options);
+  summary.provenance = privateKey
+    ? signPartitionedRunProvenance(provenance, privateKey)
+    : provenance;
+  return summary;
 }
 
 async function main() {
