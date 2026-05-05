@@ -1,0 +1,83 @@
+{
+  "pluginId": "com.orbpro.lambert-izzo",
+  "name": "Izzo Lambert Solver",
+  "version": "0.1.0",
+  "description": "SDK-compliant wrapper plan for Izzo's revisited Lambert solver.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "solve_lambert",
+      "displayName": "Solve Lambert Transfer",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.lambert-solve-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "spacedata.LMS",
+                  "fileIdentifier": "LMS"
+                }
+              ],
+              "description": "Canonical Lambert boundary-value request: r1, r2, time of flight, gravitational parameter, transfer way, and revolution budget."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One Lambert transfer solve request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "solutions",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.lambert-solve-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "spacedata.LMO",
+                  "fileIdentifier": "LMO"
+                }
+              ],
+              "description": "Canonical Lambert solve result with departure/arrival velocities, multi-revolution branch metadata, and solver diagnostics."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Lambert solve result or no stream when the request fails closed."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Solves single- and multi-revolution Lambert boundary-value transfer cases with Izzo's revisited algorithm."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [
+    {
+      "schemaName": "spacedata.LMS",
+      "fileIdentifier": "LMS"
+    },
+    {
+      "schemaName": "spacedata.LMO",
+      "fileIdentifier": "LMO"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "lambert-izzo-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

@@ -19,8 +19,10 @@
     "lambert_izzo": "2.0.0"
   },
   "scripts": {
+    "build": "node build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:manifest": "node --test tests/manifest.test.mjs tests/manifest-sdk.test.mjs"
+    "test:manifest": "node --test tests/manifest.test.mjs tests/manifest-sdk.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk-compat.test.mjs"
   },
   "devDependencies": {
     "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
