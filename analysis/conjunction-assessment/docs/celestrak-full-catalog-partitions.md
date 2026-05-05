@@ -68,12 +68,42 @@ successful partition writes an atomic checkpoint named
 `partition-<index>-<start>-<end>.json`; resumed runs skip successful checkpoint
 files and retry failed or missing partitions.
 
+## Exact Block-Pair Mode
+
+For production-scale exact coverage, prefer catalog block pairs over the legacy
+ordered-primary partition mode:
+
+```bash
+node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
+  --catalog /path/to/celestrak-full-catalog.OMM.uint32be.bin \
+  --catalog-block-size 1000 \
+  --checkpoint-dir /shared/ca-celestrak-block-pairs \
+  --resume \
+  --partition-shard-count 16 \
+  --partition-shard-index 0 \
+  --max-partitions 4 \
+  --output /shared/ca-celestrak-block-pairs-shard-0.json
+```
+
+`--catalog-block-size` changes the schedule to the upper-triangular block-pair
+grid. Diagonal partitions screen one block internally. Off-diagonal partitions
+screen primary block `A` against secondary block `B`. Each invocation slices the
+input stream down to only the one or two blocks needed for that partition and
+sets explicit primary and secondary ordered ranges in the request.
+
+For a 100,000-object catalog and `--catalog-block-size 1000`, the exact plan has
+5,050 block-pair partitions. Run shard indexes `0..15` with a shared checkpoint
+directory and repeat with `--resume` until all shards report no deferred ranges.
+This is the current supported exact full-catalog execution path.
+
 ## Evidence
 
 The summary JSON records:
 
 - catalog path, byte length, object count, partition window, shard settings, and
   completion state;
+- partition mode, including `catalog-block-pair` and the configured
+  `catalogBlockSize` when exact block-pair scheduling is enabled;
 - every completed partition with status, object count, conjunction count, and
   screening statistics;
 - aggregate failed/deferred counts and screening statistics;

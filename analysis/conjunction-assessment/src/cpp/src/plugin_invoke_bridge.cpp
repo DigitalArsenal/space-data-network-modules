@@ -1800,8 +1800,19 @@ static int HandleScreenCatalog(void) {
           request->endOrderIndex() > start ? request->endOrderIndex() : order_count;
         const uint32_t end = std::min<uint32_t>(requested_end, order_count);
         AppendOrderedCatalogRange(&primary_gps, catalog, ordered_indices, start, end);
-        const uint32_t secondary_start = std::min<uint32_t>(start + 1u, order_count);
-        AppendOrderedCatalogRange(&secondary_gps, catalog, ordered_indices, secondary_start, order_count);
+        const bool has_secondary_range =
+          request->secondaryEndOrderIndex() > request->secondaryStartOrderIndex();
+        const uint32_t secondary_start = has_secondary_range
+          ? std::min<uint32_t>(request->secondaryStartOrderIndex(), order_count)
+          : std::min<uint32_t>(start + 1u, order_count);
+        const uint32_t secondary_requested_end = has_secondary_range
+          ? request->secondaryEndOrderIndex()
+          : order_count;
+        const uint32_t secondary_end = std::min<uint32_t>(
+          std::max<uint32_t>(secondary_start, secondary_requested_end),
+          order_count
+        );
+        AppendOrderedCatalogRange(&secondary_gps, catalog, ordered_indices, secondary_start, secondary_end);
       } else {
         primary_gps = catalog;
       }

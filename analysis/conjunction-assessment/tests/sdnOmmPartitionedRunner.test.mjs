@@ -14,7 +14,9 @@ import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 import {
   buildPartitionedRunProvenance,
   loadPartitionCheckpoints,
+  planCatalogBlockPairWork,
   planPartitionWork,
+  sliceUint32beBlockPair,
   sliceUint32beFrames,
   canonicalJson,
   canonicalSha256Hex,
@@ -84,6 +86,70 @@ test("partitioned runner can resume from successful checkpoints and schedule onl
   );
   assert.equal(plan.deferredRanges.length, 1);
   assert.equal(plan.deferredRanges[0].partitionIndex, 2);
+});
+
+test("catalog block-pair planner schedules exact upper-triangular block pairs", async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-block-pairs-"));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await writeFile(
+    path.join(tempDir, "partition-000001-000000-000002-000002-000004.json"),
+    JSON.stringify({
+      partitionIndex: 1,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 2,
+      secondaryStartOrderIndex: 2,
+      secondaryEndOrderIndex: 4,
+      statusCode: 0,
+      objectsParsed: 4,
+      conjunctionsFound: 0,
+      stats: { pairsScreened: 4 },
+    }),
+  );
+
+  const checkpoints = await loadPartitionCheckpoints(tempDir);
+  const plan = planCatalogBlockPairWork({
+    objectCount: 6,
+    startOrderIndex: 0,
+    endOrderIndex: 6,
+    catalogBlockSize: 2,
+    resume: true,
+    maxPartitions: 2,
+    completedPartitions: checkpoints.completedPartitions,
+  });
+
+  assert.deepEqual(
+    plan.allRanges.map((range) => [
+      range.partitionIndex,
+      range.primaryStartOrderIndex,
+      range.primaryEndOrderIndex,
+      range.secondaryStartOrderIndex,
+      range.secondaryEndOrderIndex,
+      range.diagonal,
+    ]),
+    [
+      [0, 0, 2, 0, 2, true],
+      [1, 0, 2, 2, 4, false],
+      [2, 0, 2, 4, 6, false],
+      [3, 2, 4, 2, 4, true],
+      [4, 2, 4, 4, 6, false],
+      [5, 4, 6, 4, 6, true],
+    ],
+  );
+  assert.deepEqual(
+    plan.completedPartitions.map((partition) => partition.partitionIndex),
+    [1],
+  );
+  assert.deepEqual(
+    plan.pendingRanges.map((range) => range.partitionIndex),
+    [0, 2],
+  );
+  assert.deepEqual(
+    plan.deferredRanges.map((range) => range.partitionIndex),
+    [3, 4, 5],
+  );
 });
 
 test("partitioned runner provenance hashes and Ed25519 signatures are deterministic and verifiable", () => {
@@ -278,6 +344,43 @@ test("partitioned runner can slice deterministic windows from uint32be OMM strea
   );
 });
 
+test("catalog block-pair slicer builds minimal diagonal and off-diagonal streams", () => {
+  const first = Uint8Array.from([1]);
+  const second = Uint8Array.from([2]);
+  const third = Uint8Array.from([3]);
+  const fourth = Uint8Array.from([4]);
+  const stream = Buffer.from(encodeUint32beFramedStream([first, second, third, fourth]));
+
+  const diagonal = sliceUint32beBlockPair(stream, {
+    primaryStartOrderIndex: 0,
+    primaryEndOrderIndex: 2,
+    secondaryStartOrderIndex: 0,
+    secondaryEndOrderIndex: 2,
+  });
+  assert.equal(diagonal.objectCount, 2);
+  assert.equal(diagonal.primaryStartOrderIndex, 0);
+  assert.equal(diagonal.primaryEndOrderIndex, 2);
+  assert.equal(diagonal.secondaryStartOrderIndex, 1);
+  assert.equal(diagonal.secondaryEndOrderIndex, 2);
+  assert.deepEqual([...diagonal.payload], [...encodeUint32beFramedStream([first, second])]);
+
+  const offDiagonal = sliceUint32beBlockPair(stream, {
+    primaryStartOrderIndex: 0,
+    primaryEndOrderIndex: 2,
+    secondaryStartOrderIndex: 2,
+    secondaryEndOrderIndex: 4,
+  });
+  assert.equal(offDiagonal.objectCount, 4);
+  assert.equal(offDiagonal.primaryStartOrderIndex, 0);
+  assert.equal(offDiagonal.primaryEndOrderIndex, 2);
+  assert.equal(offDiagonal.secondaryStartOrderIndex, 2);
+  assert.equal(offDiagonal.secondaryEndOrderIndex, 4);
+  assert.deepEqual(
+    [...offDiagonal.payload],
+    [...encodeUint32beFramedStream([first, second, third, fourth])],
+  );
+});
+
 function runNodeScript(args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
@@ -392,6 +495,83 @@ test(
         Buffer.from(summary.provenance.resultSignature.signature, "base64"),
       ),
       "runner output signature verifies against the test public key",
+    );
+  },
+);
+
+test(
+  "partitioned SDN OMM runner can execute catalog block-pair shards",
+  { timeout: 30000 },
+  async (t) => {
+    if (!conjunctionArtifactExists()) {
+      t.skip("Build conjunction-assessment before running the catalog block-pair runner test.");
+      return;
+    }
+    const runnerBinary = await buildThreadedWasmEdgeRunner(
+      t,
+      "conjunction-sdn-block-pair-runner-",
+    );
+    if (!runnerBinary) {
+      return;
+    }
+
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-block-pair-run-"));
+    t.after(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    const flatc = await FlatcRunner.init();
+    const schema = await ommSchema();
+    const records = [];
+    for (let index = 0; index < 6; index++) {
+      records.push(await createOmmRecord(flatc, schema, 94000 + index));
+    }
+
+    const catalogPath = path.join(tempDir, "catalog.uint32be.bin");
+    const outputPath = path.join(tempDir, "summary.json");
+    await writeFile(catalogPath, encodeUint32beFramedStream(records));
+
+    const result = await runNodeScript([
+      "scripts/run-sdn-omm-partitioned-screen-catalog.mjs",
+      "--catalog",
+      catalogPath,
+      "--catalog-block-size",
+      "2",
+      "--duration-days",
+      "0",
+      "--coarse-step-sec",
+      "600",
+      "--wasmedge-runner-binary",
+      runnerBinary,
+      "--output",
+      outputPath,
+    ]);
+
+    assert.equal(result.status, 0, result.stderr);
+    const summary = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.equal(summary.partitionMode, "catalog-block-pair");
+    assert.equal(summary.aggregate.partitions, 6);
+    assert.deepEqual(
+      summary.partitions.map((partition) => [
+        partition.primaryStartOrderIndex,
+        partition.primaryEndOrderIndex,
+        partition.secondaryStartOrderIndex,
+        partition.secondaryEndOrderIndex,
+      ]),
+      [
+        [0, 2, 0, 2],
+        [0, 2, 2, 4],
+        [0, 2, 4, 6],
+        [2, 4, 2, 4],
+        [2, 4, 4, 6],
+        [4, 6, 4, 6],
+      ],
+    );
+    assert.equal(summary.aggregate.failedPartitions, 0);
+    assert.equal(summary.aggregate.deferredPartitions, 0);
+    assert.ok(
+      summary.partitions.every((partition) => partition.catalogBytes < summary.sourceCatalogBytes),
+      "each block-pair invocation should use a sliced catalog payload",
     );
   },
 );
