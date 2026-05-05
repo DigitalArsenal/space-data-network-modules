@@ -632,15 +632,19 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
 
     auto materialize_if_within_threshold =
         [&](const ConjunctionSolution& solution) -> std::optional<ConjunctionEvent> {
-            if (!(solution.min_range_km <= config.threshold_km)) {
+            if (!is_conjunction_within_threshold(solution.min_range_km, config.threshold_km)) {
                 return std::nullopt;
             }
-            return assess_conjunction_at_tca(
+            auto event = assess_conjunction_at_tca(
                 obj1,
                 obj2,
                 solution.tca_jd,
                 radius_m,
                 radius_m);
+            if (!is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
+                return std::nullopt;
+            }
+            return event;
         };
 
     if (window.duration_days() <= 0.0) {
@@ -656,12 +660,12 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                 config,
                 radius_m,
                 radius_m);
-            if (!(event.min_range_km <= config.threshold_km)) {
+            if (!is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
                 return std::nullopt;
             }
             if (resident_index->screening_mode ==
                 orbpro::conjunction::ConjunctionScreeningMode::polynomial_plus_exact_polish) {
-                return assess_conjunction_in_window_near_hint(
+                auto polished_event = assess_conjunction_in_window_near_hint(
                     obj1,
                     obj2,
                     slice_start_jd,
@@ -669,6 +673,10 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                     event.tca_jd,
                     radius_m,
                     radius_m);
+                if (!is_conjunction_within_threshold(polished_event.min_range_km, config.threshold_km)) {
+                    return std::nullopt;
+                }
+                return polished_event;
             }
             return event;
         }
@@ -693,12 +701,12 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
             config,
             radius_m,
             radius_m);
-        if (!(event.min_range_km <= config.threshold_km)) {
+        if (!is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
             return std::nullopt;
         }
         if (resident_index->screening_mode ==
             orbpro::conjunction::ConjunctionScreeningMode::polynomial_plus_exact_polish) {
-            return assess_conjunction_in_window_near_hint(
+            auto polished_event = assess_conjunction_in_window_near_hint(
                 obj1,
                 obj2,
                 window.start_jd,
@@ -706,6 +714,10 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                 event.tca_jd,
                 radius_m,
                 radius_m);
+            if (!is_conjunction_within_threshold(polished_event.min_range_km, config.threshold_km)) {
+                return std::nullopt;
+            }
+            return polished_event;
         }
         return event;
     }
@@ -1249,13 +1261,15 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     events.reserve(solved_hits.size());
     for (const auto& solved : solved_hits) {
         try {
-            events.push_back(
-                assess_conjunction_at_tca(
-                    tles[solved.obj1_index],
-                    tles[solved.obj2_index],
-                    solved.tca_jd,
-                    radius_m,
-                    radius_m));
+            auto event = assess_conjunction_at_tca(
+                tles[solved.obj1_index],
+                tles[solved.obj2_index],
+                solved.tca_jd,
+                radius_m,
+                radius_m);
+            if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
+                events.push_back(std::move(event));
+            }
         } catch (...) {}
     }
 
@@ -1805,7 +1819,7 @@ std::optional<ExactSolvedHit> solve_coarse_hit_if_within_threshold_exact(
                   },
             config);
 
-        if (!(coarse_solution.min_range_km <= config.threshold_km)) {
+        if (!is_conjunction_within_threshold(coarse_solution.min_range_km, config.threshold_km)) {
             return std::nullopt;
         }
     }
@@ -1837,7 +1851,7 @@ std::optional<ExactSolvedHit> solve_coarse_hit_if_within_threshold_exact(
         }
     }
 
-    if (!(solution.min_range_km <= config.threshold_km)) {
+    if (!is_conjunction_within_threshold(solution.min_range_km, config.threshold_km)) {
         return std::nullopt;
     }
 
@@ -2187,13 +2201,15 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         events.reserve(events.size() + solved_hits.size());
         for (const auto& solved : solved_hits) {
             try {
-                events.push_back(
-                    assess_conjunction_at_tca(
-                        tles[solved.obj1_index],
-                        tles[solved.obj2_index],
-                        solved.tca_jd,
-                        radius_m,
-                        radius_m));
+                auto event = assess_conjunction_at_tca(
+                    tles[solved.obj1_index],
+                    tles[solved.obj2_index],
+                    solved.tca_jd,
+                    radius_m,
+                    radius_m);
+                if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
+                    events.push_back(std::move(event));
+                }
             } catch (...) {}
         }
     }

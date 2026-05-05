@@ -28,6 +28,14 @@ uint64_t coarse_hit_key(uint32_t obj1_index, uint32_t obj2_index) {
     return (static_cast<uint64_t>(lo) << 32) | hi;
 }
 
+bool is_conjunction_within_threshold(double miss_distance_km, double threshold_km) {
+    return std::isfinite(miss_distance_km) &&
+           std::isfinite(threshold_km) &&
+           miss_distance_km >= 0.0 &&
+           threshold_km >= 0.0 &&
+           miss_distance_km <= threshold_km;
+}
+
 void merge_coarse_hit(CoarseHitRecord& aggregate, int32_t step, double distance_km) {
     aggregate.earliest_step = std::min(aggregate.earliest_step, step);
     aggregate.latest_step = std::max(aggregate.latest_step, step);

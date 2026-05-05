@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <cmath>
 
 namespace conjunction {
 
@@ -25,6 +26,7 @@ struct RefinementWindow {
 };
 
 uint64_t coarse_hit_key(uint32_t obj1_index, uint32_t obj2_index);
+bool is_conjunction_within_threshold(double miss_distance_km, double threshold_km);
 void merge_coarse_hit(CoarseHitRecord& aggregate, int32_t step, double distance_km);
 void merge_coarse_hit_record(CoarseHitRecord& aggregate, const CoarseHitRecord& update);
 RefinementWindow build_refinement_window(
