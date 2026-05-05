@@ -104,6 +104,21 @@ function decodeLambertOutputFrame(response) {
   return LMO.getRootAsLMO(bb);
 }
 
+function assertVectorNear(actual, expected, toleranceKmPerSec) {
+  assert.ok(actual, "missing vector");
+  for (const [component, getter] of [
+    ["X", () => actual.X()],
+    ["Y", () => actual.Y()],
+    ["Z", () => actual.Z()],
+  ]) {
+    const delta = Math.abs(getter() - expected[component]);
+    assert.ok(
+      delta <= toleranceKmPerSec,
+      `${component} delta ${delta} km/s exceeds ${toleranceKmPerSec} km/s`,
+    );
+  }
+}
+
 test("build publishes canonical isomorphic artifact path", () => {
   assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
 });
@@ -263,3 +278,47 @@ for (const entry of invalidRequestCases) {
     assert.match(result.ERROR_MESSAGE(), entry.errorMessage);
   });
 }
+
+test("built artifact solves the closed-form circular quarter-orbit benchmark", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "direct",
+  });
+  t.after(() => {
+    harness.destroy();
+  });
+
+  const mu = 398600.4418;
+  const radiusKm = 7000;
+  const circularSpeedKmPerSec = Math.sqrt(mu / radiusKm);
+  const quarterPeriodSeconds =
+    (Math.PI / 2) * Math.sqrt((radiusKm ** 3) / mu);
+  const response = await harness.invoke(
+    createLambertInvokeRequest(
+      createLambertRequestPayload({
+        requestId: "closed-form-quarter-circle",
+        r1x: radiusKm,
+        r1y: 0,
+        r1z: 0,
+        r2x: 0,
+        r2y: radiusKm,
+        r2z: 0,
+        tofSec: quarterPeriodSeconds,
+        muKm3S2: mu,
+        maxRevs: 0,
+      }),
+    ),
+  );
+  const result = decodeLambertOutputFrame(response);
+  const branch = result.SINGLE();
+
+  assert.equal(result.REQUEST_ID(), "closed-form-quarter-circle");
+  assert.equal(result.STATUS(), lambertSolveState.OK);
+  assert.equal(result.multiLength(), 0);
+  assert.equal(result.MAX_FEASIBLE_REVS(), 0);
+  assert.ok(branch, "missing single-revolution branch");
+  assert.equal(branch.N_REVS(), 0);
+  assert.ok(branch.ITERATIONS() > 0);
+  assertVectorNear(branch.V1(), { X: 0, Y: circularSpeedKmPerSec, Z: 0 }, 1e-6);
+  assertVectorNear(branch.V2(), { X: -circularSpeedKmPerSec, Y: 0, Z: 0 }, 1e-6);
+});

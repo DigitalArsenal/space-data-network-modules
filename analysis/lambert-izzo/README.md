@@ -63,3 +63,13 @@ SDS identifiers:
 - SDK checks: manifest codec round-trip, artifact compliance,
   browser harness, and WasmEdge loading against the same
   `dist/isomorphic/module.wasm`.
+
+## Current Verification Data
+
+- Closed-form circular quarter-orbit benchmark: `r1 = [7000, 0, 0] km`,
+  `r2 = [0, 7000, 0] km`, `mu = 398600.4418 km^3/s^2`, and
+  `tof = pi/2 * sqrt(7000^3 / mu) s`. The expected departure velocity is
+  `[0, sqrt(mu / 7000), 0] km/s` and the expected arrival velocity is
+  `[-sqrt(mu / 7000), 0, 0] km/s`. The SDK compatibility test uses an absolute
+  component tolerance of `1e-6 km/s`, which is several orders above double
+  roundoff but far below operational Lambert transfer tolerances.
