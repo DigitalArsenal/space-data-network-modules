@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   decodePlgManifest,
@@ -9,8 +10,12 @@ import {
   encodePluginManifest,
   legacyManifestToPlg,
 } from "space-data-module-sdk/manifest";
+import { validateManifestWithStandards } from "space-data-module-sdk/compliance";
 
 const manifestPath = new URL("../plugin-manifest.json", import.meta.url);
+const standardsRoot = fileURLToPath(
+  new URL("../../../../spacedatastandards.org/", import.meta.url),
+);
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
@@ -81,4 +86,17 @@ test("Lambert manifest maps to canonical PLG codec without local schema aliases"
   assert.deepEqual(findPortType(decoded, "outputPorts", "output-1"), {
     schemaName: "spacedata.LMO",
   });
+});
+
+test("Lambert manifest resolves LMS and LMO through SDK standards validation", async () => {
+  const report = await validateManifestWithStandards(readManifest(), {
+    standardsRoot,
+  });
+
+  assert.equal(
+    report.issues.filter((issue) => issue.code === "unresolved-standards-type")
+      .length,
+    0,
+    JSON.stringify(report.issues, null, 2),
+  );
 });
