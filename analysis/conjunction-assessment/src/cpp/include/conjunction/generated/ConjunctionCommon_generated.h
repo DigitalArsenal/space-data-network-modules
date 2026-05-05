@@ -2153,6 +2153,8 @@ struct ConjunctionScreenCatalogRequestT : public ::flatbuffers::NativeTable {
   std::vector<uint32_t> orderedCatalogIndices{};
   uint32_t startOrderIndex = 0;
   uint32_t endOrderIndex = 0;
+  uint32_t secondaryStartOrderIndex = 0;
+  uint32_t secondaryEndOrderIndex = 0;
   ConjunctionScreenCatalogRequestT() = default;
   ConjunctionScreenCatalogRequestT(const ConjunctionScreenCatalogRequestT &o);
   ConjunctionScreenCatalogRequestT(ConjunctionScreenCatalogRequestT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2182,7 +2184,9 @@ struct ConjunctionScreenCatalogRequest FLATBUFFERS_FINAL_CLASS : private ::flatb
     VT_USEPERIGEEFILTER = 34,
     VT_ORDEREDCATALOGINDICES = 36,
     VT_STARTORDERINDEX = 38,
-    VT_ENDORDERINDEX = 40
+    VT_ENDORDERINDEX = 40,
+    VT_SECONDARYSTARTORDERINDEX = 42,
+    VT_SECONDARYENDORDERINDEX = 44
   };
   const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::conjunction::TleRecord>> *primaryTles() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::conjunction::TleRecord>> *>(VT_PRIMARYTLES);
@@ -2241,6 +2245,12 @@ struct ConjunctionScreenCatalogRequest FLATBUFFERS_FINAL_CLASS : private ::flatb
   uint32_t endOrderIndex() const {
     return GetField<uint32_t>(VT_ENDORDERINDEX, 0);
   }
+  uint32_t secondaryStartOrderIndex() const {
+    return GetField<uint32_t>(VT_SECONDARYSTARTORDERINDEX, 0);
+  }
+  uint32_t secondaryEndOrderIndex() const {
+    return GetField<uint32_t>(VT_SECONDARYENDORDERINDEX, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2276,6 +2286,8 @@ struct ConjunctionScreenCatalogRequest FLATBUFFERS_FINAL_CLASS : private ::flatb
            verifier.VerifyVector(orderedCatalogIndices()) &&
            VerifyField<uint32_t>(verifier, VT_STARTORDERINDEX, 4) &&
            VerifyField<uint32_t>(verifier, VT_ENDORDERINDEX, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SECONDARYSTARTORDERINDEX, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SECONDARYENDORDERINDEX, 4) &&
            verifier.EndTable();
   }
   ConjunctionScreenCatalogRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2344,6 +2356,12 @@ struct ConjunctionScreenCatalogRequestBuilder {
   void add_endOrderIndex(uint32_t endOrderIndex) {
     fbb_.AddElement<uint32_t>(ConjunctionScreenCatalogRequest::VT_ENDORDERINDEX, endOrderIndex, 0);
   }
+  void add_secondaryStartOrderIndex(uint32_t secondaryStartOrderIndex) {
+    fbb_.AddElement<uint32_t>(ConjunctionScreenCatalogRequest::VT_SECONDARYSTARTORDERINDEX, secondaryStartOrderIndex, 0);
+  }
+  void add_secondaryEndOrderIndex(uint32_t secondaryEndOrderIndex) {
+    fbb_.AddElement<uint32_t>(ConjunctionScreenCatalogRequest::VT_SECONDARYENDORDERINDEX, secondaryEndOrderIndex, 0);
+  }
   explicit ConjunctionScreenCatalogRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2375,7 +2393,9 @@ inline ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> CreateConjunctionS
     bool usePerigeeFilter = true,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> orderedCatalogIndices = 0,
     uint32_t startOrderIndex = 0,
-    uint32_t endOrderIndex = 0) {
+    uint32_t endOrderIndex = 0,
+    uint32_t secondaryStartOrderIndex = 0,
+    uint32_t secondaryEndOrderIndex = 0) {
   ConjunctionScreenCatalogRequestBuilder builder_(_fbb);
   builder_.add_combinedRadiusM(combinedRadiusM);
   builder_.add_fineTolSec(fineTolSec);
@@ -2385,6 +2405,8 @@ inline ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> CreateConjunctionS
   builder_.add_startJd(startJd);
   builder_.add_endOrderIndex(endOrderIndex);
   builder_.add_startOrderIndex(startOrderIndex);
+  builder_.add_secondaryEndOrderIndex(secondaryEndOrderIndex);
+  builder_.add_secondaryStartOrderIndex(secondaryStartOrderIndex);
   builder_.add_orderedCatalogIndices(orderedCatalogIndices);
   builder_.add_numThreads(numThreads);
   builder_.add_secondaryTracks(secondaryTracks);
@@ -2424,7 +2446,9 @@ inline ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> CreateConjunctionS
     bool usePerigeeFilter = true,
     const std::vector<uint32_t> *orderedCatalogIndices = nullptr,
     uint32_t startOrderIndex = 0,
-    uint32_t endOrderIndex = 0) {
+    uint32_t endOrderIndex = 0,
+    uint32_t secondaryStartOrderIndex = 0,
+    uint32_t secondaryEndOrderIndex = 0) {
   auto primaryTles__ = primaryTles ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::conjunction::TleRecord>>(*primaryTles) : 0;
   auto secondaryTles__ = secondaryTles ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::conjunction::TleRecord>>(*secondaryTles) : 0;
   auto primaryGps__ = primaryGps ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::conjunction::GpRecord>>(*primaryGps) : 0;
@@ -2452,7 +2476,9 @@ inline ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> CreateConjunctionS
       usePerigeeFilter,
       orderedCatalogIndices__,
       startOrderIndex,
-      endOrderIndex);
+      endOrderIndex,
+      secondaryStartOrderIndex,
+      secondaryEndOrderIndex);
 }
 
 ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> CreateConjunctionScreenCatalogRequest(::flatbuffers::FlatBufferBuilder &_fbb, const ConjunctionScreenCatalogRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -4014,7 +4040,9 @@ inline ConjunctionScreenCatalogRequestT::ConjunctionScreenCatalogRequestT(const 
         usePerigeeFilter(o.usePerigeeFilter),
         orderedCatalogIndices(o.orderedCatalogIndices),
         startOrderIndex(o.startOrderIndex),
-        endOrderIndex(o.endOrderIndex) {
+        endOrderIndex(o.endOrderIndex),
+        secondaryStartOrderIndex(o.secondaryStartOrderIndex),
+        secondaryEndOrderIndex(o.secondaryEndOrderIndex) {
   primaryTles.reserve(o.primaryTles.size());
   for (const auto &primaryTles_ : o.primaryTles) { primaryTles.emplace_back((primaryTles_) ? new orbpro::conjunction::TleRecordT(*primaryTles_) : nullptr); }
   secondaryTles.reserve(o.secondaryTles.size());
@@ -4049,6 +4077,8 @@ inline ConjunctionScreenCatalogRequestT &ConjunctionScreenCatalogRequestT::opera
   std::swap(orderedCatalogIndices, o.orderedCatalogIndices);
   std::swap(startOrderIndex, o.startOrderIndex);
   std::swap(endOrderIndex, o.endOrderIndex);
+  std::swap(secondaryStartOrderIndex, o.secondaryStartOrderIndex);
+  std::swap(secondaryEndOrderIndex, o.secondaryEndOrderIndex);
   return *this;
 }
 
@@ -4080,6 +4110,8 @@ inline void ConjunctionScreenCatalogRequest::UnPackTo(ConjunctionScreenCatalogRe
   { auto _e = orderedCatalogIndices(); if (_e) { _o->orderedCatalogIndices.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->orderedCatalogIndices[_i] = _e->Get(_i); } } else { _o->orderedCatalogIndices.resize(0); } }
   { auto _e = startOrderIndex(); _o->startOrderIndex = _e; }
   { auto _e = endOrderIndex(); _o->endOrderIndex = _e; }
+  { auto _e = secondaryStartOrderIndex(); _o->secondaryStartOrderIndex = _e; }
+  { auto _e = secondaryEndOrderIndex(); _o->secondaryEndOrderIndex = _e; }
 }
 
 inline ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> CreateConjunctionScreenCatalogRequest(::flatbuffers::FlatBufferBuilder &_fbb, const ConjunctionScreenCatalogRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4109,6 +4141,8 @@ inline ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> ConjunctionScreenC
   auto _orderedCatalogIndices = _o->orderedCatalogIndices.size() ? _fbb.CreateVector(_o->orderedCatalogIndices) : 0;
   auto _startOrderIndex = _o->startOrderIndex;
   auto _endOrderIndex = _o->endOrderIndex;
+  auto _secondaryStartOrderIndex = _o->secondaryStartOrderIndex;
+  auto _secondaryEndOrderIndex = _o->secondaryEndOrderIndex;
   return orbpro::conjunction::CreateConjunctionScreenCatalogRequest(
       _fbb,
       _primaryTles,
@@ -4129,7 +4163,9 @@ inline ::flatbuffers::Offset<ConjunctionScreenCatalogRequest> ConjunctionScreenC
       _usePerigeeFilter,
       _orderedCatalogIndices,
       _startOrderIndex,
-      _endOrderIndex);
+      _endOrderIndex,
+      _secondaryStartOrderIndex,
+      _secondaryEndOrderIndex);
 }
 
 inline ConjunctionScreenCatalogResultT::ConjunctionScreenCatalogResultT(const ConjunctionScreenCatalogResultT &o)

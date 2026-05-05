@@ -191,6 +191,8 @@ table ConjunctionScreenCatalogRequest {
   orderedCatalogIndices:[uint];
   startOrderIndex:uint = 0;
   endOrderIndex:uint = 0;
+  secondaryStartOrderIndex:uint = 0;
+  secondaryEndOrderIndex:uint = 0;
   selectedSources:[ConjunctionSelectedSource];
 }
 
