@@ -172,7 +172,6 @@ table ConjunctionAlfanoResult {
 }
 
 table ConjunctionScreenCatalogRequest {
-  selectedSources:[ConjunctionSelectedSource];
   primaryTles:[TleRecord];
   secondaryTles:[TleRecord];
   primaryGps:[GpRecord];
@@ -189,6 +188,10 @@ table ConjunctionScreenCatalogRequest {
   useKdTree:bool = true;
   useDynamicWindow:bool = true;
   usePerigeeFilter:bool = true;
+  orderedCatalogIndices:[uint];
+  startOrderIndex:uint = 0;
+  endOrderIndex:uint = 0;
+  selectedSources:[ConjunctionSelectedSource];
 }
 
 table ConjunctionScreenCatalogResult {
