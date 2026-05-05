@@ -2,7 +2,15 @@
 
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -132,14 +140,23 @@ function countUint32beFrames(buffer) {
 
 function makeRange(start, end, step) {
   const ranges = [];
+  let partitionIndex = 0;
   for (let index = start; index < end; index += step) {
-    ranges.push([index, Math.min(index + step, end)]);
+    ranges.push({
+      partitionIndex,
+      startOrderIndex: index,
+      endOrderIndex: Math.min(index + step, end),
+    });
+    partitionIndex++;
   }
   return ranges;
 }
 
 function createScreenCatalogRequest(flatc, options, range, orderedCatalogIndices) {
-  const [startOrderIndex, endOrderIndex] = range;
+  const startOrderIndex = Array.isArray(range)
+    ? range[0]
+    : range.startOrderIndex;
+  const endOrderIndex = Array.isArray(range) ? range[1] : range.endOrderIndex;
   return flatc.generateBinary(
     conjunctionRequestSchema(),
     JSON.stringify({
@@ -187,6 +204,34 @@ function parseCliOptions(rawOptions) {
   return {
     catalog: rawOptions.catalog,
     output: rawOptions.output,
+    checkpointDir: rawOptions["checkpoint-dir"],
+    resume: Boolean(rawOptions.resume),
+    maxPartitions:
+      rawOptions["max-partitions"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(rawOptions["max-partitions"], "max-partitions", 0),
+          ),
+    partitionShardCount:
+      rawOptions["partition-shard-count"] === undefined
+        ? 1
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["partition-shard-count"],
+              "partition-shard-count",
+              1,
+            ),
+          ),
+    partitionShardIndex:
+      rawOptions["partition-shard-index"] === undefined
+        ? 0
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["partition-shard-index"],
+              "partition-shard-index",
+              0,
+            ),
+          ),
     wasm: rawOptions.wasm ?? DEFAULT_WASM_PATH,
     wasmEdgeBinary: rawOptions["wasmedge-binary"],
     wasmEdgeRunnerBinary: rawOptions["wasmedge-runner-binary"],
@@ -278,6 +323,7 @@ function canonicalResultFromSummary(summary) {
     partitionSize: summary.partitionSize,
     startOrderIndex: summary.startOrderIndex,
     endOrderIndex: summary.endOrderIndex,
+    complete: summary.complete ?? false,
     partitions: summary.partitions.map((partition) => ({
       partitionIndex: partition.partitionIndex,
       startOrderIndex: partition.startOrderIndex,
@@ -299,6 +345,7 @@ function canonicalResultFromSummary(summary) {
     aggregate: {
       partitions: summary.aggregate.partitions,
       failedPartitions: summary.aggregate.failedPartitions,
+      deferredPartitions: summary.aggregate.deferredPartitions ?? 0,
       objectsParsed: summary.aggregate.objectsParsed,
       conjunctionsFound: summary.aggregate.conjunctionsFound,
       pairsScreened: summary.aggregate.pairsScreened,
@@ -390,6 +437,7 @@ function aggregatePartitions(partitions, objectCount, wallElapsedMs) {
   const aggregate = {
     partitions: partitions.length,
     failedPartitions: 0,
+    deferredPartitions: 0,
     objectsParsed: objectCount,
     conjunctionsFound: 0,
     pairsScreened: 0,
@@ -415,6 +463,115 @@ function aggregatePartitions(partitions, objectCount, wallElapsedMs) {
     aggregate.elapsedMs += stats.elapsedMs ?? partition.elapsedMs ?? 0;
   }
   return aggregate;
+}
+
+function checkpointFileName(partition) {
+  const index = String(partition.partitionIndex).padStart(6, "0");
+  const start = String(partition.startOrderIndex).padStart(6, "0");
+  const end = String(partition.endOrderIndex).padStart(6, "0");
+  return `partition-${index}-${start}-${end}.json`;
+}
+
+function checkpointKey(partition) {
+  return `${partition.startOrderIndex}:${partition.endOrderIndex}`;
+}
+
+export async function loadPartitionCheckpoints(checkpointDir) {
+  if (!checkpointDir) {
+    return { completedPartitions: [] };
+  }
+  let entries;
+  try {
+    entries = await readdir(checkpointDir, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { completedPartitions: [] };
+    }
+    throw error;
+  }
+
+  const completedPartitions = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^partition-\d+-\d+-\d+\.json$/.test(entry.name)) {
+      continue;
+    }
+    const pathname = path.join(checkpointDir, entry.name);
+    const partition = JSON.parse(await readFile(pathname, "utf8"));
+    if (partition.statusCode === 0) {
+      completedPartitions.push(partition);
+    }
+  }
+  completedPartitions.sort((left, right) => {
+    if (left.startOrderIndex !== right.startOrderIndex) {
+      return left.startOrderIndex - right.startOrderIndex;
+    }
+    return left.endOrderIndex - right.endOrderIndex;
+  });
+  return { completedPartitions };
+}
+
+export function planPartitionWork({
+  objectCount,
+  startOrderIndex,
+  endOrderIndex,
+  partitionSize,
+  resume = false,
+  maxPartitions = null,
+  partitionShardCount = 1,
+  partitionShardIndex = 0,
+  completedPartitions = [],
+}) {
+  if (partitionSize <= 0) {
+    throw new Error("--partition-size must be greater than zero.");
+  }
+  if (partitionShardCount <= 0) {
+    throw new Error("--partition-shard-count must be greater than zero.");
+  }
+  if (partitionShardIndex < 0 || partitionShardIndex >= partitionShardCount) {
+    throw new Error(
+      "--partition-shard-index must be greater than or equal to zero and less than --partition-shard-count.",
+    );
+  }
+  if (maxPartitions !== null && maxPartitions < 0) {
+    throw new Error("--max-partitions must be greater than or equal to zero.");
+  }
+
+  const allRanges = makeRange(startOrderIndex, endOrderIndex, partitionSize).filter(
+    (range) => range.partitionIndex % partitionShardCount === partitionShardIndex,
+  );
+  const completedByRange = new Map(
+    completedPartitions.map((partition) => [checkpointKey(partition), partition]),
+  );
+  const completed = resume
+    ? allRanges
+        .map((range) => completedByRange.get(checkpointKey(range)))
+        .filter(Boolean)
+    : [];
+  const pending = allRanges.filter(
+    (range) => !resume || !completedByRange.has(checkpointKey(range)),
+  );
+  const limit = maxPartitions ?? pending.length;
+  const pendingRanges = pending.slice(0, limit);
+  const deferredRanges = pending.slice(limit);
+  return {
+    objectCount,
+    allRanges,
+    completedPartitions: completed,
+    pendingRanges,
+    deferredRanges,
+    complete: deferredRanges.length === 0,
+  };
+}
+
+async function writePartitionCheckpoint(checkpointDir, partition) {
+  if (!checkpointDir) {
+    return;
+  }
+  await mkdir(checkpointDir, { recursive: true });
+  const finalPath = path.join(checkpointDir, checkpointFileName(partition));
+  const temporaryPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(partition, null, 2)}\n`);
+  await rename(temporaryPath, finalPath);
 }
 
 async function maybeBuildRunner() {
@@ -445,28 +602,46 @@ export async function runPartitionedSdnOmmCatalog(options) {
     throw new Error("--end-order-index must be greater than or equal to --start-order-index.");
   }
 
+  const checkpointState =
+    options.resume && options.checkpointDir
+      ? await loadPartitionCheckpoints(options.checkpointDir)
+      : { completedPartitions: [] };
+  const workPlan = planPartitionWork({
+    objectCount,
+    startOrderIndex,
+    endOrderIndex,
+    partitionSize: options.partitionSize,
+    resume: options.resume,
+    maxPartitions: options.maxPartitions,
+    partitionShardCount: options.partitionShardCount,
+    partitionShardIndex: options.partitionShardIndex,
+    completedPartitions: checkpointState.completedPartitions,
+  });
+
   const orderedCatalogIndices = Array.from(
     { length: objectCount },
     (_, index) => index,
   );
-  const ranges = makeRange(startOrderIndex, endOrderIndex, options.partitionSize);
-  const flatc = await FlatcRunner.init();
-  const builtRunner = options.wasmEdgeRunnerBinary ? null : await maybeBuildRunner();
-  const harness = await loadModule({
-    wasmSource: options.wasm,
-    runtimeKind: "wasmedge",
-    enableThreads: true,
-    wasmEdgeBinary: options.wasmEdgeBinary,
-    wasmEdgeRunnerBinary:
-      options.wasmEdgeRunnerBinary ?? builtRunner?.runnerBinary,
-    cwd: PACKAGE_ROOT,
-  });
-
-  const partitions = [];
+  const partitions = [...workPlan.completedPartitions];
   const startedAt = performance.now();
+  let builtRunner = null;
+  let harness = null;
   try {
-    for (let partitionIndex = 0; partitionIndex < ranges.length; partitionIndex++) {
-      const range = ranges[partitionIndex];
+    if (workPlan.pendingRanges.length > 0) {
+      builtRunner = options.wasmEdgeRunnerBinary ? null : await maybeBuildRunner();
+      harness = await loadModule({
+        wasmSource: options.wasm,
+        runtimeKind: "wasmedge",
+        enableThreads: true,
+        wasmEdgeBinary: options.wasmEdgeBinary,
+        wasmEdgeRunnerBinary:
+          options.wasmEdgeRunnerBinary ?? builtRunner?.runnerBinary,
+        cwd: PACKAGE_ROOT,
+      });
+    }
+    const flatc =
+      workPlan.pendingRanges.length > 0 ? await FlatcRunner.init() : null;
+    for (const range of workPlan.pendingRanges) {
       const requestPayload = createScreenCatalogRequest(
         flatc,
         options,
@@ -496,24 +671,31 @@ export async function runPartitionedSdnOmmCatalog(options) {
             )
           : null;
 
-      partitions.push({
-        partitionIndex,
-        startOrderIndex: range[0],
-        endOrderIndex: range[1],
+      const partition = {
+        partitionIndex: range.partitionIndex,
+        startOrderIndex: range.startOrderIndex,
+        endOrderIndex: range.endOrderIndex,
         statusCode: response.statusCode,
         errorMessage: response.errorMessage ?? "",
         elapsedMs,
         objectsParsed: decoded?.objectsParsed ?? 0,
         conjunctionsFound: decoded?.conjunctionsFound ?? 0,
         stats: decoded?.stats ?? null,
-      });
+      };
+      partitions.push(partition);
+      await writePartitionCheckpoint(options.checkpointDir, partition);
     }
   } finally {
-    await harness.destroy?.();
+    await harness?.destroy?.();
     await builtRunner?.cleanup();
   }
 
   const wallElapsedMs = performance.now() - startedAt;
+  partitions.sort((left, right) => left.partitionIndex - right.partitionIndex);
+  const aggregate = aggregatePartitions(partitions, objectCount, wallElapsedMs);
+  aggregate.deferredPartitions = workPlan.deferredRanges.length;
+  const complete =
+    workPlan.deferredRanges.length === 0 && aggregate.failedPartitions === 0;
   const summary = {
     catalogPath: path.resolve(options.catalog),
     catalogBytes: catalogPayload.byteLength,
@@ -521,8 +703,15 @@ export async function runPartitionedSdnOmmCatalog(options) {
     partitionSize: options.partitionSize,
     startOrderIndex,
     endOrderIndex,
+    checkpointDir: options.checkpointDir ? path.resolve(options.checkpointDir) : null,
+    resume: options.resume,
+    partitionShardCount: options.partitionShardCount,
+    partitionShardIndex: options.partitionShardIndex,
+    maxPartitions: options.maxPartitions,
+    complete,
+    deferredRanges: workPlan.deferredRanges,
     partitions,
-    aggregate: aggregatePartitions(partitions, objectCount, wallElapsedMs),
+    aggregate,
   };
   const provenance = buildPartitionedRunProvenance(summary, options);
   const privateKey = readPrivateKey(options);
