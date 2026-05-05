@@ -24,6 +24,7 @@
 #include "conjunction/pc_method.h"
 #include "conjunction/resident_screening_index.h"
 #include "conjunction/screening.h"
+#include "conjunction/screening_internal.h"
 #include "OMM_generated.h"
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
@@ -1047,7 +1048,9 @@ static void ScreenEphemerisSourceRange(
             config.start_jd,
             config.duration_days
           );
-          if (event.miss_distance_km <= config.threshold_km) {
+          if (conjunction::is_conjunction_within_threshold(
+                event.miss_distance_km,
+                config.threshold_km)) {
             local_events.push_back(event);
           }
         } catch (...) {
@@ -1069,7 +1072,9 @@ static void ScreenEphemerisSourceRange(
             config.start_jd,
             config.duration_days
           );
-          if (event.miss_distance_km <= config.threshold_km) {
+          if (conjunction::is_conjunction_within_threshold(
+                event.miss_distance_km,
+                config.threshold_km)) {
             local_events.push_back(event);
           }
         } catch (...) {
