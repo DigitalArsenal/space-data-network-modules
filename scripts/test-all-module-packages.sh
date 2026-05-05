@@ -22,7 +22,6 @@ PACKAGES=(
     licensing/client-decrypt
     licensing/protection-key-server
     licensing/protection-license-client
-    delivery/plugin-delivery
     shaders/sensor-shaders
 )
 

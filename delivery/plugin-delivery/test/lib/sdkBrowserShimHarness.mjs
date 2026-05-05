@@ -4,14 +4,14 @@ import { fileURLToPath } from "node:url";
 import {
   createBrowserWasiShim,
   WasiExitError,
-} from "../../../../../space-data-module-sdk/src/host/wasiShim.js";
+} from "space-data-module-sdk/host/wasi-shim";
 import {
   createJsonHostcallBridge,
-} from "../../../../../space-data-module-sdk/src/host/abi.js";
+} from "../../node_modules/space-data-module-sdk/src/host/abi.js";
 import {
   encodePluginInvokeRequest,
   decodePluginInvokeResponse,
-} from "../../../../../space-data-module-sdk/src/invoke/codec.js";
+} from "space-data-module-sdk/invoke";
 
 function normalizeWasmBytes(source) {
   if (source instanceof URL) {
