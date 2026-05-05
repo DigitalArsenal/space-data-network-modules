@@ -23,15 +23,22 @@ Included package tests:
 - `licensing/client-decrypt`
 - `licensing/protection-key-server`
 - `licensing/protection-license-client`
-- `delivery/plugin-delivery`
 - `shaders/sensor-shaders`
 
 Excluded package directories:
 
 - `analysis/fastest-path`
 - `shaders/viewshed-shader`
+- `delivery/plugin-delivery`
 
-These excluded directories do not currently ship a package-local
-`plugin-manifest.json` plus canonical `dist/isomorphic/module.wasm` artifact, so
-they cannot be truthfully exercised through the SDK browser harness or WasmEdge
-loader in the same way as the authored module packages above.
+`analysis/fastest-path` and `shaders/viewshed-shader` do not currently ship a
+package-local `plugin-manifest.json` plus canonical
+`dist/isomorphic/module.wasm` artifact, so they cannot be truthfully exercised
+through the SDK browser harness or WasmEdge loader in the same way as the
+authored module packages above.
+
+`delivery/plugin-delivery` is intentionally excluded from the default matrix.
+It is a legacy compatibility fixture for client-decrypt round-trip tests. New
+protected module publication and grant issuance must use `licensing/core`,
+which publishes encrypted content once and returns provider-signed grants with
+recipient-specific wrapped keys.

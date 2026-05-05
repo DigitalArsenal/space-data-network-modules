@@ -112,7 +112,7 @@ including migrated module families and Basilisk-derived module families.
   - `basilisk/` — runtime seed package plus generated Basilisk module plan
   - `shaders/` — `sensor-shaders`, `viewshed-shader`
   - `licensing/` — `core`, `client-decrypt`, `protection-key-server`, `protection-license-client`
-  - `delivery/` — `plugin-delivery`
+  - `delivery/` — legacy `plugin-delivery` compatibility fixture
 - Completed packages publish the shared isomorphic SDK artifact at
   `dist/isomorphic/module.wasm`.
 - Optional browser adapters may live under `dist/browser/`, but they are not the
@@ -120,6 +120,11 @@ including migrated module families and Basilisk-derived module families.
 - The isomorphic artifact is the contract. It must load unchanged in the SDK
   browser harness and WasmEdge, with embedded manifest exports as the runtime
   source of truth.
+- Protected module delivery must use `licensing/core`. The older
+  `delivery/plugin-delivery` package is retained only for legacy
+  client-decrypt compatibility tests and must not be used for new publication or
+  grant issuance flows because it performs one-off bundle encryption and does
+  not emit provider-signed grants.
 - Remaining packages stay pending until they are migrated into matching `DigitalArsenal/space-data-network-plugin-<domain>` repos and added under the appropriate family subfolder.
 
 ## Basilisk Modules

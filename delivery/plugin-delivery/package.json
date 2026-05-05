@@ -1,7 +1,7 @@
 {
   "name": "@spacedatanetwork/plugin-delivery",
   "version": "0.1.0",
-  "description": "SDN plugin delivery module — fetches plugins from IPFS and delivers them encrypted via X25519 ECIES",
+  "description": "Legacy SDN plugin-delivery compatibility fixture; use licensing/core for protected publication and grants",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
