@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import test from "node:test";
 
@@ -15,6 +16,7 @@ import {
   sgp4ArtifactExists,
 } from "./lib/sgp4TrackHarness.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
+import { signCdmOutput, verifySignedCdmOutput } from "../index.js";
 
 const CLOSE_PAIR_FIXTURE_PATH = new URL(
   "./fixtures/socrates/gp_61721,67298.json",
@@ -156,4 +158,19 @@ test("emit_cdm accepts SGP4-sampled track-backed conjunction requests", async (t
   const cdm = response.outputs?.find((frame) => frame.portId === "cdm");
   assert.ok(cdm?.payload instanceof Uint8Array, "CDM payload is emitted");
   assert.ok(cdm.payload.byteLength > 0, "CDM payload is non-empty");
+
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");
+  const signed = signCdmOutput(cdm.payload, {
+    privateKey,
+    providerId: "celestrak.eth",
+    sourcePnmCid: "bafybeisocratesfixture",
+    moduleArtifactHash: "sha256:" + "b".repeat(64),
+    moduleVersion: "0.2.0",
+    cdmOutputId: "CDM-61721-67298",
+  });
+  assert.equal(
+    verifySignedCdmOutput(cdm.payload, signed, publicKey),
+    true,
+    "signed CDM metadata verifies against emitted CDM bytes",
+  );
 });

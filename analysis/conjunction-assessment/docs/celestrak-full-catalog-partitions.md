@@ -130,8 +130,12 @@ The summary JSON records:
 - deterministic provenance hashes over canonical query, config, and result
   objects;
 - optional Ed25519 result signature when `--signing-private-key` or
-  `CA_RESULT_ED25519_PRIVATE_KEY` is supplied.
+  `CA_RESULT_ED25519_PRIVATE_KEY` is supplied;
+- signed CDM artifact metadata for actual `emit_cdm` outputs via
+  `signCdmOutput(...)`, which signs the emitted `$CDM` byte hash and publication
+  metadata.
 
-Signed CDM output remains out of scope for this runner. The provenance object
-keeps `cdmOutputMetadata.available` false until signed-CDM policy and
-OCM/OEM-derived event support are completed and verified.
+The partitioned full-catalog runner itself remains an aggregate `screen_catalog`
+runner, not a per-event CDM emitter. Its provenance object keeps
+`cdmOutputMetadata.available` false unless a future per-event partition mode
+emits concrete `$CDM` bytes that can be signed with the package helper.

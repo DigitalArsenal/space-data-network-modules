@@ -58,9 +58,11 @@ The adapters support compact Cartesian position/velocity arrays:
 OEM `EPHEMERIS_DATA_LINES` is also accepted for non-uniform samples. The
 module still consumes propagated-track requests for `assess_conjunction`,
 `find_tca`, and `emit_cdm`; hosts should decode SDS `OCM`/`OEM` bytes and adapt
-them before invoking those methods. Signed CDM output policy remains separate:
-`emit_cdm` can emit a CDM payload for OCM/OEM-derived tracks, but this package
-does not yet sign those CDMs.
+them before invoking those methods. Hosts that publish `emit_cdm` outputs can
+wrap the emitted `$CDM` bytes with `signCdmOutput(...)`, which signs the CDM
+hash plus provider, source PNM CID, module artifact, module version, and output
+ID metadata. `screen_catalog` partition summaries remain aggregate results and
+do not emit per-event CDM bytes.
 
 ## Runtime contract
 
