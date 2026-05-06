@@ -15,6 +15,7 @@ import {
   buildPartitionedRunProvenance,
   invokeWithTimeout,
   loadPartitionCheckpoints,
+  findIrreducibleTimedOutBlockPairs,
   planExplicitBlockPairWork,
   planCatalogBlockPairWork,
   planTimedOutBlockPairSubdivisions,
@@ -219,6 +220,43 @@ test("timeout retry planning splits only terminal timed-out child ranges", () =>
       [4, 20, 25, 2120, 2125, 5],
     ],
   );
+});
+
+test("timeout retry planning reports irreducible terminal child ranges", () => {
+  const partitions = [
+    {
+      partitionIndex: 4,
+      statusCode: 124,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 1,
+      secondaryStartOrderIndex: 2116,
+      secondaryEndOrderIndex: 2117,
+      errorMessage: "partition 4 timed out after 10000 ms",
+    },
+  ];
+
+  const retries = planTimedOutBlockPairSubdivisions({
+    partitions,
+    minCatalogBlockSize: 1,
+  });
+  const irreducible = findIrreducibleTimedOutBlockPairs({
+    partitions,
+    minCatalogBlockSize: 1,
+  });
+
+  assert.deepEqual(retries, []);
+  assert.deepEqual(irreducible, [
+    {
+      parentPartitionIndex: 4,
+      partitionIndex: 4,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 1,
+      secondaryStartOrderIndex: 2116,
+      secondaryEndOrderIndex: 2117,
+      catalogBlockSize: 1,
+      errorMessage: "partition 4 timed out after 10000 ms",
+    },
+  ]);
 });
 
 test("explicit block-pair planner schedules a single retry child range", () => {
