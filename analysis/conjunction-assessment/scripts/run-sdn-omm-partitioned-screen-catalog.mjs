@@ -359,6 +359,17 @@ function parseCliOptions(rawOptions) {
           ),
     writeShardScript: rawOptions["write-shard-script"],
     shardOutputDir: rawOptions["shard-output-dir"],
+    writeTimeoutRetryPlan: rawOptions["write-timeout-retry-plan"],
+    minCatalogBlockSize:
+      rawOptions["min-catalog-block-size"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["min-catalog-block-size"],
+              "min-catalog-block-size",
+              0,
+            ),
+          ),
     startOrderIndex: Math.trunc(
       requiredNumber(rawOptions["start-order-index"], "start-order-index", 0),
     ),
@@ -683,6 +694,35 @@ export async function loadPartitionCheckpoints(checkpointDir) {
   return { completedPartitions };
 }
 
+async function loadPartitionCheckpointRecords(checkpointDir) {
+  if (!checkpointDir) {
+    return [];
+  }
+  let entries;
+  try {
+    entries = await readdir(checkpointDir, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const partitions = [];
+  for (const entry of entries) {
+    if (
+      !entry.isFile() ||
+      !/^partition-\d+-\d+-\d+(?:-\d+-\d+)?\.json$/.test(entry.name)
+    ) {
+      continue;
+    }
+    const pathname = path.join(checkpointDir, entry.name);
+    partitions.push(JSON.parse(await readFile(pathname, "utf8")));
+  }
+  partitions.sort((left, right) => left.partitionIndex - right.partitionIndex);
+  return partitions;
+}
+
 function shellQuote(value) {
   const text = String(value);
   if (/^[A-Za-z0-9_./:=@%+-]+$/.test(text)) {
@@ -892,6 +932,38 @@ async function planShardExecution(options) {
   };
 }
 
+async function writeTimeoutRetryPlan(options) {
+  if (!options.checkpointDir) {
+    throw new Error("--checkpoint-dir is required for --write-timeout-retry-plan.");
+  }
+  const retryPlanPath = path.resolve(options.writeTimeoutRetryPlan);
+  const partitions = await loadPartitionCheckpointRecords(options.checkpointDir);
+  const timeoutPartitions = partitions.filter(
+    (partition) =>
+      partition.statusCode === 124 &&
+      partition.primaryStartOrderIndex !== undefined,
+  );
+  const minCatalogBlockSize = options.minCatalogBlockSize ?? 100;
+  const ranges = planTimedOutBlockPairSubdivisions({
+    partitions,
+    minCatalogBlockSize,
+  });
+  const retryPlan = {
+    schemaVersion: 1,
+    checkpointDir: path.resolve(options.checkpointDir),
+    minCatalogBlockSize,
+    timeoutPartitions: timeoutPartitions.length,
+    retryRanges: ranges.length,
+    ranges,
+  };
+  await mkdir(path.dirname(retryPlanPath), { recursive: true });
+  await writeFile(retryPlanPath, `${JSON.stringify(retryPlan, null, 2)}\n`);
+  return {
+    ...retryPlan,
+    retryPlanPath,
+  };
+}
+
 export function planCatalogBlockPairWork({
   objectCount,
   startOrderIndex,
@@ -947,6 +1019,75 @@ export function planCatalogBlockPairWork({
     deferredRanges,
     complete: deferredRanges.length === 0,
   };
+}
+
+export function planTimedOutBlockPairSubdivisions({
+  partitions,
+  minCatalogBlockSize,
+}) {
+  if (!Array.isArray(partitions)) {
+    throw new TypeError("partitions must be an array");
+  }
+  const minimum = Math.trunc(requiredNumber(minCatalogBlockSize, "min-catalog-block-size", 1));
+  if (minimum <= 0) {
+    throw new Error("--min-catalog-block-size must be greater than zero.");
+  }
+
+  const retryRanges = [];
+  for (const partition of partitions) {
+    if (partition.statusCode !== 124) {
+      continue;
+    }
+    if (partition.primaryStartOrderIndex === undefined) {
+      continue;
+    }
+    const primaryRanges = splitRetryRange(
+      partition.primaryStartOrderIndex,
+      partition.primaryEndOrderIndex,
+      minimum,
+    );
+    const secondaryRanges = splitRetryRange(
+      partition.secondaryStartOrderIndex,
+      partition.secondaryEndOrderIndex,
+      minimum,
+    );
+    for (const primary of primaryRanges) {
+      for (const secondary of secondaryRanges) {
+        if (
+          partition.diagonal &&
+          secondary.start < primary.start
+        ) {
+          continue;
+        }
+        retryRanges.push({
+          parentPartitionIndex: partition.partitionIndex,
+          primaryStartOrderIndex: primary.start,
+          primaryEndOrderIndex: primary.end,
+          secondaryStartOrderIndex: secondary.start,
+          secondaryEndOrderIndex: secondary.end,
+          diagonal:
+            primary.start === secondary.start && primary.end === secondary.end,
+          catalogBlockSize: Math.max(
+            primary.end - primary.start,
+            secondary.end - secondary.start,
+          ),
+        });
+      }
+    }
+  }
+  return retryRanges;
+}
+
+function splitRetryRange(start, end, minimum) {
+  const span = end - start;
+  if (span <= minimum) {
+    return [{ start, end }];
+  }
+  const midpoint = start + Math.ceil(span / 2);
+  return [
+    { start, end: midpoint },
+    { start: midpoint, end },
+  ];
 }
 
 export function planPartitionWork({
@@ -1288,9 +1429,11 @@ export async function runPartitionedSdnOmmCatalog(options) {
 
 async function main() {
   const options = parseCliOptions(parseArgs(process.argv.slice(2)));
-  const summary = options.writeShardScript
-    ? await planShardExecution(options)
-    : await runPartitionedSdnOmmCatalog(options);
+  const summary = options.writeTimeoutRetryPlan
+    ? await writeTimeoutRetryPlan(options)
+    : options.writeShardScript
+      ? await planShardExecution(options)
+      : await runPartitionedSdnOmmCatalog(options);
   const json = JSON.stringify(summary, null, 2);
   if (options.output) {
     await writeFile(options.output, `${json}\n`);
