@@ -785,5 +785,36 @@ test(
       summary.partitions.every((partition) => partition.catalogBytes < summary.sourceCatalogBytes),
       "each block-pair invocation should use a sliced catalog payload",
     );
+
+    const explicitOutputPath = path.join(tempDir, "explicit-summary.json");
+    const explicitResult = await runNodeScript([
+      "scripts/run-sdn-omm-partitioned-screen-catalog.mjs",
+      "--catalog",
+      catalogPath,
+      "--block-pair-partition-index",
+      "99",
+      "--block-pair-primary-start-order-index",
+      "0",
+      "--block-pair-primary-end-order-index",
+      "2",
+      "--block-pair-secondary-start-order-index",
+      "2",
+      "--block-pair-secondary-end-order-index",
+      "4",
+      "--duration-days",
+      "0",
+      "--coarse-step-sec",
+      "600",
+      "--wasmedge-runner-binary",
+      runnerBinary,
+      "--output",
+      explicitOutputPath,
+    ]);
+
+    assert.equal(explicitResult.status, 0, explicitResult.stderr);
+    const explicitSummary = JSON.parse(await readFile(explicitOutputPath, "utf8"));
+    assert.equal(explicitSummary.partitionMode, "catalog-block-pair");
+    assert.equal(explicitSummary.partitions[0].partitionIndex, 99);
+    assert.equal(explicitSummary.partitions[0].catalogBytes < explicitSummary.sourceCatalogBytes, true);
   },
 );
