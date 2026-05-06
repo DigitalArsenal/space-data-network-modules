@@ -130,6 +130,11 @@ checkpoints that cover that parent, retry planning skips the covered parent and
 subdivides only terminal timed-out children. The plan summary reports both
 `timeoutPartitions` and `terminalTimeoutPartitions` so operators can confirm the
 next retry batch is not re-running superseded parent ranges.
+If a terminal timeout is already at `--min-catalog-block-size`, the planner does
+not emit the same retry range again. It reports that range in
+`irreducibleTimeoutRanges` and increments `irreducibleTimeoutPartitions` so the
+worker pool can quarantine that object pair for diagnostics instead of looping
+forever.
 
 To execute one retry child range directly:
 

@@ -1020,6 +1020,10 @@ async function writeTimeoutRetryPlan(options) {
     (partition) => !hasCompleteDescendantCoverage(partition, partitions),
   );
   const minCatalogBlockSize = options.minCatalogBlockSize ?? 100;
+  const irreducibleTimeoutRanges = findIrreducibleTimedOutBlockPairs({
+    partitions,
+    minCatalogBlockSize,
+  });
   const ranges = planTimedOutBlockPairSubdivisions({
     partitions,
     minCatalogBlockSize,
@@ -1030,7 +1034,9 @@ async function writeTimeoutRetryPlan(options) {
     minCatalogBlockSize,
     timeoutPartitions: timeoutPartitions.length,
     terminalTimeoutPartitions: terminalTimeoutPartitions.length,
+    irreducibleTimeoutPartitions: irreducibleTimeoutRanges.length,
     retryRanges: ranges.length,
+    irreducibleTimeoutRanges,
     ranges,
   };
   await mkdir(path.dirname(retryPlanPath), { recursive: true });
@@ -1271,6 +1277,9 @@ export function planTimedOutBlockPairSubdivisions({
     if (hasCompleteDescendantCoverage(partition, partitions)) {
       continue;
     }
+    if (isIrreducibleTimedOutRange(partition, minimum)) {
+      continue;
+    }
     const primaryRanges = splitRetryRange(
       partition.primaryStartOrderIndex,
       partition.primaryEndOrderIndex,
@@ -1306,6 +1315,47 @@ export function planTimedOutBlockPairSubdivisions({
     }
   }
   return retryRanges;
+}
+
+export function findIrreducibleTimedOutBlockPairs({
+  partitions,
+  minCatalogBlockSize,
+}) {
+  if (!Array.isArray(partitions)) {
+    throw new TypeError("partitions must be an array");
+  }
+  const minimum = Math.trunc(requiredNumber(minCatalogBlockSize, "min-catalog-block-size", 1));
+  if (minimum <= 0) {
+    throw new Error("--min-catalog-block-size must be greater than zero.");
+  }
+  return partitions
+    .filter(
+      (partition) =>
+        partition.statusCode === 124 &&
+        partition.primaryStartOrderIndex !== undefined &&
+        !hasCompleteDescendantCoverage(partition, partitions) &&
+        isIrreducibleTimedOutRange(partition, minimum),
+    )
+    .map((partition) => ({
+      parentPartitionIndex: partition.parentPartitionIndex ?? partition.partitionIndex,
+      partitionIndex: partition.partitionIndex,
+      primaryStartOrderIndex: partition.primaryStartOrderIndex,
+      primaryEndOrderIndex: partition.primaryEndOrderIndex,
+      secondaryStartOrderIndex: partition.secondaryStartOrderIndex,
+      secondaryEndOrderIndex: partition.secondaryEndOrderIndex,
+      catalogBlockSize: Math.max(
+        partition.primaryEndOrderIndex - partition.primaryStartOrderIndex,
+        partition.secondaryEndOrderIndex - partition.secondaryStartOrderIndex,
+      ),
+      errorMessage: partition.errorMessage ?? "",
+    }));
+}
+
+function isIrreducibleTimedOutRange(partition, minimum) {
+  return (
+    partition.primaryEndOrderIndex - partition.primaryStartOrderIndex <= minimum &&
+    partition.secondaryEndOrderIndex - partition.secondaryStartOrderIndex <= minimum
+  );
 }
 
 function hasCompleteDescendantCoverage(partition, partitions) {
