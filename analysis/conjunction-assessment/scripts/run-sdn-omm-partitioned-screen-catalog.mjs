@@ -370,6 +370,66 @@ function parseCliOptions(rawOptions) {
               0,
             ),
           ),
+    blockPairPrimaryStartOrderIndex:
+      rawOptions["block-pair-primary-start-order-index"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["block-pair-primary-start-order-index"],
+              "block-pair-primary-start-order-index",
+              0,
+            ),
+          ),
+    blockPairPrimaryEndOrderIndex:
+      rawOptions["block-pair-primary-end-order-index"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["block-pair-primary-end-order-index"],
+              "block-pair-primary-end-order-index",
+              0,
+            ),
+          ),
+    blockPairSecondaryStartOrderIndex:
+      rawOptions["block-pair-secondary-start-order-index"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["block-pair-secondary-start-order-index"],
+              "block-pair-secondary-start-order-index",
+              0,
+            ),
+          ),
+    blockPairSecondaryEndOrderIndex:
+      rawOptions["block-pair-secondary-end-order-index"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["block-pair-secondary-end-order-index"],
+              "block-pair-secondary-end-order-index",
+              0,
+            ),
+          ),
+    blockPairPartitionIndex:
+      rawOptions["block-pair-partition-index"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["block-pair-partition-index"],
+              "block-pair-partition-index",
+              0,
+            ),
+          ),
+    blockPairParentPartitionIndex:
+      rawOptions["block-pair-parent-partition-index"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["block-pair-parent-partition-index"],
+              "block-pair-parent-partition-index",
+              0,
+            ),
+          ),
     startOrderIndex: Math.trunc(
       requiredNumber(rawOptions["start-order-index"], "start-order-index", 0),
     ),
@@ -454,6 +514,15 @@ function resolvedRunConfig(options, summary) {
     useDynamicWindow: options.useDynamicWindow !== false,
     usePerigeeFilter: options.usePerigeeFilter !== false,
   };
+}
+
+function hasExplicitBlockPairRange(options) {
+  return (
+    options.blockPairPrimaryStartOrderIndex !== null ||
+    options.blockPairPrimaryEndOrderIndex !== null ||
+    options.blockPairSecondaryStartOrderIndex !== null ||
+    options.blockPairSecondaryEndOrderIndex !== null
+  );
 }
 
 function canonicalQueryFromConfig(config) {
@@ -859,7 +928,9 @@ async function planShardExecution(options) {
       ? await loadPartitionCheckpoints(options.checkpointDir)
       : { completedPartitions: [] };
   const partitionMode =
-    options.catalogBlockSize === null ? "ordered-primary" : "catalog-block-pair";
+    hasExplicitBlockPairRange(options) || options.catalogBlockSize !== null
+      ? "catalog-block-pair"
+      : "ordered-primary";
   const shardCount = options.partitionShardCount;
   const shards = [];
   let totalPartitions = 0;
@@ -1018,6 +1089,62 @@ export function planCatalogBlockPairWork({
     pendingRanges,
     deferredRanges,
     complete: deferredRanges.length === 0,
+  };
+}
+
+export function planExplicitBlockPairWork({
+  primaryStartOrderIndex,
+  primaryEndOrderIndex,
+  secondaryStartOrderIndex,
+  secondaryEndOrderIndex,
+  partitionIndex = 0,
+  parentPartitionIndex = null,
+  resume = false,
+  completedPartitions = [],
+}) {
+  const range = {
+    partitionIndex,
+    parentPartitionIndex,
+    primaryStartOrderIndex,
+    primaryEndOrderIndex,
+    secondaryStartOrderIndex,
+    secondaryEndOrderIndex,
+    diagonal:
+      primaryStartOrderIndex === secondaryStartOrderIndex &&
+      primaryEndOrderIndex === secondaryEndOrderIndex,
+  };
+  for (const [name, value] of Object.entries(range)) {
+    if (name === "parentPartitionIndex" || name === "diagonal") {
+      continue;
+    }
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`${name} must be a non-negative integer.`);
+    }
+  }
+  if (primaryEndOrderIndex <= primaryStartOrderIndex) {
+    throw new Error("primary explicit block-pair range must be non-empty.");
+  }
+  if (secondaryEndOrderIndex <= secondaryStartOrderIndex) {
+    throw new Error("secondary explicit block-pair range must be non-empty.");
+  }
+
+  const completedByRange = new Map(
+    completedPartitions.map((partition) => [checkpointKey(partition), partition]),
+  );
+  const completed = resume
+    ? [completedByRange.get(checkpointKey(range))].filter(Boolean)
+    : [];
+  const pendingRanges =
+    resume && completed.length > 0
+      ? []
+      : [range];
+  return {
+    objectCount: null,
+    allRanges: [range],
+    completedPartitions: completed,
+    pendingRanges,
+    deferredRanges: [],
+    complete: true,
   };
 }
 
@@ -1237,8 +1364,19 @@ export async function runPartitionedSdnOmmCatalog(options) {
   const partitionMode =
     options.catalogBlockSize === null ? "ordered-primary" : "catalog-block-pair";
   const workPlan =
-    partitionMode === "catalog-block-pair"
-      ? planCatalogBlockPairWork({
+    hasExplicitBlockPairRange(options)
+      ? planExplicitBlockPairWork({
+          primaryStartOrderIndex: options.blockPairPrimaryStartOrderIndex,
+          primaryEndOrderIndex: options.blockPairPrimaryEndOrderIndex,
+          secondaryStartOrderIndex: options.blockPairSecondaryStartOrderIndex,
+          secondaryEndOrderIndex: options.blockPairSecondaryEndOrderIndex,
+          partitionIndex: options.blockPairPartitionIndex ?? 0,
+          parentPartitionIndex: options.blockPairParentPartitionIndex,
+          resume: options.resume,
+          completedPartitions: checkpointState.completedPartitions,
+        })
+      : partitionMode === "catalog-block-pair"
+        ? planCatalogBlockPairWork({
           objectCount,
           startOrderIndex,
           endOrderIndex,
@@ -1249,7 +1387,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
           partitionShardIndex: options.partitionShardIndex,
           completedPartitions: checkpointState.completedPartitions,
         })
-      : planPartitionWork({
+        : planPartitionWork({
           objectCount,
           startOrderIndex,
           endOrderIndex,

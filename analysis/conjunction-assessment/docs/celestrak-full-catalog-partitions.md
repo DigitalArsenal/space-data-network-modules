@@ -126,6 +126,23 @@ The retry plan lists child primary/secondary ranges derived from each timed-out
 block pair. Operators can use those ranges to schedule smaller follow-up runs or
 feed a worker-pool scheduler that supports explicit range work.
 
+To execute one retry child range directly:
+
+```bash
+node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
+  --catalog /path/to/celestrak-full-catalog.OMM.uint32be.bin \
+  --block-pair-partition-index 4 \
+  --block-pair-parent-partition-index 4 \
+  --block-pair-primary-start-order-index 0 \
+  --block-pair-primary-end-order-index 250 \
+  --block-pair-secondary-start-order-index 2000 \
+  --block-pair-secondary-end-order-index 2250 \
+  --partition-timeout-ms 900000 \
+  --checkpoint-dir /shared/ca-celestrak-retry-checkpoints \
+  --resume \
+  --output /shared/ca-celestrak-retry-000004.json
+```
+
 To generate resumable worker commands without loading WASM, use
 `--write-shard-script`:
 
