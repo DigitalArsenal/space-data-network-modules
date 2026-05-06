@@ -1210,11 +1210,14 @@ function splitRetryRange(start, end, minimum) {
   if (span <= minimum) {
     return [{ start, end }];
   }
-  const midpoint = start + Math.ceil(span / 2);
-  return [
-    { start, end: midpoint },
-    { start: midpoint, end },
-  ];
+  const ranges = [];
+  for (let index = start; index < end; index += minimum) {
+    ranges.push({
+      start: index,
+      end: Math.min(index + minimum, end),
+    });
+  }
+  return ranges;
 }
 
 export function planPartitionWork({

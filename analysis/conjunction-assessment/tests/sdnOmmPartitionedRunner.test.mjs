@@ -84,6 +84,43 @@ test("timed-out block-pair checkpoints split into smaller retry ranges", () => {
   );
 });
 
+test("timed-out block-pair checkpoints recursively split to the minimum block size", () => {
+  const retries = planTimedOutBlockPairSubdivisions({
+    partitions: [
+      {
+        partitionIndex: 4,
+        statusCode: 124,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 500,
+        secondaryStartOrderIndex: 2000,
+        secondaryEndOrderIndex: 2500,
+      },
+    ],
+    minCatalogBlockSize: 125,
+  });
+
+  assert.equal(retries.length, 16);
+  assert.ok(
+    retries.every(
+      (range) =>
+        range.primaryEndOrderIndex - range.primaryStartOrderIndex <= 125 &&
+        range.secondaryEndOrderIndex - range.secondaryStartOrderIndex <= 125,
+    ),
+  );
+  assert.deepEqual(
+    retries[0],
+    {
+      parentPartitionIndex: 4,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 125,
+      secondaryStartOrderIndex: 2000,
+      secondaryEndOrderIndex: 2125,
+      diagonal: false,
+      catalogBlockSize: 125,
+    },
+  );
+});
+
 test("explicit block-pair planner schedules a single retry child range", () => {
   const plan = planExplicitBlockPairWork({
     primaryStartOrderIndex: 0,
