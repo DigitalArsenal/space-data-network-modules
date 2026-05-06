@@ -630,6 +630,66 @@ test("partitioned runner can write timeout retry plans without invoking WASM", a
   );
 });
 
+test("partitioned runner can write retry range commands from a timeout retry plan", async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-retry-script-"));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  const retryPlanPath = path.join(tempDir, "timeout-retries.json");
+  const retryScriptPath = path.join(tempDir, "run-retries.sh");
+  const catalogPath = path.join(tempDir, "catalog.uint32be.bin");
+  await writeFile(
+    retryPlanPath,
+    JSON.stringify({
+      ranges: [
+        {
+          parentPartitionIndex: 4,
+          primaryStartOrderIndex: 0,
+          primaryEndOrderIndex: 25,
+          secondaryStartOrderIndex: 2000,
+          secondaryEndOrderIndex: 2025,
+        },
+        {
+          parentPartitionIndex: 4,
+          primaryStartOrderIndex: 0,
+          primaryEndOrderIndex: 25,
+          secondaryStartOrderIndex: 2025,
+          secondaryEndOrderIndex: 2050,
+        },
+      ],
+    }),
+  );
+
+  const result = await runNodeScript([
+    "scripts/run-sdn-omm-partitioned-screen-catalog.mjs",
+    "--catalog",
+    catalogPath,
+    "--checkpoint-dir",
+    path.join(tempDir, "retry-checkpoints"),
+    "--retry-plan",
+    retryPlanPath,
+    "--partition-timeout-ms",
+    "120000",
+    "--write-retry-script",
+    retryScriptPath,
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.retryRanges, 2);
+  assert.equal(summary.retryScriptPath, retryScriptPath);
+
+  const script = await readFile(retryScriptPath, "utf8");
+  assert.match(script, /--block-pair-primary-start-order-index 0/);
+  assert.match(script, /--block-pair-primary-end-order-index 25/);
+  assert.match(script, /--block-pair-secondary-start-order-index 2000/);
+  assert.match(script, /--block-pair-secondary-end-order-index 2025/);
+  assert.match(script, /--partition-timeout-ms 120000/);
+  assert.match(script, /retry-000000.json/);
+  assert.match(script, /retry-000001.json/);
+});
+
 function runNodeScript(args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
