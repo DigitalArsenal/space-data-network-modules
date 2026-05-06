@@ -284,6 +284,33 @@ test("explicit block-pair planner schedules a single retry child range", () => {
   assert.equal(plan.complete, true);
 });
 
+test("explicit block-pair planner skips quarantined irreducible ranges", () => {
+  const plan = planExplicitBlockPairWork({
+    primaryStartOrderIndex: 0,
+    primaryEndOrderIndex: 1,
+    secondaryStartOrderIndex: 2116,
+    secondaryEndOrderIndex: 2117,
+    partitionIndex: 4,
+    parentPartitionIndex: 4,
+    resume: true,
+    quarantinedRanges: [
+      {
+        partitionIndex: 4,
+        parentPartitionIndex: 4,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 1,
+        secondaryStartOrderIndex: 2116,
+        secondaryEndOrderIndex: 2117,
+      },
+    ],
+  });
+
+  assert.deepEqual(plan.pendingRanges, []);
+  assert.deepEqual(plan.completedPartitions, []);
+  assert.equal(plan.quarantinedRanges.length, 1);
+  assert.equal(plan.quarantinedRanges[0].secondaryStartOrderIndex, 2116);
+});
+
 test("partitioned runner can resume from successful checkpoints and schedule only pending work", async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-resume-"));
   t.after(async () => {
