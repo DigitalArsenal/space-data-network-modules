@@ -360,6 +360,8 @@ function parseCliOptions(rawOptions) {
     writeShardScript: rawOptions["write-shard-script"],
     shardOutputDir: rawOptions["shard-output-dir"],
     writeTimeoutRetryPlan: rawOptions["write-timeout-retry-plan"],
+    retryPlan: rawOptions["retry-plan"],
+    writeRetryScript: rawOptions["write-retry-script"],
     minCatalogBlockSize:
       rawOptions["min-catalog-block-size"] === undefined
         ? null
@@ -1035,6 +1037,100 @@ async function writeTimeoutRetryPlan(options) {
   };
 }
 
+async function writeRetryScript(options) {
+  if (!options.retryPlan) {
+    throw new Error("--retry-plan is required for --write-retry-script.");
+  }
+  if (!options.catalog) {
+    throw new Error("--catalog is required for --write-retry-script.");
+  }
+  if (!options.checkpointDir) {
+    throw new Error("--checkpoint-dir is required for --write-retry-script.");
+  }
+  const retryPlanPath = path.resolve(options.retryPlan);
+  const retryScriptPath = path.resolve(options.writeRetryScript);
+  const retryPlan = JSON.parse(await readFile(retryPlanPath, "utf8"));
+  const ranges = Array.isArray(retryPlan.ranges) ? retryPlan.ranges : [];
+  const outputDir = path.resolve(
+    options.shardOutputDir ?? path.dirname(retryScriptPath),
+  );
+  await mkdir(path.dirname(retryScriptPath), { recursive: true });
+  await mkdir(outputDir, { recursive: true });
+
+  const scriptRelative = path.relative(process.cwd(), fileURLToPath(import.meta.url));
+  const scriptEntrypoint = scriptRelative.startsWith("..")
+    ? fileURLToPath(import.meta.url)
+    : scriptRelative;
+  const lines = [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "",
+  ];
+  ranges.forEach((range, index) => {
+    const parts = [
+      "node",
+      shellQuote(scriptEntrypoint),
+    ];
+    addCommandArg(parts, "catalog", options.catalog);
+    addCommandArg(parts, "block-pair-partition-index", range.parentPartitionIndex ?? index);
+    addCommandArg(parts, "block-pair-parent-partition-index", range.parentPartitionIndex);
+    addCommandArg(parts, "block-pair-primary-start-order-index", range.primaryStartOrderIndex);
+    addCommandArg(parts, "block-pair-primary-end-order-index", range.primaryEndOrderIndex);
+    addCommandArg(parts, "block-pair-secondary-start-order-index", range.secondaryStartOrderIndex);
+    addCommandArg(parts, "block-pair-secondary-end-order-index", range.secondaryEndOrderIndex);
+    addCommandArg(parts, "partition-size", options.partitionSize);
+    addCommandArg(parts, "partition-timeout-ms", options.partitionTimeoutMs);
+    addCommandArg(parts, "checkpoint-dir", options.checkpointDir);
+    addCommandArg(parts, "resume", true);
+    addCommandArg(parts, "provider-id", options.providerId);
+    addCommandArg(parts, "source-id", options.sourceId);
+    addCommandArg(parts, "source-pnm-cid", options.sourcePnmCids?.join(","));
+    addCommandArg(parts, "module-artifact-hash", options.moduleArtifactHash);
+    addCommandArg(parts, "module-version", options.moduleVersion);
+    addCommandArg(parts, "signing-private-key", options.signingPrivateKey);
+    addCommandArg(parts, "start-jd", options.startJd);
+    addCommandArg(parts, "duration-days", options.durationDays);
+    addCommandArg(parts, "threshold-km", options.thresholdKm);
+    addCommandArg(parts, "num-threads", options.numThreads);
+    addCommandArg(parts, "coarse-step-sec", options.coarseStepSec);
+    addCommandArg(parts, "fine-tol-sec", options.fineTolSec);
+    addCommandArg(parts, "combined-radius-m", options.combinedRadiusM);
+    addCommandArg(parts, "start-order-index", options.startOrderIndex);
+    addCommandArg(parts, "end-order-index", options.endOrderIndex);
+    addCommandArg(parts, "catalog-start-frame", options.catalogStartFrame);
+    addCommandArg(parts, "catalog-end-frame", options.catalogEndFrame);
+    addCommandArg(parts, "catalog-frame-limit", options.catalogFrameLimit);
+    addCommandArg(parts, "wasm", options.wasm);
+    addCommandArg(parts, "wasmedge-binary", options.wasmEdgeBinary);
+    addCommandArg(parts, "wasmedge-runner-binary", options.wasmEdgeRunnerBinary);
+    if (options.useKdTree === false) {
+      addCommandArg(parts, "no-kdtree", true);
+    }
+    if (options.useDynamicWindow === false) {
+      addCommandArg(parts, "no-dynamic-window", true);
+    }
+    if (options.usePerigeeFilter === false) {
+      addCommandArg(parts, "no-perigee-filter", true);
+    }
+    addCommandArg(
+      parts,
+      "output",
+      path.join(outputDir, `retry-${String(index).padStart(6, "0")}.json`),
+    );
+    lines.push(parts.join(" "));
+    lines.push("");
+  });
+  await writeFile(retryScriptPath, `${lines.join("\n")}\n`, { mode: 0o755 });
+  await chmod(retryScriptPath, 0o755);
+  return {
+    retryPlanPath,
+    retryScriptPath,
+    retryRanges: ranges.length,
+    checkpointDir: path.resolve(options.checkpointDir),
+    outputDir,
+  };
+}
+
 export function planCatalogBlockPairWork({
   objectCount,
   startOrderIndex,
@@ -1574,9 +1670,11 @@ async function main() {
   const options = parseCliOptions(parseArgs(process.argv.slice(2)));
   const summary = options.writeTimeoutRetryPlan
     ? await writeTimeoutRetryPlan(options)
-    : options.writeShardScript
-      ? await planShardExecution(options)
-      : await runPartitionedSdnOmmCatalog(options);
+    : options.writeRetryScript
+      ? await writeRetryScript(options)
+      : options.writeShardScript
+        ? await planShardExecution(options)
+        : await runPartitionedSdnOmmCatalog(options);
   const json = JSON.stringify(summary, null, 2);
   if (options.output) {
     await writeFile(options.output, `${json}\n`);
