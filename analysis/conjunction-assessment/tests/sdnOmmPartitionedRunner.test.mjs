@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -16,6 +16,7 @@ import {
   invokeWithTimeout,
   loadPartitionCheckpoints,
   planCatalogBlockPairWork,
+  planTimedOutBlockPairSubdivisions,
   planPartitionWork,
   sliceUint32beBlockPair,
   sliceUint32beFrames,
@@ -39,6 +40,47 @@ test("partition invocation timeout fails bounded work instead of waiting forever
     "partition 5",
   );
   assert.deepEqual(result, { statusCode: 0 });
+});
+
+test("timed-out block-pair checkpoints split into smaller retry ranges", () => {
+  const retries = planTimedOutBlockPairSubdivisions({
+    partitions: [
+      {
+        partitionIndex: 4,
+        statusCode: 124,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 500,
+        secondaryStartOrderIndex: 2000,
+        secondaryEndOrderIndex: 2500,
+      },
+      {
+        partitionIndex: 5,
+        statusCode: 0,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 500,
+        secondaryStartOrderIndex: 2500,
+        secondaryEndOrderIndex: 3000,
+      },
+    ],
+    minCatalogBlockSize: 250,
+  });
+
+  assert.deepEqual(
+    retries.map((range) => [
+      range.parentPartitionIndex,
+      range.primaryStartOrderIndex,
+      range.primaryEndOrderIndex,
+      range.secondaryStartOrderIndex,
+      range.secondaryEndOrderIndex,
+      range.catalogBlockSize,
+    ]),
+    [
+      [4, 0, 250, 2000, 2250, 250],
+      [4, 0, 250, 2250, 2500, 250],
+      [4, 250, 500, 2000, 2250, 250],
+      [4, 250, 500, 2250, 2500, 250],
+    ],
+  );
 });
 
 test("partitioned runner can resume from successful checkpoints and schedule only pending work", async (t) => {
@@ -467,6 +509,62 @@ test("partitioned runner can write resumable block-pair shard commands without i
   assert.match(script, /--partition-timeout-ms 1234/);
   assert.match(script, /--resume/);
   assert.match(script, /summary-shard-000.json/);
+});
+
+test("partitioned runner can write timeout retry plans without invoking WASM", async (t) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-timeout-retry-"));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  const checkpointDir = path.join(tempDir, "checkpoints");
+  const retryPlanPath = path.join(tempDir, "timeout-retries.json");
+  await mkdir(checkpointDir);
+  await writeFile(
+    path.join(checkpointDir, "partition-000004-000000-000500-002000-002500.json"),
+    JSON.stringify({
+      partitionIndex: 4,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 500,
+      secondaryStartOrderIndex: 2000,
+      secondaryEndOrderIndex: 2500,
+      statusCode: 124,
+      errorMessage: "partition 4 timed out after 5000 ms",
+    }),
+  );
+
+  const result = await runNodeScript([
+    "scripts/run-sdn-omm-partitioned-screen-catalog.mjs",
+    "--checkpoint-dir",
+    checkpointDir,
+    "--min-catalog-block-size",
+    "250",
+    "--write-timeout-retry-plan",
+    retryPlanPath,
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.timeoutPartitions, 1);
+  assert.equal(summary.retryRanges, 4);
+  assert.equal(summary.retryPlanPath, retryPlanPath);
+
+  const retryPlan = JSON.parse(await readFile(retryPlanPath, "utf8"));
+  assert.deepEqual(
+    retryPlan.ranges.map((range) => [
+      range.parentPartitionIndex,
+      range.primaryStartOrderIndex,
+      range.primaryEndOrderIndex,
+      range.secondaryStartOrderIndex,
+      range.secondaryEndOrderIndex,
+    ]),
+    [
+      [4, 0, 250, 2000, 2250],
+      [4, 0, 250, 2250, 2500],
+      [4, 250, 500, 2000, 2250],
+      [4, 250, 500, 2250, 2500],
+    ],
+  );
 });
 
 function runNodeScript(args, options = {}) {

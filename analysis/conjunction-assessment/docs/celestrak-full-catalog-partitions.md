@@ -96,6 +96,36 @@ For a 100,000-object catalog and `--catalog-block-size 1000`, the exact plan has
 directory and repeat with `--resume` until all shards report no deferred ranges.
 This is the current supported exact full-catalog execution path.
 
+Long-tail block pairs should be bounded with `--partition-timeout-ms` so a
+single pathological pair cannot pin a worker indefinitely:
+
+```bash
+node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
+  --catalog /path/to/celestrak-full-catalog.OMM.uint32be.bin \
+  --catalog-block-size 500 \
+  --partition-timeout-ms 900000 \
+  --checkpoint-dir /shared/ca-celestrak-block-pairs \
+  --resume \
+  --partition-shard-count 16 \
+  --partition-shard-index 0 \
+  --max-partitions 4 \
+  --output /shared/ca-celestrak-block-pairs-shard-0.json
+```
+
+Timed-out partitions are checkpointed with `statusCode` `124`. To create a
+smaller retry manifest from those timeout checkpoints without invoking WASM:
+
+```bash
+node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
+  --checkpoint-dir /shared/ca-celestrak-block-pairs \
+  --min-catalog-block-size 250 \
+  --write-timeout-retry-plan /shared/ca-celestrak-timeout-retries.json
+```
+
+The retry plan lists child primary/secondary ranges derived from each timed-out
+block pair. Operators can use those ranges to schedule smaller follow-up runs or
+feed a worker-pool scheduler that supports explicit range work.
+
 To generate resumable worker commands without loading WASM, use
 `--write-shard-script`:
 
