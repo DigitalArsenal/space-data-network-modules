@@ -125,6 +125,11 @@ node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
 The retry plan lists child primary/secondary ranges derived from each timed-out
 block pair. Operators can use those ranges to schedule smaller follow-up runs or
 feed a worker-pool scheduler that supports explicit range work.
+When a checkpoint directory contains both a timed-out parent range and child
+checkpoints that cover that parent, retry planning skips the covered parent and
+subdivides only terminal timed-out children. The plan summary reports both
+`timeoutPartitions` and `terminalTimeoutPartitions` so operators can confirm the
+next retry batch is not re-running superseded parent ranges.
 
 To execute one retry child range directly:
 
