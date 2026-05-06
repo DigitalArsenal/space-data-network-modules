@@ -347,6 +347,16 @@ function parseCliOptions(rawOptions) {
               0,
             ),
           ),
+    partitionTimeoutMs:
+      rawOptions["partition-timeout-ms"] === undefined
+        ? null
+        : Math.trunc(
+            requiredNumber(
+              rawOptions["partition-timeout-ms"],
+              "partition-timeout-ms",
+              0,
+            ),
+          ),
     writeShardScript: rawOptions["write-shard-script"],
     shardOutputDir: rawOptions["shard-output-dir"],
     startOrderIndex: Math.trunc(
@@ -720,6 +730,7 @@ async function writeShardScript(options, summary) {
     addCommandArg(parts, "catalog", options.catalog);
     addCommandArg(parts, "catalog-block-size", options.catalogBlockSize);
     addCommandArg(parts, "partition-size", options.partitionSize);
+    addCommandArg(parts, "partition-timeout-ms", options.partitionTimeoutMs);
     addCommandArg(parts, "checkpoint-dir", options.checkpointDir);
     addCommandArg(parts, "resume", true);
     addCommandArg(parts, "partition-shard-count", summary.partitionShardCount);
@@ -991,6 +1002,32 @@ export function planPartitionWork({
   };
 }
 
+export async function invokeWithTimeout(invoke, timeoutMs, label = "partition") {
+  if (timeoutMs === null || timeoutMs === undefined || timeoutMs <= 0) {
+    return invoke();
+  }
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(`${label} timed out after ${timeoutMs} ms`);
+      error.code = "ERR_PARTITION_TIMEOUT";
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve()
+        .then(invoke)
+        .catch((error) => {
+          throw error;
+        }),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function writePartitionCheckpoint(checkpointDir, partition) {
   if (!checkpointDir) {
     return;
@@ -1088,6 +1125,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
       ? null
       : Array.from({ length: objectCount }, (_, index) => index);
   const partitions = [...workPlan.completedPartitions];
+  const runtimeDeferredRanges = [];
   const startedAt = performance.now();
   let builtRunner = null;
   let harness = null;
@@ -1106,7 +1144,8 @@ export async function runPartitionedSdnOmmCatalog(options) {
     }
     const flatc =
       workPlan.pendingRanges.length > 0 ? await FlatcRunner.init() : null;
-    for (const range of workPlan.pendingRanges) {
+    for (let rangeIndex = 0; rangeIndex < workPlan.pendingRanges.length; rangeIndex += 1) {
+      const range = workPlan.pendingRanges[rangeIndex];
       const partitionCatalog =
         partitionMode === "catalog-block-pair"
           ? sliceUint32beBlockPair(catalogPayload, range)
@@ -1138,13 +1177,32 @@ export async function runPartitionedSdnOmmCatalog(options) {
         orderedCatalogIndices ?? partitionOrderedCatalogIndices,
       );
       const partitionStartedAt = performance.now();
-      const response = await harness.invoke({
-        methodId: "screen_catalog",
-        inputs: [
-          { portId: "request", payload: requestPayload },
-          { portId: "catalog", payload: partitionCatalog.payload },
-        ],
-      });
+      let response;
+      let timedOut = false;
+      try {
+        response = await invokeWithTimeout(
+          () =>
+            harness.invoke({
+              methodId: "screen_catalog",
+              inputs: [
+                { portId: "request", payload: requestPayload },
+                { portId: "catalog", payload: partitionCatalog.payload },
+              ],
+            }),
+          options.partitionTimeoutMs,
+          `partition ${range.partitionIndex}`,
+        );
+      } catch (error) {
+        if (error?.code !== "ERR_PARTITION_TIMEOUT") {
+          throw error;
+        }
+        timedOut = true;
+        response = {
+          statusCode: 124,
+          errorMessage: error.message,
+          outputs: [],
+        };
+      }
       const elapsedMs = performance.now() - partitionStartedAt;
       const resultFrame = response.outputs?.find(
         (frame) => frame.portId === "result",
@@ -1178,6 +1236,12 @@ export async function runPartitionedSdnOmmCatalog(options) {
       };
       partitions.push(partition);
       await writePartitionCheckpoint(options.checkpointDir, partition);
+      if (timedOut) {
+        runtimeDeferredRanges.push(
+          ...workPlan.pendingRanges.slice(rangeIndex + 1),
+        );
+        break;
+      }
     }
   } finally {
     await harness?.destroy?.();
@@ -1187,9 +1251,10 @@ export async function runPartitionedSdnOmmCatalog(options) {
   const wallElapsedMs = performance.now() - startedAt;
   partitions.sort((left, right) => left.partitionIndex - right.partitionIndex);
   const aggregate = aggregatePartitions(partitions, objectCount, wallElapsedMs);
-  aggregate.deferredPartitions = workPlan.deferredRanges.length;
+  const deferredRanges = [...runtimeDeferredRanges, ...workPlan.deferredRanges];
+  aggregate.deferredPartitions = deferredRanges.length;
   const complete =
-    workPlan.deferredRanges.length === 0 && aggregate.failedPartitions === 0;
+    deferredRanges.length === 0 && aggregate.failedPartitions === 0;
   const summary = {
     catalogPath: path.resolve(options.catalog),
     catalogBytes: catalogPayload.byteLength,
@@ -1209,7 +1274,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
     partitionShardIndex: options.partitionShardIndex,
     maxPartitions: options.maxPartitions,
     complete,
-    deferredRanges: workPlan.deferredRanges,
+    deferredRanges,
     partitions,
     aggregate,
   };
