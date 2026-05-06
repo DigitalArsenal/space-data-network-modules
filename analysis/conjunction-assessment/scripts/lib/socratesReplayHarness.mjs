@@ -1,5 +1,4 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 // Canonical plugin loader for the conjunction-assessment wasm artifact lives
@@ -8,6 +7,10 @@ import path from "node:path";
 import { createConjunctionAssessmentPlugin } from "../../index.js";
 
 import { maybeWriteJson, parseCsvLine } from "./aerospaceDataset.mjs";
+import {
+  defaultCelestrakCacheDir,
+  fetchCachedText,
+} from "./celestrakFetchCache.mjs";
 
 const DEFAULT_BASE_URL = "https://celestrak.org/SOCRATES";
 const DEFAULT_SORT = "maxProb";
@@ -108,18 +111,19 @@ async function fetchText(url, options = {}) {
     1000,
     numberOrDefault(options.timeoutMs, DEFAULT_TIMEOUT_MS),
   );
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(timeoutMs),
+  const fetched = await fetchCachedText(url, {
+    cacheDir: options.cacheDir ?? defaultCelestrakCacheDir(),
+    extension: options.extension ?? "txt",
+    forceRefresh: options.forceRefresh === true,
+    fetchImpl: options.fetchImpl ?? globalThis.fetch,
+    timeoutMs,
     headers: {
       "user-agent": "OrbPro-SOCRATES-Validation/1.0",
       accept: "text/plain, text/csv, application/json;q=0.9, */*;q=0.1",
       ...options.headers,
     },
   });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} for ${url}`);
-  }
-  return response.text();
+  return fetched.text;
 }
 
 export function parseSocratesCsv(text) {
@@ -164,6 +168,7 @@ export async function fetchSocratesCsv(options = {}) {
   const baseUrl = String(options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
   const text = await fetchText(`${baseUrl}/${csvFile}`, {
     ...options,
+    extension: "csv",
     timeoutMs: options.csvTimeoutMs ?? DEFAULT_CSV_TIMEOUT_MS,
   });
   return {
@@ -175,17 +180,13 @@ export async function fetchSocratesCsv(options = {}) {
   };
 }
 
-function getDefaultCacheDir() {
-  return path.join(tmpdir(), "orbpro-socrates-live-cache");
-}
-
 async function ensureDirectory(directoryPath) {
   await mkdir(directoryPath, { recursive: true });
 }
 
 export async function fetchSocratesPairGpJson(row, options = {}) {
   const baseUrl = String(options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
-  const cacheDir = options.cacheDir ?? getDefaultCacheDir();
+  const cacheDir = options.cacheDir ?? defaultCelestrakCacheDir();
   const forceRefresh = options.forceRefresh === true;
   const fileName = `gp_${row.obj1Norad},${row.obj2Norad}.json`;
   const cachePath = path.join(cacheDir, fileName);
@@ -200,7 +201,11 @@ export async function fetchSocratesPairGpJson(row, options = {}) {
 
   await ensureDirectory(cacheDir);
   const url = `${baseUrl}/data.php?CATNR=${row.obj1Norad},${row.obj2Norad}&FORMAT=json`;
-  const text = await fetchText(url, options);
+  const text = await fetchText(url, {
+    ...options,
+    cacheDir,
+    extension: "json",
+  });
   await writeFile(cachePath, text, "utf8");
   return JSON.parse(text);
 }
@@ -236,7 +241,7 @@ export async function runSocratesLiveComparison(options = {}) {
     numberOrDefault(options.maxScanRows, DEFAULT_MAX_SCAN_ROWS),
   );
   const rows = fetched.rows.slice(offset, offset + maxScanRows);
-  const cacheDir = options.cacheDir ?? getDefaultCacheDir();
+  const cacheDir = options.cacheDir ?? defaultCelestrakCacheDir();
   const rateMs = Math.max(0, numberOrDefault(options.rateMs, DEFAULT_RATE_MS));
   const progressEvery = Math.max(0, numberOrDefault(options.progressEvery, 0));
   const maxRecordedMismatches = Math.max(

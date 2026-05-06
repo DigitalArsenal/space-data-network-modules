@@ -11,6 +11,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  defaultCelestrakCacheDir,
+  fetchCachedText,
+} from './lib/celestrakFetchCache.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'tests', 'data', 'socrates_gp');
@@ -19,6 +23,8 @@ const args = process.argv.slice(2);
 const getArg = (name, def) => { const i = args.indexOf(name); return i >= 0 && args[i+1] ? args[i+1] : def; };
 const TOP = parseInt(getArg('--top', '1000'));
 const RATE_MS = parseInt(getArg('--rate', '200')); // 5/sec
+const CACHE_DIR = getArg('--cache-dir', defaultCelestrakCacheDir());
+const FORCE_REFRESH = args.includes('--force-refresh');
 
 mkdirSync(DATA_DIR, { recursive: true });
 
@@ -55,6 +61,7 @@ for (let i = 1; i < lines.length && pairs.length < TOP; i++) {
 
 console.log(`Fetching GP data for ${pairs.length} SOCRATES pairs...`);
 console.log(`Output: ${DATA_DIR}`);
+console.log(`Cache: ${CACHE_DIR}`);
 console.log(`Rate: ${RATE_MS}ms between requests (${(1000/RATE_MS).toFixed(0)}/sec)\n`);
 
 let downloaded = 0, cached = 0, errors = 0;
@@ -70,9 +77,15 @@ for (let i = 0; i < pairs.length; i++) {
 
   const url = `https://celestrak.org/SOCRATES/data.php?CATNR=${id1},${id2}&FORMAT=json`;
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
+    const { text } = await fetchCachedText(url, {
+      cacheDir: CACHE_DIR,
+      extension: 'json',
+      forceRefresh: FORCE_REFRESH,
+      headers: {
+        'user-agent': 'OrbPro-SOCRATES-Validation/1.0',
+        accept: 'application/json, */*;q=0.1',
+      },
+    });
     const data = JSON.parse(text);
     if (!data || data.length < 2) throw new Error(`Only ${data?.length || 0} objects`);
     writeFileSync(outFile, text);
