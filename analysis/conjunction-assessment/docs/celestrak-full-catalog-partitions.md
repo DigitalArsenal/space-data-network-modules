@@ -135,6 +135,11 @@ not emit the same retry range again. It reports that range in
 `irreducibleTimeoutRanges` and increments `irreducibleTimeoutPartitions` so the
 worker pool can quarantine that object pair for diagnostics instead of looping
 forever.
+Pass that manifest back into later retry execution with `--quarantine-plan`.
+Matching explicit block-pair ranges are skipped and recorded in
+`quarantinedRanges` / `aggregate.quarantinedPartitions`; they are not counted as
+successful conjunction screens, and they remain auditable exceptions that need a
+human policy decision or lower-level propagation diagnostics.
 
 To execute one retry child range directly:
 
