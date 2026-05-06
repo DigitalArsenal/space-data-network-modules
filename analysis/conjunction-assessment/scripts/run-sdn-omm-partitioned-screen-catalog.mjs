@@ -1016,6 +1016,9 @@ async function writeTimeoutRetryPlan(options) {
       partition.statusCode === 124 &&
       partition.primaryStartOrderIndex !== undefined,
   );
+  const terminalTimeoutPartitions = timeoutPartitions.filter(
+    (partition) => !hasCompleteDescendantCoverage(partition, partitions),
+  );
   const minCatalogBlockSize = options.minCatalogBlockSize ?? 100;
   const ranges = planTimedOutBlockPairSubdivisions({
     partitions,
@@ -1026,6 +1029,7 @@ async function writeTimeoutRetryPlan(options) {
     checkpointDir: path.resolve(options.checkpointDir),
     minCatalogBlockSize,
     timeoutPartitions: timeoutPartitions.length,
+    terminalTimeoutPartitions: terminalTimeoutPartitions.length,
     retryRanges: ranges.length,
     ranges,
   };
@@ -1264,6 +1268,9 @@ export function planTimedOutBlockPairSubdivisions({
     if (partition.primaryStartOrderIndex === undefined) {
       continue;
     }
+    if (hasCompleteDescendantCoverage(partition, partitions)) {
+      continue;
+    }
     const primaryRanges = splitRetryRange(
       partition.primaryStartOrderIndex,
       partition.primaryEndOrderIndex,
@@ -1299,6 +1306,73 @@ export function planTimedOutBlockPairSubdivisions({
     }
   }
   return retryRanges;
+}
+
+function hasCompleteDescendantCoverage(partition, partitions) {
+  if (partition.diagonal) {
+    return false;
+  }
+  const descendants = partitions.filter(
+    (candidate) =>
+      candidate !== partition &&
+      candidate.parentPartitionIndex === partition.partitionIndex &&
+      candidate.primaryStartOrderIndex !== undefined &&
+      candidate.primaryStartOrderIndex >= partition.primaryStartOrderIndex &&
+      candidate.primaryEndOrderIndex <= partition.primaryEndOrderIndex &&
+      candidate.secondaryStartOrderIndex >= partition.secondaryStartOrderIndex &&
+      candidate.secondaryEndOrderIndex <= partition.secondaryEndOrderIndex &&
+      (candidate.primaryStartOrderIndex > partition.primaryStartOrderIndex ||
+        candidate.primaryEndOrderIndex < partition.primaryEndOrderIndex ||
+        candidate.secondaryStartOrderIndex > partition.secondaryStartOrderIndex ||
+        candidate.secondaryEndOrderIndex < partition.secondaryEndOrderIndex),
+  );
+  if (descendants.length === 0) {
+    return false;
+  }
+
+  const primaryCuts = [
+    partition.primaryStartOrderIndex,
+    partition.primaryEndOrderIndex,
+  ];
+  const secondaryCuts = [
+    partition.secondaryStartOrderIndex,
+    partition.secondaryEndOrderIndex,
+  ];
+  for (const descendant of descendants) {
+    primaryCuts.push(
+      descendant.primaryStartOrderIndex,
+      descendant.primaryEndOrderIndex,
+    );
+    secondaryCuts.push(
+      descendant.secondaryStartOrderIndex,
+      descendant.secondaryEndOrderIndex,
+    );
+  }
+  const primaryEdges = [...new Set(primaryCuts)].sort((left, right) => left - right);
+  const secondaryEdges = [...new Set(secondaryCuts)].sort((left, right) => left - right);
+  for (let primaryIndex = 0; primaryIndex < primaryEdges.length - 1; primaryIndex += 1) {
+    const primaryStart = primaryEdges[primaryIndex];
+    const primaryEnd = primaryEdges[primaryIndex + 1];
+    for (
+      let secondaryIndex = 0;
+      secondaryIndex < secondaryEdges.length - 1;
+      secondaryIndex += 1
+    ) {
+      const secondaryStart = secondaryEdges[secondaryIndex];
+      const secondaryEnd = secondaryEdges[secondaryIndex + 1];
+      const covered = descendants.some(
+        (descendant) =>
+          descendant.primaryStartOrderIndex <= primaryStart &&
+          descendant.primaryEndOrderIndex >= primaryEnd &&
+          descendant.secondaryStartOrderIndex <= secondaryStart &&
+          descendant.secondaryEndOrderIndex >= secondaryEnd,
+      );
+      if (!covered) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function splitRetryRange(start, end, minimum) {
