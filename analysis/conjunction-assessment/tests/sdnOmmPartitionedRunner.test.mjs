@@ -13,6 +13,7 @@ import { conjunctionArtifactExists } from "./lib/conjunctionCommandHarness.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 import {
   buildPartitionedRunProvenance,
+  invokeWithTimeout,
   loadPartitionCheckpoints,
   planCatalogBlockPairWork,
   planPartitionWork,
@@ -25,6 +26,20 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
+
+test("partition invocation timeout fails bounded work instead of waiting forever", async () => {
+  await assert.rejects(
+    () => invokeWithTimeout(() => new Promise(() => {}), 5, "partition 4"),
+    /partition 4 timed out after 5 ms/,
+  );
+
+  const result = await invokeWithTimeout(
+    () => Promise.resolve({ statusCode: 0 }),
+    50,
+    "partition 5",
+  );
+  assert.deepEqual(result, { statusCode: 0 });
+});
 
 test("partitioned runner can resume from successful checkpoints and schedule only pending work", async (t) => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-resume-"));
@@ -408,6 +423,8 @@ test("partitioned runner can write resumable block-pair shard commands without i
     catalogPath,
     "--catalog-block-size",
     "2",
+    "--partition-timeout-ms",
+    "1234",
     "--partition-shard-count",
     "3",
     "--checkpoint-dir",
@@ -447,6 +464,7 @@ test("partitioned runner can write resumable block-pair shard commands without i
   assert.match(script, /--partition-shard-index 1/);
   assert.match(script, /--partition-shard-index 2/);
   assert.match(script, /--catalog-block-size 2/);
+  assert.match(script, /--partition-timeout-ms 1234/);
   assert.match(script, /--resume/);
   assert.match(script, /summary-shard-000.json/);
 });
