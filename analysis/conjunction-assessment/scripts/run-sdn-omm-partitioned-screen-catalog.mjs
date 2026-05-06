@@ -1362,7 +1362,9 @@ export async function runPartitionedSdnOmmCatalog(options) {
       ? await loadPartitionCheckpoints(options.checkpointDir)
       : { completedPartitions: [] };
   const partitionMode =
-    options.catalogBlockSize === null ? "ordered-primary" : "catalog-block-pair";
+    hasExplicitBlockPairRange(options) || options.catalogBlockSize !== null
+      ? "catalog-block-pair"
+      : "ordered-primary";
   const workPlan =
     hasExplicitBlockPairRange(options)
       ? planExplicitBlockPairWork({
