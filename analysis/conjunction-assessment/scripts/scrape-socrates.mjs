@@ -24,6 +24,10 @@
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  defaultCelestrakCacheDir,
+  fetchCachedText,
+} from './lib/celestrakFetchCache.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'tests', 'data');
@@ -40,6 +44,8 @@ const getArg = (name, def) => {
 const TOP = parseInt(getArg('--top', '10'));
 const SORT = getArg('--sort', 'maxProb');
 const FETCH_GP = getArg('--fetch-gp', null);
+const CACHE_DIR = getArg('--cache-dir', defaultCelestrakCacheDir());
+const FORCE_REFRESH = args.includes('--force-refresh');
 
 function parseCSV(text) {
   const lines = text.trim().split('\n');
@@ -67,15 +73,21 @@ async function fetchCSV() {
   const csvFile = sortMap[SORT] || sortMap.maxProb;
   const url = `${BASE_URL}/${csvFile}`;
 
-  console.log(`Fetching ${url}...`);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
+  console.log(`Fetching ${url} with cache ${CACHE_DIR}...`);
+  const { text, cacheHit } = await fetchCachedText(url, {
+    cacheDir: CACHE_DIR,
+    extension: 'csv',
+    forceRefresh: FORCE_REFRESH,
+    headers: {
+      'user-agent': 'OrbPro-SOCRATES-Validation/1.0',
+      accept: 'text/csv, text/plain;q=0.9, */*;q=0.1',
+    },
+  });
 
   mkdirSync(DATA_DIR, { recursive: true });
   const outPath = join(DATA_DIR, `socrates_${SORT}.csv`);
   writeFileSync(outPath, text);
-  console.log(`Saved ${outPath} (${text.split('\n').length} rows)`);
+  console.log(`Saved ${outPath} (${text.split('\n').length} rows, cache ${cacheHit ? 'hit' : 'miss'})`);
   return text;
 }
 
@@ -105,9 +117,15 @@ async function fetchGPData(conjunctions) {
 
       const gpUrl = `${BASE_URL}/data.php?CATNR=${id1},${id2}${fmt.param}`;
       try {
-        const res = await fetch(gpUrl);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const gpText = await res.text();
+        const { text: gpText } = await fetchCachedText(gpUrl, {
+          cacheDir: CACHE_DIR,
+          extension: fmt.ext,
+          forceRefresh: FORCE_REFRESH,
+          headers: {
+            'user-agent': 'OrbPro-SOCRATES-Validation/1.0',
+            accept: fmt.ext === 'json' ? 'application/json, */*;q=0.1' : '*/*',
+          },
+        });
         writeFileSync(gpPath, gpText);
       } catch (e) {
         console.error(`  [${i + 1}] ${id1},${id2}.${fmt.ext} — ✗ ${e.message}`);
