@@ -15,6 +15,7 @@ import {
   buildPartitionedRunProvenance,
   invokeWithTimeout,
   loadPartitionCheckpoints,
+  planExplicitBlockPairWork,
   planCatalogBlockPairWork,
   planTimedOutBlockPairSubdivisions,
   planPartitionWork,
@@ -81,6 +82,31 @@ test("timed-out block-pair checkpoints split into smaller retry ranges", () => {
       [4, 250, 500, 2250, 2500, 250],
     ],
   );
+});
+
+test("explicit block-pair planner schedules a single retry child range", () => {
+  const plan = planExplicitBlockPairWork({
+    primaryStartOrderIndex: 0,
+    primaryEndOrderIndex: 250,
+    secondaryStartOrderIndex: 2000,
+    secondaryEndOrderIndex: 2250,
+    partitionIndex: 4,
+    parentPartitionIndex: 4,
+    resume: false,
+  });
+
+  assert.deepEqual(plan.pendingRanges, [
+    {
+      partitionIndex: 4,
+      parentPartitionIndex: 4,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 250,
+      secondaryStartOrderIndex: 2000,
+      secondaryEndOrderIndex: 2250,
+      diagonal: false,
+    },
+  ]);
+  assert.equal(plan.complete, true);
 });
 
 test("partitioned runner can resume from successful checkpoints and schedule only pending work", async (t) => {
