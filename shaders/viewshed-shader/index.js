@@ -22,7 +22,7 @@ const defaultShaderSources = Object.freeze({
   frustumVertexSource: null,
   frustumFragmentSource: null,
   uniformsJson: JSON.stringify([
-    { name: "u_modelViewProjection", type: "mat4" },
+    { name: "u_modelView", type: "mat4" },
     { name: "u_observerPosition", type: "vec3" },
     { name: "u_range", type: "float" },
     { name: "u_viewshedMatrix", type: "mat4" },
