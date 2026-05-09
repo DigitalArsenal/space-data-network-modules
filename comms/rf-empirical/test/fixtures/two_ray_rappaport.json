@@ -1,0 +1,43 @@
+{
+  "model": "two-ray-ground",
+  "citation": "Rappaport, *Wireless Communications: Principles and Practice*, 2nd ed., §4.6.2 (Eq. 4.52)",
+  "source_tool": "Closed-form expansion of Rappaport Eq. 4.52 with breakpoint d_b = 4·h_t·h_r·f/c, evaluated at IEEE-754 double precision; c = 299792458 m/s.",
+  "source_tool_version": "n/a — closed-form constant",
+  "valid_range": {
+    "frequency_hz": [1.0e8, 6.0e9],
+    "tx_height_m": [1.0, 200.0],
+    "rx_height_m": [1.0, 10.0],
+    "range_m": [10.0, 1.0e6]
+  },
+  "tolerance_db": 1.0e-3,
+  "notes": [
+    "Below the breakpoint the model collapses to FSPL — this fixture covers both regimes (50 m short link is below breakpoint, 5/15 km links are above).",
+    "Phase 2 of the audit replaces these with Rappaport §4.10 worked examples and an independent reference."
+  ],
+  "vectors": [
+    {
+      "id": "two_ray_short_50m_h30_h2_900mhz",
+      "description": "Short link below breakpoint — falls back to FSPL",
+      "inputs": { "range_m": 50.0, "tx_height_m": 30.0, "rx_height_m": 2.0, "frequency_hz": 900.0e6 },
+      "expected": { "loss_db": 65.51203349739025 }
+    },
+    {
+      "id": "two_ray_bp_5km_h30_h2_900mhz",
+      "description": "Above breakpoint, 5 km, 900 MHz",
+      "inputs": { "range_m": 5000.0, "tx_height_m": 30.0, "rx_height_m": 2.0, "frequency_hz": 900.0e6 },
+      "expected": { "loss_db": 112.39577516576787 }
+    },
+    {
+      "id": "two_ray_long_15km_h30_h2_900mhz",
+      "description": "Long link, 15 km, 900 MHz",
+      "inputs": { "range_m": 15000.0, "tx_height_m": 30.0, "rx_height_m": 2.0, "frequency_hz": 900.0e6 },
+      "expected": { "loss_db": 131.48062535455438 }
+    },
+    {
+      "id": "two_ray_satlink_800km_h30_h2_2_4ghz",
+      "description": "Long-range scenario well above breakpoint at 2.4 GHz",
+      "inputs": { "range_m": 800000.0, "tx_height_m": 30.0, "rx_height_m": 2.0, "frequency_hz": 2.4e9 },
+      "expected": { "loss_db": 200.56057447200487 }
+    }
+  ]
+}

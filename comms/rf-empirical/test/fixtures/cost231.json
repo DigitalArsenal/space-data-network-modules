@@ -1,0 +1,37 @@
+{
+  "model": "cost231-hata",
+  "citation": "COST 231 Final Report 1999 §4.4.3 (Eq. 4.4.3)",
+  "source_tool": "Closed-form COST-231 equation evaluated at IEEE-754 double precision.",
+  "source_tool_version": "n/a — closed-form constant",
+  "valid_range": {
+    "frequency_mhz": [1500.0, 2000.0],
+    "tx_height_m": [30.0, 200.0],
+    "rx_height_m": [1.0, 10.0],
+    "range_km": [1.0, 20.0]
+  },
+  "tolerance_db": 1.0e-3,
+  "notes": [
+    "Metropolitan-area correction is exactly +3 dB; suburban is 0 dB. Both are exercised below.",
+    "Phase 2 of the audit replaces these with COST 231 §4.4.3 worked examples and Rappaport §4.10 cross-references."
+  ],
+  "vectors": [
+    {
+      "id": "cost231_metro_1800mhz_5km_h50_h2",
+      "metropolitan": true,
+      "inputs": { "frequency_mhz": 1800.0, "tx_height_m": 50.0, "rx_height_m": 2.0, "range_km": 5.0 },
+      "expected": { "loss_db": 158.2960358375007 }
+    },
+    {
+      "id": "cost231_suburban_1800mhz_5km_h50_h2",
+      "metropolitan": false,
+      "inputs": { "frequency_mhz": 1800.0, "tx_height_m": 50.0, "rx_height_m": 2.0, "range_km": 5.0 },
+      "expected": { "loss_db": 155.2960358375007 }
+    },
+    {
+      "id": "cost231_metro_2000mhz_2km_h30_h1_5",
+      "metropolitan": true,
+      "inputs": { "frequency_mhz": 2000.0, "tx_height_m": 30.0, "rx_height_m": 1.5, "range_km": 2.0 },
+      "expected": { "loss_db": 151.34774659636872 }
+    }
+  ]
+}
