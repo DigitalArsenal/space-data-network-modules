@@ -1,0 +1,43 @@
+{
+  "model": "fspl",
+  "citation": "ITU-R P.525-4 §6.1; Friis IRE Proc. May 1946",
+  "source_tool": "ITU-R P.525-4 §6.1 closed-form expansion (32.44778322188337 + 20·log10(d_km) + 20·log10(f_MHz))",
+  "source_tool_version": "n/a — closed-form constant",
+  "valid_range": {
+    "frequency_hz": [1.0e6, 3.0e11],
+    "range_m": [1.0, 1.0e9]
+  },
+  "tolerance_db": 1.0e-3,
+  "notes": [
+    "Phase 2 deliverable — these values will be regenerated from the Python `itur` library and ITU-R P.525-4 §6.2 worked examples once the fixture-generation script lands at tools/rf-fixtures/gen_itur.py.",
+    "Until then, expected values are computed from the closed-form ITU constant 32.44778322188337 = 20·log10(4π·1e9/c) at full IEEE-754 double precision.",
+    "Tolerance is 1e-3 dB so the same fixture passes against both the closed-form constant and any external library that uses the rounded ITU constant 32.4 or 32.45."
+  ],
+  "vectors": [
+    {
+      "id": "p525_1km_1ghz",
+      "inputs": { "range_m": 1000.0, "frequency_hz": 1.0e9 },
+      "expected": { "loss_db": 92.44778322188337 }
+    },
+    {
+      "id": "p525_10km_2_4ghz",
+      "inputs": { "range_m": 10000.0, "frequency_hz": 2.4e9 },
+      "expected": { "loss_db": 120.0520080561155 }
+    },
+    {
+      "id": "p525_100km_12ghz",
+      "inputs": { "range_m": 100000.0, "frequency_hz": 12.0e9 },
+      "expected": { "loss_db": 154.03140814283586 }
+    },
+    {
+      "id": "p525_1km_900mhz",
+      "inputs": { "range_m": 1000.0, "frequency_hz": 900.0e6 },
+      "expected": { "loss_db": 91.53263341066987 }
+    },
+    {
+      "id": "p525_500km_20ghz",
+      "inputs": { "range_m": 500000.0, "frequency_hz": 20.0e9 },
+      "expected": { "loss_db": 172.44778322188338 }
+    }
+  ]
+}

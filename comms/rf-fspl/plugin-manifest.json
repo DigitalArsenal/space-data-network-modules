@@ -1,0 +1,82 @@
+{
+  "pluginId": "com.orbpro.rf-fspl",
+  "name": "RF Free-Space Path Loss",
+  "version": "0.1.0",
+  "pluginFamily": "comms",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "node"],
+  "methods": [
+    {
+      "methodId": "compute_fspl",
+      "displayName": "Compute Free-Space Path Loss",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "comms.rf-fspl-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.comms.rf.FsplRequest",
+                  "fileIdentifier": "RFFR"
+                }
+              ],
+              "description": "Aligned-binary FSPL request frames (range_m: f64, frequency_hz: f64)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Aligned-binary FSPL inputs."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "comms.rf-fspl-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.comms.rf.FsplResult",
+                  "fileIdentifier": "RFFS"
+                }
+              ],
+              "description": "Aligned-binary FSPL result frames (loss_db: f64)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Aligned-binary FSPL outputs."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Computes Friis / ITU-R P.525-4 free-space path loss for a (range, frequency) pair."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [
+    {
+      "schemaName": "orbpro.comms.rf.FsplRequest",
+      "fileIdentifier": "RFFR"
+    },
+    {
+      "schemaName": "orbpro.comms.rf.FsplResult",
+      "fileIdentifier": "RFFS"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "rf-fspl-runtime",
+      "kind": "javascript-runtime",
+      "path": "index.js",
+      "target": "web,worker,node"
+    }
+  ],
+  "abiVersion": 1
+}
