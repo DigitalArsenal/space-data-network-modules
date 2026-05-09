@@ -1,0 +1,74 @@
+{
+  "pluginId": "com.orbpro.rf-diffraction",
+  "name": "RF Diffraction (ITU-R P.526)",
+  "version": "0.1.0",
+  "pluginFamily": "comms",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "node"],
+  "methods": [
+    {
+      "methodId": "compute_curvature_drop",
+      "displayName": "Compute Earth-Curvature Drop",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionRequest", "fileIdentifier": "RDFR" }], "description": "Aligned-binary diffraction request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionResult", "fileIdentifier": "RDFS" }], "description": "Aligned-binary diffraction result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Earth-bulge drop d²/(2·k·R_E) along a great-circle path; pass k = 0 to disable."
+    },
+    {
+      "methodId": "compute_fresnel_kirchhoff_v",
+      "displayName": "Compute Fresnel-Kirchhoff Parameter from Clearance",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionRequest", "fileIdentifier": "RDFR" }], "description": "Aligned-binary diffraction request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionResult", "fileIdentifier": "RDFS" }], "description": "Aligned-binary diffraction result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "v = h·√(2·(d1+d2)/(λ·d1·d2)) given clearance directly."
+    },
+    {
+      "methodId": "compute_knife_edge_parameter_v",
+      "displayName": "Compute Knife-Edge v from Path Profile",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionRequest", "fileIdentifier": "RDFR" }], "description": "Aligned-binary diffraction request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionResult", "fileIdentifier": "RDFS" }], "description": "Aligned-binary diffraction result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "v computed from start/end/obstacle distances and heights with optional Earth-curvature correction."
+    },
+    {
+      "methodId": "compute_knife_edge_loss",
+      "displayName": "Compute Knife-Edge Diffraction Loss",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionRequest", "fileIdentifier": "RDFR" }], "description": "Aligned-binary diffraction request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-diffraction-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.DiffractionResult", "fileIdentifier": "RDFS" }], "description": "Aligned-binary diffraction result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "ITU-R P.526-15 §4.1 Eq. (31) Vogler approximation J(v) in dB."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [
+    { "schemaName": "orbpro.comms.rf.DiffractionRequest", "fileIdentifier": "RDFR" },
+    { "schemaName": "orbpro.comms.rf.DiffractionResult", "fileIdentifier": "RDFS" }
+  ],
+  "buildArtifacts": [
+    { "artifactId": "rf-diffraction-runtime", "kind": "javascript-runtime", "path": "index.js", "target": "web,worker,node" }
+  ],
+  "abiVersion": 1
+}

@@ -1,0 +1,48 @@
+{
+  "pluginId": "com.orbpro.rf-longley-rice",
+  "name": "RF Longley-Rice (ITM)",
+  "version": "0.1.0",
+  "pluginFamily": "comms",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "node"],
+  "methods": [
+    {
+      "methodId": "is_stub",
+      "displayName": "Is Stub",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-longley-rice-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.LongleyRiceRequest", "fileIdentifier": "RLRR" }], "description": "Aligned-binary Longley-Rice request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-longley-rice-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.LongleyRiceResult", "fileIdentifier": "RLRS" }], "description": "Aligned-binary Longley-Rice result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Returns 1 while the kernel is a stub. Hosts use this to branch to the existing JS-side fallback."
+    },
+    {
+      "methodId": "compute_path_loss",
+      "displayName": "Compute Longley-Rice Path Loss",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-longley-rice-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.LongleyRiceRequest", "fileIdentifier": "RLRR" }], "description": "Aligned-binary Longley-Rice request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-longley-rice-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.LongleyRiceResult", "fileIdentifier": "RLRS" }], "description": "Aligned-binary Longley-Rice result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "NTIA-ITS Longley-Rice ITM path loss in dB (signature frozen for the future native port)."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [
+    { "schemaName": "orbpro.comms.rf.LongleyRiceRequest", "fileIdentifier": "RLRR" },
+    { "schemaName": "orbpro.comms.rf.LongleyRiceResult", "fileIdentifier": "RLRS" }
+  ],
+  "buildArtifacts": [
+    { "artifactId": "rf-longley-rice-runtime", "kind": "javascript-runtime", "path": "index.js", "target": "web,worker,node" }
+  ],
+  "abiVersion": 1
+}
