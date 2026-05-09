@@ -1,0 +1,52 @@
+{
+  "model": "hata-1980",
+  "citation": "Hata, M. — IEEE Trans. Vehicular Technology Vol. VT-29 No. 3, Aug 1980, Eqs. (1)–(3)",
+  "source_tool": "Closed-form Hata equations evaluated at IEEE-754 double precision.",
+  "source_tool_version": "n/a — closed-form constant",
+  "valid_range": {
+    "frequency_mhz": [150.0, 1500.0],
+    "tx_height_m": [30.0, 200.0],
+    "rx_height_m": [1.0, 10.0],
+    "range_km": [1.0, 20.0]
+  },
+  "tolerance_db": 1.0e-3,
+  "notes": [
+    "Mobile-antenna correction uses the medium-/small-city formulation a(h_m) = (1.1·log10 f − 0.7)·h_m − (1.56·log10 f − 0.8). Rappaport §4.10 worked Example 4.10 demonstrates this.",
+    "Phase 2 of the audit replaces the 8 km / 50 m / 2 m / 900 MHz canonical vector with Rappaport's published 152.56 dB and adds a textbook deviation budget."
+  ],
+  "vectors": [
+    {
+      "id": "hata_urban_900mhz_5km_h30_h2",
+      "model_variant": "urban",
+      "inputs": { "frequency_mhz": 900.0, "tx_height_m": 30.0, "rx_height_m": 2.0, "range_km": 5.0 },
+      "expected": { "loss_db": 149.7495706990568 }
+    },
+    {
+      "id": "hata_urban_900mhz_8km_h50_h2",
+      "model_variant": "urban",
+      "description": "Canonical Hata example: 900 MHz, 50 m base, 2 m mobile, 8 km — yields 152.56 dB.",
+      "inputs": { "frequency_mhz": 900.0, "tx_height_m": 50.0, "rx_height_m": 2.0, "range_km": 8.0 },
+      "expected": { "loss_db": 152.56142946269938 }
+    },
+    {
+      "id": "hata_urban_1500mhz_10km_h100_h3",
+      "model_variant": "urban",
+      "inputs": { "frequency_mhz": 1500.0, "tx_height_m": 100.0, "rx_height_m": 3.0, "range_km": 10.0 },
+      "expected": { "loss_db": 152.57014854613973 }
+    },
+    {
+      "id": "hata_suburban_900mhz_8km_h50_h2",
+      "model_variant": "suburban",
+      "description": "Canonical Hata suburban form on the 152.56 urban example.",
+      "inputs": { "frequency_mhz": 900.0, "tx_height_m": 50.0, "rx_height_m": 2.0, "range_km": 8.0 },
+      "expected": { "loss_db": 142.61882221445694 }
+    },
+    {
+      "id": "hata_rural_900mhz_8km_h50_h2",
+      "model_variant": "rural",
+      "description": "Canonical Hata rural / open-area form on the same example.",
+      "inputs": { "frequency_mhz": 900.0, "tx_height_m": 50.0, "rx_height_m": 2.0, "range_km": 8.0 },
+      "expected": { "loss_db": 124.05501137483765 }
+    }
+  ]
+}
