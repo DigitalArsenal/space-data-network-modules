@@ -1,0 +1,61 @@
+{
+  "pluginId": "com.orbpro.rf-rain",
+  "name": "RF Rain Attenuation",
+  "version": "0.1.0",
+  "pluginFamily": "comms",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "node"],
+  "methods": [
+    {
+      "methodId": "compute_specific_attenuation",
+      "displayName": "Compute Specific Rain Attenuation",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-rain-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.RainRequest", "fileIdentifier": "RNRR" }], "description": "Aligned-binary rain-attenuation request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-rain-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.RainResult", "fileIdentifier": "RNRS" }], "description": "Aligned-binary rain-attenuation result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "ITU-R P.838-3 §1: γ_R = k(f, θ, τ) · R^α(f, θ, τ) in dB/km."
+    },
+    {
+      "methodId": "compute_attenuation_p530",
+      "displayName": "Compute Path Rain Attenuation (P.530-18)",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-rain-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.RainRequest", "fileIdentifier": "RNRR" }], "description": "Aligned-binary rain-attenuation request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-rain-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.RainResult", "fileIdentifier": "RNRS" }], "description": "Aligned-binary rain-attenuation result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "ITU-R P.530-18 §2.4 terrestrial LOS reduction: A = γ_R·d/(1+0.045·d) in dB."
+    },
+    {
+      "methodId": "compute_attenuation_crane",
+      "displayName": "Compute Path Rain Attenuation (Crane)",
+      "inputPorts": [
+        { "portId": "request", "acceptedTypeSets": [{ "setId": "comms.rf-rain-request", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.RainRequest", "fileIdentifier": "RNRR" }], "description": "Aligned-binary rain-attenuation request frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary inputs." }
+      ],
+      "outputPorts": [
+        { "portId": "result", "acceptedTypeSets": [{ "setId": "comms.rf-rain-result", "allowedTypes": [{ "schemaName": "orbpro.comms.rf.RainResult", "fileIdentifier": "RNRS" }], "description": "Aligned-binary rain-attenuation result frames." }], "minStreams": 1, "maxStreams": 65535, "required": true, "description": "Aligned-binary outputs." }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield",
+      "description": "Crane 1980 piecewise-exponential rain attenuation in dB; path clamped at 22.5 km."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "schemasUsed": [
+    { "schemaName": "orbpro.comms.rf.RainRequest", "fileIdentifier": "RNRR" },
+    { "schemaName": "orbpro.comms.rf.RainResult", "fileIdentifier": "RNRS" }
+  ],
+  "buildArtifacts": [
+    { "artifactId": "rf-rain-runtime", "kind": "javascript-runtime", "path": "index.js", "target": "web,worker,node" }
+  ],
+  "abiVersion": 1
+}
