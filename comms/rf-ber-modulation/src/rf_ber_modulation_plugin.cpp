@@ -33,7 +33,7 @@ constexpr double kPi = 3.141592653589793238462643383279502884;
 
 bool g_initialized = false;
 
-inline bool finite(double v) { return std::isfinite(v); }
+inline bool isFiniteD(double v) { return std::isfinite(v); }
 
 // Numerical Recipes §6.2 erfcc — same coefficients as the JS port.
 double erfc_chebyshev(double x) {
@@ -74,7 +74,7 @@ void plugin_destroy(void) {
 // approximation; ~7 digits of accuracy.
 ORBPRO_EXPORT
 double rf_erfc(double x) {
-  if (!finite(x)) return 0.0;
+  if (!isFiniteD(x)) return 0.0;
   return erfc_chebyshev(x);
 }
 
@@ -83,9 +83,9 @@ double rf_erfc(double x) {
 // as the JS calculateBER default branch.
 ORBPRO_EXPORT
 double rf_ber_from_ebno(double ebno_db, int32_t modulation_code) {
-  if (!finite(ebno_db)) return 0.5;
+  if (!isFiniteD(ebno_db)) return 0.5;
   const double ebnoLinear = std::pow(10.0, ebno_db / 10.0);
-  if (!finite(ebnoLinear) || ebnoLinear <= 0.0) return 0.5;
+  if (!isFiniteD(ebnoLinear) || ebnoLinear <= 0.0) return 0.5;
 
   switch (modulation_code) {
     case 0:   // BPSK

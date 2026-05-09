@@ -35,7 +35,7 @@ namespace {
 
 bool g_initialized = false;
 
-inline bool finite(double v) { return std::isfinite(v); }
+inline bool isFiniteD(double v) { return std::isfinite(v); }
 
 }  // namespace
 
@@ -111,8 +111,8 @@ double rf_longley_rice_path_loss_db(
   (void)location_percent;
   (void)situation_percent;
 
-  if (!finite(distance_km) || !finite(frequency_mhz) ||
-      !finite(tx_height_m) || !finite(rx_height_m)) {
+  if (!isFiniteD(distance_km) || !isFiniteD(frequency_mhz) ||
+      !isFiniteD(tx_height_m) || !isFiniteD(rx_height_m)) {
     return 0.0;
   }
 

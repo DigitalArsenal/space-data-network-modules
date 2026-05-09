@@ -1,0 +1,40 @@
+{
+  "pluginId": "com.orbpro.rf-rain",
+  "name": "RF Rain Attenuation",
+  "version": "0.1.0",
+  "type": "Comms",
+  "encrypted": false,
+  "requiresProtection": false,
+  "description": "ITU-R P.838-3 specific attenuation, ITU-R P.530-18 terrestrial path reduction, and Crane 1980 piecewise-exponential rain attenuation.",
+  "wasmModule": {
+    "file": "rf-rain.wasm",
+    "loader": "rf-rain.mjs",
+    "hash": "61d15cf8c6f0b5031a7666a9eda7361b5ee6afac115d996757a6e76661bd0d00",
+    "exports": [
+      "plugin_init",
+      "plugin_destroy",
+      "rf_rain_specific_attenuation_db_per_km",
+      "rf_rain_attenuation_db",
+      "rf_rain_attenuation_crane_db",
+      "rf_rain_plugin_manifest_bytes",
+      "rf_rain_plugin_manifest_size",
+      "malloc",
+      "free"
+    ]
+  },
+  "embeddedManifest": {
+    "file": "plugin-manifest.fb",
+    "fileIdentifier": "PMAN",
+    "bytesSymbol": "rf_rain_plugin_manifest_bytes",
+    "sizeSymbol": "rf_rain_plugin_manifest_size"
+  },
+  "publication": {
+    "envelope": "sds-rec",
+    "payloadFile": "rf-rain.wasm",
+    "recordCollectionFile": "rf-rain.publication-records.fb",
+    "recordTypes": [
+      "PNM"
+    ],
+    "payloadEncrypted": false
+  }
+}

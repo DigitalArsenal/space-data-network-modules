@@ -43,7 +43,7 @@ constexpr double kLn2Recip = 1.4426950408889634;  // 1 / ln(2)
 
 bool g_initialized = false;
 
-inline bool finite(double v) { return std::isfinite(v); }
+inline bool isFiniteD(double v) { return std::isfinite(v); }
 
 }  // namespace
 
@@ -66,8 +66,8 @@ void plugin_destroy(void) {
 ORBPRO_EXPORT
 double rf_link_eirp_dbw(
     double tx_power_w, double tx_gain_dbi, double tx_line_loss_db) {
-  if (!finite(tx_power_w) || !finite(tx_gain_dbi) ||
-      !finite(tx_line_loss_db)) {
+  if (!isFiniteD(tx_power_w) || !isFiniteD(tx_gain_dbi) ||
+      !isFiniteD(tx_line_loss_db)) {
     return 0.0;
   }
   if (tx_power_w <= 0.0) return 0.0;
@@ -81,8 +81,8 @@ double rf_link_noise_power_dbw(
     double system_temp_k,
     double bandwidth_hz,
     double rx_noise_figure_db) {
-  if (!finite(system_temp_k) || !finite(bandwidth_hz) ||
-      !finite(rx_noise_figure_db)) {
+  if (!isFiniteD(system_temp_k) || !isFiniteD(bandwidth_hz) ||
+      !isFiniteD(rx_noise_figure_db)) {
     return 0.0;
   }
   if (system_temp_k <= 0.0 || bandwidth_hz <= 0.0) return 0.0;
@@ -95,7 +95,7 @@ double rf_link_noise_power_dbw(
 // self-contained even if rf-fspl is not loaded.
 ORBPRO_EXPORT
 double rf_link_free_space_loss_db(double range_m, double frequency_hz) {
-  if (!finite(range_m) || !finite(frequency_hz)) return 0.0;
+  if (!isFiniteD(range_m) || !isFiniteD(frequency_hz)) return 0.0;
   if (range_m <= 0.0 || frequency_hz <= 0.0) return 0.0;
   const double wavelength = kSpeedOfLight / frequency_hz;
   return 20.0 * std::log10((4.0 * kPi * range_m) / wavelength);
@@ -112,8 +112,8 @@ double rf_link_free_space_loss_db(double range_m, double frequency_hz) {
 ORBPRO_EXPORT
 double rf_link_ebno_db(
     double snr_db, double bandwidth_hz, double symbol_rate_hz) {
-  if (!finite(snr_db)) return 0.0;
-  if (!finite(bandwidth_hz) || !finite(symbol_rate_hz) ||
+  if (!isFiniteD(snr_db)) return 0.0;
+  if (!isFiniteD(bandwidth_hz) || !isFiniteD(symbol_rate_hz) ||
       bandwidth_hz <= 0.0 || symbol_rate_hz <= 0.0) {
     return snr_db;  // Legacy fallback: behaves as the old
                     // (incorrect) Eb/N0 = SNR identity.
@@ -124,7 +124,7 @@ double rf_link_ebno_db(
 // Shannon channel capacity in bps. SNR provided in dB.
 ORBPRO_EXPORT
 double rf_link_capacity_bps(double bandwidth_hz, double snr_db) {
-  if (!finite(bandwidth_hz) || !finite(snr_db)) return 0.0;
+  if (!isFiniteD(bandwidth_hz) || !isFiniteD(snr_db)) return 0.0;
   if (bandwidth_hz <= 0.0) return 0.0;
   const double snrLinear = std::pow(10.0, snr_db / 10.0);
   return bandwidth_hz * std::log(1.0 + snrLinear) * kLn2Recip;
