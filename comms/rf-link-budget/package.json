@@ -1,0 +1,26 @@
+{
+  "name": "space-data-network-plugin-rf-link-budget",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "index.js",
+    "manifest.js",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "^0.8.4"
+  }
+}
