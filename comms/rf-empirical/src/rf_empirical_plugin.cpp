@@ -37,7 +37,7 @@ constexpr double kPi = 3.141592653589793238462643383279502884;
 
 bool g_initialized = false;
 
-inline bool finite(double v) {
+inline bool isFiniteD(double v) {
   return std::isfinite(v);
 }
 
@@ -85,8 +85,8 @@ double rf_two_ray_ground_loss_db(
     double tx_height_m,
     double rx_height_m,
     double frequency_hz) {
-  if (!finite(range_m) || !finite(tx_height_m) ||
-      !finite(rx_height_m) || !finite(frequency_hz)) {
+  if (!isFiniteD(range_m) || !isFiniteD(tx_height_m) ||
+      !isFiniteD(rx_height_m) || !isFiniteD(frequency_hz)) {
     return 0.0;
   }
   if (range_m <= 0.0 || tx_height_m <= 0.0 ||
@@ -116,8 +116,8 @@ double rf_hata_urban_loss_db(
     double tx_height_m,
     double rx_height_m,
     double range_km) {
-  if (!finite(frequency_mhz) || !finite(tx_height_m) ||
-      !finite(rx_height_m) || !finite(range_km)) {
+  if (!isFiniteD(frequency_mhz) || !isFiniteD(tx_height_m) ||
+      !isFiniteD(rx_height_m) || !isFiniteD(range_km)) {
     return 0.0;
   }
   if (frequency_mhz <= 0.0 || tx_height_m <= 0.0 ||
@@ -177,8 +177,8 @@ double rf_cost231_loss_db(
     double rx_height_m,
     double range_km,
     int32_t metropolitan) {
-  if (!finite(frequency_mhz) || !finite(tx_height_m) ||
-      !finite(rx_height_m) || !finite(range_km)) {
+  if (!isFiniteD(frequency_mhz) || !isFiniteD(tx_height_m) ||
+      !isFiniteD(rx_height_m) || !isFiniteD(range_km)) {
     return 0.0;
   }
   if (frequency_mhz <= 0.0 || tx_height_m <= 0.0 ||

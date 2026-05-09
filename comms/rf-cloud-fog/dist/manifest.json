@@ -1,0 +1,39 @@
+{
+  "pluginId": "com.orbpro.rf-cloud-fog",
+  "name": "RF Cloud / Fog Attenuation",
+  "version": "0.1.0",
+  "type": "Comms",
+  "encrypted": false,
+  "requiresProtection": false,
+  "description": "ITU-R P.840-9 Annex 1 cloud / fog liquid-water absorption (double-Debye permittivity).",
+  "wasmModule": {
+    "file": "rf-cloud-fog.wasm",
+    "loader": "rf-cloud-fog.mjs",
+    "hash": "1fce993d3251e396b16549ca802a212fca52a3d8f6a61e72e1cc3bad3ebc16fa",
+    "exports": [
+      "plugin_init",
+      "plugin_destroy",
+      "rf_cloud_specific_attenuation_coeff",
+      "rf_cloud_attenuation_db",
+      "rf_cloud_fog_plugin_manifest_bytes",
+      "rf_cloud_fog_plugin_manifest_size",
+      "malloc",
+      "free"
+    ]
+  },
+  "embeddedManifest": {
+    "file": "plugin-manifest.fb",
+    "fileIdentifier": "PMAN",
+    "bytesSymbol": "rf_cloud_fog_plugin_manifest_bytes",
+    "sizeSymbol": "rf_cloud_fog_plugin_manifest_size"
+  },
+  "publication": {
+    "envelope": "sds-rec",
+    "payloadFile": "rf-cloud-fog.wasm",
+    "recordCollectionFile": "rf-cloud-fog.publication-records.fb",
+    "recordTypes": [
+      "PNM"
+    ],
+    "payloadEncrypted": false
+  }
+}

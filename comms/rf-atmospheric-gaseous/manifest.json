@@ -1,0 +1,41 @@
+{
+  "pluginId": "com.orbpro.rf-atmospheric-gaseous",
+  "name": "RF Atmospheric (Gaseous) Absorption",
+  "version": "0.1.0",
+  "type": "Comms",
+  "encrypted": false,
+  "requiresProtection": false,
+  "description": "Simplified single-Lorentzian oxygen + water-vapor gaseous absorption (RfCommsCore.js port). NOT ITU-R P.676-13 conformant — Phase 2 of the audit characterizes deviation against P.676 reference values.",
+  "wasmModule": {
+    "file": "rf-atmospheric-gaseous.wasm",
+    "loader": "rf-atmospheric-gaseous.mjs",
+    "hash": "29794e1e33a8da72df0c96dd27d4843f649ab814423dacdd70f2aed668ec54c1",
+    "exports": [
+      "plugin_init",
+      "plugin_destroy",
+      "rf_oxygen_specific_attenuation_db_per_km",
+      "rf_water_vapor_specific_attenuation_db_per_km",
+      "rf_atmospheric_absorption_db",
+      "rf_saturation_vapor_pressure_hpa",
+      "rf_atmospheric_gaseous_plugin_manifest_bytes",
+      "rf_atmospheric_gaseous_plugin_manifest_size",
+      "malloc",
+      "free"
+    ]
+  },
+  "embeddedManifest": {
+    "file": "plugin-manifest.fb",
+    "fileIdentifier": "PMAN",
+    "bytesSymbol": "rf_atmospheric_gaseous_plugin_manifest_bytes",
+    "sizeSymbol": "rf_atmospheric_gaseous_plugin_manifest_size"
+  },
+  "publication": {
+    "envelope": "sds-rec",
+    "payloadFile": "rf-atmospheric-gaseous.wasm",
+    "recordCollectionFile": "rf-atmospheric-gaseous.publication-records.fb",
+    "recordTypes": [
+      "PNM"
+    ],
+    "payloadEncrypted": false
+  }
+}

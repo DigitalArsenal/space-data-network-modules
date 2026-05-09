@@ -18,6 +18,7 @@
 
 #include "orbpro_plugin.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstddef>
@@ -26,7 +27,7 @@ namespace {
 
 bool g_initialized = false;
 
-inline bool finite(double v) { return std::isfinite(v); }
+inline bool isFiniteD(double v) { return std::isfinite(v); }
 
 // Mass-specific liquid-water attenuation coefficient K_l (dB/km per g/m³)
 // from the double-Debye dispersion form of ITU-R P.840-9 Annex 1.
@@ -75,7 +76,7 @@ void plugin_destroy(void) {
 ORBPRO_EXPORT
 double rf_cloud_specific_attenuation_coeff(
     double frequency_ghz, double temperature_c) {
-  if (!finite(frequency_ghz) || !finite(temperature_c)) return 0.0;
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(temperature_c)) return 0.0;
   return cloud_liquid_water_K_l(frequency_ghz, temperature_c + 273.15);
 }
 
@@ -88,8 +89,8 @@ double rf_cloud_attenuation_db(
     double temperature_c,
     double liquid_water_density_g_per_m3,
     double path_km) {
-  if (!finite(frequency_ghz) || !finite(temperature_c) ||
-      !finite(liquid_water_density_g_per_m3) || !finite(path_km)) {
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(temperature_c) ||
+      !isFiniteD(liquid_water_density_g_per_m3) || !isFiniteD(path_km)) {
     return 0.0;
   }
   if (frequency_ghz <= 0.0 || path_km <= 0.0 ||

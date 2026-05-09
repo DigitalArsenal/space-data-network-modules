@@ -42,7 +42,7 @@ constexpr double kEarthRadiusMeters = 6371000.0;
 
 bool g_initialized = false;
 
-inline bool finite(double v) { return std::isfinite(v); }
+inline bool isFiniteD(double v) { return std::isfinite(v); }
 
 inline double curvature_drop(double distance_m,
                              double effective_earth_radius_factor) {
@@ -77,7 +77,7 @@ ORBPRO_EXPORT
 double rf_curvature_drop_m(
     double distance_m,
     double effective_earth_radius_factor) {
-  if (!finite(distance_m) || !finite(effective_earth_radius_factor)) {
+  if (!isFiniteD(distance_m) || !isFiniteD(effective_earth_radius_factor)) {
     return 0.0;
   }
   return curvature_drop(distance_m, effective_earth_radius_factor);
@@ -94,8 +94,8 @@ double rf_fresnel_kirchhoff_v(
     double d1_m,
     double d2_m,
     double wavelength_m) {
-  if (!finite(clearance_m) || !finite(d1_m) || !finite(d2_m) ||
-      !finite(wavelength_m)) {
+  if (!isFiniteD(clearance_m) || !isFiniteD(d1_m) || !isFiniteD(d2_m) ||
+      !isFiniteD(wavelength_m)) {
     return 0.0;
   }
   if (d1_m <= 0.0 || d2_m <= 0.0 || wavelength_m <= 0.0) {
@@ -120,10 +120,10 @@ double rf_knife_edge_parameter_v(
     double obstacle_height_m,
     double wavelength_m,
     double effective_earth_radius_factor) {
-  if (!finite(start_distance_m) || !finite(start_height_m) ||
-      !finite(end_distance_m) || !finite(end_height_m) ||
-      !finite(obstacle_distance_m) || !finite(obstacle_height_m) ||
-      !finite(wavelength_m) || !finite(effective_earth_radius_factor)) {
+  if (!isFiniteD(start_distance_m) || !isFiniteD(start_height_m) ||
+      !isFiniteD(end_distance_m) || !isFiniteD(end_height_m) ||
+      !isFiniteD(obstacle_distance_m) || !isFiniteD(obstacle_height_m) ||
+      !isFiniteD(wavelength_m) || !isFiniteD(effective_earth_radius_factor)) {
     return 0.0;
   }
   if (wavelength_m <= 0.0) return 0.0;
@@ -155,7 +155,7 @@ double rf_knife_edge_parameter_v(
 // loss). Same form as RfCommsCore.js port.
 ORBPRO_EXPORT
 double rf_knife_edge_loss_db(double v) {
-  if (!finite(v) || v <= -0.78) {
+  if (!isFiniteD(v) || v <= -0.78) {
     return 0.0;
   }
   const double term =

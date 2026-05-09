@@ -33,7 +33,7 @@ namespace {
 
 bool g_initialized = false;
 
-inline bool finite(double v) { return std::isfinite(v); }
+inline bool isFiniteD(double v) { return std::isfinite(v); }
 
 // WMO Magnus form for saturation vapor pressure over water.
 // temperature_c: temperature in °C.
@@ -92,7 +92,7 @@ ORBPRO_EXPORT
 double rf_oxygen_specific_attenuation_db_per_km(
     double frequency_ghz,
     double temperature_c) {
-  if (!finite(frequency_ghz) || !finite(temperature_c)) return 0.0;
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(temperature_c)) return 0.0;
   if (frequency_ghz <= 0.0) return 0.0;
   return oxygen_specific_attenuation_db_per_km(
       frequency_ghz, temperature_c + 273.15);
@@ -108,8 +108,8 @@ double rf_water_vapor_specific_attenuation_db_per_km(
     double frequency_ghz,
     double temperature_c,
     double humidity_percent) {
-  if (!finite(frequency_ghz) || !finite(temperature_c) ||
-      !finite(humidity_percent)) {
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(temperature_c) ||
+      !isFiniteD(humidity_percent)) {
     return 0.0;
   }
   if (frequency_ghz <= 0.0 || humidity_percent < 0.0) return 0.0;
@@ -136,8 +136,8 @@ double rf_atmospheric_absorption_db(
     double path_km,
     double temperature_c,
     double humidity_percent) {
-  if (!finite(frequency_ghz) || !finite(path_km) ||
-      !finite(temperature_c) || !finite(humidity_percent)) {
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(path_km) ||
+      !isFiniteD(temperature_c) || !isFiniteD(humidity_percent)) {
     return 0.0;
   }
   if (path_km <= 0.0 || frequency_ghz <= 0.0 ||
@@ -158,7 +158,7 @@ double rf_atmospheric_absorption_db(
 // the rain and cloud modules and worth having directly callable.
 ORBPRO_EXPORT
 double rf_saturation_vapor_pressure_hpa(double temperature_c) {
-  if (!finite(temperature_c)) return 0.0;
+  if (!isFiniteD(temperature_c)) return 0.0;
   return magnus_saturation_vapor_pressure_hpa(temperature_c);
 }
 

@@ -28,6 +28,7 @@
 
 #include "orbpro_plugin.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstddef>
@@ -39,7 +40,7 @@ constexpr double kDegToRad = kPi / 180.0;
 
 bool g_initialized = false;
 
-inline bool finite(double v) { return std::isfinite(v); }
+inline bool isFiniteD(double v) { return std::isfinite(v); }
 
 // Sum-of-Lorentzians curve term used in the P.838 coefficient fit.
 inline double curve(double f_GHz, double a, double b, double c) {
@@ -103,7 +104,7 @@ inline double evaluate_alpha(
 RainCoefficients rain_coefficients(
     double f_GHz, double elevation_deg, double tau_deg) {
   RainCoefficients zero{0.0, 0.0};
-  if (!finite(f_GHz) || f_GHz < 1.0) {
+  if (!isFiniteD(f_GHz) || f_GHz < 1.0) {
     return zero;
   }
   const double kHorizontalLog = evaluate_log10_k(
@@ -167,8 +168,8 @@ double rf_rain_specific_attenuation_db_per_km(
     double rain_rate_mm_per_hour,
     double elevation_deg,
     double polarization_tilt_deg) {
-  if (!finite(frequency_ghz) || !finite(rain_rate_mm_per_hour) ||
-      !finite(elevation_deg) || !finite(polarization_tilt_deg)) {
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(rain_rate_mm_per_hour) ||
+      !isFiniteD(elevation_deg) || !isFiniteD(polarization_tilt_deg)) {
     return 0.0;
   }
   if (rain_rate_mm_per_hour <= 0.0 || frequency_ghz < 1.0) {
@@ -188,9 +189,9 @@ double rf_rain_attenuation_db(
     double path_km,
     double elevation_deg,
     double polarization_tilt_deg) {
-  if (!finite(frequency_ghz) || !finite(rain_rate_mm_per_hour) ||
-      !finite(path_km) || !finite(elevation_deg) ||
-      !finite(polarization_tilt_deg)) {
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(rain_rate_mm_per_hour) ||
+      !isFiniteD(path_km) || !isFiniteD(elevation_deg) ||
+      !isFiniteD(polarization_tilt_deg)) {
     return 0.0;
   }
   if (rain_rate_mm_per_hour <= 0.0 || frequency_ghz < 1.0 ||
@@ -213,9 +214,9 @@ double rf_rain_attenuation_crane_db(
     double path_km,
     double elevation_deg,
     double polarization_tilt_deg) {
-  if (!finite(frequency_ghz) || !finite(rain_rate_mm_per_hour) ||
-      !finite(path_km) || !finite(elevation_deg) ||
-      !finite(polarization_tilt_deg)) {
+  if (!isFiniteD(frequency_ghz) || !isFiniteD(rain_rate_mm_per_hour) ||
+      !isFiniteD(path_km) || !isFiniteD(elevation_deg) ||
+      !isFiniteD(polarization_tilt_deg)) {
     return 0.0;
   }
   if (rain_rate_mm_per_hour <= 0.0 || frequency_ghz < 1.0) {

@@ -1,0 +1,39 @@
+{
+  "pluginId": "com.orbpro.rf-longley-rice",
+  "name": "RF Longley-Rice (ITM)",
+  "version": "0.1.0",
+  "type": "Comms",
+  "encrypted": false,
+  "requiresProtection": false,
+  "description": "STUB. NTIA-ITS Longley-Rice (Irregular Terrain Model) interface. The C++ kernel is a deliberate stub — hosts should call rf_longley_rice_is_stub() and fall back to the existing external WASM until the native NTIA-ITS port replaces it.",
+  "wasmModule": {
+    "file": "rf-longley-rice.wasm",
+    "loader": "rf-longley-rice.mjs",
+    "hash": "2fe0f30e56be3ebc4ff1d88a5822b9ee9fabe951e5f92c1371ef986e34501813",
+    "exports": [
+      "plugin_init",
+      "plugin_destroy",
+      "rf_longley_rice_is_stub",
+      "rf_longley_rice_path_loss_db",
+      "rf_longley_rice_plugin_manifest_bytes",
+      "rf_longley_rice_plugin_manifest_size",
+      "malloc",
+      "free"
+    ]
+  },
+  "embeddedManifest": {
+    "file": "plugin-manifest.fb",
+    "fileIdentifier": "PMAN",
+    "bytesSymbol": "rf_longley_rice_plugin_manifest_bytes",
+    "sizeSymbol": "rf_longley_rice_plugin_manifest_size"
+  },
+  "publication": {
+    "envelope": "sds-rec",
+    "payloadFile": "rf-longley-rice.wasm",
+    "recordCollectionFile": "rf-longley-rice.publication-records.fb",
+    "recordTypes": [
+      "PNM"
+    ],
+    "payloadEncrypted": false
+  }
+}
