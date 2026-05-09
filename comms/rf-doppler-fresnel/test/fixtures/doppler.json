@@ -1,0 +1,47 @@
+{
+  "model": "doppler-classical",
+  "citation": "Sklar, Digital Communications 2e §1.3.2",
+  "source_tool": "Closed-form expansion of Δf = (v_r/c) · f at IEEE-754 double precision; c = 299792458 m/s (CODATA 2018, SI exact).",
+  "source_tool_version": "n/a — closed-form constant",
+  "valid_range": {
+    "frequency_hz": [1.0e6, 3.0e11],
+    "relative_velocity_mps": [-3.0e7, 3.0e7]
+  },
+  "tolerance_hz": 1.0e-6,
+  "notes": [
+    "Phase 2 of the RF audit will regenerate these vectors from a textbook reference (Sklar §1.3.2 worked examples) plus an independent tool — current values are computed from the closed-form definition at full IEEE-754 precision.",
+    "Relativistic correction (Sklar §1.3.3) at LEO velocities ~7.5 km/s is O((v/c)²) ≈ 6×10⁻¹⁰ — well below the 1 µHz fixture tolerance, so the classical form is exact for the listed valid range."
+  ],
+  "vectors": [
+    {
+      "id": "leo_2ghz_7_5kmps",
+      "description": "LEO closing rate at 2 GHz S-band",
+      "inputs": { "relative_velocity_mps": 7500.0, "frequency_hz": 2.0e9 },
+      "expected": { "shift_hz": 50034.61427972281 }
+    },
+    {
+      "id": "walking_2_4ghz_1mps",
+      "description": "Pedestrian closing 1 m/s at 2.4 GHz Wi-Fi",
+      "inputs": { "relative_velocity_mps": 1.0, "frequency_hz": 2.4e9 },
+      "expected": { "shift_hz": 8.00553828475565 }
+    },
+    {
+      "id": "car_5_8ghz_27mps",
+      "description": "Highway closing rate at 5.8 GHz",
+      "inputs": { "relative_velocity_mps": 27.0, "frequency_hz": 5.8e9 },
+      "expected": { "shift_hz": 522.3613730803061 }
+    },
+    {
+      "id": "receding_900mhz",
+      "description": "Receding mobile (negative shift) at 900 MHz",
+      "inputs": { "relative_velocity_mps": -50.0, "frequency_hz": 900.0e6 },
+      "expected": { "shift_hz": -150.1038428391684 }
+    },
+    {
+      "id": "geosync_drift_12ghz",
+      "description": "Near-geosync drift at 12 GHz Ku-band",
+      "inputs": { "relative_velocity_mps": 0.1, "frequency_hz": 12.0e9 },
+      "expected": { "shift_hz": 4.002769142377825 }
+    }
+  ]
+}
