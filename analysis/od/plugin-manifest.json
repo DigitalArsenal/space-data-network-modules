@@ -2,7 +2,7 @@
   "pluginId": "orbit-determination",
   "name": "Orbit Determination Plugin",
   "version": "0.1.0",
-  "description": "Fits SGP4 mean elements to MEME ephemeris data and returns JSON fit results.",
+  "description": "Fits near-term SGP4 SupGP/OMM mean elements to OEM-compatible operator ephemeris samples and returns JSON fit results with RMS.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -11,7 +11,7 @@
   "methods": [
     {
       "methodId": "fit",
-      "displayName": "Fit MEME",
+      "displayName": "Fit SupGP from OEM ephemeris",
       "inputPorts": [
         {
           "portId": "meme",

@@ -14,6 +14,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const FIXTURE_MEME_PATH = new URL("./fixtures/request.fit.meme", import.meta.url);
 const MEME_DATA_DIR = path.join(__dirname, "data", "meme");
+const REFERENCE_SUITE_DIR = path.join(__dirname, "data", "supgp-reference");
+const REFERENCE_MEME_DATA_DIR = path.join(REFERENCE_SUITE_DIR, "meme");
+const REFERENCE_CELESTRAK_CSV = path.join(
+  REFERENCE_SUITE_DIR,
+  "celestrak_supgp_2026-034.csv",
+);
 const DEFAULT_CELESTRAK_CSV = path.join(
   __dirname,
   "data",
@@ -48,6 +54,16 @@ function listRegressionFiles() {
     .map((entry) => path.join(MEME_DATA_DIR, entry));
 }
 
+function listReferenceSuiteFiles() {
+  if (!fs.existsSync(REFERENCE_MEME_DATA_DIR)) {
+    return [];
+  }
+  return fs.readdirSync(REFERENCE_MEME_DATA_DIR)
+    .filter((entry) => entry.startsWith("MEME_") && entry.endsWith(".txt"))
+    .sort()
+    .map((entry) => path.join(REFERENCE_MEME_DATA_DIR, entry));
+}
+
 function parseCelestrakCsv(csvPath) {
   if (!csvPath || !fs.existsSync(csvPath)) {
     return new Map();
@@ -72,6 +88,11 @@ function parseCelestrakCsv(csvPath) {
   return records;
 }
 
+function noradIdFromMemePath(filePath) {
+  const id = Number.parseInt(path.basename(filePath).split("_")[1] ?? "", 10);
+  return Number.isFinite(id) ? id : Number.NaN;
+}
+
 function summarizeRegression(results, celestrak) {
   const successful = results
     .filter((entry) => entry.ok)
@@ -93,9 +114,21 @@ function summarizeRegression(results, celestrak) {
     meanRms: successful.length
       ? successful.reduce((sum, value) => sum + value, 0) / successful.length
       : Number.NaN,
-    betterCount: comparisons.filter((entry) => entry.rms <= entry.referenceRms).length,
-    worseCount: comparisons.filter((entry) => entry.rms > entry.referenceRms).length,
+    betterCount: comparisons.filter((entry) => entry.rms < entry.referenceRms).length,
+    worseCount: comparisons.filter((entry) => entry.rms >= entry.referenceRms).length,
   };
+}
+
+function assertBeatsCelestrak(result) {
+  assert.ok(
+    result.rms < result.referenceRms,
+    [
+      `${path.basename(result.filePath)} must beat CelesTrak SupGP RMS.`,
+      `OrbPro=${result.rms.toFixed(6)} km`,
+      `CelesTrak=${result.referenceRms.toFixed(6)} km`,
+      `delta=${(result.rms - result.referenceRms).toFixed(6)} km`,
+    ].join(" "),
+  );
 }
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
@@ -139,7 +172,56 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.match(response.errorMessage, /did not contain any ephemeris points/i);
   });
 
-  test(`OD MEME corpus regression stays within fit-quality thresholds on ${runtimeKind}`, async (t) => {
+  test(`OD SupGP reference suite beats CelesTrak RMS for every case on ${runtimeKind}`, async (t) => {
+    const referenceFiles = listReferenceSuiteFiles();
+    assert.ok(
+      referenceFiles.length > 0,
+      "Expected checked-in SpaceX Starlink reference ephemerides under tests/data/supgp-reference/meme.",
+    );
+
+    const celestrak = parseCelestrakCsv(REFERENCE_CELESTRAK_CSV);
+    assert.ok(
+      celestrak.size > 0,
+      "Expected checked-in matching CelesTrak SupGP CSV records for the reference suite.",
+    );
+
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const results = [];
+    for (const filePath of referenceFiles) {
+      const noradId = noradIdFromMemePath(filePath);
+      const reference = celestrak.get(noradId);
+      assert.ok(
+        reference,
+        `Missing CelesTrak SupGP reference RMS for NORAD ${noradId}.`,
+      );
+
+      const fit = await invokeFitJson(harness, fs.readFileSync(filePath));
+      const rms = Number.parseFloat(fit.RMS);
+      assert.ok(
+        Number.isFinite(rms),
+        `Fit RMS must be finite for ${path.basename(filePath)}.`,
+      );
+      results.push({
+        filePath,
+        noradId,
+        rms,
+        referenceRms: reference.rms,
+      });
+    }
+
+    for (const result of results) {
+      assertBeatsCelestrak(result);
+    }
+  });
+
+  test(`OD source-adapter corpus regression stays within fit-quality thresholds on ${runtimeKind}`, async (t) => {
     const regressionFiles = listRegressionFiles();
     if (regressionFiles.length === 0) {
       t.skip("Add MEME files under tests/data/meme to run the broader OD regression corpus.");
@@ -165,7 +247,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     for (const filePath of files) {
       const fit = await invokeFitJson(harness, fs.readFileSync(filePath));
-      const noradId = Number.parseInt(path.basename(filePath).split("_")[1] ?? "", 10);
+      const noradId = noradIdFromMemePath(filePath);
       const rms = Number.parseFloat(fit.RMS);
       results.push({
         filePath,
@@ -185,9 +267,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       `Expected median RMS < 0.35 km, got ${summary.medianRms}.`,
     );
     if (summary.betterCount + summary.worseCount > 0) {
-      assert.ok(
-        summary.betterCount >= summary.worseCount,
-        `Expected OD fits to beat or match the optional CelesTrak reference on at least half of comparable files (${summary.betterCount} vs ${summary.worseCount}).`,
+      assert.equal(
+        summary.worseCount,
+        0,
+        `Expected every comparable OD fit to beat the optional CelesTrak reference (${summary.betterCount} better, ${summary.worseCount} not lower).`,
       );
     }
   });
