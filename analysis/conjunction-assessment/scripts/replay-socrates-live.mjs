@@ -41,6 +41,7 @@ async function main() {
     maxRecordedErrors: args["max-recorded-errors"],
     progressEvery: args["progress-every"],
     output: args.output,
+    forceRefresh: Boolean(args["force-refresh"]),
   });
   console.log(JSON.stringify(summary, null, 2));
   if (summary.mismatchCount > 0 || summary.errorCount > 0) {

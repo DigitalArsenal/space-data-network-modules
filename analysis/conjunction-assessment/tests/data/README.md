@@ -11,6 +11,13 @@ Place SOCRATES/CelesTrak catalog files directly in this directory:
 - `socrates_minrange_current.csv`
 - `socrates_norad_ids.txt`
 - `socrates_gp/gp_*.json`
+- `.celestrak-cache/*`
+
+The SOCRATES/CelesTrak fetch scripts cache HTTP responses by default under
+`.celestrak-cache/` to avoid rate-limiting during repeated validation and test
+runs. Override with `CONJUNCTION_ASSESSMENT_CELESTRAK_CACHE_DIR`,
+`CELESTRAK_CACHE_DIR`, or the script `--cache-dir` option. Use `--force-refresh`
+only when intentionally replacing cached CelesTrak responses.
 
 Place Aerospace IVV archive files in `aerospace-archives/`:
 

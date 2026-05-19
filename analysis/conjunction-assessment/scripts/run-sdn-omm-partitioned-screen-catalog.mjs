@@ -362,6 +362,7 @@ function parseCliOptions(rawOptions) {
     writeTimeoutRetryPlan: rawOptions["write-timeout-retry-plan"],
     retryPlan: rawOptions["retry-plan"],
     writeRetryScript: rawOptions["write-retry-script"],
+    quarantinePlan: rawOptions["quarantine-plan"],
     minCatalogBlockSize:
       rawOptions["min-catalog-block-size"] === undefined
         ? null
@@ -577,6 +578,7 @@ function canonicalResultFromSummary(summary) {
       partitions: summary.aggregate.partitions,
       failedPartitions: summary.aggregate.failedPartitions,
       deferredPartitions: summary.aggregate.deferredPartitions ?? 0,
+      quarantinedPartitions: summary.aggregate.quarantinedPartitions ?? 0,
       objectsParsed: summary.aggregate.objectsParsed,
       conjunctionsFound: summary.aggregate.conjunctionsFound,
       pairsScreened: summary.aggregate.pairsScreened,
@@ -844,6 +846,7 @@ async function writeShardScript(options, summary) {
     addCommandArg(parts, "partition-timeout-ms", options.partitionTimeoutMs);
     addCommandArg(parts, "checkpoint-dir", options.checkpointDir);
     addCommandArg(parts, "resume", true);
+    addCommandArg(parts, "quarantine-plan", options.quarantinePlan);
     addCommandArg(parts, "partition-shard-count", summary.partitionShardCount);
     addCommandArg(parts, "partition-shard-index", shard.partitionShardIndex);
     addCommandArg(parts, "max-partitions", options.maxPartitions);
@@ -929,6 +932,7 @@ async function planShardExecution(options) {
     options.resume && options.checkpointDir
       ? await loadPartitionCheckpoints(options.checkpointDir)
       : { completedPartitions: [] };
+  const quarantinedRanges = await loadQuarantinedRanges(options.quarantinePlan);
   const partitionMode =
     hasExplicitBlockPairRange(options) || options.catalogBlockSize !== null
       ? "catalog-block-pair"
@@ -937,6 +941,7 @@ async function planShardExecution(options) {
   const shards = [];
   let totalPartitions = 0;
   let completedPartitions = 0;
+  let quarantinedPartitions = 0;
   let pendingPartitions = 0;
   for (let shardIndex = 0; shardIndex < shardCount; shardIndex += 1) {
     const plan =
@@ -951,6 +956,7 @@ async function planShardExecution(options) {
             partitionShardCount: shardCount,
             partitionShardIndex: shardIndex,
             completedPartitions: checkpointState.completedPartitions,
+            quarantinedRanges,
           })
         : planPartitionWork({
             objectCount,
@@ -967,12 +973,14 @@ async function planShardExecution(options) {
       partitionShardIndex: shardIndex,
       totalPartitions: plan.allRanges.length,
       completedPartitions: plan.completedPartitions.length,
+      quarantinedPartitions: plan.quarantinedRanges.length,
       pendingPartitions: plan.pendingRanges.length,
       firstPartitionIndex: plan.allRanges[0]?.partitionIndex ?? null,
       lastPartitionIndex: plan.allRanges.at(-1)?.partitionIndex ?? null,
     };
     totalPartitions += shard.totalPartitions;
     completedPartitions += shard.completedPartitions;
+    quarantinedPartitions += shard.quarantinedPartitions;
     pendingPartitions += shard.pendingPartitions;
     shards.push(shard);
   }
@@ -995,6 +1003,7 @@ async function planShardExecution(options) {
     maxPartitionsPerShardRun: options.maxPartitions,
     totalPartitions,
     completedPartitions,
+    quarantinedPartitions,
     pendingPartitions,
     shards,
   };
@@ -1016,7 +1025,14 @@ async function writeTimeoutRetryPlan(options) {
       partition.statusCode === 124 &&
       partition.primaryStartOrderIndex !== undefined,
   );
+  const terminalTimeoutPartitions = timeoutPartitions.filter(
+    (partition) => !hasCompleteDescendantCoverage(partition, partitions),
+  );
   const minCatalogBlockSize = options.minCatalogBlockSize ?? 100;
+  const irreducibleTimeoutRanges = findIrreducibleTimedOutBlockPairs({
+    partitions,
+    minCatalogBlockSize,
+  });
   const ranges = planTimedOutBlockPairSubdivisions({
     partitions,
     minCatalogBlockSize,
@@ -1026,7 +1042,10 @@ async function writeTimeoutRetryPlan(options) {
     checkpointDir: path.resolve(options.checkpointDir),
     minCatalogBlockSize,
     timeoutPartitions: timeoutPartitions.length,
+    terminalTimeoutPartitions: terminalTimeoutPartitions.length,
+    irreducibleTimeoutPartitions: irreducibleTimeoutRanges.length,
     retryRanges: ranges.length,
+    irreducibleTimeoutRanges,
     ranges,
   };
   await mkdir(path.dirname(retryPlanPath), { recursive: true });
@@ -1082,6 +1101,7 @@ async function writeRetryScript(options) {
     addCommandArg(parts, "partition-timeout-ms", options.partitionTimeoutMs);
     addCommandArg(parts, "checkpoint-dir", options.checkpointDir);
     addCommandArg(parts, "resume", true);
+    addCommandArg(parts, "quarantine-plan", options.quarantinePlan);
     addCommandArg(parts, "provider-id", options.providerId);
     addCommandArg(parts, "source-id", options.sourceId);
     addCommandArg(parts, "source-pnm-cid", options.sourcePnmCids?.join(","));
@@ -1131,6 +1151,37 @@ async function writeRetryScript(options) {
   };
 }
 
+async function loadQuarantinedRanges(quarantinePlanPath) {
+  if (!quarantinePlanPath) {
+    return [];
+  }
+  const plan = JSON.parse(await readFile(path.resolve(quarantinePlanPath), "utf8"));
+  const ranges = Array.isArray(plan.irreducibleTimeoutRanges)
+    ? plan.irreducibleTimeoutRanges
+    : [];
+  return ranges
+    .filter(
+      (range) =>
+        range.primaryStartOrderIndex !== undefined &&
+        range.primaryEndOrderIndex !== undefined &&
+        range.secondaryStartOrderIndex !== undefined &&
+        range.secondaryEndOrderIndex !== undefined,
+    )
+    .map((range) => ({
+      partitionIndex: range.partitionIndex ?? range.parentPartitionIndex ?? 0,
+      parentPartitionIndex: range.parentPartitionIndex ?? null,
+      primaryStartOrderIndex: range.primaryStartOrderIndex,
+      primaryEndOrderIndex: range.primaryEndOrderIndex,
+      secondaryStartOrderIndex: range.secondaryStartOrderIndex,
+      secondaryEndOrderIndex: range.secondaryEndOrderIndex,
+      catalogBlockSize: range.catalogBlockSize ?? Math.max(
+        range.primaryEndOrderIndex - range.primaryStartOrderIndex,
+        range.secondaryEndOrderIndex - range.secondaryStartOrderIndex,
+      ),
+      reason: range.errorMessage ?? "irreducible timeout",
+    }));
+}
+
 export function planCatalogBlockPairWork({
   objectCount,
   startOrderIndex,
@@ -1141,6 +1192,7 @@ export function planCatalogBlockPairWork({
   partitionShardCount = 1,
   partitionShardIndex = 0,
   completedPartitions = [],
+  quarantinedRanges = [],
 }) {
   if (catalogBlockSize <= 0) {
     throw new Error("--catalog-block-size must be greater than zero.");
@@ -1167,13 +1219,21 @@ export function planCatalogBlockPairWork({
   const completedByRange = new Map(
     completedPartitions.map((partition) => [checkpointKey(partition), partition]),
   );
+  const quarantinedByRange = new Map(
+    quarantinedRanges.map((range) => [checkpointKey(range), range]),
+  );
   const completed = resume
     ? allRanges
         .map((range) => completedByRange.get(checkpointKey(range)))
         .filter(Boolean)
     : [];
+  const quarantined = allRanges
+    .map((range) => quarantinedByRange.get(checkpointKey(range)))
+    .filter(Boolean);
   const pending = allRanges.filter(
-    (range) => !resume || !completedByRange.has(checkpointKey(range)),
+    (range) =>
+      !quarantinedByRange.has(checkpointKey(range)) &&
+      (!resume || !completedByRange.has(checkpointKey(range))),
   );
   const limit = maxPartitions ?? pending.length;
   const pendingRanges = pending.slice(0, limit);
@@ -1182,6 +1242,7 @@ export function planCatalogBlockPairWork({
     objectCount,
     allRanges,
     completedPartitions: completed,
+    quarantinedRanges: quarantined,
     pendingRanges,
     deferredRanges,
     complete: deferredRanges.length === 0,
@@ -1197,6 +1258,7 @@ export function planExplicitBlockPairWork({
   parentPartitionIndex = null,
   resume = false,
   completedPartitions = [],
+  quarantinedRanges = [],
 }) {
   const range = {
     partitionIndex,
@@ -1227,17 +1289,22 @@ export function planExplicitBlockPairWork({
   const completedByRange = new Map(
     completedPartitions.map((partition) => [checkpointKey(partition), partition]),
   );
+  const quarantinedByRange = new Map(
+    quarantinedRanges.map((partition) => [checkpointKey(partition), partition]),
+  );
   const completed = resume
     ? [completedByRange.get(checkpointKey(range))].filter(Boolean)
     : [];
+  const quarantined = [quarantinedByRange.get(checkpointKey(range))].filter(Boolean);
   const pendingRanges =
-    resume && completed.length > 0
+    quarantined.length > 0 || (resume && completed.length > 0)
       ? []
       : [range];
   return {
     objectCount: null,
     allRanges: [range],
     completedPartitions: completed,
+    quarantinedRanges: quarantined,
     pendingRanges,
     deferredRanges: [],
     complete: true,
@@ -1262,6 +1329,12 @@ export function planTimedOutBlockPairSubdivisions({
       continue;
     }
     if (partition.primaryStartOrderIndex === undefined) {
+      continue;
+    }
+    if (hasCompleteDescendantCoverage(partition, partitions)) {
+      continue;
+    }
+    if (isIrreducibleTimedOutRange(partition, minimum)) {
       continue;
     }
     const primaryRanges = splitRetryRange(
@@ -1299,6 +1372,114 @@ export function planTimedOutBlockPairSubdivisions({
     }
   }
   return retryRanges;
+}
+
+export function findIrreducibleTimedOutBlockPairs({
+  partitions,
+  minCatalogBlockSize,
+}) {
+  if (!Array.isArray(partitions)) {
+    throw new TypeError("partitions must be an array");
+  }
+  const minimum = Math.trunc(requiredNumber(minCatalogBlockSize, "min-catalog-block-size", 1));
+  if (minimum <= 0) {
+    throw new Error("--min-catalog-block-size must be greater than zero.");
+  }
+  return partitions
+    .filter(
+      (partition) =>
+        partition.statusCode === 124 &&
+        partition.primaryStartOrderIndex !== undefined &&
+        !hasCompleteDescendantCoverage(partition, partitions) &&
+        isIrreducibleTimedOutRange(partition, minimum),
+    )
+    .map((partition) => ({
+      parentPartitionIndex: partition.parentPartitionIndex ?? partition.partitionIndex,
+      partitionIndex: partition.partitionIndex,
+      primaryStartOrderIndex: partition.primaryStartOrderIndex,
+      primaryEndOrderIndex: partition.primaryEndOrderIndex,
+      secondaryStartOrderIndex: partition.secondaryStartOrderIndex,
+      secondaryEndOrderIndex: partition.secondaryEndOrderIndex,
+      catalogBlockSize: Math.max(
+        partition.primaryEndOrderIndex - partition.primaryStartOrderIndex,
+        partition.secondaryEndOrderIndex - partition.secondaryStartOrderIndex,
+      ),
+      errorMessage: partition.errorMessage ?? "",
+    }));
+}
+
+function isIrreducibleTimedOutRange(partition, minimum) {
+  return (
+    partition.primaryEndOrderIndex - partition.primaryStartOrderIndex <= minimum &&
+    partition.secondaryEndOrderIndex - partition.secondaryStartOrderIndex <= minimum
+  );
+}
+
+function hasCompleteDescendantCoverage(partition, partitions) {
+  if (partition.diagonal) {
+    return false;
+  }
+  const descendants = partitions.filter(
+    (candidate) =>
+      candidate !== partition &&
+      candidate.parentPartitionIndex === partition.partitionIndex &&
+      candidate.primaryStartOrderIndex !== undefined &&
+      candidate.primaryStartOrderIndex >= partition.primaryStartOrderIndex &&
+      candidate.primaryEndOrderIndex <= partition.primaryEndOrderIndex &&
+      candidate.secondaryStartOrderIndex >= partition.secondaryStartOrderIndex &&
+      candidate.secondaryEndOrderIndex <= partition.secondaryEndOrderIndex &&
+      (candidate.primaryStartOrderIndex > partition.primaryStartOrderIndex ||
+        candidate.primaryEndOrderIndex < partition.primaryEndOrderIndex ||
+        candidate.secondaryStartOrderIndex > partition.secondaryStartOrderIndex ||
+        candidate.secondaryEndOrderIndex < partition.secondaryEndOrderIndex),
+  );
+  if (descendants.length === 0) {
+    return false;
+  }
+
+  const primaryCuts = [
+    partition.primaryStartOrderIndex,
+    partition.primaryEndOrderIndex,
+  ];
+  const secondaryCuts = [
+    partition.secondaryStartOrderIndex,
+    partition.secondaryEndOrderIndex,
+  ];
+  for (const descendant of descendants) {
+    primaryCuts.push(
+      descendant.primaryStartOrderIndex,
+      descendant.primaryEndOrderIndex,
+    );
+    secondaryCuts.push(
+      descendant.secondaryStartOrderIndex,
+      descendant.secondaryEndOrderIndex,
+    );
+  }
+  const primaryEdges = [...new Set(primaryCuts)].sort((left, right) => left - right);
+  const secondaryEdges = [...new Set(secondaryCuts)].sort((left, right) => left - right);
+  for (let primaryIndex = 0; primaryIndex < primaryEdges.length - 1; primaryIndex += 1) {
+    const primaryStart = primaryEdges[primaryIndex];
+    const primaryEnd = primaryEdges[primaryIndex + 1];
+    for (
+      let secondaryIndex = 0;
+      secondaryIndex < secondaryEdges.length - 1;
+      secondaryIndex += 1
+    ) {
+      const secondaryStart = secondaryEdges[secondaryIndex];
+      const secondaryEnd = secondaryEdges[secondaryIndex + 1];
+      const covered = descendants.some(
+        (descendant) =>
+          descendant.primaryStartOrderIndex <= primaryStart &&
+          descendant.primaryEndOrderIndex >= primaryEnd &&
+          descendant.secondaryStartOrderIndex <= secondaryStart &&
+          descendant.secondaryEndOrderIndex >= secondaryEnd,
+      );
+      if (!covered) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function splitRetryRange(start, end, minimum) {
@@ -1363,6 +1544,7 @@ export function planPartitionWork({
     objectCount,
     allRanges,
     completedPartitions: completed,
+    quarantinedRanges: [],
     pendingRanges,
     deferredRanges,
     complete: deferredRanges.length === 0,
@@ -1460,6 +1642,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
     options.resume && options.checkpointDir
       ? await loadPartitionCheckpoints(options.checkpointDir)
       : { completedPartitions: [] };
+  const quarantinedRanges = await loadQuarantinedRanges(options.quarantinePlan);
   const partitionMode =
     hasExplicitBlockPairRange(options) || options.catalogBlockSize !== null
       ? "catalog-block-pair"
@@ -1475,6 +1658,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
           parentPartitionIndex: options.blockPairParentPartitionIndex,
           resume: options.resume,
           completedPartitions: checkpointState.completedPartitions,
+          quarantinedRanges,
         })
       : partitionMode === "catalog-block-pair"
         ? planCatalogBlockPairWork({
@@ -1487,6 +1671,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
           partitionShardCount: options.partitionShardCount,
           partitionShardIndex: options.partitionShardIndex,
           completedPartitions: checkpointState.completedPartitions,
+          quarantinedRanges,
         })
         : planPartitionWork({
           objectCount,
@@ -1633,6 +1818,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
   const aggregate = aggregatePartitions(partitions, objectCount, wallElapsedMs);
   const deferredRanges = [...runtimeDeferredRanges, ...workPlan.deferredRanges];
   aggregate.deferredPartitions = deferredRanges.length;
+  aggregate.quarantinedPartitions = workPlan.quarantinedRanges.length;
   const complete =
     deferredRanges.length === 0 && aggregate.failedPartitions === 0;
   const summary = {
@@ -1655,6 +1841,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
     maxPartitions: options.maxPartitions,
     complete,
     deferredRanges,
+    quarantinedRanges: workPlan.quarantinedRanges,
     partitions,
     aggregate,
   };

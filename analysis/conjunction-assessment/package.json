@@ -15,7 +15,7 @@
   ],
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/sourceSelectionContract.test.mjs tests/signedCdmOutput.test.mjs tests/ocmOemTrackAdapter.test.mjs tests/archiveStreamingSmoke.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/sdnDataApiStream.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/sourceSelectionContract.test.mjs tests/signedCdmOutput.test.mjs tests/ocmOemTrackAdapter.test.mjs tests/celestrakFetchCache.test.mjs tests/archiveStreamingSmoke.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/sdnDataApiStream.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:archive-smoke": "node --test tests/archiveStreamingSmoke.test.mjs",
     "test:replay": "node --test tests/wasmedgeStandaloneHarness.test.mjs tests/socratesReplayHarness.test.mjs",
