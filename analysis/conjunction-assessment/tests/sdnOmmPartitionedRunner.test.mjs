@@ -15,6 +15,7 @@ import {
   buildPartitionedRunProvenance,
   invokeWithTimeout,
   loadPartitionCheckpoints,
+  findIrreducibleTimedOutBlockPairs,
   planExplicitBlockPairWork,
   planCatalogBlockPairWork,
   planTimedOutBlockPairSubdivisions,
@@ -121,6 +122,143 @@ test("timed-out block-pair checkpoints recursively split to the minimum block si
   );
 });
 
+test("timeout retry planning splits only terminal timed-out child ranges", () => {
+  const retries = planTimedOutBlockPairSubdivisions({
+    partitions: [
+      {
+        partitionIndex: 4,
+        statusCode: 124,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 25,
+        secondaryStartOrderIndex: 2000,
+        secondaryEndOrderIndex: 2125,
+      },
+      {
+        partitionIndex: 4,
+        parentPartitionIndex: 4,
+        statusCode: 0,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 25,
+        secondaryStartOrderIndex: 2000,
+        secondaryEndOrderIndex: 2025,
+      },
+      {
+        partitionIndex: 4,
+        parentPartitionIndex: 4,
+        statusCode: 0,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 25,
+        secondaryStartOrderIndex: 2025,
+        secondaryEndOrderIndex: 2050,
+      },
+      {
+        partitionIndex: 4,
+        parentPartitionIndex: 4,
+        statusCode: 0,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 25,
+        secondaryStartOrderIndex: 2050,
+        secondaryEndOrderIndex: 2075,
+      },
+      {
+        partitionIndex: 4,
+        parentPartitionIndex: 4,
+        statusCode: 0,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 25,
+        secondaryStartOrderIndex: 2075,
+        secondaryEndOrderIndex: 2100,
+      },
+      {
+        partitionIndex: 4,
+        parentPartitionIndex: 4,
+        statusCode: 124,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 25,
+        secondaryStartOrderIndex: 2100,
+        secondaryEndOrderIndex: 2125,
+      },
+    ],
+    minCatalogBlockSize: 5,
+  });
+
+  assert.equal(retries.length, 25);
+  assert.deepEqual(
+    retries.map((range) => [
+      range.parentPartitionIndex,
+      range.primaryStartOrderIndex,
+      range.primaryEndOrderIndex,
+      range.secondaryStartOrderIndex,
+      range.secondaryEndOrderIndex,
+      range.catalogBlockSize,
+    ]),
+    [
+      [4, 0, 5, 2100, 2105, 5],
+      [4, 0, 5, 2105, 2110, 5],
+      [4, 0, 5, 2110, 2115, 5],
+      [4, 0, 5, 2115, 2120, 5],
+      [4, 0, 5, 2120, 2125, 5],
+      [4, 5, 10, 2100, 2105, 5],
+      [4, 5, 10, 2105, 2110, 5],
+      [4, 5, 10, 2110, 2115, 5],
+      [4, 5, 10, 2115, 2120, 5],
+      [4, 5, 10, 2120, 2125, 5],
+      [4, 10, 15, 2100, 2105, 5],
+      [4, 10, 15, 2105, 2110, 5],
+      [4, 10, 15, 2110, 2115, 5],
+      [4, 10, 15, 2115, 2120, 5],
+      [4, 10, 15, 2120, 2125, 5],
+      [4, 15, 20, 2100, 2105, 5],
+      [4, 15, 20, 2105, 2110, 5],
+      [4, 15, 20, 2110, 2115, 5],
+      [4, 15, 20, 2115, 2120, 5],
+      [4, 15, 20, 2120, 2125, 5],
+      [4, 20, 25, 2100, 2105, 5],
+      [4, 20, 25, 2105, 2110, 5],
+      [4, 20, 25, 2110, 2115, 5],
+      [4, 20, 25, 2115, 2120, 5],
+      [4, 20, 25, 2120, 2125, 5],
+    ],
+  );
+});
+
+test("timeout retry planning reports irreducible terminal child ranges", () => {
+  const partitions = [
+    {
+      partitionIndex: 4,
+      statusCode: 124,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 1,
+      secondaryStartOrderIndex: 2116,
+      secondaryEndOrderIndex: 2117,
+      errorMessage: "partition 4 timed out after 10000 ms",
+    },
+  ];
+
+  const retries = planTimedOutBlockPairSubdivisions({
+    partitions,
+    minCatalogBlockSize: 1,
+  });
+  const irreducible = findIrreducibleTimedOutBlockPairs({
+    partitions,
+    minCatalogBlockSize: 1,
+  });
+
+  assert.deepEqual(retries, []);
+  assert.deepEqual(irreducible, [
+    {
+      parentPartitionIndex: 4,
+      partitionIndex: 4,
+      primaryStartOrderIndex: 0,
+      primaryEndOrderIndex: 1,
+      secondaryStartOrderIndex: 2116,
+      secondaryEndOrderIndex: 2117,
+      catalogBlockSize: 1,
+      errorMessage: "partition 4 timed out after 10000 ms",
+    },
+  ]);
+});
+
 test("explicit block-pair planner schedules a single retry child range", () => {
   const plan = planExplicitBlockPairWork({
     primaryStartOrderIndex: 0,
@@ -144,6 +282,33 @@ test("explicit block-pair planner schedules a single retry child range", () => {
     },
   ]);
   assert.equal(plan.complete, true);
+});
+
+test("explicit block-pair planner skips quarantined irreducible ranges", () => {
+  const plan = planExplicitBlockPairWork({
+    primaryStartOrderIndex: 0,
+    primaryEndOrderIndex: 1,
+    secondaryStartOrderIndex: 2116,
+    secondaryEndOrderIndex: 2117,
+    partitionIndex: 4,
+    parentPartitionIndex: 4,
+    resume: true,
+    quarantinedRanges: [
+      {
+        partitionIndex: 4,
+        parentPartitionIndex: 4,
+        primaryStartOrderIndex: 0,
+        primaryEndOrderIndex: 1,
+        secondaryStartOrderIndex: 2116,
+        secondaryEndOrderIndex: 2117,
+      },
+    ],
+  });
+
+  assert.deepEqual(plan.pendingRanges, []);
+  assert.deepEqual(plan.completedPartitions, []);
+  assert.equal(plan.quarantinedRanges.length, 1);
+  assert.equal(plan.quarantinedRanges[0].secondaryStartOrderIndex, 2116);
 });
 
 test("partitioned runner can resume from successful checkpoints and schedule only pending work", async (t) => {
@@ -609,6 +774,7 @@ test("partitioned runner can write timeout retry plans without invoking WASM", a
   assert.equal(result.status, 0, result.stderr);
   const summary = JSON.parse(result.stdout);
   assert.equal(summary.timeoutPartitions, 1);
+  assert.equal(summary.terminalTimeoutPartitions, 1);
   assert.equal(summary.retryRanges, 4);
   assert.equal(summary.retryPlanPath, retryPlanPath);
 
