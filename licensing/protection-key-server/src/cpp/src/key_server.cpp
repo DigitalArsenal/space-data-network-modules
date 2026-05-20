@@ -26,21 +26,21 @@
 #include <unordered_map>
 #include <vector>
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("call_json")))
-int32_t sdn_host_call_json(const char* operation_ptr, int32_t operation_len,
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("call_json")))
+int32_t space_data_module_host_call_json(const char* operation_ptr, int32_t operation_len,
                            const char* payload_ptr, int32_t payload_len);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("response_len")))
-int32_t sdn_host_response_len(void);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("response_len")))
+int32_t space_data_module_host_response_len(void);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("read_response")))
-int32_t sdn_host_read_response(char* dst_ptr, int32_t dst_len);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("read_response")))
+int32_t space_data_module_host_read_response(char* dst_ptr, int32_t dst_len);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("clear_response")))
-int32_t sdn_host_clear_response(void);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("clear_response")))
+int32_t space_data_module_host_clear_response(void);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("last_status_code")))
-int32_t sdn_host_last_status_code(void);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("last_status_code")))
+int32_t space_data_module_host_last_status_code(void);
 
 namespace {
 
@@ -398,15 +398,15 @@ bool read_host_json_response(std::string* response_out) {
   if (!response_out) {
     return false;
   }
-  const int32_t response_len = sdn_host_response_len();
+  const int32_t response_len = space_data_module_host_response_len();
   if (response_len < 0) {
-    sdn_host_clear_response();
+    space_data_module_host_clear_response();
     return false;
   }
   std::string response(static_cast<size_t>(response_len), '\0');
   const int32_t copied =
-      response_len > 0 ? sdn_host_read_response(response.data(), response_len) : 0;
-  sdn_host_clear_response();
+      response_len > 0 ? space_data_module_host_read_response(response.data(), response_len) : 0;
+  space_data_module_host_clear_response();
   if (copied != response_len) {
     return false;
   }
@@ -418,12 +418,12 @@ bool call_host_json(
     std::string_view operation,
     std::string_view payload,
     std::string* response_out) {
-  const int32_t rc = sdn_host_call_json(
+  const int32_t rc = space_data_module_host_call_json(
       operation.data(),
       static_cast<int32_t>(operation.size()),
       payload.empty() ? nullptr : payload.data(),
       static_cast<int32_t>(payload.size()));
-  const int32_t status = sdn_host_last_status_code();
+  const int32_t status = space_data_module_host_last_status_code();
   if (!read_host_json_response(response_out)) {
     return false;
   }

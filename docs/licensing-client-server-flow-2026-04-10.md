@@ -12,7 +12,7 @@
 
 - `space-data-network/sdn-server` now provisions `protocol_dial` for hosted
   WasmEdge modules.
-- The `sdn_host` bridge advertises `protocol.request` only when that handler is
+- The `space_data_module_host` bridge advertises `protocol.request` only when that handler is
   actually registered.
 - `space-data-network/sdn-server` now has a concrete protocol cap handler that
   dials a libp2p stream, writes request bytes, and returns the response bytes
@@ -27,7 +27,7 @@
 - Use the browser-safe decrypt path (`packages/client-decrypt` and/or
   `space-data-network/packages/module-runner/src/artifact-crypto.js`) for local
   artifact decryption.
-- Do not assume the browser `sdn_host` bridge can perform arbitrary async
+- Do not assume the browser `space_data_module_host` bridge can perform arbitrary async
   networking from inside a guest module. The current browser guest ABI is still
   synchronous.
 
@@ -35,7 +35,7 @@
 
 - `sdn-server` can block a hosted guest on outbound network calls because the
   host runtime owns the execution thread.
-- The browser `sdn_host` bridge is synchronous, while libp2p/IPFS browser
+- The browser `space_data_module_host` bridge is synchronous, while libp2p/IPFS browser
   operations are asynchronous. Forcing those through guest imports is the wrong
   boundary.
 

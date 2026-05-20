@@ -295,7 +295,7 @@ if (hasDeliveryWasm) {
               moduleId: "com.orbpro.fastest-path",
               moduleVersion: "1.0.0",
               runtime: "browser",
-              abi: "sdn-abi",
+              abi: "space-data-module-abi",
               entrypoint: "plugin_invoke_stream",
               publicationCid: cidStr,
             }),

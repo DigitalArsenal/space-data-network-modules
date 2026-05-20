@@ -149,7 +149,7 @@ async function buildGrantResponseFixture(
         moduleId: metadata.moduleId ?? "com.orbpro.client-decrypt-fixture",
         moduleVersion: metadata.moduleVersion ?? "1.0.0",
         runtime: metadata.runtime ?? "browser",
-        abi: metadata.abi ?? "sdn-abi",
+        abi: metadata.abi ?? "space-data-module-abi",
         entrypoint: metadata.entrypoint ?? "plugin_invoke_stream",
         publicationCid: metadata.publicationCid ?? "bafy-publication-fixture",
         contentCodec: metadata.contentCodec ?? "application/wasm+encrypted",

@@ -3,11 +3,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   createBrowserWasiShim,
-  WasiExitError,
-} from "space-data-module-sdk/host/wasi-shim";
-import {
   createJsonHostcallBridge,
-} from "../../node_modules/space-data-module-sdk/src/host/abi.js";
+  WasiExitError,
+} from "space-data-module-sdk";
 import {
   encodePluginInvokeRequest,
   decodePluginInvokeResponse,

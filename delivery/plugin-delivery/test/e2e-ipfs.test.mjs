@@ -183,7 +183,7 @@ await test("e2e: deliver_plugin returns GrantResponse metadata and encrypted bun
             moduleId: "com.orbpro.fastest-path",
             moduleVersion: "1.0.0",
             runtime: "browser",
-            abi: "sdn-abi",
+            abi: "space-data-module-abi",
             entrypoint: "plugin_invoke_stream",
             publicationCid: cidStr,
           }),

@@ -30,7 +30,20 @@ struct PNMT : public ::flatbuffers::NativeTable {
   std::string TIMESTAMP_SIGNATURE_TYPE{};
 };
 
-/// Publish Notification Message
+/// Publish Notification Message.
+///
+/// PNM is the compact network announcement for a published record, manifest, or
+/// dataset update. For dataset updates, FILE_ID is the complete canonical
+/// identity for the published update and CID usually points to a small DPM
+/// manifest or digest. The DPM carries the full verification contract:
+/// provider identity, retrieval protocol, canonical query, result hash, Merkle
+/// roots, completeness-capable indexes, file_id partition key, and signature.
+/// Large or paid dataset updates do not need to be published as globally
+/// discoverable IPFS files; a PNM may instead advertise a provider-mediated SDN
+/// query protocol. In that mode the PNM is only the announcement. The DPM is
+/// the signed commitment, and each provider response carries records plus
+/// Merkle proof material that the subscriber verifies against the DPM roots and
+/// the announced FILE_ID before import.
 struct PNM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef PNMT NativeTableType;
   typedef PNMBuilder Builder;
@@ -62,7 +75,10 @@ struct PNM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   /// Concatenated Content Identifier (CID)
   /// This field is a unique ID for distributed systems (CID).
-  /// The CID provides a unique identifier within distributed systems, as detailed at https://github.com/multiformats/cid. 
+  /// The CID provides a unique identifier within distributed systems, as detailed at https://github.com/multiformats/cid.
+  /// For dataset-update PNMs this SHOULD identify a compact DPM manifest,
+  /// manifest digest, or other small verification object, not necessarily the
+  /// full dataset bytes.
   const ::flatbuffers::String *CID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CID);
   }
@@ -72,7 +88,14 @@ struct PNM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_FILE_NAME);
   }
   /// File ID
-  /// This field is the file ID / Standard Type
+  /// Canonical publication/update partition identity. For dataset-update PNMs,
+  /// this MUST match DPM.FILE_ID and is the stable key used everywhere an SDN
+  /// component refers to the update: PNMs, DPMs, assets, entitlements, provider
+  /// query requests, subscriber caches, replay, audit, and completeness
+  /// verification. Provider-mediated query requests and responses MUST bind
+  /// their Merkle leaves and proof paths to this FILE_ID, and subscribers MUST
+  /// reject responses whose DPM, records, or proofs bind to a different FILE_ID.
+  /// Example: celestrak:gp:OMM.fbs:2026-05-06T03:00:00Z.
   const ::flatbuffers::String *FILE_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_FILE_ID);
   }

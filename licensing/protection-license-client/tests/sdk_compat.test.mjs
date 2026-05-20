@@ -165,14 +165,14 @@ test("manifest scopes DEK retrieval to hosted WasmEdge runtime", () => {
   assert.equal(manifest.capabilities.includes("protocol_dial"), true);
 });
 
-test("built artifact exposes the sdn-abi profile and canonical exports", async () => {
+test("built artifact exposes the module-host-abi profile and canonical exports", async () => {
   const inspection = await inspectModule(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
   );
   const importedModuleNames = uniqueImportModules(inspection);
 
-  assert.equal(inspection.profile, "sdn-abi");
-  assert.deepEqual(importedModuleNames, ["sdn_host", "wasi_snapshot_preview1"]);
+  assert.equal(inspection.profile, "module-host-abi");
+  assert.deepEqual(importedModuleNames, ["space_data_module_host", "wasi_snapshot_preview1"]);
   assert.ok(inspection.exports.includes("_start"));
   assert.ok(inspection.exports.includes("plugin_alloc"));
   assert.ok(inspection.exports.includes("plugin_free"));
@@ -260,7 +260,7 @@ test("browser direct surface decrypts and verifies protected content", async (t)
   assert.deepEqual(Buffer.from(response.outputs[0].payload), content);
 });
 
-test("direct sdn_host harness retrieves the DEK through the local key broker protocol", async (t) => {
+test("direct space_data_module_host harness retrieves the DEK through the local key broker protocol", async (t) => {
   const keyServerHarness = await createSdkBrowserShimSyncHarness({
     wasmSource: KEY_SERVER_WASM_PATH,
     dispatch: createDefaultHostDispatch(),
@@ -299,7 +299,7 @@ test("direct sdn_host harness retrieves the DEK through the local key broker pro
   assert.ok(result.expiresAtMs > Date.now());
 });
 
-test("command sdn_host harness retrieves the DEK through the local key broker protocol", async (t) => {
+test("command space_data_module_host harness retrieves the DEK through the local key broker protocol", async (t) => {
   const keyServerHarness = await createSdkBrowserShimSyncHarness({
     wasmSource: KEY_SERVER_WASM_PATH,
     dispatch: createDefaultHostDispatch(),

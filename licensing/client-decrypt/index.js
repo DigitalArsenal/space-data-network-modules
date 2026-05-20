@@ -212,7 +212,7 @@ function createJsonHostcallBridge(options = {}) {
 
   return {
     imports: {
-      sdn_host: {
+      space_data_module_host: {
         call_json: callJson,
         response_len() {
           return lastEnvelopeBytes.length;
@@ -356,7 +356,7 @@ export async function createClientDecrypt(options = {}) {
   const api = {
     runtime: {
       kind: "browser",
-      profile: "sdn-abi",
+      profile: "space-data-module-abi",
       surface: "direct",
     },
     instance: runtime.instance,

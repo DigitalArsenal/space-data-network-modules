@@ -3,15 +3,13 @@ import { fileURLToPath } from "node:url";
 
 import {
   createBrowserWasiShim,
+  createJsonHostcallBridge,
   WasiExitError,
-} from "space-data-module-sdk/host/wasi-shim";
+} from "space-data-module-sdk";
 import {
   encodePluginInvokeRequest,
   decodePluginInvokeResponse,
 } from "space-data-module-sdk/invoke";
-import {
-  createJsonHostcallBridge,
-} from "../../node_modules/space-data-module-sdk/src/host/abi.js";
 
 function normalizeWasmBytes(source) {
   if (source instanceof URL) {
