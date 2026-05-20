@@ -20,6 +20,7 @@ import {
 } from "../../../delivery/plugin-delivery/lib/module-delivery-codec.mjs";
 import {
   encryptBytesForRecipient,
+  encryptBytesForRecipient as encryptBytesForRecipientFromWorkspace,
   generateX25519Keypair,
 } from "space-data-module-sdk/transport";
 import {
@@ -27,9 +28,6 @@ import {
   randomBytes,
   x25519SharedSecret,
 } from "space-data-module-sdk/utils/wasm-crypto";
-import {
-  encryptBytesForRecipient as encryptBytesForRecipientFromWorkspace,
-} from "../../../../space-data-module-sdk/src/transport/index.js";
 
 function concat(...arrays) {
   const total = arrays.reduce((sum, array) => sum + array.length, 0);
@@ -113,7 +111,7 @@ async function buildGrantResponseFixture(plaintext, recipientPublicKey) {
         moduleId: "com.orbpro.fastest-path",
         moduleVersion: "1.0.0",
         runtime: "browser",
-        abi: "sdn-abi",
+        abi: "space-data-module-abi",
         entrypoint: "plugin_invoke_stream",
         publicationCid: "bafy-publication-api",
         contentCodec: "application/wasm+encrypted",
@@ -180,7 +178,7 @@ async function buildProtectedPublicationGrantResponseFixture(
         moduleId: "com.orbpro.client-decrypt-protected",
         moduleVersion: "1.0.0",
         runtime: "browser",
-        abi: "sdn-abi",
+        abi: "space-data-module-abi",
         entrypoint: "plugin_invoke_stream",
         publicationCid: "bafy-publication-protected",
         contentCodec: "application/wasm+encrypted",

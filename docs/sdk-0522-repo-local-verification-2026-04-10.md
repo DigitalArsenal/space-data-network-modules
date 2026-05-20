@@ -127,7 +127,7 @@ Impact:
 
 - Raw WasmEdge loading of the protection key server is intentionally skipped in
   the repo-local SDK suite because plain standalone WasmEdge does not provide
-  the `sdn_host` bridge needed by these `sdn-abi` artifacts.
+  the `space_data_module_host` bridge needed by these `space-data-module-abi` artifacts.
 - Real server verification must happen through `sdn-server`'s module runtime,
   not a bare WasmEdge standalone load.
 

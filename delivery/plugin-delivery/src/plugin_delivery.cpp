@@ -68,18 +68,18 @@ public:
 };
 
 #if defined(SDN_WASI_PLUGIN)
-extern "C" __attribute__((import_module("sdn_host"), import_name("call_json")))
-int32_t sdn_host_call_json(const char* op_ptr, int32_t op_len,
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("call_json")))
+int32_t space_data_module_host_call_json(const char* op_ptr, int32_t op_len,
                            const char* payload_ptr, int32_t payload_len);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("response_len")))
-int32_t sdn_host_response_len(void);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("response_len")))
+int32_t space_data_module_host_response_len(void);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("read_response")))
-int32_t sdn_host_read_response(char* dst_ptr, int32_t dst_len);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("read_response")))
+int32_t space_data_module_host_read_response(char* dst_ptr, int32_t dst_len);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("clear_response")))
-int32_t sdn_host_clear_response(void);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("clear_response")))
+int32_t space_data_module_host_clear_response(void);
 #endif
 
 static const uint8_t SERVER_PRIVATE_KEY[32] = { SDN_BAKED_SERVER_PRIVATE_KEY };
@@ -473,19 +473,19 @@ static bool host_random_fill(uint8_t* output, size_t size) {
     const std::string payload =
         std::string("{\"length\":") + std::to_string(size) + "}";
     static const char OP[] = "random.bytes";
-    if (sdn_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
         return false;
     }
 
-    const int32_t resp_len = sdn_host_response_len();
+    const int32_t resp_len = space_data_module_host_response_len();
     if (resp_len <= 0) {
-        sdn_host_clear_response();
+        space_data_module_host_clear_response();
         return false;
     }
 
     std::vector<char> buffer(static_cast<size_t>(resp_len));
-    const int32_t read_len = sdn_host_read_response(buffer.data(), resp_len);
-    sdn_host_clear_response();
+    const int32_t read_len = space_data_module_host_read_response(buffer.data(), resp_len);
+    space_data_module_host_clear_response();
     if (read_len != resp_len) {
         return false;
     }
@@ -509,13 +509,13 @@ static bool host_random_fill(uint8_t* output, size_t size) {
 }
 
 static bool read_hostcall_response(std::string& out_json) {
-    const int32_t resp_len = sdn_host_response_len();
+    const int32_t resp_len = space_data_module_host_response_len();
     if (resp_len <= 0) {
         return false;
     }
     std::vector<char> buffer(static_cast<size_t>(resp_len));
-    const int32_t read_len = sdn_host_read_response(buffer.data(), resp_len);
-    sdn_host_clear_response();
+    const int32_t read_len = space_data_module_host_read_response(buffer.data(), resp_len);
+    space_data_module_host_clear_response();
     if (read_len != resp_len) {
         return false;
     }
@@ -529,7 +529,7 @@ static bool fetch_ipfs_bytes(const char* cid, size_t cid_len, std::vector<uint8_
     payload += "\"}";
 
     static const char OP[] = "ipfs.cat";
-    if (sdn_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
         return false;
     }
 
@@ -557,7 +557,7 @@ static bool publish_ipfs_bytes(const std::vector<uint8_t>& bytes, std::string& o
         std::string("{\"base64\":\"") + base64_encode(bytes.data(), bytes.size()) + "\"}";
 
     static const char OP[] = "ipfs.add";
-    if (sdn_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
         return false;
     }
 

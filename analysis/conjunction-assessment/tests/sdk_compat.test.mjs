@@ -162,7 +162,7 @@ test("pthread isomorphic artifact is not routed through the browser WASI harness
         wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
         surface: "command",
       }),
-    /Browser harness only supports standalone WASI or sdn_host artifacts/i,
+    /Browser harness only supports standalone WASI or space_data_module_host artifacts/i,
   );
 });
 

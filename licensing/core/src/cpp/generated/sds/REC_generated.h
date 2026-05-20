@@ -46,6 +46,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "DFH_generated.h"
 #include "DMG_generated.h"
 #include "DOA_generated.h"
+#include "DPM_generated.h"
+#include "DSS_generated.h"
 #include "EME_generated.h"
 #include "ENC_generated.h"
 #include "ENV_generated.h"
@@ -78,7 +80,9 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "LDM_generated.h"
 #include "LGR_generated.h"
 #include "LKS_generated.h"
+#include "LMO_generated.h"
 #include "LMR_generated.h"
+#include "LMS_generated.h"
 #include "LND_generated.h"
 #include "LNE_generated.h"
 #include "LPF_generated.h"
@@ -210,131 +214,135 @@ enum class RecordType : uint8_t {
   DFH = 31,
   DMG = 32,
   DOA = 33,
-  EME = 34,
-  ENC = 35,
-  ENV = 36,
-  EOO = 37,
-  EOP = 38,
-  EPM = 39,
-  ESL = 40,
-  ETM = 41,
-  EWR = 42,
-  FCS = 43,
-  FPC = 44,
-  GDI = 45,
-  GEO = 46,
-  GJN = 47,
-  GNO = 48,
-  GPX = 49,
-  GRV = 50,
-  GVH = 51,
-  HEL = 52,
-  HYP = 53,
-  IDM = 54,
-  ION = 55,
-  IRO = 56,
-  KMF = 57,
-  KML = 58,
-  KRF = 59,
-  LCC = 60,
-  LCF = 61,
-  LCH = 62,
-  LDM = 63,
-  LGR = 64,
-  LKS = 65,
-  LMR = 66,
-  LND = 67,
-  LNE = 68,
-  LPF = 69,
-  LWK = 70,
-  MBL = 71,
-  MET = 72,
-  MFE = 73,
-  MNF = 74,
-  MNV = 75,
-  MPE = 76,
-  MSL = 77,
-  MST = 78,
-  MTI = 79,
-  NAV = 80,
-  OBD = 81,
-  OBT = 82,
-  OCM = 83,
-  OEM = 84,
-  OMM = 85,
-  OOA = 86,
-  OOB = 87,
-  OOD = 88,
-  OOE = 89,
-  OOI = 90,
-  OOL = 91,
-  OON = 92,
-  OOS = 93,
-  OOT = 94,
-  OPM = 95,
-  OSM = 96,
-  PCF = 97,
-  PHY = 98,
-  PIV = 99,
-  PLD = 100,
-  PLG = 101,
-  PLK = 102,
-  PNM = 103,
-  PPE = 104,
-  PRG = 105,
-  PRW = 106,
-  PUR = 107,
-  RAF = 108,
-  RCF = 109,
-  RDM = 110,
-  RDO = 111,
-  REV = 112,
-  RFB = 113,
-  RFE = 114,
-  RFM = 115,
-  RFO = 116,
-  ROC = 117,
-  SAR = 118,
-  SCM = 119,
-  SDF = 120,
-  SDL = 121,
-  SDR = 122,
-  SEN = 123,
-  SEO = 124,
-  SEV = 125,
-  SHW = 126,
-  SIT = 127,
-  SKI = 128,
-  SNR = 129,
-  SNW = 130,
-  SOI = 131,
-  SON = 132,
-  SPP = 133,
-  SPW = 134,
-  SRI = 135,
-  STF = 136,
-  STR = 137,
-  STV = 138,
-  SWR = 139,
-  TAB = 140,
-  TCF = 141,
-  TDM = 142,
-  TIM = 143,
-  TKG = 144,
-  TME = 145,
-  TMF = 146,
-  TPN = 147,
-  TRK = 148,
-  TRN = 149,
-  VCM = 150,
-  WPN = 151,
-  WTH = 152,
-  XTC = 153,
+  DPM = 34,
+  DSS = 35,
+  EME = 36,
+  ENC = 37,
+  ENV = 38,
+  EOO = 39,
+  EOP = 40,
+  EPM = 41,
+  ESL = 42,
+  ETM = 43,
+  EWR = 44,
+  FCS = 45,
+  FPC = 46,
+  GDI = 47,
+  GEO = 48,
+  GJN = 49,
+  GNO = 50,
+  GPX = 51,
+  GRV = 52,
+  GVH = 53,
+  HEL = 54,
+  HYP = 55,
+  IDM = 56,
+  ION = 57,
+  IRO = 58,
+  KMF = 59,
+  KML = 60,
+  KRF = 61,
+  LCC = 62,
+  LCF = 63,
+  LCH = 64,
+  LDM = 65,
+  LGR = 66,
+  LKS = 67,
+  LMO = 68,
+  LMR = 69,
+  LMS = 70,
+  LND = 71,
+  LNE = 72,
+  LPF = 73,
+  LWK = 74,
+  MBL = 75,
+  MET = 76,
+  MFE = 77,
+  MNF = 78,
+  MNV = 79,
+  MPE = 80,
+  MSL = 81,
+  MST = 82,
+  MTI = 83,
+  NAV = 84,
+  OBD = 85,
+  OBT = 86,
+  OCM = 87,
+  OEM = 88,
+  OMM = 89,
+  OOA = 90,
+  OOB = 91,
+  OOD = 92,
+  OOE = 93,
+  OOI = 94,
+  OOL = 95,
+  OON = 96,
+  OOS = 97,
+  OOT = 98,
+  OPM = 99,
+  OSM = 100,
+  PCF = 101,
+  PHY = 102,
+  PIV = 103,
+  PLD = 104,
+  PLG = 105,
+  PLK = 106,
+  PNM = 107,
+  PPE = 108,
+  PRG = 109,
+  PRW = 110,
+  PUR = 111,
+  RAF = 112,
+  RCF = 113,
+  RDM = 114,
+  RDO = 115,
+  REV = 116,
+  RFB = 117,
+  RFE = 118,
+  RFM = 119,
+  RFO = 120,
+  ROC = 121,
+  SAR = 122,
+  SCM = 123,
+  SDF = 124,
+  SDL = 125,
+  SDR = 126,
+  SEN = 127,
+  SEO = 128,
+  SEV = 129,
+  SHW = 130,
+  SIT = 131,
+  SKI = 132,
+  SNR = 133,
+  SNW = 134,
+  SOI = 135,
+  SON = 136,
+  SPP = 137,
+  SPW = 138,
+  SRI = 139,
+  STF = 140,
+  STR = 141,
+  STV = 142,
+  SWR = 143,
+  TAB = 144,
+  TCF = 145,
+  TDM = 146,
+  TIM = 147,
+  TKG = 148,
+  TME = 149,
+  TMF = 150,
+  TPN = 151,
+  TRK = 152,
+  TRN = 153,
+  VCM = 154,
+  WPN = 155,
+  WTH = 156,
+  XTC = 157,
   MIN = NONE,
   MAX = XTC
 };
 
-inline const RecordType (&EnumValuesRecordType())[154] {
+inline const RecordType (&EnumValuesRecordType())[158] {
   static const RecordType values[] = {
     RecordType::NONE,
     RecordType::ACL,
@@ -370,6 +378,8 @@ inline const RecordType (&EnumValuesRecordType())[154] {
     RecordType::DFH,
     RecordType::DMG,
     RecordType::DOA,
+    RecordType::DPM,
+    RecordType::DSS,
     RecordType::EME,
     RecordType::ENC,
     RecordType::ENV,
@@ -402,7 +412,9 @@ inline const RecordType (&EnumValuesRecordType())[154] {
     RecordType::LDM,
     RecordType::LGR,
     RecordType::LKS,
+    RecordType::LMO,
     RecordType::LMR,
+    RecordType::LMS,
     RecordType::LND,
     RecordType::LNE,
     RecordType::LPF,
@@ -495,7 +507,7 @@ inline const RecordType (&EnumValuesRecordType())[154] {
 }
 
 inline const char * const *EnumNamesRecordType() {
-  static const char * const names[155] = {
+  static const char * const names[159] = {
     "NONE",
     "ACL",
     "ACM",
@@ -530,6 +542,8 @@ inline const char * const *EnumNamesRecordType() {
     "DFH",
     "DMG",
     "DOA",
+    "DPM",
+    "DSS",
     "EME",
     "ENC",
     "ENV",
@@ -562,7 +576,9 @@ inline const char * const *EnumNamesRecordType() {
     "LDM",
     "LGR",
     "LKS",
+    "LMO",
     "LMR",
+    "LMS",
     "LND",
     "LNE",
     "LPF",
@@ -797,6 +813,14 @@ template<> struct RecordTypeTraits<DOA> {
   static const RecordType enum_value = RecordType::DOA;
 };
 
+template<> struct RecordTypeTraits<DPM> {
+  static const RecordType enum_value = RecordType::DPM;
+};
+
+template<> struct RecordTypeTraits<DSS> {
+  static const RecordType enum_value = RecordType::DSS;
+};
+
 template<> struct RecordTypeTraits<EME> {
   static const RecordType enum_value = RecordType::EME;
 };
@@ -925,8 +949,16 @@ template<> struct RecordTypeTraits<LKS> {
   static const RecordType enum_value = RecordType::LKS;
 };
 
+template<> struct RecordTypeTraits<LMO> {
+  static const RecordType enum_value = RecordType::LMO;
+};
+
 template<> struct RecordTypeTraits<LMR> {
   static const RecordType enum_value = RecordType::LMR;
+};
+
+template<> struct RecordTypeTraits<LMS> {
+  static const RecordType enum_value = RecordType::LMS;
 };
 
 template<> struct RecordTypeTraits<LND> {
@@ -1413,6 +1445,14 @@ template<> struct RecordTypeUnionTraits<DOAT> {
   static const RecordType enum_value = RecordType::DOA;
 };
 
+template<> struct RecordTypeUnionTraits<DPMT> {
+  static const RecordType enum_value = RecordType::DPM;
+};
+
+template<> struct RecordTypeUnionTraits<DSST> {
+  static const RecordType enum_value = RecordType::DSS;
+};
+
 template<> struct RecordTypeUnionTraits<EMET> {
   static const RecordType enum_value = RecordType::EME;
 };
@@ -1541,8 +1581,16 @@ template<> struct RecordTypeUnionTraits<LKST> {
   static const RecordType enum_value = RecordType::LKS;
 };
 
+template<> struct RecordTypeUnionTraits<LMOT> {
+  static const RecordType enum_value = RecordType::LMO;
+};
+
 template<> struct RecordTypeUnionTraits<LMRT> {
   static const RecordType enum_value = RecordType::LMR;
+};
+
+template<> struct RecordTypeUnionTraits<LMST> {
+  static const RecordType enum_value = RecordType::LMS;
 };
 
 template<> struct RecordTypeUnionTraits<LNDT> {
@@ -2187,6 +2235,22 @@ struct RecordTypeUnion {
     return type == RecordType::DOA ?
       reinterpret_cast<const DOAT *>(value) : nullptr;
   }
+  DPMT *AsDPM() {
+    return type == RecordType::DPM ?
+      reinterpret_cast<DPMT *>(value) : nullptr;
+  }
+  const DPMT *AsDPM() const {
+    return type == RecordType::DPM ?
+      reinterpret_cast<const DPMT *>(value) : nullptr;
+  }
+  DSST *AsDSS() {
+    return type == RecordType::DSS ?
+      reinterpret_cast<DSST *>(value) : nullptr;
+  }
+  const DSST *AsDSS() const {
+    return type == RecordType::DSS ?
+      reinterpret_cast<const DSST *>(value) : nullptr;
+  }
   EMET *AsEME() {
     return type == RecordType::EME ?
       reinterpret_cast<EMET *>(value) : nullptr;
@@ -2443,6 +2507,14 @@ struct RecordTypeUnion {
     return type == RecordType::LKS ?
       reinterpret_cast<const LKST *>(value) : nullptr;
   }
+  LMOT *AsLMO() {
+    return type == RecordType::LMO ?
+      reinterpret_cast<LMOT *>(value) : nullptr;
+  }
+  const LMOT *AsLMO() const {
+    return type == RecordType::LMO ?
+      reinterpret_cast<const LMOT *>(value) : nullptr;
+  }
   LMRT *AsLMR() {
     return type == RecordType::LMR ?
       reinterpret_cast<LMRT *>(value) : nullptr;
@@ -2450,6 +2522,14 @@ struct RecordTypeUnion {
   const LMRT *AsLMR() const {
     return type == RecordType::LMR ?
       reinterpret_cast<const LMRT *>(value) : nullptr;
+  }
+  LMST *AsLMS() {
+    return type == RecordType::LMS ?
+      reinterpret_cast<LMST *>(value) : nullptr;
+  }
+  const LMST *AsLMS() const {
+    return type == RecordType::LMS ?
+      reinterpret_cast<const LMST *>(value) : nullptr;
   }
   LNDT *AsLND() {
     return type == RecordType::LND ?
@@ -3277,6 +3357,12 @@ struct Record FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const DOA *value_as_DOA() const {
     return value_type() == RecordType::DOA ? static_cast<const DOA *>(value()) : nullptr;
   }
+  const DPM *value_as_DPM() const {
+    return value_type() == RecordType::DPM ? static_cast<const DPM *>(value()) : nullptr;
+  }
+  const DSS *value_as_DSS() const {
+    return value_type() == RecordType::DSS ? static_cast<const DSS *>(value()) : nullptr;
+  }
   const EME *value_as_EME() const {
     return value_type() == RecordType::EME ? static_cast<const EME *>(value()) : nullptr;
   }
@@ -3373,8 +3459,14 @@ struct Record FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const LKS *value_as_LKS() const {
     return value_type() == RecordType::LKS ? static_cast<const LKS *>(value()) : nullptr;
   }
+  const LMO *value_as_LMO() const {
+    return value_type() == RecordType::LMO ? static_cast<const LMO *>(value()) : nullptr;
+  }
   const LMR *value_as_LMR() const {
     return value_type() == RecordType::LMR ? static_cast<const LMR *>(value()) : nullptr;
+  }
+  const LMS *value_as_LMS() const {
+    return value_type() == RecordType::LMS ? static_cast<const LMS *>(value()) : nullptr;
   }
   const LND *value_as_LND() const {
     return value_type() == RecordType::LND ? static_cast<const LND *>(value()) : nullptr;
@@ -3788,6 +3880,14 @@ template<> inline const DOA *Record::value_as<DOA>() const {
   return value_as_DOA();
 }
 
+template<> inline const DPM *Record::value_as<DPM>() const {
+  return value_as_DPM();
+}
+
+template<> inline const DSS *Record::value_as<DSS>() const {
+  return value_as_DSS();
+}
+
 template<> inline const EME *Record::value_as<EME>() const {
   return value_as_EME();
 }
@@ -3916,8 +4016,16 @@ template<> inline const LKS *Record::value_as<LKS>() const {
   return value_as_LKS();
 }
 
+template<> inline const LMO *Record::value_as<LMO>() const {
+  return value_as_LMO();
+}
+
 template<> inline const LMR *Record::value_as<LMR>() const {
   return value_as_LMR();
+}
+
+template<> inline const LMS *Record::value_as<LMS>() const {
+  return value_as_LMS();
 }
 
 template<> inline const LND *Record::value_as<LND>() const {
@@ -4627,6 +4735,14 @@ inline bool VerifyRecordType(::flatbuffers::VerifierTemplate<B> &verifier, const
       auto ptr = reinterpret_cast<const DOA *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case RecordType::DPM: {
+      auto ptr = reinterpret_cast<const DPM *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::DSS: {
+      auto ptr = reinterpret_cast<const DSS *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     case RecordType::EME: {
       auto ptr = reinterpret_cast<const EME *>(obj);
       return verifier.VerifyTable(ptr);
@@ -4755,8 +4871,16 @@ inline bool VerifyRecordType(::flatbuffers::VerifierTemplate<B> &verifier, const
       auto ptr = reinterpret_cast<const LKS *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case RecordType::LMO: {
+      auto ptr = reinterpret_cast<const LMO *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     case RecordType::LMR: {
       auto ptr = reinterpret_cast<const LMR *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::LMS: {
+      auto ptr = reinterpret_cast<const LMS *>(obj);
       return verifier.VerifyTable(ptr);
     }
     case RecordType::LND: {
@@ -5259,6 +5383,14 @@ inline void *RecordTypeUnion::UnPack(const void *obj, RecordType type, const ::f
       auto ptr = reinterpret_cast<const DOA *>(obj);
       return ptr->UnPack(resolver);
     }
+    case RecordType::DPM: {
+      auto ptr = reinterpret_cast<const DPM *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::DSS: {
+      auto ptr = reinterpret_cast<const DSS *>(obj);
+      return ptr->UnPack(resolver);
+    }
     case RecordType::EME: {
       auto ptr = reinterpret_cast<const EME *>(obj);
       return ptr->UnPack(resolver);
@@ -5387,8 +5519,16 @@ inline void *RecordTypeUnion::UnPack(const void *obj, RecordType type, const ::f
       auto ptr = reinterpret_cast<const LKS *>(obj);
       return ptr->UnPack(resolver);
     }
+    case RecordType::LMO: {
+      auto ptr = reinterpret_cast<const LMO *>(obj);
+      return ptr->UnPack(resolver);
+    }
     case RecordType::LMR: {
       auto ptr = reinterpret_cast<const LMR *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::LMS: {
+      auto ptr = reinterpret_cast<const LMS *>(obj);
       return ptr->UnPack(resolver);
     }
     case RecordType::LND: {
@@ -5878,6 +6018,14 @@ inline ::flatbuffers::Offset<void> RecordTypeUnion::Pack(::flatbuffers::FlatBuff
       auto ptr = reinterpret_cast<const DOAT *>(value);
       return CreateDOA(_fbb, ptr, _rehasher).Union();
     }
+    case RecordType::DPM: {
+      auto ptr = reinterpret_cast<const DPMT *>(value);
+      return CreateDPM(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::DSS: {
+      auto ptr = reinterpret_cast<const DSST *>(value);
+      return CreateDSS(_fbb, ptr, _rehasher).Union();
+    }
     case RecordType::EME: {
       auto ptr = reinterpret_cast<const EMET *>(value);
       return CreateEME(_fbb, ptr, _rehasher).Union();
@@ -6006,9 +6154,17 @@ inline ::flatbuffers::Offset<void> RecordTypeUnion::Pack(::flatbuffers::FlatBuff
       auto ptr = reinterpret_cast<const LKST *>(value);
       return CreateLKS(_fbb, ptr, _rehasher).Union();
     }
+    case RecordType::LMO: {
+      auto ptr = reinterpret_cast<const LMOT *>(value);
+      return CreateLMO(_fbb, ptr, _rehasher).Union();
+    }
     case RecordType::LMR: {
       auto ptr = reinterpret_cast<const LMRT *>(value);
       return CreateLMR(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::LMS: {
+      auto ptr = reinterpret_cast<const LMST *>(value);
+      return CreateLMS(_fbb, ptr, _rehasher).Union();
     }
     case RecordType::LND: {
       auto ptr = reinterpret_cast<const LNDT *>(value);
@@ -6496,6 +6652,14 @@ inline RecordTypeUnion::RecordTypeUnion(const RecordTypeUnion &u) : type(u.type)
       value = new DOAT(*reinterpret_cast<DOAT *>(u.value));
       break;
     }
+    case RecordType::DPM: {
+      value = new DPMT(*reinterpret_cast<DPMT *>(u.value));
+      break;
+    }
+    case RecordType::DSS: {
+      value = new DSST(*reinterpret_cast<DSST *>(u.value));
+      break;
+    }
     case RecordType::EME: {
       value = new EMET(*reinterpret_cast<EMET *>(u.value));
       break;
@@ -6624,8 +6788,16 @@ inline RecordTypeUnion::RecordTypeUnion(const RecordTypeUnion &u) : type(u.type)
       value = new LKST(*reinterpret_cast<LKST *>(u.value));
       break;
     }
+    case RecordType::LMO: {
+      value = new LMOT(*reinterpret_cast<LMOT *>(u.value));
+      break;
+    }
     case RecordType::LMR: {
       value = new LMRT(*reinterpret_cast<LMRT *>(u.value));
+      break;
+    }
+    case RecordType::LMS: {
+      value = new LMST(*reinterpret_cast<LMST *>(u.value));
       break;
     }
     case RecordType::LND: {
@@ -7148,6 +7320,16 @@ inline void RecordTypeUnion::Reset() {
       delete ptr;
       break;
     }
+    case RecordType::DPM: {
+      auto ptr = reinterpret_cast<DPMT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::DSS: {
+      auto ptr = reinterpret_cast<DSST *>(value);
+      delete ptr;
+      break;
+    }
     case RecordType::EME: {
       auto ptr = reinterpret_cast<EMET *>(value);
       delete ptr;
@@ -7308,8 +7490,18 @@ inline void RecordTypeUnion::Reset() {
       delete ptr;
       break;
     }
+    case RecordType::LMO: {
+      auto ptr = reinterpret_cast<LMOT *>(value);
+      delete ptr;
+      break;
+    }
     case RecordType::LMR: {
       auto ptr = reinterpret_cast<LMRT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::LMS: {
+      auto ptr = reinterpret_cast<LMST *>(value);
       delete ptr;
       break;
     }

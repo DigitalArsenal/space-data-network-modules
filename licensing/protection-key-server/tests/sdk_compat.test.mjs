@@ -95,14 +95,14 @@ test("built artifact passes SDK compliance checks", async () => {
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
-test("built artifact exposes the sdn-abi profile and canonical exports", async () => {
+test("built artifact exposes the module-host-abi profile and canonical exports", async () => {
   const inspection = await inspectModule(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
   );
   const importedModuleNames = uniqueImportModules(inspection);
 
-  assert.equal(inspection.profile, "sdn-abi");
-  assert.deepEqual(importedModuleNames, ["sdn_host", "wasi_snapshot_preview1"]);
+  assert.equal(inspection.profile, "module-host-abi");
+  assert.deepEqual(importedModuleNames, ["space_data_module_host", "wasi_snapshot_preview1"]);
   assert.ok(inspection.exports.includes("_start"));
   assert.ok(inspection.exports.includes("plugin_alloc"));
   assert.ok(inspection.exports.includes("plugin_free"));
@@ -181,13 +181,13 @@ test("browser command surface accepts runtime configuration", async (t) => {
   assert.equal(status.publicKeyHex, config.publicKey.toString("hex"));
 });
 
-test("sdn-abi artifact requires the SDK host bridge instead of raw standalone WasmEdge", async () => {
+test("module-host-abi artifact requires the SDK host bridge instead of raw standalone WasmEdge", async () => {
   const inspection = await inspectModule(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
   );
   const importedModuleNames = uniqueImportModules(inspection);
 
-  assert.equal(inspection.profile, "sdn-abi");
-  assert.ok(importedModuleNames.includes("sdn_host"));
+  assert.equal(inspection.profile, "module-host-abi");
+  assert.ok(importedModuleNames.includes("space_data_module_host"));
   assert.ok(importedModuleNames.includes("wasi_snapshot_preview1"));
 });

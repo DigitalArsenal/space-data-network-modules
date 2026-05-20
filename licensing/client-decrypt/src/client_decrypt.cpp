@@ -3,7 +3,7 @@
  *
  * Decrypts either the legacy JSON envelope format or the canonical SDS `$LGR`
  * module-delivery grant format. For `$LGR` inputs the module fetches the
- * encrypted bundle over IPFS through the sync sdn_host bridge when the host has
+ * encrypted bundle over IPFS through the sync space_data_module_host bridge when the host has
  * not already supplied the encrypted bundle bytes.
  */
 
@@ -55,18 +55,18 @@ static const uint8_t REC_TRAILER_MAGIC[4] = {'$', 'R', 'E', 'C'};
 static const size_t REC_TRAILER_FOOTER_BYTES = 8;
 
 #if defined(SDN_WASI_PLUGIN)
-extern "C" __attribute__((import_module("sdn_host"), import_name("call_json")))
-int32_t sdn_host_call_json(const char* op_ptr, int32_t op_len,
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("call_json")))
+int32_t space_data_module_host_call_json(const char* op_ptr, int32_t op_len,
                            const char* payload_ptr, int32_t payload_len);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("response_len")))
-int32_t sdn_host_response_len(void);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("response_len")))
+int32_t space_data_module_host_response_len(void);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("read_response")))
-int32_t sdn_host_read_response(char* dst_ptr, int32_t dst_len);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("read_response")))
+int32_t space_data_module_host_read_response(char* dst_ptr, int32_t dst_len);
 
-extern "C" __attribute__((import_module("sdn_host"), import_name("clear_response")))
-int32_t sdn_host_clear_response(void);
+extern "C" __attribute__((import_module("space_data_module_host"), import_name("clear_response")))
+int32_t space_data_module_host_clear_response(void);
 #endif
 
 static int b64_char_value(char c) {
@@ -261,13 +261,13 @@ static DecryptResult decrypt_legacy_envelope(
 
 #if defined(SDN_WASI_PLUGIN)
 static bool read_hostcall_response(std::string& out_json) {
-    const int32_t resp_len = sdn_host_response_len();
+    const int32_t resp_len = space_data_module_host_response_len();
     if (resp_len <= 0) {
         return false;
     }
     std::vector<char> buffer(static_cast<size_t>(resp_len));
-    const int32_t read_len = sdn_host_read_response(buffer.data(), resp_len);
-    sdn_host_clear_response();
+    const int32_t read_len = space_data_module_host_read_response(buffer.data(), resp_len);
+    space_data_module_host_clear_response();
     if (read_len != resp_len) {
         return false;
     }
@@ -281,7 +281,7 @@ static bool fetch_ipfs_bytes(const char* cid, size_t cid_len, std::vector<uint8_
     payload += "\"}";
 
     static const char OP[] = "ipfs.cat";
-    if (sdn_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
         return false;
     }
 

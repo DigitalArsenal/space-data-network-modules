@@ -13,7 +13,7 @@ import {
   encryptBytesForRecipient,
   generateX25519Keypair,
 } from "space-data-module-sdk";
-import { getWasmWallet } from "../node_modules/space-data-module-sdk/src/utils/wasmCrypto.js";
+import { getWasmWallet } from "space-data-module-sdk/utils/wasm-crypto";
 import { PLG } from "spacedatastandards.org/lib/js/PLG/PLG.js";
 import { pluginCategory } from "spacedatastandards.org/lib/js/PLG/pluginCategory.js";
 import { KMF } from "spacedatastandards.org/lib/js/REC/KMF.js";

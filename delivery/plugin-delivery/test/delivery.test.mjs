@@ -2,7 +2,7 @@
 /**
  * Integration test: plugin-delivery WASM module (standalone repo)
  *
- * Tests the get_public_key method which doesn't require sdn_host imports.
+ * Tests the get_public_key method which doesn't require space_data_module_host imports.
  * The deliver_plugin method requires IPFS and is tested in the full
  * integration test suite.
  *

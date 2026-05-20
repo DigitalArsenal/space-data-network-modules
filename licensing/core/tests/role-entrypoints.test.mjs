@@ -4,12 +4,14 @@ import { WASI } from "node:wasi";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { inspectModule } from "space-data-module-sdk/host/isomorphic";
+import {
+  DEFAULT_HOSTCALL_IMPORT_MODULE,
+  inspectModule,
+} from "space-data-module-sdk";
 import {
   decodePlgManifest,
   isPlgManifestBuffer,
 } from "space-data-module-sdk/manifest";
-import { DEFAULT_HOSTCALL_IMPORT_MODULE } from "../node_modules/space-data-module-sdk/src/host/abi.js";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const PACKAGE_JSON_PATH = new URL("../package.json", import.meta.url);
@@ -86,7 +88,7 @@ test("embedded manifest in the built wasm matches the licensing package manifest
   const wasmBytes = fs.readFileSync(ISOMORPHIC_WASM_PATH);
 
   const inspection = await inspectModule(wasmBytes);
-  assert.equal(inspection.profile, "sdn-abi");
+  assert.equal(inspection.profile, "module-host-abi");
   assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer"));
   assert.ok(inspection.exports.includes("plugin_get_manifest_flatbuffer_size"));
   assert.ok(
