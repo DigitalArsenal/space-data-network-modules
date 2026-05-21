@@ -17,6 +17,7 @@
 #include "space_data_module_invoke.h"
 
 extern "C" int invoke(void);
+extern "C" int query_atmosphere_state_batch(void);
 
 namespace {
 
@@ -82,6 +83,13 @@ static const char *kMethod_invoke_output_ports[] = {
   "response",
 };
 
+static const PortRequirement kMethod_query_atmosphere_state_batch_input_ports[] = {
+  { "atmosphere", true },
+};
+static const char *kMethod_query_atmosphere_state_batch_output_ports[] = {
+  "states",
+};
+
 static const MethodDescriptor kMethodTable[] = {
   {
     "invoke",
@@ -93,6 +101,17 @@ static const MethodDescriptor kMethodTable[] = {
     true,
     "request",
     "response"
+  },
+  {
+    "query_atmosphere_state_batch",
+    &query_atmosphere_state_batch,
+    kMethod_query_atmosphere_state_batch_input_ports,
+    1u,
+    kMethod_query_atmosphere_state_batch_output_ports,
+    1u,
+    true,
+    "atmosphere",
+    "states"
   },
 };
 

@@ -48,16 +48,26 @@ json state_to_json(const State& state) {
     };
 }
 
+json state_to_provider_json(const State& state, const std::string& id, double altitude_m) {
+    json result = {
+        {"id", id},
+        {"altitudeM", altitude_m},
+        {"densityKgM3", state.density},
+        {"temperatureK", state.temperature},
+        {"pressurePa", state.pressure},
+        {"soundSpeedMps", state.soundSpeed},
+        {"molecularMassKgKmol", state.molecularMass},
+        {"exosphericTemperatureK", state.exosphericTemp},
+    };
+    return result;
+}
+
 Model parse_model(const json& params) {
     const auto model = params.value("model", std::string("US76"));
     return model == "NRLMSISE00" ? Model::NRLMSISE00 : Model::US76;
 }
 
-std::string query_altitude_json(const json& params) {
-    const auto model = parse_model(params);
-    const double altitude_m = params.at("altitudeM").get<double>();
-
-    State state{};
+State state_for_model(double altitude_m, Model model, const json& params) {
     if (model == Model::NRLMSISE00) {
         SolarActivity solar{};
         if (params.contains("solar")) {
@@ -71,14 +81,23 @@ std::string query_altitude_json(const json& params) {
                 }
             }
         }
-        state = nrlmsise00_simple(altitude_m, solar);
-    } else {
-        state = us76(altitude_m);
+        return nrlmsise00_simple(altitude_m, solar);
     }
+    return us76(altitude_m);
+}
+
+std::string model_name(Model model) {
+    return model == Model::NRLMSISE00 ? "NRLMSISE00" : "US76";
+}
+
+std::string query_altitude_json(const json& params) {
+    const auto model = parse_model(params);
+    const double altitude_m = params.at("altitudeM").get<double>();
+    const auto state = state_for_model(altitude_m, model, params);
 
     return json({
         {"altitudeM", altitude_m},
-        {"model", model == Model::NRLMSISE00 ? "NRLMSISE00" : "US76"},
+        {"model", model_name(model)},
         {"state", state_to_json(state)},
     }).dump();
 }
@@ -90,13 +109,48 @@ std::string query_altitudes_json(const json& params) {
     for (const auto& altitude_json : altitudes) {
         results.push_back(json::parse(query_altitude_json({
             {"altitudeM", altitude_json.get<double>()},
-            {"model", model == Model::NRLMSISE00 ? "NRLMSISE00" : "US76"},
+            {"model", model_name(model)},
             {"solar", params.value("solar", json::object())},
         })));
     }
     return json({
         {"count", results.size()},
         {"results", results},
+    }).dump();
+}
+
+std::string query_atmosphere_state_batch_json(const json& params) {
+    const auto model = parse_model(params);
+    json states = json::array();
+    const auto samples = params.contains("samples")
+        ? params.at("samples")
+        : json::array();
+
+    for (size_t index = 0; index < samples.size(); ++index) {
+        const auto& sample = samples.at(index);
+        const auto id = sample.value("id", std::string("sample-") + std::to_string(index));
+        const double altitude_m = sample.at("altitudeM").get<double>();
+        const auto state = state_for_model(altitude_m, model, params);
+        states.push_back(state_to_provider_json(state, id, altitude_m));
+    }
+
+    if (states.empty() && params.contains("altitudesM")) {
+        const auto altitudes = params.at("altitudesM");
+        for (size_t index = 0; index < altitudes.size(); ++index) {
+            const double altitude_m = altitudes.at(index).get<double>();
+            const auto state = state_for_model(altitude_m, model, params);
+            states.push_back(state_to_provider_json(
+                state,
+                std::string("altitude-") + std::to_string(index),
+                altitude_m));
+        }
+    }
+
+    return json({
+        {"provider", "atmosphere-model"},
+        {"model", model_name(model)},
+        {"count", states.size()},
+        {"states", states},
     }).dump();
 }
 
@@ -109,6 +163,9 @@ std::string dispatch_operation(const std::string& operation, const json& params)
     }
     if (operation == "queryAltitudes") {
         return query_altitudes_json(params);
+    }
+    if (operation == "queryAtmosphereStateBatch") {
+        return query_atmosphere_state_batch_json(params);
     }
 
     throw std::runtime_error("Unknown atmosphere operation: " + operation);

@@ -1,0 +1,51 @@
+{
+  "pluginId": "reentry-analysis",
+  "name": "Reentry Analysis",
+  "version": "0.1.0",
+  "description": "Evaluates reentry trajectory samples by composing atmosphere and hypersonic-condition providers.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "simulate_reentry",
+      "displayName": "Simulate Reentry",
+      "inputPorts": [
+        {
+          "portId": "scenario",
+          "acceptedTypeSets": [
+            {
+              "setId": "reentry-scenario",
+              "allowedTypes": [
+                { "schemaName": "RDM.fbs", "fileIdentifier": "$RDM", "rootTypeName": "RDM" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "reentry",
+          "acceptedTypeSets": [
+            {
+              "setId": "reentry-evaluation",
+              "allowedTypes": [
+                { "schemaName": "REM.fbs", "fileIdentifier": "$REM", "rootTypeName": "REM" }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

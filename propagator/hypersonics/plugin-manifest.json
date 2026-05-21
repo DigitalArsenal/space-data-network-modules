@@ -1,0 +1,52 @@
+{
+  "pluginId": "hypersonics-propagator",
+  "name": "Hypersonics Propagator",
+  "version": "0.1.0",
+  "description": "Evaluates hypersonic flight conditions from trajectory samples using a selectable atmosphere provider/model.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "evaluate_hypersonic_state_batch",
+      "displayName": "Evaluate Hypersonic State Batch",
+      "inputPorts": [
+        {
+          "portId": "trajectory",
+          "acceptedTypeSets": [
+            {
+              "setId": "trajectory-state",
+              "allowedTypes": [
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "conditions",
+          "acceptedTypeSets": [
+            {
+              "setId": "hypersonic-flight-conditions",
+              "allowedTypes": [
+                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

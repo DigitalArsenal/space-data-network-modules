@@ -81,6 +81,68 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result.results[1].state.pressure > result.results[2].state.pressure);
   });
 
+  test(`atmosphere state batch exposes the provider contract on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(harness, {
+      operation: "queryAtmosphereStateBatch",
+      params: {
+        model: "US76",
+        samples: [
+          { id: "sea-level", altitudeM: 0 },
+          { id: "ten-km", altitudeM: 10_000 },
+        ],
+      },
+    });
+
+    assert.equal(result.provider, "atmosphere-model");
+    assert.equal(result.model, "US76");
+    assert.equal(result.count, 2);
+    assert.deepEqual(
+      result.states.map((entry) => entry.id),
+      ["sea-level", "ten-km"],
+    );
+    assert.ok(Math.abs(result.states[0].densityKgM3 - 1.225) < 0.001);
+    assert.ok(Math.abs(result.states[0].pressurePa - 101_325) < 0.1);
+    assert.ok(Math.abs(result.states[1].densityKgM3 - 0.4135) < 0.002);
+    assert.ok(result.states[1].soundSpeedMps < result.states[0].soundSpeedMps);
+  });
+
+  test(`direct atmosphere batch method uses fixed provider method id on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      {
+        model: "US76",
+        samples: [{ id: "ten-km", altitudeM: 10_000 }],
+      },
+      {
+        methodId: "query_atmosphere_state_batch",
+        inputPortId: "atmosphere",
+        outputPortId: "states",
+      },
+    );
+
+    assert.equal(result.provider, "atmosphere-model");
+    assert.equal(result.model, "US76");
+    assert.equal(result.count, 1);
+    assert.equal(result.states[0].id, "ten-km");
+    assert.ok(Math.abs(result.states[0].densityKgM3 - 0.4135) < 0.002);
+  });
+
   test(`NRLMSISE00 responds to solar activity at 400 km on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
