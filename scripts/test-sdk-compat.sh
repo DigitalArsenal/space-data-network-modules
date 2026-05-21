@@ -7,10 +7,13 @@ SDK_ROOT="${SPACE_DATA_MODULE_SDK_ROOT:-$DEFAULT_SDK_ROOT}"
 # Paths are family-prefixed to match the submodule's subfolder layout.
 PACKAGES=(
     propagator/atmosphere
+    propagator/hypersonics
     propagator/cislunar
     propagator/hpop
     propagator/sgp4
     analysis/conjunction-assessment
+    analysis/reentry
+    analysis/launch-ascent
     analysis/maneuver
     analysis/od
     basilisk/runtime

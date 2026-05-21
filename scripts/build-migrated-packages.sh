@@ -5,10 +5,13 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # Paths are family-prefixed to match the submodule's subfolder layout.
 PACKAGES=(
     propagator/atmosphere
+    propagator/hypersonics
     propagator/cislunar
     propagator/hpop
     propagator/sgp4
     analysis/conjunction-assessment
+    analysis/reentry
+    analysis/launch-ascent
     analysis/maneuver
     analysis/od
     basilisk/runtime

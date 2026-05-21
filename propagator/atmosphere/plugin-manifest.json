@@ -42,6 +42,44 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "query_atmosphere_state_batch",
+      "displayName": "Query Atmosphere State Batch",
+      "inputPorts": [
+        {
+          "portId": "atmosphere",
+          "acceptedTypeSets": [
+            {
+              "setId": "atm-request",
+              "allowedTypes": [
+                { "schemaName": "ATM.fbs", "fileIdentifier": "$ATM", "rootTypeName": "ATM" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "states",
+          "acceptedTypeSets": [
+            {
+              "setId": "hfc-states",
+              "allowedTypes": [
+                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ]
 }

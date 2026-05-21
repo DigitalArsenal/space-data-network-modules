@@ -80,6 +80,19 @@ test("built artifact passes SDK compliance checks", async () => {
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
+test("manifest declares the fixed atmosphere provider method", () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const method = manifest.methods.find(
+    (entry) => entry.methodId === "query_atmosphere_state_batch",
+  );
+  assert.ok(method);
+  assert.equal(method.inputPorts[0].portId, "atmosphere");
+  assert.equal(method.outputPorts[0].portId, "states");
+  assert.deepEqual(method.outputPorts[0].acceptedTypeSets[0].allowedTypes, [
+    { schemaName: "HFC.fbs", fileIdentifier: "$HFC", rootTypeName: "HFC" },
+  ]);
+});
+
 test("built artifact exposes the standalone isomorphic surface", async () => {
   const inspection = await inspectModule(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
