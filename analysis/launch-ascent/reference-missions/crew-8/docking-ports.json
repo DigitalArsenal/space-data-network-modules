@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "missionId": "nasa-spacex-crew-8",
+  "station": "International Space Station",
+  "frame": "iss-body-visualization",
+  "ports": [
+    {
+      "portId": "harmony-forward",
+      "module": "Harmony",
+      "orientation": "forward",
+      "approxOffsetM": {
+        "x": 12,
+        "y": 0,
+        "z": 0
+      },
+      "offsetConfidence": "estimated",
+      "sourceIds": [
+        "nasa-crew8-overview",
+        "nasa-crew8-launch-to-dock-timeline"
+      ]
+    },
+    {
+      "portId": "harmony-zenith",
+      "module": "Harmony",
+      "orientation": "space-facing",
+      "approxOffsetM": {
+        "x": 0,
+        "y": 0,
+        "z": 12
+      },
+      "offsetConfidence": "estimated",
+      "sourceIds": [
+        "nasa-crew8-relocation-undock",
+        "nasa-crew8-relocation-redock"
+      ]
+    }
+  ],
+  "occupancy": [
+    {
+      "portId": "harmony-forward",
+      "state": "docked",
+      "startUtc": "2024-03-05T08:13:00Z",
+      "endUtc": "2024-05-02T12:57:00Z",
+      "sourceIds": [
+        "nasa-crew8-launch-to-dock-timeline",
+        "nasa-crew8-relocation-undock"
+      ]
+    },
+    {
+      "portId": "harmony-zenith",
+      "state": "docked",
+      "startUtc": "2024-05-02T13:46:00Z",
+      "endUtc": "2024-10-23T21:05:00Z",
+      "sourceIds": [
+        "nasa-crew8-relocation-redock",
+        "nasa-crew8-undocking-event"
+      ]
+    },
+    {
+      "portId": "harmony-zenith",
+      "state": "departed",
+      "startUtc": "2024-10-23T21:05:00Z",
+      "endUtc": "2024-10-25T07:29:00Z",
+      "sourceIds": [
+        "nasa-crew8-undocking-event",
+        "nasa-crew8-splashdown-release"
+      ]
+    }
+  ],
+  "relativeModelLimitations": [
+    "Offsets are visualization-scale approximations for Crew-8 Sandcastle continuity tests.",
+    "Precise ISS CAD port transforms and Dragon docking adapter geometry are not provided by the cited mission records."
+  ]
+}

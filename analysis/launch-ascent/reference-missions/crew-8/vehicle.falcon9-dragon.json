@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "vehicleId": "falcon9-block5-dragon-crew",
+  "displayName": "Falcon 9 Block 5 With Crew Dragon",
+  "sourceIds": [
+    "nasa-crew8-overview"
+  ],
+  "rocket": {
+    "provider": "SpaceX",
+    "family": "Falcon 9",
+    "variant": "Block 5",
+    "height": {
+      "value": 229.6,
+      "unit": "ft",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    "diameter": {
+      "value": 12,
+      "unit": "ft",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    "propellant": {
+      "oxidizer": "LOX",
+      "fuel": "RP-1",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    "targetSeparationVelocity": {
+      "value": 17500,
+      "unit": "mph",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    }
+  },
+  "spacecraft": {
+    "provider": "SpaceX",
+    "family": "Crew Dragon",
+    "name": "Endeavour",
+    "height": {
+      "value": 26.7,
+      "unit": "ft",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    "diameter": {
+      "value": 13,
+      "unit": "ft",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    "pressurizedVolume": {
+      "value": 328,
+      "unit": "ft3",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    "crewCapacity": {
+      "value": 7,
+      "unit": "persons",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    "returnMode": {
+      "value": "splashdown",
+      "confidence": "published",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    }
+  },
+  "stages": [
+    {
+      "stageId": "falcon9-first-stage",
+      "name": "Falcon 9 First Stage",
+      "engineFamily": "Merlin 1D",
+      "engineCount": 9,
+      "thrustPerEngine": {
+        "value": 190000,
+        "unit": "lbf",
+        "confidence": "published"
+      },
+      "propellant": {
+        "oxidizer": "LOX",
+        "fuel": "RP-1"
+      },
+      "massConfidence": "estimated",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    },
+    {
+      "stageId": "falcon9-second-stage",
+      "name": "Falcon 9 Second Stage",
+      "engineFamily": "Merlin Vacuum",
+      "engineCount": 1,
+      "propellant": {
+        "oxidizer": "LOX",
+        "fuel": "RP-1"
+      },
+      "massConfidence": "estimated",
+      "sourceIds": [
+        "nasa-crew8-overview",
+        "nasa-crew8-launch-to-dock-timeline"
+      ]
+    },
+    {
+      "stageId": "dragon-endeavour",
+      "name": "Crew Dragon Endeavour",
+      "engineFamily": "Draco",
+      "engineCount": null,
+      "propellant": {
+        "family": "hypergolic",
+        "confidence": "published"
+      },
+      "massConfidence": "estimated",
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ]
+    }
+  ],
+  "limitations": [
+    "Detailed Falcon 9 wet mass, dry mass, throttle schedule, ascent guidance, and aerodynamic coefficient tables are not public in the cited NASA sources.",
+    "Dragon rendezvous burn targeting and Crew Dragon GNC laws are reconstructed only from public event timing and should not be treated as telemetry-grade truth."
+  ]
+}

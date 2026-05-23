@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "missionId": "nasa-spacex-crew-8",
+  "displayName": "NASA SpaceX Crew-8",
+  "sourceIds": [
+    "nasa-crew8-overview",
+    "nasa-crew8-liftoff-post",
+    "nasa-crew8-splashdown-release"
+  ],
+  "launch": {
+    "vehicle": "falcon9-block5-dragon-crew",
+    "site": {
+      "id": "ksc-lc-39a",
+      "name": "Launch Complex 39A",
+      "center": "NASA Kennedy Space Center",
+      "region": "Florida",
+      "latitudeDeg": 28.608389,
+      "longitudeDeg": -80.604333,
+      "sourceIds": [
+        "nasa-crew8-overview"
+      ],
+      "coordinateConfidence": "derived"
+    },
+    "liftoffUtc": "2024-03-04T03:53:38Z",
+    "sourceIds": [
+      "nasa-crew8-launch-to-dock-timeline",
+      "nasa-crew8-liftoff-post"
+    ]
+  },
+  "spacecraft": {
+    "provider": "SpaceX",
+    "family": "Crew Dragon",
+    "name": "Endeavour",
+    "missionUse": "C206.5",
+    "sourceIds": [
+      "nasa-crew8-overview",
+      "nasa-crew8-liftoff-post"
+    ]
+  },
+  "crew": [
+    {
+      "name": "Matthew Dominick",
+      "role": "Commander",
+      "agency": "NASA"
+    },
+    {
+      "name": "Michael Barratt",
+      "role": "Pilot",
+      "agency": "NASA"
+    },
+    {
+      "name": "Jeanette Epps",
+      "role": "Mission Specialist",
+      "agency": "NASA"
+    },
+    {
+      "name": "Alexander Grebenkin",
+      "role": "Mission Specialist",
+      "agency": "Roscosmos"
+    }
+  ],
+  "issTarget": {
+    "station": "International Space Station",
+    "initialDockingPort": "harmony-forward",
+    "relocationPort": "harmony-zenith",
+    "sourceIds": [
+      "nasa-crew8-overview",
+      "nasa-crew8-relocation-undock",
+      "nasa-crew8-relocation-redock"
+    ]
+  },
+  "return": {
+    "splashdownRegion": "Gulf of Mexico off Pensacola, Florida",
+    "splashdownUtc": "2024-10-25T07:29:00Z",
+    "sourceIds": [
+      "nasa-crew8-splashdown-release"
+    ]
+  }
+}
