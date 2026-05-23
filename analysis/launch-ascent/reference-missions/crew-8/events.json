@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "missionId": "nasa-spacex-crew-8",
+  "timeScale": "UTC",
+  "events": [
+    {
+      "id": "liftoff",
+      "label": "Falcon 9 Liftoff",
+      "phase": "launch",
+      "utc": "2024-03-04T03:53:38Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "frame": "site-fixed",
+      "siteId": "ksc-lc-39a"
+    },
+    {
+      "id": "stage_2_ignition",
+      "label": "Stage 2 Ignition",
+      "phase": "ascent",
+      "utc": "2024-03-04T03:56:04Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "frame": "vehicle-event"
+    },
+    {
+      "id": "seco",
+      "label": "Second-Stage Engine Cutoff",
+      "phase": "ascent",
+      "utc": "2024-03-04T04:02:30Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "frame": "vehicle-event"
+    },
+    {
+      "id": "dragon_separation",
+      "label": "Dragon Separation And Draco Checkouts",
+      "phase": "ascent",
+      "utc": "2024-03-04T04:05:39Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "frame": "vehicle-event"
+    },
+    {
+      "id": "phase_burn",
+      "label": "Phase Burn",
+      "phase": "rendezvous",
+      "utc": "2024-03-04T04:39:23Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "deltaVApproxMps": 45.3,
+      "durationSeconds": 490,
+      "frame": "orbital"
+    },
+    {
+      "id": "boost_burn",
+      "label": "Boost Burn",
+      "phase": "rendezvous",
+      "utc": "2024-03-05T00:13:16Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "deltaVApproxMps": 15,
+      "durationSeconds": 162,
+      "frame": "orbital"
+    },
+    {
+      "id": "rendezvous_30km",
+      "label": "30 km Rendezvous Complete",
+      "phase": "rendezvous",
+      "utc": "2024-03-05T05:04:00Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 30,
+      "relativeRangeM": 30000,
+      "frame": "iss-lvlh"
+    },
+    {
+      "id": "approach_initiation_burn",
+      "label": "Approach Initiation Burn",
+      "phase": "rendezvous",
+      "utc": "2024-03-05T06:34:00Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "relativeRangeM": 7500,
+      "deltaVApproxMps": 0.66,
+      "durationSeconds": 90,
+      "frame": "iss-lvlh"
+    },
+    {
+      "id": "waypoint_zero",
+      "label": "Waypoint Zero",
+      "phase": "rendezvous",
+      "utc": "2024-03-05T07:19:00Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 30,
+      "relativeRangeM": 400,
+      "relativePosition": "below station",
+      "frame": "iss-lvlh"
+    },
+    {
+      "id": "waypoint_1",
+      "label": "Waypoint 1",
+      "phase": "rendezvous",
+      "utc": "2024-03-05T07:43:00Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 30,
+      "relativeRangeM": 220,
+      "relativePosition": "docking axis",
+      "frame": "iss-lvlh"
+    },
+    {
+      "id": "waypoint_2_arrive",
+      "label": "Waypoint 2 Arrive",
+      "phase": "docking",
+      "utc": "2024-03-05T07:54:00Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 30,
+      "relativeRangeM": 20,
+      "targetPort": "harmony-forward",
+      "frame": "iss-lvlh"
+    },
+    {
+      "id": "contact_capture",
+      "label": "Contact And Capture",
+      "phase": "docking",
+      "utc": "2024-03-05T08:00:00Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "targetPort": "harmony-forward",
+      "frame": "iss-port-frame"
+    },
+    {
+      "id": "docking_complete",
+      "label": "Docking Complete",
+      "phase": "docked",
+      "utc": "2024-03-05T08:13:00Z",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline",
+      "uncertaintySeconds": 1,
+      "targetPort": "harmony-forward",
+      "frame": "iss-port-frame"
+    },
+    {
+      "id": "relocation_undock_forward",
+      "label": "Relocation Undock From Harmony Forward",
+      "phase": "relocation",
+      "utc": "2024-05-02T12:57:00Z",
+      "sourceId": "nasa-crew8-relocation-undock",
+      "uncertaintySeconds": 60,
+      "fromPort": "harmony-forward",
+      "toPort": "harmony-zenith",
+      "frame": "iss-port-frame"
+    },
+    {
+      "id": "relocation_redock_zenith",
+      "label": "Relocation Redock To Harmony Zenith",
+      "phase": "relocation",
+      "utc": "2024-05-02T13:46:00Z",
+      "sourceId": "nasa-crew8-relocation-redock",
+      "uncertaintySeconds": 60,
+      "targetPort": "harmony-zenith",
+      "frame": "iss-port-frame"
+    },
+    {
+      "id": "undock_departure",
+      "label": "Crew-8 Undock For Return",
+      "phase": "departure",
+      "utc": "2024-10-23T21:05:00Z",
+      "sourceId": "nasa-crew8-undocking-event",
+      "uncertaintySeconds": 60,
+      "fromPort": "harmony-zenith",
+      "frame": "iss-port-frame"
+    },
+    {
+      "id": "deorbit_burn_start",
+      "label": "Deorbit Burn Start",
+      "phase": "reentry",
+      "utc": "2024-10-25T06:39:00Z",
+      "sourceId": "nasa-crew8-deorbit-prep",
+      "uncertaintySeconds": 120,
+      "durationSecondsApprox": 480,
+      "frame": "orbital"
+    },
+    {
+      "id": "deorbit_burn_completion_report",
+      "label": "Deorbit Burn Completion Report",
+      "phase": "reentry",
+      "utc": "2024-10-25T07:06:00Z",
+      "sourceId": "nasa-crew8-deorbit-complete",
+      "uncertaintySeconds": 1200,
+      "frame": "orbital"
+    },
+    {
+      "id": "drogues_deploy",
+      "label": "Drogue Parachutes Deploy",
+      "phase": "reentry",
+      "utc": "2024-10-25T07:25:00Z",
+      "sourceId": "nasa-crew8-deorbit-complete",
+      "uncertaintySeconds": 90,
+      "altitudeFtApprox": 18000,
+      "speedMphApprox": 350,
+      "timeBasis": "about four minutes before splashdown"
+    },
+    {
+      "id": "mains_deploy",
+      "label": "Main Parachutes Deploy",
+      "phase": "reentry",
+      "utc": "2024-10-25T07:26:00Z",
+      "sourceId": "nasa-crew8-deorbit-complete",
+      "uncertaintySeconds": 90,
+      "altitudeFtApprox": 6000,
+      "speedMphApprox": 119,
+      "timeBasis": "less than one minute after drogue deployment"
+    },
+    {
+      "id": "splashdown",
+      "label": "Splashdown Off Pensacola, Florida",
+      "phase": "splashdown",
+      "utc": "2024-10-25T07:29:00Z",
+      "sourceId": "nasa-crew8-splashdown-release",
+      "uncertaintySeconds": 60,
+      "region": "Gulf of Mexico off Pensacola, Florida",
+      "frame": "wgs84-region"
+    }
+  ]
+}

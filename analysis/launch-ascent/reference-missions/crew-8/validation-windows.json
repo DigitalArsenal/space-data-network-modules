@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "missionId": "nasa-spacex-crew-8",
+  "validationWindows": [
+    {
+      "id": "launch-ascent-events",
+      "eventIds": [
+        "liftoff",
+        "stage_2_ignition",
+        "seco",
+        "dragon_separation"
+      ],
+      "metric": "event-time-residual",
+      "toleranceSeconds": 2,
+      "rationale": "NASA launch-to-dock timeline provides second-level event times for the launch and early ascent sequence.",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline"
+    },
+    {
+      "id": "rendezvous-burn-events",
+      "eventIds": [
+        "phase_burn",
+        "boost_burn",
+        "approach_initiation_burn"
+      ],
+      "metric": "event-time-residual",
+      "toleranceSeconds": 5,
+      "rationale": "Timeline lists burn start times, durations, and approximate delta-v values; public data does not expose Dragon closed-loop burn targeting.",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline"
+    },
+    {
+      "id": "approach-gates",
+      "eventIds": [
+        "rendezvous_30km",
+        "waypoint_zero",
+        "waypoint_1",
+        "waypoint_2_arrive"
+      ],
+      "metric": "relative-range-gate",
+      "toleranceMeters": 100,
+      "rationale": "Approach gate ranges are public milestone values, not GPS-grade relative navigation truth.",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline"
+    },
+    {
+      "id": "docking-complete",
+      "eventIds": [
+        "contact_capture",
+        "docking_complete"
+      ],
+      "metric": "event-time-residual",
+      "toleranceSeconds": 2,
+      "rationale": "Contact/capture and docking-complete times are listed to the second in the NASA timeline.",
+      "sourceId": "nasa-crew8-launch-to-dock-timeline"
+    },
+    {
+      "id": "relocation",
+      "eventIds": [
+        "relocation_undock_forward",
+        "relocation_redock_zenith"
+      ],
+      "metric": "event-time-residual",
+      "toleranceSeconds": 90,
+      "rationale": "NASA blog records relocation undock and redock to the minute.",
+      "sourceId": "nasa-crew8-relocation-redock"
+    },
+    {
+      "id": "return-undocking",
+      "eventIds": [
+        "undock_departure"
+      ],
+      "metric": "event-time-residual",
+      "toleranceSeconds": 90,
+      "rationale": "NASA event page and return advisory record Crew-8 undocking at 5:05 p.m. EDT.",
+      "sourceId": "nasa-crew8-undocking-event"
+    },
+    {
+      "id": "deorbit-reentry",
+      "eventIds": [
+        "deorbit_burn_start",
+        "deorbit_burn_completion_report",
+        "drogues_deploy",
+        "mains_deploy"
+      ],
+      "metric": "event-time-residual",
+      "toleranceSeconds": 120,
+      "rationale": "Deorbit burn start and parachute deployment timing are public approximate return milestones.",
+      "sourceId": "nasa-crew8-deorbit-prep"
+    },
+    {
+      "id": "splashdown",
+      "eventIds": [
+        "splashdown"
+      ],
+      "metric": "region-and-time",
+      "toleranceSeconds": 90,
+      "toleranceRegion": "Gulf of Mexico off Pensacola, Florida",
+      "rationale": "NASA release provides public splashdown time and region, not a precise trajectory truth vector.",
+      "sourceId": "nasa-crew8-splashdown-release"
+    }
+  ]
+}

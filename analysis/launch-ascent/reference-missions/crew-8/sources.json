@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "missionId": "nasa-spacex-crew-8",
+  "accessedUtc": "2026-05-23T00:00:00Z",
+  "sources": [
+    {
+      "id": "nasa-crew8-overview",
+      "title": "NASA SpaceX Crew-8 Mission Overview",
+      "owner": "NASA Commercial Crew Program",
+      "url": "https://www.nasa.gov/wp-content/uploads/2024/01/crew-8-mission-overview-final.pdf",
+      "authority": "primary",
+      "supports": [
+        "falcon9-vehicle-summary",
+        "dragon-vehicle-summary",
+        "launch-site",
+        "initial-docking-port",
+        "mission-crew"
+      ]
+    },
+    {
+      "id": "nasa-crew8-launch-to-dock-timeline",
+      "title": "Crew-8 Rendezvous Summary Timeline",
+      "owner": "NASA",
+      "url": "https://www.nasa.gov/wp-content/uploads/2024/03/crew-8-launch-to-dock-summary-timeline-0304.pdf",
+      "authority": "primary",
+      "supports": [
+        "liftoff-time",
+        "ascent-events",
+        "rendezvous-burns",
+        "approach-gates",
+        "contact-capture",
+        "docking-complete"
+      ]
+    },
+    {
+      "id": "nasa-crew8-liftoff-post",
+      "title": "Liftoff! NASA SpaceX Crew-8 Begins Journey to International Space Station",
+      "owner": "NASA Commercial Crew Program",
+      "url": "https://www.nasa.gov/blogs/commercialcrew/2024/03/03/liftoff-nasas-spacex-crew-8-begins-journey-to-international-space-station-2/",
+      "authority": "primary",
+      "supports": [
+        "liftoff-confirmation",
+        "dragon-name",
+        "crew",
+        "iss-position-context"
+      ]
+    },
+    {
+      "id": "nasa-crew8-relocation-undock",
+      "title": "Crew Undocks in Dragon Spacecraft for Port Relocation",
+      "owner": "NASA International Space Station Blog",
+      "url": "https://www.nasa.gov/blogs/spacestation/2024/05/02/crew-undocks-in-dragon-spacecraft-for-port-relocation/",
+      "authority": "primary",
+      "supports": [
+        "relocation-undock-time",
+        "relocation-initial-port",
+        "relocation-final-port"
+      ]
+    },
+    {
+      "id": "nasa-crew8-relocation-redock",
+      "title": "Dragon Moves to New Port, Makes Way for Starliner",
+      "owner": "NASA International Space Station Blog",
+      "url": "https://www.nasa.gov/blogs/spacestation/2024/05/02/dragon-moves-to-new-port-makes-way-for-starliner/",
+      "authority": "primary",
+      "supports": [
+        "relocation-redock-time",
+        "relocation-final-port"
+      ]
+    },
+    {
+      "id": "nasa-crew8-undocking-event",
+      "title": "NASA SpaceX Crew-8 Undocking and Splashdown",
+      "owner": "NASA",
+      "url": "https://www.nasa.gov/event/crew-8-splashdown/",
+      "authority": "primary",
+      "supports": [
+        "return-undocking-time",
+        "splashdown-target-time"
+      ]
+    },
+    {
+      "id": "nasa-crew8-return-advisory",
+      "title": "NASA to Provide Live Coverage of Crew-8 Return, Splashdown",
+      "owner": "NASA",
+      "url": "https://www.nasa.gov/news-release/nasa-to-provide-live-coverage-of-crew-8-return-splashdown/",
+      "authority": "primary",
+      "supports": [
+        "return-undocking-time",
+        "return-coverage-window"
+      ]
+    },
+    {
+      "id": "nasa-crew8-deorbit-prep",
+      "title": "NASA SpaceX Crew-8 Prepares for Deorbit Burn",
+      "owner": "NASA International Space Station Blog",
+      "url": "https://www.nasa.gov/blogs/spacestation/2024/10/25/nasas-spacex-crew-8-prepares-for-deorbit-burn/",
+      "authority": "primary",
+      "supports": [
+        "deorbit-burn-start",
+        "deorbit-burn-duration",
+        "splashdown-target-time"
+      ]
+    },
+    {
+      "id": "nasa-crew8-deorbit-complete",
+      "title": "Dragon Deorbit Burn Complete; Next Up, NASA SpaceX Crew-8 Splashdown",
+      "owner": "NASA International Space Station Blog",
+      "url": "https://www.nasa.gov/blogs/spacestation/2024/10/25/dragon-deorbit-burn-complete-next-up-nasas-spacex-crew-8-splashdown/",
+      "authority": "primary",
+      "supports": [
+        "deorbit-burn-complete",
+        "parachute-deployment-altitudes",
+        "parachute-deployment-relative-times",
+        "splashdown-target-time"
+      ]
+    },
+    {
+      "id": "nasa-crew8-splashdown-release",
+      "title": "Back on Earth: NASA SpaceX Crew-8 Mission Splashes Down Off Florida",
+      "owner": "NASA",
+      "url": "https://www.nasa.gov/news-release/back-on-earth-nasas-spacex-crew-8-mission-splashes-down-off-florida/",
+      "authority": "primary",
+      "supports": [
+        "splashdown-time",
+        "splashdown-region",
+        "mission-duration"
+      ]
+    }
+  ]
+}
