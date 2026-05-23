@@ -62,4 +62,86 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result.peakHeating.valueWm2 > result.peakDynamicPressure.valuePa);
     assert.equal(result.impactPoint.altitudeM, 0);
   });
+
+  test(`reentry module generates a deorbit-to-impact trajectory and delta-v budget on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      {
+        atmosphereProvider: "atmosphere-model",
+        hypersonicsProvider: "hypersonics-propagator",
+        atmosphereModel: "US76",
+        vehicle: {
+          name: "Crew Dragon",
+          referenceAreaM2: 10.75,
+          referenceLengthM: 3.7,
+          noseRadiusM: 1.85,
+          massKg: 9_500,
+        },
+        entryInterface: {
+          latitudeDeg: 26.5,
+          longitudeDeg: -110.0,
+          altitudeM: 80_000,
+          speedMps: 7_650,
+          flightPathAngleDeg: -1.5,
+        },
+        targetImpact: {
+          latitudeDeg: 29.7,
+          longitudeDeg: -83.5,
+          altitudeM: 0,
+        },
+        corridor: {
+          durationSeconds: 1_500,
+          sampleStepSeconds: 30,
+        },
+        stableOrbit: {
+          altitudeM: 420_000,
+        },
+      },
+      {
+        methodId: "simulate_reentry",
+        inputPortId: "scenario",
+        outputPortId: "reentry",
+      },
+    );
+
+    assert.equal(result.provider, "reentry-analysis");
+    assert.equal(result.trajectorySource, "module-generated-entry-corridor");
+    assert.ok(result.trajectorySamples.length >= 45);
+    assertClose(
+      result.trajectorySamples[0].altitudeM,
+      80_000,
+      1_000,
+      "entry interface altitude",
+    );
+    assertClose(
+      result.trajectorySamples.at(-1).altitudeM,
+      0,
+      1,
+      "impact altitude",
+    );
+    assertClose(
+      result.impactPoint.latitudeDeg,
+      29.7,
+      0.1,
+      "impact latitude",
+    );
+    assertClose(
+      result.impactPoint.longitudeDeg,
+      -83.5,
+      0.1,
+      "impact longitude",
+    );
+    assert.ok(result.trajectoryGeometry.maxHeadingStepDeg < 2.0);
+    assert.ok(result.deltaV.fromStableOrbitDeorbitMps > 70);
+    assert.ok(result.deltaV.fromStableOrbitDeorbitMps < 250);
+    assert.equal(result.hypersonicConditions.length, result.trajectorySamples.length);
+  });
 }

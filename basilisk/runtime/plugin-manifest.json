@@ -52,6 +52,40 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "run_pointing_power_scenario",
+      "displayName": "Run Pointing and Power Scenario",
+      "inputPorts": [
+        {
+          "portId": "scenario",
+          "acceptedTypeSets": [
+            {
+              "setId": "basilisk-scenario-request",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "telemetry",
+          "acceptedTypeSets": [
+            {
+              "setId": "basilisk-telemetry",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ]
 }

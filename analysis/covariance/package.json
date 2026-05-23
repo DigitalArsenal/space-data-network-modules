@@ -1,0 +1,14 @@
+{
+  "name": "@orbpro/module-analysis-covariance",
+  "version": "0.1.0",
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node ../../scripts/build-sdk-compiled-module.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
+  },
+  "dependencies": {
+    "space-data-module-sdk": "^0.8.4"
+  }
+}

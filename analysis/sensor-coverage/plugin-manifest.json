@@ -1,0 +1,47 @@
+{
+  "pluginId": "sensor-coverage-analysis",
+  "name": "Sensor Coverage Analysis",
+  "version": "0.1.0",
+  "description": "Computes STK-style time coverage, revisit/gap statistics, and colored swath products from shared module inputs.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "compute_sensor_coverage",
+      "displayName": "Compute Sensor Coverage",
+      "inputPorts": [
+        {
+          "portId": "coverage",
+          "acceptedTypeSets": [
+            {
+              "setId": "coverage-request",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "coverage",
+          "acceptedTypeSets": [
+            {
+              "setId": "coverage-result",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

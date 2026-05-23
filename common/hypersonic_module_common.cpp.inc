@@ -187,6 +187,50 @@ std::vector<std::string> object_array(const std::string& json, const std::string
   return objects;
 }
 
+std::string object_value(const std::string& json, const std::string& key) {
+  const size_t key_pos = find_key(json, key);
+  if (key_pos == std::string::npos) {
+    return "";
+  }
+  const size_t object_open = json.find('{', key_pos);
+  if (object_open == std::string::npos) {
+    return "";
+  }
+
+  int object_depth = 0;
+  bool in_string = false;
+  bool escape = false;
+  for (size_t index = object_open; index < json.size(); ++index) {
+    const char ch = json[index];
+    if (in_string) {
+      if (escape) {
+        escape = false;
+      } else if (ch == '\\') {
+        escape = true;
+      } else if (ch == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+    if (ch == '"') {
+      in_string = true;
+      continue;
+    }
+    if (ch == '{') {
+      ++object_depth;
+      continue;
+    }
+    if (ch == '}') {
+      --object_depth;
+      if (object_depth == 0) {
+        return json.substr(object_open, index - object_open + 1);
+      }
+    }
+  }
+
+  return "";
+}
+
 std::vector<Sample> parse_samples(const std::string& request, const std::string& key) {
   std::vector<Sample> samples;
   const auto objects = object_array(request, key);

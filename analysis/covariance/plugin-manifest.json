@@ -1,0 +1,47 @@
+{
+  "pluginId": "covariance-analysis",
+  "name": "Covariance Analysis",
+  "version": "0.1.0",
+  "description": "Combines direct covariance, synthetic TLE-series scatter, and sensor bias inputs into an SDS-compatible covariance product.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "compute_covariance",
+      "displayName": "Compute Covariance",
+      "inputPorts": [
+        {
+          "portId": "covariance",
+          "acceptedTypeSets": [
+            {
+              "setId": "covariance-request",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "covariance",
+          "acceptedTypeSets": [
+            {
+              "setId": "ocm-covariance-result",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
