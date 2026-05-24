@@ -16,6 +16,11 @@ struct LaunchTrajectoryPoint {
   std::string phase;
 };
 
+struct ThrottlePoint {
+  double elapsedSeconds = 0.0;
+  double throttle = 1.0;
+};
+
 double deg_to_rad(double degrees) {
   return degrees * kPi / 180.0;
 }
@@ -31,6 +36,10 @@ double clamp01(double value) {
 double smoothstep(double value) {
   const double u = clamp01(value);
   return u * u * (3.0 - 2.0 * u);
+}
+
+double clamp_throttle(double value) {
+  return std::max(0.0, std::min(1.1, value));
 }
 
 double normalize_longitude_deg(double longitude) {
@@ -92,6 +101,109 @@ double heading_between_deg(
   return normalize_heading_deg(rad_to_deg(std::atan2(y, x)));
 }
 
+std::vector<ThrottlePoint> parse_throttle_schedule(
+  const std::string& guidance,
+  double duration
+) {
+  std::vector<ThrottlePoint> schedule;
+  if (!guidance.empty()) {
+    schedule.push_back({0.0, clamp_throttle(number_value(guidance, "throttle", 1.0))});
+  } else {
+    schedule.push_back({0.0, 1.0});
+  }
+
+  const size_t key = guidance.find("\"throttleSchedule\"");
+  if (key != std::string::npos) {
+    const size_t array_start = guidance.find('[', key);
+    if (array_start != std::string::npos) {
+      int depth = 0;
+      size_t array_end = std::string::npos;
+      for (size_t i = array_start; i < guidance.size(); ++i) {
+        if (guidance[i] == '[') {
+          ++depth;
+        } else if (guidance[i] == ']') {
+          --depth;
+          if (depth == 0) {
+            array_end = i;
+            break;
+          }
+        }
+      }
+      if (array_end != std::string::npos) {
+        size_t cursor = array_start + 1;
+        while (cursor < array_end) {
+          const size_t object_start = guidance.find('{', cursor);
+          if (object_start == std::string::npos || object_start >= array_end) {
+            break;
+          }
+          int object_depth = 0;
+          size_t object_end = std::string::npos;
+          for (size_t i = object_start; i <= array_end; ++i) {
+            if (guidance[i] == '{') {
+              ++object_depth;
+            } else if (guidance[i] == '}') {
+              --object_depth;
+              if (object_depth == 0) {
+                object_end = i;
+                break;
+              }
+            }
+          }
+          if (object_end == std::string::npos) {
+            break;
+          }
+          const std::string object = guidance.substr(object_start, object_end - object_start + 1);
+          schedule.push_back({
+            std::max(0.0, number_value(
+              object,
+              "elapsedSeconds",
+              number_value(object, "timeSeconds", 0.0)
+            )),
+            clamp_throttle(number_value(object, "throttle", 1.0)),
+          });
+          cursor = object_end + 1;
+        }
+      }
+    }
+  }
+
+  const double upper_stage_throttle = number_value(guidance, "upperStageThrottle", -1.0);
+  if (upper_stage_throttle >= 0.0) {
+    schedule.push_back({duration * 0.33, clamp_throttle(upper_stage_throttle)});
+  }
+
+  std::sort(schedule.begin(), schedule.end(), [](const auto& left, const auto& right) {
+    return left.elapsedSeconds < right.elapsedSeconds;
+  });
+
+  std::vector<ThrottlePoint> deduped;
+  for (const auto& point : schedule) {
+    if (!deduped.empty() && std::fabs(deduped.back().elapsedSeconds - point.elapsedSeconds) < 1e-6) {
+      deduped.back() = point;
+    } else {
+      deduped.push_back(point);
+    }
+  }
+  if (deduped.empty() || deduped.front().elapsedSeconds > 0.0) {
+    deduped.insert(deduped.begin(), {0.0, 1.0});
+  }
+  return deduped;
+}
+
+double throttle_at(const std::vector<ThrottlePoint>& schedule, double elapsedSeconds) {
+  if (schedule.empty()) {
+    return 1.0;
+  }
+  double throttle = schedule.front().throttle;
+  for (const auto& point : schedule) {
+    if (point.elapsedSeconds > elapsedSeconds) {
+      break;
+    }
+    throttle = point.throttle;
+  }
+  return throttle;
+}
+
 std::vector<LaunchTrajectoryPoint> generate_target_orbit_trajectory(
   const std::string& request,
   const Vehicle& vehicle
@@ -116,22 +228,82 @@ std::vector<LaunchTrajectoryPoint> generate_target_orbit_trajectory(
   const double duration = std::max(60.0, number_value(guidance, "durationSeconds", 540.0));
   const double step = std::max(1.0, number_value(guidance, "sampleStepSeconds", 15.0));
   const int sample_count = std::max(2, static_cast<int>(std::ceil(duration / step)) + 1);
-  const double final_downrange = std::max(500000.0, target_alt * 11.25);
+  const std::vector<ThrottlePoint> throttle_schedule =
+    parse_throttle_schedule(guidance, duration);
+
+  std::vector<double> elapsed_values;
+  std::vector<double> throttle_progress;
+  std::vector<double> altitude_values;
+  std::vector<double> speed_values;
+  elapsed_values.reserve(static_cast<size_t>(sample_count));
+  throttle_progress.reserve(static_cast<size_t>(sample_count));
+  altitude_values.reserve(static_cast<size_t>(sample_count));
+  speed_values.reserve(static_cast<size_t>(sample_count));
+
+  double throttle_seconds = 0.0;
+  double previous_elapsed = 0.0;
+  double previous_throttle = throttle_at(throttle_schedule, 0.0);
+  for (int index = 0; index < sample_count; ++index) {
+    const double elapsed = std::min(duration, index * step);
+    const double throttle = throttle_at(throttle_schedule, elapsed);
+    if (index > 0) {
+      const double dt = std::max(0.0, elapsed - previous_elapsed);
+      throttle_seconds += 0.5 * (previous_throttle + throttle) * dt;
+    }
+    const double time_u = clamp01(elapsed / duration);
+    const double throttle_u = clamp01(throttle_seconds / duration);
+    const double average_throttle = std::max(0.2, throttle_seconds / std::max(1.0, elapsed));
+    const double achieved_alt = std::max(
+      1000.0,
+      target_alt * std::min(1.05, std::max(0.35, std::pow(average_throttle, 0.7)))
+    );
+
+    elapsed_values.push_back(elapsed);
+    throttle_progress.push_back(throttle_u);
+    altitude_values.push_back(
+      launch_alt + std::max(0.0, achieved_alt - launch_alt) * smoothstep(time_u)
+    );
+    speed_values.push_back(target_speed * std::pow(throttle_u, 0.55));
+    previous_elapsed = elapsed;
+    previous_throttle = throttle;
+  }
+  altitude_values.back() = launch_alt +
+    std::max(0.0, target_alt - launch_alt) *
+      std::min(1.05, std::max(0.35, std::pow(
+        std::max(0.2, throttle_seconds / duration),
+        0.7
+      )));
+  speed_values.back() = target_speed * std::pow(
+    clamp01(throttle_seconds / duration),
+    0.55
+  );
 
   std::vector<LaunchTrajectoryPoint> points;
   points.reserve(static_cast<size_t>(sample_count));
+  double downrange = 0.0;
   for (int index = 0; index < sample_count; ++index) {
-    const double elapsed = std::min(duration, index * step);
+    const double elapsed = elapsed_values[index];
     const double u = clamp01(elapsed / duration);
-    const double downrange = final_downrange * smoothstep(u);
+    double flight_path_angle_deg = 89.0;
+    if (index > 0) {
+      const double dt = std::max(1e-6, elapsed_values[index] - elapsed_values[index - 1]);
+      const double distance = 0.5 * (speed_values[index - 1] + speed_values[index]) * dt;
+      const double vertical = altitude_values[index] - altitude_values[index - 1];
+      const double horizontal = std::sqrt(std::max(0.0, distance * distance - vertical * vertical));
+      downrange += horizontal;
+      flight_path_angle_deg = rad_to_deg(std::asin(std::max(-1.0, std::min(1.0, vertical / std::max(distance, 1.0)))));
+    }
     const auto [lat, lon] = great_circle_point_deg(launch_lat, launch_lon, azimuth, downrange);
 
     LaunchTrajectoryPoint point{};
     point.sample.elapsedSeconds = elapsed;
-    point.sample.altitudeM = launch_alt + std::max(0.0, target_alt - launch_alt) * std::pow(u, 1.25);
-    point.sample.speedMps = target_speed * std::pow(u, 0.55);
-    point.sample.massKg = std::max(vehicle.massKg * 0.08, vehicle.massKg * (1.0 - 0.82 * u));
-    point.sample.flightPathAngleDeg = 0.2 + 84.8 * std::pow(1.0 - u, 1.65);
+    point.sample.altitudeM = altitude_values[index];
+    point.sample.speedMps = speed_values[index];
+    point.sample.massKg = std::max(
+      vehicle.massKg * 0.08,
+      vehicle.massKg * (1.0 - 0.82 * throttle_progress[index])
+    );
+    point.sample.flightPathAngleDeg = flight_path_angle_deg;
     point.latitudeDeg = lat;
     point.longitudeDeg = lon;
     point.downrangeM = downrange;
@@ -161,6 +333,7 @@ std::vector<LaunchTrajectoryPoint> generate_target_orbit_trajectory(
   }
   if (points.size() >= 2) {
     points.back().headingDeg = points[points.size() - 2].headingDeg;
+    points.front().sample.flightPathAngleDeg = points[1].sample.flightPathAngleDeg;
   }
 
   return points;
@@ -250,6 +423,63 @@ std::string delta_v_json(const std::string& request, const std::vector<LaunchTra
   return buffer;
 }
 
+std::string achieved_orbit_json(
+  const std::string& request,
+  const std::vector<LaunchTrajectoryPoint>& points
+) {
+  if (points.empty()) {
+    return "null";
+  }
+  const std::string launch_site = object_value(request, "launchSite");
+  const std::string target_orbit = object_value(request, "targetOrbit");
+  const double launch_lat = number_value(launch_site, "latitudeDeg", 28.608389);
+  const double launch_alt = number_value(launch_site, "altitudeM", 0.0);
+  const double azimuth = number_value(target_orbit, "azimuthDeg", 73.0);
+  const auto& point = points.back();
+  const double radius = kEarthMeanRadiusM + std::max(point.sample.altitudeM, 0.0);
+  const double fpa = deg_to_rad(point.sample.flightPathAngleDeg);
+  const double earth_rotation =
+    kEarthRotationRateRadS * (kEarthMeanRadiusM + launch_alt) *
+    std::cos(deg_to_rad(launch_lat)) * std::sin(deg_to_rad(azimuth));
+  const double tangential_speed =
+    std::max(0.0, point.sample.speedMps * std::cos(fpa) + earth_rotation);
+  const double radial_speed = point.sample.speedMps * std::sin(fpa);
+  const double inertial_speed = std::hypot(tangential_speed, radial_speed);
+  const double energy = 0.5 * inertial_speed * inertial_speed - kEarthMuM3S2 / radius;
+  double semi_major_axis = std::numeric_limits<double>::infinity();
+  double eccentricity = 1.0;
+  double apoapsis = point.sample.altitudeM;
+  double periapsis = point.sample.altitudeM;
+  if (energy < -1e-9) {
+    semi_major_axis = -kEarthMuM3S2 / (2.0 * energy);
+    const double angular_momentum = radius * tangential_speed;
+    const double e2 = 1.0 +
+      (2.0 * energy * angular_momentum * angular_momentum) /
+        (kEarthMuM3S2 * kEarthMuM3S2);
+    eccentricity = std::sqrt(std::max(0.0, e2));
+    apoapsis = semi_major_axis * (1.0 + eccentricity) - kEarthMeanRadiusM;
+    periapsis = semi_major_axis * (1.0 - eccentricity) - kEarthMeanRadiusM;
+  }
+
+  char buffer[1024];
+  std::snprintf(
+    buffer,
+    sizeof(buffer),
+    "{\"apoapsisM\":%.12g,\"periapsisM\":%.12g,"
+    "\"semiMajorAxisM\":%.12g,\"eccentricity\":%.12g,"
+    "\"inertialSpeedMps\":%.12g,\"tangentialSpeedMps\":%.12g,"
+    "\"radialSpeedMps\":%.12g,\"earthRotationBoostMps\":%.12g}",
+    apoapsis,
+    periapsis,
+    std::isfinite(semi_major_axis) ? semi_major_axis : 0.0,
+    eccentricity,
+    inertial_speed,
+    tangential_speed,
+    radial_speed,
+    earth_rotation);
+  return buffer;
+}
+
 }  // namespace
 
 extern "C" int simulate_launch_ascent(void) {
@@ -333,6 +563,7 @@ extern "C" int simulate_launch_ascent(void) {
     "\"launchTrajectory\":{\"sampleCount\":" + std::to_string(samples.size()) +
       ",\"maxHeadingStepDeg\":" + std::to_string(max_heading_step_deg(generated_points)) + "},"
     "\"deltaV\":" + delta_v_json(request, generated_points) + ","
+    "\"achievedOrbit\":" + achieved_orbit_json(request, generated_points) + ","
     "\"events\":["
     "{\"event\":\"liftoff\",\"sampleId\":" + quote(first.sample.id) + "},"
     "{\"event\":\"max_dynamic_pressure\",\"sampleId\":" + quote(max_q.sample.id) + "},"
