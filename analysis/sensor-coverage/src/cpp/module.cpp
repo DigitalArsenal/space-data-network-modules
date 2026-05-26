@@ -4,6 +4,7 @@ namespace {
 
 constexpr double kEarthRadiusM = 6378137.0;
 constexpr double kRadiansToDegrees = 180.0 / 3.14159265358979323846;
+constexpr int kCoverageGeometryChunkSize = 256;
 
 struct Interval {
   double start = 0.0;
@@ -45,6 +46,11 @@ struct SensorConfig {
   int angularSamples = 32;
 };
 
+struct SensorTrack {
+  SensorConfig sensor;
+  std::vector<State> states;
+};
+
 struct FootprintSample {
   int sensorId = 0;
   double elapsedSeconds = 0.0;
@@ -74,6 +80,7 @@ struct Cell {
   double latitude = 0.0;
   double longitude = 0.0;
   std::vector<Interval> intervals;
+  std::vector<int> contributingSensorIds;
   uint32_t sensorMask = 0;
   double totalAccess = 0.0;
   double maxGap = 0.0;
@@ -184,17 +191,21 @@ GridConfig parse_grid(const std::string& request) {
   return config;
 }
 
+SensorConfig parse_sensor_config(const std::string& sensor_json, int fallback_sensor_id = 0) {
+  SensorConfig config{};
+  config.sensorId = static_cast<int>(number_value(sensor_json, "sensorId", static_cast<double>(fallback_sensor_id)));
+  config.type = string_value(sensor_json, "type", "conic");
+  config.outerHalfAngleRad = clamp(number_value(sensor_json, "outerHalfAngleRad", 0.20), 0.01, 1.2);
+  config.xHalfAngleRad = clamp(number_value(sensor_json, "xHalfAngleRad", config.outerHalfAngleRad), 0.01, 1.2);
+  config.yHalfAngleRad = clamp(number_value(sensor_json, "yHalfAngleRad", config.outerHalfAngleRad), 0.01, 1.2);
+  config.radiusMeters = std::max(1.0, number_value(sensor_json, "radiusMeters", 1500000.0));
+  config.angularSamples = static_cast<int>(clamp(number_value(sensor_json, "angularSamples", 32.0), 8.0, 96.0));
+  return config;
+}
+
 SensorConfig parse_sensor(const std::string& request) {
   const std::string sensor = object_value(request, "sensor");
-  SensorConfig config{};
-  config.sensorId = static_cast<int>(number_value(sensor, "sensorId", 0.0));
-  config.type = string_value(sensor, "type", "conic");
-  config.outerHalfAngleRad = clamp(number_value(sensor, "outerHalfAngleRad", 0.20), 0.01, 1.2);
-  config.xHalfAngleRad = clamp(number_value(sensor, "xHalfAngleRad", config.outerHalfAngleRad), 0.01, 1.2);
-  config.yHalfAngleRad = clamp(number_value(sensor, "yHalfAngleRad", config.outerHalfAngleRad), 0.01, 1.2);
-  config.radiusMeters = std::max(1.0, number_value(sensor, "radiusMeters", 1500000.0));
-  config.angularSamples = static_cast<int>(clamp(number_value(sensor, "angularSamples", 32.0), 8.0, 96.0));
-  return config;
+  return parse_sensor_config(sensor.empty() ? request : sensor);
 }
 
 Vec3 parse_vec3(const std::string& object) {
@@ -256,6 +267,35 @@ std::vector<State> parse_states(const std::string& request) {
     return left.elapsedSeconds < right.elapsedSeconds;
   });
   return states;
+}
+
+std::vector<SensorTrack> parse_sensor_tracks(const std::string& request) {
+  const auto sensor_objects = object_array(request, "sensors");
+  std::vector<SensorTrack> tracks;
+  if (!sensor_objects.empty()) {
+    tracks.reserve(sensor_objects.size());
+    for (size_t index = 0; index < sensor_objects.size(); ++index) {
+      const auto& sensor_object = sensor_objects[index];
+      const std::string nested_sensor = object_value(sensor_object, "sensor");
+      SensorTrack track{};
+      track.sensor = parse_sensor_config(
+        nested_sensor.empty() ? sensor_object : nested_sensor,
+        static_cast<int>(index));
+      track.states = parse_states(sensor_object);
+      if (track.states.size() >= 2) {
+        tracks.push_back(track);
+      }
+    }
+    return tracks;
+  }
+
+  SensorTrack track{};
+  track.sensor = parse_sensor(request);
+  track.states = parse_states(request);
+  if (track.states.size() >= 2) {
+    tracks.push_back(track);
+  }
+  return tracks;
 }
 
 std::vector<Cell> create_cells(const GridConfig& grid) {
@@ -447,6 +487,14 @@ void accumulate_swaths(std::vector<Cell>& cells, const std::vector<SwathSegment>
       if (segment.sensorId >= 0 && segment.sensorId < 32) {
         cell.sensorMask |= static_cast<uint32_t>(1u << segment.sensorId);
       }
+      if (
+        std::find(
+          cell.contributingSensorIds.begin(),
+          cell.contributingSensorIds.end(),
+          segment.sensorId) == cell.contributingSensorIds.end()
+      ) {
+        cell.contributingSensorIds.push_back(segment.sensorId);
+      }
     }
   }
 }
@@ -532,7 +580,7 @@ std::string cells_json(const std::vector<Cell>& cells, double duration) {
       "\"longitudeDeg\":%.12g,\"accessCount\":%d,\"revisitCount\":%d,"
       "\"totalAccessDurationSec\":%.12g,\"percentCoverage\":%.12g,"
       "\"maxGapDurationSec\":%.12g,\"meanRevisitTimeSec\":%.12g,"
-      "\"sensorMask\":%u,\"colorRgba\":%s}",
+      "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"colorRgba\":%s}",
       cell.index,
       cell.row,
       cell.column,
@@ -544,6 +592,7 @@ std::string cells_json(const std::vector<Cell>& cells, double duration) {
       percent,
       cell.maxGap,
       cell.meanRevisit,
+      cell.contributingSensorIds.size(),
       cell.sensorMask,
       color_json(percent).c_str());
     output += buffer;
@@ -643,6 +692,51 @@ std::string footprints_json(const std::vector<FootprintSample>& samples) {
   return output;
 }
 
+std::string aggregate_geometry_json(const std::vector<SwathSegment>& segments, size_t active_sensor_count) {
+  size_t vertex_count = 0;
+  std::string deltas = "[";
+  for (size_t index = 0; index < segments.size(); ++index) {
+    if (index > 0) {
+      deltas += ",";
+    }
+    const auto& segment = segments[index];
+    vertex_count += 4;
+    char delta[512];
+    std::snprintf(
+      delta,
+      sizeof(delta),
+      "{\"operation\":\"add\",\"polygonIndex\":%zu,\"swathIndex\":%d,"
+      "\"sensorId\":%d,\"chunkId\":%zu,\"startSeconds\":%.12g,\"stopSeconds\":%.12g}",
+      index,
+      segment.index,
+      segment.sensorId,
+      index / static_cast<size_t>(kCoverageGeometryChunkSize),
+      segment.start,
+      segment.stop);
+    deltas += delta;
+  }
+  deltas += "]";
+
+  char header[1024];
+  std::snprintf(
+    header,
+    sizeof(header),
+    "{\"contract\":\"orbpro.coverage.aggregate.v0\","
+    "\"aggregation\":\"all_active_sensors\","
+    "\"operationMode\":\"additive_deltas\","
+    "\"activeSensorCount\":%zu,"
+    "\"chunkSize\":%d,"
+    "\"full\":{\"kind\":\"multipolygon\",\"polygonCount\":%zu,\"ringCount\":%zu,"
+    "\"vertexCount\":%zu,\"ringReference\":\"swaths[].vertices\"},"
+    "\"deltas\":",
+    active_sensor_count,
+    kCoverageGeometryChunkSize,
+    segments.size(),
+    segments.size(),
+    vertex_count);
+  return std::string(header) + deltas + "}";
+}
+
 }  // namespace
 
 extern "C" int compute_sensor_coverage(void) {
@@ -658,14 +752,22 @@ extern "C" int compute_sensor_coverage(void) {
     return fail("invalid-time-span", "Coverage stopSeconds must be greater than startSeconds.");
   }
 
-  const SensorConfig sensor = parse_sensor(request);
-  const std::vector<State> states = parse_states(request);
-  if (states.size() < 2) {
+  const std::vector<SensorTrack> tracks = parse_sensor_tracks(request);
+  if (tracks.empty()) {
     return fail("missing-states", "Coverage request must include at least two propagated sensor-owner states.");
   }
 
-  const std::vector<FootprintSample> footprints = compute_footprints(states, sensor);
-  const std::vector<SwathSegment> swaths = build_swath_segments(footprints);
+  std::vector<FootprintSample> footprints;
+  std::vector<SwathSegment> swaths;
+  for (const auto& track : tracks) {
+    const std::vector<FootprintSample> track_footprints = compute_footprints(track.states, track.sensor);
+    const std::vector<SwathSegment> track_swaths = build_swath_segments(track_footprints);
+    footprints.insert(footprints.end(), track_footprints.begin(), track_footprints.end());
+    for (auto segment : track_swaths) {
+      segment.index = static_cast<int>(swaths.size());
+      swaths.push_back(segment);
+    }
+  }
   if (swaths.empty()) {
     return fail("empty-swath", "Sensor geometry did not intersect Earth over the sampled time span.");
   }
@@ -682,13 +784,16 @@ extern "C" int compute_sensor_coverage(void) {
       ++accessed;
       total_access += cell.totalAccess;
     }
-    if (cell.sensorMask != 0 && (cell.sensorMask & (cell.sensorMask - 1u)) != 0) {
+    if (cell.contributingSensorIds.size() > 1) {
       ++multi_access;
     }
   }
 
   const double duration = grid.stop - grid.start;
   const std::string fom_type = string_value(request, "figureOfMerit", "percent_coverage");
+  const std::string output_mode = string_value(request, "outputMode", "");
+  const bool aggregate_output =
+    output_mode == "aggregate_differential_geometry" || tracks.size() > 1;
   const std::string coverage_source = object_value(request, "coverageSource");
   char header[2048];
   std::snprintf(
@@ -700,6 +805,7 @@ extern "C" int compute_sensor_coverage(void) {
     "\"grid\":{\"rows\":%d,\"columns\":%d,\"cellCount\":%zu,"
     "\"latitudeStepDeg\":%.12g,\"longitudeStepDeg\":%.12g},"
     "\"statistics\":{\"totalCells\":%zu,\"accessedCells\":%d,\"multiAccessCells\":%d,"
+    "\"activeSensorCount\":%zu,\"swathCount\":%zu,"
     "\"totalAccessDurationSec\":%.12g,\"percentCoverage\":%.12g},",
     coverage_source.empty() ? "{}" : coverage_source.c_str(),
     grid.rows,
@@ -710,14 +816,17 @@ extern "C" int compute_sensor_coverage(void) {
     cells.size(),
     accessed,
     multi_access,
+    tracks.size(),
+    swaths.size(),
     total_access,
     cells.empty() ? 0.0 : 100.0 * static_cast<double>(accessed) / static_cast<double>(cells.size()));
 
   std::string response = std::string(header) +
     "\"cells\":" + cells_json(cells, duration) + "," +
     "\"figureOfMerit\":" + fom_json(cells, fom_type, duration) + "," +
-    "\"footprints\":" + footprints_json(footprints) + "," +
+    "\"footprints\":" + (aggregate_output ? std::string("[]") : footprints_json(footprints)) + "," +
     "\"swaths\":" + swaths_json(swaths, duration) + "," +
+    "\"aggregateGeometry\":" + aggregate_geometry_json(swaths, tracks.size()) + "," +
     "\"assumptions\":[\"OrbPro Sensor-owned propagated states define the coverage source\","
     "\"swath polygons are continuous along-track left/right footprint bands\","
     "\"grid cells are secondary figure-of-merit samples accumulated from swath geometry\"]}";
