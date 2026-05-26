@@ -85,6 +85,11 @@ struct Cell {
   double totalAccess = 0.0;
   double maxGap = 0.0;
   double meanRevisit = 0.0;
+  double firstResponse = 0.0;
+  double maxResponse = 0.0;
+  double meanResponse = 0.0;
+  double totalGap = 0.0;
+  double revisitGapTotal = 0.0;
   int accessCount = 0;
   int revisitCount = 0;
 };
@@ -530,16 +535,47 @@ void update_cell_statistics(Cell& cell, const GridConfig& grid) {
   cell.revisitCount = std::max(0, cell.accessCount - 1);
   cell.totalAccess = 0.0;
   cell.maxGap = 0.0;
-  double gap_sum = 0.0;
+  cell.totalGap = 0.0;
+  cell.revisitGapTotal = 0.0;
+  cell.firstResponse = 0.0;
+  cell.maxResponse = 0.0;
+  cell.meanResponse = 0.0;
+  const double duration = std::max(0.0, grid.stop - grid.start);
+  if (cell.intervals.empty()) {
+    cell.totalGap = duration;
+    cell.firstResponse = duration;
+    cell.maxGap = duration;
+    cell.maxResponse = duration;
+    cell.meanResponse = duration;
+    return;
+  }
+
+  double response_gap_sum = 0.0;
+  int response_gap_count = 0;
+  auto accumulate_response_gap = [&](double gap) {
+    const double finite_gap = std::max(0.0, gap);
+    cell.maxResponse = std::max(cell.maxResponse, finite_gap);
+    cell.maxGap = std::max(cell.maxGap, finite_gap);
+    response_gap_sum += finite_gap;
+    ++response_gap_count;
+  };
+
+  cell.firstResponse = std::max(0.0, cell.intervals.front().start - grid.start);
+  accumulate_response_gap(cell.firstResponse);
   for (size_t index = 0; index < cell.intervals.size(); ++index) {
     cell.totalAccess += cell.intervals[index].stop - cell.intervals[index].start;
     if (index > 0) {
       const double gap = cell.intervals[index].start - cell.intervals[index - 1].stop;
-      cell.maxGap = std::max(cell.maxGap, gap);
-      gap_sum += gap;
+      cell.revisitGapTotal += gap;
+      accumulate_response_gap(gap);
     }
   }
-  cell.meanRevisit = cell.revisitCount > 0 ? gap_sum / cell.revisitCount : 0.0;
+  accumulate_response_gap(grid.stop - cell.intervals.back().stop);
+  cell.totalGap = std::max(0.0, duration - cell.totalAccess);
+  cell.meanRevisit =
+    cell.revisitCount > 0 ? cell.revisitGapTotal / cell.revisitCount : 0.0;
+  cell.meanResponse =
+    response_gap_count > 0 ? response_gap_sum / response_gap_count : 0.0;
 }
 
 std::string color_json(double percent) {
@@ -564,6 +600,30 @@ std::string vertex_json(const Vertex& vertex) {
   return buffer;
 }
 
+std::string interval_json(const Interval& interval) {
+  char buffer[192];
+  std::snprintf(
+    buffer,
+    sizeof(buffer),
+    "{\"startSeconds\":%.12g,\"stopSeconds\":%.12g,\"durationSec\":%.12g}",
+    interval.start,
+    interval.stop,
+    interval.stop - interval.start);
+  return buffer;
+}
+
+std::string intervals_json(const std::vector<Interval>& intervals) {
+  std::string output = "[";
+  for (size_t index = 0; index < intervals.size(); ++index) {
+    if (index > 0) {
+      output += ",";
+    }
+    output += interval_json(intervals[index]);
+  }
+  output += "]";
+  return output;
+}
+
 std::string cells_json(const std::vector<Cell>& cells, double duration) {
   std::string output = "[";
   for (size_t index = 0; index < cells.size(); ++index) {
@@ -580,7 +640,10 @@ std::string cells_json(const std::vector<Cell>& cells, double duration) {
       "\"longitudeDeg\":%.12g,\"accessCount\":%d,\"revisitCount\":%d,"
       "\"totalAccessDurationSec\":%.12g,\"percentCoverage\":%.12g,"
       "\"maxGapDurationSec\":%.12g,\"meanRevisitTimeSec\":%.12g,"
-      "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"colorRgba\":%s}",
+      "\"firstResponseTimeSec\":%.12g,\"maxResponseTimeSec\":%.12g,"
+      "\"meanResponseTimeSec\":%.12g,\"totalGapDurationSec\":%.12g,"
+      "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"colorRgba\":%s,"
+      "\"intervals\":",
       cell.index,
       cell.row,
       cell.column,
@@ -592,43 +655,120 @@ std::string cells_json(const std::vector<Cell>& cells, double duration) {
       percent,
       cell.maxGap,
       cell.meanRevisit,
+      cell.firstResponse,
+      cell.maxResponse,
+      cell.meanResponse,
+      cell.totalGap,
       cell.contributingSensorIds.size(),
       cell.sensorMask,
       color_json(percent).c_str());
     output += buffer;
+    output += intervals_json(cell.intervals);
+    output += "}";
   }
   output += "]";
   return output;
 }
 
-std::string fom_json(const std::vector<Cell>& cells, const std::string& fom_type, double duration) {
+std::string coverage_intervals_json(const std::vector<Cell>& cells) {
+  std::string output = "[";
+  bool first = true;
+  for (const auto& cell : cells) {
+    for (const auto& interval : cell.intervals) {
+      if (!first) {
+        output += ",";
+      }
+      first = false;
+      char buffer[512];
+      std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "{\"cellIndex\":%d,\"row\":%d,\"column\":%d,"
+        "\"startSeconds\":%.12g,\"stopSeconds\":%.12g,\"durationSec\":%.12g,"
+        "\"sensorContributionCount\":%zu,\"sensorMask\":%u}",
+        cell.index,
+        cell.row,
+        cell.column,
+        interval.start,
+        interval.stop,
+        interval.stop - interval.start,
+        cell.contributingSensorIds.size(),
+        cell.sensorMask);
+      output += buffer;
+    }
+  }
+  output += "]";
+  return output;
+}
+
+double fom_value_for_cell(
+  const Cell& cell,
+  const std::string& fom_type,
+  double duration,
+  std::string& units) {
+  double value = cell.totalAccess;
+  units = "seconds";
+  if (fom_type == "access_count") {
+    value = cell.accessCount;
+    units = "count";
+  } else if (fom_type == "percent_coverage") {
+    value = duration > 0.0 ? 100.0 * cell.totalAccess / duration : 0.0;
+    units = "percent";
+  } else if (fom_type == "max_gap_duration" || fom_type == "gap_time") {
+    value = cell.maxGap;
+    units = "seconds";
+  } else if (fom_type == "mean_revisit_time" || fom_type == "revisit_time") {
+    value = cell.meanRevisit;
+    units = "seconds";
+  } else if (fom_type == "response_time") {
+    value = cell.firstResponse;
+    units = "seconds";
+  }
+  return value;
+}
+
+std::string fom_values_json(
+  const std::vector<Cell>& cells,
+  const std::string& fom_type,
+  double duration,
+  std::string& units) {
   std::string values = "[";
-  std::string units = "seconds";
   for (size_t index = 0; index < cells.size(); ++index) {
     if (index > 0) {
       values += ",";
     }
-    const auto& cell = cells[index];
-    double value = cell.totalAccess;
-    units = "seconds";
-    if (fom_type == "access_count") {
-      value = cell.accessCount;
-      units = "count";
-    } else if (fom_type == "percent_coverage") {
-      value = duration > 0.0 ? 100.0 * cell.totalAccess / duration : 0.0;
-      units = "percent";
-    } else if (fom_type == "max_gap_duration") {
-      value = cell.maxGap;
-      units = "seconds";
-    } else if (fom_type == "mean_revisit_time") {
-      value = cell.meanRevisit;
-      units = "seconds";
-    }
+    const double value = fom_value_for_cell(cells[index], fom_type, duration, units);
     char buffer[64];
     std::snprintf(buffer, sizeof(buffer), "%.12g", value);
     values += buffer;
   }
-  return "{\"type\":" + quote(fom_type) + ",\"units\":" + quote(units) + ",\"values\":" + values + "]}";
+  values += "]";
+  return values;
+}
+
+std::string fom_product_json(
+  const std::vector<Cell>& cells,
+  const std::string& fom_type,
+  double duration) {
+  std::string units = "seconds";
+  const std::string values = fom_values_json(cells, fom_type, duration, units);
+  return "{\"type\":" + quote(fom_type) + ",\"units\":" + quote(units) + ",\"values\":" + values + "}";
+}
+
+std::string fom_products_json(const std::vector<Cell>& cells, double duration) {
+  return std::string("{") +
+    "\"percent_coverage\":" + fom_product_json(cells, "percent_coverage", duration) + "," +
+    "\"gap_time\":" + fom_product_json(cells, "gap_time", duration) + "," +
+    "\"revisit_time\":" + fom_product_json(cells, "revisit_time", duration) + "," +
+    "\"response_time\":" + fom_product_json(cells, "response_time", duration) +
+    "}";
+}
+
+std::string fom_json(const std::vector<Cell>& cells, const std::string& fom_type, double duration) {
+  std::string units = "seconds";
+  const std::string values = fom_values_json(cells, fom_type, duration, units);
+  return "{\"type\":" + quote(fom_type) + ",\"units\":" + quote(units) +
+    ",\"values\":" + values + ",\"products\":" + fom_products_json(cells, duration) + "}";
 }
 
 std::string swaths_json(const std::vector<SwathSegment>& segments, double duration) {
@@ -777,9 +917,23 @@ extern "C" int compute_sensor_coverage(void) {
 
   int accessed = 0;
   int multi_access = 0;
+  int total_interval_count = 0;
+  int total_revisit_count = 0;
   double total_access = 0.0;
+  double total_gap = 0.0;
+  double max_gap = 0.0;
+  double revisit_gap_total = 0.0;
+  double max_response = 0.0;
+  double response_sum = 0.0;
   for (auto& cell : cells) {
     update_cell_statistics(cell, grid);
+    total_interval_count += cell.accessCount;
+    total_revisit_count += cell.revisitCount;
+    total_gap += cell.totalGap;
+    max_gap = std::max(max_gap, cell.maxGap);
+    revisit_gap_total += cell.revisitGapTotal;
+    max_response = std::max(max_response, cell.maxResponse);
+    response_sum += cell.meanResponse;
     if (cell.totalAccess > 0.0) {
       ++accessed;
       total_access += cell.totalAccess;
@@ -806,7 +960,11 @@ extern "C" int compute_sensor_coverage(void) {
     "\"latitudeStepDeg\":%.12g,\"longitudeStepDeg\":%.12g},"
     "\"statistics\":{\"totalCells\":%zu,\"accessedCells\":%d,\"multiAccessCells\":%d,"
     "\"activeSensorCount\":%zu,\"swathCount\":%zu,"
-    "\"totalAccessDurationSec\":%.12g,\"percentCoverage\":%.12g},",
+    "\"totalIntervalCount\":%d,\"totalRevisitCount\":%d,"
+    "\"totalAccessDurationSec\":%.12g,\"totalGapDurationSec\":%.12g,"
+    "\"maxGapDurationSec\":%.12g,\"meanRevisitTimeSec\":%.12g,"
+    "\"maxResponseTimeSec\":%.12g,\"meanResponseTimeSec\":%.12g,"
+    "\"percentCoverage\":%.12g},",
     coverage_source.empty() ? "{}" : coverage_source.c_str(),
     grid.rows,
     grid.columns,
@@ -818,11 +976,19 @@ extern "C" int compute_sensor_coverage(void) {
     multi_access,
     tracks.size(),
     swaths.size(),
+    total_interval_count,
+    total_revisit_count,
     total_access,
+    total_gap,
+    max_gap,
+    total_revisit_count > 0 ? revisit_gap_total / total_revisit_count : 0.0,
+    max_response,
+    cells.empty() ? 0.0 : response_sum / static_cast<double>(cells.size()),
     cells.empty() ? 0.0 : 100.0 * static_cast<double>(accessed) / static_cast<double>(cells.size()));
 
   std::string response = std::string(header) +
     "\"cells\":" + cells_json(cells, duration) + "," +
+    "\"coverageIntervals\":" + coverage_intervals_json(cells) + "," +
     "\"figureOfMerit\":" + fom_json(cells, fom_type, duration) + "," +
     "\"footprints\":" + (aggregate_output ? std::string("[]") : footprints_json(footprints)) + "," +
     "\"swaths\":" + swaths_json(swaths, duration) + "," +

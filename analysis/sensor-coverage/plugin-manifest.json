@@ -2,7 +2,7 @@
   "pluginId": "sensor-coverage-analysis",
   "name": "Sensor Coverage Analysis",
   "version": "0.1.0",
-  "description": "Computes OrbPro Sensor-driven time coverage, revisit/gap statistics, and Orekit-style swath products from propagated sensor geometry.",
+  "description": "Computes OrbPro Sensor-driven time coverage, intervals, revisit/gap/response statistics, and Orekit-style swath products from propagated sensor geometry.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
