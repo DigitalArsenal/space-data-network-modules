@@ -107,6 +107,53 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       result.cells.some((cell) => cell.sensorContributionCount > 1),
       "expected at least one grid cell to record overlapping sensor contribution",
     );
+    assert.ok(
+      Array.isArray(result.coverageIntervals),
+      "coverage result should expose merged access intervals",
+    );
+    assert.ok(result.coverageIntervals.length > 0);
+    assert.equal(
+      result.statistics.totalIntervalCount,
+      result.coverageIntervals.length,
+    );
+    assert.ok(Number.isFinite(result.statistics.maxGapDurationSec));
+    assert.ok(Number.isFinite(result.statistics.meanRevisitTimeSec));
+    assert.ok(Number.isFinite(result.statistics.maxResponseTimeSec));
+    assert.ok(Number.isFinite(result.statistics.meanResponseTimeSec));
+    assert.ok(Number.isInteger(result.statistics.totalRevisitCount));
+    assert.ok(
+      result.coverageIntervals.every(
+        (interval) =>
+          interval.stopSeconds > interval.startSeconds &&
+          interval.durationSec === interval.stopSeconds - interval.startSeconds,
+      ),
+    );
+    assert.ok(
+      result.cells.some(
+        (cell) =>
+          cell.intervals.length > 0 &&
+          Number.isFinite(cell.firstResponseTimeSec) &&
+          Number.isFinite(cell.maxResponseTimeSec),
+      ),
+      "expected covered cells to include interval and response metrics",
+    );
+    assert.deepEqual(
+      Object.keys(result.figureOfMerit.products).sort(),
+      [
+        "gap_time",
+        "percent_coverage",
+        "response_time",
+        "revisit_time",
+      ],
+    );
+    assert.equal(result.figureOfMerit.products.percent_coverage.units, "percent");
+    assert.equal(result.figureOfMerit.products.gap_time.units, "seconds");
+    assert.equal(result.figureOfMerit.products.revisit_time.units, "seconds");
+    assert.equal(result.figureOfMerit.products.response_time.units, "seconds");
+    assert.equal(
+      result.figureOfMerit.products.response_time.values.length,
+      result.grid.cellCount,
+    );
   });
 
   test(`sensor coverage module accepts a 1000-sensor analysis without splitting work per sensor on ${runtimeKind}`, async (t) => {
