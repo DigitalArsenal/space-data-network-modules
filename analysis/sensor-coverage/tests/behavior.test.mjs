@@ -10,6 +10,182 @@ import {
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
+  test(`sensor coverage module aggregates all active sensors into one differential geometry product on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const earthRadius = 6378137.0;
+    const orbitRadius = earthRadius + 500000.0;
+    const speed = 7612.608173223869;
+    const makeState = (theta, elapsedSeconds) => ({
+      elapsedSeconds,
+      position: {
+        x: orbitRadius * Math.cos(theta),
+        y: orbitRadius * Math.sin(theta),
+        z: 0,
+      },
+      velocity: {
+        x: -speed * Math.sin(theta),
+        y: speed * Math.cos(theta),
+        z: 0,
+      },
+    });
+    const sharedStates = [
+      makeState(-0.08, 0),
+      makeState(-0.04, 600),
+      makeState(0, 1200),
+      makeState(0.04, 1800),
+      makeState(0.08, 2400),
+    ];
+
+    const sensors = Array.from({ length: 3 }, (_, sensorIndex) => ({
+      sensorId: sensorIndex,
+      type: "conic",
+      outerHalfAngleRad: 0.22,
+      radiusMeters: 1600000,
+      states: sharedStates,
+    }));
+
+    const result = await invokeJsonRequest(
+      harness,
+      {
+        coverageSource: {
+          brand: "OrbPro",
+          mode: "all active sensors in one analysis",
+          attachedToPropagatedEntity: true,
+          positionPropertyType: "PropagatedPositionProperty",
+          requestedSensorCount: sensors.length,
+        },
+        sensors,
+        grid: {
+          minLatitudeDeg: -8,
+          maxLatitudeDeg: 8,
+          minLongitudeDeg: -12,
+          maxLongitudeDeg: 12,
+          latitudeStepDeg: 2,
+          longitudeStepDeg: 2,
+        },
+        timeSpan: {
+          startSeconds: 0,
+          stopSeconds: 2400,
+        },
+        figureOfMerit: "percent_coverage",
+        outputMode: "aggregate_differential_geometry",
+      },
+      {
+        methodId: "compute_sensor_coverage",
+        inputPortId: "coverage",
+        outputPortId: "coverage",
+      },
+    );
+
+    assert.equal(result.provider, "sensor-coverage-analysis");
+    assert.equal(result.statistics.activeSensorCount, 3);
+    assert.equal(result.swaths.length, 12);
+    assert.equal(result.aggregateGeometry.contract, "orbpro.coverage.aggregate.v0");
+    assert.equal(result.aggregateGeometry.aggregation, "all_active_sensors");
+    assert.equal(result.aggregateGeometry.operationMode, "additive_deltas");
+    assert.equal(result.aggregateGeometry.activeSensorCount, 3);
+    assert.equal(result.aggregateGeometry.full.kind, "multipolygon");
+    assert.equal(result.aggregateGeometry.full.polygonCount, result.swaths.length);
+    assert.equal(result.aggregateGeometry.full.ringReference, "swaths[].vertices");
+    assert.equal(result.aggregateGeometry.deltas.length, result.swaths.length);
+    assert.ok(
+      result.aggregateGeometry.deltas.every((delta) => delta.operation === "add"),
+    );
+    assert.ok(
+      result.aggregateGeometry.deltas.every((delta) =>
+        Number.isInteger(delta.chunkId),
+      ),
+    );
+    assert.ok(
+      result.cells.some((cell) => cell.sensorContributionCount > 1),
+      "expected at least one grid cell to record overlapping sensor contribution",
+    );
+  });
+
+  test(`sensor coverage module accepts a 1000-sensor analysis without splitting work per sensor on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const earthRadius = 6378137.0;
+    const orbitRadius = earthRadius + 550000.0;
+    const speed = 7560.0;
+    const sensors = Array.from({ length: 1000 }, (_, sensorIndex) => {
+      const phase = (2 * Math.PI * sensorIndex) / 1000;
+      const inclination = 0.22 * Math.sin(sensorIndex * 0.37);
+      const makeState = (theta, elapsedSeconds) => ({
+        elapsedSeconds,
+        position: {
+          x: orbitRadius * Math.cos(theta + phase),
+          y: orbitRadius * Math.sin(theta + phase),
+          z: orbitRadius * inclination * Math.sin(theta + phase),
+        },
+        velocity: {
+          x: -speed * Math.sin(theta + phase),
+          y: speed * Math.cos(theta + phase),
+          z: speed * inclination * Math.cos(theta + phase),
+        },
+      });
+      return {
+        sensorId: sensorIndex,
+        type: "conic",
+        outerHalfAngleRad: 0.055,
+        radiusMeters: 900000,
+        angularSamples: 8,
+        states: [makeState(0, 0), makeState(0.025, 180)],
+      };
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      {
+        coverageSource: {
+          brand: "OrbPro",
+          mode: "1000 satellite aggregate coverage",
+          requestedSensorCount: sensors.length,
+        },
+        sensors,
+        grid: {
+          minLatitudeDeg: -30,
+          maxLatitudeDeg: 30,
+          minLongitudeDeg: -180,
+          maxLongitudeDeg: 180,
+          latitudeStepDeg: 15,
+          longitudeStepDeg: 30,
+        },
+        timeSpan: {
+          startSeconds: 0,
+          stopSeconds: 180,
+        },
+        figureOfMerit: "percent_coverage",
+        outputMode: "aggregate_differential_geometry",
+      },
+      {
+        methodId: "compute_sensor_coverage",
+        inputPortId: "coverage",
+        outputPortId: "coverage",
+      },
+    );
+
+    assert.equal(result.statistics.activeSensorCount, 1000);
+    assert.equal(result.swaths.length, 1000);
+    assert.equal(result.aggregateGeometry.activeSensorCount, 1000);
+    assert.equal(result.aggregateGeometry.full.polygonCount, 1000);
+    assert.equal(result.aggregateGeometry.deltas.length, 1000);
+    assert.ok(result.statistics.accessedCells > 0);
+  });
+
   test(`sensor coverage module derives moving Orekit-style swaths from sensor-attached states on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
