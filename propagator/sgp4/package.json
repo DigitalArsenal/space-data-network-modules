@@ -15,7 +15,7 @@
     "esbuild": "^0.20.2",
     "flatbuffers": "^25.2.10",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "^0.8.4",
+    "space-data-module-sdk": "file:../../../space-data-module-sdk",
     "spacedatastandards.org": "^1.93.3"
   }
 }

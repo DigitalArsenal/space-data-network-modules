@@ -102,6 +102,21 @@ target_include_directories(
 )
 target_link_libraries(sgp4_wasm PRIVATE sgp4_core)
 
+add_executable(
+    sgp4_wasm_browser_shared
+    src/plugin_invoke_bridge.cpp
+)
+target_include_directories(
+    sgp4_wasm_browser_shared PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/generated"
+    "${CMAKE_CURRENT_SOURCE_DIR}/generated/sds"
+    "${FLATBUFFERS_INCLUDE_DIR}"
+)
+target_link_libraries(sgp4_wasm_browser_shared PRIVATE sgp4_core)
+
 # Keep the full OrbPro native surface exported alongside the SDS PIV
 # invoke/manifest exports so the artifact can be consumed by browser and WASI
 # runtimes.
@@ -155,16 +170,24 @@ set(SGP4_EXPORTED_FUNCTIONS "\
 \"_free\"\
 ")
 
-set_target_properties(
-    sgp4_wasm PROPERTIES
-    SUFFIX ".js"
-    LINK_FLAGS "\
+function(configure_sgp4_emscripten_target target_name export_name)
+    set(imported_memory_link_flags "")
+    if(ARGC GREATER 2 AND ARGV2)
+        target_compile_options(${target_name} PRIVATE -matomics -mbulk-memory)
+        set(imported_memory_link_flags "-s IMPORTED_MEMORY=1 -s SHARED_MEMORY=1 -matomics -mbulk-memory")
+    endif()
+
+    set_target_properties(
+        ${target_name} PROPERTIES
+        SUFFIX ".js"
+        LINK_FLAGS "\
         -s EXPORTED_FUNCTIONS=[${SGP4_EXPORTED_FUNCTIONS}] \
         -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAPU32','HEAP8','HEAP32','HEAPF64'] \
         -s MODULARIZE=1 \
-        -s EXPORT_NAME='Sgp4Module' \
+        -s EXPORT_NAME='${export_name}' \
         -s EXPORT_ES6=1 \
         -s STANDALONE_WASM=1 \
+        ${imported_memory_link_flags} \
         -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
         -Wl,--allow-undefined \
         -Wl,--export=__wasm_call_ctors \
@@ -175,4 +198,8 @@ set_target_properties(
         -s MALLOC='emmalloc' \
         -s FILESYSTEM=0 \
     "
-)
+    )
+endfunction()
+
+configure_sgp4_emscripten_target(sgp4_wasm Sgp4Module OFF)
+configure_sgp4_emscripten_target(sgp4_wasm_browser_shared Sgp4SharedModule ON)

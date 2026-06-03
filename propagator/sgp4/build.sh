@@ -4,6 +4,8 @@
 # Produces:
 #   dist/browser/module.js      - Emscripten ES module loader
 #   dist/browser/module.wasm    - Wasm artifact (browser host)
+#   dist/browser-shared/module.js   - Emscripten ES module loader with imported memory
+#   dist/browser-shared/module.wasm - Browser wasm artifact importing env.memory
 #   dist/isomorphic/module.wasm - Same wasm artifact (WASI/server)
 set -euo pipefail
 
@@ -13,8 +15,10 @@ SRC_DIR="$SCRIPT_DIR/src/cpp"
 BUILD_DIR="$SRC_DIR/build-wasm"
 DIST_DIR="$SCRIPT_DIR/dist"
 BROWSER_DIST_DIR="$DIST_DIR/browser"
+BROWSER_SHARED_DIST_DIR="$DIST_DIR/browser-shared"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
 BROWSER_TARGET="sgp4_wasm"
+BROWSER_SHARED_TARGET="sgp4_wasm_browser_shared"
 
 SQLITE_VENDOR_DIR="$SRC_DIR/deps/sqlite3"
 SQLITE_VERSION="${SDN_SGP4_SQLITE_VERSION:-3450200}"
@@ -124,7 +128,7 @@ node "$SCRIPT_DIR/generate-test-bindings.mjs"
 
 rm -rf "$BUILD_DIR"
 rm -rf "$DIST_DIR"
-mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
+mkdir -p "$BROWSER_DIST_DIR" "$BROWSER_SHARED_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
 
 echo "Configuring Emscripten build..."
 emcmake cmake \
@@ -136,10 +140,21 @@ echo ""
 echo "Building propagator.sgp4 wasm module..."
 cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
+echo ""
+echo "Building propagator.sgp4 browser-shared wasm module..."
+cmake --build "$BUILD_DIR" --target "$BROWSER_SHARED_TARGET" -j"$(cpu_count)"
+
 cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
 cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
 cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+cp "$BUILD_DIR/${BROWSER_SHARED_TARGET}.js" "$BROWSER_SHARED_DIST_DIR/module.js"
+cp "$BUILD_DIR/${BROWSER_SHARED_TARGET}.wasm" "$BROWSER_SHARED_DIST_DIR/module.wasm"
 
 echo ""
 echo "=== Build Complete ==="
-ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+ls -lh \
+    "$BROWSER_DIST_DIR/module.js" \
+    "$BROWSER_DIST_DIR/module.wasm" \
+    "$BROWSER_SHARED_DIST_DIR/module.js" \
+    "$BROWSER_SHARED_DIST_DIR/module.wasm" \
+    "$ISOMORPHIC_DIST_DIR/module.wasm"
