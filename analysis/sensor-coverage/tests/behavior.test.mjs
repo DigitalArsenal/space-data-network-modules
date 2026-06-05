@@ -233,6 +233,100 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result.statistics.accessedCells > 0);
   });
 
+  test(`sensor coverage module handles the dense 1000-satellite Sandcastle batch shape on ${runtimeKind}`, async (t) => {
+    if (runtimeKind !== "browser") {
+      t.skip("Dense Sandcastle batch stress is guarded on the browser worker path.");
+      return;
+    }
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const earthRadius = 6378137.0;
+    const orbitRadius = earthRadius + 500000.0;
+    const speed = 7612.608173223869;
+    const stateCount = 25;
+    const sensorCount = 400;
+    const stepSeconds = 5;
+    const meanMotion = speed / orbitRadius;
+    const sensors = Array.from({ length: sensorCount }, (_, sensorIndex) => {
+      const phase = (2 * Math.PI * sensorIndex) / 1000;
+      const ringIndex = Math.floor(sensorIndex / 25);
+      const inclinationScale = 0.12;
+      const makeState = (stateIndex) => {
+        const elapsedSeconds = stateIndex * stepSeconds;
+        const theta = -0.22 + phase + meanMotion * elapsedSeconds;
+        const zTheta = theta * 0.7 + ringIndex * ((2 * Math.PI) / 40);
+        return {
+          elapsedSeconds,
+          position: {
+            x: orbitRadius * Math.cos(theta),
+            y: orbitRadius * Math.sin(theta),
+            z: orbitRadius * inclinationScale * Math.sin(zTheta),
+          },
+          velocity: {
+            x: -speed * Math.sin(theta),
+            y: speed * Math.cos(theta),
+            z: speed * inclinationScale * 0.7 * Math.cos(zTheta),
+          },
+        };
+      };
+      return {
+        sensorId: sensorIndex,
+        type: "conic",
+        outerHalfAngleRad: (12.5 * Math.PI) / 180,
+        radiusMeters: 1600000,
+        angularSamples: 8,
+        states: Array.from({ length: stateCount }, (_, stateIndex) =>
+          makeState(stateIndex),
+        ),
+      };
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      {
+        coverageSource: {
+          brand: "OrbPro",
+          mode: "1000 satellite aggregate coverage first worker batch",
+          requestedSensorCount: 1000,
+          batchStartSensorIndex: 0,
+          batchSensorCount: sensorCount,
+        },
+        sensors,
+        grid: {
+          minLatitudeDeg: -90,
+          maxLatitudeDeg: 90,
+          minLongitudeDeg: -180,
+          maxLongitudeDeg: 180,
+          latitudeStepDeg: 5,
+          longitudeStepDeg: 5,
+        },
+        timeSpan: {
+          startSeconds: 0,
+          stopSeconds: 120,
+        },
+        figureOfMerit: "percent_coverage",
+        outputMode: "aggregate_differential_geometry",
+      },
+      {
+        methodId: "compute_sensor_coverage",
+        inputPortId: "coverage",
+        outputPortId: "coverage",
+      },
+    );
+
+    assert.equal(result.statistics.activeSensorCount, sensorCount);
+    assert.equal(result.swaths.length, sensorCount * (stateCount - 1));
+    assert.equal(result.aggregateGeometry.full.polygonCount, result.swaths.length);
+    assert.ok(result.statistics.accessedCells > 0);
+    assert.ok(result.coverageIntervals.length > 0);
+  });
+
   test(`sensor coverage module derives moving Orekit-style swaths from sensor-attached states on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
