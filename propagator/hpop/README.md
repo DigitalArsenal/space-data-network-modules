@@ -4,6 +4,20 @@ OrbPro High-Precision Orbital Propagator (HPOP) Plugin.
 
 Implements a high-fidelity numerical orbit propagator accounting for full geopotential models, atmospheric drag, solar radiation pressure, and third-body perturbations. Compiled to WebAssembly for high-performance, cross-platform use.
 
+## Atmosphere models (honest labeling)
+
+| Model name | Status |
+| --- | --- |
+| `NRLMSISE00` | **Full model.** The real NRLMSISE-00 (Picone/Hedin/Drob, JGR 2002) via the public-domain Brodowski C port vendored in `third_party/nrlmsise00/`. Drag uses the gtd7d "effective mass density" (includes anomalous oxygen). Verified against the canonical 17-case output table shipped with the reference package. |
+| `USSA1976` | **Full lower-atmosphere model (0-86 km geometric).** US Standard Atmosphere 1976 with the proper geopotential-altitude layer formulation. Above 86 km it hands off to the Vallado exponential table (documented in code). |
+| `Exponential` | Piecewise-exponential model, Vallado *Fundamentals of Astrodynamics and Applications* 4th ed., Table 8-4. |
+| `JB2008` | **Simplified approximation only** — mimics the Jacchia-Bowman 2008 exospheric-temperature response to S10.7/M10.7/Y10.7 with a single-species barometric profile. NOT the published JB2008 coefficient model. |
+| `DTM2020` | **Simplified approximation only** — mimics the DTM2020 F30/Hp temperature response. NOT the published DTM2020 spherical-harmonic model. |
+| `GOST2004` / `HarrisPriester` | Enum placeholders; dispatch falls through to `NRLMSISE00`. |
+
+The JSON `atmosphere` operation exposes only the honestly-implemented models
+(`NRLMSISE00`, `USSA1976`, `EXPONENTIAL`).
+
 ## Installation
 
 ```bash

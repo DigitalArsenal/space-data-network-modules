@@ -143,6 +143,104 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(Math.abs(result.states[0].densityKgM3 - 0.4135) < 0.002);
   });
 
+  test(`US76 reproduces published 1976 Standard Atmosphere values on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    // Published values: US Standard Atmosphere 1976 (NOAA-S/T 76-1562),
+    // Table I. All tolerances <= 0.1%.
+    //   Z = 0 m:        T = 288.150 K, P = 101325 Pa, rho = 1.2250 kg/m^3
+    //   Z = 10 km geom: T = 223.252 K, P = 26500 Pa, rho = 0.41351 kg/m^3
+    //   H = 20 km geopotential (Z = 20063.1 m): T = 216.65 K, P = 5474.9 Pa
+    //   H = 47 km geopotential (Z = 47350.1 m): T = 270.65 K
+    const relClose = (a, b, tol, label) => {
+      const rel = Math.abs(a - b) / Math.abs(b);
+      assert.ok(rel <= tol, `${label}: ${a} not within rel ${tol} of ${b}`);
+    };
+
+    const sea = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: { altitudeM: 0, model: "US76" },
+    });
+    relClose(sea.state.temperature, 288.15, 1e-3, "T 0 km");
+    relClose(sea.state.pressure, 101325, 1e-3, "P 0 km");
+    relClose(sea.state.density, 1.225, 1e-3, "rho 0 km");
+
+    const tenKm = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: { altitudeM: 10_000, model: "US76" },
+    });
+    relClose(tenKm.state.temperature, 223.252, 1e-3, "T 10 km geometric");
+    relClose(tenKm.state.pressure, 26500, 1e-3, "P 10 km geometric");
+    relClose(tenKm.state.density, 0.41351, 1e-3, "rho 10 km geometric");
+
+    // 20 km geopotential -> geometric Z = r0*H/(r0-H), r0 = 6 356 766 m
+    const z20 = (6356766 * 20000) / (6356766 - 20000);
+    const twentyKm = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: { altitudeM: z20, model: "US76" },
+    });
+    relClose(twentyKm.state.temperature, 216.65, 1e-3, "T 20 km geopotential");
+    relClose(twentyKm.state.pressure, 5474.9, 1e-3, "P 20 km geopotential");
+
+    const z47 = (6356766 * 47000) / (6356766 - 47000);
+    const fortySevenKm = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: { altitudeM: z47, model: "US76" },
+    });
+    relClose(fortySevenKm.state.temperature, 270.65, 1e-3, "T 47 km geopotential");
+  });
+
+  test(`NRLMSISE00 reproduces the canonical published test vector on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    // Canonical case 1 of the 17-case output table distributed with the
+    // NRLMSISE-00 C reference package (release 20041227, Brodowski port of
+    // Picone/Hedin/Drob; DOCUMENTATION file, also at
+    // https://github.com/magnific0/nrlmsise-00/blob/master/DOCUMENTATION):
+    //   doy=172, sec=29000 s UT, alt=400 km, lat=60, lon=-70, lst=16 h,
+    //   F107A=150, F107=150, ap=4
+    //   -> TINF = 1250.54 K, TG = 1241.42 K, RHO(gtd7) = 4.075e-15 g/cm^3,
+    //      HE = 6.665e+05, O = 1.139e+08, N2 = 1.998e+07 [1/cm^3]
+    // This module reports the gtd7d drag-effective density; at 400 km the
+    // anomalous-oxygen contribution is < 0.1%, hence the 2e-3 tolerance on
+    // mass density and 1e-3 elsewhere.
+    const result = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: {
+        altitudeM: 400_000,
+        model: "NRLMSISE00",
+        position: { latitudeDeg: 60, longitudeDeg: -70 },
+        epoch: { year: 0, dayOfYear: 172, secondOfDay: 29_000 },
+        localSolarTimeHours: 16,
+        solar: { F107: 150, F107A: 150, Ap: [4, 4, 4, 4, 4, 4, 4] },
+      },
+    });
+
+    const relClose = (a, b, tol, label) => {
+      const rel = Math.abs(a - b) / Math.abs(b);
+      assert.ok(rel <= tol, `${label}: ${a} not within rel ${tol} of ${b}`);
+    };
+
+    relClose(result.state.exosphericTemp, 1250.54, 1e-3, "TINF");
+    relClose(result.state.temperature, 1241.42, 1e-3, "TG");
+    relClose(result.state.density, 4.075e-15 * 1000, 2e-3, "rho kg/m^3");
+    relClose(result.state.numDensityHe, 6.665e5 * 1e6, 1e-3, "He 1/m^3");
+    relClose(result.state.numDensityO, 1.139e8 * 1e6, 1e-3, "O 1/m^3");
+    relClose(result.state.numDensityN2, 1.998e7 * 1e6, 1e-3, "N2 1/m^3");
+  });
+
   test(`NRLMSISE00 responds to solar activity at 400 km on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {

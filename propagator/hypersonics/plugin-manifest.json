@@ -2,12 +2,17 @@
   "pluginId": "hypersonics-propagator",
   "name": "Hypersonics Propagator",
   "version": "0.1.0",
-  "description": "Evaluates hypersonic flight conditions from trajectory samples using a selectable atmosphere provider/model.",
+  "description": "Evaluates hypersonic flight conditions from trajectory samples. Supported atmosphere models: US76 (US Standard Atmosphere 1976, geopotential formulation, 0-86 km) and US76_EXPONENTIAL_EXTENSION (crude isothermal extension above 86 km). NRLMSISE00 requests fail hard \u2014 use the atmosphere or hpop modules for real NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "evaluate_hypersonic_state_batch",
@@ -19,8 +24,16 @@
             {
               "setId": "trajectory-state",
               "allowedTypes": [
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
-                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" }
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
               ]
             }
           ],
@@ -36,7 +49,11 @@
             {
               "setId": "hypersonic-flight-conditions",
               "allowedTypes": [
-                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" }
+                {
+                  "schemaName": "HFC.fbs",
+                  "fileIdentifier": "$HFC",
+                  "rootTypeName": "HFC"
+                }
               ]
             }
           ],

@@ -11,8 +11,15 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 #include <string>
+
+// Real NRLMSISE-00 (public-domain Brodowski C port, vendored in
+// third_party/nrlmsise00/).
+extern "C" {
+#include "nrlmsise-00.h"
+}
 
 namespace hpop {
 
@@ -293,12 +300,115 @@ std::string propagate_json(const json& params) {
     return output.dump();
 }
 
+// Direct atmosphere query against the same model implementations used by the
+// HPOP drag force path. Honest model names:
+//   "NRLMSISE00"     — real NRLMSISE-00 (vendored Picone/Hedin/Drob C port)
+//   "USSA1976"       — US Standard Atmosphere 1976, 0-86 km geometric
+//   "EXPONENTIAL"    — Vallado piecewise-exponential model (Table 8-4)
+// The simplified JB2008/DTM2020 approximations are intentionally NOT exposed
+// here; they are crude approximations, not the published coefficient models.
+std::string atmosphere_json(const json& params) {
+    const auto model = params.value("model", std::string("NRLMSISE00"));
+
+    if (model == "USSA1976") {
+        const double alt_km = params.at("altitudeKm").get<double>();
+        const auto atm = astro::computeUSSA1976(alt_km);
+        return json({
+            {"model", "USSA1976"},
+            {"altitudeKm", alt_km},
+            {"densityKgM3", atm.density},
+            {"temperatureK", atm.temperature},
+            {"scaleHeightKm", atm.scaleHeight},
+        }).dump();
+    }
+
+    if (model == "EXPONENTIAL") {
+        const double alt_km = params.at("altitudeKm").get<double>();
+        return json({
+            {"model", "EXPONENTIAL"},
+            {"altitudeKm", alt_km},
+            {"densityKgM3", astro::exponentialAtmosphereDensity(alt_km)},
+        }).dump();
+    }
+
+    if (model != "NRLMSISE00") {
+        throw std::runtime_error(
+            "Unknown atmosphere model \"" + model +
+            "\". Supported: NRLMSISE00, USSA1976, EXPONENTIAL.");
+    }
+
+    nrlmsise_input input;
+    nrlmsise_flags flags;
+    nrlmsise_output output;
+    std::memset(&input, 0, sizeof(input));
+    std::memset(&flags, 0, sizeof(flags));
+    std::memset(&output, 0, sizeof(output));
+
+    flags.switches[0] = 0;
+    for (int i = 1; i < 24; ++i) {
+        flags.switches[i] = 1;
+    }
+
+    input.year = params.value("year", 0);
+    input.doy = params.value("dayOfYear", 172);
+    input.sec = params.value("secondOfDay", 29000.0);
+    input.alt = params.at("altitudeKm").get<double>();
+    input.g_lat = params.value("latitudeDeg", 0.0);
+    input.g_long = params.value("longitudeDeg", 0.0);
+    if (params.contains("localSolarTimeHours")) {
+        input.lst = params.at("localSolarTimeHours").get<double>();
+    } else {
+        // Recommended consistency relation (NRLMSISE-00 package notes).
+        double lst = input.sec / 3600.0 + input.g_long / 15.0;
+        lst = std::fmod(lst, 24.0);
+        if (lst < 0.0) lst += 24.0;
+        input.lst = lst;
+    }
+    input.f107A = params.value("f107a", 150.0);
+    input.f107 = params.value("f107", 150.0);
+    input.ap = params.value("ap", 4.0);
+    input.ap_a = nullptr;
+
+    // gtd7: total mass density excludes anomalous oxygen (canonical test
+    // vectors). gtd7d: includes anomalous oxygen (drag-effective density,
+    // what the HPOP drag path uses).
+    const bool includeAnomalousOxygen = params.value("includeAnomalousOxygen", false);
+    if (includeAnomalousOxygen) {
+        gtd7d(&input, &flags, &output);
+    } else {
+        gtd7(&input, &flags, &output);
+    }
+
+    return json({
+        {"model", "NRLMSISE00"},
+        {"variant", includeAnomalousOxygen ? "gtd7d" : "gtd7"},
+        {"altitudeKm", input.alt},
+        {"densityKgM3", output.d[5] * 1000.0},
+        {"densityGCm3", output.d[5]},
+        {"temperatureK", output.t[1]},
+        {"exosphericTemperatureK", output.t[0]},
+        {"numberDensitiesCm3", {
+            {"He", output.d[0]},
+            {"O", output.d[1]},
+            {"N2", output.d[2]},
+            {"O2", output.d[3]},
+            {"Ar", output.d[4]},
+            {"H", output.d[6]},
+            {"N", output.d[7]},
+            {"anomalousO", output.d[8]},
+        }},
+    }).dump();
+}
+
 std::string dispatch_operation(const std::string& operation, const json& params) {
     if (operation == "version") {
         return json({{"version", version()}, {"plugin", "hpop-propagator"}}).dump();
     }
     if (operation == "propagate") {
         return propagate_json(params);
+    }
+    if (operation == "atmosphere") {
+        return atmosphere_json(params);
     }
 
     throw std::runtime_error("Unknown HPOP operation: " + operation);

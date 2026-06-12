@@ -26,16 +26,49 @@ void assertRelNear(double a, double b, double relTol, const char* msg) {
 }
 
 // ===== US76 Tests =====
-// Validated against US Standard Atmosphere 1976 reference tables
+// Validated against US Standard Atmosphere 1976 (NOAA-S/T 76-1562) Table I.
 
 void testUS76_SeaLevel() {
+    // Published: US Standard Atmosphere 1976, Table I, Z = 0 m:
+    // T = 288.150 K, P = 101325 Pa, rho = 1.2250 kg/m^3, a = 340.294 m/s.
     auto s = atmosphere::us76(0);
     assertNear(s.temperature, 288.15, 0.01, "T sea level");
     assertNear(s.pressure, 101325.0, 1.0, "P sea level");
-    assertRelNear(s.density, 1.225, 0.001, "rho sea level");
+    assertRelNear(s.density, 1.2250, 0.001, "rho sea level");
     assertRelNear(s.soundSpeed, 340.294, 0.5, "a sea level");
     std::cout << "  US76 sea level: T=" << s.temperature << "K P=" << s.pressure
               << "Pa rho=" << s.density << " a=" << s.soundSpeed << " ✓\n";
+}
+
+void testUS76_PublishedTable() {
+    // Published values from US Standard Atmosphere 1976 (NOAA-S/T 76-1562),
+    // Table I (geometric altitude entries):
+    //   Z = 10 000 m (geometric): T = 223.252 K, P = 26 500 Pa,
+    //                             rho = 4.1351e-1 kg/m^3
+    // (note: 223.252 K, NOT 223.15 K — the layer math runs in geopotential
+    // altitude H = r0*Z/(r0+Z), H(10 km) = 9.9843 km).
+    auto s10 = atmosphere::us76(10000.0);
+    assertRelNear(s10.temperature, 223.252, 0.001, "T 10km geometric");
+    assertRelNear(s10.pressure, 26500.0, 0.001, "P 10km geometric");
+    assertRelNear(s10.density, 0.41351, 0.001, "rho 10km geometric");
+
+    // Layer-base values are defined at GEOPOTENTIAL altitudes (US76 Table 4):
+    //   H = 20 km geopotential: T = 216.65 K, P = 5474.9 Pa
+    //   H = 47 km geopotential: T = 270.65 K
+    // Convert to the geometric input expected by us76().
+    const double z20 = atmosphere::geometricAlt(20000.0);
+    auto s20 = atmosphere::us76(z20);
+    assertRelNear(s20.temperature, 216.65, 0.001, "T 20km geopotential");
+    assertRelNear(s20.pressure, 5474.9, 0.001, "P 20km geopotential");
+
+    const double z47 = atmosphere::geometricAlt(47000.0);
+    auto s47 = atmosphere::us76(z47);
+    assertRelNear(s47.temperature, 270.65, 0.001, "T 47km geopotential");
+
+    std::cout << "  US76 published table: 10km T=" << s10.temperature
+              << " P=" << s10.pressure << " | 20km(geopot) T=" << s20.temperature
+              << " P=" << s20.pressure << " | 47km(geopot) T=" << s47.temperature
+              << " ✓\n";
 }
 
 void testUS76_Tropopause() {
@@ -89,12 +122,114 @@ void testUS76_MonotonicDensity() {
 }
 
 // ===== NRLMSISE-00 Tests =====
+// Canonical reference vectors: 17-case output table distributed with the
+// NRLMSISE-00 C package (release 20041227, D. Brodowski port of
+// Picone/Hedin/Drob), DOCUMENTATION file — also at
+// https://github.com/magnific0/nrlmsise-00/blob/master/DOCUMENTATION.
+// Common inputs: doy=172, sec=29000 s UT, lat=60 deg, lon=-70 deg, lst=16 h,
+// F107A=150, F107=150, ap=4 (lst deliberately inconsistent with UT/lon).
+// Table values are quoted to 4 significant digits; the table RHO row is the
+// gtd7 density (excludes anomalous oxygen). Our State.density is the gtd7d
+// drag-effective density, so RHO is re-derived from the species columns
+// where anomalous oxygen matters.
+
+namespace canonical {
+constexpr double LST = 16.0;
+
+atmosphere::State run(double alt_km, int doy = 172, double sec = 29000.0,
+                      double latDeg = 60.0, double lonDeg = -70.0,
+                      double f107a = 150.0, double f107 = 150.0, double ap = 4.0) {
+    atmosphere::GeoPos pos{latDeg * M_PI / 180.0, lonDeg * M_PI / 180.0, alt_km * 1000.0};
+    atmosphere::Epoch epoch{0, doy, sec};
+    atmosphere::SolarActivity solar;
+    solar.F107 = f107;
+    solar.F107A = f107a;
+    for (int i = 0; i < 7; ++i) solar.Ap[i] = ap;
+    return atmosphere::nrlmsise00(pos, epoch, solar, LST);
+}
+
+// gtd7-equivalent mass density (g/cm^3) from the species number densities
+// (1/m^3): He, O, N2, O2, Ar, H, N — exactly the species summed by gtd7.
+double gtd7RhoGcm3(const atmosphere::State& s) {
+    constexpr double AMU = 1.66053906892e-24;  // g
+    const double per_cm3 = 1e-6;
+    return AMU * per_cm3 * (4.002602 * s.numDensityHe +
+                            15.9994 * s.numDensityO +
+                            28.0134 * s.numDensityN2 +
+                            31.9988 * s.numDensityO2 +
+                            39.948 * s.numDensityAr +
+                            1.00797 * s.numDensityH +
+                            14.0067 * s.numDensityN);
+}
+}  // namespace canonical
+
+void testNRLMSISE_CanonicalCase1() {
+    // Case 1: alt = 400 km. Published outputs:
+    //   TINF = 1250.54 K, TG = 1241.42 K, RHO = 4.075e-15 g/cm^3,
+    //   HE = 6.665e+05, O = 1.139e+08, N2 = 1.998e+07, O2 = 4.023e+05,
+    //   AR = 3.557e+03, H = 3.475e+04, N = 4.096e+06  [1/cm^3]
+    auto s = canonical::run(400.0);
+    assertRelNear(s.exosphericTemp, 1250.54, 1e-3, "case1 TINF");
+    assertRelNear(s.temperature, 1241.42, 1e-3, "case1 TG");
+    assertRelNear(canonical::gtd7RhoGcm3(s), 4.075e-15, 1e-3, "case1 RHO (gtd7)");
+    // gtd7d density (incl. anomalous O) is within 0.1% of gtd7 at 400 km.
+    assertRelNear(s.density, 4.075e-15 * 1000.0, 2e-3, "case1 rho kg/m^3 (gtd7d)");
+    assertRelNear(s.numDensityHe * 1e-6, 6.665e+05, 1e-3, "case1 He");
+    assertRelNear(s.numDensityO * 1e-6, 1.139e+08, 1e-3, "case1 O");
+    assertRelNear(s.numDensityN2 * 1e-6, 1.998e+07, 1e-3, "case1 N2");
+    assertRelNear(s.numDensityO2 * 1e-6, 4.023e+05, 1e-3, "case1 O2");
+    assertRelNear(s.numDensityAr * 1e-6, 3.557e+03, 1e-3, "case1 Ar");
+    assertRelNear(s.numDensityH * 1e-6, 3.475e+04, 1e-3, "case1 H");
+    assertRelNear(s.numDensityN * 1e-6, 4.096e+06, 1e-3, "case1 N");
+    std::cout << "  NRLMSISE-00 canonical case 1 (400 km): TINF=" << s.exosphericTemp
+              << " TG=" << s.temperature << " rho=" << s.density << " ✓\n";
+}
+
+void testNRLMSISE_CanonicalCase4() {
+    // Case 4: alt = 100 km. Published: TG = 206.89 K, RHO = 3.584e-10 g/cm^3,
+    // O = 1.919e+11, N2 = 6.116e+12, O2 = 1.225e+12 [1/cm^3].
+    // Anomalous oxygen is ~1e-42 here, so gtd7d == gtd7.
+    auto s = canonical::run(100.0);
+    assertRelNear(s.temperature, 206.89, 1e-3, "case4 TG");
+    assertRelNear(s.density, 3.584e-10 * 1000.0, 1e-3, "case4 rho");
+    assertRelNear(s.numDensityO * 1e-6, 1.919e+11, 1e-3, "case4 O");
+    assertRelNear(s.numDensityN2 * 1e-6, 6.116e+12, 1e-3, "case4 N2");
+    assertRelNear(s.numDensityO2 * 1e-6, 1.225e+12, 1e-3, "case4 O2");
+    std::cout << "  NRLMSISE-00 canonical case 4 (100 km): TG=" << s.temperature
+              << " rho=" << s.density << " ✓\n";
+}
+
+void testNRLMSISE_CanonicalCase11() {
+    // Case 11: alt = 0 km. Published: TG = 281.46 K, RHO = 1.261e-03 g/cm^3
+    // (= 1.261 kg/m^3), N2 = 2.050e+19, O2 = 5.499e+18 [1/cm^3].
+    auto s = canonical::run(0.0);
+    assertRelNear(s.temperature, 281.46, 1e-3, "case11 TG");
+    assertRelNear(s.density, 1.261, 1e-3, "case11 rho");
+    assertRelNear(s.numDensityN2 * 1e-6, 2.050e+19, 1e-3, "case11 N2");
+    assertRelNear(s.numDensityO2 * 1e-6, 5.499e+18, 1e-3, "case11 O2");
+    std::cout << "  NRLMSISE-00 canonical case 11 (0 km): TG=" << s.temperature
+              << " rho=" << s.density << " ✓\n";
+}
+
+void testNRLMSISE_CanonicalCase9_HighF107() {
+    // Case 9: F107 = 180 (others as common). Published: TINF = 1306.05 K,
+    // TG = 1293.37 K, O = 1.245e+08 [1/cm^3].
+    auto s = canonical::run(400.0, 172, 29000.0, 60.0, -70.0, 150.0, 180.0, 4.0);
+    assertRelNear(s.exosphericTemp, 1306.05, 1e-3, "case9 TINF");
+    assertRelNear(s.temperature, 1293.37, 1e-3, "case9 TG");
+    assertRelNear(s.numDensityO * 1e-6, 1.245e+08, 1e-3, "case9 O");
+    std::cout << "  NRLMSISE-00 canonical case 9 (F107=180): TINF=" << s.exosphericTemp
+              << " ✓\n";
+}
 
 void testNRLMSISE_SeaLevel() {
+    // Real NRLMSISE-00 surface state varies with location/season; it does not
+    // exactly reproduce US76. Physically-justified bounds: surface density
+    // within ~10% of 1.225 kg/m^3, temperature in a plausible surface range
+    // (published case 11 at 60N gives 281.46 K / 1.261 kg/m^3).
     auto s = atmosphere::nrlmsise00_simple(0);
-    // Should agree closely with US76 at sea level
-    assertRelNear(s.temperature, 288.15, 0.01, "NRLMSISE T sea level");
-    assertRelNear(s.density, 1.225, 0.05, "NRLMSISE rho sea level");
+    assert(s.density > 1.1 && s.density < 1.4);
+    assert(s.temperature > 250.0 && s.temperature < 330.0);
     std::cout << "  NRLMSISE-00 sea level: T=" << s.temperature << " rho=" << s.density << " ✓\n";
 }
 
@@ -213,12 +348,19 @@ int main() {
 
     // US76
     testUS76_SeaLevel();
+    testUS76_PublishedTable();
     testUS76_Tropopause();
     testUS76_Stratosphere();
     testUS76_HighAlt();
     testUS76_MonotonicDensity();
 
-    // NRLMSISE-00
+    // NRLMSISE-00 (canonical published vectors)
+    testNRLMSISE_CanonicalCase1();
+    testNRLMSISE_CanonicalCase4();
+    testNRLMSISE_CanonicalCase11();
+    testNRLMSISE_CanonicalCase9_HighF107();
+
+    // NRLMSISE-00 (behavioral)
     testNRLMSISE_SeaLevel();
     testNRLMSISE_Thermosphere();
     testNRLMSISE_SolarActivityEffect();

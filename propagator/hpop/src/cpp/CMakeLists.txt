@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
-project(hpop_sdn_plugin LANGUAGES CXX)
+project(hpop_sdn_plugin LANGUAGES CXX C)
+
+# Vendored public-domain NRLMSISE-00 C port (Picone/Hedin/Drob via Brodowski).
+set(NRLMSISE00_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/nrlmsise00")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,8 +43,10 @@ add_library(
     src/time_convert.cpp
     src/us76.cpp
     src/plugin_runtime.cpp
+    "${NRLMSISE00_DIR}/nrlmsise-00.c"
+    "${NRLMSISE00_DIR}/nrlmsise-00_data.c"
 )
-target_include_directories(hpop PUBLIC include include/hpop)
+target_include_directories(hpop PUBLIC include include/hpop "${NRLMSISE00_DIR}")
 
 if(NOT EMSCRIPTEN)
     # Native test targets can be added here

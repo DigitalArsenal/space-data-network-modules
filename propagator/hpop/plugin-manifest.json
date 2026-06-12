@@ -2,12 +2,18 @@
   "pluginId": "com.orbpro.hpop",
   "name": "HPOP High-Precision Orbit Propagator",
   "version": "1.0.0",
-  "description": "High-precision numerical orbit propagator with configurable force models, integrators, atmosphere models, and covariance propagation.",
+  "description": "High-precision numerical orbit propagator with configurable force models, integrators, and covariance propagation. Atmosphere models: real NRLMSISE-00 (vendored Picone/Hedin/Drob reference C port), US Standard Atmosphere 1976 (geopotential formulation, 0-86 km), Vallado exponential table; JB2008 and DTM2020 entries are simplified approximations, not the published coefficient models.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasi",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "invoke",
@@ -18,7 +24,11 @@
           "acceptedTypeSets": [
             {
               "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
             }
           ],
           "minStreams": 1,
@@ -32,7 +42,11 @@
           "acceptedTypeSets": [
             {
               "setId": "any-flatbuffer",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
             }
           ],
           "minStreams": 0,

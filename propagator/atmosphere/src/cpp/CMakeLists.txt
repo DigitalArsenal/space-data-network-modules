@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
-project(atmosphere_sdn_plugin LANGUAGES CXX)
+project(atmosphere_sdn_plugin LANGUAGES CXX C)
+
+# Vendored public-domain NRLMSISE-00 C port (Picone/Hedin/Drob via Brodowski).
+set(NRLMSISE00_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/nrlmsise00")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,8 +35,10 @@ add_library(
     src/us76.cpp
     src/nrlmsise00.cpp
     src/plugin_runtime.cpp
+    "${NRLMSISE00_DIR}/nrlmsise-00.c"
+    "${NRLMSISE00_DIR}/nrlmsise-00_data.c"
 )
-target_include_directories(atmosphere PUBLIC include)
+target_include_directories(atmosphere PUBLIC include "${NRLMSISE00_DIR}")
 
 if(NOT EMSCRIPTEN)
     add_executable(test_atmosphere tests/test_atmosphere.cpp)

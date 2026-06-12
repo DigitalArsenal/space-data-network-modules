@@ -28,7 +28,7 @@ The response payload is UTF-8 JSON returned on the `response` port.
 - `queryAltitude`
 - `queryAltitudes`
 
-These operations route the repo's existing US76 and NRLMSISE-00 model implementations through the canonical SDK command bridge.
+These operations route the US Standard Atmosphere 1976 implementation (geopotential-altitude formulation, 0-86 km geometric) and the REAL NRLMSISE-00 model (public-domain Picone/Hedin/Drob reference C port by D. Brodowski, vendored in `third_party/nrlmsise00/`) through the canonical SDK command bridge. NRLMSISE-00 mass density is the gtd7d drag-effective density (includes anomalous oxygen); outputs are verified against the canonical 17-case table distributed with the reference package.
 
 ## Runtime contract
 

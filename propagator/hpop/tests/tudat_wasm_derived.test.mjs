@@ -6,6 +6,13 @@
  * sampled Tudat state histories for the copied two-body and high-fidelity
  * cases. These checks drive the public HPOP command ABI only, through the SDK
  * browser harness or the WasmEdge loader.
+ *
+ * NOTE on `drag: false` below: the captured Tudat reference state histories
+ * were generated WITHOUT drag (the upstream tudat-wasm test cases do not
+ * enable it), so these comparisons must keep drag disabled to match the
+ * fixture. Drag-enabled propagation is covered by
+ * tests/drag_atmosphere.test.mjs against published physical reference values
+ * (NRLMSISE-00 canonical vectors, US76 Table I, published ISS-like decay).
  */
 
 import assert from "node:assert/strict";
