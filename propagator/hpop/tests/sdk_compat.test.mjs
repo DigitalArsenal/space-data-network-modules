@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { validatePluginArtifact } from "space-data-module-sdk/compliance";
 import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
+import { stripPublicationRecordCollection } from "space-data-module-sdk/transport";
 import {
   createBrowserModuleHarness,
   generateManifestHarnessPlan,
@@ -81,7 +82,13 @@ function instantiateStandaloneModule(wasmBytes) {
 }
 
 async function instantiateBrowserModuleAsBrowser({
-  wasmBytes = fs.readFileSync(fileURLToPath(BROWSER_WASM_PATH)),
+  // Browser consumers (e.g. OrbPro PluginLoader via resolveProtectedWasmBytes)
+  // strip the appended publication record collection (signature/PNM/REC
+  // trailers) before handing wasmBinary to the Emscripten factory; mirror
+  // that contract here since dist artifacts ship signed.
+  wasmBytes = stripPublicationRecordCollection(
+    fs.readFileSync(fileURLToPath(BROWSER_WASM_PATH)),
+  ),
   noInitialRun = true,
 } = {}) {
   const savedProcess = globalThis.process;
@@ -182,7 +189,11 @@ test("built artifact exposes the standalone isomorphic surface", async () => {
 });
 
 test("built artifact embeds a non-empty manifest flatbuffer", () => {
-  const wasmBytes = fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
+  // dist artifacts ship signed: strip the publication record trailer the
+  // way runtime loaders do before compiling raw bytes.
+  const wasmBytes = stripPublicationRecordCollection(
+    fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+  );
   const instance = instantiateStandaloneModule(wasmBytes);
   const manifestPtr = instance.exports.plugin_get_manifest_flatbuffer();
   const manifestSize = instance.exports.plugin_get_manifest_flatbuffer_size();

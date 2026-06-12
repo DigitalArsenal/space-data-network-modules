@@ -5,6 +5,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -81,7 +83,30 @@ State state_for_model(double altitude_m, Model model, const json& params) {
                 }
             }
         }
-        return nrlmsise00_simple(altitude_m, solar);
+
+        // Optional geodetic position and epoch (default: equator / prime
+        // meridian, Jan 1 2024 noon UT — same defaults as nrlmsise00_simple).
+        GeoPos pos{0, 0, altitude_m};
+        Epoch epoch{2024, 1, 43200.0};
+        constexpr double RAD = M_PI / 180.0;
+        if (params.contains("position")) {
+            const auto& p = params.at("position");
+            pos.lat_rad = p.value("latitudeDeg", 0.0) * RAD;
+            pos.lon_rad = p.value("longitudeDeg", 0.0) * RAD;
+        }
+        if (params.contains("epoch")) {
+            const auto& e = params.at("epoch");
+            epoch.year = e.value("year", epoch.year);
+            epoch.dayOfYear = e.value("dayOfYear", epoch.dayOfYear);
+            epoch.secondOfDay = e.value("secondOfDay", epoch.secondOfDay);
+        }
+
+        // Optional explicit local apparent solar time (hours, [0,24)). The
+        // canonical published NRLMSISE-00 test vectors use an lst
+        // deliberately inconsistent with UT/longitude, so tests need this
+        // override. Negative -> derive from UT and longitude.
+        const double lst = params.value("localSolarTimeHours", -1.0);
+        return nrlmsise00(pos, epoch, solar, lst);
     }
     return us76(altitude_m);
 }

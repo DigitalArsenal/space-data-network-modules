@@ -8,8 +8,15 @@
 #include "astrodynamics.h"
 #include "atmosphere.h"
 #include <cmath>
+#include <cstring>
 #include <algorithm>
 #include <limits>
+
+// Real NRLMSISE-00 (public-domain Brodowski C port, vendored in
+// third_party/nrlmsise00/). See that directory's README for provenance.
+extern "C" {
+#include "nrlmsise-00.h"
+}
 
 namespace astro {
 
@@ -4747,8 +4754,13 @@ SRPAcceleration computeSRPBoxWing(
 // =============================================================================
 
 double exponentialAtmosphereDensity(double altitude) {
-    // Simple exponential atmosphere (Harris-Priester base)
-    // Reference: scale heights from US Standard Atmosphere 1976
+    // Piecewise-exponential atmospheric model.
+    // Reference: Vallado, D.A., "Fundamentals of Astrodynamics and
+    // Applications", 4th ed. (2013), Microcosm Press, Table 8-4
+    // "Exponential Atmospheric Model" (after Wertz). Values cross-checked
+    // against the machine-readable copy in
+    // JuliaSpace/SatelliteToolboxAtmosphericModels.jl
+    // (src/exponential/constants.jl), which cites the same table.
 
     if (altitude < 0) altitude = 0;
     if (altitude > 2500) return 0;
@@ -4759,34 +4771,34 @@ double exponentialAtmosphereDensity(double altitude) {
     };
 
     constexpr AtmLayer layers[] = {
-        {0,     1.225,      8.5},
-        {25,    3.899e-2,   6.5},
-        {30,    1.774e-2,   6.7},
-        {40,    3.972e-3,   7.6},
-        {50,    1.057e-3,   8.1},
-        {60,    3.206e-4,   8.6},
-        {70,    8.770e-5,   9.2},
-        {80,    1.905e-5,   10.4},
-        {90,    3.396e-6,   13.5},
-        {100,   5.604e-7,   16.1},
-        {110,   9.708e-8,   22.2},
-        {120,   2.222e-8,   29.7},
-        {130,   8.152e-9,   37.6},
-        {140,   3.831e-9,   45.5},
-        {150,   2.076e-9,   53.3},
-        {180,   5.194e-10,  73.2},
-        {200,   2.541e-10,  85.6},
-        {250,   6.073e-11,  102.3},
-        {300,   1.916e-11,  117.5},
-        {350,   7.014e-12,  132.5},
-        {400,   2.803e-12,  147.5},
-        {450,   1.184e-12,  162.4},
-        {500,   5.215e-13,  177.3},
-        {600,   1.137e-13,  206.8},
-        {700,   3.070e-14,  236.0},
-        {800,   1.136e-14,  264.9},
-        {900,   5.759e-15,  293.5},
-        {1000,  3.561e-15,  321.7}
+        {0,     1.225,      7.249},
+        {25,    3.899e-2,   6.349},
+        {30,    1.774e-2,   6.682},
+        {40,    3.972e-3,   7.554},
+        {50,    1.057e-3,   8.382},
+        {60,    3.206e-4,   7.714},
+        {70,    8.770e-5,   6.549},
+        {80,    1.905e-5,   5.799},
+        {90,    3.396e-6,   5.382},
+        {100,   5.297e-7,   5.877},
+        {110,   9.661e-8,   7.263},
+        {120,   2.438e-8,   9.473},
+        {130,   8.484e-9,   12.636},
+        {140,   3.845e-9,   16.149},
+        {150,   2.070e-9,   22.523},
+        {180,   5.464e-10,  29.740},
+        {200,   2.789e-10,  37.105},
+        {250,   7.248e-11,  45.546},
+        {300,   2.418e-11,  53.628},
+        {350,   9.518e-12,  53.298},
+        {400,   3.725e-12,  58.515},
+        {450,   1.585e-12,  60.828},
+        {500,   6.967e-13,  63.822},
+        {600,   1.454e-13,  71.835},
+        {700,   3.614e-14,  88.667},
+        {800,   1.170e-14,  124.64},
+        {900,   5.245e-15,  181.05},
+        {1000,  3.019e-15,  268.00}
     };
     constexpr int nLayers = sizeof(layers) / sizeof(layers[0]);
 
@@ -4807,65 +4819,107 @@ double exponentialAtmosphereDensity(double altitude) {
 }
 
 AtmosphericDensity computeUSSA1976(double altitude) {
+    // US Standard Atmosphere 1976 (NOAA-S/T 76-1562), lower atmosphere
+    // (0-86 km geometric). The model defines its seven layers in
+    // GEOPOTENTIAL altitude H = r0*Z/(r0+Z) with r0 = 6356.766 km
+    // (US76 Eq. 18-19), so the geometric input must be converted before
+    // applying the layer lapse rates. Layer bases (geopotential km):
+    // 0 / 11 / 20 / 32 / 47 / 51 / 71, lapse rates
+    // -6.5 / 0 / +1.0 / +2.8 / 0 / -2.8 / -2.0 K/km (US76 Table 4),
+    // valid up to 86 km geometric = 84.852 km geopotential.
+    //
+    // HAND-OFF ABOVE 86 km: US76's full formulation above 86 km
+    // (species-resolved, Eq. 33-41) is NOT implemented here. Above 86 km
+    // geometric this function honestly delegates density to the Vallado
+    // piecewise-exponential model (exponentialAtmosphereDensity) and
+    // reports a crude thermospheric temperature ramp. Use NRLMSISE-00 for
+    // physically meaningful thermosphere densities.
+
     AtmosphericDensity result;
     result.altitude = altitude;
 
     if (altitude < 0) altitude = 0;
 
-    // US Standard Atmosphere 1976 (simplified for 0-86 km)
-    // Above 86 km, use exponential extrapolation
+    constexpr double GMR = 9.80665 * 28.9644 / 8.31432;  // g0*M0/R* = 34.1632 K/km
+    constexpr double R_AIR = 8314.32 / 28.9644;          // 287.053 J/(kg K)
+    constexpr double R0_KM = 6356.766;                   // US76 effective Earth radius
 
-    double T, P;  // Temperature (K), Pressure (Pa)
-
-    if (altitude <= 11.0) {
-        // Troposphere
-        double T0 = 288.15;
-        double L = -6.5e-3;  // K/m (lapse rate)
-        T = T0 + L * altitude * 1000.0;
-        P = 101325.0 * std::pow(T / T0, -9.80665 / (L * 287.05));
-    } else if (altitude <= 20.0) {
-        // Tropopause
-        T = 216.65;
-        double P11 = 22632.0;
-        P = P11 * std::exp(-9.80665 * (altitude - 11.0) * 1000.0 / (287.05 * T));
-    } else if (altitude <= 32.0) {
-        // Stratosphere 1
-        double T20 = 216.65;
-        double L = 1.0e-3;
-        T = T20 + L * (altitude - 20.0) * 1000.0;
-        double P20 = 5474.9;
-        P = P20 * std::pow(T / T20, -9.80665 / (L * 287.05));
-    } else if (altitude <= 47.0) {
-        // Stratosphere 2
-        double T32 = 228.65;
-        double L = 2.8e-3;
-        T = T32 + L * (altitude - 32.0) * 1000.0;
-        double P32 = 868.02;
-        P = P32 * std::pow(T / T32, -9.80665 / (L * 287.05));
-    } else if (altitude <= 86.0) {
-        // Mesosphere (simplified)
-        T = 270.65 - 2.8e-3 * (altitude - 47.0) * 1000.0;
-        if (T < 186.87) T = 186.87;
-        double P47 = 110.91;
-        P = P47 * std::exp(-9.80665 * (altitude - 47.0) * 1000.0 / (287.05 * 0.5 * (270.65 + T)));
-    } else {
-        // Above 86 km - use exponential
-        T = 186.87 + (altitude - 86.0) * 3.0;  // Temperature increases in thermosphere
+    if (altitude > 86.0) {
+        // Documented hand-off (see header comment above).
+        double T = 186.87 + (altitude - 86.0) * 3.0;  // crude thermosphere ramp
         if (T > 1000) T = 1000;
         result.density = exponentialAtmosphereDensity(altitude);
         result.temperature = T;
-        result.scaleHeight = 287.05 * T / 9.80665 / 1000.0;  // km
-        result.molecularMass = 28.964;
+        result.scaleHeight = R_AIR * T / 9.80665 / 1000.0;  // km
+        result.molecularMass = 28.9644;
         return result;
     }
 
-    // Density from ideal gas law: rho = P / (R * T)
-    result.density = P / (287.05 * T);  // kg/m^3
+    // Geometric -> geopotential altitude (km)
+    double H = R0_KM * altitude / (R0_KM + altitude);
+    if (H > 84.852) H = 84.852;
+
+    // Layer base geopotential altitude (km), temperature (K),
+    // pressure (Pa, US76 Table I), lapse rate (K/km)
+    struct Us76Layer { double Hb, Tb, Pb, Lb; };
+    constexpr Us76Layer layers[7] = {
+        {0.0,  288.15, 101325.0,   -6.5},
+        {11.0, 216.65, 22632.06,    0.0},
+        {20.0, 216.65, 5474.889,    1.0},
+        {32.0, 228.65, 868.0187,    2.8},
+        {47.0, 270.65, 110.9063,    0.0},
+        {51.0, 270.65, 66.93887,   -2.8},
+        {71.0, 214.65, 3.956420,   -2.0},
+    };
+
+    int layer = 0;
+    for (int i = 6; i >= 0; --i) {
+        if (H >= layers[i].Hb) { layer = i; break; }
+    }
+
+    const double dH = H - layers[layer].Hb;
+    const double Tb = layers[layer].Tb;
+    const double Pb = layers[layer].Pb;
+    const double Lb = layers[layer].Lb;
+
+    double T = Tb + Lb * dH;
+    double P;
+    if (std::fabs(Lb) < 1e-12) {
+        P = Pb * std::exp(-GMR * dH / Tb);
+    } else {
+        P = Pb * std::pow(Tb / T, GMR / Lb);
+    }
+
+    result.density = P / (R_AIR * T);  // kg/m^3 (ideal gas)
     result.temperature = T;
-    result.scaleHeight = 287.05 * T / 9.80665 / 1000.0;  // km
-    result.molecularMass = 28.964;
+    result.scaleHeight = R_AIR * T / 9.80665 / 1000.0;  // km
+    result.molecularMass = 28.9644;
 
     return result;
+}
+
+// Convert a Julian date (UT) to calendar year, day-of-year and seconds of day.
+// Fliegel, H.F. & Van Flandern, T.C. (1968), Comm. ACM 11(10), 657.
+static void jdToYearDoySec(double jd, int& year, int& doy, double& sec) {
+    const double jd05 = jd + 0.5;
+    long z = static_cast<long>(std::floor(jd05));
+    double frac = jd05 - static_cast<double>(z);
+
+    long alpha = static_cast<long>(std::floor((static_cast<double>(z) - 1867216.25) / 36524.25));
+    long a = z + 1 + alpha - alpha / 4;
+    long b = a + 1524;
+    long c = static_cast<long>(std::floor((static_cast<double>(b) - 122.1) / 365.25));
+    long d = static_cast<long>(std::floor(365.25 * static_cast<double>(c)));
+    long e = static_cast<long>(std::floor(static_cast<double>(b - d) / 30.6001));
+
+    int day = static_cast<int>(b - d - static_cast<long>(std::floor(30.6001 * static_cast<double>(e))));
+    int month = static_cast<int>((e < 14) ? e - 1 : e - 13);
+    year = static_cast<int>((month > 2) ? c - 4716 : c - 4715);
+
+    static const int cumDays[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    doy = cumDays[month - 1] + day + ((leap && month > 2) ? 1 : 0);
+    sec = frac * 86400.0;
 }
 
 AtmosphericDensity computeNRLMSISE00(
@@ -4874,11 +4928,16 @@ AtmosphericDensity computeNRLMSISE00(
     const SpaceWeatherData& weather,
     const AtmosphereConfig& config)
 {
+    // Real NRLMSISE-00 (Picone, Hedin, Drob; JGR 107(A12), 1468, 2002),
+    // via the public-domain Brodowski C port vendored in
+    // third_party/nrlmsise00/. Uses gtd7d so the returned total mass
+    // density includes anomalous oxygen ("effective mass density for
+    // drag", the recommended output for satellite drag computations).
     AtmosphericDensity result;
 
     // Convert position to geodetic
     double lat, lon, alt;
-    ecefToGeodetic(position, lat, lon, alt);
+    ecefToGeodetic(position, lat, lon, alt);  // rad, rad, km
 
     result.latitude = lat;
     result.longitude = lon;
@@ -4890,74 +4949,82 @@ AtmosphericDensity computeNRLMSISE00(
         return result;
     }
 
-    // NRLMSISE-00 model (simplified implementation)
-    // Full model requires extensive coefficient tables
+    int year = 0;
+    int doy = 1;
+    double sec = 0.0;
+    jdToYearDoySec(jd, year, doy, sec);
 
-    // Base density from exponential
-    double rhoBase = exponentialAtmosphereDensity(alt);
+    const double latDeg = lat * 180.0 / PI;
+    const double lonDeg = lon * 180.0 / PI;
 
-    // Solar activity correction
-    // NRLMSISE-00 shows density varies by factor of ~10 between solar min and max at 400 km
-    // Using exponential dependence on F10.7 for realistic behavior
-    double F107avg = weather.F107a;
-    double F107 = weather.F107;
-    double F107ref = 150.0;  // Reference F10.7
+    // Recommended consistency relation lst = sec/3600 + g_long/15
+    // (NRLMSISE-00 package notes on input variables).
+    double lst = sec / 3600.0 + lonDeg / 15.0;
+    lst = std::fmod(lst, 24.0);
+    if (lst < 0.0) lst += 24.0;
 
-    // Altitude-dependent solar activity sensitivity
-    // Higher altitudes show stronger solar activity dependence
-    double altFactor = 1.0 + (alt - 200.0) / 400.0;  // Increases with altitude
-    if (altFactor < 0.5) altFactor = 0.5;
-    if (altFactor > 3.0) altFactor = 3.0;
+    nrlmsise_input msisInput;
+    nrlmsise_flags msisFlags;
+    nrlmsise_output msisOutput;
+    std::memset(&msisInput, 0, sizeof(msisInput));
+    std::memset(&msisFlags, 0, sizeof(msisFlags));
+    std::memset(&msisOutput, 0, sizeof(msisOutput));
 
-    // Solar activity factor: exponential dependence gives ~10x variation
-    // from F10.7=70 (min) to F10.7=250 (max)
-    double solarFactor = std::exp(altFactor * 0.015 * (F107 - F107ref));
-
-    // Geomagnetic activity correction
-    // Ap index effect: storms can increase density by factor of 2-3
-    double Ap = weather.Ap;
-    double geomagFactor = 1.0 + 0.02 * std::max(0.0, Ap - 15.0);
-    if (weather.isStorm) {
-        geomagFactor *= 1.0 + 0.01 * std::max(0.0, Ap - 50.0);
+    msisFlags.switches[0] = 0;  // output in SI-adjacent units handled below
+    for (int i = 1; i < 24; ++i) {
+        msisFlags.switches[i] = 1;
+    }
+    if (!config.diurnalVariation) {
+        msisFlags.switches[7] = 0;   // diurnal
+        msisFlags.switches[8] = 0;   // semidiurnal
+        msisFlags.switches[14] = 0;  // terdiurnal
+    }
+    if (!config.geomagneticEffects) {
+        msisFlags.switches[9] = 0;   // daily ap
+        msisFlags.switches[13] = 0;  // mixed ap/UT/long
     }
 
-    // Diurnal variation
-    double diurnalFactor = 1.0;
-    if (config.diurnalVariation) {
-        double lst = result.localSolarTime;
-        // Day side has higher density
-        diurnalFactor = 1.0 + 0.3 * std::sin((lst - 6.0) * PI / 12.0);
-    }
+    msisInput.year = year;  // ignored by the model
+    msisInput.doy = doy;
+    msisInput.sec = sec;
+    msisInput.alt = alt;        // km
+    msisInput.g_lat = latDeg;   // deg
+    msisInput.g_long = lonDeg;  // deg
+    msisInput.lst = lst;        // hours
+    msisInput.f107A = weather.F107a;
+    msisInput.f107 = weather.F107;
+    msisInput.ap = weather.Ap;
+    msisInput.ap_a = nullptr;
 
-    // Latitude variation
-    double latFactor = 1.0 + 0.1 * std::cos(2.0 * lat);
+    gtd7d(&msisInput, &msisFlags, &msisOutput);
 
-    // Combine factors
-    result.density = rhoBase * solarFactor * geomagFactor * diurnalFactor * latFactor;
+    result.density = msisOutput.d[5] * 1000.0;  // g/cm^3 -> kg/m^3
+    result.temperature = msisOutput.t[1];       // K at altitude
 
-    // Temperature estimate
-    double F107norm = (F107 - 70.0) / 100.0;  // Normalized F10.7 for temperature
-    double Tinf = 900.0 + 150.0 * F107norm + 50.0 * (Ap - 15.0) / 100.0;
-    double T0 = 188.0;  // Exospheric base temperature
-    double z0 = 120.0;  // km
-    double sigma = 0.02;
-    result.temperature = Tinf - (Tinf - T0) * std::exp(-sigma * (alt - z0));
+    // Number densities: 1/cm^3 -> 1/m^3
+    result.nHe = msisOutput.d[0] * 1e6;
+    result.nO  = msisOutput.d[1] * 1e6;
+    result.nN2 = msisOutput.d[2] * 1e6;
+    result.nO2 = msisOutput.d[3] * 1e6;
+    result.nAr = msisOutput.d[4] * 1e6;
+    result.nH  = msisOutput.d[6] * 1e6;
 
-    result.scaleHeight = result.temperature * 287.05 / 9.80665 / 1000.0;  // Approximate
-
-    // Species densities (simplified partitioning)
-    if (alt < 200.0) {
-        result.nN2 = result.density * 0.78 * 6.022e23 / 0.028;
-        result.nO2 = result.density * 0.21 * 6.022e23 / 0.032;
-        result.nO = result.density * 0.01 * 6.022e23 / 0.016;
-    } else if (alt < 500.0) {
-        result.nO = result.density * 0.8 * 6.022e23 / 0.016;
-        result.nN2 = result.density * 0.15 * 6.022e23 / 0.028;
-        result.nHe = result.density * 0.05 * 6.022e23 / 0.004;
+    // Mean molecular mass (g/mol) from species mix (He,O,N2,O2,Ar,H,N)
+    const double nTotal = (msisOutput.d[0] + msisOutput.d[1] + msisOutput.d[2] +
+                           msisOutput.d[3] + msisOutput.d[4] + msisOutput.d[6] +
+                           msisOutput.d[7]) * 1e6;
+    if (nTotal > 1e-30) {
+        // rho [kg/m^3] / n [1/m^3] * N_A [1/mol] * 1000 -> g/mol
+        result.molecularMass = result.density / nTotal * 6.02214076e23 * 1000.0;
     } else {
-        result.nH = result.density * 0.6 * 6.022e23 / 0.001;
-        result.nHe = result.density * 0.3 * 6.022e23 / 0.004;
-        result.nO = result.density * 0.1 * 6.022e23 / 0.016;
+        result.molecularMass = 0.0;
+    }
+
+    // Local pressure scale height H = R*T/(M*g) in km
+    if (result.molecularMass > 1e-12 && result.temperature > 0) {
+        result.scaleHeight =
+            8.31446 * result.temperature /
+            (result.molecularMass * 1e-3 * 9.80665) / 1000.0;
     }
 
     return result;
@@ -4970,8 +5037,12 @@ AtmosphericDensity computeJB2008(
 {
     AtmosphericDensity result;
 
-    // Jacchia-Bowman 2008 model (simplified)
-    // Uses S10.7, M10.7, Y10.7 solar indices
+    // SIMPLIFIED APPROXIMATION of Jacchia-Bowman 2008 — NOT the full
+    // JB2008 coefficient model (Bowman et al., AIAA 2008-6438). This
+    // implementation only mimics the exospheric-temperature response to
+    // the S10.7/M10.7/Y10.7 indices and uses a single-species barometric
+    // profile from 120 km. Do not use where validated JB2008 densities
+    // are required; prefer NRLMSISE00 (full model, vendored).
 
     double lat, lon, alt;
     ecefToGeodetic(position, lat, lon, alt);
@@ -5034,12 +5105,13 @@ AtmosphericDensity computeJB2008(
     double rho120 = 2.0e-8;
 
     // Barometric formula with variable temperature
-    double g0 = 9.80665;
-    double M = 28.0;  // Mean molecular mass (g/mol), decreases with altitude
-    double R = 8.314;  // J/(mol·K)
+    double g0 = 9.80665;           // m/s^2
+    double M = 28.0e-3;            // Mean molecular mass (kg/mol)
+    double R = 8.31446;            // J/(mol·K)
 
-    // Simplified integration
-    double H = R * Tz / (M * g0 * 1e-3);  // Scale height in km
+    // Scale height H = R*T/(M*g): result is in meters, divide by 1000 for km
+    // (alt is in km). For Tz ~ 1000 K this gives H ~ 30 km.
+    double H = R * Tz / (M * g0) / 1000.0;  // Scale height in km
     result.density = rho120 * std::exp(-(alt - 120.0) / H);
 
     // Apply solar/geomagnetic factors
@@ -5058,8 +5130,12 @@ AtmosphericDensity computeDTM2020(
 {
     AtmosphericDensity result;
 
-    // DTM2020 (Drag Temperature Model) - simplified implementation
-    // DTM2020 is the successor to DTM2013 with improved thermosphere modeling
+    // SIMPLIFIED APPROXIMATION of DTM2020 (Drag Temperature Model;
+    // Bruinsma & Boniface, JSWSC 2021) — NOT the full DTM2020 spherical-
+    // harmonic coefficient model. Only the qualitative F30/Hp temperature
+    // response and a single-species barometric profile are mimicked here.
+    // Do not use where validated DTM2020 densities are required; prefer
+    // NRLMSISE00 (full model, vendored).
 
     double lat, lon, alt;
     ecefToGeodetic(position, lat, lon, alt);
@@ -5117,8 +5193,8 @@ AtmosphericDensity computeDTM2020(
     // Reference density at 120 km
     double rho_ref = 1.8e-8;  // kg/m^3
 
-    // Scale height
-    double H = 8.314 * Tz / (28.0 * 9.80665 * 1e-3);
+    // Scale height H = R*T/(M*g) in km (M in kg/mol; divide by 1000 m->km)
+    double H = 8.31446 * Tz / (28.0e-3 * 9.80665) / 1000.0;
     result.scaleHeight = H;
 
     // Barometric law

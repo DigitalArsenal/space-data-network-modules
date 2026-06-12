@@ -23,14 +23,23 @@ double us76_speedOfSound(double altitude_m);
 
 // ---------------------------------------------------------------------------
 // NRLMSISE-00 Empirical Atmosphere
-// Ported from OrbPro2-ModSim/plugins/atmosphere/src/nrlmsise00.cpp
-// Altitude range: 0 to 1000 km
-// Includes solar/geomagnetic activity effects, species composition,
-// diurnal variation, and exospheric temperature
+// Thin wrapper over the real, public-domain NRLMSISE-00 C port vendored in
+// third_party/nrlmsise00/ (Picone/Hedin/Drob via D. Brodowski).
+// Altitude range: 0 to 1000 km. Total mass density from gtd7d (includes
+// anomalous oxygen — drag-effective density).
 // ---------------------------------------------------------------------------
 
 /// Full NRLMSISE-00 with position, time, and solar activity
 State nrlmsise00(const GeoPos& pos, const Epoch& epoch, const SolarActivity& solar);
+
+/// Full NRLMSISE-00 with explicit local apparent solar time override (hours,
+/// [0, 24)). Pass a negative value to derive lst from secondOfDay and
+/// longitude (recommended relation lst = sec/3600 + lon_deg/15). The
+/// override exists because the canonical published test vectors use an lst
+/// that is deliberately inconsistent with UT/longitude. (Negative sentinel
+/// instead of NaN: builds use -ffast-math.)
+State nrlmsise00(const GeoPos& pos, const Epoch& epoch, const SolarActivity& solar,
+                 double lstHours);
 
 /// Simplified: altitude-only with default solar activity
 State nrlmsise00_simple(double altitude_m, const SolarActivity& solar);

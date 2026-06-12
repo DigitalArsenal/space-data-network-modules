@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,11 @@ struct AtmosphereState {
   double temperatureK = 288.15;
   double pressurePa = 101325.0;
   double soundSpeedMps = 340.294;
+  // Set to false (with `error` describing why) when the requested
+  // atmosphere model cannot be evaluated. Numeric fields are NaN-poisoned
+  // in that case so the failure can never be silently consumed.
+  bool valid = true;
+  std::string error;
 };
 
 struct Sample {
@@ -258,8 +264,17 @@ Vehicle parse_vehicle(const std::string& request) {
   return vehicle;
 }
 
+// US Standard Atmosphere 1976 (NOAA-S/T 76-1562), 0-86 km geometric.
+// The model defines its layers in GEOPOTENTIAL altitude
+// H = r0*z/(r0+z), r0 = 6 356 766 m (US76 Eq. 18-19), so the geometric
+// input must be converted before the layer math. Published check value:
+// Z = 10 km geometric -> H = 9.9843 km -> T = 223.252 K (US76 Table I).
 AtmosphereState us76(double altitude_m) {
-  const double h = std::clamp(altitude_m, 0.0, 84852.0);
+  constexpr double kEarthRadiusM = 6356766.0;  // US76 effective Earth radius
+  const double z = std::clamp(altitude_m, 0.0, 86000.0);  // geometric [m]
+  const double h_geopotential = kEarthRadiusM * z / (kEarthRadiusM + z);
+  const double h = std::min(h_geopotential, 84852.0);  // top of US76 layers
+
   static const double base_h[] = {0.0, 11000.0, 20000.0, 32000.0, 47000.0, 51000.0, 71000.0};
   static const double base_t[] = {288.15, 216.65, 216.65, 228.65, 270.65, 270.65, 214.65};
   static const double base_p[] = {
@@ -300,8 +315,25 @@ AtmosphereState us76(double altitude_m) {
   return state;
 }
 
+// Supported models:
+//   "US76"                       — US Standard Atmosphere 1976 (0-86 km
+//                                  geometric; input clamped to that range).
+//   "US76_EXPONENTIAL_EXTENSION" — US76 below 86 km; above 86 km an
+//                                  honestly-named CRUDE isothermal
+//                                  exponential extension (T = 900 K,
+//                                  H = 28 km). This is NOT NRLMSISE-00 and
+//                                  not suitable for satellite drag work.
+//
+// "NRLMSISE00" is intentionally REJECTED: these single-translation-unit
+// wasm modules cannot link the real vendored NRLMSISE-00 implementation
+// (third_party/nrlmsise00/), and silently substituting an exponential fit
+// while calling it NRLMSISE-00 would be dishonest. Use the `atmosphere`
+// or `hpop` modules for real NRLMSISE-00 densities.
 AtmosphereState atmosphere_for_model(double altitude_m, const std::string& model) {
-  if (model == "NRLMSISE00") {
+  if (model == "US76") {
+    return us76(altitude_m);
+  }
+  if (model == "US76_EXPONENTIAL_EXTENSION") {
     const double clamped = std::min(altitude_m, 86000.0);
     AtmosphereState base = us76(clamped);
     if (altitude_m > 86000.0) {
@@ -313,7 +345,28 @@ AtmosphereState atmosphere_for_model(double altitude_m, const std::string& model
     }
     return base;
   }
-  return us76(altitude_m);
+
+  AtmosphereState invalid{};
+  invalid.valid = false;
+  if (model == "NRLMSISE00") {
+    invalid.error =
+      "Atmosphere model \"NRLMSISE00\" is not available in this module: the "
+      "real NRLMSISE-00 implementation cannot be compiled into this "
+      "single-source wasm build, and approximating it silently is not "
+      "acceptable. Supported models: \"US76\", "
+      "\"US76_EXPONENTIAL_EXTENSION\". For real NRLMSISE-00 use the "
+      "atmosphere or hpop modules.";
+  } else {
+    invalid.error =
+      "Unknown atmosphere model \"" + model + "\". Supported models: "
+      "\"US76\", \"US76_EXPONENTIAL_EXTENSION\".";
+  }
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  invalid.densityKgM3 = nan;
+  invalid.temperatureK = nan;
+  invalid.pressurePa = nan;
+  invalid.soundSpeedMps = nan;
+  return invalid;
 }
 
 double dynamic_viscosity_pa_s(double temperature_k) {

@@ -21,10 +21,23 @@ extern "C" int evaluate_hypersonic_state_batch(void) {
     return fail("missing-states", "Request must include a non-empty states array.");
   }
 
+  // Fail hard on unsupported atmosphere models (e.g. "NRLMSISE00") before
+  // doing any work — no silent fallbacks.
+  {
+    const AtmosphereState probe = atmosphere_for_model(0.0, atmosphere_model);
+    if (!probe.valid) {
+      return fail("unsupported-atmosphere-model", probe.error.c_str());
+    }
+  }
+
   std::vector<HypersonicCondition> conditions;
   conditions.reserve(samples.size());
   for (const auto& sample : samples) {
-    conditions.push_back(compute_condition(sample, vehicle, atmosphere_model));
+    HypersonicCondition condition = compute_condition(sample, vehicle, atmosphere_model);
+    if (!condition.atmosphere.valid) {
+      return fail("unsupported-atmosphere-model", condition.atmosphere.error.c_str());
+    }
+    conditions.push_back(condition);
   }
 
   std::string response =
@@ -33,7 +46,7 @@ extern "C" int evaluate_hypersonic_state_batch(void) {
     "\"atmosphereModel\":" + quote(atmosphere_model) + ","
     "\"count\":" + std::to_string(conditions.size()) + ","
     "\"conditions\":" + join_conditions(conditions) + ","
-    "\"assumptions\":[\"US Standard Atmosphere 1976 below 86 km\","
+    "\"assumptions\":[\"US Standard Atmosphere 1976 below 86 km (geopotential-corrected)\","
     "\"Sutton-Graves stagnation-point convective heating\","
     "\"perfect-gas Mach number using gamma=1.4\"]}";
 

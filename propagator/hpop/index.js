@@ -2,7 +2,7 @@ import {
   decodePlgManifest,
   isPlgManifestBuffer,
 } from "space-data-module-sdk/manifest";
-import { createBrowserModuleHarness } from "../../../space-data-module-sdk/src/testing/browserModuleHarness.js";
+import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 export const pluginManifestPath = new URL("./plugin-manifest.json", import.meta.url);
 export const browserModulePath = new URL("./dist/browser/module.js", import.meta.url);

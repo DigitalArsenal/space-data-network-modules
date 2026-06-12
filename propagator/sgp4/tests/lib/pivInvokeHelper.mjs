@@ -15,6 +15,7 @@ import {
   PIVT,
   TABT,
 } from "spacedatastandards.org/lib/js/PIV/main.js";
+import { stripPublicationRecordCollection } from "space-data-module-sdk/transport";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const browserDistDir = path.resolve(__dirname, "..", "..", "dist", "browser");
@@ -34,7 +35,12 @@ async function loadFactory() {
 
 export async function loadRawSgp4Module() {
   const factory = await loadFactory();
-  const wasmBinary = await readFile(path.join(browserDistDir, "module.wasm"));
+  // dist artifacts ship signed (appended publication record collection);
+  // strip it the way runtime consumers (OrbPro resolveProtectedWasmBytes,
+  // SDK loaders) do before handing bytes to the Emscripten factory.
+  const wasmBinary = stripPublicationRecordCollection(
+    await readFile(path.join(browserDistDir, "module.wasm")),
+  );
   return factory({ wasmBinary });
 }
 
