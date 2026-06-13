@@ -41,21 +41,7 @@
 #include <unordered_map>
 #include <vector>
 
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("call_json")))
-int32_t space_data_module_host_call_json(const char* operation_ptr, int32_t operation_len,
-                           const char* payload_ptr, int32_t payload_len);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t space_data_module_host_response_len(void);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t space_data_module_host_read_response(char* dst_ptr, int32_t dst_len);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("clear_response")))
-int32_t space_data_module_host_clear_response(void);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("last_status_code")))
-int32_t space_data_module_host_last_status_code(void);
+#include "../../../../../common/sdm_hostcall_wire.hpp"
 
 namespace {
 
@@ -387,42 +373,6 @@ bool decode_base64_bytes(std::string_view text, std::vector<uint8_t>* bytes_out)
   return true;
 }
 
-std::string encode_base64_bytes(const uint8_t* bytes, size_t size) {
-  static constexpr char kAlphabet[] =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  std::string output;
-  output.reserve(((size + 2) / 3) * 4);
-  size_t cursor = 0;
-  while (cursor + 3 <= size) {
-    const uint32_t block =
-        (static_cast<uint32_t>(bytes[cursor]) << 16) |
-        (static_cast<uint32_t>(bytes[cursor + 1]) << 8) |
-        static_cast<uint32_t>(bytes[cursor + 2]);
-    output.push_back(kAlphabet[(block >> 18) & 0x3f]);
-    output.push_back(kAlphabet[(block >> 12) & 0x3f]);
-    output.push_back(kAlphabet[(block >> 6) & 0x3f]);
-    output.push_back(kAlphabet[block & 0x3f]);
-    cursor += 3;
-  }
-  const size_t remaining = size - cursor;
-  if (remaining == 1) {
-    const uint32_t block = static_cast<uint32_t>(bytes[cursor]) << 16;
-    output.push_back(kAlphabet[(block >> 18) & 0x3f]);
-    output.push_back(kAlphabet[(block >> 12) & 0x3f]);
-    output.push_back('=');
-    output.push_back('=');
-  } else if (remaining == 2) {
-    const uint32_t block =
-        (static_cast<uint32_t>(bytes[cursor]) << 16) |
-        (static_cast<uint32_t>(bytes[cursor + 1]) << 8);
-    output.push_back(kAlphabet[(block >> 18) & 0x3f]);
-    output.push_back(kAlphabet[(block >> 12) & 0x3f]);
-    output.push_back(kAlphabet[(block >> 6) & 0x3f]);
-    output.push_back('=');
-  }
-  return output;
-}
-
 int decode_hex_char(char c) {
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -489,85 +439,19 @@ std::string escape_json_string(std::string_view value) {
   return escaped;
 }
 
-bool read_host_json_response(std::string* response_out) {
-  if (!response_out) {
-    return false;
-  }
-  const int32_t response_len = space_data_module_host_response_len();
-  if (response_len < 0) {
-    space_data_module_host_clear_response();
-    return false;
-  }
-  std::string response(static_cast<size_t>(response_len), '\0');
-  const int32_t copied =
-      response_len > 0 ? space_data_module_host_read_response(response.data(), response_len) : 0;
-  space_data_module_host_clear_response();
-  if (copied != response_len) {
-    return false;
-  }
-  *response_out = response;
-  return true;
-}
-
-bool call_host_json(
-    std::string_view operation,
-    std::string_view payload,
-    std::string* response_out) {
-  const int32_t rc = space_data_module_host_call_json(
-      operation.data(),
-      static_cast<int32_t>(operation.size()),
-      payload.empty() ? nullptr : payload.data(),
-      static_cast<int32_t>(payload.size()));
-  const int32_t status = space_data_module_host_last_status_code();
-  if (!read_host_json_response(response_out)) {
-    return false;
-  }
-  bool ok = false;
-  return rc == 0 && status == 0 &&
-         extract_json_bool_field(*response_out, "ok", &ok) && ok;
-}
-
-bool call_host_json_bool_result(
-    std::string_view operation,
-    std::string_view payload,
-    bool* value_out) {
-  if (!value_out) {
-    return false;
-  }
-  std::string response;
-  if (!call_host_json(operation, payload, &response)) {
-    return false;
-  }
-  return extract_json_bool_field(response, "result", value_out);
-}
-
-bool call_host_json_bytes(
-    std::string_view operation,
-    std::string_view payload,
-    std::vector<uint8_t>* bytes_out) {
-  if (!bytes_out) {
-    return false;
-  }
-  std::string response;
-  if (!call_host_json(operation, payload, &response)) {
-    return false;
-  }
-  std::string base64;
-  if (!extract_json_string_field(response, "base64", &base64)) {
-    return false;
-  }
-  return decode_base64_bytes(base64, bytes_out);
-}
-
 bool keyslot_get_bytes(
     std::string_view slot_id,
     std::vector<uint8_t>* bytes_out) {
   if (!bytes_out || slot_id.empty()) {
     return false;
   }
-  const std::string request_json =
+  const std::string meta =
       "{\"slotId\":\"" + escape_json_string(slot_id) + "\"}";
-  return call_host_json_bytes("keyslot.get", request_json, bytes_out);
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call("keyslot.get", meta, {}, &response)) {
+    return false;
+  }
+  return sdm_hostcall::get_result_bytes(response, bytes_out);
 }
 
 bool ipfs_add_bytes(
@@ -577,15 +461,16 @@ bool ipfs_add_bytes(
   if (!cid_out) {
     return false;
   }
-  const std::string payload_base64 = encode_base64_bytes(payload, payload_len);
-  const std::string request_json =
-      "{\"base64\":\"" + payload_base64 + "\"}";
-  std::string response;
-  if (!call_host_json("ipfs.add", request_json, &response)) {
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call(
+          "ipfs.add",
+          "{\"content\":{\"$bin\":0}}",
+          {{payload, payload_len}},
+          &response)) {
     return false;
   }
-  return extract_json_string_field(response, "Hash", cid_out) ||
-         extract_json_string_field(response, "cid", cid_out);
+  return extract_json_string_field(response.meta, "Hash", cid_out) ||
+         extract_json_string_field(response.meta, "cid", cid_out);
 }
 
 std::vector<uint8_t> sha256_bytes(const uint8_t* payload, size_t payload_len) {
@@ -608,12 +493,12 @@ std::vector<uint8_t> build_plg_bytes(const PLGT& descriptor) {
 }
 
 int64_t now_ms() {
-  std::string response;
+  sdm_hostcall::Response response;
   int64_t value = 0;
-  if (!call_host_json("clock.now", "{}", &response)) {
+  if (!sdm_hostcall::call("clock.now", "{}", {}, &response)) {
     return 0;
   }
-  if (!extract_json_int64_field(response, "result", &value)) {
+  if (!sdm_hostcall::find_json_int64(response.meta, "result", &value)) {
     return 0;
   }
   return value;
@@ -626,17 +511,14 @@ bool fill_random_bytes(uint8_t* bytes, size_t len) {
   if (len == 0) {
     return true;
   }
-  const std::string payload = "{\"length\":" + std::to_string(len) + "}";
-  std::string response;
-  if (!call_host_json("random.bytes", payload, &response)) {
-    return false;
-  }
-  std::string base64;
-  if (!extract_json_string_field(response, "base64", &base64)) {
+  const std::string meta = "{\"length\":" + std::to_string(len) + "}";
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call("random.bytes", meta, {}, &response)) {
     return false;
   }
   std::vector<uint8_t> random_bytes;
-  if (!decode_base64_bytes(base64, &random_bytes) || random_bytes.size() != len) {
+  if (!sdm_hostcall::get_result_bytes(response, &random_bytes) ||
+      random_bytes.size() != len) {
     secure_zero(random_bytes.data(), random_bytes.size());
     return false;
   }
@@ -1011,12 +893,13 @@ bool ed25519_public_key_from_seed(
     return false;
   }
   std::vector<uint8_t> public_key_bytes;
-  const std::string request_json =
-      "{\"seed\":\"" + encode_base64_bytes(seed, seed_len) + "\"}";
-  if (!call_host_json_bytes(
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call(
           "crypto.ed25519.publicKeyFromSeed",
-          request_json,
-          &public_key_bytes) ||
+          "{\"seed\":{\"$bin\":0}}",
+          {{seed, seed_len}},
+          &response) ||
+      !sdm_hostcall::get_result_bytes(response, &public_key_bytes) ||
       public_key_bytes.size() != public_key_out->size()) {
     return false;
   }
@@ -1040,11 +923,13 @@ bool ed25519_sign_detached(
     return false;
   }
   std::vector<uint8_t> signature_bytes;
-  const std::string request_json =
-      "{\"message\":\"" + encode_base64_bytes(message, message_len) +
-      "\",\"seed\":\"" + encode_base64_bytes(seed, seed_len) + "\"}";
-  if (!call_host_json_bytes(
-          "crypto.ed25519.sign", request_json, &signature_bytes) ||
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call(
+          "crypto.ed25519.sign",
+          "{\"message\":{\"$bin\":0},\"seed\":{\"$bin\":1}}",
+          {{message, message_len}, {seed, seed_len}},
+          &response) ||
+      !sdm_hostcall::get_result_bytes(response, &signature_bytes) ||
       signature_bytes.size() != signature_out->size()) {
     return false;
   }
@@ -1067,15 +952,17 @@ bool ed25519_verify_detached(
       public_key_len != 32 || signature_len != 64) {
     return false;
   }
-  const std::string request_json =
-      "{\"message\":\"" + encode_base64_bytes(message, message_len) +
-      "\",\"signature\":\"" + encode_base64_bytes(signature, signature_len) +
-      "\",\"publicKey\":\"" + encode_base64_bytes(public_key, public_key_len) + "\"}";
-  if (!call_host_json_bool_result(
-          "crypto.ed25519.verify", request_json, valid_out)) {
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call(
+          "crypto.ed25519.verify",
+          "{\"message\":{\"$bin\":0},\"signature\":{\"$bin\":1},\"publicKey\":{\"$bin\":2}}",
+          {{message, message_len},
+           {signature, signature_len},
+           {public_key, public_key_len}},
+          &response)) {
     return false;
   }
-  return true;
+  return sdm_hostcall::find_json_bool(response.meta, "result", valid_out);
 }
 
 std::vector<uint8_t> build_lch_bytes(

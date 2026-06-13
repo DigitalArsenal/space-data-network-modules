@@ -55,18 +55,7 @@ static const uint8_t REC_TRAILER_MAGIC[4] = {'$', 'R', 'E', 'C'};
 static const size_t REC_TRAILER_FOOTER_BYTES = 8;
 
 #if defined(SDN_WASI_PLUGIN)
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("call_json")))
-int32_t space_data_module_host_call_json(const char* op_ptr, int32_t op_len,
-                           const char* payload_ptr, int32_t payload_len);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t space_data_module_host_response_len(void);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t space_data_module_host_read_response(char* dst_ptr, int32_t dst_len);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("clear_response")))
-int32_t space_data_module_host_clear_response(void);
+#include "../../../common/sdm_hostcall_wire.hpp"
 #endif
 
 static int b64_char_value(char c) {
@@ -260,48 +249,16 @@ static DecryptResult decrypt_legacy_envelope(
 }
 
 #if defined(SDN_WASI_PLUGIN)
-static bool read_hostcall_response(std::string& out_json) {
-    const int32_t resp_len = space_data_module_host_response_len();
-    if (resp_len <= 0) {
-        return false;
-    }
-    std::vector<char> buffer(static_cast<size_t>(resp_len));
-    const int32_t read_len = space_data_module_host_read_response(buffer.data(), resp_len);
-    space_data_module_host_clear_response();
-    if (read_len != resp_len) {
-        return false;
-    }
-    out_json.assign(buffer.data(), buffer.size());
-    return true;
-}
-
 static bool fetch_ipfs_bytes(const char* cid, size_t cid_len, std::vector<uint8_t>& out_bytes) {
-    std::string payload = "{\"cid\":\"";
-    payload.append(cid, cid_len);
-    payload += "\"}";
+    std::string meta = "{\"cid\":\"";
+    meta.append(cid, cid_len);
+    meta += "\"}";
 
-    static const char OP[] = "ipfs.cat";
-    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    sdm_hostcall::Response response;
+    if (!sdm_hostcall::call("ipfs.cat", meta, {}, &response)) {
         return false;
     }
-
-    std::string json;
-    if (!read_hostcall_response(json)) {
-        return false;
-    }
-    if (json.find("\"ok\":true") == std::string::npos &&
-        json.find("\"ok\": true") == std::string::npos) {
-        return false;
-    }
-
-    const std::string base64 = json_get_string(json.data(), json.size(), "base64");
-    if (!base64.empty()) {
-        out_bytes = base64_decode(base64.data(), base64.size());
-        return true;
-    }
-
-    out_bytes.assign(json.begin(), json.end());
-    return true;
+    return sdm_hostcall::get_result_bytes(response, &out_bytes);
 }
 #else
 static bool fetch_ipfs_bytes(const char*, size_t, std::vector<uint8_t>&) {
@@ -362,6 +319,57 @@ static void aes_ctr_xor(
     CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption ctr;
     ctr.SetKeyWithIV(key, KEY_BYTES, iv, CTR_IV_BYTES);
     ctr.ProcessData(data, data, data_len);
+}
+
+// AES-256-GCM is not yet published in the SDS SymmetricAlgo enum (which only
+// defines AES_256_CTR = 0); the SDK encodes it as raw byte value 1.
+static const uint8_t SYMMETRIC_ALGO_AES_256_GCM = 1;
+
+// Re-encode a parsed ENC record as a standalone `$ENC` FlatBuffer with the
+// exact byte layout the SDK's encodeEncRecord() produces (the JS object-API
+// pack order). The SDK uses these bytes as the GCM AAD for protected
+// publications, so the encoding must be byte-identical: vectors are created
+// even when empty (matching the JS pack), strings only when present, and the
+// table fields are pushed in ascending field order.
+static std::vector<uint8_t> encode_enc_record_for_aad(const ENC* enc) {
+    flatbuffers::FlatBufferBuilder fbb(256);
+    const auto* eph = enc->EPHEMERAL_PUBLIC_KEY();
+    const auto* nonce = enc->NONCE_START();
+    const auto* rkid = enc->RECIPIENT_KEY_ID();
+    const auto* shash = enc->SCHEMA_HASH();
+    const auto eph_offset =
+        fbb.CreateVector(eph ? eph->Data() : nullptr, eph ? eph->size() : 0);
+    const auto nonce_offset =
+        fbb.CreateVector(nonce ? nonce->Data() : nullptr, nonce ? nonce->size() : 0);
+    const auto rkid_offset =
+        fbb.CreateVector(rkid ? rkid->Data() : nullptr, rkid ? rkid->size() : 0);
+    flatbuffers::Offset<flatbuffers::String> context_offset = 0;
+    if (enc->CONTEXT()) {
+        context_offset = fbb.CreateString(enc->CONTEXT()->c_str(), enc->CONTEXT()->size());
+    }
+    const auto shash_offset =
+        fbb.CreateVector(shash ? shash->Data() : nullptr, shash ? shash->size() : 0);
+    flatbuffers::Offset<flatbuffers::String> root_type_offset = 0;
+    if (enc->ROOT_TYPE()) {
+        root_type_offset = fbb.CreateString(enc->ROOT_TYPE()->c_str(), enc->ROOT_TYPE()->size());
+    }
+
+    ENCBuilder table_builder(fbb);
+    table_builder.add_VERSION(enc->VERSION());
+    table_builder.add_KEY_EXCHANGE(enc->KEY_EXCHANGE());
+    table_builder.add_SYMMETRIC(enc->SYMMETRIC());
+    table_builder.add_KEY_DERIVATION(enc->KEY_DERIVATION());
+    table_builder.add_EPHEMERAL_PUBLIC_KEY(eph_offset);
+    table_builder.add_NONCE_START(nonce_offset);
+    table_builder.add_RECIPIENT_KEY_ID(rkid_offset);
+    table_builder.add_CONTEXT(context_offset);
+    table_builder.add_SCHEMA_HASH(shash_offset);
+    table_builder.add_ROOT_TYPE(root_type_offset);
+    table_builder.add_TIMESTAMP(enc->TIMESTAMP());
+    fbb.Finish(table_builder.Finish(), ENCIdentifier());
+    return std::vector<uint8_t>(
+        fbb.GetBufferPointer(),
+        fbb.GetBufferPointer() + fbb.GetSize());
 }
 
 static bool record_standard_is(const Record* record, const char* expected) {
@@ -458,8 +466,10 @@ static int decrypt_protected_publication_bundle(
         error_out = "protected publication ENC record is missing required bytes";
         return -1;
     }
+    const uint8_t symmetric_raw = static_cast<uint8_t>(enc->SYMMETRIC());
+    const bool is_gcm = symmetric_raw == SYMMETRIC_ALGO_AES_256_GCM;
     if (enc->KEY_EXCHANGE() != KeyExchange::X25519 ||
-        enc->SYMMETRIC() != SymmetricAlgo::AES_256_CTR ||
+        (enc->SYMMETRIC() != SymmetricAlgo::AES_256_CTR && !is_gcm) ||
         enc->KEY_DERIVATION() != KDF::HKDF_SHA256) {
         error_out = "protected publication ENC record uses an unsupported cipher suite";
         return -1;
@@ -488,6 +498,47 @@ static int decrypt_protected_publication_bundle(
         context_len,
         aes_key.data(),
         aes_key.size());
+
+    if (is_gcm) {
+        // SDK protected publication payload = ciphertext || 16-byte GCM tag;
+        // the serialized standalone ENC record doubles as the GCM AAD.
+        if (record_collection_offset < GCM_TAG_BYTES) {
+            memset(aes_key.data(), 0, aes_key.size());
+            memset(shared_secret.BytePtr(), 0, shared_secret.size());
+            error_out = "protected publication GCM payload is truncated";
+            return -1;
+        }
+        const size_t ciphertext_len = record_collection_offset - GCM_TAG_BYTES;
+        const uint8_t* ciphertext = protected_bundle.data();
+        const uint8_t* tag = protected_bundle.data() + ciphertext_len;
+        const std::vector<uint8_t> aad = encode_enc_record_for_aad(enc);
+
+        plaintext_out.assign(ciphertext_len, 0);
+        bool gcm_ok = false;
+        try {
+            CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
+            dec.SetKeyWithIV(
+                aes_key.data(),
+                aes_key.size(),
+                nonce_start->Data(),
+                nonce_start->size());
+            dec.SpecifyDataLengths(aad.size(), ciphertext_len, 0);
+            dec.Update(aad.data(), aad.size());
+            dec.ProcessData(plaintext_out.data(), ciphertext, ciphertext_len);
+            gcm_ok = dec.TruncatedVerify(tag, GCM_TAG_BYTES);
+        } catch (...) {
+            gcm_ok = false;
+        }
+        memset(aes_key.data(), 0, aes_key.size());
+        memset(shared_secret.BytePtr(), 0, shared_secret.size());
+        if (!gcm_ok) {
+            memset(plaintext_out.data(), 0, plaintext_out.size());
+            plaintext_out.clear();
+            error_out = "protected publication GCM authentication failed";
+            return -1;
+        }
+        return 1;
+    }
 
     std::array<uint8_t, CTR_IV_BYTES> ctr_iv{};
     memcpy(ctr_iv.data(), nonce_start->Data(), nonce_start->size());

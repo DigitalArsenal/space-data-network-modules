@@ -68,18 +68,7 @@ public:
 };
 
 #if defined(SDN_WASI_PLUGIN)
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("call_json")))
-int32_t space_data_module_host_call_json(const char* op_ptr, int32_t op_len,
-                           const char* payload_ptr, int32_t payload_len);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t space_data_module_host_response_len(void);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t space_data_module_host_read_response(char* dst_ptr, int32_t dst_len);
-
-extern "C" __attribute__((import_module("space_data_module_host"), import_name("clear_response")))
-int32_t space_data_module_host_clear_response(void);
+#include "../../../common/sdm_hostcall_wire.hpp"
 #endif
 
 static const uint8_t SERVER_PRIVATE_KEY[32] = { SDN_BAKED_SERVER_PRIVATE_KEY };
@@ -99,51 +88,6 @@ static const size_t GCM_TAG_BYTES = 16;
 static const size_t RECIPIENT_KEY_ID_BYTES = 8;
 static const uint16_t KMF_KEY_BYTES_FIELD_ID = 4;
 
-static const char B64_CHARS[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-static std::string base64_encode(const uint8_t* data, size_t len) {
-    std::string out;
-    out.reserve(((len + 2) / 3) * 4);
-    for (size_t i = 0; i < len; i += 3) {
-        uint32_t n = static_cast<uint32_t>(data[i]) << 16;
-        if (i + 1 < len) {
-            n |= static_cast<uint32_t>(data[i + 1]) << 8;
-        }
-        if (i + 2 < len) {
-            n |= static_cast<uint32_t>(data[i + 2]);
-        }
-        out += B64_CHARS[(n >> 18) & 0x3f];
-        out += B64_CHARS[(n >> 12) & 0x3f];
-        out += (i + 1 < len) ? B64_CHARS[(n >> 6) & 0x3f] : '=';
-        out += (i + 2 < len) ? B64_CHARS[n & 0x3f] : '=';
-    }
-    return out;
-}
-
-static std::vector<uint8_t> base64_decode(const char* in, size_t in_len) {
-    std::vector<uint8_t> out;
-    out.reserve(in_len * 3 / 4);
-    int val = 0;
-    int bits = -8;
-    for (size_t i = 0; i < in_len; i++) {
-        int v = -1;
-        const char c = in[i];
-        if (c >= 'A' && c <= 'Z') v = c - 'A';
-        else if (c >= 'a' && c <= 'z') v = c - 'a' + 26;
-        else if (c >= '0' && c <= '9') v = c - '0' + 52;
-        else if (c == '+' || c == '-') v = 62;
-        else if (c == '/' || c == '_') v = 63;
-        else continue;
-        val = (val << 6) + v;
-        bits += 6;
-        if (bits >= 0) {
-            out.push_back(static_cast<uint8_t>((val >> bits) & 0xff));
-            bits -= 8;
-        }
-    }
-    return out;
-}
 
 static std::string bytes_to_hex(const uint8_t* data, size_t len) {
     static const char HEX[] = "0123456789abcdef";
@@ -470,112 +414,49 @@ static EncryptedBundle encrypt_bundle_for_recipient(
 
 #if defined(SDN_WASI_PLUGIN)
 static bool host_random_fill(uint8_t* output, size_t size) {
-    const std::string payload =
+    const std::string meta =
         std::string("{\"length\":") + std::to_string(size) + "}";
-    static const char OP[] = "random.bytes";
-    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    sdm_hostcall::Response response;
+    if (!sdm_hostcall::call("random.bytes", meta, {}, &response)) {
         return false;
     }
-
-    const int32_t resp_len = space_data_module_host_response_len();
-    if (resp_len <= 0) {
-        space_data_module_host_clear_response();
-        return false;
-    }
-
-    std::vector<char> buffer(static_cast<size_t>(resp_len));
-    const int32_t read_len = space_data_module_host_read_response(buffer.data(), resp_len);
-    space_data_module_host_clear_response();
-    if (read_len != resp_len) {
-        return false;
-    }
-
-    const std::string json(buffer.data(), buffer.size());
-    if (json.find("\"ok\":true") == std::string::npos &&
-        json.find("\"ok\": true") == std::string::npos) {
-        return false;
-    }
-
-    const std::string base64 = json_get_string(json.data(), json.size(), "base64");
-    if (base64.empty()) {
-        return false;
-    }
-    const std::vector<uint8_t> bytes = base64_decode(base64.data(), base64.size());
-    if (bytes.size() != size) {
+    std::vector<uint8_t> bytes;
+    if (!sdm_hostcall::get_result_bytes(response, &bytes) || bytes.size() != size) {
         return false;
     }
     memcpy(output, bytes.data(), size);
     return true;
 }
 
-static bool read_hostcall_response(std::string& out_json) {
-    const int32_t resp_len = space_data_module_host_response_len();
-    if (resp_len <= 0) {
-        return false;
-    }
-    std::vector<char> buffer(static_cast<size_t>(resp_len));
-    const int32_t read_len = space_data_module_host_read_response(buffer.data(), resp_len);
-    space_data_module_host_clear_response();
-    if (read_len != resp_len) {
-        return false;
-    }
-    out_json.assign(buffer.data(), buffer.size());
-    return true;
-}
-
 static bool fetch_ipfs_bytes(const char* cid, size_t cid_len, std::vector<uint8_t>& out_bytes) {
-    std::string payload = "{\"cid\":\"";
-    payload.append(cid, cid_len);
-    payload += "\"}";
+    std::string meta = "{\"cid\":\"";
+    meta.append(cid, cid_len);
+    meta += "\"}";
 
-    static const char OP[] = "ipfs.cat";
-    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    sdm_hostcall::Response response;
+    if (!sdm_hostcall::call("ipfs.cat", meta, {}, &response)) {
         return false;
     }
-
-    std::string json;
-    if (!read_hostcall_response(json)) {
-        return false;
-    }
-    if (json.find("\"ok\":true") == std::string::npos &&
-        json.find("\"ok\": true") == std::string::npos) {
-        return false;
-    }
-
-    const std::string base64 = json_get_string(json.data(), json.size(), "base64");
-    if (!base64.empty()) {
-        out_bytes = base64_decode(base64.data(), base64.size());
-        return true;
-    }
-
-    out_bytes.assign(json.begin(), json.end());
-    return true;
+    return sdm_hostcall::get_result_bytes(response, &out_bytes);
 }
 
 static bool publish_ipfs_bytes(const std::vector<uint8_t>& bytes, std::string& out_cid) {
-    const std::string payload =
-        std::string("{\"base64\":\"") + base64_encode(bytes.data(), bytes.size()) + "\"}";
-
-    static const char OP[] = "ipfs.add";
-    if (space_data_module_host_call_json(OP, sizeof(OP) - 1, payload.c_str(), payload.size()) != 0) {
+    sdm_hostcall::Response response;
+    if (!sdm_hostcall::call(
+            "ipfs.add",
+            "{\"content\":{\"$bin\":0}}",
+            {{bytes.data(), bytes.size()}},
+            &response)) {
         return false;
     }
 
-    std::string json;
-    if (!read_hostcall_response(json)) {
-        return false;
-    }
-    if (json.find("\"ok\":true") == std::string::npos &&
-        json.find("\"ok\": true") == std::string::npos) {
-        return false;
-    }
-
-    out_cid = json_get_string(json.data(), json.size(), "Hash");
+    const std::string& meta = response.meta;
+    out_cid = json_get_string(meta.data(), meta.size(), "Hash");
     if (out_cid.empty()) {
-        out_cid = json_get_string(json.data(), json.size(), "cid");
+        out_cid = json_get_string(meta.data(), meta.size(), "cid");
     }
     if (out_cid.empty()) {
-        out_cid = json_get_string(json.data(), json.size(), "path");
+        out_cid = json_get_string(meta.data(), meta.size(), "path");
     }
     return !out_cid.empty();
 }

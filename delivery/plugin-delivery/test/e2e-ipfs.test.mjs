@@ -103,14 +103,13 @@ function createDeliveryHarness(wasmBytes, contentStore, operationLog) {
       return new Uint8Array(data);
     }
     if (operation === "ipfs.add") {
+      // Copy: hostcall segments are views into wasm guest memory.
       const raw =
-        typeof params?.base64 === "string"
-          ? fromBase64(params.base64)
-          : typeof params?.data === "string"
-            ? fromBase64(params.data)
-            : null;
+        params?.content instanceof Uint8Array
+          ? new Uint8Array(params.content)
+          : null;
       if (!raw) {
-        throw new Error("ipfs.add requires base64 payload");
+        throw new Error("ipfs.add requires content bytes");
       }
       const cidStr = `bafy-encrypted-${Buffer.from(sha256Bytes(raw)).toString("hex").slice(0, 24)}`;
       contentStore.set(cidStr, raw);

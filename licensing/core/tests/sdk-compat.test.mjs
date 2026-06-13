@@ -62,11 +62,12 @@ function makeRuntimeConfig() {
   };
 }
 
-function decodeBase64Param(params, field) {
-  if (typeof params?.[field] !== "string") {
-    throw new Error(`Missing base64 field: ${field}`);
+function requireBytesParam(params, field) {
+  const value = params?.[field];
+  if (!(value instanceof Uint8Array)) {
+    throw new Error(`Missing bytes field: ${field}`);
   }
-  return new Uint8Array(Buffer.from(params[field], "base64"));
+  return value;
 }
 
 function handleEd25519HostOperation(wallet, operation, params) {
@@ -75,22 +76,22 @@ function handleEd25519HostOperation(wallet, operation, params) {
   }
   if (operation === "crypto.ed25519.publicKeyFromSeed") {
     return new Uint8Array(
-      wallet.curves.ed25519.publicKeyFromSeed(decodeBase64Param(params, "seed")),
+      wallet.curves.ed25519.publicKeyFromSeed(requireBytesParam(params, "seed")),
     );
   }
   if (operation === "crypto.ed25519.sign") {
     return new Uint8Array(
       wallet.curves.ed25519.sign(
-        decodeBase64Param(params, "message"),
-        decodeBase64Param(params, "seed"),
+        requireBytesParam(params, "message"),
+        requireBytesParam(params, "seed"),
       ),
     );
   }
   if (operation === "crypto.ed25519.verify") {
     return wallet.curves.ed25519.verify(
-      decodeBase64Param(params, "message"),
-      decodeBase64Param(params, "signature"),
-      decodeBase64Param(params, "publicKey"),
+      requireBytesParam(params, "message"),
+      requireBytesParam(params, "signature"),
+      requireBytesParam(params, "publicKey"),
     );
   }
   return undefined;
@@ -131,14 +132,13 @@ function createServerHostDispatch(contentStore, keySlots = new Map(), wallet = n
       return new Uint8Array(keyBytes);
     }
     if (operation === "ipfs.add") {
+      // Copy: hostcall segments are views into wasm guest memory.
       const raw =
-        typeof params?.base64 === "string"
-          ? Buffer.from(params.base64, "base64")
-          : typeof params?.data === "string"
-            ? Buffer.from(params.data, "base64")
-            : null;
+        params?.content instanceof Uint8Array
+          ? Buffer.from(params.content)
+          : null;
       if (!raw) {
-        throw new Error("ipfs.add requires base64 payload");
+        throw new Error("ipfs.add requires content bytes");
       }
       const cid = `bafy-lic-${createHash("sha256").update(raw).digest("hex").slice(0, 24)}`;
       contentStore.set(cid, raw);
@@ -263,9 +263,8 @@ function createProtocolDispatch(serverHarness, contentStore = new Map(), wallet 
       throw new Error(`Unsupported operation: ${operation}`);
     }
 
-    const payload = params?.payloadBase64
-      ? Buffer.from(params.payloadBase64, "base64")
-      : new Uint8Array();
+    const payload =
+      params?.payload instanceof Uint8Array ? params.payload : new Uint8Array();
 
     if (params?.protocolId === MODULE_DELIVERY_PROTOCOL_ID) {
       const fileIdentifier = detectFlatbufferFileIdentifier(payload);

@@ -18,6 +18,12 @@ extern "C" int evaluate_hypersonic_state_batch(void) {
     samples = parse_samples(request, "samples");
   }
   if (samples.empty()) {
+    // Zero-copy chained flows forward another mission module's response
+    // (e.g. analysis/reentry) verbatim; those payloads carry the trajectory
+    // under "trajectorySamples".
+    samples = parse_samples(request, "trajectorySamples");
+  }
+  if (samples.empty()) {
     return fail("missing-states", "Request must include a non-empty states array.");
   }
 
