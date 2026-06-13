@@ -1,6 +1,8 @@
 import {
   createBrowserWasiShim,
 } from "space-data-module-sdk/host/wasi-shim";
+import { createHostcallBridge } from "space-data-module-sdk";
+import { toLoadableWasmBytes } from "space-data-module-sdk/testing/browser";
 import {
   decodePluginInvokeResponse,
   encodePluginInvokeRequest,
@@ -29,17 +31,6 @@ function toUint8Array(value) {
     return new Uint8Array(value);
   }
   return null;
-}
-
-function bytesToBase64(bytes) {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
-  }
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 1) {
-    binary += String.fromCharCode(bytes[index]);
-  }
-  return btoa(binary);
 }
 
 async function readNodeFile(url) {
@@ -92,143 +83,6 @@ async function resolveWasmBytes(options = {}) {
   return loadLocalWasmBytes();
 }
 
-function encodeHostcallValue(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-  const bytes = toUint8Array(value);
-  if (bytes) {
-    return {
-      __type: "bytes",
-      base64: bytesToBase64(bytes),
-    };
-  }
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => encodeHostcallValue(entry));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, entry]) => entry !== undefined)
-        .map(([key, entry]) => [key, encodeHostcallValue(entry)]),
-    );
-  }
-  return value;
-}
-
-function createJsonHostcallBridge(options = {}) {
-  if (typeof options.dispatch !== "function") {
-    throw new TypeError("createJsonHostcallBridge requires a dispatch function.");
-  }
-  if (typeof options.getMemory !== "function") {
-    throw new TypeError("createJsonHostcallBridge requires a getMemory function.");
-  }
-
-  const maxRequestBytes = Number.isInteger(options.maxRequestBytes)
-    ? options.maxRequestBytes
-    : DEFAULT_MAX_REQUEST_BYTES;
-  const maxResponseBytes = Number.isInteger(options.maxResponseBytes)
-    ? options.maxResponseBytes
-    : DEFAULT_MAX_RESPONSE_BYTES;
-
-  let lastEnvelopeBytes = textEncoder.encode(JSON.stringify({ ok: true, result: null }));
-
-  function setEnvelope(envelope) {
-    const bytes = textEncoder.encode(JSON.stringify(envelope));
-    if (bytes.length > maxResponseBytes) {
-      throw new Error(`Hostcall response exceeds ${maxResponseBytes} bytes.`);
-    }
-    lastEnvelopeBytes = bytes;
-  }
-
-  function readMemory(ptr, len, label) {
-    const memory = options.getMemory();
-    const buffer = memory?.buffer;
-    if (!(buffer instanceof ArrayBuffer || buffer instanceof SharedArrayBuffer)) {
-      throw new TypeError("Hostcall bridge requires a WebAssembly memory export.");
-    }
-    if (!Number.isInteger(ptr) || ptr < 0 || !Number.isInteger(len) || len < 0) {
-      throw new RangeError(`${label} range is invalid.`);
-    }
-    if (ptr + len > buffer.byteLength) {
-      throw new RangeError(`${label} exceeds guest memory bounds.`);
-    }
-    return new Uint8Array(buffer, ptr, len);
-  }
-
-  function writeMemory(ptr, bytes, maxLen) {
-    const memory = options.getMemory();
-    const buffer = memory?.buffer;
-    if (!(buffer instanceof ArrayBuffer || buffer instanceof SharedArrayBuffer)) {
-      throw new TypeError("Hostcall bridge requires a WebAssembly memory export.");
-    }
-    const payload = toUint8Array(bytes) ?? new Uint8Array(bytes);
-    const byteLength = Math.min(payload.length, maxLen);
-    new Uint8Array(buffer, ptr, byteLength).set(payload.subarray(0, byteLength));
-    return byteLength;
-  }
-
-  function callJson(operationPtr, operationLen, payloadPtr, payloadLen) {
-    try {
-      if (payloadLen > maxRequestBytes) {
-        throw new Error(`Hostcall request exceeds ${maxRequestBytes} bytes.`);
-      }
-      const operation = textDecoder.decode(
-        readMemory(operationPtr, operationLen, "Host operation"),
-      );
-      const payloadBytes = readMemory(payloadPtr, payloadLen, "Host payload");
-      const params =
-        payloadBytes.length > 0
-          ? JSON.parse(textDecoder.decode(payloadBytes))
-          : null;
-      const result = options.dispatch(operation, params);
-      if (result && typeof result === "object" && typeof result.then === "function") {
-        throw new Error(
-          `Operation "${operation}" returned a Promise. The sync hostcall ABI requires synchronous dispatch.`,
-        );
-      }
-      setEnvelope({
-        ok: true,
-        result: encodeHostcallValue(result),
-      });
-      return 0;
-    } catch (error) {
-      setEnvelope({
-        ok: false,
-        error: {
-          name: error?.name ?? "Error",
-          message: error?.message ?? String(error),
-        },
-      });
-      return 1;
-    }
-  }
-
-  return {
-    imports: {
-      space_data_module_host: {
-        call_json: callJson,
-        response_len() {
-          return lastEnvelopeBytes.length;
-        },
-        read_response(dstPtr, dstLen) {
-          return writeMemory(dstPtr, lastEnvelopeBytes, dstLen);
-        },
-        clear_response() {
-          setEnvelope({ ok: true, result: null });
-          return 0;
-        },
-      },
-    },
-  };
-}
-
 async function compileWasmModule(source) {
   if (source instanceof WebAssembly.Module) {
     return source;
@@ -237,7 +91,7 @@ async function compileWasmModule(source) {
     typeof source === "string" || source instanceof URL
       ? await resolveWasmBytes({ wasmUrl: source })
       : await resolveWasmBytes({ wasmBytes: source });
-  return WebAssembly.compile(bytes);
+  return WebAssembly.compile(toLoadableWasmBytes(bytes));
 }
 
 async function instantiateClientDecrypt(options = {}) {
@@ -254,7 +108,7 @@ async function instantiateClientDecrypt(options = {}) {
   });
   const importObject = { ...wasi.imports };
   let instance = null;
-  const bridge = createJsonHostcallBridge({
+  const bridge = createHostcallBridge({
     dispatch:
       options.dispatch ??
       (() => {

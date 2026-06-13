@@ -174,6 +174,13 @@ struct GRVT : public ::flatbuffers::NativeTable {
   bool SOLID_TIDES = false;
   bool OCEAN_TIDES = false;
   bool POLE_TIDES = false;
+  double EQUATORIAL_RADIUS = 0.0;
+  double J2 = 0.0;
+  double MU = 0.0;
+  double J3 = 0.0;
+  double J4 = 0.0;
+  double J5 = 0.0;
+  double J6 = 0.0;
 };
 
 /// Gravity Models
@@ -192,7 +199,14 @@ struct GRV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_INCLUDE_PLANETS = 18,
     VT_SOLID_TIDES = 20,
     VT_OCEAN_TIDES = 22,
-    VT_POLE_TIDES = 24
+    VT_POLE_TIDES = 24,
+    VT_EQUATORIAL_RADIUS = 26,
+    VT_J2 = 28,
+    VT_MU = 30,
+    VT_J3 = 32,
+    VT_J4 = 34,
+    VT_J5 = 36,
+    VT_J6 = 38
   };
   GravityModelType MODEL_TYPE() const {
     return static_cast<GravityModelType>(GetField<int8_t>(VT_MODEL_TYPE, 2));
@@ -227,6 +241,27 @@ struct GRV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool POLE_TIDES() const {
     return GetField<uint8_t>(VT_POLE_TIDES, 0) != 0;
   }
+  double EQUATORIAL_RADIUS() const {
+    return GetField<double>(VT_EQUATORIAL_RADIUS, 0.0);
+  }
+  double J2() const {
+    return GetField<double>(VT_J2, 0.0);
+  }
+  double MU() const {
+    return GetField<double>(VT_MU, 0.0);
+  }
+  double J3() const {
+    return GetField<double>(VT_J3, 0.0);
+  }
+  double J4() const {
+    return GetField<double>(VT_J4, 0.0);
+  }
+  double J5() const {
+    return GetField<double>(VT_J5, 0.0);
+  }
+  double J6() const {
+    return GetField<double>(VT_J6, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -241,6 +276,13 @@ struct GRV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_SOLID_TIDES, 1) &&
            VerifyField<uint8_t>(verifier, VT_OCEAN_TIDES, 1) &&
            VerifyField<uint8_t>(verifier, VT_POLE_TIDES, 1) &&
+           VerifyField<double>(verifier, VT_EQUATORIAL_RADIUS, 8) &&
+           VerifyField<double>(verifier, VT_J2, 8) &&
+           VerifyField<double>(verifier, VT_MU, 8) &&
+           VerifyField<double>(verifier, VT_J3, 8) &&
+           VerifyField<double>(verifier, VT_J4, 8) &&
+           VerifyField<double>(verifier, VT_J5, 8) &&
+           VerifyField<double>(verifier, VT_J6, 8) &&
            verifier.EndTable();
   }
   GRVT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -285,6 +327,27 @@ struct GRVBuilder {
   void add_POLE_TIDES(bool POLE_TIDES) {
     fbb_.AddElement<uint8_t>(GRV::VT_POLE_TIDES, static_cast<uint8_t>(POLE_TIDES), 0);
   }
+  void add_EQUATORIAL_RADIUS(double EQUATORIAL_RADIUS) {
+    fbb_.AddElement<double>(GRV::VT_EQUATORIAL_RADIUS, EQUATORIAL_RADIUS, 0.0);
+  }
+  void add_J2(double J2) {
+    fbb_.AddElement<double>(GRV::VT_J2, J2, 0.0);
+  }
+  void add_MU(double MU) {
+    fbb_.AddElement<double>(GRV::VT_MU, MU, 0.0);
+  }
+  void add_J3(double J3) {
+    fbb_.AddElement<double>(GRV::VT_J3, J3, 0.0);
+  }
+  void add_J4(double J4) {
+    fbb_.AddElement<double>(GRV::VT_J4, J4, 0.0);
+  }
+  void add_J5(double J5) {
+    fbb_.AddElement<double>(GRV::VT_J5, J5, 0.0);
+  }
+  void add_J6(double J6) {
+    fbb_.AddElement<double>(GRV::VT_J6, J6, 0.0);
+  }
   explicit GRVBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -308,8 +371,22 @@ inline ::flatbuffers::Offset<GRV> CreateGRV(
     bool INCLUDE_PLANETS = false,
     bool SOLID_TIDES = false,
     bool OCEAN_TIDES = false,
-    bool POLE_TIDES = false) {
+    bool POLE_TIDES = false,
+    double EQUATORIAL_RADIUS = 0.0,
+    double J2 = 0.0,
+    double MU = 0.0,
+    double J3 = 0.0,
+    double J4 = 0.0,
+    double J5 = 0.0,
+    double J6 = 0.0) {
   GRVBuilder builder_(_fbb);
+  builder_.add_J6(J6);
+  builder_.add_J5(J5);
+  builder_.add_J4(J4);
+  builder_.add_J3(J3);
+  builder_.add_MU(MU);
+  builder_.add_J2(J2);
+  builder_.add_EQUATORIAL_RADIUS(EQUATORIAL_RADIUS);
   builder_.add_MAX_ORDER(MAX_ORDER);
   builder_.add_MAX_DEGREE(MAX_DEGREE);
   builder_.add_POLE_TIDES(POLE_TIDES);
@@ -351,6 +428,13 @@ inline void GRV::UnPackTo(GRVT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = SOLID_TIDES(); _o->SOLID_TIDES = _e; }
   { auto _e = OCEAN_TIDES(); _o->OCEAN_TIDES = _e; }
   { auto _e = POLE_TIDES(); _o->POLE_TIDES = _e; }
+  { auto _e = EQUATORIAL_RADIUS(); _o->EQUATORIAL_RADIUS = _e; }
+  { auto _e = J2(); _o->J2 = _e; }
+  { auto _e = MU(); _o->MU = _e; }
+  { auto _e = J3(); _o->J3 = _e; }
+  { auto _e = J4(); _o->J4 = _e; }
+  { auto _e = J5(); _o->J5 = _e; }
+  { auto _e = J6(); _o->J6 = _e; }
 }
 
 inline ::flatbuffers::Offset<GRV> CreateGRV(::flatbuffers::FlatBufferBuilder &_fbb, const GRVT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -372,6 +456,13 @@ inline ::flatbuffers::Offset<GRV> GRV::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _SOLID_TIDES = _o->SOLID_TIDES;
   auto _OCEAN_TIDES = _o->OCEAN_TIDES;
   auto _POLE_TIDES = _o->POLE_TIDES;
+  auto _EQUATORIAL_RADIUS = _o->EQUATORIAL_RADIUS;
+  auto _J2 = _o->J2;
+  auto _MU = _o->MU;
+  auto _J3 = _o->J3;
+  auto _J4 = _o->J4;
+  auto _J5 = _o->J5;
+  auto _J6 = _o->J6;
   return CreateGRV(
       _fbb,
       _MODEL_TYPE,
@@ -384,7 +475,14 @@ inline ::flatbuffers::Offset<GRV> GRV::Pack(::flatbuffers::FlatBufferBuilder &_f
       _INCLUDE_PLANETS,
       _SOLID_TIDES,
       _OCEAN_TIDES,
-      _POLE_TIDES);
+      _POLE_TIDES,
+      _EQUATORIAL_RADIUS,
+      _J2,
+      _MU,
+      _J3,
+      _J4,
+      _J5,
+      _J6);
 }
 
 inline const GRV *GetGRV(const void *buf) {

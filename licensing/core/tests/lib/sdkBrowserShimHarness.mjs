@@ -3,13 +3,14 @@ import { fileURLToPath } from "node:url";
 
 import {
   createBrowserWasiShim,
-  createJsonHostcallBridge,
+  createHostcallBridge,
   WasiExitError,
 } from "space-data-module-sdk";
 import {
   encodePluginInvokeRequest,
   decodePluginInvokeResponse,
 } from "space-data-module-sdk/invoke";
+import { toLoadableWasmBytes } from "space-data-module-sdk/testing/browser";
 
 function normalizeWasmBytes(source) {
   if (source instanceof URL) {
@@ -31,7 +32,7 @@ async function compileWasmModule(source) {
   if (source instanceof WebAssembly.Module) {
     return source;
   }
-  return WebAssembly.compile(normalizeWasmBytes(source));
+  return WebAssembly.compile(toLoadableWasmBytes(normalizeWasmBytes(source)));
 }
 
 async function instantiateWithHostcallBridge(options) {
@@ -43,7 +44,7 @@ async function instantiateWithHostcallBridge(options) {
   });
   const importObject = { ...wasi.imports };
   let instance = null;
-  const bridge = createJsonHostcallBridge({
+  const bridge = createHostcallBridge({
     dispatch: options.dispatch,
     getMemory: () => instance.exports.memory,
   });

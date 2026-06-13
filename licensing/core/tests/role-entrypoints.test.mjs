@@ -12,6 +12,7 @@ import {
   decodePlgManifest,
   isPlgManifestBuffer,
 } from "space-data-module-sdk/manifest";
+import { toLoadableWasmBytes } from "space-data-module-sdk/testing/browser";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const PACKAGE_JSON_PATH = new URL("../package.json", import.meta.url);
@@ -110,7 +111,7 @@ test("embedded manifest in the built wasm matches the licensing package manifest
       .map((entry) => [entry.name, () => 0]),
   );
   const { instance } = await WebAssembly.instantiate(
-    wasmBytes,
+    toLoadableWasmBytes(wasmBytes),
     {
       ...wasi.getImportObject(),
       [DEFAULT_HOSTCALL_IMPORT_MODULE]: hostImports,

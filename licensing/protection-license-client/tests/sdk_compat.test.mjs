@@ -113,9 +113,8 @@ function createProtocolDispatch(keyServerHarness) {
       throw new Error(`Unsupported operation: ${operation}`);
     }
 
-    const payload = params?.payloadBase64
-      ? Buffer.from(params.payloadBase64, "base64")
-      : new Uint8Array();
+    const payload =
+      params?.payload instanceof Uint8Array ? params.payload : new Uint8Array();
 
     if (params?.protocolId === "/orbpro/public-key/1.0.0") {
       const response = keyServerHarness.invokeSync({
