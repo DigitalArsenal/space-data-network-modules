@@ -18,15 +18,22 @@ typedef struct plugin_input_frame_t {
   const char *file_identifier;
   uint32_t wire_format;
   const char *root_type_name;
+  /* Legacy TABF-only metadata. SDS PIV/TAB inputs set this to 0. */
   uint16_t fixed_string_length;
+  /* SDS PIV/TAB inputs expose the payload byte length here. */
   uint32_t byte_length;
   uint16_t required_alignment;
   uint16_t alignment;
   uint32_t size;
+  /* Legacy TABF-only metadata. SDS PIV/TAB inputs set this to 0. */
   uint32_t generation;
+  /* SDS PIV/TAB maps TAB.FRAME_ID here. */
   uint64_t trace_id;
+  /* Legacy TABF-only metadata. SDS PIV/TAB inputs set this to 0. */
   uint32_t stream_id;
+  /* SDS PIV/TAB decodes this from TAB.FRAME_ID as frame_id >> 1. */
   uint64_t sequence;
+  /* SDS PIV/TAB decodes this from TAB.FRAME_ID bit 0. */
   int32_t end_of_stream;
   const uint8_t *payload;
   uint32_t payload_length;
@@ -66,6 +73,12 @@ int32_t plugin_push_output_ex(
   uint16_t required_alignment,
   const uint8_t *payload_ptr,
   uint32_t payload_length
+);
+int32_t plugin_set_output_frame_id(uint32_t output_index, uint64_t frame_id);
+int32_t plugin_set_output_stream_frame(
+  uint32_t output_index,
+  uint64_t sequence,
+  int32_t end_of_stream
 );
 
 void plugin_set_yielded(int32_t yielded);

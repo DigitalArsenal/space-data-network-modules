@@ -41,6 +41,9 @@ ensure_emscripten() {
 
 find_flatbuffers_include_dir() {
     local candidates=(
+        "${SDN_FLATBUFFERS_INCLUDE_DIR:-}"
+        "${FLATBUFFERS_INCLUDE_DIR:-}"
+        "$SCRIPT_DIR/../../../../flatbuffers/include"
         /opt/homebrew/include
         /opt/homebrew/opt/flatbuffers/include
         /usr/local/include

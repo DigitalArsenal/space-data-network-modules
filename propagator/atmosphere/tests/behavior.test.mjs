@@ -312,16 +312,78 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
+    const response = await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [
+        {
+          portId: "atmosphere",
+          typeRef: {
+            schemaName: "HFC.fbs",
+            fileIdentifier: "$HFC",
+            rootTypeName: "HFC",
+          },
+          payload: encodeHfcAtmosphereRequest({
+            altitudesM: [10_000],
+          }),
+        },
+      ],
+    });
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const result = decodeHfcResponse(response);
+    assert.equal(result.ATMOSPHERE_PROVIDER(), "atmosphere-model");
+    assert.equal(result.ALTITUDE_M(0), 10_000);
+    assert.ok(Math.abs(result.DENSITY_KG_PER_M3(0) - 0.4135) < 0.002);
+  });
+
+  test(`direct atmosphere JSON fallback rejects the fixed provider method id on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    await assert.rejects(
+      () => invokeJsonRequest(
+        harness,
+        {
+          model: "US76",
+          samples: [{ id: "ten-km", altitudeM: 10_000 }],
+        },
+        {
+          methodId: "query_atmosphere_state_batch",
+          inputPortId: "atmosphere",
+          outputPortId: "states",
+        },
+      ),
+      /WASI exit|exited with code 1/,
+    );
+  });
+
+  test(`generic atmosphere invoke method still accepts JSON batch requests on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
     const result = await invokeJsonRequest(
       harness,
       {
-        model: "US76",
-        samples: [{ id: "ten-km", altitudeM: 10_000 }],
+        operation: "queryAtmosphereStateBatch",
+        params: {
+          model: "US76",
+          samples: [{ id: "ten-km", altitudeM: 10_000 }],
+        },
       },
       {
-        methodId: "query_atmosphere_state_batch",
-        inputPortId: "atmosphere",
-        outputPortId: "states",
+        methodId: "invoke",
+        inputPortId: "request",
+        outputPortId: "response",
       },
     );
 

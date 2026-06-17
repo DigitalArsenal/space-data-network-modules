@@ -26,8 +26,6 @@
 #include "conjunction/screening.h"
 #include "conjunction/screening_internal.h"
 #include "OMM_generated.h"
-#include "PluginInvokeRequest_generated.h"
-#include "PluginInvokeResponse_generated.h"
 #include "PIV_generated.h"
 #include "TypedArenaBuffer_generated.h"
 #include "orbpro/generated/PropagatorTrajectorySegments_generated.h"
@@ -464,63 +462,6 @@ static uint32_t AlignOffset(uint32_t offset, uint32_t alignment) {
   return remainder == 0u ? offset : offset + alignment - remainder;
 }
 
-static bool LoadInputsFromRequest(const orbpro::invoke::PluginInvokeRequestT &request) {
-  g_invoke_context.inputs.clear();
-  g_invoke_context.inputs.reserve(request.input_frames.size());
-
-  for (const auto &frame_ptr : request.input_frames) {
-    if (!frame_ptr) {
-      continue;
-    }
-
-    const auto &frame = *frame_ptr;
-    const auto payload_offset = static_cast<size_t>(frame.offset);
-    const auto payload_size = static_cast<size_t>(frame.size);
-    if (payload_offset + payload_size > request.payload_arena.size()) {
-      SetError("invalid-request-frame", "Input frame payload range exceeds request payload arena.");
-      return false;
-    }
-
-    g_invoke_context.inputs.emplace_back();
-    auto &owned = g_invoke_context.inputs.back();
-    owned = InputFrameOwned{};
-    owned.port_id = frame.port_id;
-    if (frame.type_ref) {
-      owned.schema_name = frame.type_ref->schema_name;
-      owned.file_identifier = frame.type_ref->file_identifier;
-      owned.root_type_name = frame.type_ref->root_type_name;
-    }
-    owned.payload.insert(
-      owned.payload.end(),
-      request.payload_arena.begin() + static_cast<std::ptrdiff_t>(payload_offset),
-      request.payload_arena.begin() + static_cast<std::ptrdiff_t>(payload_offset + payload_size)
-    );
-
-    owned.view.port_id = owned.port_id.empty() ? nullptr : owned.port_id.c_str();
-    owned.view.schema_name = owned.schema_name.empty() ? nullptr : owned.schema_name.c_str();
-    owned.view.file_identifier = owned.file_identifier.empty() ? nullptr : owned.file_identifier.c_str();
-    owned.view.wire_format =
-      frame.type_ref
-        ? static_cast<uint32_t>(frame.type_ref->wire_format)
-        : static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_Flatbuffer);
-    owned.view.root_type_name = owned.root_type_name.empty() ? nullptr : owned.root_type_name.c_str();
-    owned.view.fixed_string_length = frame.type_ref ? frame.type_ref->fixed_string_length : 0;
-    owned.view.byte_length = frame.type_ref ? frame.type_ref->byte_length : static_cast<uint32_t>(payload_size);
-    owned.view.required_alignment = frame.type_ref ? frame.type_ref->required_alignment : 0;
-    owned.view.alignment = frame.alignment;
-    owned.view.size = frame.size;
-    owned.view.generation = frame.generation;
-    owned.view.trace_id = frame.trace_id;
-    owned.view.stream_id = frame.stream_id;
-    owned.view.sequence = frame.sequence;
-    owned.view.end_of_stream = frame.end_of_stream ? 1 : 0;
-    owned.view.payload = owned.payload.empty() ? nullptr : owned.payload.data();
-    owned.view.payload_length = static_cast<uint32_t>(owned.payload.size());
-  }
-
-  return true;
-}
-
 static bool ResolvePivPayload(
   const PIVRequest *request,
   const TAB *frame,
@@ -648,79 +589,6 @@ static bool ValidateRequiredInputs(const MethodDescriptor *method) {
   return true;
 }
 
-static orbpro::invoke::PluginInvokeResponseT BuildResponseObject() {
-  orbpro::invoke::PluginInvokeResponseT response{};
-  response.status_code = g_invoke_context.status_code;
-  response.yielded = g_invoke_context.yielded;
-  response.backlog_remaining = g_invoke_context.backlog_remaining;
-  response.error_code = g_invoke_context.error_code;
-  response.error_message = g_invoke_context.error_message;
-
-  uint32_t arena_offset = 0;
-  for (const auto &output : g_invoke_context.outputs) {
-    const uint32_t alignment = std::max<uint32_t>(
-      1u,
-      output.required_alignment > 0 ? output.required_alignment : output.alignment
-    );
-    const uint32_t aligned_offset = AlignOffset(arena_offset, alignment);
-    response.payload_arena.resize(aligned_offset, 0);
-    response.payload_arena.insert(
-      response.payload_arena.end(),
-      output.payload.begin(),
-      output.payload.end()
-    );
-    arena_offset = aligned_offset + static_cast<uint32_t>(output.payload.size());
-
-    auto type_ref = std::make_unique<orbpro::stream::FlatBufferTypeRefT>();
-    type_ref->schema_name = output.schema_name;
-    type_ref->file_identifier = output.file_identifier;
-    type_ref->wire_format =
-      static_cast<orbpro::stream::PayloadWireFormat>(output.wire_format);
-    type_ref->root_type_name = output.root_type_name;
-    type_ref->fixed_string_length = output.fixed_string_length;
-    type_ref->byte_length =
-      output.byte_length > 0 ? output.byte_length : static_cast<uint32_t>(output.payload.size());
-    type_ref->required_alignment = output.required_alignment;
-
-    auto frame = std::make_unique<orbpro::stream::TypedArenaBufferT>();
-    frame->type_ref = std::move(type_ref);
-    frame->port_id = output.port_id;
-    frame->alignment = static_cast<uint16_t>(alignment);
-    frame->offset = aligned_offset;
-    frame->size = static_cast<uint32_t>(output.payload.size());
-    frame->generation = output.generation;
-    frame->trace_id = output.trace_id;
-    frame->stream_id = output.stream_id;
-    frame->sequence = output.sequence;
-    frame->end_of_stream = output.end_of_stream;
-    response.output_frames.emplace_back(std::move(frame));
-  }
-
-  return response;
-}
-
-static std::vector<uint8_t> SerializeResponse(const orbpro::invoke::PluginInvokeResponseT &response) {
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-  const auto root = orbpro::invoke::CreatePluginInvokeResponse(builder, &response);
-  orbpro::invoke::FinishPluginInvokeResponseBuffer(builder, root);
-  return std::vector<uint8_t>(
-    builder.GetBufferPointer(),
-    builder.GetBufferPointer() + builder.GetSize()
-  );
-}
-
-static std::vector<uint8_t> SerializeErrorResponse(
-  int32_t status_code,
-  const char *error_code,
-  const std::string &error_message
-) {
-  orbpro::invoke::PluginInvokeResponseT response{};
-  response.status_code = status_code;
-  response.error_code = error_code ? error_code : "invoke-error";
-  response.error_message = error_message;
-  return SerializeResponse(response);
-}
-
 static pivStatus PivStatusForContext() {
   if (!g_invoke_context.error_code.empty() || !g_invoke_context.error_message.empty()) {
     return pivStatus::FAILED;
@@ -836,37 +704,6 @@ static std::vector<uint8_t> SerializePivErrorResponse(
   );
 }
 
-static std::vector<uint8_t> DispatchRequestObject(
-  const orbpro::invoke::PluginInvokeRequestT &request,
-  bool *runtime_error
-) {
-  const auto *method = FindMethod(request.method_id);
-  if (!method) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    return SerializeErrorResponse(
-      404,
-      "unknown-method",
-      std::string("Unknown method: ") + request.method_id
-    );
-  }
-
-  ResetInvokeContext(method);
-  if (!LoadInputsFromRequest(request) || !ValidateRequiredInputs(method)) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    if (g_invoke_context.status_code == 0) {
-      g_invoke_context.status_code = 400;
-    }
-    return SerializeResponse(BuildResponseObject());
-  }
-
-  g_invoke_context.status_code = method->handler ? method->handler() : -1;
-  return SerializeResponse(BuildResponseObject());
-}
-
 static std::vector<uint8_t> DispatchPivRequest(
   const PIVRequest *request,
   bool *runtime_error
@@ -980,26 +817,6 @@ static bool WriteAllStdout(const uint8_t *bytes, size_t length) {
     return std::fflush(stdout) == 0;
   }
   return std::fwrite(bytes, 1, length, stdout) == length && std::fflush(stdout) == 0;
-}
-
-static bool BuildRawShortcutRequest(
-  const MethodDescriptor *method,
-  const std::vector<uint8_t> &stdin_bytes,
-  orbpro::invoke::PluginInvokeRequestT *request
-) {
-  if (!method || !method->raw_shortcut_allowed || !request) {
-    return false;
-  }
-  request->method_id = method->method_id;
-  request->payload_arena = stdin_bytes;
-
-  auto frame = std::make_unique<orbpro::stream::TypedArenaBufferT>();
-  frame->port_id = method->raw_input_port_id ? method->raw_input_port_id : "";
-  frame->alignment = 1;
-  frame->offset = 0;
-  frame->size = static_cast<uint32_t>(stdin_bytes.size());
-  request->input_frames.emplace_back(std::move(frame));
-  return true;
 }
 
 static constexpr uint16_t kAlignedBinaryAlignment = 8;
@@ -3056,59 +2873,11 @@ int main(int argc, char **argv) {
   }
 
   if (shortcut_method) {
-    const auto *method = FindMethod(shortcut_method);
-    if (!method || !method->raw_shortcut_allowed) {
-      std::fprintf(
-        stderr,
-        "Method %s does not support raw stdin/stdout shortcut mode.\n",
-        shortcut_method
-      );
-      return 64;
-    }
-
-    orbpro::invoke::PluginInvokeRequestT shortcut_request{};
-    if (!BuildRawShortcutRequest(method, stdin_bytes, &shortcut_request)) {
-      std::fprintf(stderr, "Failed to construct raw shortcut request.\n");
-      return 64;
-    }
-
-    bool runtime_error = false;
-    const auto response_bytes = DispatchRequestObject(shortcut_request, &runtime_error);
-    ::flatbuffers::Verifier verifier(response_bytes.data(), response_bytes.size());
-    if (!orbpro::invoke::VerifyPluginInvokeResponseBuffer(verifier)) {
-      std::fprintf(stderr, "Shortcut response verification failed.\n");
-      return 70;
-    }
-
-    auto response = std::unique_ptr<orbpro::invoke::PluginInvokeResponseT>(
-      orbpro::invoke::GetPluginInvokeResponse(response_bytes.data())->UnPack()
+    std::fprintf(
+      stderr,
+      "--method raw shortcut mode was removed; pass an SDS PIV envelope on stdin.\n"
     );
-    if (runtime_error || response->status_code != 0 || !response->error_code.empty()) {
-      if (!response->error_message.empty()) {
-        std::fprintf(stderr, "%s\n", response->error_message.c_str());
-      }
-      return 1;
-    }
-    if (response->output_frames.size() > 1u) {
-      std::fprintf(stderr, "Raw shortcut mode produced more than one output frame.\n");
-      return 65;
-    }
-    if (response->output_frames.empty()) {
-      return 0;
-    }
-
-    const auto &frame = *response->output_frames[0];
-    const auto payload_offset = static_cast<size_t>(frame.offset);
-    const auto payload_size = static_cast<size_t>(frame.size);
-    if (payload_offset + payload_size > response->payload_arena.size()) {
-      std::fprintf(stderr, "Raw shortcut output frame exceeds response payload arena.\n");
-      return 70;
-    }
-    if (!WriteAllStdout(response->payload_arena.data() + payload_offset, payload_size)) {
-      std::fprintf(stderr, "Failed to write stdout.\n");
-      return 74;
-    }
-    return 0;
+    return 64;
   }
 
   bool runtime_error = false;
