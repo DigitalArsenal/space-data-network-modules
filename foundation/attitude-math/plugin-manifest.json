@@ -1,0 +1,94 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.attitude-math",
+  "name": "Foundation Attitude Math",
+  "version": "0.1.0",
+  "description": "Shared SDS RBK rigid-body kinematics module for Basilisk-compatible MRP, Gibbs, PRV, Euler-angle, Euler-parameter, direction-cosine-matrix, and differential attitude utilities.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "evaluate_rigid_body_kinematics",
+      "displayName": "Evaluate Rigid-Body Kinematics",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-rbk-rigid-body-kinematics-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "RBK.fbs",
+                  "fileIdentifier": "$RBK",
+                  "rootTypeName": "RBK"
+                },
+                {
+                  "schemaName": "RBK.fbs",
+                  "fileIdentifier": "$RBK",
+                  "rootTypeName": "RBK",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS RBK envelope carrying RBKRigidBodyKinematicsRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Rigid-body kinematics operation request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-rbk-rigid-body-kinematics-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "RBK.fbs",
+                  "fileIdentifier": "$RBK",
+                  "rootTypeName": "RBK"
+                },
+                {
+                  "schemaName": "RBK.fbs",
+                  "fileIdentifier": "$RBK",
+                  "rootTypeName": "RBK",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS RBK envelope carrying RBKRigidBodyKinematicsResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Rigid-body kinematics operation result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Evaluates one Basilisk-compatible MRP, Gibbs-vector, principal-rotation-vector, Euler-angle, scalar-first Euler-parameter, direction-cosine-matrix, or differential rigid-body kinematics operation."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "RBK.fbs",
+      "fileIdentifier": "$RBK",
+      "rootTypeName": "RBK"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-attitude-math-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

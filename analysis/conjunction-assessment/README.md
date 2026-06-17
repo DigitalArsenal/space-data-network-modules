@@ -57,12 +57,14 @@ The adapters support compact Cartesian position/velocity arrays:
 
 OEM `EPHEMERIS_DATA_LINES` is also accepted for non-uniform samples. The
 module still consumes propagated-track requests for `assess_conjunction`,
-`find_tca`, and `emit_cdm`; hosts should decode SDS `OCM`/`OEM` bytes and adapt
-them before invoking those methods. Hosts that publish `emit_cdm` outputs can
+`find_tca`, `emit_cdm`, and `emit_csm`; hosts should decode SDS `OCM`/`OEM`
+bytes and adapt them before invoking those methods. Hosts that publish
+`emit_cdm` outputs can
 wrap the emitted `$CDM` bytes with `signCdmOutput(...)`, which signs the CDM
 hash plus provider, source PNM CID, module artifact, module version, and output
-ID metadata. `screen_catalog` partition summaries remain aggregate results and
-do not emit per-event CDM bytes.
+ID metadata. Hosts can invoke `emit_csm` when they need a compact SDS `$CSM`
+summary record for the same conjunction event. `screen_catalog` partition
+summaries remain aggregate results and do not emit per-event CDM or CSM bytes.
 
 ## Runtime contract
 
@@ -123,6 +125,32 @@ Coverage:
 - browser wrapper smoke via `dist/browser/module.js`
 - WasmEdge command invoke smoke via `dist/isomorphic/module.wasm`
 - a hosted-runtime example contract check
+- native C++ probability-method vectors ported from Orekit `Patera2005Test`
+  scalar cases 01-08, CSM 1-3, and CDM 1-2
+- native C++ `chan` probability-method parity with Orekit `Chan1997Test`
+  scalar cases 01-12, CSM 1-3, CDM 1-2, and Alfano cases 3 and 5
+- native C++ `ALFRIEND-1999` and `ALFRIEND-1999-MAX` probability-method
+  parity with Orekit `Alfriend1999Test` and `Alfriend1999MaxTest` Armellin
+  appendix scalar vectors
+- native C++ `ALFANO-2005` probability-method parity with Orekit
+  `Alfano2005Test` scalar cases 01-12, CSM 1-3, CDM 1-2, and Alfano cases 3
+  and 5
+- native C++ `LAAS-2015` probability-method parity with Orekit `Laas2015Test`
+  scalar cases 01-12, CSM 1-3, CDM 1-2, and Alfano cases 3 and 5, including
+  lower and upper probability bounds where Orekit asserts them
+- native C++ CDM FlatBuffers output coverage registered as ctest `cdm_output`,
+  asserting generated FlatBuffers verifier acceptance for single and
+  size-prefixed batch `$CDM` buffers, SDS CDM header, relative-state, object ID,
+  collision-probability, and buffer-capacity fields
+- native C++ CSM FlatBuffers output coverage registered as ctest `csm_output`,
+  asserting generated FlatBuffers verifier acceptance for SDS `$CSM` summary
+  records, object IDs, TCA/range/speed/probability fields, and buffer-capacity
+  errors, with `emit_csm` command coverage in the WasmEdge harness
+- SDS `$CDM` aligned-binary import for Pc computation through the
+  `compute_pc_from_cdm` command method and native `compute_pc_from_cdm` helper
+- Orekit CDM KVN parser/writer fixture parity for a `CDMExample1.txt`-derived
+  fixture through native `cdm_kvn_to_sds`/`cdm_sds_to_kvn` helpers and the
+  `parse_cdm_kvn`/`write_cdm_kvn` WasmEdge command methods
 - a public SOCRATES replay harness using vendored CelesTrak GP fixtures
 - an Aerospace V&V replay harness that uses an extracted local dataset path
 

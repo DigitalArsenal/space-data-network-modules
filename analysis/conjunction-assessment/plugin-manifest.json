@@ -111,6 +111,46 @@
       "drainPolicy": "single-shot"
     },
     {
+      "methodId": "emit_csm",
+      "displayName": "Emit CSM",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.pair-request",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ" },
+                { "schemaName": "orbpro.conjunction.ConjunctionPairRequest", "fileIdentifier": "CAPQ", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPairRequest", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "csm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.csm",
+              "allowedTypes": [
+                { "schemaName": "CSM.fbs", "fileIdentifier": "$CSM" },
+                { "schemaName": "CSM.fbs", "fileIdentifier": "$CSM", "wireFormat": "aligned-binary", "rootTypeName": "CSM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
       "methodId": "find_tca",
       "displayName": "Find Time Of Closest Approach",
       "inputPorts": [
@@ -219,6 +259,202 @@
               "allowedTypes": [
                 { "schemaName": "orbpro.conjunction.ConjunctionPcResult", "fileIdentifier": "CAPC" },
                 { "schemaName": "orbpro.conjunction.ConjunctionPcResult", "fileIdentifier": "CAPC", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPcResult", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "compute_pc_from_cdm",
+      "displayName": "Compute Collision Probability From CDM",
+      "inputPorts": [
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.conjunction.pc-result",
+              "allowedTypes": [
+                { "schemaName": "orbpro.conjunction.ConjunctionPcResult", "fileIdentifier": "CAPC" },
+                { "schemaName": "orbpro.conjunction.ConjunctionPcResult", "fileIdentifier": "CAPC", "wireFormat": "aligned-binary", "rootTypeName": "ConjunctionPcResult", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse_cdm_kvn",
+      "displayName": "Parse CDM KVN",
+      "inputPorts": [
+        {
+          "portId": "kvn",
+          "acceptedTypeSets": [
+            {
+              "setId": "ccsds.cdm.kvn",
+              "allowedTypes": [
+                { "schemaName": "text/plain" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "write_cdm_kvn",
+      "displayName": "Write CDM KVN",
+      "inputPorts": [
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "kvn",
+          "acceptedTypeSets": [
+            {
+              "setId": "ccsds.cdm.kvn",
+              "allowedTypes": [
+                { "schemaName": "text/plain" }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse_cdm_xml",
+      "displayName": "Parse CDM XML",
+      "inputPorts": [
+        {
+          "portId": "xml",
+          "acceptedTypeSets": [
+            {
+              "setId": "ccsds.cdm.xml",
+              "allowedTypes": [
+                { "schemaName": "text/xml" }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "write_cdm_xml",
+      "displayName": "Write CDM XML",
+      "inputPorts": [
+        {
+          "portId": "cdm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds.cdm",
+              "allowedTypes": [
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM" },
+                { "schemaName": "CDM.fbs", "fileIdentifier": "$CDM", "wireFormat": "aligned-binary", "rootTypeName": "CDM", "requiredAlignment": 8 }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "xml",
+          "acceptedTypeSets": [
+            {
+              "setId": "ccsds.cdm.xml",
+              "allowedTypes": [
+                { "schemaName": "text/xml" }
               ]
             }
           ],

@@ -1,13 +1,202 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
+import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
+import {
+  AtmosphericModelFamily,
+  ATMT,
+  HFC,
+  HFCT,
+  hfcAtmosphereCouplingMode,
+} from "../../../../spacedatastandards.org/lib/js/HFC/main.js";
+import {
+  F107DataType,
+  SPW,
+} from "../../../../spacedatastandards.org/lib/js/SPW/main.js";
+import {
+  OEM,
+} from "../../../../spacedatastandards.org/lib/js/OEM/main.js";
+import {
+  VCM,
+  VCMStateVectorT,
+  VCMT,
+} from "../../../../spacedatastandards.org/lib/js/VCM/main.js";
 import {
   STANDALONE_RUNTIME_KINDS,
+  assertSuccessfulResponse,
   createStandaloneHarnessOrSkip,
   invokeJsonRequest,
 } from "../../../tests/lib/isomorphicHarness.mjs";
 
+const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+
+function readManifest() {
+  return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+}
+
+function encodeHfcAtmosphereRequest({
+  model = AtmosphericModelFamily.USSA_XX,
+  year = 1976,
+  sampleEpochs = [],
+  latitudesDeg = [],
+  longitudesDeg = [],
+  altitudesM = [0, 10_000],
+  speedsMps = [],
+} = {}) {
+  const builder = new flatbuffers.Builder(512);
+  const envelope = new HFCT(
+    "atmosphere-query-reference",
+    "2026-05-25T00:00:00Z",
+    "DigitalArsenal",
+    "ATMOSPHERE-QUERY",
+    "UTC",
+    "ITRF",
+    null,
+    null,
+    0.0,
+    null,
+    null,
+    new ATMT(model, year),
+    null,
+    null,
+    hfcAtmosphereCouplingMode.BATCH_QUERY,
+    null,
+    null,
+    undefined,
+    0,
+    [],
+    sampleEpochs,
+    latitudesDeg,
+    longitudesDeg,
+    altitudesM,
+    speedsMps,
+  );
+  const root = envelope.pack(builder);
+  HFC.finishHFCBuffer(builder, root);
+  return builder.asUint8Array();
+}
+
+function encodeSpwRecord({
+  date = "2024-01-01",
+  f107Obs = 150,
+  f107Adj = f107Obs,
+  f107ObsCenter81 = f107Obs,
+  f107AdjCenter81 = f107Adj,
+  ap = 4,
+} = {}) {
+  const builder = new flatbuffers.Builder(256);
+  const dateOffset = builder.createString(date);
+  const root = SPW.createSPW(
+    builder,
+    dateOffset,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    ap,
+    ap,
+    ap,
+    ap,
+    ap,
+    ap,
+    ap,
+    ap,
+    ap,
+    0,
+    0,
+    0,
+    f107Obs,
+    f107Adj,
+    F107DataType.OBS,
+    f107ObsCenter81,
+    f107Obs,
+    f107AdjCenter81,
+    f107Adj,
+  );
+  SPW.finishSPWBuffer(builder, root);
+  return builder.asUint8Array();
+}
+
+function encodeVcmDragReferenceState() {
+  const builder = new flatbuffers.Builder(512);
+  const envelope = new VCMT(
+    2.0,
+    "2026-05-26T00:00:00Z",
+    "DigitalArsenal",
+    "BASILISK-ATMOSPHERIC-DRAG",
+    "BASILISK-ORBITAL-MOTION",
+    "EARTH",
+    "EME2000",
+    "UTC",
+    new VCMStateVectorT(
+      "2026-05-26T00:00:00Z",
+      6200.0,
+      100.0,
+      2000.0,
+      1.0,
+      9.0,
+      1.0,
+    ),
+    null,
+    null,
+    398600.436,
+    null,
+    null,
+    null,
+    50.0,
+    0.0,
+    0.0,
+    2.0,
+    0.2,
+  );
+  const root = envelope.pack(builder);
+  VCM.finishVCMBuffer(builder, root);
+  return builder.asUint8Array();
+}
+
+function decodeHfcResponse(response) {
+  const payload = assertSuccessfulResponse(response, { outputPortId: "states" });
+  const [frame] = response.outputs.filter((entry) => entry.portId === "states");
+  assert.equal(frame.typeRef?.schemaName, "HFC.fbs");
+  assert.equal(frame.typeRef?.fileIdentifier, "$HFC");
+  assert.equal(frame.typeRef?.rootTypeName, "HFC");
+  const bb = new flatbuffers.ByteBuffer(payload);
+  assert.equal(HFC.bufferHasIdentifier(bb), true);
+  return HFC.getRootAsHFC(bb);
+}
+
+function decodeDragOemResponse(response) {
+  const payload = assertSuccessfulResponse(response, { outputPortId: "drag_acceleration" });
+  const [frame] = response.outputs.filter((entry) => entry.portId === "drag_acceleration");
+  assert.equal(frame.typeRef?.schemaName, "OEM.fbs");
+  assert.equal(frame.typeRef?.fileIdentifier, "$OEM");
+  assert.equal(frame.typeRef?.rootTypeName, "OEM");
+  const bb = new flatbuffers.ByteBuffer(payload);
+  assert.equal(OEM.bufferHasIdentifier(bb), true);
+  return OEM.getRootAsOEM(bb);
+}
+
+test("manifest declares Basilisk atmospheric drag direct VCM/OEM surface", () => {
+  const manifest = readManifest();
+  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_drag_acceleration_oem");
+  assert.ok(method, "missing vcm_state_to_drag_acceleration_oem method");
+  assert.equal(method.inputPorts[0].portId, "vector_state");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.outputPorts[0].portId, "drag_acceleration");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OEM.fbs");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "$OEM");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OEM");
+});
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`version request returns the package version on ${runtimeKind}`, async (t) => {
@@ -239,6 +428,48 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     relClose(result.state.numDensityHe, 6.665e5 * 1e6, 1e-3, "He 1/m^3");
     relClose(result.state.numDensityO, 1.139e8 * 1e6, 1e-3, "O 1/m^3");
     relClose(result.state.numDensityN2, 1.998e7 * 1e6, 1e-3, "N2 1/m^3");
+  });
+
+  test(`direct drag method computes Basilisk atmosphericDrag acceleration from VCM spacecraft state on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await harness.invoke({
+      methodId: "vcm_state_to_drag_acceleration_oem",
+      inputs: [
+        {
+          portId: "vector_state",
+          typeRef: {
+            schemaName: "VCM.fbs",
+            rootTypeName: "VCM",
+          },
+          payload: encodeVcmDragReferenceState(),
+        },
+      ],
+    });
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const oem = decodeDragOemResponse(response);
+    const block = oem.EPHEMERIS_DATA_BLOCK(0);
+    assert.ok(block, "missing OEM ephemeris block");
+    assert.equal(block.ephemerisDataLinesLength(), 1);
+    const line = block.EPHEMERIS_DATA_LINES(0);
+    assert.ok(line, "missing OEM ephemeris data line");
+
+    const assertNear = (actual, expected, tolerance, label) => {
+      assert.ok(
+        Math.abs(actual - expected) <= tolerance,
+        `${label}: ${actual} not within ${tolerance} of ${expected}`,
+      );
+    };
+    assertNear(line.X_DDOT(), -2.8245395411253663e-7, 1e-18, "drag ax km/s2");
+    assertNear(line.Y_DDOT(), -2.5420855870128297e-6, 1e-18, "drag ay km/s2");
+    assertNear(line.Z_DDOT(), -2.8245395411253663e-7, 1e-18, "drag az km/s2");
   });
 
   test(`NRLMSISE00 responds to solar activity at 400 km on ${runtimeKind}`, async (t) => {

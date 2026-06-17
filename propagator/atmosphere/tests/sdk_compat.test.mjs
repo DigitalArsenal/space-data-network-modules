@@ -23,6 +23,26 @@ const FLOW_EXAMPLE_PATH = new URL(
   "../tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json",
   import.meta.url,
 );
+const HFC_ALLOWED_TYPES = [
+  { schemaName: "HFC.fbs", fileIdentifier: "$HFC", rootTypeName: "HFC" },
+  {
+    schemaName: "HFC.fbs",
+    fileIdentifier: "$HFC",
+    rootTypeName: "HFC",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
+const SPW_ALLOWED_TYPES = [
+  { schemaName: "SPW.fbs", fileIdentifier: "$SPW", rootTypeName: "SPW" },
+  {
+    schemaName: "SPW.fbs",
+    fileIdentifier: "$SPW",
+    rootTypeName: "SPW",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
 
 function readFixtureBytes() {
   return fs.readFileSync(REQUEST_FIXTURE_PATH);
@@ -87,10 +107,12 @@ test("manifest declares the fixed atmosphere provider method", () => {
   );
   assert.ok(method);
   assert.equal(method.inputPorts[0].portId, "atmosphere");
+  assert.equal(method.inputPorts[1].portId, "space_weather");
+  assert.equal(method.inputPorts[1].required, false);
   assert.equal(method.outputPorts[0].portId, "states");
-  assert.deepEqual(method.outputPorts[0].acceptedTypeSets[0].allowedTypes, [
-    { schemaName: "HFC.fbs", fileIdentifier: "$HFC", rootTypeName: "HFC" },
-  ]);
+  assert.deepEqual(method.inputPorts[0].acceptedTypeSets[0].allowedTypes, HFC_ALLOWED_TYPES);
+  assert.deepEqual(method.inputPorts[1].acceptedTypeSets[0].allowedTypes, SPW_ALLOWED_TYPES);
+  assert.deepEqual(method.outputPorts[0].acceptedTypeSets[0].allowedTypes, HFC_ALLOWED_TYPES);
 });
 
 test("built artifact exposes the standalone isomorphic surface", async () => {

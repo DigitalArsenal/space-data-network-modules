@@ -1,0 +1,94 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.math-bspline",
+  "name": "Foundation Math B-Spline",
+  "version": "0.1.0",
+  "description": "Shared SDS BSP interpolation module for Basilisk-compatible three-axis B-spline waypoint interpolation.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "interpolate_bspline",
+      "displayName": "Interpolate B-Spline",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-bsp-interpolation-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "BSP.fbs",
+                  "fileIdentifier": "$BSP",
+                  "rootTypeName": "BSP"
+                },
+                {
+                  "schemaName": "BSP.fbs",
+                  "fileIdentifier": "$BSP",
+                  "rootTypeName": "BSP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS BSP envelope carrying BSPInterpolationRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "B-spline interpolation request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-bsp-interpolation-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "BSP.fbs",
+                  "fileIdentifier": "$BSP",
+                  "rootTypeName": "BSP"
+                },
+                {
+                  "schemaName": "BSP.fbs",
+                  "fileIdentifier": "$BSP",
+                  "rootTypeName": "BSP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS BSP envelope carrying BSPInterpolationResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "B-spline interpolation result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Interpolates one three-axis waypoint series with Basilisk-compatible B-spline endpoint derivative constraints."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "BSP.fbs",
+      "fileIdentifier": "$BSP",
+      "rootTypeName": "BSP"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-math-bspline-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

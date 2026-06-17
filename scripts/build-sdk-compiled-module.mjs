@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,10 +13,59 @@ const commonPath = path.join(repoRoot, "common/hypersonic_module_common.cpp.inc"
 const outputDir = path.join(packageDir, "dist/isomorphic");
 const outputPath = path.join(outputDir, "module.wasm");
 
+async function directoryExists(candidate) {
+  try {
+    return (await stat(candidate)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function resolveStandardsRoot() {
+  const candidates = [
+    process.env.SPACE_DATA_STANDARDS_ROOT,
+    path.resolve(repoRoot, "../spacedatastandards.org"),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (await directoryExists(path.join(candidate, "lib", "cpp"))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+async function readSdsCppHeaders(manifest) {
+  const standardsRoot = await resolveStandardsRoot();
+  if (!standardsRoot) {
+    return "";
+  }
+  const schemaRefs = new Set();
+  for (const schema of manifest.schemasUsed ?? []) {
+    const schemaName = String(schema?.schemaName ?? "");
+    const match = schemaName.match(/^([A-Z][A-Z0-9]{2})(?:\/main)?\.fbs$/i);
+    if (match) {
+      schemaRefs.add(match[1].toUpperCase());
+    }
+  }
+  const headers = [];
+  for (const schemaRef of [...schemaRefs].sort()) {
+    const headerPath = path.join(
+      standardsRoot,
+      "lib",
+      "cpp",
+      schemaRef,
+      "main_generated.h",
+    );
+    headers.push(await readFile(headerPath, "utf8"));
+  }
+  return headers.join("\n\n");
+}
+
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const commonSource = await readFile(commonPath, "utf8");
 const moduleSource = await readFile(sourcePath, "utf8");
-const sourceCode = `${commonSource}\n${moduleSource}`;
+const sdsCppHeaders = await readSdsCppHeaders(manifest);
+const sourceCode = `${sdsCppHeaders}\n${commonSource}\n${moduleSource}`;
 
 await mkdir(outputDir, { recursive: true });
 

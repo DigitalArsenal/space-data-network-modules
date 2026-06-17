@@ -2,9 +2,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveBasiliskRoot } from "./lib/resolve-basilisk-root.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const basiliskRoot = path.resolve(repoRoot, process.env.BASILISK_ROOT ?? "../basilisk");
+const basiliskRoot = resolveBasiliskRoot(repoRoot);
 const outPath = path.join(repoRoot, "docs", "basilisk-message-standards.json");
 const payloadRoots = [
   "src/architecture/msgPayloadDefC",

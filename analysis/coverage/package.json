@@ -3,13 +3,21 @@
   "private": true,
   "type": "module",
   "main": "index.js",
+  "sdn-module": "./dist/isomorphic/module.wasm",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./dist/*": "./dist/*",
+    "./flowHandlers": "./flowHandlers.js",
+    "./manifest": "./manifest.js",
+    "./plugin-manifest.json": "./plugin-manifest.json"
   },
   "files": [
+    "dist/",
     "index.js",
+    "index.d.ts",
     "flowHandlers.js",
     "manifest.js",
+    "manifest.json",
     "plugin-manifest.json"
   ],
   "scripts": {

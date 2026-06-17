@@ -18,6 +18,7 @@
 #include <sstream>
 #include <cmath>
 #include <cassert>
+#include <cstdlib>
 
 using namespace conjunction;
 
@@ -435,6 +436,13 @@ void test_direct_gp_propagation() {
 
 void test_live_socrates_minrange_pair_accuracy() {
     std::cout << "\n--- Test: Live SOCRATES min-range GP pair accuracy ---" << std::endl;
+
+    if (std::getenv("CONJUNCTION_RUN_NATIVE_LIVE_SOCRATES") == nullptr) {
+        std::cout << "    SKIP: set CONJUNCTION_RUN_NATIVE_LIVE_SOCRATES=1 "
+                  << "to run the time-sensitive SOCRATES reference check"
+                  << std::endl;
+        return;
+    }
 
     const char* json = R"JSON([
         {

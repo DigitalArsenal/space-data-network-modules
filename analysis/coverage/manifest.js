@@ -334,15 +334,15 @@ export function createCoveragePluginManifest() {
     [
       new BuildArtifactT(
         "coverage-runtime",
-        "javascript-runtime",
-        "index.js",
-        "web,worker,node",
+        "wasm",
+        "dist/isomorphic/module.wasm",
+        "browser,wasmedge",
         null,
       ),
     ],
     1,
     [InvokeSurface.DIRECT],
-    ["browser", "node"],
+    ["browser", "wasmedge"],
   );
 }
 

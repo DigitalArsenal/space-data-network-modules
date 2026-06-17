@@ -543,22 +543,33 @@ function readText(relativePath) {
   return readFile(new URL(relativePath, import.meta.url), "utf8");
 }
 
+async function readSdsSchemaText(path) {
+  const roots = [
+    "../../../../spacedatastandards.org/schema/",
+    "../node_modules/spacedatastandards.org/schema/",
+  ];
+  let lastError = null;
+  for (const root of roots) {
+    try {
+      return await readFile(new URL(`${root}${path}`, import.meta.url), "utf8");
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 async function ommSchema() {
   return {
     entry: "/sds/OMM/main.fbs",
     files: {
-      "/sds/OMM/main.fbs": await readText(
-        "../node_modules/spacedatastandards.org/schema/OMM/main.fbs",
-      ),
-      "/sds/RFM/main.fbs": await readText(
-        "../node_modules/spacedatastandards.org/schema/RFM/main.fbs",
-      ),
-      "/sds/TIM/main.fbs": await readText(
-        "../node_modules/spacedatastandards.org/schema/TIM/main.fbs",
-      ),
-      "/sds/MET/main.fbs": await readText(
-        "../node_modules/spacedatastandards.org/schema/MET/main.fbs",
-      ),
+      "/sds/OMM/main.fbs": await readSdsSchemaText("OMM/main.fbs"),
+      "/sds/RFM/main.fbs": await readSdsSchemaText("RFM/main.fbs"),
+      "/sds/TIM/main.fbs": await readSdsSchemaText("TIM/main.fbs"),
+      "/sds/MET/main.fbs": await readSdsSchemaText("MET/main.fbs"),
     },
   };
 }

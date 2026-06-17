@@ -1,0 +1,2352 @@
+{
+  "schemaVersion": 1,
+  "orekit": {
+    "sourceIndex": "docs/orekit-source-test-index.json",
+    "mappings": [
+      {
+        "id": "orekit-time-tai-aas06134",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TAIScaleTest.java",
+        "upstreamTestMethod": "testAAS06134",
+        "sourceContains": ["testAAS06134"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit TAIScaleTest.testAAS06134 UTC instant to TAI"
+          }
+        ],
+        "quantities": ["UTC epoch", "TAI epoch", "TAI minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-utcscale-pre1972-offsets",
+        "upstreamTestFile": "src/test/java/org/orekit/time/UTCScaleTest.java",
+        "upstreamTestMethod": "testOffsets",
+        "sourceContains": ["testOffsets", "UTC-TAI.history", "1.422 818 0s", "4.213 170 0s"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit UTCScaleTest.testOffsets 1961 linear UTC offset to TAI"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit UTCScaleTest.testOffsets 1968 linear UTC offset to TAI"
+          }
+        ],
+        "quantities": ["UTC epoch", "TAI epoch", "pre-1972 linear TAI minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-tt-aas06134",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TTScaleTest.java",
+        "upstreamTestMethod": "testAAS06134",
+        "sourceContains": ["testAAS06134"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit TTScaleTest.testAAS06134 UTC instant to TT"
+          }
+        ],
+        "quantities": ["UTC epoch", "TT epoch", "TT minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-ut1-aas06134",
+        "upstreamTestFile": "src/test/java/org/orekit/time/UT1ScaleTest.java",
+        "upstreamTestMethod": "testAAS06134",
+        "sourceContains": ["testAAS06134", "-0.439962", "27.946047"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit UT1ScaleTest.testAAS06134 UTC instant to UT1 with DUT1"
+          }
+        ],
+        "quantities": ["UTC epoch", "UT1 epoch", "DUT1 offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-tcg-aas06134",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TCGScaleTest.java",
+        "upstreamTestMethod": "testAAS06134",
+        "sourceContains": ["testAAS06134", "33.1695861742"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit TCGScaleTest.testAAS06134 UTC instant to TCG"
+          }
+        ],
+        "quantities": ["UTC epoch", "TCG epoch", "TCG minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "5e-10 seconds"
+      },
+      {
+        "id": "orekit-time-tcg-reference",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TCGScaleTest.java",
+        "upstreamTestMethod": "testReference",
+        "sourceContains": ["testReference", "1977", "184000000000000000L"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit TCGScaleTest.testReference TCG reference instant to TAI"
+          }
+        ],
+        "quantities": ["TCG reference epoch", "TAI reference epoch", "TT/TCG reference offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-tdb-reference",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TDBScaleTest.java",
+        "upstreamTestMethod": "testReference",
+        "sourceContains": ["testReference", "32.183927340791372839"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit TDBScaleTest.testReference J2000 TAI instant to TDB"
+          }
+        ],
+        "quantities": ["J2000 TAI epoch", "TDB epoch", "TDB minus TAI offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-tdb-to-tai",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TDBScaleTest.java",
+        "upstreamTestMethod": "testToTAI",
+        "sourceContains": ["testToTAI", "11, 59, 59.999927340791372839"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit TDBScaleTest.testToTAI J2000 TDB instant to TAI"
+          }
+        ],
+        "quantities": ["TDB epoch", "J2000 TAI epoch", "TDB minus TAI offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-6 seconds due to ISO microsecond formatting"
+      },
+      {
+        "id": "orekit-time-tcb-aas06134",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TCBScaleTest.java",
+        "upstreamTestMethod": "testAAS06134",
+        "sourceContains": ["testAAS06134", "45.9109901113"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit TCBScaleTest.testAAS06134 UTC instant to TCB"
+          }
+        ],
+        "quantities": ["UTC epoch", "TCB epoch", "TCB minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "2e-8 seconds"
+      },
+      {
+        "id": "orekit-time-gmst-reference",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GMSTScaleTest.java",
+        "upstreamTestMethod": "testReference",
+        "sourceContains": ["testReference", "8.329", "4.0e-4"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit GMSTScaleTest.testReference UT1 instant to GMST"
+          }
+        ],
+        "quantities": ["UT1 epoch", "GMST epoch", "sidereal offset"],
+        "units": "SI seconds",
+        "tolerance": "4e-4 seconds"
+      },
+      {
+        "id": "orekit-time-glonass-arbitrary",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GLONASSScaleTest.java",
+        "upstreamTestMethod": "testArbitrary",
+        "sourceContains": ["testArbitrary", "21, 0"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit GLONASSScaleTest.testArbitrary GLONASS instant to UTC"
+          }
+        ],
+        "quantities": ["GLONASS epoch", "UTC epoch", "GLONASS minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-glonass-during-leap",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GLONASSScaleTest.java",
+        "upstreamTestMethod": "testDuringLeap",
+        "sourceContains": ["testDuringLeap", "02:59:60.004"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "formats Orekit GLONASSScaleTest.testDuringLeap UTC leap instant as GLONASS leap second"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GLONASSScaleTest.testDuringLeap GLONASS leap label to UTC"
+          }
+        ],
+        "quantities": ["UTC leap-second epoch", "GLONASS leap-second epoch", "GLONASS minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-datetime-components-parse-offset",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateTimeComponentsTest.java",
+        "upstreamTestMethod": "testParse",
+        "sourceContains": ["testParse", "2000-01-02T03:04:05.000+00:00"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit DateTimeComponentsTest.testParse UTC zero offset suffix"
+          }
+        ],
+        "quantities": ["ISO-8601 date-time", "UTC offset suffix", "UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-datetime-components-local-offset",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateTimeComponentsTest.java",
+        "upstreamTestMethod": "testLocalTime",
+        "sourceContains": ["testLocalTime", "2000-02-29T03:04:05.000+00:01"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit DateTimeComponentsTest.testLocalTime UTC positive offset to UTC"
+          }
+        ],
+        "quantities": ["local date-time", "UTC offset minutes", "UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-absolute-date-local-time-parsing-offsets",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testLocalTimeParsing",
+        "sourceContains": [
+          "testLocalTimeParsing",
+          "2012-01-01T03:30:00+0430",
+          "2012-01-01T03:30:00+04",
+          "2011-12-31T22:17:00-0700"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit AbsoluteDateTest.testLocalTimeParsing compact positive offset to UTC"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit AbsoluteDateTest.testLocalTimeParsing hour-only offset to UTC"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit AbsoluteDateTest.testLocalTimeParsing compact negative offset to UTC"
+          }
+        ],
+        "quantities": ["local date-time", "compact/hour-only UTC offset suffix", "UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-time-components-comma-fraction",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TimeComponentsTest.java",
+        "upstreamTestMethod": "testParse",
+        "sourceContains": ["testParse", "23:59:59,900"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit TimeComponentsTest.testParse comma fractional seconds"
+          }
+        ],
+        "quantities": ["ISO-8601 date-time", "comma fractional seconds", "UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-time-components-basic-utc-time",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TimeComponentsTest.java",
+        "upstreamTestMethod": "testParse",
+        "sourceContains": ["testParse", "235959.900Z"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit TimeComponentsTest.testParse basic UTC time"
+          }
+        ],
+        "quantities": ["ISO-8601 date-time", "basic UTC time", "UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-time-components-reduced-local-time",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TimeComponentsTest.java",
+        "upstreamTestMethod": "testParse",
+        "sourceContains": ["testParse", "23:59", "235959.900+10", "23:59:59+01:00"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit TimeComponentsTest.testParse reduced local time variants"
+          }
+        ],
+        "quantities": ["ISO-8601 date-time", "minute-only local time", "hour-only UTC offset suffix", "UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-time-components-bad-format",
+        "upstreamTestFile": "src/test/java/org/orekit/time/TimeComponentsTest.java",
+        "upstreamTestMethod": "testBadFormat",
+        "sourceContains": ["testBadFormat", "23h59m59s"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "rejects Orekit TimeComponentsTest.testBadFormat HMS designators"
+          }
+        ],
+        "quantities": ["invalid HMS-designator local time"],
+        "units": "ISO-8601 parser status",
+        "tolerance": "exact invalid-input status"
+      },
+      {
+        "id": "orekit-time-absolute-date-parse-date-forms",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testParse",
+        "sourceContains": [
+          "testParse",
+          "-4712-01-01T12:00:00.000",
+          "1950-01-01",
+          "1958-001",
+          "1858-W46-3"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testParse date-only Fifties epoch"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testParse ordinal CCSDS epoch"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testParse ISO week Modified Julian epoch"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testParse signed Julian epoch"
+          }
+        ],
+        "quantities": ["signed Julian epoch", "date-only epoch", "ordinal-date epoch", "ISO week-date epoch"],
+        "units": "calendar date fields and SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-date-components-basic-signed-parse",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testParse",
+        "sourceContains": [
+          "testParse",
+          "-47120101",
+          "-4712-01-01",
+          "2000001",
+          "1999W526"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit DateComponentsTest.testParse basic and signed date forms"
+          }
+        ],
+        "quantities": ["signed basic calendar date", "signed extended calendar date", "basic ordinal date", "basic ISO week date"],
+        "units": "calendar date fields and SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-date-components-parse-chronology",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testParse",
+        "sourceContains": [
+          "testParse",
+          "DateComponents.parseDate(\"-47131231\").getJ2000Day()",
+          "DateComponents.parseDate(\"1500-02-29\").getJ2000Day()",
+          "DateComponents.parseDate(\"1582-W40-5\").getJ2000Day()",
+          "DateComponents.parseDate(\"17000301\").getJ2000Day()",
+          "DateComponents.parseDate(\"2000-03-01\").getJ2000Day()"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit DateComponentsTest.testParse chronology J2000 days as MJD"
+          }
+        ],
+        "quantities": ["calendar date", "ISO week date", "ordinal date", "J2000 day", "Modified Julian Date"],
+        "units": "calendar date fields and MJD days",
+        "tolerance": "1e-12 day scalar comparison"
+      },
+      {
+        "id": "orekit-time-date-components-mjd",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testMJD",
+        "sourceContains": [
+          "testMJD",
+          "DateComponents.MODIFIED_JULIAN_EPOCH.getMJD()",
+          "new DateComponents(1962, 1,  1).getMJD()",
+          "new DateComponents(2008, 5, 14).getMJD()"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit DateComponentsTest.testMJD modified Julian days"
+          }
+        ],
+        "quantities": ["calendar date", "Modified Julian Date"],
+        "units": "calendar date fields and MJD days",
+        "tolerance": "1e-12 day scalar comparison"
+      },
+      {
+        "id": "orekit-time-date-components-week-components",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testWeekComponents",
+        "sourceContains": [
+          "testWeekComponents",
+          "{ 1994, 52, 7, 1995,  1,  1 }",
+          "{ 1998, 53, 7, 1999,  1,  3 }",
+          "{ 1582, 40, 5, 1582, 10, 15 }",
+          "{ 1583,  1, 1, 1583,  1,  3 }"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit DateComponentsTest.testWeekComponents ISO week-date sweep"
+          }
+        ],
+        "quantities": ["ISO week date", "calendar date", "Gregorian reform boundary"],
+        "units": "calendar date fields and SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-date-components-iso8601-examples",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testISO8601Examples",
+        "sourceContains": [
+          "testISO8601Examples",
+          "DateComponents.parseDate(\"19850412\")",
+          "DateComponents.parseDate(\"1985102\")",
+          "DateComponents.parseDate(\"1985W155\")"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit DateComponentsTest.testISO8601Examples date forms"
+          }
+        ],
+        "quantities": ["calendar date", "ordinal date", "ISO week date", "J2000 day"],
+        "units": "calendar date fields and SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-date-components-day-of-year",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testDayOfYear",
+        "sourceContains": [
+          "testDayOfYear",
+          "Assertions.assertEquals(365, new DateComponents(2003, 12, 31).getDayOfYear());",
+          "Assertions.assertEquals( 60, new DateComponents(2004,  2, 29).getDayOfYear());",
+          "Assertions.assertEquals(269, new DateComponents(2003,  9, 26).getDayOfYear());"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit DateComponentsTest.testDayOfYear ordinal mappings"
+          }
+        ],
+        "quantities": ["ordinal date", "calendar date", "common year", "leap year"],
+        "units": "calendar date fields and SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-date-components-gregorian-reform",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testReferenceDates",
+        "sourceContains": [
+          "testReferenceDates",
+          "{  1582, 10, 04,  -152385 }",
+          "{  1582, 10, 15,  -152384 }",
+          "DateComponents.parseDate(\"1582-W40-5\")"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit DateComponentsTest Gregorian reform consecutive MJD days"
+          }
+        ],
+        "quantities": ["Gregorian reform calendar date", "ISO week date", "J2000 day", "Modified Julian Date"],
+        "units": "calendar date fields and MJD days",
+        "tolerance": "1e-12 day scalar comparison"
+      },
+      {
+        "id": "orekit-time-date-components-invalid-week",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testConstructorBadWeek",
+        "sourceContains": ["testConstructorBadWeek", "DateComponents.createFromWeekComponents(2008, 53, 1)"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "rejects Orekit DateComponentsTest.testConstructorBadWeek invalid ISO week date"
+          }
+        ],
+        "quantities": ["invalid ISO week date", "week 53 on a 52-week year"],
+        "units": "calendar week fields",
+        "tolerance": "exact invalid-input status comparison"
+      },
+      {
+        "id": "orekit-time-date-components-invalid-weekday-and-string",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testConstructorBadDayOfWeek1/testConstructorBadDayOfWeek2/testConstructorBadString",
+        "sourceContains": [
+          "testConstructorBadDayOfWeek1",
+          "DateComponents.createFromWeekComponents(2008, 43, 0)",
+          "testConstructorBadDayOfWeek2",
+          "DateComponents.createFromWeekComponents(2008, 43, 8)",
+          "testConstructorBadString",
+          "DateComponents.parseDate(\"197-05-01\")"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "rejects Orekit DateComponentsTest invalid weekday and malformed date strings"
+          }
+        ],
+        "quantities": ["invalid ISO week date", "invalid day-of-week field", "malformed calendar date"],
+        "units": "calendar week and date fields",
+        "tolerance": "exact invalid-input status comparison"
+      },
+      {
+        "id": "orekit-time-date-components-well-formed-ranges",
+        "upstreamTestFile": "src/test/java/org/orekit/time/DateComponentsTest.java",
+        "upstreamTestMethod": "testWellFormed",
+        "sourceContains": [
+          "testWellFormed",
+          "checkWellFormed(-4800, -4700, -2483687, -2446797)",
+          "checkWellFormed(   -5,     5,  -732313,  -728296)",
+          "checkWellFormed( 1580,  1605,  -153392,  -143906)",
+          "checkWellFormed( 1995,  2005,    -1826,     2191)"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit DateComponentsTest.testWellFormed range endpoint J2000 days as MJD"
+          }
+        ],
+        "quantities": ["calendar date", "J2000 day", "Modified Julian Date", "calendar validity range"],
+        "units": "calendar date fields and MJD days",
+        "tolerance": "1e-12 day scalar comparison"
+      },
+      {
+        "id": "orekit-time-galileo-2006",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GalileoScaleTest.java",
+        "upstreamTestMethod": "test2006",
+        "sourceContains": ["test2006", "23, 59, 46"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit GalileoScaleTest.test2006 GST instant to UTC"
+          }
+        ],
+        "quantities": ["GST epoch", "UTC epoch", "GST minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-bdt-2010",
+        "upstreamTestFile": "src/test/java/org/orekit/time/BDSScaleTest.java",
+        "upstreamTestMethod": "test2010",
+        "sourceContains": ["test2010", "23, 59, 59"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit BDSScaleTest.test2010 BDT instant to UTC"
+          }
+        ],
+        "quantities": ["BDT epoch", "UTC epoch", "BDT minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-qzss-arbitrary",
+        "upstreamTestFile": "src/test/java/org/orekit/time/QZSSScaleTest.java",
+        "upstreamTestMethod": "testArbitrary",
+        "sourceContains": ["testArbitrary", "23, 59, 47"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit QZSSScaleTest.testArbitrary QZSS instant to UTC"
+          }
+        ],
+        "quantities": ["QZSS epoch", "UTC epoch", "QZSS minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-navic-arbitrary",
+        "upstreamTestFile": "src/test/java/org/orekit/time/NavicScaleTest.java",
+        "upstreamTestMethod": "testArbitrary",
+        "sourceContains": ["testArbitrary", "23, 59, 47"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit NavicScaleTest.testArbitrary NavIC instant to UTC"
+          }
+        ],
+        "quantities": ["NavIC epoch", "UTC epoch", "NavIC minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-gps-arbitrary",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GPSScaleTest.java",
+        "upstreamTestMethod": "testArbitrary",
+        "sourceContains": ["testArbitrary"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "converts Orekit GPSScaleTest.testArbitrary GPS instant to UTC"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits GPS seconds for Orekit GPSScaleTest.testArbitrary instant"
+          }
+        ],
+        "quantities": ["GPS epoch", "UTC epoch", "GPS seconds"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds for offsets, 1e-9 seconds for GPS seconds"
+      },
+      {
+        "id": "orekit-time-gps-t0",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GPSScaleTest.java",
+        "upstreamTestMethod": "testT0",
+        "sourceContains": ["testT0"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "uses Orekit GPSScaleTest.testT0 GPS epoch for GPS seconds"
+          }
+        ],
+        "quantities": ["GPS seconds zero", "GPS epoch"],
+        "units": "SI seconds",
+        "tolerance": "exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-gnssdate-week-seconds",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GNSSDateTest.java",
+        "upstreamTestMethod": "testFromWeekAndSeconds*/testFromAbsoluteDate*",
+        "sourceContains": [
+          "testFromWeekAndSecondsGPS",
+          "testFromAbsoluteDateGPS",
+          "testFromWeekAndSecondsQZSS",
+          "testFromAbsoluteDateQZSS",
+          "testFromWeekAndSecondsSBAS",
+          "testFromAbsoluteDateSBAS",
+          "testFromWeekAndSecondsGalileo",
+          "testFromAbsoluteDateGalileo",
+          "testFromWeekAndSecondsBeidou",
+          "testFromAbsoluteDateBeidou",
+          "testFromWeekAndSecondsNavIC",
+          "testFromAbsoluteDateNavIC",
+          "216, 515713.0"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit GNSSDateTest.testFromAbsoluteDateGPS GPS week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testFromWeekAndSecondsGPS GPS week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit GNSSDateTest.testFromAbsoluteDateQZSS QZSS week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testFromWeekAndSecondsQZSS QZSS week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit GNSSDateTest.testFromAbsoluteDateSBAS SBAS week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testFromWeekAndSecondsSBAS SBAS week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit GNSSDateTest.testFromAbsoluteDateGalileo GST week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testFromWeekAndSecondsGalileo GST week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit GNSSDateTest.testFromAbsoluteDateBeidou BDT week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testFromWeekAndSecondsBeidou BDT week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit GNSSDateTest.testFromAbsoluteDateNavIC NavIC week seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testFromWeekAndSecondsNavIC NavIC week seconds"
+          }
+        ],
+        "quantities": ["GNSS week", "GNSS seconds in week", "constellation epoch", "UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "1e-9 seconds"
+      },
+      {
+        "id": "orekit-time-gnssdate-rollover-reference",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GNSSDateTest.java",
+        "upstreamTestMethod": "testZeroZeroGPS",
+        "sourceContains": [
+          "testZeroZeroGPS",
+          "GNSSDate.setRolloverReference",
+          "new DateComponents(DateComponents.GPS_EPOCH, 7 * 512)",
+          "Assertions.assertEquals(1024, date2.getWeekNumber())"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit GNSSDateTest.testZeroZeroGPS GPS week and seconds"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testZeroZeroGPS before rollover reference"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit GNSSDateTest.testZeroZeroGPS after rollover reference"
+          }
+        ],
+        "quantities": ["GPS week", "GPS seconds in week", "rollover reference date", "UTC epoch"],
+        "units": "SI seconds and ISO-8601 timestamps",
+        "tolerance": "1e-9 seconds and exact string epoch comparison"
+      },
+      {
+        "id": "orekit-time-gnssdate-bad-satellite-system",
+        "upstreamTestFile": "src/test/java/org/orekit/time/GNSSDateTest.java",
+        "upstreamTestMethod": "testBadSatelliteSystem",
+        "sourceContains": ["testBadSatelliteSystem", "SatelliteSystem.GLONASS", "INVALID_SATELLITE_SYSTEM"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "rejects Orekit GNSSDateTest.testBadSatelliteSystem GLONASS GPS_SECONDS source"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "rejects Orekit GNSSDateTest.testBadSatelliteSystem GLONASS GPS_SECONDS target"
+          }
+        ],
+        "quantities": ["GNSSDate satellite-system validity", "TIM GPS_SECONDS representation status"],
+        "units": "status",
+        "tolerance": "exact INVALID_INPUT status"
+      },
+      {
+        "id": "orekit-time-absolute-date-julian-dates",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testGetJulianDates",
+        "sourceContains": ["testGetJulianDates"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testGetJulianDates UTC Julian Date"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testGetJulianDates UTC MJD input"
+          }
+        ],
+        "quantities": ["Julian Date", "Modified Julian Date", "UTC epoch"],
+        "units": "days",
+        "tolerance": "1e-6 days"
+      },
+      {
+        "id": "orekit-time-absolute-date-mjd",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testMJDDate",
+        "sourceContains": ["testMJDDate"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testMJDDate TT Modified Julian Date"
+          }
+        ],
+        "quantities": ["Modified Julian Date", "TT epoch"],
+        "units": "days",
+        "tolerance": "1e-12 days"
+      },
+      {
+        "id": "orekit-time-absolute-date-offsets",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testOffsets",
+        "sourceContains": ["testOffsets"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testOffsets UTC leap second to TAI"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "formats Orekit AbsoluteDateTest.testOffsets TAI leap instant as UTC leap second"
+          }
+        ],
+        "quantities": ["UTC leap second epoch", "TAI epoch", "TAI minus UTC offset"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-absolute-date-large-leap-second",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testLargeLeapSecond",
+        "sourceContains": ["testLargeLeapSecond", "23:59:61.4", "22818"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testLargeLeapSecond pre-1972 UTC label"
+          }
+        ],
+        "quantities": ["pre-1972 UTC large leap-second label", "UTC shifted instant", "TAI epoch"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-utcscale-leap-stress-offset-west",
+        "upstreamTestFile": "src/test/java/org/orekit/time/UTCScaleTest.java",
+        "upstreamTestMethod": "testCreatingInLeapDateLocalTime50HoursWest",
+        "sourceContains": ["testCreatingInLeapDateLocalTime50HoursWest", "-50:00", "23:59:60"],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit UTCScaleTest.testCreatingInLeapDateLocalTime50HoursWest stress offset"
+          }
+        ],
+        "quantities": ["UTC leap-second label", "stress UTC offset", "normalized UTC epoch"],
+        "units": "SI seconds",
+        "tolerance": "1e-12 seconds"
+      },
+      {
+        "id": "orekit-time-absolute-date-ccsds-unsegmented-no-extension",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testCCSDSUnsegmentedNoExtension",
+        "sourceContains": [
+          "testCCSDSUnsegmentedNoExtension",
+          "parseCCSDSUnsegmentedTimeCode",
+          "0x53, 0x7F, 0x40, -0x70, -0x37, -0x05, -0x19",
+          "0x04, 0x7E, -0x0B, -0x10, -0x07, 0x16, -0x79"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testCCSDSUnsegmentedNoExtension CCSDS epoch CUC"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSUnsegmentedNoExtension CCSDS epoch CUC target"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSUnsegmentedNoExtension agency epoch CUC target"
+          }
+        ],
+        "quantities": ["CCSDS CUC preamble", "coarse time bytes", "fine time bytes", "UTC epoch", "agency epoch", "target raw CCSDS octets"],
+        "units": "SI seconds and raw CCSDS octets",
+        "tolerance": "exact ISO-8601 epoch comparison at microsecond precision and exact raw-octet comparison for canonical and source-kind-preserving target CUC formatting"
+      },
+      {
+        "id": "orekit-time-absolute-date-ccsds-unsegmented-extended-preamble",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testCCSDSUnsegmentedWithExtendedPreamble",
+        "sourceContains": [
+          "testCCSDSUnsegmentedWithExtendedPreamble",
+          "parseCCSDSUnsegmentedTimeCode",
+          "2095-03-03T22:02:45.789012345678901",
+          "(byte)(0x05 - leap)",
+          "-0x37, -0x04, -0x4A, -0x74, -0x2C, -0x3C, -0x48"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSUnsegmentedWithExtendedPreamble extended CUC target"
+          }
+        ],
+        "quantities": ["extended CCSDS CUC preambles", "coarse time bytes", "fine time bytes", "TAI epoch", "target raw CCSDS octets"],
+        "units": "SI seconds and raw CCSDS octets",
+        "tolerance": "exact ISO-8601 epoch comparison at microsecond precision and exact raw-octet comparison for source-kind-preserving extended CUC formatting"
+      },
+      {
+        "id": "orekit-time-absolute-date-ccsds-day-segmented",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testCCSDSDaySegmented",
+        "sourceContains": [
+          "testCCSDSDaySegmented",
+          "parseCCSDSDaySegmentedTimeCode",
+          "0x3F, 0x55, 0x02, -0x4D, 0x2C, -0x6B, 0x00, -0x44, 0x61, 0x4E",
+          "0x03, 0x69, 0x02, -0x4D, 0x2C, -0x6B, 0x00, 0x0C"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testCCSDSDaySegmented CCSDS epoch CDS"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSDaySegmented CCSDS epoch CDS target"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSDaySegmented CCSDS epoch CDS source target"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSDaySegmented agency epoch CDS target"
+          }
+        ],
+        "quantities": ["CCSDS CDS preamble", "day bytes", "milliseconds in day", "submillisecond bytes", "UTC epoch", "agency epoch", "target raw CCSDS octets"],
+        "units": "SI seconds and raw CCSDS octets",
+        "tolerance": "exact ISO-8601 epoch comparison at microsecond precision and exact raw-octet comparison for canonical and source-kind-preserving picosecond CDS target formatting"
+      },
+      {
+        "id": "orekit-time-absolute-date-ccsds-calendar-segmented",
+        "upstreamTestFile": "src/test/java/org/orekit/time/AbsoluteDateTest.java",
+        "upstreamTestMethod": "testCCSDSCalendarSegmented",
+        "sourceContains": [
+          "testCCSDSCalendarSegmented",
+          "parseCCSDSCalendarSegmentedTimeCode",
+          "0x07, -0x2E, 0x05, 0x17, 0x0C, 0x22, 0x38, 0x4E, 0x5A, 0x0C, 0x22, 0x38, 0x4E",
+          "0x07, -0x2E, 0x00, -0x71, 0x0C, 0x22, 0x38, 0x4E, 0x5A, 0x0C, 0x22, 0x38, 0x4E",
+          "0x07, -0x2E, 0x00, -0x71, 0x0C, 0x22, 0x38, 0x4E, 0x5A, 0x0C"
+        ],
+        "sdnModule": "foundation/time",
+        "sdnTests": [
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testCCSDSCalendarSegmented CCS month-day variation"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "parses Orekit AbsoluteDateTest.testCCSDSCalendarSegmented CCS day-of-year variation"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSCalendarSegmented CCS month-day source target"
+          },
+          {
+            "file": "foundation/time/tests/time_conversion.test.mjs",
+            "name": "emits Orekit AbsoluteDateTest.testCCSDSCalendarSegmented CCS day-of-year target"
+          }
+        ],
+        "quantities": ["CCSDS CCS preamble", "calendar date fields", "time-of-day fields", "base-100 fractional-second bytes", "UTC epoch", "target raw CCSDS octets"],
+        "units": "SI seconds and raw CCSDS octets",
+        "tolerance": "exact ISO-8601 epoch comparison at microsecond precision and exact raw-octet comparison for source-kind-preserving month-day and day-of-year target CCS formatting"
+      },
+      {
+        "id": "orekit-orbits-keplerian-reference-ellipse",
+        "upstreamTestFile": "src/test/java/org/orekit/orbits/KeplerianOrbitTest.java",
+        "upstreamTestMethod": "testJacobianReferenceEllipse",
+        "sourceContains": ["testJacobianReferenceEllipse"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Orekit reference mean elements from SDS OMM to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Orekit reference Cartesian state from SDS OEM to SDS OMM mean elements"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Orekit reference SDS OPM Cartesian state to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Orekit reference SDS OPM Cartesian state as SDS OMM mean elements"
+          }
+        ],
+        "quantities": ["Keplerian elements", "Cartesian position", "Cartesian velocity", "GM"],
+        "units": "km, km/s, km3/s2 after SDS conversion from Orekit SI values",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "orekit-ssa-patera2005-scalar-probability-cases",
+        "upstreamTestFile": "src/test/java/org/orekit/ssa/collision/shorttermencounter/probability/twod/Patera2005Test.java",
+        "upstreamTestMethod": "Chan test case 01-08 / CSM test case 1-3 / CDM test case 1-2",
+        "sourceContains": [
+          "Patera2005Test",
+          "Assertions.assertEquals(9.741e-3, result.getValue(), 1e-6)",
+          "Assertions.assertEquals(2.2795e-20, result.getValue(), 1e-24)"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_pc_methods.cpp",
+            "name": "test_orekit_patera2005_vectors"
+          }
+        ],
+        "quantities": ["encounter-plane miss coordinates", "encounter-plane covariance sigmas", "combined hard-body radius", "collision probability"],
+        "units": "common length unit for xm/ym/sigma/radius; unitless probability",
+        "tolerance": "Orekit source tolerances from 1e-6 to 1e-24 by vector"
+      },
+      {
+        "id": "orekit-ssa-chan1997-scalar-probability-cases",
+        "upstreamTestFile": "src/test/java/org/orekit/ssa/collision/shorttermencounter/probability/twod/Chan1997Test.java",
+        "upstreamTestMethod": "Chan test case 01-12 / CSM test case 1-3 / CDM test case 1-2 / Alfano test case 3 and 5",
+        "sourceContains": [
+          "Chan1997Test",
+          "Assertions.assertEquals(9.754e-3, result.getValue(), 1e-6)",
+          "Assertions.assertEquals(1.7346e-202, result.getValue(), 1e-206)"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_pc_methods.cpp",
+            "name": "test_orekit_chan1997_vectors"
+          }
+        ],
+        "quantities": ["encounter-plane miss coordinates", "encounter-plane covariance sigmas", "combined hard-body radius", "collision probability"],
+        "units": "common length unit for xm/ym/sigma/radius; unitless probability",
+        "tolerance": "Orekit source tolerances from 1e-6 to 1e-206 by vector"
+      },
+      {
+        "id": "orekit-ssa-alfriend1999-armellin-scalar-probability",
+        "upstreamTestFile": "src/test/java/org/orekit/ssa/collision/shorttermencounter/probability/twod/Alfriend1999Test.java",
+        "upstreamTestMethod": "testComputeExpectedApproximatedProbabilityOfCollisionFromArmellinAppendix / testReturnExpectedValueWithDerivative",
+        "sourceContains": [
+          "Alfriend1999Test",
+          "final double xmNominal     = 20.711983607206943",
+          "Assertions.assertEquals(0.147559, result.getValue().getReal(), 1e-6)"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_pc_methods.cpp",
+            "name": "test_orekit_alfriend1999_vectors"
+          }
+        ],
+        "quantities": ["encounter-plane miss coordinates", "encounter-plane covariance sigmas", "combined hard-body radius", "collision probability"],
+        "units": "meters for xm/ym/sigma/radius; unitless probability",
+        "tolerance": "Orekit source tolerance 1e-6"
+      },
+      {
+        "id": "orekit-ssa-alfriend1999max-armellin-maximum-probability",
+        "upstreamTestFile": "src/test/java/org/orekit/ssa/collision/shorttermencounter/probability/twod/Alfriend1999MaxTest.java",
+        "upstreamTestMethod": "testComputeExpectedMaximumProbabilityOfCollisionFromArmellinAppendix / testReturnExpectedValueWithDerivative",
+        "sourceContains": [
+          "Alfriend1999MaxTest",
+          "final double xmNominal     = 20.711983607206943",
+          "Assertions.assertEquals(1.9259e-1, result.getValue(), 1e-6)"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_pc_methods.cpp",
+            "name": "test_orekit_alfriend1999_vectors"
+          }
+        ],
+        "quantities": ["encounter-plane miss coordinates", "encounter-plane covariance sigmas", "combined hard-body radius", "maximum collision probability"],
+        "units": "meters for xm/ym/sigma/radius; unitless probability",
+        "tolerance": "Orekit source tolerance 1e-6"
+      },
+      {
+        "id": "orekit-ssa-alfano2005-scalar-probability-cases",
+        "upstreamTestFile": "src/test/java/org/orekit/ssa/collision/shorttermencounter/probability/twod/Alfano2005Test.java",
+        "upstreamTestMethod": "Chan test case 01-12 / CSM test case 1-3 / CDM test case 1-2 / Alfano test case 3 and 5",
+        "sourceContains": [
+          "Alfano2005Test",
+          "Assertions.assertEquals(9.742e-3, result.getValue(), 1e-6)",
+          "Assertions.assertEquals(2.1652e-20, result.getValue(), 1e-24)",
+          "Assertions.assertEquals(4.4510e-2, result.getValue(), 1e-6)"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_pc_methods.cpp",
+            "name": "test_orekit_alfano2005_vectors"
+          }
+        ],
+        "quantities": ["encounter-plane miss coordinates", "encounter-plane covariance sigmas", "combined hard-body radius", "collision probability"],
+        "units": "common length unit for xm/ym/sigma/radius; unitless probability",
+        "tolerance": "Orekit source tolerances from 1e-5 to 1e-24 by vector"
+      },
+      {
+        "id": "orekit-ssa-laas2015-scalar-probability-cases",
+        "upstreamTestFile": "src/test/java/org/orekit/ssa/collision/shorttermencounter/probability/twod/Laas2015Test.java",
+        "upstreamTestMethod": "Chan test case 01-12 / CSM test case 1-3 / CDM test case 1-2 / Alfano test case 3 and 5",
+        "sourceContains": [
+          "Laas2015Test",
+          "Assertions.assertEquals(9.742e-3, result.getValue(), 1e-6)",
+          "Assertions.assertEquals(9.704e-3, result.getLowerLimit(), 1e-6)",
+          "Assertions.assertEquals(2.2796e-20, result.getValue(), 1e-24)",
+          "Assertions.assertEquals(4.4507e-2, result.getValue(), 1e-6)"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_pc_methods.cpp",
+            "name": "test_orekit_laas2015_vectors"
+          }
+        ],
+        "quantities": ["encounter-plane miss coordinates", "encounter-plane covariance sigmas", "combined hard-body radius", "collision probability", "lower collision-probability bound", "upper collision-probability bound"],
+        "units": "common length unit for xm/ym/sigma/radius; unitless probabilities and bounds",
+        "tolerance": "Orekit source tolerances from 1e-5 to 1e-24 by vector"
+      },
+      {
+        "id": "orekit-cdm-parser-example1-kvn",
+        "upstreamTestFile": "src/test/java/org/orekit/files/ccsds/ndm/cdm/CdmParserTest.java",
+        "upstreamTestMethod": "testParseCDM1",
+        "sourceContains": [
+          "testParseCDM1",
+          "CDMExample1.txt",
+          "Assertions.assertEquals(715.0, file.getRelativeMetadata().getMissDistance(), DISTANCE_PRECISION)"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_cdm_output.cpp",
+            "name": "test_orekit_cdm_example1_kvn_roundtrip"
+          }
+        ],
+        "quantities": ["CDM header fields", "TCA", "miss distance", "object metadata", "state vectors", "RTN covariance"],
+        "units": "CCSDS KVN meters/meter-derived units converted to SDS module kilometers/km-derived units",
+        "tolerance": "exact string fields; 1e-12 km state and miss-distance checks; 1e-14 km2 covariance check"
+      },
+      {
+        "id": "orekit-cdm-writer-example1-kvn",
+        "upstreamTestFile": "src/test/java/org/orekit/files/ccsds/ndm/cdm/CdmWriterTest.java",
+        "upstreamTestMethod": "testWriteExample1",
+        "sourceContains": [
+          "testWriteExample1",
+          "doTest(\"/ccsds/cdm/CDMExample1.txt\")"
+        ],
+        "sdnModule": "analysis/conjunction-assessment",
+        "sdnTests": [
+          {
+            "file": "analysis/conjunction-assessment/src/cpp/tests/test_cdm_output.cpp",
+            "name": "test_orekit_cdm_example1_kvn_roundtrip"
+          }
+        ],
+        "quantities": ["SDS CDM KVN writer header fields", "miss distance", "object block labels", "RTN covariance"],
+        "units": "SDS module kilometers/km-derived units converted back to CCSDS KVN meters/meter-derived units",
+        "tolerance": "exact required field presence; reparsed writer output preserves 1e-12 km miss distance and covariance checks"
+      },
+      {
+        "id": "orekit-access-topocentric-inverse-tracking-coordinates",
+        "upstreamTestFile": "src/test/java/org/orekit/frames/TopocentricFrameTest.java",
+        "upstreamTestMethod": "testInverseGetTopocentricCoordinates",
+        "sourceContains": [
+          "testGetTopocentricCoordinatesValues",
+          "Arguments.of(3 * FastMath.PI / 2, FastMath.PI / 4, 1000)",
+          "testInverseGetTopocentricCoordinates",
+          "MathUtils.normalizeAngle(rebuiltTC.getAzimuth(), azimuth)"
+        ],
+        "sdnModule": "analysis/access",
+        "sdnTests": [
+          {
+            "file": "analysis/access/test/accessAnalyzer.test.mjs",
+            "name": "Access analyzer matches Orekit TopocentricFrame inverse azimuth/elevation/range vectors"
+          }
+        ],
+        "quantities": ["topocentric azimuth", "topocentric elevation", "topocentric range", "Earth-fixed ECEF position"],
+        "units": "radians and meters; WGS84 Earth-fixed ECEF with local east/north/up topocentric axes",
+        "tolerance": "1e-10 rad for azimuth/elevation and 1e-10 relative range to allow ECEF station-offset subtraction before inverse topocentric recovery"
+      },
+      {
+        "id": "orekit-access-elevation-mask-interpolation",
+        "upstreamTestFile": "src/test/java/org/orekit/propagation/events/ElevationDetectorTest.java",
+        "upstreamTestMethod": "testEventForMask",
+        "sourceContains": [
+          "testEventForMask",
+          "withElevationMask(mask)",
+          "{ FastMath.toRadians( 30), FastMath.toRadians(4)}",
+          "{ FastMath.toRadians( 60), FastMath.toRadians(3)}",
+          "Assertions.assertEquals(0.065, elevation, 2.0e-5)"
+        ],
+        "sdnModule": "analysis/access",
+        "sdnTests": [
+          {
+            "file": "analysis/access/test/accessAnalyzer.test.mjs",
+            "name": "Access analyzer applies Orekit ElevationMask interpolation for azimuth-dependent visibility"
+          },
+          {
+            "file": "analysis/access/test/manifestContract.test.mjs",
+            "name": "Access stream invoke applies ACW elevation mask and refraction request fields"
+          }
+        ],
+        "quantities": ["azimuth-dependent elevation mask", "linearly interpolated mask elevation", "AOS time", "LOS time", "maximum elevation"],
+        "units": "mask azimuth/elevation in degrees converted to radians; TT Julian-date sample times; WGS84 Earth-fixed ECEF positions in meters",
+        "tolerance": "1e-3 seconds for linearly interpolated AOS/LOS across 60-second samples and 1e-10 rad for maximum elevation"
+      },
+      {
+        "id": "orekit-access-earth-standard-atmosphere-refraction",
+        "upstreamTestFile": "src/test/java/org/orekit/propagation/events/ElevationDetectorTest.java",
+        "upstreamTestMethod": "testHorizon",
+        "sourceContains": [
+          "testHorizon",
+          "new EarthStandardAtmosphereRefraction()",
+          "withRefraction(refractionModel)",
+          "FastMath.toRadians(-0.5746255623877098)"
+        ],
+        "sdnModule": "analysis/access",
+        "sdnTests": [
+          {
+            "file": "analysis/access/test/accessAnalyzer.test.mjs",
+            "name": "Access analyzer applies Orekit EarthStandardAtmosphereRefraction to elevation switching"
+          },
+          {
+            "file": "analysis/access/test/manifestContract.test.mjs",
+            "name": "Access stream invoke applies ACW elevation mask and refraction request fields"
+          }
+        ],
+        "quantities": ["true elevation", "standard-atmosphere optical refraction", "apparent elevation switching function", "AOS time", "LOS time", "maximum geometric elevation"],
+        "units": "radians and degrees for elevation/refraction; pressure in Pa and temperature in K; TT Julian-date sample times; WGS84 Earth-fixed ECEF positions in meters",
+        "tolerance": "1e-3 seconds for linearly interpolated AOS/LOS across 60-second samples, 1e-12 rad for the refraction correction, and 1e-10 rad for maximum geometric elevation"
+      },
+      {
+        "id": "orekit-access-earth-standard-atmosphere-refraction-pressure-temperature",
+        "upstreamTestFile": "src/test/java/org/orekit/propagation/events/ElevationDetectorTest.java",
+        "upstreamTestMethod": "testPresTemp",
+        "sourceContains": [
+          "testPresTemp",
+          "refractionModel.setPressure(101325)",
+          "refractionModel.setTemperature(290)",
+          "FastMath.toRadians(1.7026104902251749)"
+        ],
+        "sdnModule": "analysis/access",
+        "sdnTests": [
+          {
+            "file": "analysis/access/test/accessAnalyzer.test.mjs",
+            "name": "Access analyzer applies Orekit EarthStandardAtmosphereRefraction pressure and temperature setters"
+          }
+        ],
+        "quantities": ["local pressure correction", "local temperature correction", "standard-atmosphere optical refraction", "apparent elevation switching function", "AOS time", "LOS time"],
+        "units": "pressure in Pa, temperature in K, elevation/refraction in radians and degrees, TT Julian-date sample times, WGS84 Earth-fixed ECEF positions in meters",
+        "tolerance": "1e-3 seconds for linearly interpolated AOS/LOS across 60-second samples and 1e-12 rad for the pressure/temperature-adjusted refraction correction"
+      },
+      {
+        "id": "orekit-access-iturp834-atmospheric-refraction",
+        "upstreamTestFile": "src/test/java/org/orekit/models/earth/EarthITURP834AtmosphericRefractionTest.java",
+        "upstreamTestMethod": "testEarthITU453AtmosphereRefractionHighest; testEarthITU453AtmosphereRefractionLowest; testEarthITU453AtmosphereRefraction2degree; testEarthITU453AtmosphereRefractionminusdegree",
+        "sourceContains": [
+          "ITURP834AtmosphericRefraction modelTropo = new ITURP834AtmosphericRefraction(altitude);",
+          "Assertions.assertEquals(0.11458177523385392, refraction, epsilon)",
+          "Assertions.assertEquals(0.3550620274090111, refraction, epsilon)",
+          "Assertions.assertEquals(refraction, 0.32, onehundredth)",
+          "Assertions.assertEquals(1.7367073234643113, refraction, onethousandth)"
+        ],
+        "sdnModule": "analysis/access",
+        "sdnTests": [
+          {
+            "file": "analysis/access/test/accessAnalyzer.test.mjs",
+            "name": "Access analyzer matches Orekit ITURP834AtmosphericRefraction source vectors"
+          },
+          {
+            "file": "analysis/access/test/accessAnalyzer.test.mjs",
+            "name": "Access analyzer applies Orekit ITURP834AtmosphericRefraction to native elevation switching"
+          }
+        ],
+        "quantities": ["station altitude", "true elevation", "ITU-R P.834 atmospheric refraction", "apparent elevation switching function", "AOS time", "LOS time"],
+        "units": "altitude in meters; elevation/refraction in degrees and radians; TT Julian-date sample times; WGS84 Earth-fixed ECEF positions in meters",
+        "tolerance": "1e-14 degrees for exact 2-degree source vectors after public geometry round trip, source test tolerances for approximate Kiruna and negative-elevation vectors, and 1e-3 seconds for native linearly interpolated AOS/LOS"
+      },
+      {
+        "id": "orekit-fov-footprint-boundary-on-ellipsoid",
+        "upstreamTestFile": "src/test/java/org/orekit/geometry/fov/AbstractSmoothFieldOfViewTest.java",
+        "upstreamTestMethod": "doTestFootprint",
+        "sourceContains": [
+          "List<List<GeodeticPoint>> footprint = fov.getFootprint(fovToBody, earth, FastMath.toRadians(0.1));",
+          "Assertions.assertEquals(0.0, loop.get(i).getAltitude(), 9.0e-9);"
+        ],
+        "sdnModule": "analysis/swath",
+        "sdnTests": [
+          {
+            "file": "analysis/swath/test/nativeArtifact.test.mjs",
+            "name": "swath C++ artifact projects conical footprint vertices onto the WGS84 ellipsoid"
+          }
+        ],
+        "quantities": ["footprint boundary altitude", "footprint boundary longitude", "footprint boundary latitude", "ground range", "look angle"],
+        "units": "radians for longitude/latitude and look angle; meters for altitude and ground range",
+        "tolerance": "1e-3 m altitude on WGS84 ellipsoid for the initial native aligned-binary projection smoke; full Orekit aggregate footprint parity remains open"
+      }
+    ]
+  },
+  "basilisk": {
+    "sourceIndex": "docs/basilisk-source-test-index.json",
+    "mappings": [
+      {
+        "id": "basilisk-bspline-interpolation",
+        "upstreamTestFile": "src/architecture/utilitiesSelfCheck/_UnitTest/test_BSpline.py",
+        "upstreamTestMethod": "test_BSpline",
+        "sourceContains": ["test_BSpline", "BSpline.interpolate", "accuracy"],
+        "sdnModule": "foundation/math-bspline",
+        "sdnTests": [
+          {
+            "file": "foundation/math-bspline/tests/bspline_interpolation.test.mjs",
+            "name": "matches Basilisk BSpline waypoint and derivative checks for P=5, xDot=false, xDDot=false"
+          },
+          {
+            "file": "foundation/math-bspline/tests/bspline_interpolation.test.mjs",
+            "name": "matches Basilisk BSpline waypoint and derivative checks for P=6, xDot=true, xDDot=true"
+          }
+        ],
+        "quantities": ["B-spline waypoint positions", "endpoint first derivatives", "endpoint second derivatives"],
+        "units": "seconds, coordinate units, coordinate units per second, coordinate units per second squared",
+        "tolerance": "1e-6 absolute, matching Basilisk accuracy parameter"
+      },
+      {
+        "id": "basilisk-avs-rigid-body-kinematics",
+        "upstreamTestFile": "src/architecture/utilitiesSelfCheck/_UnitTest/test_avsLibrarySelfCheck.py",
+        "upstreamTestMethod": "testRigidBodyKinematics",
+        "sourceContains": ["testRigidBodyKinematics", "test_unitDynamicsModes", "1e-10"],
+        "sdnModule": "foundation/attitude-math",
+        "sdnTests": [
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS addMRP composition vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS subMRP relative rotation vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS MRPswitch shadow branch"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS MRP2EP quaternion conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS EP2MRP vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS C2EP quaternion conversion from DCM"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS EP2C direction cosine matrix conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS C2MRP vector conversion from DCM"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS MRP2C direction cosine matrix conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS BmatMRP matrix"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS BinvMRP matrix"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS dMRP derivative vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS dMRP2Omega body-rate vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS BdotmatMRP matrix"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS ddMRP second-derivative vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS ddMRP2dOmega body-acceleration vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS addGibbs composition vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS subGibbs relative rotation vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS EP2Gibbs vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS Gibbs2EP quaternion conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS C2Gibbs vector conversion from DCM"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS Gibbs2C direction cosine matrix conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS MRP2Gibbs vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS Gibbs2MRP vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS BmatGibbs matrix"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS BinvGibbs matrix"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS dGibbs derivative vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS addPRV composition vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS subPRV relative rotation vector"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS addEuler composition vectors for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS subEuler relative rotation vectors for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS C2Euler vectors for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS Euler2C matrices for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS Euler representation conversion vectors for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS representation-to-Euler conversion vectors for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS Euler B and inverse B matrices for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS dEuler derivative vectors for all sequences"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS EP2PRV vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS PRV2EP quaternion conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS C2PRV vector conversion from DCM"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS PRV2C direction cosine matrix conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS MRP2PRV vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS PRV2MRP vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS Gibbs2PRV vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS PRV2Gibbs vector conversion"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS BmatPRV matrix"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS BinvPRV matrix"
+          },
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk AVS dPRV derivative vector"
+          }
+        ],
+        "quantities": ["Modified Rodrigues Parameters", "Gibbs vectors", "principal rotation vectors", "Euler angles", "scalar-first Euler parameters", "direction cosine matrix", "MRP B matrix", "Gibbs B matrix", "PRV B matrix", "Euler B matrix", "MRP B-dot matrix", "MRP switch threshold", "body angular rate", "body angular acceleration", "MRP derivative", "Gibbs derivative", "PRV derivative", "Euler derivative", "MRP second derivative"],
+        "units": "dimensionless attitude parameters, row-major direction cosine matrix entries, radians per second, and radians per second squared",
+        "tolerance": "1e-10 absolute, matching Basilisk testRigidBodyKinematics tolerance"
+      },
+      {
+        "id": "basilisk-avs-eigen-support-tilde-matrix",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_avsEigenSupport.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "avsEigenSupport.TildeMatrix",
+        "sourceContains": ["TEST(avsEigenSupport, TildeMatrix)", "eigenTilde(vec)", "EXPECT_NEAR(tilde(0,1), -vec(2), 1e-10)"],
+        "sdnModule": "foundation/attitude-math",
+        "sdnTests": [
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk avsEigenSupport tilde matrix"
+          }
+        ],
+        "quantities": ["skew-symmetric tilde matrix"],
+        "units": "dimensionless vector components and row-major matrix entries",
+        "tolerance": "1e-10 absolute, matching Basilisk TildeMatrix assertions"
+      },
+      {
+        "id": "basilisk-avs-eigen-support-rotation-matrices",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_avsEigenSupport.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "avsEigenSupport.RotationMatrices",
+        "sourceContains": [
+          "TEST(avsEigenSupport, RotationMatrices)",
+          "eigenM1(angle)",
+          "eigenM2(angle)",
+          "eigenM3(angle)"
+        ],
+        "sdnModule": "foundation/attitude-math",
+        "sdnTests": [
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk avsEigenSupport elementary rotation matrices"
+          }
+        ],
+        "quantities": ["elementary one-axis, two-axis, and three-axis direction cosine matrices"],
+        "units": "radians and row-major dimensionless matrix entries",
+        "tolerance": "1e-10 absolute, matching Basilisk RotationMatrices assertions"
+      },
+      {
+        "id": "basilisk-avs-eigen-support-dcm-to-mrp",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_avsEigenSupport.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "avsEigenSupport.DCMtoMRP",
+        "sourceContains": [
+          "TEST(avsEigenSupport, DCMtoMRP)",
+          "eigenC2MRP(dcm)",
+          "EXPECT_NEAR(mrp.z(), 0.41421356, 1e-6)"
+        ],
+        "sdnModule": "foundation/attitude-math",
+        "sdnTests": [
+          {
+            "file": "foundation/attitude-math/tests/rigid_body_kinematics.test.mjs",
+            "name": "matches Basilisk avsEigenSupport DCMtoMRP reference"
+          }
+        ],
+        "quantities": ["direction cosine matrix to Modified Rodrigues Parameters conversion"],
+        "units": "row-major dimensionless matrix entries and dimensionless MRP components",
+        "tolerance": "1e-6 absolute, matching Basilisk DCMtoMRP assertions"
+      },
+      {
+        "id": "basilisk-avs-eigen-support-newton-raphson",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_avsEigenSupport.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "avsEigenSupport.NewtonRaphson",
+        "sourceContains": [
+          "TEST(avsEigenSupport, NewtonRaphson)",
+          "newtonRaphsonSolve(3.0, 1e-10, f, fPrime)",
+          "EXPECT_NEAR(result, 2.0, 1e-10)"
+        ],
+        "sdnModule": "foundation/numerics",
+        "sdnTests": [
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk avsEigenSupport NewtonRaphson scalar root"
+          }
+        ],
+        "quantities": ["scalar Newton-Raphson root of x squared minus four"],
+        "units": "dimensionless scalar root and residual",
+        "tolerance": "1e-10 absolute, matching Basilisk NewtonRaphson assertions"
+      },
+      {
+        "id": "basilisk-saturate-vector-clamp",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_saturate.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "Saturate.testSaturate",
+        "sourceContains": [
+          "TEST(Saturate, testSaturate)",
+          "states << -555, 1.27, 5000000.",
+          "expected << -400, 5, 5000000"
+        ],
+        "sdnModule": "foundation/numerics",
+        "sdnTests": [
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk Saturate.testSaturate vector clamp"
+          }
+        ],
+        "quantities": ["component-wise vector saturation by lower and upper bounds"],
+        "units": "dimensionless state and bound vector components",
+        "tolerance": "exact equality for the Basilisk source vector"
+      },
+      {
+        "id": "basilisk-discretize-vector-quantization",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_discretize.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "Discretize.testRoundToZero/testRoundFromZero/testRoundNear/testRoundToZeroCarryError",
+        "sourceContains": [
+          "TEST(Discretize, testRoundToZero)",
+          "TEST(Discretize, testRoundToZeroCarryError)",
+          "states << 0.1, 10.1, 11.1",
+          "expected << 10.0, 20.0, 20.0"
+        ],
+        "sdnModule": "foundation/numerics",
+        "sdnTests": [
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk Discretize no-carry vector rounding modes"
+          },
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk Discretize carry-error vector rounding"
+          }
+        ],
+        "quantities": ["component-wise vector quantization by least significant bit"],
+        "units": "dimensionless state, LSB, discretized-state, and carried-error vector components",
+        "tolerance": "exact equality for discretized output vectors; 1e-12 absolute for floating carried-error values"
+      },
+      {
+        "id": "basilisk-linear-interpolation-source-formula",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_linearInterpolation.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "LinearInterpolationTest.HandlesNormalInputs",
+        "sourceContains": [
+          "TEST(LinearInterpolationTest, HandlesNormalInputs)",
+          "y1 * (x2 - x) / (x2 - x1)",
+          "linearInterpolation(x1, x2, y1, y2, x)"
+        ],
+        "sdnModule": "foundation/numerics",
+        "sdnTests": [
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk linearInterpolation source formula"
+          }
+        ],
+        "quantities": ["scalar linear interpolation between two sample values"],
+        "units": "dimensionless scalar coordinates and values",
+        "tolerance": "exact equality for the deterministic source-formula vector"
+      },
+      {
+        "id": "basilisk-bilinear-interpolation-source-formula",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_bilinearInterpolation.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "BilinearInterpolationTest.HandlesNormalInputs",
+        "sourceContains": [
+          "TEST(BilinearInterpolationTest, HandlesNormalInputs)",
+          "z11 * (x2 - x) * (y2 - y)",
+          "bilinearInterpolation(x1, x2, y1, y2, z11, z12, z21, z22, x, y)"
+        ],
+        "sdnModule": "foundation/numerics",
+        "sdnTests": [
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk bilinearInterpolation source formula"
+          }
+        ],
+        "quantities": ["scalar bilinear interpolation from four rectangular-corner sample values"],
+        "units": "dimensionless scalar coordinates and corner values",
+        "tolerance": "exact equality for the deterministic source-formula vector"
+      },
+      {
+        "id": "basilisk-gauss-markov-sequence-statistics",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_gaussMarkov.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "GaussMarkov.stdDeviationIsExpected/meanIsZero/boundsAreRespected/gaussianOnlyMode",
+        "sourceContains": [
+          "TEST(GaussMarkov, stdDeviationIsExpected)",
+          "TEST(GaussMarkov, meanIsZero)",
+          "TEST(GaussMarkov, boundsAreRespected)",
+          "TEST(GaussMarkov, gaussianOnlyMode)",
+          "EXPECT_NEAR(stds(0), 1.0, 0.1)"
+        ],
+        "sdnModule": "foundation/numerics",
+        "sdnTests": [
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk GaussMarkov steady-state standard deviation"
+          },
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk GaussMarkov gaussian-only statistics"
+          },
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk GaussMarkov tiny-bounds zero-mean case"
+          },
+          {
+            "file": "foundation/numerics/tests/numerics.test.mjs",
+            "name": "matches Basilisk GaussMarkov symmetric bound clamp semantics"
+          }
+        ],
+        "quantities": ["bounded Gauss-Markov state sequence mean", "sample standard deviation", "minimum", "maximum"],
+        "units": "dimensionless state, propagation matrix, noise matrix, and symmetric state-bound components",
+        "tolerance": "0.1 absolute for statistical mean/std checks; 4/sqrt(numPts) mean bound for tiny-bounds source case; exact inequality for symmetric clamp bounds"
+      },
+      {
+        "id": "basilisk-geodetic-conversion",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_geodeticConversion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "GeodeticConversion.testPCI2PCPF/testPCPF2PCI/testLLA2PCPF/testPCPF2LLA",
+        "sourceContains": [
+          "TEST(GeodeticConversion, testPCI2PCPF)",
+          "TEST(GeodeticConversion, testPCPF2PCI)",
+          "TEST(GeodeticConversion, testLLA2PCPF)",
+          "TEST(GeodeticConversion, testPCPF2LLA)"
+        ],
+        "sdnModule": "foundation/frames",
+        "sdnTests": [
+          {
+            "file": "foundation/frames/tests/frame_transform.test.mjs",
+            "name": "matches Basilisk GeodeticConversion.testPCI2PCPF"
+          },
+          {
+            "file": "foundation/frames/tests/frame_transform.test.mjs",
+            "name": "matches Basilisk GeodeticConversion.testPCPF2PCI"
+          },
+          {
+            "file": "foundation/frames/tests/frame_transform.test.mjs",
+            "name": "matches Basilisk GeodeticConversion.testLLA2PCPF"
+          },
+          {
+            "file": "foundation/frames/tests/frame_transform.test.mjs",
+            "name": "matches Basilisk GeodeticConversion.testPCPF2LLA"
+          }
+        ],
+        "quantities": ["PCI position", "PCPF position", "J2000-to-planet-fixed DCM", "geodetic latitude", "geodetic longitude", "ellipsoid altitude", "equatorial radius", "polar radius"],
+        "units": "unitless Cartesian frame vectors for PCI/PCPF rotation tests; radians, meters, and row-major dimensionless DCM entries for LLA/PCPF tests",
+        "tolerance": "exact equality for PCI/PCPF DCM source vectors; <100 m LLA-to-PCPF norm error; 0.0001 rad latitude/longitude and 100 m altitude for PCPF-to-LLA"
+      },
+      {
+        "id": "basilisk-geodetic-conversion-spherical-planet",
+        "upstreamTestFile": "src/architecture/utilities/geodeticConversion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "geodeticConversion LLA2PCPF/PCPF2LLA spherical planetPoRad branch",
+        "sourceContains": [
+          "if(planetPoRad < 0.0)",
+          "pcpfPosition.norm() - planetEqRad",
+          "atan2(pcpfPosition[2], sqrt(pow(pcpfPosition[0], 2.0) + pow(pcpfPosition[1], 2.0)))",
+          "double planetEcc2 = 0.0"
+        ],
+        "sdnModule": "foundation/frames",
+        "sdnTests": [
+          {
+            "file": "foundation/frames/tests/frame_transform.test.mjs",
+            "name": "matches Basilisk geodeticConversion LLA2PCPF spherical branch"
+          },
+          {
+            "file": "foundation/frames/tests/frame_transform.test.mjs",
+            "name": "matches Basilisk geodeticConversion PCPF2LLA spherical branch"
+          }
+        ],
+        "quantities": ["spherical geodetic latitude", "spherical geodetic longitude", "spherical altitude", "PCPF position", "equatorial radius", "negative polar-radius sentinel"],
+        "units": "radians and meters",
+        "tolerance": "1e-12 absolute for the closed-form [3, 4, 12] m spherical reference vector"
+      },
+      {
+        "id": "basilisk-keplerian-orbit-mean-motion",
+        "upstreamTestFile": "src/architecture/utilitiesSelfCheck/_UnitTest/test_keplerianOrbit.py",
+        "upstreamTestMethod": "test_unitKeplerianOrbit",
+        "sourceContains": ["test_unitKeplerianOrbit", "expected_n = np.sqrt", "orb3.n() == expected_n"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes Basilisk VCM Keplerian true-anomaly elements to SDS OMM mean elements"
+          }
+        ],
+        "quantities": ["Keplerian mean motion"],
+        "units": "Basilisk rad/s converted to CCSDS OMM rev/day",
+        "tolerance": "1e-12 rev/day"
+      },
+      {
+        "id": "basilisk-orbital-anomaly-conversions",
+        "upstreamTestFile": "src/architecture/utilitiesSelfCheck/avsLibrarySelfCheck/avsLibrarySelfCheck.c",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "testOrbitalAnomalies",
+        "sourceContains": ["testOrbitalAnomalies", "E2f", "E2M", "f2E", "H2f", "H2N", "M2E", "N2H"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes Basilisk VCM Keplerian anomaly conventions"
+          }
+        ],
+        "quantities": ["elliptic mean anomaly", "elliptic true anomaly", "hyperbolic mean anomaly", "hyperbolic true anomaly"],
+        "units": "Basilisk radians converted to SDS VCM degree fields",
+        "tolerance": "1e-10 degrees"
+      },
+      {
+        "id": "basilisk-orbital-motion-atmospheric-density",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.atmosphericDensity_200km/2000km",
+        "sourceContains": ["atmosphericDensity_200km", "atmosphericDensity_2000km"],
+        "sdnModule": "propagator/atmosphere",
+        "sdnTests": [
+          {
+            "file": "propagator/atmosphere/src/cpp/tests/test_atmosphere.cpp",
+            "name": "testStandardAtmosphereOrbitalDensity_BasiliskReferences"
+          }
+        ],
+        "quantities": ["density at 200 km", "density at 2000 km"],
+        "units": "kg/m3",
+        "tolerance": "1e-12 relative native"
+      },
+      {
+        "id": "basilisk-orbital-motion-debye-length",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "DebeyeLengthTests.checksDebeyeLengthAtAltitude",
+        "sourceContains": ["DebeyeLengthTests", "checksDebeyeLengthAtAltitude"],
+        "sdnModule": "propagator/atmosphere",
+        "sdnTests": [
+          {
+            "file": "propagator/atmosphere/src/cpp/tests/test_atmosphere.cpp",
+            "name": "testBasiliskDebyeLengthReferences"
+          }
+        ],
+        "quantities": ["Debye length at 400 km", "Debye length at 1000 km", "Debye length at 10000 km", "Debye length at 34000 km"],
+        "units": "meters",
+        "tolerance": "1e-10 meters"
+      },
+      {
+        "id": "basilisk-orbital-motion-atmospheric-drag",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.atmosphericDrag",
+        "sourceContains": ["atmosphericDrag"],
+        "sdnModule": "propagator/atmosphere",
+        "sdnTests": [
+          {
+            "file": "propagator/atmosphere/src/cpp/tests/test_atmosphere.cpp",
+            "name": "testBasiliskAtmosphericDragReference"
+          },
+          {
+            "file": "propagator/atmosphere/tests/behavior.test.mjs",
+            "name": "direct drag method computes Basilisk atmosphericDrag acceleration from VCM spacecraft state"
+          }
+        ],
+        "quantities": ["drag acceleration vector"],
+        "units": "m/s2 after native SDK SI conversion; km/s2 in SDS OEM direct-method output",
+        "tolerance": "1e-14 m/s2 native, 1e-18 km/s2 browser/WasmEdge OEM"
+      },
+      {
+        "id": "basilisk-orbital-motion-two-dimension-elliptical",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "TwoDimensionElliptical.elem2rv/rv2elem",
+        "sourceContains": ["TwoDimensionElliptical", "elem2rv", "rv2elem"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk OPM Keplerian true-anomaly elements to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes Basilisk OPM Keplerian true-anomaly elements to SDS OMM mean elements"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk VCM Keplerian true-anomaly elements to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk VCM Keplerian true-anomaly elements to VCM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk VCM Cartesian state vector as VCM Keplerian mean anomaly"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk VCM Cartesian state vector as VCM equinoctial elements"
+          }
+        ],
+        "quantities": ["elliptical Keplerian elements", "Cartesian position", "Cartesian velocity", "mean anomaly"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-circular-inclined",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "CircularInclined.elem2rv/rv2elem",
+        "sourceContains": ["CircularInclined", "elem2rv", "rv2elem"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk circular inclined Cartesian state as OMM argument of latitude"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "promotes Basilisk VCM Cartesian state vector to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk VCM Cartesian state vector as OMM argument of latitude"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers circular inclined VCM equinoctial elements as Keplerian argument of latitude"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts circular inclined VCM equinoctial elements to VCM state vector"
+          }
+        ],
+        "quantities": ["circular inclined elements", "argument of latitude", "Cartesian state"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-circular-equitorial",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "CircularEquitorial.elem2rv/rv2elem",
+        "sourceContains": ["CircularEquitorial", "elem2rv", "rv2elem"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk circular equatorial Cartesian state as OMM true longitude"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes circular equatorial VCM equinoctial elements to SDS OMM true longitude"
+          }
+        ],
+        "quantities": ["circular equatorial elements", "true longitude", "Cartesian state"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-non-circular-equitorial",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "NonCircularEquitorial.elem2rv/rv2elem",
+        "sourceContains": ["NonCircularEquitorial", "elem2rv", "rv2elem"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk non-circular equatorial OMM mean elements to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk non-circular equatorial Cartesian state as OMM longitude of pericenter"
+          }
+        ],
+        "quantities": ["non-circular equatorial elements", "longitude of pericenter", "Cartesian state"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-non-circular-near-equitorial",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "NonCircularNearEquitorial.rv2elem",
+        "sourceContains": ["NonCircularNearEquitorial", "rv2elem"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk near-equatorial Cartesian state with longitude-of-pericenter sum"
+          }
+        ],
+        "quantities": ["near-equatorial non-circular elements", "longitude of pericenter sum", "Cartesian state"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-circular-equitorial-retrograde",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "CircularEquitorialRetrograde.elem2rv/rv2elem",
+        "sourceContains": ["CircularEquitorialRetrograde", "elem2rv", "rv2elem"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk circular retrograde equatorial OMM state to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk circular retrograde equatorial Cartesian state as OMM true longitude"
+          }
+        ],
+        "quantities": ["retrograde circular equatorial elements", "true longitude", "Cartesian state"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-two-dimension-hyperbolic",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "TwoDimensionHyperbolic.elem2rv/rv2elem",
+        "sourceContains": ["TwoDimensionHyperbolic", "elem2rv", "rv2elem"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk hyperbolic OMM mean elements to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk hyperbolic Cartesian state as OMM mean elements"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes Basilisk VCM hyperbolic Keplerian true-anomaly elements to SDS OMM mean elements"
+          }
+        ],
+        "quantities": ["hyperbolic Keplerian elements", "Cartesian state", "hyperbolic mean anomaly"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-rectilinear-elliptical",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.elem2rv1DEccentric",
+        "sourceContains": ["elem2rv1DEccentric", "elements.a = 7500.0", "elements.e = 1.0"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk rectilinear elliptical VCM anomaly elements to Cartesian state"
+          }
+        ],
+        "quantities": ["rectilinear elliptical elements", "Basilisk source anomaly", "Cartesian state"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity"
+      },
+      {
+        "id": "basilisk-orbital-motion-parabolic-state-inverse",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "TwoDimensionParabolic.rv2elem",
+        "sourceContains": ["TwoDimensionParabolic", "elements.rPeriap = 7500.", "elements.e = 1.0"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk parabolic OEM Cartesian state as OMM Barker mean elements"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk parabolic OPM Cartesian state as OMM Barker mean elements"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk parabolic VCM Cartesian state vector as VCM Keplerian true anomaly"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk parabolic VCM Cartesian state vector as OMM Barker mean elements"
+          }
+        ],
+        "quantities": ["parabolic Cartesian state", "Keplerian elements", "true anomaly", "Barker mean anomaly", "OMM mean elements"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-10 degrees angles, 1e-12 eccentricity"
+      },
+      {
+        "id": "basilisk-orbital-motion-parabolic-signed-true-anomaly",
+        "upstreamTestFile": "src/simulation/dynamics/DynOutput/orbElemConvert/_UnitTest/test_orb_elem_convert.py",
+        "upstreamTestMethod": "orbElem rv2elem parabolic/hyperbolic conic anomaly range",
+        "sourceContains": ["if (eO >= 1.0 and math.fabs(fO) > math.pi):", "twopiSigned = math.copysign(2.0 * math.pi, fO)", "fO -= twopiSigned"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk parabolic VCM Cartesian state with signed true anomaly"
+          }
+        ],
+        "quantities": ["parabolic Cartesian state", "signed true anomaly", "periapsis radius"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-10 degrees angles, 1e-12 eccentricity"
+      },
+      {
+        "id": "basilisk-orb-elem-convert-parameter-sweep",
+        "upstreamTestFile": "src/simulation/dynamics/DynOutput/orbElemConvert/_UnitTest/test_orb_elem_convert.py",
+        "upstreamTestMethod": "test_orb_elem_convert",
+        "sourceContains": ["@pytest.mark.parametrize(\"a, e, i, AN, AP, f, mu, name\"", "IncHyp_e_2", "EquPara_2"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "covers Basilisk orbElemConvert parameter sweep through VCM Keplerian/state conversion"
+          }
+        ],
+        "quantities": ["Keplerian elements", "Cartesian state", "recovered Keplerian elements", "elliptic/circular/parabolic/hyperbolic conic families"],
+        "units": "source SI m, m/s, and m3/s2 converted to SDS km, km/s, and km3/s2; angles in degrees",
+        "tolerance": "5e-10 relative or 5e-11 absolute for Cartesian state, 1e-7 degrees inverse angles, 5e-9 relative element recovery",
+        "notes": "Ports the full upstream parameter sweep over inclined/equatorial elliptic, circular, parabolic, and hyperbolic cases through VCM Keplerian-to-state and state-to-Keplerian FlatBuffer methods."
+      },
+      {
+        "id": "basilisk-orbital-motion-parabolic-forward",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "TwoDimensionParabolic.elem2rv",
+        "sourceContains": ["TwoDimensionParabolic", "elem2rv", "elements.rPeriap = 7500.", "elements.e = 1.0"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk parabolic VCM Keplerian periapsis elements to Cartesian state"
+          }
+        ],
+        "quantities": ["parabolic Keplerian periapsis elements", "Cartesian position", "Cartesian velocity"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity"
+      },
+      {
+        "id": "basilisk-orbital-motion-parabolic-barker-anomaly",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "TwoDimensionParabolic",
+        "sourceContains": ["TwoDimensionParabolic", "elements.f = 123.0 * D2R", "elements.rPeriap = 7500."],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes parabolic VCM Keplerian anomaly with Barker equation"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes Basilisk parabolic VCM Keplerian elements to SDS OMM mean elements"
+          }
+        ],
+        "quantities": ["parabolic true anomaly", "Barker mean anomaly", "periapsis radius", "Cartesian position", "Cartesian velocity", "OMM mean elements"],
+        "units": "km, km/s, degrees in SDS VCM, dimensionless Barker anomaly converted to degrees",
+        "tolerance": "1e-10 degrees anomaly, 1e-9 km position, 1e-12 km/s velocity, 1e-15 rev/day mean motion",
+        "notes": "The parabolic orbit vector comes from Basilisk TwoDimensionParabolic; mean anomaly uses the closed-form Barker equation M=tan(f/2)+tan(f/2)^3/3 and OMM mean motion remains zero because semi-major axis is undefined for parabolic states."
+      },
+      {
+        "id": "basilisk-orbital-motion-rectilinear-hyperbolic",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.elem2rv1DHyperbolic",
+        "sourceContains": ["elem2rv1DHyperbolic", "elements.a = -7500.0", "elements.e = 1.0"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk rectilinear hyperbolic VCM anomaly elements to Cartesian state"
+          }
+        ],
+        "quantities": ["rectilinear hyperbolic elements", "Basilisk source anomaly", "Cartesian state"],
+        "units": "km, km/s, degrees, km3/s2",
+        "tolerance": "1e-9 km position, 1e-12 km/s velocity"
+      },
+      {
+        "id": "basilisk-orbital-motion-hill-relative-state",
+        "upstreamTestFile": "src/architecture/utilitiesSelfCheck/avsLibrarySelfCheck/avsLibrarySelfCheck.c",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "testOrbitalHill",
+        "sourceContains": ["testOrbitalHill", "rv2hill", "hill2rv", "rhoPrime_H"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "maps Basilisk chief and deputy VCM states to CDM Hill relative state"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "maps Basilisk CDM Hill relative state and chief VCM to deputy VCM state"
+          }
+        ],
+        "quantities": ["chief Cartesian state", "deputy Cartesian state", "Hill relative position", "Hill relative velocity", "recovered deputy Cartesian state"],
+        "units": "km, km/s",
+        "tolerance": "1e-6 km position, 1e-9 km/s velocity"
+      },
+      {
+        "id": "basilisk-orbital-motion-classic-mean-to-osculating",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.classicElementsToMeanElements",
+        "sourceContains": ["classicElementsToMeanElements", "clMeanOscMap", "req = 300.0", "J2 = 1e-3"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "maps Basilisk VCM Keplerian mean elements to osculating elements with GRV J2 context"
+          }
+        ],
+        "quantities": ["mean Keplerian elements", "osculating Keplerian elements", "equatorial radius", "J2"],
+        "units": "km, radians in upstream, degrees in SDS VCM, unitless J2",
+        "tolerance": "1e-10 km semi-major axis, 1e-14 eccentricity, 1e-10 degrees angles"
+      },
+      {
+        "id": "basilisk-orbital-motion-classic-osculating-to-mean",
+        "upstreamTestFile": "src/architecture/utilities/orbitalMotion.c",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.clMeanOscMap",
+        "sourceContains": ["void clMeanOscMap", "sgn=1:mean2osc, sgn=-1:osc2mean", "double gamma2 = sgn * J2 / 2.0"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "maps Basilisk VCM Keplerian osculating elements to mean elements with GRV J2 context"
+          }
+        ],
+        "quantities": ["osculating Keplerian elements", "mean Keplerian elements", "equatorial radius", "J2"],
+        "units": "km, radians in upstream, degrees in SDS VCM, unitless J2",
+        "tolerance": "2e-4 km semi-major axis, 1e-7 eccentricity, 5e-6 degrees angles for first-order inverse recovery"
+      },
+      {
+        "id": "basilisk-orbital-motion-j-perturb-order-6",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.jPerturb_order_6",
+        "sourceContains": ["jPerturb_order_6", "jPerturb(r, order, ans)", "-7.3080959003487213e-006"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "computes Basilisk J2-J6 zonal perturbation acceleration from VCM state and GRV context"
+          }
+        ],
+        "quantities": ["Cartesian position", "J2-J6 zonal coefficients", "equatorial radius", "gravitational parameter", "perturbation acceleration"],
+        "units": "km, km3/s2, km/s2",
+        "tolerance": "5e-16 km/s2 for X/Z and 5e-18 km/s2 for Y against compiled current Basilisk orbitalMotion.c output",
+        "notes": "The upstream test file's literal check vector is stale and still passes upstream because v3IsEqual uses an absolute tolerance of 11; the SDN test asserts the current executable jPerturb formula with Basilisk Earth constants."
+      },
+      {
+        "id": "basilisk-orbital-motion-solar-radiation-pressure",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.solarRadiationPressure",
+        "sourceContains": ["solarRadiationPressure", "solarRad(A, m, r, ans)", "-1.9825487816e-10"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "computes Basilisk solar radiation pressure acceleration from VCM spacecraft parameters and CRD sun vector"
+          }
+        ],
+        "quantities": ["spacecraft area", "spacecraft mass", "solar radiation pressure coefficient", "central-body-to-Sun vector", "solar radiation pressure acceleration"],
+        "units": "m2, kg, unitless coefficient, AU, km/s2",
+        "tolerance": "5e-21 km/s2 for X and 5e-22 km/s2 for Y/Z against compiled current Basilisk orbitalMotion.c output",
+        "notes": "The upstream test file's literal check vector appears to come from an older solar flux value; the SDN test asserts current orbitalMotion.c solarRad with flux 1372.5398 W/m2, Cr 1.3, and c 299792458 m/s."
+      },
+      {
+        "id": "basilisk-orbital-motion-classic-to-equinoctial",
+        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
+        "upstreamFileKind": "sourceFile",
+        "upstreamTestMethod": "OrbitalMotion.classicElementsToEquinoctialElements",
+        "sourceContains": ["classicElementsToEquinoctialElements"],
+        "sdnModule": "foundation/orbits",
+        "sdnTests": [
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk VCM Keplerian elements to VCM equinoctial elements"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "recovers Basilisk VCM equinoctial elements as VCM Keplerian true anomaly"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "normalizes Basilisk VCM equinoctial elements to SDS OMM mean elements"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk VCM equinoctial elements to SDS OEM state vector"
+          },
+          {
+            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
+            "name": "converts Basilisk VCM equinoctial elements to VCM state vector"
+          }
+        ],
+        "quantities": ["equinoctial elements", "Keplerian elements", "Cartesian state"],
+        "units": "km, km/s, radians in upstream, degrees in SDS VCM, unitless AF/AG/CHI/PSI",
+        "tolerance": "1e-15 unitless equinoctial fields, 1e-12 degrees angles"
+      }
+    ]
+  }
+}

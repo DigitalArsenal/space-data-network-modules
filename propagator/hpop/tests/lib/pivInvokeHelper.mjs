@@ -1,6 +1,6 @@
 // Shared harness for driving the HPOP module's canonical SDS PIV invoke ABI.
 
-import * as flatbuffers from "flatbuffers";
+import * as flatbuffers from "../../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -14,7 +14,7 @@ import {
   PIVRequestT,
   PIVT,
   TABT,
-} from "spacedatastandards.org/lib/js/PIV/main.js";
+} from "../../../../../spacedatastandards.org/lib/js/PIV/main.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const browserDistDir = path.resolve(__dirname, "..", "..", "dist", "browser");
@@ -47,6 +47,22 @@ function alignOffset(offset, alignment) {
   return remainder === 0 ? offset : offset + alignment - remainder;
 }
 
+function encodeWireFormat(value) {
+  if (typeof value === "number") {
+    return value;
+  }
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-") === "aligned-binary"
+    ? payloadWireFormat.ALIGNED_BINARY
+    : payloadWireFormat.FLATBUFFER;
+}
+
+function decodeWireFormat(value) {
+  return value === payloadWireFormat.ALIGNED_BINARY ? "aligned-binary" : "flatbuffer";
+}
+
 export function encodePivInvokeRequest({
   methodId,
   inputs = [],
@@ -75,7 +91,7 @@ export function encodePivInvokeRequest({
       offset,
       payload.length,
       alignment,
-      input.typeRef?.wireFormat ?? payloadWireFormat.FLATBUFFER,
+      encodeWireFormat(input.wireFormat ?? input.typeRef?.wireFormat),
       typeRef,
       input.mutability ?? bufferMutability.IMMUTABLE,
       input.ownership ?? bufferOwnership.HOST_OWNED,
@@ -126,6 +142,10 @@ export function invokePiv(
     outputStreamCap,
     traceId,
   });
+  return invokePivBytes(module, requestBytes);
+}
+
+export function invokePivBytes(module, requestBytes) {
   const requestPointer = module._plugin_alloc(requestBytes.length);
   const responseSizePointer = module._plugin_alloc(4);
   writeBytes(module, requestPointer, requestBytes);
@@ -155,6 +175,8 @@ export function invokePiv(
             rootTypeName: output.TYPE_REF.ROOT_TYPE,
           }
         : null,
+      wireFormat: decodeWireFormat(output.WIRE_FORMAT),
+      alignment: output.ALIGNMENT,
       bytes: new Uint8Array(
         response.PAYLOAD_ARENA.slice(
           output.OFFSET,

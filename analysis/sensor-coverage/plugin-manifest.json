@@ -6,7 +6,7 @@
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command"],
+  "invokeSurfaces": ["direct", "command"],
   "runtimeTargets": ["browser", "wasmedge"],
   "methods": [
     {
@@ -17,13 +17,28 @@
           "portId": "coverage",
           "acceptedTypeSets": [
             {
-              "setId": "coverage-request",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "coverage-scv-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "SensorCoverageCompatibilityJson",
+                  "fileIdentifier": "JSON",
+                  "rootTypeName": "SensorCoverageCompatibilityRequest"
+                },
+                {
+                  "schemaName": "SCV/main.fbs",
+                  "fileIdentifier": "$SCV",
+                  "rootTypeName": "SCV",
+                  "wireFormat": "flatbuffer",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Canonical SDS SCV FlatBuffer request payload with explicit JSON compatibility fallback during migration."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
-          "required": true
+          "required": true,
+          "description": "Required canonical SDS SCV request envelope or explicit JSON compatibility adapter."
         }
       ],
       "outputPorts": [
@@ -31,17 +46,46 @@
           "portId": "coverage",
           "acceptedTypeSets": [
             {
-              "setId": "coverage-result",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "setId": "coverage-scv-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "SensorCoverageCompatibilityJson",
+                  "fileIdentifier": "JSON",
+                  "rootTypeName": "SensorCoverageCompatibilityResult"
+                },
+                {
+                  "schemaName": "SCV/main.fbs",
+                  "fileIdentifier": "$SCV",
+                  "rootTypeName": "SCV",
+                  "wireFormat": "flatbuffer",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Canonical SDS SCV progress/result envelopes with explicit JSON compatibility fallback during migration."
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
-          "required": false
+          "maxStreams": 3,
+          "required": false,
+          "description": "Coverage result stream: SCV progress/result frames plus optional JSON compatibility result."
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "description": "Computes deterministic sensor coverage, access intervals, coverage FOMs, and swath geometry products."
     }
-  ]
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "SCV/main.fbs",
+      "fileIdentifier": "$SCV",
+      "rootTypeName": "SCV",
+      "wireFormat": "flatbuffer",
+      "requiredAlignment": 8,
+      "description": "Canonical binary request/result/progress ABI for this module's active coverage contract."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "abiVersion": 1
 }

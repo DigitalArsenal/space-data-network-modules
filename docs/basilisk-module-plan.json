@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-30T03:24:49.583Z",
-  "upstreamBasiliskRoot": "../basilisk",
+  "generatedAt": "2026-05-25T14:21:13.523Z",
+  "upstreamBasiliskRoot": "../../ancillary-packages/basilisk",
   "artifactContract": {
     "primaryArtifact": "dist/isomorphic/module.wasm",
     "browserAndWasmEdgeSameArtifact": true,
@@ -7506,6 +7506,238 @@
       ]
     },
     {
+      "id": "fsw-configuration-data",
+      "modulePath": "basilisk/fsw/configuration-data",
+      "status": "planned",
+      "standards": {
+        "primarySchemas": [
+          "ACM",
+          "ATD",
+          "MNV",
+          "XTC"
+        ],
+        "xtceRequired": true
+      },
+      "modules": [
+        {
+          "name": "rwConfigData",
+          "status": "planned",
+          "modulePath": "basilisk/fsw/configuration-data/rwConfigData",
+          "upstreamSource": "src/fswAlgorithms/rwConfigData",
+          "standards": {
+            "primarySchemas": [
+              "ACM",
+              "ATD",
+              "MNV",
+              "XTC"
+            ],
+            "xtceRequired": true,
+            "invokeEnvelope": "PIV",
+            "payloadFrame": "TAB",
+            "manifest": "PLG",
+            "publication": "PNM"
+          },
+          "authoritativeTests": [
+            {
+              "source": "Basilisk upstream configuration-data tests",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "known actuator and vehicle configuration examples",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            }
+          ],
+          "runtimeTargets": [
+            "browser",
+            "wasmedge"
+          ],
+          "hostCapabilities": [
+            "time",
+            "logging"
+          ],
+          "dependencyStrategy": "thin SDN module wrapper over upstream Basilisk source; no copied Basilisk source dump",
+          "failClosedOnMissingStandards": true
+        },
+        {
+          "name": "vehicleConfigData",
+          "status": "planned",
+          "modulePath": "basilisk/fsw/configuration-data/vehicleConfigData",
+          "upstreamSource": "src/fswAlgorithms/vehicleConfigData",
+          "standards": {
+            "primarySchemas": [
+              "ACM",
+              "ATD",
+              "MNV",
+              "XTC"
+            ],
+            "xtceRequired": true,
+            "invokeEnvelope": "PIV",
+            "payloadFrame": "TAB",
+            "manifest": "PLG",
+            "publication": "PNM"
+          },
+          "authoritativeTests": [
+            {
+              "source": "Basilisk upstream configuration-data tests",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "known actuator and vehicle configuration examples",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            }
+          ],
+          "runtimeTargets": [
+            "browser",
+            "wasmedge"
+          ],
+          "hostCapabilities": [
+            "time",
+            "logging"
+          ],
+          "dependencyStrategy": "thin SDN module wrapper over upstream Basilisk source; no copied Basilisk source dump",
+          "failClosedOnMissingStandards": true
+        }
+      ]
+    },
+    {
+      "id": "fsw-dv-guidance",
+      "modulePath": "basilisk/fsw/dv-guidance",
+      "status": "planned",
+      "standards": {
+        "primarySchemas": [
+          "OMM",
+          "OPM",
+          "OEM",
+          "MNV",
+          "ACM",
+          "XTC"
+        ],
+        "xtceRequired": true
+      },
+      "modules": [
+        {
+          "name": "dvAttGuidance",
+          "status": "planned",
+          "modulePath": "basilisk/fsw/dv-guidance/dvAttGuidance",
+          "upstreamSource": "src/fswAlgorithms/dvGuidance/dvAttGuidance",
+          "standards": {
+            "primarySchemas": [
+              "OMM",
+              "OPM",
+              "OEM",
+              "MNV",
+              "ACM",
+              "XTC"
+            ],
+            "xtceRequired": true,
+            "invokeEnvelope": "PIV",
+            "payloadFrame": "TAB",
+            "manifest": "PLG",
+            "publication": "PNM"
+          },
+          "authoritativeTests": [
+            {
+              "source": "Basilisk upstream DV guidance tests",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "closed-form delta-V guidance cases",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "shared optimal-control benchmark cases",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            }
+          ],
+          "runtimeTargets": [
+            "browser",
+            "wasmedge"
+          ],
+          "hostCapabilities": [
+            "time",
+            "logging"
+          ],
+          "dependencyStrategy": "thin SDN module wrapper over upstream Basilisk source; no copied Basilisk source dump",
+          "failClosedOnMissingStandards": true
+        },
+        {
+          "name": "dvExecuteGuidance",
+          "status": "planned",
+          "modulePath": "basilisk/fsw/dv-guidance/dvExecuteGuidance",
+          "upstreamSource": "src/fswAlgorithms/dvGuidance/dvExecuteGuidance",
+          "standards": {
+            "primarySchemas": [
+              "OMM",
+              "OPM",
+              "OEM",
+              "MNV",
+              "ACM",
+              "XTC"
+            ],
+            "xtceRequired": true,
+            "invokeEnvelope": "PIV",
+            "payloadFrame": "TAB",
+            "manifest": "PLG",
+            "publication": "PNM"
+          },
+          "authoritativeTests": [
+            {
+              "source": "Basilisk upstream DV guidance tests",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "closed-form delta-V guidance cases",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "shared optimal-control benchmark cases",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            }
+          ],
+          "runtimeTargets": [
+            "browser",
+            "wasmedge"
+          ],
+          "hostCapabilities": [
+            "time",
+            "logging"
+          ],
+          "dependencyStrategy": "thin SDN module wrapper over upstream Basilisk source; no copied Basilisk source dump",
+          "failClosedOnMissingStandards": true
+        }
+      ]
+    },
+    {
       "id": "fsw-orbit-formation-navigation",
       "modulePath": "basilisk/fsw/orbit-formation-navigation",
       "status": "planned",
@@ -8746,6 +8978,81 @@
             },
             {
               "source": "CCSDS orbit examples",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            }
+          ],
+          "runtimeTargets": [
+            "browser",
+            "wasmedge"
+          ],
+          "hostCapabilities": [
+            "time",
+            "logging",
+            "deterministic-random"
+          ],
+          "dependencyStrategy": "thin SDN module wrapper over upstream Basilisk source; no copied Basilisk source dump",
+          "failClosedOnMissingStandards": true
+        }
+      ]
+    },
+    {
+      "id": "fsw-state-estimation",
+      "modulePath": "basilisk/fsw/state-estimation",
+      "status": "planned",
+      "standards": {
+        "primarySchemas": [
+          "OMM",
+          "OPM",
+          "OEM",
+          "OCM",
+          "TDM",
+          "MNV",
+          "XTC"
+        ],
+        "xtceRequired": true
+      },
+      "modules": [
+        {
+          "name": "thrustCMEstimation",
+          "status": "planned",
+          "modulePath": "basilisk/fsw/state-estimation/thrustCMEstimation",
+          "upstreamSource": "src/fswAlgorithms/stateEstimation/thrustCMEstimation",
+          "standards": {
+            "primarySchemas": [
+              "OMM",
+              "OPM",
+              "OEM",
+              "OCM",
+              "TDM",
+              "MNV",
+              "XTC"
+            ],
+            "xtceRequired": true,
+            "invokeEnvelope": "PIV",
+            "payloadFrame": "TAB",
+            "manifest": "PLG",
+            "publication": "PNM"
+          },
+          "authoritativeTests": [
+            {
+              "source": "Basilisk upstream state-estimation tests",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "least-squares and Kalman filter benchmark cases",
+              "units": "documented per port before implementation",
+              "frame": "documented per port before implementation",
+              "timeScale": "documented per port before implementation",
+              "tolerance": "must be justified against source precision"
+            },
+            {
+              "source": "closed-form estimation consistency cases",
               "units": "documented per port before implementation",
               "frame": "documented per port before implementation",
               "timeScale": "documented per port before implementation",

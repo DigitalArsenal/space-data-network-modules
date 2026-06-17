@@ -6,7 +6,7 @@
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command"],
+  "invokeSurfaces": ["direct", "command"],
   "runtimeTargets": ["browser", "wasi", "wasmedge"],
   "methods": [
     {
@@ -51,9 +51,88 @@
           "portId": "atmosphere",
           "acceptedTypeSets": [
             {
-              "setId": "atm-request",
+              "setId": "hfc-atmosphere-query",
               "allowedTypes": [
-                { "schemaName": "ATM.fbs", "fileIdentifier": "$ATM", "rootTypeName": "ATM" }
+                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" },
+                {
+                  "schemaName": "HFC.fbs",
+                  "fileIdentifier": "$HFC",
+                  "rootTypeName": "HFC",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "space_weather",
+          "acceptedTypeSets": [
+            {
+              "setId": "spw-space-weather",
+              "allowedTypes": [
+                { "schemaName": "SPW.fbs", "fileIdentifier": "$SPW", "rootTypeName": "SPW" },
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "states",
+          "acceptedTypeSets": [
+            {
+              "setId": "hfc-states",
+              "allowedTypes": [
+                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" },
+                {
+                  "schemaName": "HFC.fbs",
+                  "fileIdentifier": "$HFC",
+                  "rootTypeName": "HFC",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "vcm_state_to_drag_acceleration_oem",
+      "displayName": "VCM State To Atmospheric Drag Acceleration OEM",
+      "inputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcm-vector-state",
+              "allowedTypes": [
+                { "schemaName": "VCM.fbs", "rootTypeName": "VCM" },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
               ]
             }
           ],
@@ -64,12 +143,19 @@
       ],
       "outputPorts": [
         {
-          "portId": "states",
+          "portId": "drag_acceleration",
           "acceptedTypeSets": [
             {
-              "setId": "hfc-states",
+              "setId": "oem-drag-acceleration",
               "allowedTypes": [
-                { "schemaName": "HFC.fbs", "fileIdentifier": "$HFC", "rootTypeName": "HFC" }
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
               ]
             }
           ],

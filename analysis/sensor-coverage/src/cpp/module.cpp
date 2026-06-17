@@ -1,3 +1,5 @@
+#include <map>
+
 using namespace sdn_hypersonics;
 
 namespace {
@@ -9,6 +11,7 @@ constexpr int kCoverageGeometryChunkSize = 256;
 struct Interval {
   double start = 0.0;
   double stop = 0.0;
+  std::vector<int> contributingSensorIds;
 };
 
 struct Vec3 {
@@ -22,6 +25,13 @@ struct SensorFrame {
   Vec3 xAxis;
   Vec3 yAxis;
   bool valid = false;
+};
+
+struct Quaternion {
+  double x = 0.0;
+  double y = 0.0;
+  double z = 0.0;
+  double w = 1.0;
 };
 
 struct Vertex {
@@ -81,6 +91,8 @@ struct Cell {
   double longitude = 0.0;
   std::vector<Interval> intervals;
   std::vector<int> contributingSensorIds;
+  // Legacy lower-32 compatibility field. Exact identity is carried by
+  // contributingSensorIds and serialized as sensorIds/sensorBitsetWords.
   uint32_t sensorMask = 0;
   double totalAccess = 0.0;
   double maxGap = 0.0;
@@ -105,6 +117,12 @@ struct GridConfig {
   double stop = 86400.0;
   int rows = 0;
   int columns = 0;
+};
+
+struct CoverageInput {
+  GridConfig grid;
+  std::vector<SensorTrack> tracks;
+  bool isScv = false;
 };
 
 double clamp(double value, double min_value, double max_value) {
@@ -303,6 +321,206 @@ std::vector<SensorTrack> parse_sensor_tracks(const std::string& request) {
   return tracks;
 }
 
+Vec3 vec3_from_scv(const SCVVec3* value) {
+  if (!value) {
+    return {};
+  }
+  return {value->X(), value->Y(), value->Z()};
+}
+
+SensorFrame fallback_sensor_frame(const State& state) {
+  const Vec3 radial = normalize(state.position);
+  Vec3 x_axis = subtract(state.velocity, scale(radial, dot(state.velocity, radial)));
+  x_axis = normalize(x_axis, normalize({-radial.y, radial.x, 0.0}));
+  SensorFrame frame{};
+  frame.boresight = scale(radial, -1.0);
+  frame.xAxis = x_axis;
+  frame.yAxis = normalize(cross(frame.boresight, frame.xAxis), {0.0, 0.0, 1.0});
+  frame.valid = true;
+  return frame;
+}
+
+Quaternion normalize_quaternion(Quaternion value) {
+  const double length = std::sqrt(
+    value.x * value.x +
+    value.y * value.y +
+    value.z * value.z +
+    value.w * value.w);
+  if (!(length > 0.0) || !std::isfinite(length)) {
+    return {};
+  }
+  return {
+    value.x / length,
+    value.y / length,
+    value.z / length,
+    value.w / length,
+  };
+}
+
+Vec3 rotate_local_vector(Quaternion q, Vec3 vector) {
+  const Vec3 qv{q.x, q.y, q.z};
+  const Vec3 t = scale(cross(qv, vector), 2.0);
+  return add(add(vector, scale(t, q.w)), cross(qv, t));
+}
+
+Vec3 frame_vector_from_local(const SensorFrame& base, Vec3 local) {
+  return add(
+    add(scale(base.xAxis, local.x), scale(base.yAxis, local.y)),
+    scale(base.boresight, local.z));
+}
+
+SensorFrame sensor_frame_from_scv_quaternion(const State& state, const SCVStateSample* sample) {
+  SensorFrame frame{};
+  const Quaternion q = normalize_quaternion({
+    sample->QUATERNION_X(),
+    sample->QUATERNION_Y(),
+    sample->QUATERNION_Z(),
+    sample->QUATERNION_W(),
+  });
+  const double q_length = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+  if (!(q_length > 0.0) || !std::isfinite(q_length)) {
+    return frame;
+  }
+
+  const SensorFrame base = fallback_sensor_frame(state);
+  frame.boresight = normalize(
+    frame_vector_from_local(base, rotate_local_vector(q, {0.0, 0.0, 1.0})),
+    base.boresight);
+  frame.xAxis = normalize(
+    frame_vector_from_local(base, rotate_local_vector(q, {1.0, 0.0, 0.0})),
+    base.xAxis);
+  frame.yAxis = normalize(
+    frame_vector_from_local(base, rotate_local_vector(q, {0.0, 1.0, 0.0})),
+    base.yAxis);
+  frame.valid = true;
+  return frame;
+}
+
+GridConfig grid_from_scv_request(const SCVCoverageRequest* request) {
+  GridConfig config{};
+  if (const auto* coverage_grid = request->COVERAGE_GRID()) {
+    config.minLat = coverage_grid->MIN_LAT_DEG();
+    config.maxLat = coverage_grid->MAX_LAT_DEG();
+    config.minLon = coverage_grid->MIN_LON_DEG();
+    config.maxLon = coverage_grid->MAX_LON_DEG();
+    config.latStep = std::max(0.01, coverage_grid->LAT_STEP_DEG());
+    config.lonStep = std::max(0.01, coverage_grid->LON_STEP_DEG());
+  }
+  if (const auto* time_grid = request->TIME_GRID()) {
+    config.start = time_grid->START_OFFSET_SEC();
+    config.stop = time_grid->STOP_OFFSET_SEC();
+  }
+  config.rows = std::max(1, static_cast<int>(std::ceil((config.maxLat - config.minLat) / config.latStep)));
+  config.columns = std::max(1, static_cast<int>(std::ceil((config.maxLon - config.minLon) / config.lonStep)));
+  return config;
+}
+
+SensorConfig sensor_from_scv(const SCVSensor* sensor, int fallback_sensor_id) {
+  SensorConfig config{};
+  if (!sensor) {
+    config.sensorId = fallback_sensor_id;
+    return config;
+  }
+  config.sensorId = static_cast<int>(sensor->SENSOR_ID());
+  if (sensor->SHAPE() == scvSensorShapeKind_RECTANGULAR) {
+    config.type = "rectangular";
+  }
+  const double half_angle_deg = sensor->HALF_ANGLE_DEG();
+  if (half_angle_deg > 0.0) {
+    config.outerHalfAngleRad = clamp(half_angle_deg / kRadiansToDegrees, 0.01, 1.2);
+  }
+  const double cross_track_deg = sensor->CROSS_TRACK_HALF_ANGLE_DEG();
+  const double along_track_deg = sensor->ALONG_TRACK_HALF_ANGLE_DEG();
+  config.xHalfAngleRad = clamp(
+    (cross_track_deg > 0.0 ? cross_track_deg : half_angle_deg) / kRadiansToDegrees,
+    0.01,
+    1.2);
+  config.yHalfAngleRad = clamp(
+    (along_track_deg > 0.0 ? along_track_deg : half_angle_deg) / kRadiansToDegrees,
+    0.01,
+    1.2);
+  const double max_range = sensor->MAX_RANGE_M();
+  if (max_range > 0.0) {
+    config.radiusMeters = max_range;
+  }
+  return config;
+}
+
+std::vector<SensorTrack> tracks_from_scv_request(const SCVCoverageRequest* request) {
+  std::map<int, std::vector<State>> states_by_sensor;
+  if (const auto* samples = request->STATE_SAMPLES()) {
+    for (const auto* sample : *samples) {
+      if (!sample) {
+        continue;
+      }
+      State state{};
+      state.elapsedSeconds = sample->TIME_OFFSET_SEC();
+      state.position = vec3_from_scv(sample->POSITION_M());
+      state.velocity = vec3_from_scv(sample->VELOCITY_MPS());
+      state.sensorFrame = sensor_frame_from_scv_quaternion(state, sample);
+      if (
+        std::isfinite(state.elapsedSeconds) &&
+        magnitude(state.position) > kEarthRadiusM + 1.0 &&
+        magnitude(state.velocity) > 0.0
+      ) {
+        states_by_sensor[static_cast<int>(sample->SENSOR_ID())].push_back(state);
+      }
+    }
+  }
+
+  std::vector<SensorTrack> tracks;
+  if (const auto* sensors = request->SENSORS()) {
+    tracks.reserve(sensors->size());
+    for (uint32_t index = 0; index < sensors->size(); ++index) {
+      const auto* sensor = sensors->Get(index);
+      SensorTrack track{};
+      track.sensor = sensor_from_scv(sensor, static_cast<int>(index));
+      auto found = states_by_sensor.find(track.sensor.sensorId);
+      if (found != states_by_sensor.end()) {
+        track.states = found->second;
+      }
+      std::sort(track.states.begin(), track.states.end(), [](const State& left, const State& right) {
+        return left.elapsedSeconds < right.elapsedSeconds;
+      });
+      if (track.states.size() >= 2) {
+        tracks.push_back(track);
+      }
+    }
+  }
+  return tracks;
+}
+
+bool payload_has_scv_identifier(const std::string& payload) {
+  return payload.size() >= 8 &&
+    SCVBufferHasIdentifier(reinterpret_cast<const uint8_t*>(payload.data()));
+}
+
+bool parse_coverage_input(const std::string& payload, CoverageInput& input, std::string& error) {
+  if (payload_has_scv_identifier(payload)) {
+    flatbuffers::Verifier verifier(
+      reinterpret_cast<const uint8_t*>(payload.data()),
+      payload.size());
+    if (!VerifySCVBuffer(verifier)) {
+      error = "Input port \"coverage\" must contain a valid SCV FlatBuffer.";
+      return false;
+    }
+    const SCV* envelope = GetSCV(payload.data());
+    if (!envelope || envelope->ENVELOPE_KIND() != scvEnvelopeKind_REQUEST || !envelope->REQUEST()) {
+      error = "Input port \"coverage\" SCV envelope must contain a REQUEST payload.";
+      return false;
+    }
+    input.isScv = true;
+    input.grid = grid_from_scv_request(envelope->REQUEST());
+    input.tracks = tracks_from_scv_request(envelope->REQUEST());
+    return true;
+  }
+
+  input.isScv = false;
+  input.grid = parse_grid(payload);
+  input.tracks = parse_sensor_tracks(payload);
+  return true;
+}
+
 std::vector<Cell> create_cells(const GridConfig& grid) {
   std::vector<Cell> cells;
   cells.reserve(static_cast<size_t>(grid.rows * grid.columns));
@@ -319,18 +537,6 @@ std::vector<Cell> create_cells(const GridConfig& grid) {
     }
   }
   return cells;
-}
-
-SensorFrame fallback_sensor_frame(const State& state) {
-  const Vec3 radial = normalize(state.position);
-  Vec3 x_axis = subtract(state.velocity, scale(radial, dot(state.velocity, radial)));
-  x_axis = normalize(x_axis, normalize({-radial.y, radial.x, 0.0}));
-  SensorFrame frame{};
-  frame.boresight = scale(radial, -1.0);
-  frame.xAxis = x_axis;
-  frame.yAxis = normalize(cross(frame.boresight, frame.xAxis), {0.0, 0.0, 1.0});
-  frame.valid = true;
-  return frame;
 }
 
 SensorFrame resolve_sensor_frame(const State& state) {
@@ -481,6 +687,21 @@ std::vector<Vertex> segment_polygon(const SwathSegment& segment) {
   };
 }
 
+void add_unique_sensor_id(std::vector<int>& sensor_ids, int sensor_id) {
+  if (sensor_id < 0) {
+    return;
+  }
+  if (std::find(sensor_ids.begin(), sensor_ids.end(), sensor_id) == sensor_ids.end()) {
+    sensor_ids.push_back(sensor_id);
+  }
+}
+
+void merge_sensor_ids(std::vector<int>& target, const std::vector<int>& source) {
+  for (const int sensor_id : source) {
+    add_unique_sensor_id(target, sensor_id);
+  }
+}
+
 void accumulate_swaths(std::vector<Cell>& cells, const std::vector<SwathSegment>& segments, const GridConfig& grid) {
   for (const auto& segment : segments) {
     const auto polygon = segment_polygon(segment);
@@ -488,18 +709,11 @@ void accumulate_swaths(std::vector<Cell>& cells, const std::vector<SwathSegment>
       if (!point_in_polygon(cell.latitude, cell.longitude, polygon)) {
         continue;
       }
-      cell.intervals.push_back({segment.start, segment.stop});
+      cell.intervals.push_back({segment.start, segment.stop, {segment.sensorId}});
       if (segment.sensorId >= 0 && segment.sensorId < 32) {
         cell.sensorMask |= static_cast<uint32_t>(1u << segment.sensorId);
       }
-      if (
-        std::find(
-          cell.contributingSensorIds.begin(),
-          cell.contributingSensorIds.end(),
-          segment.sensorId) == cell.contributingSensorIds.end()
-      ) {
-        cell.contributingSensorIds.push_back(segment.sensorId);
-      }
+      add_unique_sensor_id(cell.contributingSensorIds, segment.sensorId);
     }
   }
 }
@@ -516,6 +730,7 @@ void merge_intervals(Cell& cell, double scenario_start, double scenario_stop) {
     const Interval clipped{
       clamp(interval.start, scenario_start, scenario_stop),
       clamp(interval.stop, scenario_start, scenario_stop),
+      interval.contributingSensorIds,
     };
     if (clipped.stop <= clipped.start) {
       continue;
@@ -524,6 +739,7 @@ void merge_intervals(Cell& cell, double scenario_start, double scenario_stop) {
       merged.push_back(clipped);
     } else {
       merged.back().stop = std::max(merged.back().stop, clipped.stop);
+      merge_sensor_ids(merged.back().contributingSensorIds, clipped.contributingSensorIds);
     }
   }
   cell.intervals = merged;
@@ -624,6 +840,66 @@ std::string intervals_json(const std::vector<Interval>& intervals) {
   return output;
 }
 
+std::string sensor_ids_json(const std::vector<int>& sensor_ids) {
+  std::string output = "[";
+  for (size_t index = 0; index < sensor_ids.size(); ++index) {
+    if (index > 0) {
+      output += ",";
+    }
+    output += std::to_string(sensor_ids[index]);
+  }
+  output += "]";
+  return output;
+}
+
+std::vector<uint64_t> sensor_bitset_words(const std::vector<int>& sensor_ids) {
+  int max_sensor_id = -1;
+  for (const int sensor_id : sensor_ids) {
+    if (sensor_id > max_sensor_id) {
+      max_sensor_id = sensor_id;
+    }
+  }
+  if (max_sensor_id < 0) {
+    return {};
+  }
+
+  std::vector<uint64_t> words(static_cast<size_t>(max_sensor_id / 64 + 1), 0);
+  for (const int sensor_id : sensor_ids) {
+    if (sensor_id < 0) {
+      continue;
+    }
+    const size_t word_index = static_cast<size_t>(sensor_id / 64);
+    const uint64_t bit = static_cast<uint64_t>(1) << (sensor_id % 64);
+    words[word_index] |= bit;
+  }
+  return words;
+}
+
+uint32_t legacy_sensor_mask(const std::vector<int>& sensor_ids) {
+  uint32_t mask = 0;
+  for (const int sensor_id : sensor_ids) {
+    if (sensor_id >= 0 && sensor_id < 32) {
+      mask |= static_cast<uint32_t>(1u << sensor_id);
+    }
+  }
+  return mask;
+}
+
+std::string sensor_bitset_words_json(const std::vector<int>& sensor_ids) {
+  const auto words = sensor_bitset_words(sensor_ids);
+  std::string output = "[";
+  for (size_t index = 0; index < words.size(); ++index) {
+    if (index > 0) {
+      output += ",";
+    }
+    output += "\"";
+    output += std::to_string(words[index]);
+    output += "\"";
+  }
+  output += "]";
+  return output;
+}
+
 std::string cells_json(const std::vector<Cell>& cells, double duration) {
   std::string output = "[";
   for (size_t index = 0; index < cells.size(); ++index) {
@@ -642,8 +918,7 @@ std::string cells_json(const std::vector<Cell>& cells, double duration) {
       "\"maxGapDurationSec\":%.12g,\"meanRevisitTimeSec\":%.12g,"
       "\"firstResponseTimeSec\":%.12g,\"maxResponseTimeSec\":%.12g,"
       "\"meanResponseTimeSec\":%.12g,\"totalGapDurationSec\":%.12g,"
-      "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"colorRgba\":%s,"
-      "\"intervals\":",
+      "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"sensorIds\":",
       cell.index,
       cell.row,
       cell.column,
@@ -660,9 +935,14 @@ std::string cells_json(const std::vector<Cell>& cells, double duration) {
       cell.meanResponse,
       cell.totalGap,
       cell.contributingSensorIds.size(),
-      cell.sensorMask,
-      color_json(percent).c_str());
+      cell.sensorMask);
     output += buffer;
+    output += sensor_ids_json(cell.contributingSensorIds);
+    output += ",\"sensorBitsetWords\":";
+    output += sensor_bitset_words_json(cell.contributingSensorIds);
+    output += ",\"colorRgba\":";
+    output += color_json(percent);
+    output += ",\"intervals\":";
     output += intervals_json(cell.intervals);
     output += "}";
   }
@@ -685,16 +965,20 @@ std::string coverage_intervals_json(const std::vector<Cell>& cells) {
         sizeof(buffer),
         "{\"cellIndex\":%d,\"row\":%d,\"column\":%d,"
         "\"startSeconds\":%.12g,\"stopSeconds\":%.12g,\"durationSec\":%.12g,"
-        "\"sensorContributionCount\":%zu,\"sensorMask\":%u}",
+        "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"sensorIds\":",
         cell.index,
         cell.row,
         cell.column,
         interval.start,
         interval.stop,
         interval.stop - interval.start,
-        cell.contributingSensorIds.size(),
-        cell.sensorMask);
+        interval.contributingSensorIds.size(),
+        legacy_sensor_mask(interval.contributingSensorIds));
       output += buffer;
+      output += sensor_ids_json(interval.contributingSensorIds);
+      output += ",\"sensorBitsetWords\":";
+      output += sensor_bitset_words_json(interval.contributingSensorIds);
+      output += "}";
     }
   }
   output += "]";
@@ -877,26 +1161,295 @@ std::string aggregate_geometry_json(const std::vector<SwathSegment>& segments, s
   return std::string(header) + deltas + "}";
 }
 
+uint32_t total_window_count(const std::vector<SensorTrack>& tracks) {
+  uint32_t total = 0;
+  for (const auto& track : tracks) {
+    if (track.states.size() > 1) {
+      total += static_cast<uint32_t>(track.states.size() - 1);
+    }
+  }
+  return total;
+}
+
+std::vector<uint8_t> build_scv_result(
+    const GridConfig& grid,
+    const std::vector<SensorTrack>& tracks,
+    const std::vector<Cell>& cells,
+    const std::vector<SwathSegment>& swaths,
+    uint32_t total_windows) {
+  flatbuffers::FlatBufferBuilder builder(4096);
+  std::vector<flatbuffers::Offset<SCVCellStat>> cell_stats;
+  cell_stats.reserve(cells.size());
+  std::vector<flatbuffers::Offset<SCVInterval>> intervals;
+
+  const double duration = std::max(0.0, grid.stop - grid.start);
+  for (const auto& cell : cells) {
+    std::vector<uint32_t> sensor_ids;
+    sensor_ids.reserve(cell.contributingSensorIds.size());
+    for (const int sensor_id : cell.contributingSensorIds) {
+      if (sensor_id >= 0) {
+        sensor_ids.push_back(static_cast<uint32_t>(sensor_id));
+      }
+    }
+    const std::vector<uint64_t> bitset_words = sensor_bitset_words(cell.contributingSensorIds);
+    const double coverage_fraction = duration > 0.0 ? cell.totalAccess / duration : 0.0;
+    const double mean_gap = cell.accessCount > 0
+      ? cell.totalGap / static_cast<double>(cell.accessCount + 1)
+      : duration;
+    cell_stats.push_back(CreateSCVCellStatDirect(
+      builder,
+      static_cast<uint32_t>(cell.index),
+      cell.latitude,
+      cell.longitude,
+      0.0,
+      static_cast<uint32_t>(cell.accessCount),
+      total_windows,
+      coverage_fraction,
+      cell.meanRevisit,
+      cell.maxGap,
+      mean_gap,
+      static_cast<double>(sensor_ids.size()),
+      &sensor_ids,
+      &bitset_words));
+    for (const auto& interval : cell.intervals) {
+      for (const int sensor_id : interval.contributingSensorIds) {
+        if (sensor_id < 0) {
+          continue;
+        }
+        intervals.push_back(CreateSCVInterval(
+          builder,
+          static_cast<uint32_t>(sensor_id),
+          0,
+          scvIntervalCategory_ACCESS,
+          interval.start,
+          interval.stop,
+          interval.stop - interval.start,
+          0.0,
+          0.0,
+          static_cast<uint32_t>(cell.index)));
+      }
+    }
+  }
+
+  std::vector<float> reveal_coords;
+  reveal_coords.reserve(swaths.size() * 8);
+  std::vector<uint32_t> indices;
+  indices.reserve(swaths.size() * 6);
+  std::vector<uint32_t> segment_ids;
+  segment_ids.reserve(swaths.size());
+  std::vector<uint32_t> geometry_sensor_ids;
+  geometry_sensor_ids.reserve(swaths.size());
+  std::vector<flatbuffers::Offset<SCVSwathSegment>> geometry_segments;
+  geometry_segments.reserve(swaths.size());
+  for (size_t index = 0; index < swaths.size(); ++index) {
+    const auto& segment = swaths[index];
+    const uint32_t vertex_offset = static_cast<uint32_t>(index * 4);
+    const uint32_t index_offset = static_cast<uint32_t>(index * 6);
+    auto push_vertex = [&](const Vertex& vertex) {
+      reveal_coords.push_back(static_cast<float>(vertex.longitudeDeg));
+      reveal_coords.push_back(static_cast<float>(vertex.latitudeDeg));
+    };
+    push_vertex(segment.leftStart);
+    push_vertex(segment.leftStop);
+    push_vertex(segment.rightStop);
+    push_vertex(segment.rightStart);
+    indices.push_back(vertex_offset);
+    indices.push_back(vertex_offset + 1);
+    indices.push_back(vertex_offset + 2);
+    indices.push_back(vertex_offset);
+    indices.push_back(vertex_offset + 2);
+    indices.push_back(vertex_offset + 3);
+
+    const uint32_t segment_id = static_cast<uint32_t>(std::max(segment.index, 0));
+    const uint32_t sensor_id = static_cast<uint32_t>(std::max(segment.sensorId, 0));
+    segment_ids.push_back(segment_id);
+    geometry_sensor_ids.push_back(sensor_id);
+    const std::vector<uint32_t> segment_sensor_ids{sensor_id};
+    geometry_segments.push_back(CreateSCVSwathSegmentDirect(
+      builder,
+      segment_id,
+      sensor_id,
+      segment_id,
+      scvGeometryDomain_SURFACE,
+      scvCoordinateFrame_BODY_FIXED,
+      segment.start,
+      segment.stop,
+      vertex_offset,
+      4,
+      index_offset,
+      6,
+      &segment_sensor_ids));
+  }
+
+  const auto geometry = CreateSCVPackedGeometryChunkDirect(
+    builder,
+    "sensor-coverage-analysis",
+    0,
+    0,
+    0,
+    static_cast<uint32_t>(swaths.size()),
+    scvGeometryDomain_SURFACE,
+    scvCoordinateFrame_BODY_FIXED,
+    scvGeometryEncoding_FLAT_FLOAT32,
+    grid.start,
+    grid.stop,
+    nullptr,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    nullptr,
+    nullptr,
+    nullptr,
+    &reveal_coords,
+    &indices,
+    &segment_ids,
+    &geometry_sensor_ids,
+    &geometry_segments);
+
+  const double step = total_windows > 0
+    ? duration / static_cast<double>(total_windows)
+    : duration;
+  const auto time_grid = CreateSCVTimeGridDirect(
+    builder,
+    nullptr,
+    0.0,
+    grid.start,
+    grid.stop,
+    step,
+    0,
+    total_windows);
+  const auto target_body = CreateSCVEllipsoidDirect(
+    builder,
+    scvBodyKind_EARTH,
+    "Earth",
+    kEarthRadiusM,
+    6356752.314245,
+    kEarthRadiusM,
+    scvCoordinateFrame_BODY_FIXED);
+  const auto result = CreateSCVResultDirect(
+    builder,
+    "sensor-coverage-analysis",
+    0,
+    scvResultState_OK,
+    time_grid,
+    target_body,
+    static_cast<uint32_t>(tracks.size()),
+    total_windows,
+    &cell_stats,
+    &intervals,
+	    nullptr,
+	    nullptr,
+	    nullptr,
+	    nullptr,
+	    nullptr,
+	    geometry,
+	    "Compatibility JSON request converted to canonical SDS SCV result.");
+  const auto envelope = CreateSCV(
+    builder,
+    scvEnvelopeKind_RESULT,
+    0,
+    0,
+    0,
+    result,
+    0);
+  FinishSCVBuffer(builder, envelope);
+
+  const uint8_t* begin = builder.GetBufferPointer();
+  return std::vector<uint8_t>(begin, begin + builder.GetSize());
+}
+
+std::vector<uint8_t> build_scv_progress(
+    const std::vector<SensorTrack>& tracks,
+    uint32_t completed_windows,
+    uint32_t total_windows) {
+  flatbuffers::FlatBufferBuilder builder(256);
+  const uint32_t total_sensors = static_cast<uint32_t>(tracks.size());
+  const uint32_t backlog_remaining =
+    completed_windows < total_windows ? total_windows - completed_windows : 0u;
+  const double completion_fraction = total_windows > 0
+    ? clamp(
+        static_cast<double>(completed_windows) / static_cast<double>(total_windows),
+        0.0,
+        1.0)
+    : 1.0;
+  const auto progress = CreateSCVProgressDirect(
+    builder,
+    "sensor-coverage-analysis",
+    0,
+    scvResultState_OK,
+    total_sensors,
+    total_sensors,
+    completed_windows,
+    total_windows,
+    backlog_remaining,
+    completion_fraction,
+    completed_windows >= total_windows
+      ? "Sensor coverage complete."
+      : "Sensor coverage in progress.");
+  const auto envelope = CreateSCV(
+    builder,
+    scvEnvelopeKind_PROGRESS,
+    0,
+    progress,
+    0,
+    0,
+    0);
+  FinishSCVBuffer(builder, envelope);
+
+  const uint8_t* begin = builder.GetBufferPointer();
+  return std::vector<uint8_t>(begin, begin + builder.GetSize());
+}
+
+int emit_scv_progress_frame(
+    const std::vector<SensorTrack>& tracks,
+    uint32_t completed_windows,
+    uint32_t total_windows) {
+  const std::vector<uint8_t> scv_progress =
+    build_scv_progress(tracks, completed_windows, total_windows);
+  return emit_bytes(
+    "coverage",
+    "SCV/main.fbs",
+    "$SCV",
+    scv_progress.data(),
+    static_cast<uint32_t>(scv_progress.size()));
+}
+
 }  // namespace
 
 extern "C" int compute_sensor_coverage(void) {
   plugin_reset_output_state();
 
-  const std::string request = payload_for_port("coverage");
-  if (request.empty()) {
+  const std::string request_payload = payload_for_port("coverage");
+  if (request_payload.empty()) {
     return fail("missing-coverage", "Input port \"coverage\" is required.");
   }
 
-  const GridConfig grid = parse_grid(request);
+  CoverageInput input{};
+  std::string parse_error;
+  if (!parse_coverage_input(request_payload, input, parse_error)) {
+    return fail("invalid-coverage", parse_error.c_str());
+  }
+
+  const GridConfig grid = input.grid;
   if (!(grid.stop > grid.start)) {
     return fail("invalid-time-span", "Coverage stopSeconds must be greater than startSeconds.");
   }
 
-  const std::vector<SensorTrack> tracks = parse_sensor_tracks(request);
+  const std::vector<SensorTrack> tracks = input.tracks;
   if (tracks.empty()) {
     return fail("missing-states", "Coverage request must include at least two propagated sensor-owner states.");
   }
 
+  const uint32_t total_windows = total_window_count(tracks);
+  const uint32_t progress_stride = std::max<uint32_t>(1, total_windows / 20);
+  uint32_t completed_windows = 0;
   std::vector<FootprintSample> footprints;
   std::vector<SwathSegment> swaths;
   for (const auto& track : tracks) {
@@ -906,6 +1459,18 @@ extern "C" int compute_sensor_coverage(void) {
     for (auto segment : track_swaths) {
       segment.index = static_cast<int>(swaths.size());
       swaths.push_back(segment);
+      completed_windows = std::min<uint32_t>(completed_windows + 1, total_windows);
+      if (
+        input.isScv &&
+        completed_windows < total_windows &&
+        (completed_windows == 1 || completed_windows % progress_stride == 0)
+      ) {
+        const int progress_status =
+          emit_scv_progress_frame(tracks, completed_windows, total_windows);
+        if (progress_status != 0) {
+          return progress_status;
+        }
+      }
     }
   }
   if (swaths.empty()) {
@@ -944,11 +1509,17 @@ extern "C" int compute_sensor_coverage(void) {
   }
 
   const double duration = grid.stop - grid.start;
-  const std::string fom_type = string_value(request, "figureOfMerit", "percent_coverage");
-  const std::string output_mode = string_value(request, "outputMode", "");
+  const std::string fom_type = input.isScv
+    ? std::string("percent_coverage")
+    : string_value(request_payload, "figureOfMerit", "percent_coverage");
+  const std::string output_mode = input.isScv
+    ? std::string("")
+    : string_value(request_payload, "outputMode", "");
   const bool aggregate_output =
     output_mode == "aggregate_differential_geometry" || tracks.size() > 1;
-  const std::string coverage_source = object_value(request, "coverageSource");
+  const std::string coverage_source = input.isScv
+    ? std::string("")
+    : object_value(request_payload, "coverageSource");
   char header[2048];
   std::snprintf(
     header,
@@ -997,5 +1568,28 @@ extern "C" int compute_sensor_coverage(void) {
     "\"swath polygons are continuous along-track left/right footprint bands\","
     "\"grid cells are secondary figure-of-merit samples accumulated from swath geometry\"]}";
 
-  return emit_json("coverage", "TAB.fbs", "$TAB", response);
+  if (!input.isScv) {
+    const int json_status = emit_json(
+      "coverage",
+      "SensorCoverageCompatibilityJson",
+      "JSON",
+      response);
+    if (json_status != 0) {
+      return json_status;
+    }
+  }
+
+  const int progress_status =
+    emit_scv_progress_frame(tracks, total_windows, total_windows);
+  if (progress_status != 0) {
+    return progress_status;
+  }
+
+  const std::vector<uint8_t> scv_result = build_scv_result(grid, tracks, cells, swaths, total_windows);
+  return emit_bytes(
+    "coverage",
+    "SCV/main.fbs",
+    "$SCV",
+    scv_result.data(),
+    static_cast<uint32_t>(scv_result.size()));
 }

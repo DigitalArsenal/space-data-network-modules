@@ -1,0 +1,94 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.time",
+  "name": "Foundation Time",
+  "version": "0.1.0",
+  "description": "Shared SDS TIM time-scale conversion module for Orekit-compatible UTC, TAI, TT, GPS, GLONASS, GST, QZSS, BDT, NAVIC, UT1, TCG, TDB, TCB, and GMST epoch handling.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "convert_time",
+      "displayName": "Convert Time",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tim-conversion-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "TIM.fbs",
+                  "fileIdentifier": "$TIM",
+                  "rootTypeName": "TIM"
+                },
+                {
+                  "schemaName": "TIM.fbs",
+                  "fileIdentifier": "$TIM",
+                  "rootTypeName": "TIM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS TIM envelope carrying TIMConversionRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Time conversion request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tim-conversion-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "TIM.fbs",
+                  "fileIdentifier": "$TIM",
+                  "rootTypeName": "TIM"
+                },
+                {
+                  "schemaName": "TIM.fbs",
+                  "fileIdentifier": "$TIM",
+                  "rootTypeName": "TIM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS TIM envelope carrying TIMConversionResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Time conversion result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS TIM instant between supported time systems."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TIM.fbs",
+      "fileIdentifier": "$TIM",
+      "rootTypeName": "TIM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-time-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

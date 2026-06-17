@@ -1,0 +1,19 @@
+{
+  "name": "space-data-network-plugin-dop",
+  "version": "1.0.0",
+  "description": "Space Data Network GNSS dilution-of-precision analysis module",
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./plugin-manifest.json": "./plugin-manifest.json",
+    "./dist/*": "./dist/*"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "space-data-module-sdk": "file:../../../space-data-module-sdk"
+  },
+  "private": true
+}

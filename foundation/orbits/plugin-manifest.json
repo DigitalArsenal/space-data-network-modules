@@ -1,0 +1,1881 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.orbits",
+  "name": "Foundation Orbits",
+  "version": "0.1.0",
+  "description": "Shared SDS OMM/OPM/OEM/VCM/CDM/GRV/CRD orbit conversion module for Orekit-compatible elliptical and hyperbolic Keplerian mean elements, parabolic VCM periapsis states, Cartesian state vectors, CCSDS orbit parameter messages, VCM equinoctial elements, Basilisk J2 mean/osculating elements, Basilisk J2-J6 zonal perturbation acceleration, Basilisk solar radiation pressure acceleration, and Basilisk Hill relative states.",
+  "pluginFamily": "foundation",
+  "capabilities": ["clock"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "com.digitalarsenal.foundation.time.convert_time",
+      "kind": "clock",
+      "direction": "input",
+      "capability": "clock",
+      "description": "Epoch normalization is delegated to foundation/time; this module treats OMM epochs as opaque SDS timestamps and does not duplicate time-scale conversion logic."
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "keplerian_to_cartesian",
+      "displayName": "Keplerian To Cartesian",
+      "inputPorts": [
+        {
+          "portId": "mean_elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-mean-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM mean Keplerian elements using km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Mean Keplerian elements."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one explicit ephemerisDataLine state vector."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian position/velocity state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS OMM elliptical or hyperbolic Keplerian mean-element state into one SDS OEM Cartesian state."
+    },
+    {
+      "methodId": "cartesian_to_keplerian",
+      "displayName": "Cartesian To Keplerian",
+      "inputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one explicit ephemerisDataLine state vector."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cartesian position/velocity state vector."
+        },
+        {
+          "portId": "gravity_context",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-gravity-context",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM context frame carrying GM and optional object metadata for the emitted mean elements."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Gravity parameter and output metadata context."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mean_elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-mean-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM mean Keplerian elements using km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Mean Keplerian elements."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS OEM Cartesian state into one SDS OMM elliptical or hyperbolic Keplerian mean-element state using GM from gravity_context."
+    },
+    {
+      "methodId": "opm_to_oem",
+      "displayName": "OPM To OEM",
+      "inputPorts": [
+        {
+          "portId": "orbit_parameters",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-opm-orbit-parameters",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                },
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OPM orbit parameter message carrying one Cartesian state vector in km and km/s."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Orbit parameter message."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one explicit ephemerisDataLine state vector."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian position/velocity state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS OPM Cartesian state into a one-line SDS OEM ephemeris state vector."
+    },
+    {
+      "methodId": "opm_keplerian_to_oem",
+      "displayName": "OPM Keplerian To OEM",
+      "inputPorts": [
+        {
+          "portId": "orbit_parameters",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-opm-orbit-parameters",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                },
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OPM orbit parameter message carrying Keplerian elements in km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Orbit parameter message."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one explicit ephemerisDataLine state vector."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian position/velocity state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS OPM Keplerian true-anomaly state into a one-line SDS OEM ephemeris state vector."
+    },
+    {
+      "methodId": "opm_keplerian_to_omm",
+      "displayName": "OPM Keplerian To OMM",
+      "inputPorts": [
+        {
+          "portId": "orbit_parameters",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-opm-orbit-parameters",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                },
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OPM orbit parameter message carrying Keplerian elements in km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Orbit parameter message."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mean_elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-mean-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM mean Keplerian elements using km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Mean Keplerian elements."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Normalizes one SDS OPM Keplerian true-anomaly state into an SDS OMM mean-element state."
+    },
+    {
+      "methodId": "opm_to_omm",
+      "displayName": "OPM To OMM",
+      "inputPorts": [
+        {
+          "portId": "orbit_parameters",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-opm-orbit-parameters",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                },
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OPM orbit parameter message carrying one Cartesian state vector and GM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Orbit parameter message."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mean_elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-mean-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM mean Keplerian elements using km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Mean Keplerian elements."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS OPM Cartesian state into one SDS OMM elliptical or hyperbolic Keplerian mean-element state using GM from the OPM."
+    },
+    {
+      "methodId": "vcm_state_to_oem",
+      "displayName": "VCM State To OEM",
+      "inputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, and epoch fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "VCM Cartesian state vector."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one explicit ephemerisDataLine state vector."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian position/velocity state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Promotes one SDS VCM Cartesian state vector into a one-line SDS OEM ephemeris state vector."
+    },
+    {
+      "methodId": "vcm_state_to_j_zonal_acceleration_oem",
+      "displayName": "VCM State To J-Zonal Acceleration OEM",
+      "inputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, and epoch fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "VCM Cartesian state vector."
+        },
+        {
+          "portId": "gravity_context",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-grv-zonal-gravity-context",
+              "allowedTypes": [
+                {
+                  "schemaName": "GRV.fbs",
+                  "fileIdentifier": "$GRV",
+                  "rootTypeName": "GRV"
+                },
+                {
+                  "schemaName": "GRV.fbs",
+                  "fileIdentifier": "$GRV",
+                  "rootTypeName": "GRV",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS GRV context carrying MU, equatorial radius, and J2-J6 zonal coefficients."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "J-zonal gravity context."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-acceleration-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one position/velocity/acceleration ephemerisDataLine."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian state vector with J-zonal acceleration."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Computes Basilisk-equivalent J2-J6 zonal perturbation acceleration from one SDS VCM Cartesian state and SDS GRV gravity context."
+    },
+    {
+      "methodId": "vcm_state_to_srp_acceleration_oem",
+      "displayName": "VCM State To SRP Acceleration OEM",
+      "inputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state-with-spacecraft-parameters",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR plus MASS, SOLAR_RAD_AREA, and SOLAR_RAD_COEFF spacecraft fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "VCM Cartesian state vector and spacecraft SRP parameters."
+        },
+        {
+          "portId": "sun_vector",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-crd-sun-vector-au",
+              "allowedTypes": [
+                {
+                  "schemaName": "CRD.fbs",
+                  "fileIdentifier": "$CRD",
+                  "rootTypeName": "CRD"
+                },
+                {
+                  "schemaName": "CRD.fbs",
+                  "fileIdentifier": "$CRD",
+                  "rootTypeName": "CRD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS CRD vector whose X/Y/Z fields carry the central-body-to-Sun vector in astronomical units."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Sun vector in AU."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-acceleration-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one position/velocity/acceleration ephemerisDataLine."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian state vector with SRP acceleration."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Computes Basilisk-equivalent solar radiation pressure acceleration from one SDS VCM Cartesian state with spacecraft parameters and one SDS CRD Sun vector in AU."
+    },
+    {
+      "methodId": "vcm_state_to_omm",
+      "displayName": "VCM State To OMM",
+      "inputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "VCM Cartesian state vector."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mean_elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-mean-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM mean Keplerian elements using km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Mean Keplerian elements."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM Cartesian state vector into one SDS OMM elliptical or hyperbolic Keplerian mean-element state using GM from the VCM."
+    },
+    {
+      "methodId": "vcm_state_to_keplerian",
+      "displayName": "VCM State To Keplerian",
+      "inputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "VCM Cartesian state vector."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS in km, degree, and anomaly-convention fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM Cartesian state vector into SDS VCM KEPLERIAN_ELEMENTS using GM from the VCM. Elliptic and hyperbolic states emit MEAN_ANOMALY; parabolic states emit TRUE_ANOMALY and PERIAPSIS_RADIUS."
+    },
+    {
+      "methodId": "vcm_state_to_equinoctial",
+      "displayName": "VCM State To Equinoctial",
+      "inputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "VCM Cartesian state vector."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "equinoctial_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-equinoctial-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state with EQUINOCTIAL_ELEMENTS populated from the input Cartesian state vector."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Equinoctial VCM state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM Cartesian state vector into SDS VCM EQUINOCTIAL_ELEMENTS using GM from the VCM."
+    },
+    {
+      "methodId": "vcm_keplerian_to_oem",
+      "displayName": "VCM Keplerian To OEM",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR.EPOCH, KEPLERIAN_ELEMENTS, and GM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one explicit ephemerisDataLine state vector."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian position/velocity state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM Keplerian state into a one-line SDS OEM ephemeris state vector, including parabolic TRUE_ANOMALY states when PERIAPSIS_RADIUS is present."
+    },
+    {
+      "methodId": "vcm_keplerian_to_state",
+      "displayName": "VCM Keplerian To State",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR.EPOCH, KEPLERIAN_ELEMENTS, and GM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "VCM Cartesian state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM Keplerian state into VCM STATE_VECTOR fields using GM from the VCM, including parabolic TRUE_ANOMALY states when PERIAPSIS_RADIUS is present."
+    },
+    {
+      "methodId": "vcm_keplerian_to_omm",
+      "displayName": "VCM Keplerian To OMM",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR.EPOCH, KEPLERIAN_ELEMENTS, and GM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mean_elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-mean-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM mean Keplerian elements using km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Mean Keplerian elements."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Normalizes one SDS VCM elliptical or hyperbolic Keplerian state into one SDS OMM mean-element frame, converting TRUE_ANOMALY to MEAN_ANOMALY when required."
+    },
+    {
+      "methodId": "vcm_keplerian_to_true_anomaly",
+      "displayName": "VCM Keplerian To True Anomaly",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS with TRUE_ANOMALY or MEAN_ANOMALY."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS normalized to TRUE_ANOMALY."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Keplerian VCM state normalized to true anomaly."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Normalizes one SDS VCM elliptical or hyperbolic Keplerian state to TRUE_ANOMALY using Basilisk-compatible orbital anomaly conversions."
+    },
+    {
+      "methodId": "vcm_keplerian_to_mean_anomaly",
+      "displayName": "VCM Keplerian To Mean Anomaly",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS with TRUE_ANOMALY or MEAN_ANOMALY."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS normalized to MEAN_ANOMALY."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Keplerian VCM state normalized to mean anomaly."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Normalizes one SDS VCM elliptical or hyperbolic Keplerian state to MEAN_ANOMALY using Basilisk-compatible orbital anomaly conversions."
+    },
+    {
+      "methodId": "vcm_keplerian_mean_to_osculating",
+      "displayName": "VCM Keplerian Mean To Osculating",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying elliptical KEPLERIAN_ELEMENTS in km, degrees, and a declared anomaly convention."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Mean Keplerian VCM state."
+        },
+        {
+          "portId": "gravity_context",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-grv-j2-context",
+              "allowedTypes": [
+                {
+                  "schemaName": "GRV.fbs",
+                  "fileIdentifier": "$GRV",
+                  "rootTypeName": "GRV"
+                },
+                {
+                  "schemaName": "GRV.fbs",
+                  "fileIdentifier": "$GRV",
+                  "rootTypeName": "GRV",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS GRV gravity context carrying EQUATORIAL_RADIUS and J2 for first-order zonal perturbation mapping."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Gravity model context."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying osculating KEPLERIAN_ELEMENTS."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Osculating Keplerian VCM state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Maps one SDS VCM elliptical Keplerian mean-element state to osculating elements using Basilisk clMeanOscMap first-order J2 semantics and GRV EQUATORIAL_RADIUS/J2."
+    },
+    {
+      "methodId": "vcm_keplerian_osculating_to_mean",
+      "displayName": "VCM Keplerian Osculating To Mean",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying elliptical KEPLERIAN_ELEMENTS in km, degrees, and a declared anomaly convention."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Osculating Keplerian VCM state."
+        },
+        {
+          "portId": "gravity_context",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-grv-j2-context",
+              "allowedTypes": [
+                {
+                  "schemaName": "GRV.fbs",
+                  "fileIdentifier": "$GRV",
+                  "rootTypeName": "GRV"
+                },
+                {
+                  "schemaName": "GRV.fbs",
+                  "fileIdentifier": "$GRV",
+                  "rootTypeName": "GRV",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS GRV gravity context carrying EQUATORIAL_RADIUS and J2 for first-order zonal perturbation mapping."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Gravity model context."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying mean KEPLERIAN_ELEMENTS."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Mean Keplerian VCM state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Maps one SDS VCM elliptical Keplerian osculating-element state to mean elements using Basilisk clMeanOscMap first-order J2 semantics and GRV EQUATORIAL_RADIUS/J2."
+    },
+    {
+      "methodId": "keplerian_to_equinoctial",
+      "displayName": "Keplerian To Equinoctial",
+      "inputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS in km, degrees, and a declared anomaly convention."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "equinoctial_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-equinoctial-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state with EQUINOCTIAL_ELEMENTS populated from the input Keplerian elements."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Equinoctial VCM state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM elliptical Keplerian state into VCM equinoctial elements."
+    },
+    {
+      "methodId": "equinoctial_to_keplerian",
+      "displayName": "Equinoctial To Keplerian",
+      "inputPorts": [
+        {
+          "portId": "equinoctial_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-equinoctial-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS in km, degrees, and unitless shape fields."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Equinoctial VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "keplerian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-keplerian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state with KEPLERIAN_ELEMENTS populated from the input equinoctial elements."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Keplerian VCM state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM elliptical equinoctial state into VCM Keplerian elements with TRUE_ANOMALY, normalizing circular undefined angles."
+    },
+    {
+      "methodId": "vcm_equinoctial_to_omm",
+      "displayName": "VCM Equinoctial To OMM",
+      "inputPorts": [
+        {
+          "portId": "equinoctial_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-equinoctial-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS, STATE_VECTOR.EPOCH, and GM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Equinoctial VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mean_elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-mean-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OMM mean Keplerian elements using km, km^3/s^2, and degree fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Mean Keplerian elements."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Normalizes one SDS VCM elliptical equinoctial state into SDS OMM mean Keplerian elements by recovering true anomaly and converting it to mean anomaly, including circular prograde cases."
+    },
+    {
+      "methodId": "vcm_equinoctial_to_oem",
+      "displayName": "VCM Equinoctial To OEM",
+      "inputPorts": [
+        {
+          "portId": "equinoctial_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-equinoctial-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS, STATE_VECTOR.EPOCH, and GM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Equinoctial VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cartesian_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-cartesian-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS OEM ephemeris data block with one explicit ephemerisDataLine state vector."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cartesian position/velocity state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM elliptical equinoctial state into a one-line SDS OEM ephemeris state vector by recovering true anomaly and propagating through Keplerian Cartesian conversion, including circular prograde cases."
+    },
+    {
+      "methodId": "vcm_equinoctial_to_state",
+      "displayName": "VCM Equinoctial To State",
+      "inputPorts": [
+        {
+          "portId": "equinoctial_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-equinoctial-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS, STATE_VECTOR.EPOCH, and GM."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Equinoctial VCM state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "vector_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-vector-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "VCM Cartesian state vector."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts one SDS VCM elliptical equinoctial state into VCM STATE_VECTOR fields by recovering true anomaly and propagating through Keplerian Cartesian conversion, including circular prograde cases."
+    },
+    {
+      "methodId": "vcm_pair_to_cdm_relative_hill",
+      "displayName": "VCM Pair To CDM Relative Hill",
+      "inputPorts": [
+        {
+          "portId": "chief_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-chief-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM chief state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Chief inertial Cartesian state."
+        },
+        {
+          "portId": "deputy_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-deputy-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM deputy state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Deputy inertial Cartesian state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "relative_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cdm-relative-rtn-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM"
+                },
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS CDM relative RTN/Hill position and velocity fields in km and km/s."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "CDM relative state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Maps a chief/deputy pair of SDS VCM Cartesian state vectors into SDS CDM relative RTN/Hill position and velocity fields using the Basilisk orbitalMotion rv2hill convention."
+    },
+    {
+      "methodId": "cdm_relative_hill_to_vcm_deputy_state",
+      "displayName": "CDM Relative Hill To VCM Deputy State",
+      "inputPorts": [
+        {
+          "portId": "chief_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-chief-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM chief state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Chief inertial Cartesian state."
+        },
+        {
+          "portId": "relative_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cdm-relative-rtn-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM"
+                },
+                {
+                  "schemaName": "CDM.fbs",
+                  "fileIdentifier": "$CDM",
+                  "rootTypeName": "CDM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS CDM relative RTN/Hill position and velocity fields in km and km/s."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CDM relative Hill state."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "deputy_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-deputy-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS VCM deputy state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Deputy inertial Cartesian state."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Maps SDS CDM relative RTN/Hill position and velocity plus a chief SDS VCM Cartesian state into a deputy SDS VCM Cartesian state using the Basilisk orbitalMotion hill2rv convention."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OPM.fbs",
+      "fileIdentifier": "$OPM",
+      "rootTypeName": "OPM"
+    },
+    {
+      "schemaName": "VCM.fbs",
+      "rootTypeName": "VCM"
+    },
+    {
+      "schemaName": "GRV.fbs",
+      "fileIdentifier": "$GRV",
+      "rootTypeName": "GRV"
+    },
+    {
+      "schemaName": "CRD.fbs",
+      "fileIdentifier": "$CRD",
+      "rootTypeName": "CRD"
+    },
+    {
+      "schemaName": "CDM.fbs",
+      "fileIdentifier": "$CDM",
+      "rootTypeName": "CDM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-orbits-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

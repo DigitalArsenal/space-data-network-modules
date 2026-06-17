@@ -4,12 +4,14 @@ import fs from "fs";
 import path from "path";
 import process from "node:process";
 import crypto from "crypto";
+import os from "node:os";
 import { fileURLToPath } from "url";
 import { protectModuleArtifact } from "space-data-module-sdk/compiler";
 import { writeEmbeddedManifestArtifacts } from "space-data-module-sdk/manifest";
 
-import { shouldRebuild, writeBuildHash } from "../../../orbpro-integration/build-cache.js";
-import { requireFlatbuffersCppInclude } from "../../../orbpro-integration/flatbuffers-include.js";
+import { getInvokeCppSchemaHeaders } from "../../../../ancillary-packages/space-data-module-sdk/src/compiler/flatcSupport.js";
+import { shouldRebuild, writeBuildHash } from "../../../OrbPro/packages/orbpro-integration/build-cache.js";
+import { requireFlatbuffersCppInclude } from "../../../OrbPro/packages/orbpro-integration/flatbuffers-include.js";
 import {
   compileSourceObjects,
   createEmscriptenSetting,
@@ -18,8 +20,8 @@ import {
   linkEmscriptenArtifact,
   readEmceptionFile,
   withEmceptionWorkspace,
-} from "../../../../scripts/sdn-emception-build.js";
-import { normalizeNodeEsmLoader } from "../../../orbpro-integration/protected-loader-hardening.js";
+} from "../../../OrbPro/scripts/sdn-emception-build.js";
+import { normalizeNodeEsmLoader } from "../../../OrbPro/packages/orbpro-integration/protected-loader-hardening.js";
 import {
   ACCESS_MANIFEST_BYTES_SYMBOL,
   ACCESS_MANIFEST_SIZE_SYMBOL,
@@ -29,16 +31,40 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const ORBPRO_ROOT = path.resolve(__dirname, "../../../OrbPro");
 const DIST_DIR = path.join(__dirname, "dist");
 const BROWSER_DIST_DIR = path.join(DIST_DIR, "browser");
 const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
 const MANIFEST_JSON_PATH = path.join(__dirname, "manifest.json");
 const DIST_MANIFEST_JSON_PATH = path.join(DIST_DIR, "manifest.json");
 const PLUGIN_SDK_INCLUDE = path.join(
-  REPO_ROOT,
+  ORBPRO_ROOT,
   "packages/orbpro-integration/sdk/include",
 );
+const STACK_FLATBUFFERS_INCLUDE = path.resolve(
+  __dirname,
+  "../../../flatbuffers/include",
+);
+const SDS_ACW_CPP_HEADER = path.resolve(
+  __dirname,
+  "../../../spacedatastandards.org/lib/cpp/ACW/main_generated.h",
+);
+
+async function writeInvokeSchemaHeaders(outputDir) {
+  fs.rmSync(outputDir, { recursive: true, force: true });
+  fs.mkdirSync(outputDir, { recursive: true });
+  const generatedHeaders = await getInvokeCppSchemaHeaders();
+  for (const [relativePath, content] of Object.entries(generatedHeaders)) {
+    const targetPath = path.join(outputDir, relativePath);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, content, "utf8");
+  }
+  fs.copyFileSync(SDS_ACW_CPP_HEADER, path.join(outputDir, "ACW_generated.h"));
+}
+
+function stripTrailingWhitespace(source) {
+  return source.replace(/[ \t]+$/gm, "");
+}
 
 async function build() {
   const force = process.argv.includes("--force");
@@ -61,6 +87,10 @@ async function build() {
     bytesSymbol: ACCESS_MANIFEST_BYTES_SYMBOL,
     sizeSymbol: ACCESS_MANIFEST_SIZE_SYMBOL,
   });
+  const generatedInvokeHeaderDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "access-invoke-headers-"),
+  );
+  await writeInvokeSchemaHeaders(generatedInvokeHeaderDir);
 
   const exportedFunctions = [
     "_plugin_init",
@@ -73,7 +103,14 @@ async function build() {
     "_access_get_ground_station_blackout_count",
     "_access_get_ground_station_blackout_record",
     "_access_compute_access_windows",
+    "_access_compute_access_windows_with_elevation_mask",
+    "_access_compute_access_windows_with_effects",
     "_access_schedule_contacts",
+    "_plugin_alloc",
+    "_plugin_free",
+    "_plugin_get_manifest_flatbuffer",
+    "_plugin_get_manifest_flatbuffer_size",
+    "_plugin_invoke_stream",
     `_${ACCESS_MANIFEST_BYTES_SYMBOL}`,
     `_${ACCESS_MANIFEST_SIZE_SYMBOL}`,
     "_malloc",
@@ -81,7 +118,9 @@ async function build() {
   ];
 
   const srcDir = path.join(__dirname, "src");
-  const flatbuffersCppInclude = requireFlatbuffersCppInclude();
+  const flatbuffersCppInclude = requireFlatbuffersCppInclude(process.env, [
+    STACK_FLATBUFFERS_INCLUDE,
+  ]);
   const wasmPath = path.join(DIST_DIR, "access.wasm");
   const loaderPath = path.join(DIST_DIR, "access.mjs");
   const bytesModulePath = path.join(DIST_DIR, "access-binary.js");
@@ -94,9 +133,10 @@ async function build() {
     `Compiling Access plugin with ${describePreferredEmscriptenBackend()}...`,
   );
 
-  await withEmceptionWorkspace(
-    "space-data-network-modules/analysis/access",
-    async (workspace) => {
+  try {
+    await withEmceptionWorkspace(
+      "space-data-network-modules/analysis/access",
+      async (workspace) => {
     const { session, workDir, stageHostDirectory, stageHostFile } = workspace;
     const stagedSrcDir = path.posix.join(workDir, "src");
     const stagedGeneratedDir = path.posix.join(workDir, "generated");
@@ -118,6 +158,7 @@ async function build() {
     await stageHostDirectory(srcDir, stagedSrcDir);
     await stageHostDirectory(PLUGIN_SDK_INCLUDE, stagedIntegrationSdkInclude);
     await stageHostDirectory(flatbuffersCppInclude, stagedFlatbuffersInclude);
+    await stageHostDirectory(generatedInvokeHeaderDir, stagedGeneratedDir);
     await stageHostFile(
       embeddedManifestArtifacts.sourcePath,
       stagedManifestSource,
@@ -141,6 +182,7 @@ async function build() {
       includeDirs: [
         stagedFlatbuffersInclude,
         stagedIntegrationSdkInclude,
+        stagedGeneratedDir,
         stagedSrcDir,
       ],
       compileFlags: ["-O3", "-std=c++17", "-Wno-dangling-else", "-Wno-format"],
@@ -174,7 +216,7 @@ async function build() {
       path.posix.join(stagedOutputDir, "access.mjs"),
       { encoding: "utf8" },
     );
-    loaderSource = normalizeNodeEsmLoader(loaderSource);
+    loaderSource = stripTrailingWhitespace(normalizeNodeEsmLoader(loaderSource));
     fs.writeFileSync(loaderPath, loaderSource, "utf8");
     fs.writeFileSync(
       wasmPath,
@@ -186,7 +228,10 @@ async function build() {
       ),
     );
     },
-  );
+    );
+  } finally {
+    fs.rmSync(generatedInvokeHeaderDir, { recursive: true, force: true });
+  }
 
   const wasmBinary = fs.readFileSync(wasmPath);
   const publication = await protectModuleArtifact({
@@ -198,13 +243,10 @@ async function build() {
     publicationRecordsPath,
     Buffer.from(publication.publicationRecordsBytes),
   );
-  fs.writeFileSync(wasmPath, Buffer.from(publication.protectedArtifactBytes));
   fs.copyFileSync(wasmPath, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
   fs.copyFileSync(wasmPath, path.join(BROWSER_DIST_DIR, "module.wasm"));
   fs.copyFileSync(loaderPath, path.join(BROWSER_DIST_DIR, "module.js"));
-  const wasmBase64 = Buffer.from(publication.protectedArtifactBytes).toString(
-    "base64",
-  );
+  const wasmBase64 = Buffer.from(wasmBinary).toString("base64");
   fs.writeFileSync(
     bytesModulePath,
     `export const wasmBase64 = "${wasmBase64}";\n`,

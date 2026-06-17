@@ -6,8 +6,8 @@ including migrated module families and Basilisk-derived module families.
 
 ## Structure
 
-- `analysis/`, `propagator/`, `shaders/`, `licensing/`, `delivery/`: migrated
-  SDK-compliant module families
+- `foundation/`, `analysis/`, `propagator/`, `shaders/`, `licensing/`,
+  `delivery/`: migrated and parity-oriented SDK-compliant module families
 - `basilisk/`: Basilisk-derived module plans and runtime seed modules
 - `packages/<domain>`: pending legacy migration targets when a package has not
   yet been moved into a family folder
@@ -54,7 +54,7 @@ including migrated module families and Basilisk-derived module families.
 | `packages/gps-jamming-detection` | `DigitalArsenal/space-data-network-plugin-gps-jamming-detection` | `Friends-Of-Lobsternaut/gps-jamming-detection-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/gscpi` | `DigitalArsenal/space-data-network-plugin-gscpi` | `Friends-Of-Lobsternaut/gscpi-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/gunter-scraper` | `DigitalArsenal/space-data-network-plugin-gunter-scraper` | `Friends-Of-Lobsternaut/gunter-scraper-sdn-plugin` | Pending | Not migrated yet. |
-| `propagator/hpop` | `DigitalArsenal/space-data-network-plugin-hpop` | `Friends-Of-Lobsternaut/hpop-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, numerical propagation with configurable force models. |
+| `propagator/hpop` | `DigitalArsenal/space-data-network-plugin-hpop` | `Friends-Of-Lobsternaut/hpop-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, numerical propagation with configurable force models, SDK-routed resident-state binary stream methods, and SGP4-to-HPOP aligned-binary `PropagatorState` handoff coverage. |
 | `packages/iridium` | `DigitalArsenal/space-data-network-plugin-iridium` | `Friends-Of-Lobsternaut/iridium-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/kiwisdr` | `DigitalArsenal/space-data-network-plugin-kiwisdr` | `Friends-Of-Lobsternaut/kiwisdr-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/launch-predict` | `DigitalArsenal/space-data-network-plugin-launch-predict` | `Friends-Of-Lobsternaut/launch-predict-sdn-plugin` | Pending | Not migrated yet. |
@@ -107,6 +107,8 @@ including migrated module families and Basilisk-derived module families.
 ## Current State
 
 - Packages are organized by family under top-level subfolders:
+  - `foundation/` — `time`, `math-bspline`, `numerics`, `attitude-math`,
+    `frames`, `orbits`
   - `propagator/` — `sgp4`, `hpop`, `atmosphere`, `cislunar`
   - `analysis/` — `conjunction-assessment`, `maneuver`, `od`, `fastest-path`
   - `basilisk/` — runtime seed package plus generated Basilisk module plan
@@ -134,14 +136,51 @@ checked-in planning artifacts are:
 
 - `docs/basilisk-module-plan.json`
 - `docs/basilisk-message-standards.json`
+- `docs/basilisk-unit-test-port-index.json`
 - `docs/basilisk-inventory.md`
 - `docs/basilisk-standards-map.md`
 
-Regenerate and verify them with:
+Orekit and Basilisk parity planning is tracked in:
+
+- `docs/orekit-basilisk-gap-analysis.md`
+- `docs/orekit-basilisk-module-todos.md`
+- `docs/orekit-source-test-index.json`
+- `docs/basilisk-source-test-index.json`
+- `docs/current-module-parity-index.json`
+- `docs/module-import-descriptors.json`
+- `docs/test-vector-extraction-index.json`
+- `docs/sds-schema-audit.json`
+
+Regenerate and verify Basilisk planning with:
 
 ```bash
 npm run generate:basilisk-plan
 npm run check:basilisk-plan
+npm run generate:basilisk-unit-test-ports
+npm run check:basilisk-unit-test-ports
+```
+
+Regenerate and verify Orekit/Basilisk source-test inventory indices with:
+
+```bash
+npm run generate:source-indices
+npm run check:source-indices
+```
+
+Regenerate and verify current module parity/readiness inventory with:
+
+```bash
+npm run generate:module-index
+npm run check:module-index
+```
+
+Verify import descriptors, selected source-library test-vector mappings, and
+the SDS schema audit with:
+
+```bash
+npm run check:module-imports
+npm run check:test-vectors
+npm run check:sds-schema-audit
 ```
 
 The runtime seed module is `basilisk/runtime` and follows the same

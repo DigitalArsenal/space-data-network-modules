@@ -15,10 +15,12 @@
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
 #include "TypedArenaBuffer_generated.h"
+#include "PIV_generated.h"
 #include "space_data_module_invoke.h"
 
 extern "C" int invoke(void);
 extern "C" int query_atmosphere_state_batch(void);
+extern "C" int vcm_state_to_drag_acceleration_oem(void);
 
 namespace {
 
@@ -76,6 +78,7 @@ struct InvokeContext {
   const MethodDescriptor *method = nullptr;
   std::vector<InputFrameOwned> inputs{};
   std::vector<OutputFrameOwned> outputs{};
+  uint64_t trace_id = 0;
   uint32_t backlog_remaining = 0;
   bool yielded = false;
   int32_t status_code = 0;
@@ -92,9 +95,17 @@ static const char *kMethod_invoke_output_ports[] = {
 
 static const PortRequirement kMethod_query_atmosphere_state_batch_input_ports[] = {
   { "atmosphere", true },
+  { "space_weather", false },
 };
 static const char *kMethod_query_atmosphere_state_batch_output_ports[] = {
   "states",
+};
+
+static const PortRequirement kMethod_vcm_state_to_drag_acceleration_oem_input_ports[] = {
+  { "vector_state", true },
+};
+static const char *kMethod_vcm_state_to_drag_acceleration_oem_output_ports[] = {
+  "drag_acceleration",
 };
 
 static const MethodDescriptor kMethodTable[] = {
@@ -105,7 +116,7 @@ static const MethodDescriptor kMethodTable[] = {
     1u,
     kMethod_invoke_output_ports,
     1u,
-    true,
+    false,
     "request",
     "response"
   },
@@ -113,12 +124,23 @@ static const MethodDescriptor kMethodTable[] = {
     "query_atmosphere_state_batch",
     &query_atmosphere_state_batch,
     kMethod_query_atmosphere_state_batch_input_ports,
-    1u,
+    2u,
     kMethod_query_atmosphere_state_batch_output_ports,
     1u,
-    true,
+    false,
     "atmosphere",
     "states"
+  },
+  {
+    "vcm_state_to_drag_acceleration_oem",
+    &vcm_state_to_drag_acceleration_oem,
+    kMethod_vcm_state_to_drag_acceleration_oem_input_ports,
+    1u,
+    kMethod_vcm_state_to_drag_acceleration_oem_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
   },
 };
 
@@ -164,6 +186,10 @@ static bool MethodDeclaresOutputPort(const MethodDescriptor *method, const char 
 static void ResetInvokeContext(const MethodDescriptor *method) {
   g_invoke_context = InvokeContext{};
   g_invoke_context.method = method;
+}
+
+static std::string StringValue(const ::flatbuffers::String *value) {
+  return value ? value->str() : std::string();
 }
 
 static void SetError(const char *code, const std::string &message) {
@@ -303,6 +329,106 @@ static bool LoadInputsFromRequestTable(const orbpro::invoke::PluginInvokeRequest
     owned.view.end_of_stream = frame->end_of_stream() ? 1 : 0;
     owned.view.payload = payload_ptr;
     owned.view.payload_length = static_cast<uint32_t>(payload_size);
+  }
+
+  return true;
+}
+
+static bool ResolvePivPayload(
+  const PIVRequest *request,
+  const TAB *frame,
+  const uint8_t **payload_out,
+  uint32_t *payload_size_out
+) {
+  if (!payload_out || !payload_size_out) {
+    return false;
+  }
+  *payload_out = nullptr;
+  *payload_size_out = 0u;
+  if (!request || !frame) {
+    return false;
+  }
+
+  const uint32_t payload_size = frame->SIZE();
+  const uint32_t payload_offset = frame->OFFSET();
+  const auto *arena = request->PAYLOAD_ARENA();
+  if (payload_size == 0u) {
+    *payload_size_out = 0u;
+    return true;
+  }
+  if (arena && arena->size() > 0u) {
+    const uint64_t end_offset =
+      static_cast<uint64_t>(payload_offset) + static_cast<uint64_t>(payload_size);
+    if (end_offset > arena->size()) {
+      SetError("invalid-request-frame", "PIV input frame payload range exceeds request payload arena.");
+      return false;
+    }
+    *payload_out = arena->Data() + payload_offset;
+    *payload_size_out = payload_size;
+    return true;
+  }
+
+  const uintptr_t pointer = static_cast<uintptr_t>(payload_offset);
+  if (pointer == 0u) {
+    SetError("invalid-request-frame", "PIV input frame uses an external payload pointer of zero.");
+    return false;
+  }
+  *payload_out = reinterpret_cast<const uint8_t *>(pointer);
+  *payload_size_out = payload_size;
+  return true;
+}
+
+static bool LoadInputsFromPivRequest(const PIVRequest *request) {
+  g_invoke_context.inputs.clear();
+  const auto *frames = request ? request->INPUTS() : nullptr;
+  if (!frames) {
+    return true;
+  }
+  g_invoke_context.inputs.reserve(frames->size());
+
+  for (::flatbuffers::uoffset_t index = 0; index < frames->size(); index += 1) {
+    const TAB *frame = frames->Get(index);
+    if (!frame) {
+      continue;
+    }
+
+    const uint8_t *payload_ptr = nullptr;
+    uint32_t payload_size = 0;
+    if (!ResolvePivPayload(request, frame, &payload_ptr, &payload_size)) {
+      return false;
+    }
+
+    g_invoke_context.inputs.emplace_back();
+    auto &owned = g_invoke_context.inputs.back();
+    owned = InputFrameOwned{};
+    owned.port_id = StringValue(frame->PORT_ID());
+    const FlatBufferTypeRef *type_ref = frame->TYPE_REF();
+    if (type_ref) {
+      owned.schema_name = StringValue(type_ref->SCHEMA_NAME());
+      owned.file_identifier = StringValue(type_ref->FILE_IDENTIFIER());
+      owned.root_type_name = StringValue(type_ref->ROOT_TYPE());
+    }
+    if (payload_ptr && payload_size > 0u) {
+      owned.payload.insert(owned.payload.end(), payload_ptr, payload_ptr + payload_size);
+    }
+
+    owned.view.port_id = owned.port_id.empty() ? nullptr : owned.port_id.c_str();
+    owned.view.schema_name = owned.schema_name.empty() ? nullptr : owned.schema_name.c_str();
+    owned.view.file_identifier = owned.file_identifier.empty() ? nullptr : owned.file_identifier.c_str();
+    owned.view.wire_format = static_cast<uint32_t>(frame->WIRE_FORMAT());
+    owned.view.root_type_name = owned.root_type_name.empty() ? nullptr : owned.root_type_name.c_str();
+    owned.view.fixed_string_length = 0;
+    owned.view.byte_length = payload_size;
+    owned.view.required_alignment = static_cast<uint16_t>(frame->ALIGNMENT());
+    owned.view.alignment = static_cast<uint16_t>(frame->ALIGNMENT());
+    owned.view.size = payload_size;
+    owned.view.generation = 0;
+    owned.view.trace_id = frame->FRAME_ID();
+    owned.view.stream_id = 0;
+    owned.view.sequence = 0;
+    owned.view.end_of_stream = 1;
+    owned.view.payload = owned.payload.empty() ? nullptr : owned.payload.data();
+    owned.view.payload_length = static_cast<uint32_t>(owned.payload.size());
   }
 
   return true;
@@ -455,6 +581,121 @@ static std::vector<uint8_t> SerializeErrorResponse(
   return SerializeResponse(response);
 }
 
+static pivStatus PivStatusForContext() {
+  if (!g_invoke_context.error_code.empty() || !g_invoke_context.error_message.empty()) {
+    return pivStatus::FAILED;
+  }
+  if (g_invoke_context.status_code != 0) {
+    return pivStatus::FAILED;
+  }
+  if (g_invoke_context.yielded || g_invoke_context.backlog_remaining > 0u) {
+    return pivStatus::YIELDED;
+  }
+  return pivStatus::OK;
+}
+
+static std::vector<uint8_t> SerializePivResponse() {
+  ::flatbuffers::FlatBufferBuilder builder(1024);
+  std::vector<uint8_t> payload_arena;
+  std::vector<::flatbuffers::Offset<TAB>> outputs;
+  payload_arena.reserve(1024);
+  outputs.reserve(g_invoke_context.outputs.size());
+
+  for (const auto &output : g_invoke_context.outputs) {
+    const uint32_t alignment = std::max<uint32_t>(
+      1u,
+      output.required_alignment > 0u ? output.required_alignment : output.alignment
+    );
+    const uint32_t aligned_offset = AlignOffset(
+      static_cast<uint32_t>(payload_arena.size()),
+      alignment
+    );
+    payload_arena.resize(aligned_offset, 0);
+    if (!output.payload.empty()) {
+      payload_arena.insert(
+        payload_arena.end(),
+        output.payload.begin(),
+        output.payload.end()
+      );
+    }
+
+    const auto type_ref = CreateFlatBufferTypeRefDirect(
+      builder,
+      output.schema_name.empty() ? nullptr : output.schema_name.c_str(),
+      output.file_identifier.empty() ? nullptr : output.file_identifier.c_str(),
+      nullptr,
+      output.root_type_name.empty() ? nullptr : output.root_type_name.c_str()
+    );
+    outputs.push_back(CreateTABDirect(
+      builder,
+      aligned_offset,
+      static_cast<uint32_t>(output.payload.size()),
+      alignment,
+      static_cast<payloadWireFormat>(output.wire_format),
+      type_ref,
+      bufferMutability::IMMUTABLE,
+      bufferOwnership::HOST_OWNED,
+      output.trace_id,
+      output.port_id.empty() ? nullptr : output.port_id.c_str()
+    ));
+  }
+
+  const auto response = CreatePIVResponseDirect(
+    builder,
+    g_invoke_context.status_code,
+    PivStatusForContext(),
+    g_invoke_context.yielded,
+    g_invoke_context.backlog_remaining,
+    outputs.empty() ? nullptr : &outputs,
+    payload_arena.empty() ? nullptr : &payload_arena,
+    g_invoke_context.error_code.empty() ? nullptr : g_invoke_context.error_code.c_str(),
+    g_invoke_context.error_message.empty() ? nullptr : g_invoke_context.error_message.c_str(),
+    g_invoke_context.trace_id
+  );
+  const auto envelope = CreatePIV(builder, 0, response);
+  FinishPIVBuffer(builder, envelope);
+  return std::vector<uint8_t>(
+    builder.GetBufferPointer(),
+    builder.GetBufferPointer() + builder.GetSize()
+  );
+}
+
+static std::vector<uint8_t> SerializePivErrorResponse(
+  int32_t status_code,
+  pivStatus status,
+  const char *error_code,
+  const std::string &error_message,
+  uint64_t trace_id = 0
+) {
+  ResetInvokeContext(nullptr);
+  g_invoke_context.trace_id = trace_id;
+  g_invoke_context.status_code = status_code;
+  g_invoke_context.error_code = error_code ? error_code : "invoke-error";
+  g_invoke_context.error_message = error_message;
+  if (status == pivStatus::NOT_FOUND) {
+    g_invoke_context.error_code = error_code ? error_code : "unknown-method";
+  }
+  ::flatbuffers::FlatBufferBuilder builder(512);
+  const auto response = CreatePIVResponseDirect(
+    builder,
+    status_code,
+    status,
+    false,
+    0,
+    nullptr,
+    nullptr,
+    g_invoke_context.error_code.c_str(),
+    g_invoke_context.error_message.c_str(),
+    trace_id
+  );
+  const auto envelope = CreatePIV(builder, 0, response);
+  FinishPIVBuffer(builder, envelope);
+  return std::vector<uint8_t>(
+    builder.GetBufferPointer(),
+    builder.GetBufferPointer() + builder.GetSize()
+  );
+}
+
 static std::vector<uint8_t> DispatchRequestObject(
   const orbpro::invoke::PluginInvokeRequestT &request,
   bool *runtime_error
@@ -486,6 +727,48 @@ static std::vector<uint8_t> DispatchRequestObject(
   return SerializeResponse(BuildResponseObject());
 }
 
+static std::vector<uint8_t> DispatchPivRequest(
+  const PIVRequest *request,
+  bool *runtime_error
+) {
+  if (!request) {
+    if (runtime_error) {
+      *runtime_error = true;
+    }
+    return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV envelope does not contain a request.");
+  }
+
+  const std::string method_id = StringValue(request->METHOD_ID());
+  const auto *method = FindMethod(method_id);
+  if (!method) {
+    if (runtime_error) {
+      *runtime_error = true;
+    }
+    return SerializePivErrorResponse(
+      404,
+      pivStatus::NOT_FOUND,
+      "unknown-method",
+      std::string("Unknown method: ") + method_id,
+      request->TRACE_ID()
+    );
+  }
+
+  ResetInvokeContext(method);
+  g_invoke_context.trace_id = request->TRACE_ID();
+  if (!LoadInputsFromPivRequest(request) || !ValidateRequiredInputs(method)) {
+    if (runtime_error) {
+      *runtime_error = true;
+    }
+    if (g_invoke_context.status_code == 0) {
+      g_invoke_context.status_code = 400;
+    }
+    return SerializePivResponse();
+  }
+
+  g_invoke_context.status_code = method->handler ? method->handler() : -1;
+  return SerializePivResponse();
+}
+
 static std::vector<uint8_t> DispatchRequestBytes(
   const uint8_t *request_bytes,
   size_t request_len,
@@ -495,48 +778,36 @@ static std::vector<uint8_t> DispatchRequestBytes(
     if (runtime_error) {
       *runtime_error = true;
     }
-    return SerializeErrorResponse(400, "invalid-request", "Invoke request bytes are empty.");
+    return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "Invoke request bytes are empty.");
   }
 
-  ::flatbuffers::Verifier verifier(request_bytes, request_len);
-  if (!orbpro::invoke::VerifyPluginInvokeRequestBuffer(verifier)) {
-    if (runtime_error) {
-      *runtime_error = true;
+  if (request_len >= 8u && PIVBufferHasIdentifier(request_bytes)) {
+    ::flatbuffers::Verifier piv_verifier(request_bytes, request_len);
+    if (!VerifyPIVBuffer(piv_verifier)) {
+      if (runtime_error) {
+        *runtime_error = true;
+      }
+      return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV request FlatBuffer verification failed.");
     }
-    return SerializeErrorResponse(400, "invalid-request", "Invoke request FlatBuffer verification failed.");
+    const auto *envelope = GetPIV(request_bytes);
+    if (!envelope || !envelope->REQUEST()) {
+      if (runtime_error) {
+        *runtime_error = true;
+      }
+      return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV envelope does not contain a request.");
+    }
+    return DispatchPivRequest(envelope->REQUEST(), runtime_error);
   }
 
-  // Zero-copy dispatch: read the request table in place (no UnPack object
-  // copy) and hand the method handler payload views directly into the
-  // request's aligned payload arena.
-  const auto *request = orbpro::invoke::GetPluginInvokeRequest(request_bytes);
-  const std::string method_id =
-    request->method_id() ? request->method_id()->str() : std::string();
-  const auto *method = FindMethod(method_id);
-  if (!method) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    return SerializeErrorResponse(
-      404,
-      "unknown-method",
-      std::string("Unknown method: ") + method_id
-    );
+  if (runtime_error) {
+    *runtime_error = true;
   }
-
-  ResetInvokeContext(method);
-  if (!LoadInputsFromRequestTable(request) || !ValidateRequiredInputs(method)) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    if (g_invoke_context.status_code == 0) {
-      g_invoke_context.status_code = 400;
-    }
-    return SerializeResponse(BuildResponseObject());
-  }
-
-  g_invoke_context.status_code = method->handler ? method->handler() : -1;
-  return SerializeResponse(BuildResponseObject());
+  return SerializePivErrorResponse(
+    400,
+    pivStatus::FAILED,
+    "invalid-request",
+    "Invoke request must be an SDS PIV envelope."
+  );
 }
 
 static bool ReadAllStdin(std::vector<uint8_t> *bytes_out) {
@@ -766,8 +1037,9 @@ extern "C" uint32_t plugin_invoke_stream(
   std::vector<uint8_t> response_bytes;
   if (request_ptr != 0u && (request_ptr % kInvokeArenaAlignment) != 0u) {
     runtime_error = true;
-    response_bytes = SerializeErrorResponse(
+    response_bytes = SerializePivErrorResponse(
       400,
+      pivStatus::FAILED,
       "misaligned-request",
       "Invoke request buffer base is not 8-byte aligned."
     );

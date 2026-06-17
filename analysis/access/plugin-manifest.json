@@ -6,7 +6,7 @@
   "capabilities": [],
   "externalInterfaces": [],
   "invokeSurfaces": ["direct"],
-  "runtimeTargets": ["browser", "node"],
+  "runtimeTargets": ["browser", "wasmedge"],
   "methods": [
     {
       "methodId": "compute_access_windows",
@@ -19,17 +19,26 @@
               "setId": "analysis.access-window-request",
               "allowedTypes": [
                 {
-                  "schemaName": "orbpro.analysis.AccessWindowRequest",
-                  "fileIdentifier": "AWRQ"
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
                 }
               ],
-              "description": "Aligned-binary access-window request frames."
+              "description": "SDS ACW request envelope as FlatBuffer or aligned-binary frames."
             }
           ],
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "Aligned-binary access-window analysis requests."
+          "description": "SDS ACW access-window analysis requests."
         }
       ],
       "outputPorts": [
@@ -40,17 +49,26 @@
               "setId": "analysis.access-window-result",
               "allowedTypes": [
                 {
-                  "schemaName": "orbpro.analysis.AccessWindowResult",
-                  "fileIdentifier": "AWRS"
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
                 }
               ],
-              "description": "Aligned-binary access-window result frames."
+              "description": "SDS ACW result envelope as FlatBuffer or aligned-binary frames."
             }
           ],
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "Aligned-binary access-window analysis results."
+          "description": "SDS ACW access-window analysis results."
         }
       ],
       "maxBatch": 1,
@@ -62,20 +80,18 @@
   "protocols": [],
   "schemasUsed": [
     {
-      "schemaName": "orbpro.analysis.AccessWindowRequest",
-      "fileIdentifier": "AWRQ"
-    },
-    {
-      "schemaName": "orbpro.analysis.AccessWindowResult",
-      "fileIdentifier": "AWRS"
+      "schemaName": "ACW.fbs",
+      "fileIdentifier": "$ACW",
+      "rootTypeName": "ACW",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [
     {
       "artifactId": "access-runtime",
-      "kind": "javascript-runtime",
-      "path": "index.js",
-      "target": "web,worker,node"
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
     }
   ],
   "abiVersion": 1

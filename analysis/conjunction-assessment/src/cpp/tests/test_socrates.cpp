@@ -63,6 +63,16 @@ int main(int argc, char* argv[]) {
     std::string data_dir = "tests/data";
     if (argc > 1) data_dir = argv[1];
 
+    {
+        const std::string first_fixture = data_dir + "/" + SOCRATES_DATA[0].gp_file;
+        std::ifstream probe(first_fixture);
+        if (!probe.is_open()) {
+            std::cout << "SKIP: local SOCRATES GP fixtures not found under "
+                      << data_dir << std::endl;
+            return 77;
+        }
+    }
+
     // SOCRATES computation start
     double start_jd = iso_to_jd("2026-03-09T18:00:00Z");
 

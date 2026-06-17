@@ -19,6 +19,9 @@ find_path(
     FLATBUFFERS_INCLUDE_DIR
     NAMES flatbuffers/flatbuffers.h
     PATHS
+        "$ENV{SDN_FLATBUFFERS_INCLUDE_DIR}"
+        "$ENV{FLATBUFFERS_INCLUDE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../flatbuffers/include"
         /opt/homebrew/include
         /opt/homebrew/opt/flatbuffers/include
         /usr/local/include
@@ -66,6 +69,7 @@ if(EMSCRIPTEN)
         ..
         include
         generated
+        generated/sds
         "${FLATBUFFERS_INCLUDE_DIR}"
     )
     target_link_libraries(hpop_wasm hpop)
@@ -74,9 +78,10 @@ if(EMSCRIPTEN)
         SUFFIX ".js"
         LINK_FLAGS "\
             -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_init\",\"_plugin_init_states\",\"_plugin_stream_invoke\",\"_get_entity_count\",\"_get_orbital_period\",\"_get_eccentricity\",\"_plugin_propagate\",\"_plugin_propagate_path_entity\",\"_plugin_propagate_path_times\",\"_plugin_set_integrator\",\"_plugin_set_state\",\"_plugin_set_force_model\",\"_plugin_set_drag_options\",\"_plugin_set_atmosphere_model\",\"_plugin_set_solar_activity\",\"_plugin_set_gravity\",\"_plugin_set_tides\",\"_plugin_set_relativity\",\"_plugin_set_earth_radiation\",\"_plugin_set_third_body_extended\",\"_plugin_set_empirical\",\"_plugin_propagate_to\",\"_plugin_propagate_path\",\"_plugin_compute_stm\",\"_plugin_propagate_covariance\",\"_plugin_get_covariance_ellipsoid\",\"_plugin_get_acceleration_breakdown\",\"_plugin_set_burns\",\"_plugin_clear_burns\",\"_plugin_destroy\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\",\"_malloc\",\"_free\"]' \
-            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
+            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\",\"HEAPU8\",\"HEAPU32\",\"HEAP8\",\"HEAP32\",\"HEAPF64\"]' \
             -s MODULARIZE=1 \
             -s EXPORT_NAME='HPOPModule' \
+            -s EXPORT_ES6=1 \
             -s STANDALONE_WASM=1 \
             -s INITIAL_MEMORY=134217728 \
             -s STACK_SIZE=2097152 \
@@ -96,6 +101,7 @@ elseif(WASI_SDK)
         hpop_standalone PRIVATE
         include
         generated
+        generated/sds
         "${FLATBUFFERS_INCLUDE_DIR}"
     )
     target_link_libraries(hpop_standalone hpop)

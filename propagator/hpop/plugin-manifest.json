@@ -23,10 +23,11 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "any-flatbuffer",
+              "setId": "hpop-invoke-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "orbpro.hpop.InvokeRequest",
+                  "rootTypeName": "InvokeRequest"
                 }
               ]
             }
@@ -41,10 +42,219 @@
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "any-flatbuffer",
+              "setId": "hpop-invoke-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "orbpro.hpop.InvokeResponse",
+                  "rootTypeName": "InvokeResponse"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_state",
+      "displayName": "Ingest Resident Propagator State",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "propagator-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.plugins.PropagatorState",
+                  "fileIdentifier": "PRST",
+                  "rootTypeName": "PropagatorState"
+                },
+                {
+                  "schemaName": "orbpro.plugins.PropagatorState",
+                  "fileIdentifier": "PRST",
+                  "rootTypeName": "PropagatorState",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "propagate_state",
+      "displayName": "Propagate Resident States",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "propagator-batch-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.propagator.PropagatorBatchRequest",
+                  "rootTypeName": "PropagatorBatchRequest"
+                },
+                {
+                  "schemaName": "orbpro.propagator.PropagatorBatchRequest",
+                  "rootTypeName": "PropagatorBatchRequest",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "propagator-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.plugins.PropagatorState",
+                  "fileIdentifier": "PRST",
+                  "rootTypeName": "PropagatorState"
+                },
+                {
+                  "schemaName": "orbpro.plugins.PropagatorState",
+                  "fileIdentifier": "PRST",
+                  "rootTypeName": "PropagatorState",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "prepare_trajectory_segments",
+      "displayName": "Prepare Trajectory Segments",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "prepare-trajectory-segments-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.propagator.PropagatorPrepareTrajectorySegmentsRequest",
+                  "rootTypeName": "PropagatorPrepareTrajectorySegmentsRequest"
+                },
+                {
+                  "schemaName": "orbpro.propagator.PropagatorPrepareTrajectorySegmentsRequest",
+                  "rootTypeName": "PropagatorPrepareTrajectorySegmentsRequest",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "prepare-trajectory-segments-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.propagator.PropagatorPrepareTrajectorySegmentsResult",
+                  "fileIdentifier": "PTSS",
+                  "rootTypeName": "PropagatorPrepareTrajectorySegmentsResult"
+                },
+                {
+                  "schemaName": "orbpro.propagator.PropagatorPrepareTrajectorySegmentsResult",
+                  "fileIdentifier": "PTSS",
+                  "rootTypeName": "PropagatorPrepareTrajectorySegmentsResult",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "describe_trajectory_segments",
+      "displayName": "Describe Trajectory Segments",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "describe-trajectory-segments-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.propagator.PropagatorDescribeTrajectorySegmentsRequest",
+                  "rootTypeName": "PropagatorDescribeTrajectorySegmentsRequest"
+                },
+                {
+                  "schemaName": "orbpro.propagator.PropagatorDescribeTrajectorySegmentsRequest",
+                  "rootTypeName": "PropagatorDescribeTrajectorySegmentsRequest",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "describe-trajectory-segments-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.propagator.PropagatorDescribeTrajectorySegmentsResult",
+                  "fileIdentifier": "PTDS",
+                  "rootTypeName": "PropagatorDescribeTrajectorySegmentsResult"
+                },
+                {
+                  "schemaName": "orbpro.propagator.PropagatorDescribeTrajectorySegmentsResult",
+                  "fileIdentifier": "PTDS",
+                  "rootTypeName": "PropagatorDescribeTrajectorySegmentsResult",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
                 }
               ]
             }

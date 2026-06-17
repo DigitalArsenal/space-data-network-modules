@@ -107,6 +107,57 @@ void testUS76_HighAlt() {
               << " 80km T=" << s80.temperature << " rho=" << s80.density << " ✓\n";
 }
 
+void testStandardAtmosphereOrbitalDensity_BasiliskReferences() {
+    // Basilisk orbitalMotion.c atmosphericDensity() regression values.
+    assertRelNear(
+        atmosphere::standardAtmosphere1976OrbitalDensity(200000.0),
+        1.64100656241e-10,
+        1e-12,
+        "Basilisk atmosphericDensity 200km");
+    assertRelNear(
+        atmosphere::standardAtmosphere1976OrbitalDensity(2000000.0),
+        2.48885731828e-15,
+        1e-12,
+        "Basilisk atmosphericDensity 2000km");
+
+    std::cout << "  Basilisk atmosphericDensity references (200km, 2000km) ✓\n";
+}
+
+void testBasiliskDebyeLengthReferences() {
+    // Basilisk src/architecture/utilities/tests/test_orbitalMotion.cpp
+    // DebeyeLengthTests vectors. Input altitude is meters here; output is meters.
+    assertNear(atmosphere::basiliskDebyeLength(400000.0), 0.00404, 1e-10,
+               "Basilisk debyeLength 400km");
+    assertNear(atmosphere::basiliskDebyeLength(1000000.0), 0.0159, 1e-10,
+               "Basilisk debyeLength 1000km");
+    assertNear(atmosphere::basiliskDebyeLength(10000000.0), 0.0396, 1e-10,
+               "Basilisk debyeLength 10000km");
+    assertNear(atmosphere::basiliskDebyeLength(34000000.0), 400.30000000000018, 1e-10,
+               "Basilisk debyeLength 34000km");
+
+    std::cout << "  Basilisk debyeLength references (400km, 1000km, 10000km, 34000km) ✓\n";
+}
+
+void testBasiliskAtmosphericDragReference() {
+    // Basilisk orbitalMotion.c atmosphericDrag() source vector. Inputs and
+    // output are converted from km/km-s/km-s^2 into SDK SI units.
+    double position_m[3] = {6200000.0, 100000.0, 2000000.0};
+    double velocity_mps[3] = {1000.0, 9000.0, 1000.0};
+    double acceleration_mps2[3] = {0.0, 0.0, 0.0};
+
+    atmosphere::basiliskAtmosphericDragAcceleration(
+        0.2, 2.0, 50.0, position_m, velocity_mps, acceleration_mps2);
+
+    assertNear(acceleration_mps2[0], -2.8245395411253663e-4, 1e-14,
+               "Basilisk atmosphericDrag x");
+    assertNear(acceleration_mps2[1], -2.5420855870128297e-3, 1e-14,
+               "Basilisk atmosphericDrag y");
+    assertNear(acceleration_mps2[2], -2.8245395411253663e-4, 1e-14,
+               "Basilisk atmosphericDrag z");
+
+    std::cout << "  Basilisk atmosphericDrag reference vector ✓\n";
+}
+
 void testUS76_MonotonicDensity() {
     // Density should monotonically decrease with altitude
     double prevRho = 1e10;
@@ -352,6 +403,9 @@ int main() {
     testUS76_Tropopause();
     testUS76_Stratosphere();
     testUS76_HighAlt();
+    testStandardAtmosphereOrbitalDensity_BasiliskReferences();
+    testBasiliskDebyeLengthReferences();
+    testBasiliskAtmosphericDragReference();
     testUS76_MonotonicDensity();
 
     // NRLMSISE-00 (canonical published vectors)

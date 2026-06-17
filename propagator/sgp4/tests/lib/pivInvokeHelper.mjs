@@ -52,6 +52,22 @@ function alignOffset(offset, alignment) {
   return remainder === 0 ? offset : offset + alignment - remainder;
 }
 
+function encodeWireFormat(value) {
+  if (typeof value === "number") {
+    return value;
+  }
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-") === "aligned-binary"
+    ? payloadWireFormat.ALIGNED_BINARY
+    : payloadWireFormat.FLATBUFFER;
+}
+
+function decodeWireFormat(value) {
+  return value === payloadWireFormat.ALIGNED_BINARY ? "aligned-binary" : "flatbuffer";
+}
+
 export function encodePivInvokeRequest({
   methodId,
   inputs = [],
@@ -80,7 +96,7 @@ export function encodePivInvokeRequest({
       offset,
       payload.length,
       alignment,
-      input.typeRef?.wireFormat ?? payloadWireFormat.FLATBUFFER,
+      encodeWireFormat(input.wireFormat ?? input.typeRef?.wireFormat),
       typeRef,
       input.mutability ?? bufferMutability.IMMUTABLE,
       input.ownership ?? bufferOwnership.HOST_OWNED,
@@ -160,6 +176,8 @@ export function invokePiv(
             rootTypeName: output.TYPE_REF.ROOT_TYPE,
           }
         : null,
+      wireFormat: decodeWireFormat(output.WIRE_FORMAT),
+      alignment: output.ALIGNMENT,
       bytes: new Uint8Array(
         response.PAYLOAD_ARENA.slice(
           output.OFFSET,

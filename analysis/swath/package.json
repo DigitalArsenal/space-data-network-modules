@@ -5,6 +5,7 @@
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
+  "sdn-module": "./dist/isomorphic/module.wasm",
   "exports": {
     ".": {
       "types": "./index.d.ts",
@@ -12,8 +13,18 @@
     },
     "./manifest": "./manifest.js",
     "./flowHandlers": "./flowHandlers.js",
-    "./plugin-manifest.json": "./plugin-manifest.json"
+    "./plugin-manifest.json": "./plugin-manifest.json",
+    "./dist/*": "./dist/*"
   },
+  "files": [
+    "dist/",
+    "index.js",
+    "index.d.ts",
+    "flowHandlers.js",
+    "manifest.js",
+    "plugin-manifest.json",
+    "README.md"
+  ],
   "scripts": {
     "build": "node build.js",
     "test": "node --test test/*.test.mjs",

@@ -1,0 +1,694 @@
+{
+  "schemaVersion": 1,
+  "generatedFor": "Orekit/Basilisk SDN parity Phase 0",
+  "standardsSchemaRoot": "../spacedatastandards.org/schema",
+  "sdsFirstPolicy": "No parity module may expose a durable external record that is missing from SDS; add the SDS schema before consuming it in a module manifest.",
+  "domains": [
+    {
+      "id": "time",
+      "label": "Time, Epochs, And Time Scales",
+      "status": "partial",
+      "requiredRecords": [
+        "time instant",
+        "time conversion request/result",
+        "leap-second and EOP data context",
+        "CCSDS time-code parse/format request/result"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "TIM",
+          "fileIdentifier": "$TIM",
+          "purpose": "Canonical TIMInstant, TIMConversionRequest, and TIMConversionResult records used by foundation/time, including SBAS as a GNSSDate-compatible GPS-family time system, GNSS_WEEK_SECONDS fields for Orekit rollover-reference parity, and an initial CCSDS_TIME_CODE payload for Orekit unsegmented CUC parsing and canonical TAI CUC target formatting plus day-segmented CDS and calendar-segmented CCS parsing."
+        },
+        {
+          "schema": "TME",
+          "fileIdentifier": "$TME",
+          "purpose": "Legacy time-system command surface; retained as reference only for non-canonical migration debt."
+        },
+        {
+          "schema": "EOP",
+          "fileIdentifier": "$EOP",
+          "purpose": "Earth orientation samples needed by UT1 and frame transforms."
+        }
+      ],
+      "gaps": [
+        "TIM exposes an initial CCSDS time-code payload, but full CDS/CCS segmented-code coverage, caller-selected target formatting metadata, and complete CCSDS parser/writer request semantics are still missing.",
+        "TIM does not yet model reusable Orekit DataContext/leap-second-loader provenance."
+      ],
+      "nextSdsActions": [
+        "Extend TIM CCSDS time-code records for segmented CDS/CCS target formatting selection and complete parser/writer metadata before claiming full foundation/time CCSDS parity.",
+        "Add provenance fields for leap-second/EOP source selection before full Orekit data-context parity."
+      ],
+      "downstreamConsumers": [
+        "foundation/time",
+        "foundation/frames",
+        "propagator/hpop",
+        "propagator/dsst",
+        "basilisk/runtime"
+      ]
+    },
+    {
+      "id": "frames",
+      "label": "Frames, EOP, And Transforms",
+      "status": "partial",
+      "requiredRecords": [
+        "reference frame identity",
+        "frame transform request/result",
+        "EOP sample series",
+        "topocentric/local orbital frame instance"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "RFM",
+          "fileIdentifier": "$RFM",
+          "purpose": "SANA-derived celestial, spacecraft, orbit, and custom frame identifiers."
+        },
+        {
+          "schema": "EOP",
+          "fileIdentifier": "$EOP",
+          "purpose": "Earth orientation parameters for ITRF/TEME/TOD/MOD transforms."
+        },
+        {
+          "schema": "FRM",
+          "fileIdentifier": "$FRM",
+          "purpose": "Frame/geodetic transform request/result records used by foundation/frames for Basilisk-compatible PCI, PCPF, and ellipsoid LLA conversions."
+        },
+        {
+          "schema": "STV",
+          "fileIdentifier": "$STV",
+          "purpose": "Compact state vector with reference-frame tag."
+        },
+        {
+          "schema": "ACM",
+          "fileIdentifier": "$ACM",
+          "purpose": "Attitude covariance and frame-tagged attitude states."
+        }
+      ],
+      "gaps": [
+        "Initial FRM coverage handles explicit DCM PCI/PCPF and ellipsoid LLA/PCPF transforms but not full Orekit dynamic frame/EOP transforms.",
+        "No explicit topocentric frame instance record captures station geodetic point and local-axis convention.",
+        "EOP coverage needs interpolation/version/provenance metadata for Orekit IERS parity."
+      ],
+      "nextSdsActions": [
+        "Extend FRM for dynamic EOP-backed frame transform inputs before full Orekit frames parity.",
+        "Add station/topocentric frame instance records before TopocentricFrameTest parity."
+      ],
+      "downstreamConsumers": [
+        "foundation/frames",
+        "foundation/orbits",
+        "files/ccsds-messages",
+        "analysis/access",
+        "basilisk/fsw/*"
+      ]
+    },
+    {
+      "id": "orbit-state",
+      "label": "Orbit State And Propagation Products",
+      "status": "partial",
+      "requiredRecords": [
+        "Cartesian state vector",
+        "Keplerian elements",
+        "equinoctial/circular elements",
+        "covariance",
+        "maneuver",
+        "propagator runtime request/result",
+        "gravity parameters"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "OMM",
+          "fileIdentifier": "$OMM",
+          "purpose": "CCSDS mean-element orbit record used by SGP4 and foundation/orbits."
+        },
+        {
+          "schema": "OPM",
+          "fileIdentifier": "$OPM",
+          "purpose": "CCSDS orbit-parameter message with Cartesian and Keplerian fields."
+        },
+        {
+          "schema": "OEM",
+          "fileIdentifier": "$OEM",
+          "purpose": "CCSDS orbit ephemeris message with Cartesian samples and covariance."
+        },
+        {
+          "schema": "OCM",
+          "fileIdentifier": "$OCM",
+          "purpose": "CCSDS orbit comprehensive message with state, covariance, maneuver, and OD blocks."
+        },
+        {
+          "schema": "VCM",
+          "purpose": "Vector covariance message including Cartesian, Keplerian, equinoctial, perturbation metadata, and parabolic Keplerian periapsis radius."
+        },
+        {
+          "schema": "PRW",
+          "fileIdentifier": "$PRW",
+          "purpose": "Propagator runtime wire request/result envelopes."
+        },
+        {
+          "schema": "PPE",
+          "fileIdentifier": "$PPE",
+          "purpose": "Polynomial ephemeris products."
+        },
+        {
+          "schema": "MNV",
+          "fileIdentifier": "$MNV",
+          "purpose": "Maneuver state and status records."
+        },
+        {
+          "schema": "GRV",
+          "fileIdentifier": "$GRV",
+          "purpose": "Gravity model identity, central-body selection, equatorial radius, MU, and J2-J6 context used by foundation/orbits Basilisk mean/osculating conversion and J-zonal acceleration."
+        },
+        {
+          "schema": "CRD",
+          "fileIdentifier": "$CRD",
+          "purpose": "Coordinate vector record used by foundation/orbits to carry the Basilisk solar radiation pressure central-body-to-Sun vector in AU."
+        }
+      ],
+      "gaps": [
+        "GRV exposes numeric equatorial radius, MU, and J2-J6 scalar zonal terms but not full coefficient-set metadata or normalized harmonic arrays.",
+        "CRD carries a generic vector but does not encode units, so the SRP method documents X/Y/Z as AU at the module contract level.",
+        "No standalone orbit-conversion request/result record exists for reusable foundation/orbits imports.",
+        "Parabolic OMM mean-anomaly handling and some circular/equinoctial singular conventions are not first-class SDS semantics."
+      ],
+      "nextSdsActions": [
+        "Add canonical gravity-field coefficient records before higher-order gravity model parity.",
+        "Define orbit-conversion request/result records if foundation/orbits exports reusable conversion APIs beyond CCSDS message transforms."
+      ],
+      "downstreamConsumers": [
+        "foundation/orbits",
+        "propagator/sgp4",
+        "propagator/hpop",
+        "propagator/dsst",
+        "analysis/covariance",
+        "basilisk/dynamics/*"
+      ]
+    },
+    {
+      "id": "attitude-state",
+      "label": "Attitude State And Attitude Products",
+      "status": "partial",
+      "requiredRecords": [
+        "attitude state",
+        "attitude ephemeris",
+        "attitude parameter message",
+        "attitude covariance",
+        "attitude command/error state"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "ACM",
+          "fileIdentifier": "$ACM",
+          "purpose": "CCSDS attitude comprehensive message with attitude states, covariance, properties, and maneuvers."
+        },
+        {
+          "schema": "AEM",
+          "fileIdentifier": "$AEM",
+          "purpose": "CCSDS attitude ephemeris message segments."
+        },
+        {
+          "schema": "APM",
+          "fileIdentifier": "$APM",
+          "purpose": "CCSDS attitude parameter message shell."
+        },
+        {
+          "schema": "RFM",
+          "fileIdentifier": "$RFM",
+          "purpose": "Spacecraft and attitude sensor frame identifiers."
+        },
+        {
+          "schema": "BSP",
+          "fileIdentifier": "$BSP",
+          "purpose": "B-spline interpolation request/result records used by foundation/math-bspline and Basilisk constrained attitude maneuver utility parity."
+        },
+        {
+          "schema": "RBK",
+          "fileIdentifier": "$RBK",
+          "purpose": "Rigid-body kinematics request/result records used by foundation/attitude-math for Basilisk-compatible MRP, Gibbs-vector, principal-rotation-vector, Euler-angle, scalar-first Euler-parameter, direction-cosine-matrix, elementary rotation-matrix, tilde-matrix, and differential utilities."
+        }
+      ],
+      "gaps": [
+        "Basilisk MRP error, rate-command, and control-torque payloads are not first-class SDS records.",
+        "APM is currently too thin for full Orekit ADM parser/writer parity.",
+        "No dedicated attitude-law request/result record exists for attitude/laws module imports."
+      ],
+      "nextSdsActions": [
+        "Extend attitude schemas for attitude guidance/control command records before Basilisk FSW wrappers expose those ports.",
+        "Expand APM/APM-adjacent records before files/ccsds-messages claims full ADM parity."
+      ],
+      "downstreamConsumers": [
+        "foundation/attitude-math",
+        "attitude/laws",
+        "files/ccsds-messages",
+        "basilisk/fsw/attitude-control/*",
+        "basilisk/fsw/attitude-guidance/*"
+      ]
+    },
+    {
+      "id": "math-utilities",
+      "label": "Shared Math And Numerical Utilities",
+      "status": "partial",
+      "requiredRecords": [
+        "root-solving request/result",
+        "function selection and parameters",
+        "interpolation request/result",
+        "bounded stochastic sequence request/result",
+        "linear algebra utility request/result"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "BSP",
+          "fileIdentifier": "$BSP",
+          "purpose": "B-spline interpolation request/result records used by foundation/math-bspline and Basilisk constrained attitude maneuver utility parity."
+        },
+        {
+          "schema": "NUM",
+          "fileIdentifier": "$NUM",
+          "purpose": "Scalar numerical root-solving, vector-saturation, vector-discretization, scalar-interpolation, and bounded Gauss-Markov sequence request/result records used by foundation/numerics for Basilisk-compatible Newton-Raphson, Saturate, Discretize, linearInterpolation, bilinearInterpolation, and GaussMarkov utility parity."
+        }
+      ],
+      "gaps": [
+        "NUM currently exposes the Basilisk Newton-Raphson source-vector surface for a quadratic-minus-constant function, the Basilisk Saturate component-wise vector-clamp surface, the Basilisk Discretize component-wise vector-quantization surface, the Basilisk scalar linear/bilinear interpolation source-formula surfaces, and the Basilisk bounded Gauss-Markov sequence statistics surface.",
+        "No generic SDS expression, polynomial, derivative callback, or linear algebra utility record exists yet."
+      ],
+      "nextSdsActions": [
+        "Extend NUM with broader scalar/vector function families before claiming Orekit solver parity.",
+        "Add reusable linear algebra records before porting remaining AVS Eigen conversion utilities as durable module methods."
+      ],
+      "downstreamConsumers": [
+        "foundation/numerics",
+        "foundation/math-bspline",
+        "foundation/orbits",
+        "foundation/attitude-math",
+        "propagator/hpop"
+      ]
+    },
+    {
+      "id": "earth-environment",
+      "label": "Earth Environment And Force Inputs",
+      "status": "partial",
+      "requiredRecords": [
+        "atmosphere request/result",
+        "space-weather sample",
+        "gravity model",
+        "ionosphere/troposphere/weather model",
+        "force/acceleration vector output",
+        "geomagnetic and displacement model inputs"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "ATM",
+          "fileIdentifier": "$ATM",
+          "purpose": "Atmosphere model family selection."
+        },
+        {
+          "schema": "HFC",
+          "fileIdentifier": "$HFC",
+          "purpose": "High-frequency calculation/query record currently used for atmosphere states."
+        },
+        {
+          "schema": "SPW",
+          "fileIdentifier": "$SPW",
+          "purpose": "Space-weather flux and geomagnetic activity inputs."
+        },
+        {
+          "schema": "GRV",
+          "fileIdentifier": "$GRV",
+          "purpose": "Gravity model identity and central-body selection."
+        },
+        {
+          "schema": "ION",
+          "fileIdentifier": "$ION",
+          "purpose": "Ionosphere-related data product."
+        },
+        {
+          "schema": "ENV",
+          "fileIdentifier": "$ENV",
+          "purpose": "Generic environment/weather and terrain context."
+        }
+      ],
+      "gaps": [
+        "HFC does not expose Debye length or acceleration-vector output needed by current Basilisk atmosphere ports.",
+        "No canonical geomagnetic WMM/IGRF, solid/ocean tide, geoid, troposphere, or displacement model request/result records are available.",
+        "No reusable force-model acceleration record exists for HPOP/DSST/Basilisk imports."
+      ],
+      "nextSdsActions": [
+        "Promote atmosphere force-output vectors before exposing drag/SRP/gravity force modules.",
+        "Add geomagnetic and displacement model records before Basilisk environment and Orekit models parity modules."
+      ],
+      "downstreamConsumers": [
+        "models/earth-environment",
+        "propagator/atmosphere",
+        "propagator/hpop",
+        "propagator/dsst",
+        "basilisk/environment/*"
+      ]
+    },
+    {
+      "id": "observations",
+      "label": "Observations And Measurement Products",
+      "status": "partial",
+      "requiredRecords": [
+        "electro-optical observation",
+        "radar/range/range-rate observation",
+        "tracking data message",
+        "orbit determination summary",
+        "measurement modifiers and residuals"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "EOO",
+          "fileIdentifier": "$EOO",
+          "purpose": "Electro-optical observations and image metadata."
+        },
+        {
+          "schema": "RDO",
+          "fileIdentifier": "$RDO",
+          "purpose": "Radar observation record."
+        },
+        {
+          "schema": "TDM",
+          "fileIdentifier": "$TDM",
+          "purpose": "CCSDS tracking data message shell."
+        },
+        {
+          "schema": "OBD",
+          "fileIdentifier": "$OBD",
+          "purpose": "Orbit determination result summary with observation statistics."
+        },
+        {
+          "schema": "SEN",
+          "fileIdentifier": "$SEN",
+          "purpose": "Sensor management and tasking metadata."
+        },
+        {
+          "schema": "SDR",
+          "fileIdentifier": "$SDR",
+          "purpose": "Sensor detection runtime report for batch detection modules."
+        },
+        {
+          "schema": "SNW",
+          "fileIdentifier": "$SNW",
+          "purpose": "Sensor runtime wire envelope for detection plugins."
+        }
+      ],
+      "gaps": [
+        "Orekit measurement modifiers, residual vectors, and generated measurement requests are not canonical SDS records.",
+        "CCSDS TDM parser/writer parity may require richer per-observation typing than the current TDM shell exposes.",
+        "Basilisk sensor/filter measurement messages need per-family mapping before durable external exchange."
+      ],
+      "nextSdsActions": [
+        "Define measurement request/result/residual records before analysis/iod-measurements and OD filters export module APIs.",
+        "Expand TDM or add companion observation records when files/ccsds-messages ports Orekit TDM tests."
+      ],
+      "downstreamConsumers": [
+        "analysis/iod-measurements",
+        "analysis/od",
+        "files/ccsds-messages",
+        "basilisk/sensors/*",
+        "basilisk/fsw/attitude-determination/*"
+      ]
+    },
+    {
+      "id": "gnss-products",
+      "label": "GNSS Products",
+      "status": "partial",
+      "requiredRecords": [
+        "GNSS observation",
+        "GNSS navigation message",
+        "RINEX/ANTEX/SP3/SINEX products",
+        "SSR/RTCM corrections",
+        "DOP and receiver state"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "GNO",
+          "fileIdentifier": "$GNO",
+          "purpose": "GNSS observation data points and receiver metadata."
+        },
+        {
+          "schema": "GPX",
+          "fileIdentifier": "$GPX",
+          "purpose": "Generic GPS exchange track/waypoint data."
+        },
+        {
+          "schema": "TDM",
+          "fileIdentifier": "$TDM",
+          "purpose": "Tracking data products that can carry GNSS-derived measurements."
+        }
+      ],
+      "gaps": [
+        "No canonical RINEX navigation/observation, ANTEX, SSR, RTCM, Ntrip, or GNSS clock/product records are present.",
+        "No DOP request/result record exists for analysis/dop."
+      ],
+      "nextSdsActions": [
+        "Add GNSS navigation-product schemas before gnss/navigation-products and files/gnss-products modules.",
+        "Add DOP result records before analysis/dop publishes SDK ports."
+      ],
+      "downstreamConsumers": [
+        "gnss/navigation-products",
+        "files/gnss-products",
+        "analysis/dop",
+        "analysis/iod-measurements"
+      ]
+    },
+    {
+      "id": "image-products",
+      "label": "Image And Optical Products",
+      "status": "partial",
+      "requiredRecords": [
+        "image metadata",
+        "camera/instrument geometry",
+        "raw or processed image payload reference",
+        "optical navigation feature output",
+        "sensor coverage product"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "EOO",
+          "fileIdentifier": "$EOO",
+          "purpose": "EO observation and image quality metadata."
+        },
+        {
+          "schema": "SEN",
+          "fileIdentifier": "$SEN",
+          "purpose": "Sensor identity, tasking, and operational statistics."
+        },
+        {
+          "schema": "SDR",
+          "fileIdentifier": "$SDR",
+          "purpose": "Sensor detection runtime I/O with target and detection result records."
+        },
+        {
+          "schema": "KML",
+          "fileIdentifier": "$KML",
+          "purpose": "Geospatial overlay/image reference metadata."
+        }
+      ],
+      "gaps": [
+        "No canonical raw image/tensor payload descriptor exists for Basilisk optical navigation modules.",
+        "No camera intrinsics/extrinsics and optical feature tracks record exists beyond EOO metadata fields.",
+        "No standardized processed image product record covers synthetic tracking or segmentation outputs."
+      ],
+      "nextSdsActions": [
+        "Add image payload and camera model records before basilisk/optical modules publish durable outputs.",
+        "Define optical-navigation feature/result records before FSW optical filters export module APIs."
+      ],
+      "downstreamConsumers": [
+        "basilisk/optical/*",
+        "basilisk/sensors/*",
+        "analysis/sensor-coverage",
+        "files/orbit-products"
+      ]
+    },
+    {
+      "id": "actuator-commands",
+      "label": "Actuator Commands And Effector State",
+      "status": "partial",
+      "requiredRecords": [
+        "reaction-wheel command/status",
+        "thruster command/status",
+        "magnetic torquer command/status",
+        "motor/stepper command",
+        "actuator configuration"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "XTC",
+          "fileIdentifier": "$XTC",
+          "purpose": "XTCE command and telemetry metadata container."
+        },
+        {
+          "schema": "BUS",
+          "fileIdentifier": "$BUS",
+          "purpose": "Satellite bus specification with broad stabilization metadata."
+        },
+        {
+          "schema": "PHY",
+          "fileIdentifier": "$PHY",
+          "purpose": "Generic physics command strings and rigid-body simulation slots."
+        },
+        {
+          "schema": "MNV",
+          "fileIdentifier": "$MNV",
+          "purpose": "Maneuver status and orbital state around maneuvers."
+        },
+        {
+          "schema": "RFM",
+          "fileIdentifier": "$RFM",
+          "purpose": "Actuator, reaction wheel, magnetic torquer, and spacecraft body frame identifiers."
+        }
+      ],
+      "gaps": [
+        "No first-class reaction-wheel, thruster, magnetic-torquer, VSCMG, motor, or stepper command/status records exist.",
+        "PHY contains string placeholders rather than typed actuator command payloads.",
+        "XTC can describe command metadata but does not replace typed command/result records for module ports."
+      ],
+      "nextSdsActions": [
+        "Add typed actuator command/status/config records before Basilisk effector-interface and dynamics modules expose ports.",
+        "Map each Basilisk actuator message family to SDS or explicitly add missing SDS records before implementation."
+      ],
+      "downstreamConsumers": [
+        "basilisk/fsw/effector-interfaces/*",
+        "basilisk/dynamics/*",
+        "basilisk/runtime"
+      ]
+    },
+    {
+      "id": "power",
+      "label": "Power And Electrical State",
+      "status": "partial",
+      "requiredRecords": [
+        "battery state",
+        "solar array state",
+        "power node/load state",
+        "power telemetry and commands"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "BUS",
+          "fileIdentifier": "$BUS",
+          "purpose": "Spacecraft bus power generation, payload power, and battery capacity metadata."
+        },
+        {
+          "schema": "CMS",
+          "fileIdentifier": "$CMS",
+          "purpose": "Communications payload power metadata."
+        },
+        {
+          "schema": "XTC",
+          "fileIdentifier": "$XTC",
+          "purpose": "Power telemetry/command metadata description."
+        }
+      ],
+      "gaps": [
+        "No typed power-network, battery charge/discharge, solar-array, power sink/source, or EPS command/status records exist.",
+        "BUS and CMS expose static capacity/power metadata but not runtime power simulation state."
+      ],
+      "nextSdsActions": [
+        "Add EPS/battery/solar-array runtime records before Basilisk power modules expose durable state.",
+        "Use XTC only as metadata; add typed FlatBuffers for repeated module data-plane payloads."
+      ],
+      "downstreamConsumers": [
+        "basilisk/power/*",
+        "basilisk/runtime",
+        "basilisk/dynamics/*"
+      ]
+    },
+    {
+      "id": "thermal",
+      "label": "Thermal State",
+      "status": "missing",
+      "requiredRecords": [
+        "thermal node state",
+        "thermal model configuration",
+        "heater/radiator command status",
+        "temperature telemetry"
+      ],
+      "existingSchemas": [],
+      "gaps": [
+        "No dedicated SDS thermal state or thermal network schema exists.",
+        "PHY has a THERMAL_STATE string placeholder but not typed exchange records.",
+        "XTC can describe telemetry metadata but does not provide the repeated runtime thermal data-plane record."
+      ],
+      "nextSdsActions": [
+        "Add typed thermal node/network and thermal actuator records before Basilisk thermal modules.",
+        "Add temperature telemetry payload records or explicitly map them through XTC plus a typed value record."
+      ],
+      "downstreamConsumers": [
+        "basilisk/power/*",
+        "basilisk/runtime",
+        "basilisk/dynamics/*"
+      ]
+    },
+    {
+      "id": "runtime-telemetry",
+      "label": "Runtime Telemetry And Module Invocation",
+      "status": "partial",
+      "requiredRecords": [
+        "module manifest",
+        "invoke request/response",
+        "typed payload frame",
+        "runtime entity metadata",
+        "propagator runtime batch result",
+        "generic module health/performance telemetry"
+      ],
+      "existingSchemas": [
+        {
+          "schema": "PLG",
+          "fileIdentifier": "$PLG",
+          "purpose": "Plugin manifest and method/port contract metadata."
+        },
+        {
+          "schema": "PIV",
+          "fileIdentifier": "$PIV",
+          "purpose": "Plugin invoke envelope."
+        },
+        {
+          "schema": "TAB",
+          "fileIdentifier": "$TAB",
+          "purpose": "Typed arena-backed payload frame descriptor."
+        },
+        {
+          "schema": "ETM",
+          "fileIdentifier": "$ETM",
+          "purpose": "Runtime entity metadata for shared host collections."
+        },
+        {
+          "schema": "PRW",
+          "fileIdentifier": "$PRW",
+          "purpose": "Propagator runtime request/result wire format."
+        },
+        {
+          "schema": "XTC",
+          "fileIdentifier": "$XTC",
+          "purpose": "General telemetry and command metadata."
+        },
+        {
+          "schema": "REC",
+          "fileIdentifier": "$REC",
+          "purpose": "Record envelope for bundled/published artifacts."
+        },
+        {
+          "schema": "MBL",
+          "fileIdentifier": "$MBL",
+          "purpose": "Module bundle metadata."
+        }
+      ],
+      "gaps": [
+        "No generic module health/performance telemetry record exists for runtime timing, memory, warnings, and deterministic replay state.",
+        "Basilisk runtime snapshot/restore and message dictionary records are not yet canonical SDS records."
+      ],
+      "nextSdsActions": [
+        "Add module runtime health/performance telemetry before large Basilisk scenario replay surfaces.",
+        "Add Basilisk message dictionary and snapshot records before full basilisk/runtime parity."
+      ],
+      "downstreamConsumers": [
+        "basilisk/runtime",
+        "space-data-module-sdk harnesses",
+        "space-data-network runtime hosts",
+        "all parity modules"
+      ]
+    }
+  ]
+}

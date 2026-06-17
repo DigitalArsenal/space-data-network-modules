@@ -2,9 +2,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveBasiliskRoot } from "./lib/resolve-basilisk-root.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const basiliskRoot = path.resolve(repoRoot, process.env.BASILISK_ROOT ?? "../basilisk");
+const basiliskRoot = resolveBasiliskRoot(repoRoot);
 const outPath = path.join(repoRoot, "docs", "basilisk-module-plan.json");
 
 const familyRules = [
@@ -93,6 +94,35 @@ const familyRules = [
     authoritativeSources: ["Basilisk upstream effector interface tests", "known actuator allocation examples"],
   },
   {
+    id: "fsw-configuration-data",
+    sourceRoot: "src/fswAlgorithms",
+    singleModulesOnly: true,
+    singleModules: [
+      {
+        name: "rwConfigData",
+        upstreamSource: "src/fswAlgorithms/rwConfigData",
+      },
+      {
+        name: "vehicleConfigData",
+        upstreamSource: "src/fswAlgorithms/vehicleConfigData",
+      },
+    ],
+    modulePath: "basilisk/fsw/configuration-data",
+    schemas: ["ACM", "ATD", "MNV", "XTC"],
+    xtceRequired: true,
+    hostCapabilities: ["time", "logging"],
+    authoritativeSources: ["Basilisk upstream configuration-data tests", "known actuator and vehicle configuration examples"],
+  },
+  {
+    id: "fsw-dv-guidance",
+    sourceRoot: "src/fswAlgorithms/dvGuidance",
+    modulePath: "basilisk/fsw/dv-guidance",
+    schemas: ["OMM", "OPM", "OEM", "MNV", "ACM", "XTC"],
+    xtceRequired: true,
+    hostCapabilities: ["time", "logging"],
+    authoritativeSources: ["Basilisk upstream DV guidance tests", "closed-form delta-V guidance cases", "shared optimal-control benchmark cases"],
+  },
+  {
     id: "fsw-orbit-formation-navigation",
     sourceRoot: "src/fswAlgorithms/orbitControl",
     extraRoots: ["src/fswAlgorithms/formationFlying", "src/fswAlgorithms/transDetermination", "src/fswAlgorithms/smallBodyNavigation"],
@@ -101,6 +131,15 @@ const familyRules = [
     xtceRequired: true,
     hostCapabilities: ["time", "logging", "deterministic-random"],
     authoritativeSources: ["Basilisk Lambert/orbit-control unit tests", "published Lambert benchmark cases", "CCSDS orbit examples"],
+  },
+  {
+    id: "fsw-state-estimation",
+    sourceRoot: "src/fswAlgorithms/stateEstimation",
+    modulePath: "basilisk/fsw/state-estimation",
+    schemas: ["OMM", "OPM", "OEM", "OCM", "TDM", "MNV", "XTC"],
+    xtceRequired: true,
+    hostCapabilities: ["time", "logging", "deterministic-random"],
+    authoritativeSources: ["Basilisk upstream state-estimation tests", "least-squares and Kalman filter benchmark cases", "closed-form estimation consistency cases"],
   },
   {
     id: "fsw-sensor-optical-image",
@@ -198,11 +237,17 @@ for (const rule of familyRules) {
   const sourceRoots = [rule.sourceRoot, ...(rule.extraRoots ?? [])];
   const sourceRootsByName = {};
   const names = new Set();
-  for (const root of sourceRoots) {
-    for (const name of listModuleDirs(root)) {
-      names.add(name);
-      sourceRootsByName[name] = `${root}/${name}`;
+  if (!rule.singleModulesOnly) {
+    for (const root of sourceRoots) {
+      for (const name of listModuleDirs(root)) {
+        names.add(name);
+        sourceRootsByName[name] = `${root}/${name}`;
+      }
     }
+  }
+  for (const singleModule of rule.singleModules ?? []) {
+    names.add(singleModule.name);
+    sourceRootsByName[singleModule.name] = singleModule.upstreamSource;
   }
   const family = {
     ...rule,
