@@ -24,6 +24,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import createFlatc from "flatc-wasm/module";
+import {
+  signModuleArtifact,
+  verifyModuleArtifact,
+} from "space-data-module-sdk/bundle";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMSDK_DIR = path.resolve(
@@ -38,6 +42,14 @@ const TOOLCHAIN_STAMP_PATH = path.join(BUILD_DIR, ".emsdk-path");
 const CORE_SDS_GENERATED_DIR = path.resolve(
   __dirname,
   "../core/src/cpp/generated/sds",
+);
+const LEGACY_INVOKE_GENERATED_DIR = path.resolve(
+  __dirname,
+  "../protection-key-server/src/cpp/generated",
+);
+const MODULE_SIGNING_KEYPAIR_PATH = path.resolve(
+  __dirname,
+  "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
 );
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -122,6 +134,26 @@ function syncToolchainStamp() {
 async function generateFlatbufferHeaders(outDir) {
   console.log("  Generating FlatBuffer C++ headers...");
   fs.mkdirSync(outDir, { recursive: true });
+
+  const legacyHeaders = [
+    "PluginInvokeRequest_generated.h",
+    "PluginInvokeResponse_generated.h",
+    "TypedArenaBuffer_generated.h",
+  ];
+  if (
+    legacyHeaders.every((header) =>
+      fs.existsSync(path.join(LEGACY_INVOKE_GENERATED_DIR, header)),
+    )
+  ) {
+    for (const header of legacyHeaders) {
+      fs.copyFileSync(
+        path.join(LEGACY_INVOKE_GENERATED_DIR, header),
+        path.join(outDir, header),
+      );
+    }
+    console.log(`  Using tracked invoke headers: ${LEGACY_INVOKE_GENERATED_DIR}`);
+    return;
+  }
 
   const sdkSchemasDir = path.join(__dirname, "node_modules", "space-data-module-sdk", "schemas");
   if (!fs.existsSync(sdkSchemasDir)) {
@@ -254,6 +286,16 @@ function resolveFlatbuffersInclude() {
     console.log(`  Using FlatBuffers headers: ${explicit}`);
     return explicit;
   }
+  const stackFlatbuffersInclude = path.resolve(
+    __dirname,
+    "../../../flatbuffers/include",
+  );
+  if (
+    fs.existsSync(path.join(stackFlatbuffersInclude, "flatbuffers", "base.h"))
+  ) {
+    console.log(`  Using stack FlatBuffers headers: ${stackFlatbuffersInclude}`);
+    return stackFlatbuffersInclude;
+  }
   try {
     const brewPrefix = runSilent("brew --prefix flatbuffers 2>/dev/null", {}).trim();
     const brewInc = path.join(brewPrefix, "include");
@@ -267,6 +309,25 @@ function resolveFlatbuffersInclude() {
       "Install with: brew install flatbuffers\n" +
       "Or set FLATBUFFERS_INCLUDE_DIR=/path/to/include",
   );
+}
+
+async function signBuiltModule(wasmPath) {
+  if (!fs.existsSync(MODULE_SIGNING_KEYPAIR_PATH)) {
+    throw new Error(`Module signing keypair not found: ${MODULE_SIGNING_KEYPAIR_PATH}`);
+  }
+  const keypair = JSON.parse(
+    fs.readFileSync(MODULE_SIGNING_KEYPAIR_PATH, "utf8"),
+  );
+  const signed = await signModuleArtifact(fs.readFileSync(wasmPath), {
+    privateKeySeedHex: keypair.privateKeySeedHex,
+    keyId: keypair.keyId ?? null,
+  });
+  fs.writeFileSync(wasmPath, signed.wasmBytes);
+  await verifyModuleArtifact(signed.wasmBytes, {
+    trustedPublicKeys: [keypair.publicKeyHex],
+    requireSignature: true,
+  });
+  console.log(`  Signed module artifact: ${wasmPath}`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -339,6 +400,8 @@ uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
   );
 
   fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
+  await signBuiltModule(outWasm);
+  await signBuiltModule(path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
 
   console.log(`\n✓ Build complete: ${outWasm}`);
 }
