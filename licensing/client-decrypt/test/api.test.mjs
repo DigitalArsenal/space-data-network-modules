@@ -28,6 +28,12 @@ import {
   randomBytes,
   x25519SharedSecret,
 } from "space-data-module-sdk/utils/wasm-crypto";
+import {
+  verifyModuleArtifact,
+} from "space-data-module-sdk/bundle";
+
+const TRUSTED_DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
+  "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78";
 
 function concat(...arrays) {
   const total = arrays.reduce((sum, array) => sum + array.length, 0);
@@ -239,6 +245,24 @@ test("package entrypoint avoids literal node: imports so browser bundlers can pa
   const source = fs.readFileSync(new URL("../index.js", import.meta.url), "utf8");
 
   assert.equal(source.includes("node:"), false);
+});
+
+test("built wasm artifacts carry the trusted module signature", async () => {
+  for (const artifactUrl of [
+    new URL("../dist/client-decrypt.wasm", import.meta.url),
+    isomorphicWasmPath,
+  ]) {
+    const result = await verifyModuleArtifact(fs.readFileSync(artifactUrl), {
+      trustedPublicKeys: [TRUSTED_DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
+      requireSignature: true,
+    });
+    assert.equal(result.verified, true);
+    assert.equal(result.signed, true);
+    assert.equal(
+      result.publicKeyHex,
+      TRUSTED_DEV_MODULE_SIGNER_PUBLIC_KEY_HEX,
+    );
+  }
 });
 
 test("package entrypoint accepts prefetched encrypted bundle bytes for awaited browser delivery", async (t) => {

@@ -27,10 +27,8 @@
 #include <flatbuffers/flatbuffers.h>
 #include "ENC_generated.h"
 #include "LGR_generated.h"
-#include "PluginInvokeRequest_generated.h"
-#include "PluginInvokeResponse_generated.h"
+#include "PIV_generated.h"
 #include "REC_generated.h"
-#include "TypedArenaBuffer_generated.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -761,68 +759,139 @@ static DecryptResult decrypt_lgr_grant(
     return result;
 }
 
-using namespace orbpro::invoke;
+static std::vector<uint8_t> finish_piv_response(
+    flatbuffers::FlatBufferBuilder& fbb,
+    flatbuffers::Offset<PIVResponse> response
+) {
+    const auto root = CreatePIV(fbb, 0, response);
+    FinishPIVBuffer(fbb, root);
+    return std::vector<uint8_t>(
+        fbb.GetBufferPointer(),
+        fbb.GetBufferPointer() + fbb.GetSize()
+    );
+}
 
-static flatbuffers::DetachedBuffer build_error_response(const char* msg) {
+static std::vector<uint8_t> build_error_response(
+    const char* code,
+    const char* msg,
+    int32_t status_code,
+    uint64_t trace_id = 0
+) {
     flatbuffers::FlatBufferBuilder fbb(256);
-    const auto msg_off = fbb.CreateString(msg);
-    PluginInvokeResponseBuilder rb(fbb);
-    rb.add_status_code(1);
-    rb.add_error_message(msg_off);
-    FinishPluginInvokeResponseBuffer(fbb, rb.Finish());
-    return fbb.Release();
+    const auto code_off = fbb.CreateString(code ? code : "invoke-error");
+    const auto msg_off = fbb.CreateString(msg ? msg : "client-decrypt failed");
+    const auto response = CreatePIVResponse(
+        fbb,
+        status_code,
+        status_code == 404 ? pivStatus::NOT_FOUND : pivStatus::FAILED,
+        false,
+        0,
+        0,
+        0,
+        code_off,
+        msg_off,
+        trace_id
+    );
+    return finish_piv_response(fbb, response);
 }
 
-static flatbuffers::DetachedBuffer build_bytes_response(const uint8_t* data, size_t len) {
+static std::vector<uint8_t> build_bytes_response(
+    const uint8_t* data,
+    size_t len,
+    uint64_t trace_id = 0
+) {
     flatbuffers::FlatBufferBuilder fbb(len + 512);
+    fbb.ForceVectorAlignment(len, sizeof(uint8_t), 8);
     const auto arena_vec = fbb.CreateVector(data, len);
-    using namespace orbpro::stream;
-    TypedArenaBufferBuilder tb(fbb);
-    tb.add_offset(0);
-    tb.add_size(static_cast<uint32_t>(len));
-    const auto frame = tb.Finish();
+    const auto frame = CreateTABDirect(
+        fbb,
+        0,
+        static_cast<uint32_t>(len),
+        8,
+        payloadWireFormat::FLATBUFFER,
+        0,
+        bufferMutability::IMMUTABLE,
+        bufferOwnership::HOST_OWNED,
+        0,
+        "result"
+    );
     const auto frames = fbb.CreateVector(&frame, 1);
-    PluginInvokeResponseBuilder rb(fbb);
-    rb.add_status_code(0);
-    rb.add_output_frames(frames);
-    rb.add_payload_arena(arena_vec);
-    FinishPluginInvokeResponseBuffer(fbb, rb.Finish());
-    return fbb.Release();
+    const auto response = CreatePIVResponse(
+        fbb,
+        0,
+        pivStatus::OK,
+        false,
+        0,
+        frames,
+        arena_vec,
+        0,
+        0,
+        trace_id
+    );
+    return finish_piv_response(fbb, response);
 }
 
-static flatbuffers::DetachedBuffer handle_decrypt_artifact(const PluginInvokeRequest* req) {
-    const auto* frames = req->input_frames();
-    const auto* arena = req->payload_arena();
-    if (!frames || frames->size() < 2 || frames->size() > 3) {
-        return build_error_response("decrypt_artifact requires 2 or 3 input frames");
+static bool resolve_piv_frame_payload(
+    const TAB* frame,
+    const flatbuffers::Vector<uint8_t>* arena,
+    const uint8_t** payload,
+    size_t* payload_len
+) {
+    if (!frame || !payload || !payload_len) {
+        return false;
     }
-    if (!arena) {
-        return build_error_response("missing payload arena");
+    const size_t offset = static_cast<size_t>(frame->OFFSET());
+    const size_t size = static_cast<size_t>(frame->SIZE());
+    const size_t arena_size = arena ? static_cast<size_t>(arena->size()) : 0;
+    if (size > 0 && !arena) {
+        return false;
+    }
+    if (offset > arena_size || size > arena_size - offset) {
+        return false;
+    }
+    *payload = size > 0 ? arena->data() + offset : nullptr;
+    *payload_len = size;
+    return true;
+}
+
+static std::vector<uint8_t> handle_decrypt_artifact(const PIVRequest* req) {
+    const auto* frames = req->INPUTS();
+    const auto* arena = req->PAYLOAD_ARENA();
+    const uint64_t trace_id = req ? req->TRACE_ID() : 0;
+    if (!frames || frames->size() < 2 || frames->size() > 3) {
+        return build_error_response(
+            "invalid-input",
+            "decrypt_artifact requires 2 or 3 input frames",
+            400,
+            trace_id
+        );
     }
 
     const auto* payload_frame = frames->Get(0);
     const auto* key_frame = frames->Get(1);
     const auto* encrypted_bundle_frame = frames->size() > 2 ? frames->Get(2) : nullptr;
-    if (!payload_frame || !key_frame) {
-        return build_error_response("missing input frames");
-    }
-    if (payload_frame->offset() + payload_frame->size() > arena->size() ||
-        key_frame->offset() + key_frame->size() > arena->size() ||
+    const uint8_t* payload = nullptr;
+    size_t payload_len = 0;
+    const uint8_t* private_key = nullptr;
+    size_t private_key_len = 0;
+    const uint8_t* encrypted_bundle = nullptr;
+    size_t encrypted_bundle_len = 0;
+    if (!resolve_piv_frame_payload(payload_frame, arena, &payload, &payload_len) ||
+        !resolve_piv_frame_payload(key_frame, arena, &private_key, &private_key_len) ||
         (encrypted_bundle_frame &&
-            encrypted_bundle_frame->offset() + encrypted_bundle_frame->size() > arena->size())) {
-        return build_error_response("input frame exceeds payload arena");
+            !resolve_piv_frame_payload(
+                encrypted_bundle_frame,
+                arena,
+                &encrypted_bundle,
+                &encrypted_bundle_len
+            ))) {
+        return build_error_response(
+            "invalid-input",
+            "input frame exceeds payload arena",
+            400,
+            trace_id
+        );
     }
-
-    const uint8_t* payload = arena->data() + payload_frame->offset();
-    const size_t payload_len = payload_frame->size();
-    const uint8_t* private_key = arena->data() + key_frame->offset();
-    const size_t private_key_len = key_frame->size();
-    const uint8_t* encrypted_bundle = encrypted_bundle_frame
-        ? arena->data() + encrypted_bundle_frame->offset()
-        : nullptr;
-    const size_t encrypted_bundle_len = encrypted_bundle_frame
-        ? encrypted_bundle_frame->size()
-        : 0;
 
     DecryptResult decrypted;
     if (payload_len >= 8 && LGRBufferHasIdentifier(payload)) {
@@ -844,9 +913,18 @@ static flatbuffers::DetachedBuffer handle_decrypt_artifact(const PluginInvokeReq
     }
 
     if (!decrypted.ok) {
-        return build_error_response(decrypted.error.c_str());
+        return build_error_response(
+            "decrypt-failed",
+            decrypted.error.c_str(),
+            1,
+            trace_id
+        );
     }
-    return build_bytes_response(decrypted.plaintext.data(), decrypted.plaintext.size());
+    return build_bytes_response(
+        decrypted.plaintext.data(),
+        decrypted.plaintext.size(),
+        trace_id
+    );
 }
 
 extern "C" {
@@ -864,25 +942,65 @@ void plugin_free(uint8_t* ptr, uint32_t) {
 __attribute__((visibility("default")))
 uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
     if (!req_ptr || req_len == 0 || !out_len_ptr) {
+        std::vector<uint8_t> response = build_error_response(
+            "invalid-request",
+            "Invoke request bytes are empty.",
+            400
+        );
         if (out_len_ptr) {
-            *out_len_ptr = 0;
+            *out_len_ptr = static_cast<uint32_t>(response.size());
         }
-        return nullptr;
+        uint8_t* response_ptr = static_cast<uint8_t*>(malloc(response.size()));
+        if (!response_ptr) {
+            if (out_len_ptr) {
+                *out_len_ptr = 0;
+            }
+            return nullptr;
+        }
+        memcpy(response_ptr, response.data(), response.size());
+        return response_ptr;
     }
 
-    flatbuffers::Verifier verifier(req_ptr, req_len);
-    if (!VerifyPluginInvokeRequestBuffer(verifier)) {
-        *out_len_ptr = 0;
-        return nullptr;
-    }
-    const PluginInvokeRequest* req = GetPluginInvokeRequest(req_ptr);
-    const char* method = req->method_id() ? req->method_id()->c_str() : "";
-
-    flatbuffers::DetachedBuffer response;
-    if (strcmp(method, "decrypt_artifact") == 0) {
-        response = handle_decrypt_artifact(req);
+    std::vector<uint8_t> response;
+    if (req_len < 8 || !PIVBufferHasIdentifier(req_ptr)) {
+        response = build_error_response(
+            "invalid-request",
+            "Invoke request must be an SDS PIV envelope.",
+            400
+        );
     } else {
-        response = build_error_response("unknown method");
+        flatbuffers::Verifier verifier(req_ptr, req_len);
+        if (!VerifyPIVBuffer(verifier)) {
+            response = build_error_response(
+                "invalid-request",
+                "SDS PIV invoke envelope verification failed.",
+                400
+            );
+        } else {
+            const PIV* envelope = GetPIV(req_ptr);
+            const PIVRequest* req = envelope ? envelope->REQUEST() : nullptr;
+            const uint64_t trace_id = req ? req->TRACE_ID() : 0;
+            if (!req) {
+                response = build_error_response(
+                    "invalid-request",
+                    "SDS PIV invoke envelope does not contain a request.",
+                    400,
+                    trace_id
+                );
+            } else {
+                const char* method = req->METHOD_ID() ? req->METHOD_ID()->c_str() : "";
+                if (strcmp(method, "decrypt_artifact") == 0) {
+                    response = handle_decrypt_artifact(req);
+                } else {
+                    response = build_error_response(
+                        "unknown-method",
+                        "unknown method",
+                        404,
+                        trace_id
+                    );
+                }
+            }
+        }
     }
 
     const uint32_t response_len = static_cast<uint32_t>(response.size());
