@@ -19,11 +19,15 @@ function isGeneratedArtifact(path) {
   return /(^|\/)(dist|build[^/]*)\//.test(path) || path.endsWith(".wasm");
 }
 
+function isScannerSource(path) {
+  return path === "tests/piv_invoke_sources.test.mjs";
+}
+
 test("tracked module sources do not reference legacy PINQ/PINS invoke identifiers", () => {
   const matches = [];
 
   for (const path of trackedFiles()) {
-    if (isGeneratedArtifact(path)) {
+    if (isGeneratedArtifact(path) || isScannerSource(path)) {
       continue;
     }
     const text = readFileSync(path, "utf8");
