@@ -39,7 +39,7 @@ const __orbproDirname =
 
 var Module = (() => {
   var _scriptDir = import.meta.url;
-  
+
   return (
 async function(moduleArg = {}) {
 
@@ -65,7 +65,7 @@ Module['ready'] = new Promise((resolve, reject) => {
   readyPromiseResolve = resolve;
   readyPromiseReject = reject;
 });
-["_plugin_init","_plugin_destroy","_access_reset_ground_stations","_access_add_ground_station","_access_set_ground_station_blackouts","_access_get_ground_station_count","_access_get_ground_station_record","_access_get_ground_station_blackout_count","_access_get_ground_station_blackout_record","_access_compute_access_windows","_access_schedule_contacts","_access_plugin_manifest_bytes","_access_plugin_manifest_size","_malloc","_free","_memory","___indirect_function_table","_fflush","onRuntimeInitialized"].forEach((prop) => {
+["_plugin_init","_plugin_destroy","_access_reset_ground_stations","_access_add_ground_station","_access_set_ground_station_blackouts","_access_get_ground_station_count","_access_get_ground_station_record","_access_get_ground_station_blackout_count","_access_get_ground_station_blackout_record","_access_compute_access_windows","_access_compute_access_windows_with_elevation_mask","_access_compute_access_windows_with_effects","_access_schedule_contacts","_plugin_alloc","_plugin_free","_plugin_get_manifest_flatbuffer","_plugin_get_manifest_flatbuffer_size","_plugin_invoke_stream","_access_plugin_manifest_bytes","_access_plugin_manifest_size","_malloc","_free","_memory","___indirect_function_table","_fflush","onRuntimeInitialized"].forEach((prop) => {
   if (!Object.getOwnPropertyDescriptor(Module['ready'], prop)) {
     Object.defineProperty(Module['ready'], prop, {
       get: () => abort('You are getting ' + prop + ' on the Promise object, instead of the instance. Use .then() to get called back with the instance, see the MODULARIZE docs in src/settings.js'),
@@ -394,7 +394,7 @@ assert(!ENVIRONMENT_IS_SHELL, "shell environment detected but not enabled at bui
 // An online HTML version (which may be of a different version of Emscripten)
 //    is up at http://kripken.github.io/emscripten-site/docs/api_reference/preamble.js.html
 
-var wasmBinary; 
+var wasmBinary;
 if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];legacyModuleProp('wasmBinary', 'wasmBinary');
 
 if (typeof WebAssembly != 'object') {
@@ -544,7 +544,7 @@ function initRuntime() {
 
   checkStackCookie();
 
-  
+
   callRuntimeCallbacks(__ATINIT__);
 }
 
@@ -860,10 +860,10 @@ function createWasm() {
   function receiveInstance(instance, module) {
     wasmExports = instance.exports;
 
-    
+
 
     wasmMemory = wasmExports['memory'];
-    
+
     assert(wasmMemory, "memory not found in wasm exports");
     // This assertion doesn't hold when emscripten is run in --post-link
     // mode.
@@ -1037,7 +1037,7 @@ function dbg(text) {
       }
     };
 
-  
+
     /**
      * @param {number} ptr
      * @param {string} type
@@ -1066,7 +1066,7 @@ function dbg(text) {
       return '0x' + ptr.toString(16).padStart(8, '0');
     };
 
-  
+
     /**
      * @param {number} ptr
      * @param {number} value
@@ -1096,173 +1096,8 @@ function dbg(text) {
       }
     };
 
-  /** @constructor */
-  function ExceptionInfo(excPtr) {
-      this.excPtr = excPtr;
-      this.ptr = excPtr - 24;
-  
-      this.set_type = function(type) {
-        HEAPU32[(((this.ptr)+(4))>>2)] = type;
-      };
-  
-      this.get_type = function() {
-        return HEAPU32[(((this.ptr)+(4))>>2)];
-      };
-  
-      this.set_destructor = function(destructor) {
-        HEAPU32[(((this.ptr)+(8))>>2)] = destructor;
-      };
-  
-      this.get_destructor = function() {
-        return HEAPU32[(((this.ptr)+(8))>>2)];
-      };
-  
-      this.set_caught = function(caught) {
-        caught = caught ? 1 : 0;
-        HEAP8[(((this.ptr)+(12))>>0)] = caught;
-      };
-  
-      this.get_caught = function() {
-        return HEAP8[(((this.ptr)+(12))>>0)] != 0;
-      };
-  
-      this.set_rethrown = function(rethrown) {
-        rethrown = rethrown ? 1 : 0;
-        HEAP8[(((this.ptr)+(13))>>0)] = rethrown;
-      };
-  
-      this.get_rethrown = function() {
-        return HEAP8[(((this.ptr)+(13))>>0)] != 0;
-      };
-  
-      // Initialize native structure fields. Should be called once after allocated.
-      this.init = function(type, destructor) {
-        this.set_adjusted_ptr(0);
-        this.set_type(type);
-        this.set_destructor(destructor);
-      }
-  
-      this.set_adjusted_ptr = function(adjustedPtr) {
-        HEAPU32[(((this.ptr)+(16))>>2)] = adjustedPtr;
-      };
-  
-      this.get_adjusted_ptr = function() {
-        return HEAPU32[(((this.ptr)+(16))>>2)];
-      };
-  
-      // Get pointer which is expected to be received by catch clause in C++ code. It may be adjusted
-      // when the pointer is casted to some of the exception object base classes (e.g. when virtual
-      // inheritance is used). When a pointer is thrown this method should return the thrown pointer
-      // itself.
-      this.get_exception_ptr = function() {
-        // Work around a fastcomp bug, this code is still included for some reason in a build without
-        // exceptions support.
-        var isPointer = ___cxa_is_pointer_type(this.get_type());
-        if (isPointer) {
-          return HEAPU32[((this.excPtr)>>2)];
-        }
-        var adjusted = this.get_adjusted_ptr();
-        if (adjusted !== 0) return adjusted;
-        return this.excPtr;
-      };
-    }
-  
-  var exceptionLast = 0;
-  
-  var uncaughtExceptionCount = 0;
-  var ___cxa_throw = (ptr, type, destructor) => {
-      var info = new ExceptionInfo(ptr);
-      // Initialize ExceptionInfo content after it was allocated in __cxa_allocate_exception.
-      info.init(type, destructor);
-      exceptionLast = ptr;
-      uncaughtExceptionCount++;
-      assert(false, 'Exception thrown, but exception catching is not enabled. Compile with -sNO_DISABLE_EXCEPTION_CATCHING or -sEXCEPTION_CATCHING_ALLOWED=[..] to catch.');
-    };
-
-  var _abort = () => {
-      abort('native code called abort()');
-    };
-
-  var _emscripten_memcpy_js = (dest, src, num) => HEAPU8.copyWithin(dest, src, src + num);
-
-  var getHeapMax = () =>
-      // Stay one Wasm page short of 4GB: while e.g. Chrome is able to allocate
-      // full 4GB Wasm memories, the size will wrap back to 0 bytes in Wasm side
-      // for any code that deals with heap sizes, which would require special
-      // casing all heap size related code to treat 0 specially.
-      268435456;
-  
-  var growMemory = (size) => {
-      var b = wasmMemory.buffer;
-      var pages = (size - b.byteLength + 65535) / 65536;
-      try {
-        // round size grow request up to wasm page size (fixed 64KB per spec)
-        wasmMemory.grow(pages); // .grow() takes a delta compared to the previous size
-        updateMemoryViews();
-        return 1 /*success*/;
-      } catch(e) {
-        err(`growMemory: Attempted to grow heap from ${b.byteLength} bytes to ${size} bytes, but got error: ${e}`);
-      }
-      // implicit 0 return to save code size (caller will cast "undefined" into 0
-      // anyhow)
-    };
-  var _emscripten_resize_heap = (requestedSize) => {
-      var oldSize = HEAPU8.length;
-      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
-      requestedSize >>>= 0;
-      // With multithreaded builds, races can happen (another thread might increase the size
-      // in between), so return a failure, and let the caller retry.
-      assert(requestedSize > oldSize);
-  
-      // Memory resize rules:
-      // 1.  Always increase heap size to at least the requested size, rounded up
-      //     to next page multiple.
-      // 2a. If MEMORY_GROWTH_LINEAR_STEP == -1, excessively resize the heap
-      //     geometrically: increase the heap size according to
-      //     MEMORY_GROWTH_GEOMETRIC_STEP factor (default +20%), At most
-      //     overreserve by MEMORY_GROWTH_GEOMETRIC_CAP bytes (default 96MB).
-      // 2b. If MEMORY_GROWTH_LINEAR_STEP != -1, excessively resize the heap
-      //     linearly: increase the heap size by at least
-      //     MEMORY_GROWTH_LINEAR_STEP bytes.
-      // 3.  Max size for the heap is capped at 2048MB-WASM_PAGE_SIZE, or by
-      //     MAXIMUM_MEMORY, or by ASAN limit, depending on which is smallest
-      // 4.  If we were unable to allocate as much memory, it may be due to
-      //     over-eager decision to excessively reserve due to (3) above.
-      //     Hence if an allocation fails, cut down on the amount of excess
-      //     growth, in an attempt to succeed to perform a smaller allocation.
-  
-      // A limit is set for how much we can grow. We should not exceed that
-      // (the wasm binary specifies it, so if we tried, we'd fail anyhow).
-      var maxHeapSize = getHeapMax();
-      if (requestedSize > maxHeapSize) {
-        err(`Cannot enlarge memory, requested ${requestedSize} bytes, but the limit is ${maxHeapSize} bytes!`);
-        return false;
-      }
-  
-      var alignUp = (x, multiple) => x + (multiple - x % multiple) % multiple;
-  
-      // Loop through potential heap size increases. If we attempt a too eager
-      // reservation that fails, cut down on the attempted size and reserve a
-      // smaller bump instead. (max 3 times, chosen somewhat arbitrarily)
-      for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
-        var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown); // ensure geometric growth
-        // but limit overreserving (default to capping at +96MB overgrowth at most)
-        overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296 );
-  
-        var newSize = Math.min(maxHeapSize, alignUp(Math.max(requestedSize, overGrownHeapSize), 65536));
-  
-        var replacement = growMemory(newSize);
-        if (replacement) {
-  
-          return true;
-        }
-      }
-      err(`Failed to grow the heap from ${oldSize} bytes to ${newSize} bytes, not enough memory!`);
-      return false;
-    };
-
   var UTF8Decoder = typeof TextDecoder != 'undefined' ? new TextDecoder('utf8') : undefined;
-  
+
     /**
      * Given a pointer 'idx' to a null-terminated UTF8-encoded string in the given
      * array that contains uint8 values, returns a copy of that string as a
@@ -1281,7 +1116,7 @@ function dbg(text) {
       // (As a tiny code save trick, compare endPtr against endIdx using a negation,
       // so that undefined means Infinity)
       while (heapOrArray[endPtr] && !(endPtr >= endIdx)) ++endPtr;
-  
+
       if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
         return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
       }
@@ -1304,7 +1139,7 @@ function dbg(text) {
           if ((u0 & 0xF8) != 0xF0) warnOnce('Invalid UTF-8 leading byte ' + ptrToString(u0) + ' encountered when deserializing a UTF-8 string in wasm memory to a JS string!');
           u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
         }
-  
+
         if (u0 < 0x10000) {
           str += String.fromCharCode(u0);
         } else {
@@ -1314,7 +1149,7 @@ function dbg(text) {
       }
       return str;
     };
-  
+
     /**
      * Given a pointer 'ptr' to a null-terminated UTF8-encoded string in the
      * emscripten HEAP, returns a copy of that string as a Javascript String object.
@@ -1334,6 +1169,175 @@ function dbg(text) {
       assert(typeof ptr == 'number', `UTF8ToString expects a number (got ${typeof ptr})`);
       return ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead) : '';
     };
+  var ___assert_fail = (condition, filename, line, func) => {
+      abort(`Assertion failed: ${UTF8ToString(condition)}, at: ` + [filename ? UTF8ToString(filename) : 'unknown filename', line, func ? UTF8ToString(func) : 'unknown function']);
+    };
+
+  /** @constructor */
+  function ExceptionInfo(excPtr) {
+      this.excPtr = excPtr;
+      this.ptr = excPtr - 24;
+
+      this.set_type = function(type) {
+        HEAPU32[(((this.ptr)+(4))>>2)] = type;
+      };
+
+      this.get_type = function() {
+        return HEAPU32[(((this.ptr)+(4))>>2)];
+      };
+
+      this.set_destructor = function(destructor) {
+        HEAPU32[(((this.ptr)+(8))>>2)] = destructor;
+      };
+
+      this.get_destructor = function() {
+        return HEAPU32[(((this.ptr)+(8))>>2)];
+      };
+
+      this.set_caught = function(caught) {
+        caught = caught ? 1 : 0;
+        HEAP8[(((this.ptr)+(12))>>0)] = caught;
+      };
+
+      this.get_caught = function() {
+        return HEAP8[(((this.ptr)+(12))>>0)] != 0;
+      };
+
+      this.set_rethrown = function(rethrown) {
+        rethrown = rethrown ? 1 : 0;
+        HEAP8[(((this.ptr)+(13))>>0)] = rethrown;
+      };
+
+      this.get_rethrown = function() {
+        return HEAP8[(((this.ptr)+(13))>>0)] != 0;
+      };
+
+      // Initialize native structure fields. Should be called once after allocated.
+      this.init = function(type, destructor) {
+        this.set_adjusted_ptr(0);
+        this.set_type(type);
+        this.set_destructor(destructor);
+      }
+
+      this.set_adjusted_ptr = function(adjustedPtr) {
+        HEAPU32[(((this.ptr)+(16))>>2)] = adjustedPtr;
+      };
+
+      this.get_adjusted_ptr = function() {
+        return HEAPU32[(((this.ptr)+(16))>>2)];
+      };
+
+      // Get pointer which is expected to be received by catch clause in C++ code. It may be adjusted
+      // when the pointer is casted to some of the exception object base classes (e.g. when virtual
+      // inheritance is used). When a pointer is thrown this method should return the thrown pointer
+      // itself.
+      this.get_exception_ptr = function() {
+        // Work around a fastcomp bug, this code is still included for some reason in a build without
+        // exceptions support.
+        var isPointer = ___cxa_is_pointer_type(this.get_type());
+        if (isPointer) {
+          return HEAPU32[((this.excPtr)>>2)];
+        }
+        var adjusted = this.get_adjusted_ptr();
+        if (adjusted !== 0) return adjusted;
+        return this.excPtr;
+      };
+    }
+
+  var exceptionLast = 0;
+
+  var uncaughtExceptionCount = 0;
+  var ___cxa_throw = (ptr, type, destructor) => {
+      var info = new ExceptionInfo(ptr);
+      // Initialize ExceptionInfo content after it was allocated in __cxa_allocate_exception.
+      info.init(type, destructor);
+      exceptionLast = ptr;
+      uncaughtExceptionCount++;
+      assert(false, 'Exception thrown, but exception catching is not enabled. Compile with -sNO_DISABLE_EXCEPTION_CATCHING or -sEXCEPTION_CATCHING_ALLOWED=[..] to catch.');
+    };
+
+  var _abort = () => {
+      abort('native code called abort()');
+    };
+
+  var _emscripten_memcpy_js = (dest, src, num) => HEAPU8.copyWithin(dest, src, src + num);
+
+  var getHeapMax = () =>
+      // Stay one Wasm page short of 4GB: while e.g. Chrome is able to allocate
+      // full 4GB Wasm memories, the size will wrap back to 0 bytes in Wasm side
+      // for any code that deals with heap sizes, which would require special
+      // casing all heap size related code to treat 0 specially.
+      268435456;
+
+  var growMemory = (size) => {
+      var b = wasmMemory.buffer;
+      var pages = (size - b.byteLength + 65535) / 65536;
+      try {
+        // round size grow request up to wasm page size (fixed 64KB per spec)
+        wasmMemory.grow(pages); // .grow() takes a delta compared to the previous size
+        updateMemoryViews();
+        return 1 /*success*/;
+      } catch(e) {
+        err(`growMemory: Attempted to grow heap from ${b.byteLength} bytes to ${size} bytes, but got error: ${e}`);
+      }
+      // implicit 0 return to save code size (caller will cast "undefined" into 0
+      // anyhow)
+    };
+  var _emscripten_resize_heap = (requestedSize) => {
+      var oldSize = HEAPU8.length;
+      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
+      requestedSize >>>= 0;
+      // With multithreaded builds, races can happen (another thread might increase the size
+      // in between), so return a failure, and let the caller retry.
+      assert(requestedSize > oldSize);
+
+      // Memory resize rules:
+      // 1.  Always increase heap size to at least the requested size, rounded up
+      //     to next page multiple.
+      // 2a. If MEMORY_GROWTH_LINEAR_STEP == -1, excessively resize the heap
+      //     geometrically: increase the heap size according to
+      //     MEMORY_GROWTH_GEOMETRIC_STEP factor (default +20%), At most
+      //     overreserve by MEMORY_GROWTH_GEOMETRIC_CAP bytes (default 96MB).
+      // 2b. If MEMORY_GROWTH_LINEAR_STEP != -1, excessively resize the heap
+      //     linearly: increase the heap size by at least
+      //     MEMORY_GROWTH_LINEAR_STEP bytes.
+      // 3.  Max size for the heap is capped at 2048MB-WASM_PAGE_SIZE, or by
+      //     MAXIMUM_MEMORY, or by ASAN limit, depending on which is smallest
+      // 4.  If we were unable to allocate as much memory, it may be due to
+      //     over-eager decision to excessively reserve due to (3) above.
+      //     Hence if an allocation fails, cut down on the amount of excess
+      //     growth, in an attempt to succeed to perform a smaller allocation.
+
+      // A limit is set for how much we can grow. We should not exceed that
+      // (the wasm binary specifies it, so if we tried, we'd fail anyhow).
+      var maxHeapSize = getHeapMax();
+      if (requestedSize > maxHeapSize) {
+        err(`Cannot enlarge memory, requested ${requestedSize} bytes, but the limit is ${maxHeapSize} bytes!`);
+        return false;
+      }
+
+      var alignUp = (x, multiple) => x + (multiple - x % multiple) % multiple;
+
+      // Loop through potential heap size increases. If we attempt a too eager
+      // reservation that fails, cut down on the attempted size and reserve a
+      // smaller bump instead. (max 3 times, chosen somewhat arbitrarily)
+      for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
+        var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown); // ensure geometric growth
+        // but limit overreserving (default to capping at +96MB overgrowth at most)
+        overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296 );
+
+        var newSize = Math.min(maxHeapSize, alignUp(Math.max(requestedSize, overGrownHeapSize), 65536));
+
+        var replacement = growMemory(newSize);
+        if (replacement) {
+
+          return true;
+        }
+      }
+      err(`Failed to grow the heap from ${oldSize} bytes to ${newSize} bytes, not enough memory!`);
+      return false;
+    };
+
   var SYSCALLS = {
   varargs:undefined,
   get() {
@@ -1353,7 +1357,7 @@ function dbg(text) {
       abort('fd_close called without SYSCALLS_REQUIRE_FILESYSTEM');
     };
 
-  
+
   var convertI32PairToI53Checked = (lo, hi) => {
       assert(lo == (lo >>> 0) || lo == (lo|0)); // lo should either be a i32 or a u32
       assert(hi === (hi|0));                    // hi should be a i32
@@ -1361,14 +1365,14 @@ function dbg(text) {
     };
   function _fd_seek(fd,offset_low, offset_high,whence,newOffset) {
     var offset = convertI32PairToI53Checked(offset_low, offset_high);;
-  
-    
+
+
       return 70;
     ;
   }
 
   var printCharBuffers = [null,[],[]];
-  
+
   var printChar = (stream, curr) => {
       var buffer = printCharBuffers[stream];
       assert(buffer);
@@ -1379,15 +1383,15 @@ function dbg(text) {
         buffer.push(curr);
       }
     };
-  
+
   var flush_NO_FILESYSTEM = () => {
       // flush anything remaining in the buffers during shutdown
       _fflush(0);
       if (printCharBuffers[1].length) printChar(1, 10);
       if (printCharBuffers[2].length) printChar(2, 10);
     };
-  
-  
+
+
   var _fd_write = (fd, iov, iovcnt, pnum) => {
       // hack to support printf in SYSCALLS_REQUIRE_FILESYSTEM=0
       var num = 0;
@@ -1407,6 +1411,8 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
 var wasmImports = {
+  /** @export */
+  __assert_fail: ___assert_fail,
   /** @export */
   __cxa_throw: ___cxa_throw,
   /** @export */
@@ -1435,12 +1441,19 @@ var _access_get_ground_station_blackout_count = Module['_access_get_ground_stati
 var _access_get_ground_station_blackout_record = Module['_access_get_ground_station_blackout_record'] = createExportWrapper('access_get_ground_station_blackout_record');
 var _access_compute_access_windows = Module['_access_compute_access_windows'] = createExportWrapper('access_compute_access_windows');
 var _malloc = Module['_malloc'] = createExportWrapper('malloc');
+var _access_compute_access_windows_with_elevation_mask = Module['_access_compute_access_windows_with_elevation_mask'] = createExportWrapper('access_compute_access_windows_with_elevation_mask');
+var _access_compute_access_windows_with_effects = Module['_access_compute_access_windows_with_effects'] = createExportWrapper('access_compute_access_windows_with_effects');
 var _access_schedule_contacts = Module['_access_schedule_contacts'] = createExportWrapper('access_schedule_contacts');
+var _plugin_get_manifest_flatbuffer = Module['_plugin_get_manifest_flatbuffer'] = createExportWrapper('plugin_get_manifest_flatbuffer');
 var _access_plugin_manifest_bytes = Module['_access_plugin_manifest_bytes'] = createExportWrapper('access_plugin_manifest_bytes');
+var _plugin_get_manifest_flatbuffer_size = Module['_plugin_get_manifest_flatbuffer_size'] = createExportWrapper('plugin_get_manifest_flatbuffer_size');
 var _access_plugin_manifest_size = Module['_access_plugin_manifest_size'] = createExportWrapper('access_plugin_manifest_size');
+var _plugin_alloc = Module['_plugin_alloc'] = createExportWrapper('plugin_alloc');
+var _plugin_free = Module['_plugin_free'] = createExportWrapper('plugin_free');
+var _free = Module['_free'] = createExportWrapper('free');
+var _plugin_invoke_stream = Module['_plugin_invoke_stream'] = createExportWrapper('plugin_invoke_stream');
 var ___errno_location = createExportWrapper('__errno_location');
 var _fflush = Module['_fflush'] = createExportWrapper('fflush');
-var _free = Module['_free'] = createExportWrapper('free');
 var _emscripten_stack_init = () => (_emscripten_stack_init = wasmExports['emscripten_stack_init'])();
 var _emscripten_stack_get_free = () => (_emscripten_stack_get_free = wasmExports['emscripten_stack_get_free'])();
 var _emscripten_stack_get_base = () => (_emscripten_stack_get_base = wasmExports['emscripten_stack_get_base'])();

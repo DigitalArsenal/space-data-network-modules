@@ -14,6 +14,25 @@ function readText(path) {
   return fs.readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
+function readSdsSchemaText(path) {
+  const roots = [
+    "../../../../spacedatastandards.org/schema/",
+    "../node_modules/spacedatastandards.org/schema/",
+  ];
+  let lastError = null;
+  for (const root of roots) {
+    try {
+      return fs.readFileSync(new URL(`${root}${path}`, import.meta.url), "utf8");
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 function conjunctionRequestSchema() {
   return {
     entry: "/schemas/ConjunctionScreenCatalogRequest.fbs",
@@ -32,18 +51,10 @@ function ommSchema() {
   return {
     entry: "/sds/OMM/main.fbs",
     files: {
-      "/sds/OMM/main.fbs": readText(
-        "../node_modules/spacedatastandards.org/schema/OMM/main.fbs",
-      ),
-      "/sds/RFM/main.fbs": readText(
-        "../node_modules/spacedatastandards.org/schema/RFM/main.fbs",
-      ),
-      "/sds/TIM/main.fbs": readText(
-        "../node_modules/spacedatastandards.org/schema/TIM/main.fbs",
-      ),
-      "/sds/MET/main.fbs": readText(
-        "../node_modules/spacedatastandards.org/schema/MET/main.fbs",
-      ),
+      "/sds/OMM/main.fbs": readSdsSchemaText("OMM/main.fbs"),
+      "/sds/RFM/main.fbs": readSdsSchemaText("RFM/main.fbs"),
+      "/sds/TIM/main.fbs": readSdsSchemaText("TIM/main.fbs"),
+      "/sds/MET/main.fbs": readSdsSchemaText("MET/main.fbs"),
     },
   };
 }
@@ -128,6 +139,22 @@ function encodeUint32beFramedStream(records) {
   return stream;
 }
 
+async function invokeWithTimeout(promise, timeoutMs, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 test("screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams", async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the SDN stream adapter test.");
@@ -154,13 +181,17 @@ test("screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams", asyn
     await harness.destroy();
   });
 
-  const response = await harness.invoke({
-    methodId: "screen_catalog",
-    inputs: [
-      { portId: "request", payload: requestPayload },
-      { portId: "catalog", payload: catalogPayload },
-    ],
-  });
+  const response = await invokeWithTimeout(
+    harness.invoke({
+      methodId: "screen_catalog",
+      inputs: [
+        { portId: "request", payload: requestPayload },
+        { portId: "catalog", payload: catalogPayload },
+      ],
+    }),
+    10000,
+    "screen_catalog SDN data API OMM stream invoke",
+  );
 
   assert.equal(response.statusCode, 0, response.errorMessage);
   const result = response.outputs?.find((frame) => frame.portId === "result");
@@ -194,13 +225,17 @@ test("screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM 
     await harness.destroy();
   });
 
-  const response = await harness.invoke({
-    methodId: "screen_catalog",
-    inputs: [
-      { portId: "request", payload: requestPayload },
-      { portId: "catalog", payload: catalogPayload },
-    ],
-  });
+  const response = await invokeWithTimeout(
+    harness.invoke({
+      methodId: "screen_catalog",
+      inputs: [
+        { portId: "request", payload: requestPayload },
+        { portId: "catalog", payload: catalogPayload },
+      ],
+    }),
+    10000,
+    "screen_catalog size-prefixed SDN data API OMM stream invoke",
+  );
 
   assert.equal(response.statusCode, 0, response.errorMessage);
   const result = response.outputs?.find((frame) => frame.portId === "result");

@@ -471,6 +471,19 @@ int emit_json(const char* port_id, const char* schema_name, const char* file_ide
   return 0;
 }
 
+int emit_bytes(
+    const char* port_id,
+    const char* schema_name,
+    const char* file_identifier,
+    const uint8_t* payload,
+    uint32_t payload_length) {
+  if (plugin_push_output(port_id, schema_name, file_identifier, payload, payload_length) < 0) {
+    plugin_set_error("emit-failed", "Failed to emit module response.");
+    return 1;
+  }
+  return 0;
+}
+
 int fail(const char* code, const char* message) {
   plugin_set_error(code, message);
   return 1;

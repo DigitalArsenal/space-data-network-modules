@@ -5,7 +5,6 @@ import {
   FlatBufferTypeRefT,
   InvokeSurface,
   MethodManifestT,
-  PayloadWireFormat,
   PluginFamily,
   PluginManifestT,
   PortManifestT,
@@ -18,18 +17,21 @@ export const ACCESS_PLUGIN_DESCRIPTION =
   "Access-window analysis for mission-planning and contact-interval evaluation.";
 export const ACCESS_MANIFEST_BYTES_SYMBOL = "access_plugin_manifest_bytes";
 export const ACCESS_MANIFEST_SIZE_SYMBOL = "access_plugin_manifest_size";
+export const ACCESS_WINDOW_SCHEMA_NAME = "ACW.fbs";
+export const ACCESS_WINDOW_FILE_IDENTIFIER = "$ACW";
+export const ACCESS_WINDOW_ROOT_TYPE = "ACW";
 
-function createTypeRef(schemaName, fileIdentifier) {
+function createTypeRef(schemaName, fileIdentifier, options = {}) {
   return new FlatBufferTypeRefT(
     schemaName,
     fileIdentifier,
     [],
     false,
-    PayloadWireFormat.AlignedBinary,
-    null,
+    options.wireFormat ?? "flatbuffer",
+    options.rootTypeName ?? null,
     0,
-    0,
-    8,
+    options.byteLength ?? 0,
+    options.requiredAlignment ?? 0,
   );
 }
 
@@ -98,24 +100,43 @@ function mapPluginFamilyToLegacyType(pluginFamily) {
 }
 
 export function createAccessPluginManifest() {
-  const accessWindowRequestType = createTypeRef(
-    "orbpro.analysis.AccessWindowRequest",
-    "AWRQ",
+  const accessWindowFlatbufferType = createTypeRef(
+    ACCESS_WINDOW_SCHEMA_NAME,
+    ACCESS_WINDOW_FILE_IDENTIFIER,
+    {
+      rootTypeName: ACCESS_WINDOW_ROOT_TYPE,
+    },
   );
-  const accessWindowResultType = createTypeRef(
-    "orbpro.analysis.AccessWindowResult",
-    "AWRS",
+  const accessWindowAlignedType = createTypeRef(
+    ACCESS_WINDOW_SCHEMA_NAME,
+    ACCESS_WINDOW_FILE_IDENTIFIER,
+    {
+      rootTypeName: ACCESS_WINDOW_ROOT_TYPE,
+      wireFormat: "aligned-binary",
+      requiredAlignment: 8,
+    },
+  );
+  const accessWindowAllowedTypes = [
+    accessWindowFlatbufferType,
+    accessWindowAlignedType,
+  ];
+  const accessWindowSchemaRef = createTypeRef(
+    ACCESS_WINDOW_SCHEMA_NAME,
+    ACCESS_WINDOW_FILE_IDENTIFIER,
+    {
+      rootTypeName: ACCESS_WINDOW_ROOT_TYPE,
+    },
   );
 
   const accessWindowRequestSet = createAcceptedTypeSet(
     "analysis.access-window-request",
-    [accessWindowRequestType],
-    "Aligned-binary access-window request frames.",
+    accessWindowAllowedTypes,
+    "SDS ACW request envelope as FlatBuffer or aligned-binary frames.",
   );
   const accessWindowResultSet = createAcceptedTypeSet(
     "analysis.access-window-result",
-    [accessWindowResultType],
-    "Aligned-binary access-window result frames.",
+    accessWindowAllowedTypes,
+    "SDS ACW result envelope as FlatBuffer or aligned-binary frames.",
   );
 
   return new PluginManifestT(
@@ -132,7 +153,7 @@ export function createAccessPluginManifest() {
             "request",
             "Access Requests",
             [accessWindowRequestSet],
-            "Aligned-binary access-window analysis requests.",
+            "SDS ACW access-window analysis requests.",
           ),
         ],
         [
@@ -140,7 +161,7 @@ export function createAccessPluginManifest() {
             "results",
             "Access Windows",
             [accessWindowResultSet],
-            "Aligned-binary access-window analysis results.",
+            "SDS ACW access-window analysis results.",
           ),
         ],
         "Computes access windows for an asset, target, and time span.",
@@ -149,19 +170,19 @@ export function createAccessPluginManifest() {
     [],
     [],
     [],
-    [accessWindowRequestType, accessWindowResultType],
+    [accessWindowSchemaRef],
     [
       new BuildArtifactT(
         "access-runtime",
-        "javascript-runtime",
-        "index.js",
-        "web,worker,node",
+        "wasm",
+        "dist/isomorphic/module.wasm",
+        "browser,wasmedge",
         null,
       ),
     ],
     1,
     [InvokeSurface.DIRECT],
-    ["browser", "node"],
+    ["browser", "wasmedge"],
   );
 }
 

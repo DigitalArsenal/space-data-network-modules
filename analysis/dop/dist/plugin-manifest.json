@@ -1,0 +1,88 @@
+{
+  "pluginId": "com.orbpro.dop",
+  "name": "DOP Analysis",
+  "version": "1.0.0",
+  "description": "GNSS dilution-of-precision analysis from receiver and satellite geometry.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "compute_dop",
+      "displayName": "Compute DOP",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.dop-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.DopRequest",
+                  "fileIdentifier": "DOPQ",
+                  "rootTypeName": "DopRequest"
+                },
+                {
+                  "schemaName": "orbpro.analysis.DopRequest",
+                  "fileIdentifier": "DOPQ",
+                  "rootTypeName": "DopRequest",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Aligned-binary receiver and satellite geometry request."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "DOP request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "results",
+          "acceptedTypeSets": [
+            {
+              "setId": "analysis.dop-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.analysis.DopResult",
+                  "fileIdentifier": "DOPR",
+                  "rootTypeName": "DopResult"
+                },
+                {
+                  "schemaName": "orbpro.analysis.DopResult",
+                  "fileIdentifier": "DOPR",
+                  "rootTypeName": "DopResult",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Aligned-binary DOP scalar result."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "DOP result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Computes GDOP, PDOP, HDOP, VDOP, and TDOP from visible satellite line-of-sight geometry."
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "dop-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

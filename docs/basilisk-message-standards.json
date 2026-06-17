@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-30T03:24:49.647Z",
-  "upstreamBasiliskRoot": "../basilisk",
+  "generatedAt": "2026-05-25T14:21:13.583Z",
+  "upstreamBasiliskRoot": "../../ancillary-packages/basilisk",
   "payloadCount": 132,
   "payloads": [
     {

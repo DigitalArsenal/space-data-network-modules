@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "imports": [
+    {
+      "id": "sgp4-propagator-state-to-hpop",
+      "description": "Host-composed aligned-binary PropagatorState handoff from SGP4 propagation into HPOP resident-state ingestion.",
+      "transport": "host-piv-tab",
+      "status": "verified",
+      "provider": {
+        "modulePath": "propagator/sgp4",
+        "pluginId": "com.orbpro.sgp4",
+        "methodId": "propagate_state",
+        "portId": "state",
+        "direction": "output"
+      },
+      "consumer": {
+        "modulePath": "propagator/hpop",
+        "pluginId": "com.orbpro.hpop",
+        "methodId": "ingest_state",
+        "portId": "state",
+        "direction": "input"
+      },
+      "typeRef": {
+        "schemaName": "orbpro.plugins.PropagatorState",
+        "fileIdentifier": "PRST",
+        "rootTypeName": "PropagatorState",
+        "wireFormat": "aligned-binary",
+        "requiredAlignment": 8
+      },
+      "dependency": {
+        "providerVersionRange": ">=1.0.0 <2.0.0"
+      },
+      "fixture": "propagator/hpop/tests/intermodule_sgp4_import.test.mjs"
+    }
+  ]
+}

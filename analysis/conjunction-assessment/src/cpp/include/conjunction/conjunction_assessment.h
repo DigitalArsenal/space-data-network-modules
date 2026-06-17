@@ -25,6 +25,7 @@
  */
 
 #include "sgp4_propagator.h"
+#include "conjunction/pc_method.h"
 #include <vector>
 #include <string>
 
@@ -175,10 +176,48 @@ int32_t conjunction_to_cdm(
     const ConjunctionEvent& event,
     uint8_t* output, uint32_t output_capacity);
 
+/// Serialize a conjunction event to SDS CSM FlatBuffers binary ($CSM identifier)
+/// Returns bytes written (>=0 success), -2 buffer too small, -1 error
+int32_t conjunction_to_csm(
+    const ConjunctionEvent& event,
+    uint8_t* output, uint32_t output_capacity);
+
 /// Serialize multiple conjunction events as size-prefixed CDM collection
 int32_t conjunctions_to_cdm_batch(
     const std::vector<ConjunctionEvent>& events,
     uint8_t* output, uint32_t output_capacity);
+
+/// Parse a CCSDS CDM KVN text message into an SDS CDM FlatBuffer binary.
+/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error.
+int32_t cdm_kvn_to_sds(
+    const char* kvn_text, uint32_t kvn_text_size,
+    uint8_t* output, uint32_t output_capacity);
+
+/// Write an SDS CDM FlatBuffer binary as CCSDS CDM KVN text.
+/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error.
+int32_t cdm_sds_to_kvn(
+    const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
+    char* output, uint32_t output_capacity);
+
+/// Parse a CCSDS CDM XML text message into an SDS CDM FlatBuffer binary.
+/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error.
+int32_t cdm_xml_to_sds(
+    const char* xml_text, uint32_t xml_text_size,
+    uint8_t* output, uint32_t output_capacity);
+
+/// Write an SDS CDM FlatBuffer binary as CCSDS CDM XML text.
+/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error.
+int32_t cdm_sds_to_xml(
+    const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
+    char* output, uint32_t output_capacity);
+
+/// Compute collision probability from an SDS CDM FlatBuffer binary ($CDM identifier).
+/// If method_override is empty, COLLISION_PROBABILITY_METHOD from the CDM is used,
+/// falling back to FOSTER-2D when the CDM does not name a method.
+PcResult compute_pc_from_cdm(
+    const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
+    const std::string& method_override = std::string(),
+    double combined_radius_km = 0.01);
 
 } // namespace conjunction
 

@@ -24,6 +24,84 @@ const FLOW_EXAMPLE_PATH = new URL(
   "../tests/fixtures/hosted-runtime/hpop.single-plugin.flow.json",
   import.meta.url,
 );
+const PROPAGATOR_STATE_TYPES = [
+  {
+    schemaName: "orbpro.plugins.PropagatorState",
+    fileIdentifier: "PRST",
+    rootTypeName: "PropagatorState",
+  },
+  {
+    schemaName: "orbpro.plugins.PropagatorState",
+    fileIdentifier: "PRST",
+    rootTypeName: "PropagatorState",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
+const PROPAGATOR_BATCH_REQUEST_TYPES = [
+  {
+    schemaName: "orbpro.propagator.PropagatorBatchRequest",
+    rootTypeName: "PropagatorBatchRequest",
+  },
+  {
+    schemaName: "orbpro.propagator.PropagatorBatchRequest",
+    rootTypeName: "PropagatorBatchRequest",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
+const PREPARE_TRAJECTORY_REQUEST_TYPES = [
+  {
+    schemaName: "orbpro.propagator.PropagatorPrepareTrajectorySegmentsRequest",
+    rootTypeName: "PropagatorPrepareTrajectorySegmentsRequest",
+  },
+  {
+    schemaName: "orbpro.propagator.PropagatorPrepareTrajectorySegmentsRequest",
+    rootTypeName: "PropagatorPrepareTrajectorySegmentsRequest",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
+const PREPARE_TRAJECTORY_RESULT_TYPES = [
+  {
+    schemaName: "orbpro.propagator.PropagatorPrepareTrajectorySegmentsResult",
+    fileIdentifier: "PTSS",
+    rootTypeName: "PropagatorPrepareTrajectorySegmentsResult",
+  },
+  {
+    schemaName: "orbpro.propagator.PropagatorPrepareTrajectorySegmentsResult",
+    fileIdentifier: "PTSS",
+    rootTypeName: "PropagatorPrepareTrajectorySegmentsResult",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
+const DESCRIBE_TRAJECTORY_REQUEST_TYPES = [
+  {
+    schemaName: "orbpro.propagator.PropagatorDescribeTrajectorySegmentsRequest",
+    rootTypeName: "PropagatorDescribeTrajectorySegmentsRequest",
+  },
+  {
+    schemaName: "orbpro.propagator.PropagatorDescribeTrajectorySegmentsRequest",
+    rootTypeName: "PropagatorDescribeTrajectorySegmentsRequest",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
+const DESCRIBE_TRAJECTORY_RESULT_TYPES = [
+  {
+    schemaName: "orbpro.propagator.PropagatorDescribeTrajectorySegmentsResult",
+    fileIdentifier: "PTDS",
+    rootTypeName: "PropagatorDescribeTrajectorySegmentsResult",
+  },
+  {
+    schemaName: "orbpro.propagator.PropagatorDescribeTrajectorySegmentsResult",
+    fileIdentifier: "PTDS",
+    rootTypeName: "PropagatorDescribeTrajectorySegmentsResult",
+    wireFormat: "aligned-binary",
+    requiredAlignment: 8,
+  },
+];
 
 function readFixtureBytes() {
   return fs.readFileSync(REQUEST_FIXTURE_PATH);
@@ -168,6 +246,48 @@ test("built artifact passes SDK compliance checks", async () => {
     wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
   });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+});
+
+test("manifest declares HPOP resident-state binary methods", () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const methods = new Map(manifest.methods.map((method) => [method.methodId, method]));
+
+  assert.ok(methods.has("ingest_state"));
+  assert.deepEqual(
+    methods.get("ingest_state").inputPorts[0].acceptedTypeSets[0].allowedTypes,
+    PROPAGATOR_STATE_TYPES,
+  );
+  assert.deepEqual(methods.get("ingest_state").outputPorts, []);
+
+  assert.ok(methods.has("propagate_state"));
+  assert.deepEqual(
+    methods.get("propagate_state").inputPorts[0].acceptedTypeSets[0].allowedTypes,
+    PROPAGATOR_BATCH_REQUEST_TYPES,
+  );
+  assert.deepEqual(
+    methods.get("propagate_state").outputPorts[0].acceptedTypeSets[0].allowedTypes,
+    PROPAGATOR_STATE_TYPES,
+  );
+
+  assert.ok(methods.has("prepare_trajectory_segments"));
+  assert.deepEqual(
+    methods.get("prepare_trajectory_segments").inputPorts[0].acceptedTypeSets[0].allowedTypes,
+    PREPARE_TRAJECTORY_REQUEST_TYPES,
+  );
+  assert.deepEqual(
+    methods.get("prepare_trajectory_segments").outputPorts[0].acceptedTypeSets[0].allowedTypes,
+    PREPARE_TRAJECTORY_RESULT_TYPES,
+  );
+
+  assert.ok(methods.has("describe_trajectory_segments"));
+  assert.deepEqual(
+    methods.get("describe_trajectory_segments").inputPorts[0].acceptedTypeSets[0].allowedTypes,
+    DESCRIBE_TRAJECTORY_REQUEST_TYPES,
+  );
+  assert.deepEqual(
+    methods.get("describe_trajectory_segments").outputPorts[0].acceptedTypeSets[0].allowedTypes,
+    DESCRIBE_TRAJECTORY_RESULT_TYPES,
+  );
 });
 
 test("built artifact exposes the standalone isomorphic surface", async () => {

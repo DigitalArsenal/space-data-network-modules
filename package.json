@@ -6,6 +6,15 @@
   "scripts": {
     "generate:basilisk-plan": "node scripts/generate-basilisk-module-plan.mjs && node scripts/generate-basilisk-message-map.mjs",
     "check:basilisk-plan": "node scripts/check-basilisk-plan.mjs",
+    "generate:basilisk-unit-test-ports": "node scripts/generate-basilisk-unit-test-port-index.mjs",
+    "check:basilisk-unit-test-ports": "node scripts/check-basilisk-unit-test-port-index.mjs",
+    "generate:source-indices": "node scripts/generate-source-test-indices.mjs",
+    "check:source-indices": "node scripts/check-source-test-indices.mjs",
+    "generate:module-index": "node scripts/generate-current-module-index.mjs",
+    "check:module-index": "node scripts/check-current-module-index.mjs",
+    "check:module-imports": "node scripts/check-module-import-descriptors.mjs",
+    "check:test-vectors": "node scripts/check-test-vector-extraction-index.mjs",
+    "check:sds-schema-audit": "node scripts/check-sds-schema-audit.mjs",
     "test": "node --test tests/*.test.mjs"
   }
 }

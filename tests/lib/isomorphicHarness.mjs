@@ -89,13 +89,19 @@ export function assertSuccessfulResponse(
 export async function invokeJsonRequest(
   harness,
   request,
-  { methodId = "invoke", inputPortId = "request", outputPortId = "response" } = {},
+  {
+    methodId = "invoke",
+    inputPortId = "request",
+    outputPortId = "response",
+    inputTypeRef = null,
+  } = {},
 ) {
   const response = await harness.invoke({
     methodId,
     inputs: [
       {
         portId: inputPortId,
+        typeRef: inputTypeRef,
         payload: Buffer.from(JSON.stringify(request), "utf8"),
       },
     ],

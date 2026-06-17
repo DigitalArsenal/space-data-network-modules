@@ -9,7 +9,7 @@
   "wasmModule": {
     "file": "access.wasm",
     "loader": "access.mjs",
-    "hash": "0b4738ff59f45ab332863914924a1a6d2c393bcaaf7bde8f3316707cb236de89",
+    "hash": "5f7912f6efd66f42391f7ff76a6f20775b7d61b0aa3b1f3f9475dda2eb7d0a3a",
     "exports": [
       "plugin_init",
       "plugin_destroy",
@@ -21,7 +21,14 @@
       "access_get_ground_station_blackout_count",
       "access_get_ground_station_blackout_record",
       "access_compute_access_windows",
+      "access_compute_access_windows_with_elevation_mask",
+      "access_compute_access_windows_with_effects",
       "access_schedule_contacts",
+      "plugin_alloc",
+      "plugin_free",
+      "plugin_get_manifest_flatbuffer",
+      "plugin_get_manifest_flatbuffer_size",
+      "plugin_invoke_stream",
       "access_plugin_manifest_bytes",
       "access_plugin_manifest_size",
       "malloc",

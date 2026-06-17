@@ -21,6 +21,23 @@ double us76_temperature(double altitude_m);
 double us76_pressure(double altitude_m);
 double us76_speedOfSound(double altitude_m);
 
+/// Basilisk orbitalMotion atmosphericDensity curve fit based on Standard
+/// Atmosphere 1976 data. Input and output use SDK SI units.
+double standardAtmosphere1976OrbitalDensity(double altitude_m);
+
+/// Basilisk orbitalMotion debyeLength interpolation. Input altitude and output
+/// Debye length use SDK SI units; returns NaN outside Basilisk's valid range.
+double basiliskDebyeLength(double altitude_m);
+
+/// Basilisk orbitalMotion atmosphericDrag acceleration. Inputs and output use
+/// SDK SI units; acceleration is inertial and aligned opposite velocity.
+void basiliskAtmosphericDragAcceleration(double drag_coefficient,
+                                         double area_m2,
+                                         double mass_kg,
+                                         const double position_m[3],
+                                         const double velocity_m_per_s[3],
+                                         double acceleration_m_per_s2[3]);
+
 // ---------------------------------------------------------------------------
 // NRLMSISE-00 Empirical Atmosphere
 // Thin wrapper over the real, public-domain NRLMSISE-00 C port vendored in

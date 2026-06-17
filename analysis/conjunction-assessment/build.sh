@@ -13,9 +13,11 @@ ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
 SINGLETHREAD_DIST_DIR="$DIST_DIR/isomorphic-singlethread"
 BROWSER_TARGET="conjunction_assessment_wasm"
 FLATBUFFERS_INCLUDE_DIR="${SDN_FLATBUFFERS_INCLUDE_DIR:-${FLATBUFFERS_INCLUDE_DIR:-}}"
+STACK_FLATBUFFERS_INCLUDE="$SCRIPT_DIR/../../../flatbuffers/include"
 
 if [ -z "$FLATBUFFERS_INCLUDE_DIR" ]; then
     for candidate in \
+        "$STACK_FLATBUFFERS_INCLUDE" \
         /opt/homebrew/include \
         /opt/homebrew/opt/flatbuffers/include \
         /usr/local/include \
@@ -105,6 +107,7 @@ cp "$BROWSER_BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
 cp "$BROWSER_BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
 find "$BROWSER_BUILD_DIR" -maxdepth 1 -name "${BROWSER_TARGET}*.worker.js" \
     -exec cp {} "$BROWSER_DIST_DIR/" \;
+node "$SCRIPT_DIR/embed-manifest-section.mjs" "$BROWSER_DIST_DIR/module.wasm"
 
 echo ""
 echo "Configuring Emscripten pthread WasmEdge SDK build..."
@@ -121,6 +124,7 @@ echo "Building standalone SDK artifact..."
 cmake --build "$ISOMORPHIC_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
 cp "$ISOMORPHIC_BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+node "$SCRIPT_DIR/embed-manifest-section.mjs" "$ISOMORPHIC_DIST_DIR/module.wasm"
 
 echo ""
 echo "Configuring Emscripten single-thread SDK build..."
@@ -137,6 +141,7 @@ echo "Building single-thread SDK artifact..."
 cmake --build "$SINGLETHREAD_BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
 cp "$SINGLETHREAD_BUILD_DIR/${BROWSER_TARGET}.wasm" "$SINGLETHREAD_DIST_DIR/module.wasm"
+node "$SCRIPT_DIR/embed-manifest-section.mjs" "$SINGLETHREAD_DIST_DIR/module.wasm"
 
 echo ""
 echo "=== Build Complete ==="

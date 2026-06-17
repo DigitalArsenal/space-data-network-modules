@@ -197,7 +197,7 @@ void test_compute_pc_only() {
     // Try with each method
     engine.set_pc_method("chan");
     auto event2 = engine.compute_pc(s1, s2, cov, cov, 0.01);
-    CHECK(event2.pc.method == "CHAN-2008", "Method switchable to Chan");
+    CHECK(event2.pc.method == "CHAN-1997", "Method switchable to Chan");
 
     // Results should be similar
     if (event.pc.probability > 1e-30) {

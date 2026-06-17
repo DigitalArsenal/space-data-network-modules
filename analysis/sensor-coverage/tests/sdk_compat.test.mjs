@@ -19,10 +19,46 @@ test("manifest declares the sensor coverage analysis contract", async () => {
   assert.equal(manifest.pluginId, "sensor-coverage-analysis");
   assert.equal(manifest.runtimeTargets.includes("browser"), true);
   assert.equal(manifest.runtimeTargets.includes("wasmedge"), true);
+  assert.deepEqual(
+    manifest.invokeSurfaces,
+    ["direct", "command"],
+    "browser coverage must advertise direct invoke while retaining command compatibility",
+  );
   assert.equal(manifest.methods[0].methodId, "compute_sensor_coverage");
+  const method = manifest.methods[0];
+  const inputTypes =
+    method.inputPorts[0].acceptedTypeSets[0].allowedTypes;
+  const outputTypes =
+    method.outputPorts[0].acceptedTypeSets[0].allowedTypes;
+  assert.equal(
+    inputTypes.some((typeRef) => typeRef.acceptsAnyFlatbuffer === true),
+    false,
+    "sensor coverage input must use explicit SDS/compatibility type refs",
+  );
+  assert.equal(
+    outputTypes.some((typeRef) => typeRef.acceptsAnyFlatbuffer === true),
+    false,
+    "sensor coverage output must use explicit SDS/compatibility type refs",
+  );
+  assert.deepEqual(
+    inputTypes.map((typeRef) => typeRef.fileIdentifier).sort(),
+    ["$SCV", "JSON"],
+  );
+  assert.deepEqual(
+    outputTypes.map((typeRef) => typeRef.fileIdentifier).sort(),
+    ["$SCV", "JSON"],
+  );
+  assert.equal(
+    manifest.schemasUsed.some(
+      (typeRef) =>
+        typeRef.schemaName === "SCV/main.fbs" &&
+        typeRef.fileIdentifier === "$SCV",
+    ),
+    true,
+  );
 });
 
-test("built artifact exposes the canonical isomorphic command surface", async () => {
+test("built artifact exposes the canonical direct invoke and command compatibility surfaces", async () => {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const report = await validateArtifactWithStandards({
     manifest,
@@ -34,5 +70,7 @@ test("built artifact exposes the canonical isomorphic command surface", async ()
   assert.equal(inspection.profile, "standalone");
   assert.ok(inspection.exports.includes("_start"));
   assert.ok(inspection.exports.includes("plugin_invoke_stream"));
+  assert.ok(inspection.exports.includes("plugin_alloc"));
+  assert.ok(inspection.exports.includes("plugin_free"));
   assert.ok(inspection.exports.includes("compute_sensor_coverage"));
 });

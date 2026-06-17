@@ -12,7 +12,7 @@ option(
 )
 
 if(EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -DNDEBUG")
     if(CONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER OR NOT CONJUNCTION_ENABLE_PTHREADS)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fwasm-exceptions")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fwasm-exceptions")
@@ -28,9 +28,9 @@ if(EMSCRIPTEN)
     endif()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto")
 elseif(WASI_SDK)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG -DCONJUNCTION_SINGLE_THREAD")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -DNDEBUG -DCONJUNCTION_SINGLE_THREAD")
 else()
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto -ffast-math -march=native -mtune=native")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto -march=native -mtune=native")
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
@@ -81,6 +81,7 @@ find_path(
     PATHS
         "$ENV{SDN_FLATBUFFERS_INCLUDE_DIR}"
         "$ENV{FLATBUFFERS_INCLUDE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../flatbuffers/include"
         /opt/homebrew/include
         /opt/homebrew/opt/flatbuffers/include
         /usr/local/include
@@ -112,6 +113,7 @@ set(CA_SOURCES
     src/screening_internal.cpp
     src/screening.cpp
     src/cdm_output.cpp
+    src/csm_output.cpp
     src/pc_method.cpp
     src/ephemeris_source.cpp
     src/conjunction_engine.cpp
@@ -162,6 +164,8 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
         add_executable(test_pc_methods tests/test_pc_methods.cpp)
         target_link_libraries(test_pc_methods conjunction_assessment)
         target_include_directories(test_pc_methods PRIVATE include "${SGP4_DIR}")
+        target_compile_definitions(test_pc_methods PRIVATE
+            CONJUNCTION_TEST_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
     endif()
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_engine.cpp")
@@ -170,9 +174,22 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
         target_include_directories(test_engine PRIVATE include "${SGP4_DIR}")
     endif()
 
+    if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_cdm_output.cpp")
+        add_executable(test_cdm_output tests/test_cdm_output.cpp)
+        target_link_libraries(test_cdm_output conjunction_assessment)
+        target_include_directories(test_cdm_output PRIVATE include "${SGP4_DIR}")
+    endif()
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_csm_output.cpp")
+        add_executable(test_csm_output tests/test_csm_output.cpp)
+        target_link_libraries(test_csm_output conjunction_assessment)
+        target_include_directories(test_csm_output PRIVATE include "${SGP4_DIR}")
+    endif()
+
     enable_testing()
     if(TARGET test_socrates)
         add_test(NAME socrates COMMAND test_socrates)
+        set_tests_properties(socrates PROPERTIES SKIP_RETURN_CODE 77)
     endif()
     if(TARGET test_gp_json)
         add_test(NAME gp_json COMMAND test_gp_json)
@@ -188,6 +205,12 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
     endif()
     if(TARGET test_engine)
         add_test(NAME engine COMMAND test_engine)
+    endif()
+    if(TARGET test_cdm_output)
+        add_test(NAME cdm_output COMMAND test_cdm_output)
+    endif()
+    if(TARGET test_csm_output)
+        add_test(NAME csm_output COMMAND test_csm_output)
     endif()
 endif()
 
@@ -206,6 +229,7 @@ if(EMSCRIPTEN)
         include
         include/conjunction
         generated
+        generated/sds
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../../propagator/sgp4/src/cpp/generated/sds"
         "${FLATBUFFERS_INCLUDE_DIR}"
         "${SGP4_DIR}"
@@ -237,6 +261,7 @@ elseif(WASI_SDK)
         include
         include/conjunction
         generated
+        generated/sds
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../../propagator/sgp4/src/cpp/generated/sds"
         "${FLATBUFFERS_INCLUDE_DIR}"
         "${SGP4_DIR}"

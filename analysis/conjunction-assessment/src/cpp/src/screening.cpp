@@ -20,7 +20,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
-#include <pthread.h>
+#include <condition_variable>
 #endif
 #include <chrono>
 #include <cmath>
@@ -45,6 +45,41 @@ constexpr size_t MAX_PAIRWISE_CANDIDATE_SCAN_COUNT = 250000;
 constexpr size_t MIN_EXPLICIT_PAIRS_FOR_KDTREE = 8192;
 constexpr uint64_t MIN_IMPLICIT_ALL_VS_ALL_PAIR_ESTIMATE = 250000;
 constexpr double MAX_RESIDENT_SPEED_BOUND_KM_S = 16.0;
+
+#ifndef CONJUNCTION_SINGLE_THREAD
+class ReusableBarrier {
+public:
+    explicit ReusableBarrier(size_t participant_count)
+        : threshold_(participant_count),
+          count_(participant_count),
+          generation_(0)
+    {
+        if (participant_count == 0) {
+            throw std::invalid_argument("ReusableBarrier requires participants");
+        }
+    }
+
+    void wait()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        const size_t generation = generation_;
+        if (--count_ == 0) {
+            generation_++;
+            count_ = threshold_;
+            condition_.notify_all();
+            return;
+        }
+        condition_.wait(lock, [&]() { return generation != generation_; });
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    const size_t threshold_;
+    size_t count_;
+    size_t generation_;
+};
+#endif
 
 double evaluate_chebyshev_coefficients(
     const std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT>& coefficients,
@@ -1158,18 +1193,26 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
         start_jd, end_jd, config.coarse_step_sec,
         0, 1);
 #else
-    std::vector<std::thread> threads;
-    for (int t = 0; t < num_threads; t++) {
-        threads.emplace_back([&, t]() {
-            thread_results[t] = process_time_steps(
-                config,
-                tles, valid_pairs,
-                start_jd, end_jd, config.coarse_step_sec,
-                t, num_threads);
-        });
-    }
+    if (num_threads <= 1) {
+        thread_results[0] = process_time_steps(
+            config,
+            tles, valid_pairs,
+            start_jd, end_jd, config.coarse_step_sec,
+            0, 1);
+    } else {
+        std::vector<std::thread> threads;
+        for (int t = 0; t < num_threads; t++) {
+            threads.emplace_back([&, t]() {
+                thread_results[t] = process_time_steps(
+                    config,
+                    tles, valid_pairs,
+                    start_jd, end_jd, config.coarse_step_sec,
+                    t, num_threads);
+            });
+        }
 
-    for (auto& t : threads) t.join();
+        for (auto& t : threads) t.join();
+    }
 #endif
 
     // Merge coarse-hit aggregates from all threads.
@@ -1217,13 +1260,8 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
         } catch (...) {}
     }
 #else
-    std::mutex solved_hits_mutex;
-
-    // Parallel TCA refinement
-    auto refine_range = [&](size_t from, size_t to) {
-        std::vector<ExactSolvedHit> local_solved_hits;
-        for (size_t i = from; i < to; i++) {
-            const auto& [key, hit] = pair_list[i];
+    if (num_threads <= 1) {
+        for (const auto& [key, hit] : pair_list) {
             try {
                 auto solved = solve_coarse_hit_if_within_threshold_exact(
                     tles[hit.obj1_index],
@@ -1235,28 +1273,52 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
                     end_jd,
                     config);
                 if (solved.has_value()) {
-                    local_solved_hits.push_back(std::move(*solved));
+                    solved_hits.push_back(std::move(*solved));
                 }
             } catch (...) {}
         }
+    } else {
+        std::mutex solved_hits_mutex;
 
-        std::lock_guard<std::mutex> lock(solved_hits_mutex);
-        solved_hits.insert(
-            solved_hits.end(),
-            local_solved_hits.begin(),
-            local_solved_hits.end());
-    };
+        // Parallel TCA refinement
+        auto refine_range = [&](size_t from, size_t to) {
+            std::vector<ExactSolvedHit> local_solved_hits;
+            for (size_t i = from; i < to; i++) {
+                const auto& [key, hit] = pair_list[i];
+                try {
+                    auto solved = solve_coarse_hit_if_within_threshold_exact(
+                        tles[hit.obj1_index],
+                        tles[hit.obj2_index],
+                        hit.obj1_index,
+                        hit.obj2_index,
+                        hit,
+                        start_jd,
+                        end_jd,
+                        config);
+                    if (solved.has_value()) {
+                        local_solved_hits.push_back(std::move(*solved));
+                    }
+                } catch (...) {}
+            }
 
-    threads.clear();
-    size_t chunk = (pair_list.size() + num_threads - 1) / num_threads;
-    for (int t = 0; t < num_threads; t++) {
-        size_t from = t * chunk;
-        size_t to = std::min(from + chunk, pair_list.size());
-        if (from < to) {
-            threads.emplace_back(refine_range, from, to);
+            std::lock_guard<std::mutex> lock(solved_hits_mutex);
+            solved_hits.insert(
+                solved_hits.end(),
+                local_solved_hits.begin(),
+                local_solved_hits.end());
+        };
+
+        std::vector<std::thread> threads;
+        size_t chunk = (pair_list.size() + num_threads - 1) / num_threads;
+        for (int t = 0; t < num_threads; t++) {
+            size_t from = t * chunk;
+            size_t to = std::min(from + chunk, pair_list.size());
+            if (from < to) {
+                threads.emplace_back(refine_range, from, to);
+            }
         }
+        for (auto& t : threads) t.join();
     }
-    for (auto& t : threads) t.join();
 #endif
 
     events.reserve(solved_hits.size());
@@ -1931,7 +1993,21 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         }
     }
 #else
-    if (num_batches <= 1) {
+    if (num_threads <= 1) {
+        for (int b = 0; b < num_batches; b++) {
+            const double batch_start = start_jd + interval_days * b;
+            const double batch_end = std::min(end_jd, batch_start + interval_days);
+            thread_results[0] = process_time_steps_implicit(
+                config, tles, perigee_km, apogee_km, is_primary, participates,
+                batch_start, batch_end, config.coarse_step_sec, 0, 1, resident_index);
+            merge_thread_results();
+            if (progress) {
+                const double frac = 0.05 + 0.65 * static_cast<double>(b + 1)
+                                                  / static_cast<double>(num_batches);
+                progress(frac, "Screening...");
+            }
+        }
+    } else if (num_batches <= 1) {
         // Single batch — simple create/join, no barriers needed.
         std::vector<std::thread> threads;
         std::exception_ptr thread_exception = nullptr;
@@ -1960,10 +2036,8 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         merge_thread_results();
         if (progress) progress(0.7, "Screening complete...");
     } else {
-        // Multiple batches — reuse threads across batches via pthread_barrier.
-        pthread_barrier_t barrier;
-        pthread_barrier_init(&barrier, nullptr,
-                             static_cast<unsigned>(num_threads + 1));
+        // Multiple batches: reuse threads across batches with a portable barrier.
+        ReusableBarrier barrier(static_cast<size_t>(num_threads + 1));
         std::atomic<int> current_batch{0};
         std::atomic<bool> shutdown{false};
 
@@ -1971,7 +2045,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         for (int t = 0; t < num_threads; t++) {
             threads.emplace_back([&, t]() {
                 while (true) {
-                    pthread_barrier_wait(&barrier); // wait for batch signal
+                    barrier.wait(); // wait for batch signal
                     if (shutdown.load(std::memory_order_acquire)) return;
                     const int b = current_batch.load(std::memory_order_acquire);
                     const double batch_start = start_jd + interval_days * b;
@@ -1982,15 +2056,15 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
                         is_primary, participates,
                         batch_start, batch_end, config.coarse_step_sec,
                         t, num_threads, resident_index);
-                    pthread_barrier_wait(&barrier); // signal batch done
+                    barrier.wait(); // signal batch done
                 }
             });
         }
 
         for (int b = 0; b < num_batches; b++) {
             current_batch.store(b, std::memory_order_release);
-            pthread_barrier_wait(&barrier); // release threads
-            pthread_barrier_wait(&barrier); // wait for threads to finish
+            barrier.wait(); // release threads
+            barrier.wait(); // wait for threads to finish
             merge_thread_results();
             if (progress) {
                 const double frac = 0.05 + 0.65
@@ -2001,9 +2075,8 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         }
 
         shutdown.store(true, std::memory_order_release);
-        pthread_barrier_wait(&barrier); // release threads to exit
+        barrier.wait(); // release threads to exit
         for (auto& t : threads) t.join();
-        pthread_barrier_destroy(&barrier);
     }
 #endif
 
@@ -2097,9 +2170,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         std::vector<std::vector<ConjunctionEvent>> thread_events(num_refine_threads);
         std::vector<std::vector<ExactSolvedHit>> thread_solved(num_refine_threads);
 
-        pthread_barrier_t refine_barrier;
-        pthread_barrier_init(&refine_barrier, nullptr,
-                             static_cast<unsigned>(num_refine_threads + 1));
+        ReusableBarrier refine_barrier(static_cast<size_t>(num_refine_threads + 1));
         std::atomic<size_t> batch_start{0};
         std::atomic<size_t> batch_end{0};
         std::atomic<bool> refine_shutdown{false};
@@ -2108,7 +2179,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         for (int t = 0; t < num_refine_threads; t++) {
             threads.emplace_back([&, t]() {
                 while (true) {
-                    pthread_barrier_wait(&refine_barrier);
+                    refine_barrier.wait();
                     if (refine_shutdown.load(std::memory_order_acquire)) return;
                     const size_t b_start = batch_start.load(std::memory_order_acquire);
                     const size_t b_end = batch_end.load(std::memory_order_acquire);
@@ -2136,7 +2207,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
                             }
                         } catch (...) {}
                     }
-                    pthread_barrier_wait(&refine_barrier);
+                    refine_barrier.wait();
                 }
             });
         }
@@ -2146,8 +2217,8 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
             batch_end.store(
                 std::min((b + 1) * REFINE_BATCH_SIZE, refine_total),
                 std::memory_order_release);
-            pthread_barrier_wait(&refine_barrier);
-            pthread_barrier_wait(&refine_barrier);
+            refine_barrier.wait();
+            refine_barrier.wait();
             if (progress) {
                 progress(0.75 + 0.25 * static_cast<double>(b + 1)
                                       / static_cast<double>(num_refine_batches),
@@ -2156,9 +2227,8 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         }
 
         refine_shutdown.store(true, std::memory_order_release);
-        pthread_barrier_wait(&refine_barrier);
+        refine_barrier.wait();
         for (auto& t : threads) t.join();
-        pthread_barrier_destroy(&refine_barrier);
 
         for (auto& te : thread_events)
             events.insert(events.end(),

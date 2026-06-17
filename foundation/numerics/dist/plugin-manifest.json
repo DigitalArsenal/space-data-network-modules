@@ -1,0 +1,354 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.numerics",
+  "name": "Foundation Numerics",
+  "version": "0.1.0",
+  "description": "Shared SDS NUM numerical utility module for Basilisk-compatible scalar root solving, vector saturation, vector discretization, scalar interpolation, and bounded Gauss-Markov sequence statistics.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "solve_scalar_root",
+      "displayName": "Solve Scalar Root",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-root-solve-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMRootSolveRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Root-solve request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-root-solve-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMRootSolveResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Root-solve result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Solves one scalar root with Basilisk-compatible Newton-Raphson iteration."
+    },
+    {
+      "methodId": "saturate_vector",
+      "displayName": "Saturate Vector",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-vector-saturate-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMVectorSaturateRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Vector-saturate request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-vector-saturate-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMVectorSaturateResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Vector-saturate result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Clamps one vector component-wise with Basilisk-compatible Saturate utility semantics."
+    },
+    {
+      "methodId": "discretize_vector",
+      "displayName": "Discretize Vector",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-vector-discretize-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMVectorDiscretizeRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Vector-discretize request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-vector-discretize-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMVectorDiscretizeResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Vector-discretize result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Quantizes one vector component-wise with Basilisk-compatible Discretize utility semantics."
+    },
+    {
+      "methodId": "interpolate_scalar",
+      "displayName": "Interpolate Scalar",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-scalar-interpolation-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMScalarInterpolationRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Scalar-interpolation request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-scalar-interpolation-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMScalarInterpolationResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Scalar-interpolation result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Interpolates one scalar with Basilisk-compatible linearInterpolation and bilinearInterpolation utility semantics."
+    },
+    {
+      "methodId": "compute_gauss_markov_sequence",
+      "displayName": "Compute Gauss-Markov Sequence",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-gauss-markov-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMGaussMarkovRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Gauss-Markov request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-num-gauss-markov-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM"
+                },
+                {
+                  "schemaName": "NUM.fbs",
+                  "fileIdentifier": "$NUM",
+                  "rootTypeName": "NUM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS NUM envelope carrying NUMGaussMarkovResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Gauss-Markov result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Generates one Basilisk-compatible bounded Gauss-Markov random sequence and emits post-warmup summary statistics."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "NUM.fbs",
+      "fileIdentifier": "$NUM",
+      "rootTypeName": "NUM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-numerics-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

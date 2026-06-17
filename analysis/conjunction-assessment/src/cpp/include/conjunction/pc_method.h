@@ -11,7 +11,11 @@
  *   AlfanoMaxPc       — Maximum probability bound (AAS 03-548)
  *   Foster2D          — Foster-Estes short-encounter (1992), 2D Gaussian
  *   Patera2001        — Patera single-integral method (2001)
- *   Chan2008          — Chan series expansion (2008)
+ *   Chan1997          — Chan zeroth-order analytical expression
+ *   Alfriend1999      — Alfriend-Akella constant-density approximation
+ *   Alfriend1999Max   — Alfriend-Akella covariance-scaled maximum Pc
+ *   Alfano2005        — Orekit Alfano 2005 Simpson quadrature method
+ *   Laas2015          — Orekit LAAS 2015 recurrent series with bounds
  *   Alfriend2D        — Alfriend-Akella 2D numerical integration
  *
  * References:
@@ -21,12 +25,15 @@
  *            and Maneuver Rate for Space Vehicles" NASA/JSC-25898, 1992
  *   Patera: "General Method for Calculating Satellite Collision Probability"
  *            JGCD Vol 24 No 4, 2001
- *   Chan:   "Spacecraft Collision Probability" El Segundo: Aerospace Press, 2008
+ *   Chan:   "Collision Probability Analyses for Earth Orbiting Satellites",
+ *           Advances in the Astronautical Sciences Series 96, 1997
  *   Alfriend: "Probability of Collision Error Analysis" Space Debris Vol 1, 1999
  */
 
 #include <string>
 #include <cmath>
+#include <memory>
+#include <algorithm>
 
 namespace conjunction {
 
@@ -80,11 +87,18 @@ struct BPlaneGeometry {
 
     // Covariance eigenvalues
     void eigenvalues(double& lambda1, double& lambda2) const {
-        double trace = sigma_xx + sigma_zz;
-        double det = sigma_xx * sigma_zz - sigma_xz * sigma_xz;
-        double disc = std::sqrt(std::max(0.0, trace * trace / 4.0 - det));
-        lambda1 = trace / 2.0 + disc;
-        lambda2 = trace / 2.0 - disc;
+        const double trace = sigma_xx + sigma_zz;
+        const double det = sigma_xx * sigma_zz - sigma_xz * sigma_xz;
+        const double delta = std::hypot(sigma_xx - sigma_zz, 2.0 * sigma_xz);
+        lambda1 = 0.5 * (trace + delta);
+        lambda2 = 0.5 * (trace - delta);
+
+        if (lambda1 > 0.0 && det >= 0.0) {
+            lambda2 = det / lambda1;
+        }
+        if (lambda2 > lambda1) {
+            std::swap(lambda1, lambda2);
+        }
     }
 
     // Eigenvalue standard deviations
@@ -120,6 +134,8 @@ struct PcResult {
     int iterations = 0;          // for iterative methods
     double max_probability = 0;  // Alfano upper bound (always computed)
     double mahalanobis_2d = 0;   // Mahalanobis distance in encounter plane
+    double lower_probability = 0; // lower Pc bound when a method provides one
+    double upper_probability = 0; // upper Pc bound when a method provides one
 };
 
 // ── Abstract Interface ──
@@ -174,21 +190,68 @@ private:
     int n_quad_;
 };
 
-// ── Chan 2008 (series expansion) ──
-// Exact series solution using modified Bessel functions.
-// Converges fast for moderate aspect ratios. The standard
-// for NASA CARA operations.
+// ── Chan 1997 (zeroth-order analytical expression) ──
+// Series expression with the term counts recommended by Chan and used by
+// Orekit's Chan1997 implementation.
 //
-// Ref: Chan, "Spacecraft Collision Probability" Aerospace Press, 2008
+// Ref: Chan, "Collision Probability Analyses for Earth Orbiting Satellites",
+// Advances in the Astronautical Sciences Series 96, 1997
 
-class Chan2008 : public PcMethod {
+class Chan1997 : public PcMethod {
 public:
-    explicit Chan2008(int max_terms = 100, double tol = 1e-16) : max_terms_(max_terms), tol_(tol) {}
+    explicit Chan1997(int max_terms = 0, double tol = 0.0) : max_terms_(max_terms), tol_(tol) {}
     PcResult compute(const BPlaneGeometry& bplane) const override;
-    std::string name() const override { return "CHAN-2008"; }
+    std::string name() const override { return "CHAN-1997"; }
 private:
     int max_terms_;
     double tol_;
+};
+
+using Chan2008 = Chan1997;
+
+// ── Alfriend-Akella 1999 constant-density approximation ──
+// Matches Orekit's Alfriend1999 scalar formulation:
+//   Pc = exp(-0.5 Md²) R² / (2 sqrt(det(C)))
+
+class Alfriend1999 : public PcMethod {
+public:
+    PcResult compute(const BPlaneGeometry& bplane) const override;
+    std::string name() const override { return "ALFRIEND-1999"; }
+};
+
+// ── Alfriend-Akella 1999 maximum probability ──
+// Matches Orekit's Alfriend1999Max covariance-scaled maximum formulation:
+//   Pcmax = R² / (Md² sqrt(det(C)) e)
+
+class Alfriend1999Max : public PcMethod {
+public:
+    PcResult compute(const BPlaneGeometry& bplane) const override;
+    std::string name() const override { return "ALFRIEND-1999-MAX"; }
+};
+
+// ── Alfano 2005 Numerical Integration ──
+// Matches Orekit's Alfano2005 scalar formulation: a Simpson-rule integration
+// over the hard-body disk in covariance principal axes.
+
+class Alfano2005 : public PcMethod {
+public:
+    PcResult compute(const BPlaneGeometry& bplane) const override;
+    std::string name() const override { return "ALFANO-2005"; }
+};
+
+// ── LAAS 2015 Recurrent Series ──
+// Matches Orekit's Laas2015 scalar formulation, including the lower and upper
+// probability bounds provided by the method.
+
+class Laas2015 : public PcMethod {
+public:
+    explicit Laas2015(double absolute_accuracy = 1.0e-30, int max_terms = 37000)
+        : absolute_accuracy_(absolute_accuracy), max_terms_(max_terms) {}
+    PcResult compute(const BPlaneGeometry& bplane) const override;
+    std::string name() const override { return "LAAS-2015"; }
+private:
+    double absolute_accuracy_;
+    int max_terms_;
 };
 
 // ── Alfriend-Akella 2D Numerical Integration ──
@@ -212,7 +275,8 @@ private:
 // ── Factory ──
 
 /// Create Pc method by name
-/// Names: "alfano", "foster", "patera", "chan", "alfriend"
+/// Names: "alfano", "foster", "patera", "chan", "alfriend1999",
+/// "alfriend1999max", "alfano2005", "laas2015", "alfriend"
 std::unique_ptr<PcMethod> create_pc_method(const std::string& name);
 
 } // namespace conjunction

@@ -27,12 +27,56 @@ export interface AccessBlackoutWindow {
   endJulianDate: number;
 }
 
+export type AccessRefractionModelName =
+  | "earth-standard-atmosphere"
+  | "orekit-earth-standard-atmosphere"
+  | "EarthStandardAtmosphereRefraction"
+  | "itu-r-p834"
+  | "itu-r-p.834"
+  | "orekit-itu-r-p834"
+  | "iturp834"
+  | "ITURP834AtmosphericRefraction";
+
+export interface AccessRefractionModelOptions {
+  type?: AccessRefractionModelName | string;
+  model?: AccessRefractionModelName | string;
+  name?: AccessRefractionModelName | string;
+  pressurePa?: number;
+  pressure?: number;
+  localPressurePa?: number;
+  temperatureK?: number;
+  temperature?: number;
+  localTemperatureK?: number;
+  stationAltitudeM?: number;
+  altitudeM?: number;
+  altitude?: number;
+  [key: string]: unknown;
+}
+
+export type AccessElevationMaskPoint =
+  | [number, number]
+  | {
+      azimuthDeg?: number;
+      elevationDeg?: number;
+      azimuthRad?: number;
+      elevationRad?: number;
+      azimuth?: number;
+      elevation?: number;
+      [key: string]: unknown;
+    };
+
 export interface AccessComputeOptions {
   minElevationDeg?: number;
   minElevationRad?: number;
   assetId?: string | number;
   afterJulianDate?: number;
   afterJd?: number;
+  elevationMaskDeg?: AccessElevationMaskPoint[];
+  elevationMaskRad?: AccessElevationMaskPoint[];
+  elevationMask?: AccessElevationMaskPoint[];
+  refractionModel?: boolean | "none" | AccessRefractionModelName | AccessRefractionModelOptions;
+  refraction?: boolean | "none" | AccessRefractionModelName | AccessRefractionModelOptions;
+  atmosphericRefraction?: boolean | "none" | AccessRefractionModelName | AccessRefractionModelOptions;
   [key: string]: unknown;
 }
 
@@ -83,6 +127,8 @@ export interface AccessGeometryResult {
     z: number;
   };
   minElevationRad: number;
+  refractionRad: number;
+  apparentElevationRad: number;
   visible: boolean;
 }
 
@@ -152,6 +198,24 @@ export interface AccessRuntimeModule {
     stateCount: number,
     stationIndex: number,
     minElevationRad: number,
+    outWindowCountPtr: number,
+  ) => number;
+  _access_compute_access_windows_with_elevation_mask?: (
+    statePtr: number,
+    stateCount: number,
+    stationIndex: number,
+    maskPtr: number,
+    maskPointCount: number,
+    outWindowCountPtr: number,
+  ) => number;
+  _access_compute_access_windows_with_effects?: (
+    statePtr: number,
+    stateCount: number,
+    stationIndex: number,
+    minElevationRad: number,
+    maskPtr: number,
+    maskPointCount: number,
+    refractionModelPtr: number,
     outWindowCountPtr: number,
   ) => number;
   _access_schedule_contacts: (

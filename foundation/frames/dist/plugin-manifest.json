@@ -1,0 +1,94 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.frames",
+  "name": "Foundation Frames",
+  "version": "0.1.0",
+  "description": "Shared SDS FRM frame/geodetic transform module for Basilisk-compatible PCI, PCPF, and ellipsoid LLA coordinate conversions.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "transform_frame_position",
+      "displayName": "Transform Frame Position",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-frm-frame-transform-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "FRM.fbs",
+                  "fileIdentifier": "$FRM",
+                  "rootTypeName": "FRM"
+                },
+                {
+                  "schemaName": "FRM.fbs",
+                  "fileIdentifier": "$FRM",
+                  "rootTypeName": "FRM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS FRM envelope carrying FRMFrameTransformRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Frame/geodetic transform request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-frm-frame-transform-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "FRM.fbs",
+                  "fileIdentifier": "$FRM",
+                  "rootTypeName": "FRM"
+                },
+                {
+                  "schemaName": "FRM.fbs",
+                  "fileIdentifier": "$FRM",
+                  "rootTypeName": "FRM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS FRM envelope carrying FRMFrameTransformResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Frame/geodetic transform result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Evaluates one Basilisk-compatible PCI/PCPF DCM transform or ellipsoid LLA/PCPF conversion."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "FRM.fbs",
+      "fileIdentifier": "$FRM",
+      "rootTypeName": "FRM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-frames-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

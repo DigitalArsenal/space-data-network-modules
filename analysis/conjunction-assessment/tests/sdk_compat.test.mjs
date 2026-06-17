@@ -95,6 +95,102 @@ test("built artifact passes SDK compliance checks", async () => {
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
 });
 
+test("manifest declares CDM import probability command surface", () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const method = manifest.methods.find(
+    (entry) => entry.methodId === "compute_pc_from_cdm",
+  );
+  assert.ok(method, "compute_pc_from_cdm method is declared");
+  assert.equal(method.inputPorts.length, 1);
+  assert.equal(method.inputPorts[0].portId, "cdm");
+  assert.equal(
+    method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$CDM",
+  );
+  assert.equal(method.outputPorts.length, 1);
+  assert.equal(method.outputPorts[0].portId, "result");
+  assert.equal(
+    method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "CAPC",
+  );
+});
+
+test("manifest declares CSM summary command surface", () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const method = manifest.methods.find((entry) => entry.methodId === "emit_csm");
+  assert.ok(method, "emit_csm method is declared");
+  assert.equal(method.inputPorts.length, 1);
+  assert.equal(method.inputPorts[0].portId, "request");
+  assert.equal(
+    method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "CAPQ",
+  );
+  assert.equal(method.outputPorts.length, 1);
+  assert.equal(method.outputPorts[0].portId, "csm");
+  assert.equal(
+    method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$CSM",
+  );
+});
+
+test("manifest declares Orekit CDM KVN parser/writer command surfaces", () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const parseMethod = manifest.methods.find(
+    (entry) => entry.methodId === "parse_cdm_kvn",
+  );
+  assert.ok(parseMethod, "parse_cdm_kvn method is declared");
+  assert.equal(parseMethod.inputPorts.length, 1);
+  assert.equal(parseMethod.inputPorts[0].portId, "kvn");
+  assert.equal(parseMethod.outputPorts.length, 1);
+  assert.equal(parseMethod.outputPorts[0].portId, "cdm");
+  assert.equal(
+    parseMethod.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$CDM",
+  );
+
+  const writeMethod = manifest.methods.find(
+    (entry) => entry.methodId === "write_cdm_kvn",
+  );
+  assert.ok(writeMethod, "write_cdm_kvn method is declared");
+  assert.equal(writeMethod.inputPorts.length, 1);
+  assert.equal(writeMethod.inputPorts[0].portId, "cdm");
+  assert.equal(
+    writeMethod.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$CDM",
+  );
+  assert.equal(writeMethod.outputPorts.length, 1);
+  assert.equal(writeMethod.outputPorts[0].portId, "kvn");
+});
+
+test("manifest declares Orekit CDM XML parser/writer command surfaces", () => {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  const parseMethod = manifest.methods.find(
+    (entry) => entry.methodId === "parse_cdm_xml",
+  );
+  assert.ok(parseMethod, "parse_cdm_xml method is declared");
+  assert.equal(parseMethod.inputPorts.length, 1);
+  assert.equal(parseMethod.inputPorts[0].portId, "xml");
+  assert.equal(parseMethod.outputPorts.length, 1);
+  assert.equal(parseMethod.outputPorts[0].portId, "cdm");
+  assert.equal(
+    parseMethod.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$CDM",
+  );
+
+  const writeMethod = manifest.methods.find(
+    (entry) => entry.methodId === "write_cdm_xml",
+  );
+  assert.ok(writeMethod, "write_cdm_xml method is declared");
+  assert.equal(writeMethod.inputPorts.length, 1);
+  assert.equal(writeMethod.inputPorts[0].portId, "cdm");
+  assert.equal(
+    writeMethod.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+    "$CDM",
+  );
+  assert.equal(writeMethod.outputPorts.length, 1);
+  assert.equal(writeMethod.outputPorts[0].portId, "xml");
+});
+
 test("built artifact exposes the WasmEdge Emscripten pthread surface", async () => {
   const inspection = await inspectModule(
     fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
@@ -162,7 +258,7 @@ test("pthread isomorphic artifact is not routed through the browser WASI harness
         wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
         surface: "command",
       }),
-    /Browser harness only supports standalone WASI or space_data_module_host artifacts/i,
+    /Browser harness only supports standalone WASI or (space_data_module_host|sdn_host) artifacts/i,
   );
 });
 

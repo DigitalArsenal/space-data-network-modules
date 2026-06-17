@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveBasiliskRoot } from "./lib/resolve-basilisk-root.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const basiliskRoot = path.resolve(repoRoot, process.env.BASILISK_ROOT ?? "../basilisk");
+const basiliskRoot = resolveBasiliskRoot(repoRoot);
 const planPath = path.join(repoRoot, "docs", "basilisk-module-plan.json");
 const mapPath = path.join(repoRoot, "docs", "basilisk-message-standards.json");
 

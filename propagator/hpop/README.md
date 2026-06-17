@@ -80,6 +80,9 @@ npm test
 That covers:
 
 - SDK artifact compliance and harness loading in `tests/sdk_compat.test.mjs`
+- Resident-state binary stream method declarations in `tests/sdk_compat.test.mjs`
+- Inter-module aligned-binary `PropagatorState` handoff from SGP4 to HPOP in
+  `tests/intermodule_sgp4_import.test.mjs`
 - Tudat-derived propagation regressions in `tests/tudat_wasm_derived.test.mjs`
 - Stored Tudat reference vectors in `tests/fixtures/tudat.reference.json`
 

@@ -28,6 +28,7 @@
 #include "OMM_generated.h"
 #include "PluginInvokeRequest_generated.h"
 #include "PluginInvokeResponse_generated.h"
+#include "PIV_generated.h"
 #include "TypedArenaBuffer_generated.h"
 #include "orbpro/generated/PropagatorTrajectorySegments_generated.h"
 #include "orbpro/generated/StateVector_generated.h"
@@ -97,6 +98,7 @@ struct InvokeContext {
   const MethodDescriptor *method = nullptr;
   std::vector<InputFrameOwned> inputs{};
   std::vector<OutputFrameOwned> outputs{};
+  uint64_t trace_id = 0;
   uint32_t backlog_remaining = 0;
   bool yielded = false;
   int32_t status_code = 0;
@@ -109,6 +111,15 @@ static const PortRequirement kMethod_invoke_input_ports[] = {
 };
 static const PortRequirement kMethod_pair_request_input_ports[] = {
   { "request", true },
+};
+static const PortRequirement kMethod_cdm_input_ports[] = {
+  { "cdm", true },
+};
+static const PortRequirement kMethod_kvn_input_ports[] = {
+  { "kvn", true },
+};
+static const PortRequirement kMethod_xml_input_ports[] = {
+  { "xml", true },
 };
 static const PortRequirement kMethod_screen_catalog_input_ports[] = {
   { "request", true },
@@ -147,12 +158,27 @@ static const char *kMethod_screen_catalog_output_ports[] = {
 static const char *kMethod_cdm_output_ports[] = {
   "cdm",
 };
+static const char *kMethod_csm_output_ports[] = {
+  "csm",
+};
+static const char *kMethod_kvn_output_ports[] = {
+  "kvn",
+};
+static const char *kMethod_xml_output_ports[] = {
+  "xml",
+};
 
 static int HandleAssessConjunction(void);
 static int HandleEmitCdm(void);
+static int HandleEmitCsm(void);
 static int HandleFindTca(void);
 static int HandleAlfanoMaxProbability(void);
 static int HandleComputePc(void);
+static int HandleComputePcFromCdm(void);
+static int HandleParseCdmKvn(void);
+static int HandleWriteCdmKvn(void);
+static int HandleParseCdmXml(void);
+static int HandleWriteCdmXml(void);
 static int HandleScreenCatalog(void);
 static int HandlePrepareScreeningIndex(void);
 static int HandlePrepareSegmentScreeningIndex(void);
@@ -169,7 +195,7 @@ static const MethodDescriptor kMethodTable[] = {
     1u,
     kMethod_invoke_output_ports,
     1u,
-    true,
+    false,
     "request",
     "response"
   },
@@ -190,6 +216,17 @@ static const MethodDescriptor kMethodTable[] = {
     kMethod_pair_request_input_ports,
     1u,
     kMethod_cdm_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "emit_csm",
+    &HandleEmitCsm,
+    kMethod_pair_request_input_ports,
+    1u,
+    kMethod_csm_output_ports,
     1u,
     false,
     nullptr,
@@ -223,6 +260,61 @@ static const MethodDescriptor kMethodTable[] = {
     kMethod_pair_request_input_ports,
     1u,
     kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "compute_pc_from_cdm",
+    &HandleComputePcFromCdm,
+    kMethod_cdm_input_ports,
+    1u,
+    kMethod_result_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "parse_cdm_kvn",
+    &HandleParseCdmKvn,
+    kMethod_kvn_input_ports,
+    1u,
+    kMethod_cdm_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "write_cdm_kvn",
+    &HandleWriteCdmKvn,
+    kMethod_cdm_input_ports,
+    1u,
+    kMethod_kvn_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "parse_cdm_xml",
+    &HandleParseCdmXml,
+    kMethod_xml_input_ports,
+    1u,
+    kMethod_cdm_output_ports,
+    1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "write_cdm_xml",
+    &HandleWriteCdmXml,
+    kMethod_cdm_input_ports,
+    1u,
+    kMethod_xml_output_ports,
     1u,
     false,
     nullptr,
@@ -351,6 +443,10 @@ static void ResetInvokeContext(const MethodDescriptor *method) {
   g_invoke_context.method = method;
 }
 
+static std::string StringValue(const ::flatbuffers::String *value) {
+  return value ? value->str() : std::string();
+}
+
 static void SetError(const char *code, const std::string &message) {
   g_invoke_context.error_code = code ? code : "invoke-error";
   g_invoke_context.error_message = message;
@@ -418,6 +514,106 @@ static bool LoadInputsFromRequest(const orbpro::invoke::PluginInvokeRequestT &re
     owned.view.stream_id = frame.stream_id;
     owned.view.sequence = frame.sequence;
     owned.view.end_of_stream = frame.end_of_stream ? 1 : 0;
+    owned.view.payload = owned.payload.empty() ? nullptr : owned.payload.data();
+    owned.view.payload_length = static_cast<uint32_t>(owned.payload.size());
+  }
+
+  return true;
+}
+
+static bool ResolvePivPayload(
+  const PIVRequest *request,
+  const TAB *frame,
+  const uint8_t **payload_out,
+  uint32_t *payload_size_out
+) {
+  if (!payload_out || !payload_size_out) {
+    return false;
+  }
+  *payload_out = nullptr;
+  *payload_size_out = 0u;
+  if (!request || !frame) {
+    return false;
+  }
+
+  const uint32_t payload_size = frame->SIZE();
+  const uint32_t payload_offset = frame->OFFSET();
+  const auto *arena = request->PAYLOAD_ARENA();
+  if (payload_size == 0u) {
+    *payload_size_out = 0u;
+    return true;
+  }
+  if (arena && arena->size() > 0u) {
+    const uint64_t end_offset =
+      static_cast<uint64_t>(payload_offset) + static_cast<uint64_t>(payload_size);
+    if (end_offset > arena->size()) {
+      SetError("invalid-request-frame", "PIV input frame payload range exceeds request payload arena.");
+      return false;
+    }
+    *payload_out = arena->Data() + payload_offset;
+    *payload_size_out = payload_size;
+    return true;
+  }
+
+  const uintptr_t pointer = static_cast<uintptr_t>(payload_offset);
+  if (pointer == 0u) {
+    SetError("invalid-request-frame", "PIV input frame uses an external payload pointer of zero.");
+    return false;
+  }
+  *payload_out = reinterpret_cast<const uint8_t *>(pointer);
+  *payload_size_out = payload_size;
+  return true;
+}
+
+static bool LoadInputsFromPivRequest(const PIVRequest *request) {
+  g_invoke_context.inputs.clear();
+  const auto *frames = request ? request->INPUTS() : nullptr;
+  if (!frames) {
+    return true;
+  }
+  g_invoke_context.inputs.reserve(frames->size());
+
+  for (::flatbuffers::uoffset_t index = 0; index < frames->size(); index += 1) {
+    const TAB *frame = frames->Get(index);
+    if (!frame) {
+      continue;
+    }
+
+    const uint8_t *payload_ptr = nullptr;
+    uint32_t payload_size = 0;
+    if (!ResolvePivPayload(request, frame, &payload_ptr, &payload_size)) {
+      return false;
+    }
+
+    g_invoke_context.inputs.emplace_back();
+    auto &owned = g_invoke_context.inputs.back();
+    owned = InputFrameOwned{};
+    owned.port_id = StringValue(frame->PORT_ID());
+    const FlatBufferTypeRef *type_ref = frame->TYPE_REF();
+    if (type_ref) {
+      owned.schema_name = StringValue(type_ref->SCHEMA_NAME());
+      owned.file_identifier = StringValue(type_ref->FILE_IDENTIFIER());
+      owned.root_type_name = StringValue(type_ref->ROOT_TYPE());
+    }
+    if (payload_ptr && payload_size > 0u) {
+      owned.payload.insert(owned.payload.end(), payload_ptr, payload_ptr + payload_size);
+    }
+
+    owned.view.port_id = owned.port_id.empty() ? nullptr : owned.port_id.c_str();
+    owned.view.schema_name = owned.schema_name.empty() ? nullptr : owned.schema_name.c_str();
+    owned.view.file_identifier = owned.file_identifier.empty() ? nullptr : owned.file_identifier.c_str();
+    owned.view.wire_format = static_cast<uint32_t>(frame->WIRE_FORMAT());
+    owned.view.root_type_name = owned.root_type_name.empty() ? nullptr : owned.root_type_name.c_str();
+    owned.view.fixed_string_length = 0;
+    owned.view.byte_length = payload_size;
+    owned.view.required_alignment = static_cast<uint16_t>(frame->ALIGNMENT());
+    owned.view.alignment = static_cast<uint16_t>(frame->ALIGNMENT());
+    owned.view.size = payload_size;
+    owned.view.generation = 0;
+    owned.view.trace_id = frame->FRAME_ID();
+    owned.view.stream_id = 0;
+    owned.view.sequence = 0;
+    owned.view.end_of_stream = 1;
     owned.view.payload = owned.payload.empty() ? nullptr : owned.payload.data();
     owned.view.payload_length = static_cast<uint32_t>(owned.payload.size());
   }
@@ -525,6 +721,121 @@ static std::vector<uint8_t> SerializeErrorResponse(
   return SerializeResponse(response);
 }
 
+static pivStatus PivStatusForContext() {
+  if (!g_invoke_context.error_code.empty() || !g_invoke_context.error_message.empty()) {
+    return pivStatus::FAILED;
+  }
+  if (g_invoke_context.status_code != 0) {
+    return pivStatus::FAILED;
+  }
+  if (g_invoke_context.yielded || g_invoke_context.backlog_remaining > 0u) {
+    return pivStatus::YIELDED;
+  }
+  return pivStatus::OK;
+}
+
+static std::vector<uint8_t> SerializePivResponse() {
+  ::flatbuffers::FlatBufferBuilder builder(1024);
+  std::vector<uint8_t> payload_arena;
+  std::vector<::flatbuffers::Offset<TAB>> outputs;
+  payload_arena.reserve(1024);
+  outputs.reserve(g_invoke_context.outputs.size());
+
+  for (const auto &output : g_invoke_context.outputs) {
+    const uint32_t alignment = std::max<uint32_t>(
+      1u,
+      output.required_alignment > 0u ? output.required_alignment : output.alignment
+    );
+    const uint32_t aligned_offset = AlignOffset(
+      static_cast<uint32_t>(payload_arena.size()),
+      alignment
+    );
+    payload_arena.resize(aligned_offset, 0);
+    if (!output.payload.empty()) {
+      payload_arena.insert(
+        payload_arena.end(),
+        output.payload.begin(),
+        output.payload.end()
+      );
+    }
+
+    const auto type_ref = CreateFlatBufferTypeRefDirect(
+      builder,
+      output.schema_name.empty() ? nullptr : output.schema_name.c_str(),
+      output.file_identifier.empty() ? nullptr : output.file_identifier.c_str(),
+      nullptr,
+      output.root_type_name.empty() ? nullptr : output.root_type_name.c_str()
+    );
+    outputs.push_back(CreateTABDirect(
+      builder,
+      aligned_offset,
+      static_cast<uint32_t>(output.payload.size()),
+      alignment,
+      static_cast<payloadWireFormat>(output.wire_format),
+      type_ref,
+      bufferMutability::IMMUTABLE,
+      bufferOwnership::HOST_OWNED,
+      output.trace_id,
+      output.port_id.empty() ? nullptr : output.port_id.c_str()
+    ));
+  }
+
+  const auto response = CreatePIVResponseDirect(
+    builder,
+    g_invoke_context.status_code,
+    PivStatusForContext(),
+    g_invoke_context.yielded,
+    g_invoke_context.backlog_remaining,
+    outputs.empty() ? nullptr : &outputs,
+    payload_arena.empty() ? nullptr : &payload_arena,
+    g_invoke_context.error_code.empty() ? nullptr : g_invoke_context.error_code.c_str(),
+    g_invoke_context.error_message.empty() ? nullptr : g_invoke_context.error_message.c_str(),
+    g_invoke_context.trace_id
+  );
+  const auto envelope = CreatePIV(builder, 0, response);
+  FinishPIVBuffer(builder, envelope);
+  return std::vector<uint8_t>(
+    builder.GetBufferPointer(),
+    builder.GetBufferPointer() + builder.GetSize()
+  );
+}
+
+static std::vector<uint8_t> SerializePivErrorResponse(
+  int32_t status_code,
+  pivStatus status,
+  const char *error_code,
+  const std::string &error_message,
+  uint64_t trace_id = 0
+) {
+  ResetInvokeContext(nullptr);
+  g_invoke_context.trace_id = trace_id;
+  g_invoke_context.status_code = status_code;
+  g_invoke_context.error_code = error_code ? error_code : "invoke-error";
+  g_invoke_context.error_message = error_message;
+  if (status == pivStatus::NOT_FOUND) {
+    g_invoke_context.error_code = error_code ? error_code : "unknown-method";
+  }
+  ::flatbuffers::FlatBufferBuilder builder(512);
+  const auto response = CreatePIVResponseDirect(
+    builder,
+    status_code,
+    status,
+    false,
+    0,
+    nullptr,
+    nullptr,
+    g_invoke_context.error_code.c_str(),
+    g_invoke_context.error_message.c_str(),
+    trace_id
+  );
+  const auto envelope = CreatePIV(builder, 0, response);
+  FinishPIVBuffer(builder, envelope);
+  return std::vector<uint8_t>(
+    builder.GetBufferPointer(),
+    builder.GetBufferPointer() + builder.GetSize()
+  );
+}
+
 static std::vector<uint8_t> DispatchRequestObject(
   const orbpro::invoke::PluginInvokeRequestT &request,
   bool *runtime_error
@@ -556,6 +867,48 @@ static std::vector<uint8_t> DispatchRequestObject(
   return SerializeResponse(BuildResponseObject());
 }
 
+static std::vector<uint8_t> DispatchPivRequest(
+  const PIVRequest *request,
+  bool *runtime_error
+) {
+  if (!request) {
+    if (runtime_error) {
+      *runtime_error = true;
+    }
+    return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV envelope does not contain a request.");
+  }
+
+  const std::string method_id = StringValue(request->METHOD_ID());
+  const auto *method = FindMethod(method_id);
+  if (!method) {
+    if (runtime_error) {
+      *runtime_error = true;
+    }
+    return SerializePivErrorResponse(
+      404,
+      pivStatus::NOT_FOUND,
+      "unknown-method",
+      std::string("Unknown method: ") + method_id,
+      request->TRACE_ID()
+    );
+  }
+
+  ResetInvokeContext(method);
+  g_invoke_context.trace_id = request->TRACE_ID();
+  if (!LoadInputsFromPivRequest(request) || !ValidateRequiredInputs(method)) {
+    if (runtime_error) {
+      *runtime_error = true;
+    }
+    if (g_invoke_context.status_code == 0) {
+      g_invoke_context.status_code = 400;
+    }
+    return SerializePivResponse();
+  }
+
+  g_invoke_context.status_code = method->handler ? method->handler() : -1;
+  return SerializePivResponse();
+}
+
 static std::vector<uint8_t> DispatchRequestBytes(
   const uint8_t *request_bytes,
   size_t request_len,
@@ -565,20 +918,36 @@ static std::vector<uint8_t> DispatchRequestBytes(
     if (runtime_error) {
       *runtime_error = true;
     }
-    return SerializeErrorResponse(400, "invalid-request", "Invoke request bytes are empty.");
+    return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "Invoke request bytes are empty.");
   }
 
-  ::flatbuffers::Verifier verifier(request_bytes, request_len);
-  if (!orbpro::invoke::VerifyPluginInvokeRequestBuffer(verifier)) {
-    if (runtime_error) {
-      *runtime_error = true;
+  if (request_len >= 8u && PIVBufferHasIdentifier(request_bytes)) {
+    ::flatbuffers::Verifier piv_verifier(request_bytes, request_len);
+    if (!VerifyPIVBuffer(piv_verifier)) {
+      if (runtime_error) {
+        *runtime_error = true;
+      }
+      return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV request FlatBuffer verification failed.");
     }
-    return SerializeErrorResponse(400, "invalid-request", "Invoke request FlatBuffer verification failed.");
+    const auto *envelope = GetPIV(request_bytes);
+    if (!envelope || !envelope->REQUEST()) {
+      if (runtime_error) {
+        *runtime_error = true;
+      }
+      return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV envelope does not contain a request.");
+    }
+    return DispatchPivRequest(envelope->REQUEST(), runtime_error);
   }
 
-  const auto *request = orbpro::invoke::GetPluginInvokeRequest(request_bytes);
-  auto request_object = std::unique_ptr<orbpro::invoke::PluginInvokeRequestT>(request->UnPack());
-  return DispatchRequestObject(*request_object, runtime_error);
+  if (runtime_error) {
+    *runtime_error = true;
+  }
+  return SerializePivErrorResponse(
+    400,
+    pivStatus::FAILED,
+    "invalid-request",
+    "Invoke request must be an SDS PIV envelope."
+  );
 }
 
 static bool ReadAllStdin(std::vector<uint8_t> *bytes_out) {
@@ -859,34 +1228,33 @@ static bool AppendOmmPayload(
   if (!payload || payload_size == 0u || !catalog) {
     return false;
   }
-  if (payload_size < sizeof(flatbuffers::uoffset_t) + flatbuffers::kFileIdentifierLength ||
-      !OMMBufferHasIdentifier(payload)) {
-    if (payload_size < (sizeof(flatbuffers::uoffset_t) * 2u) + flatbuffers::kFileIdentifierLength ||
-        !SizePrefixedOMMBufferHasIdentifier(payload)) {
-      return false;
-    }
-    {
-      ::flatbuffers::Verifier verifier(payload, payload_size);
-      if (VerifySizePrefixedOMMBuffer(verifier)) {
-        catalog->push_back(DecodeOmmRecord(GetSizePrefixedOMM(payload)));
-        return true;
-      }
-    }
-    const uint8_t *inner_payload = payload + sizeof(flatbuffers::uoffset_t);
-    const size_t inner_size = payload_size - sizeof(flatbuffers::uoffset_t);
-    ::flatbuffers::Verifier verifier(inner_payload, inner_size);
-    if (OMMBufferHasIdentifier(inner_payload) && VerifyOMMBuffer(verifier)) {
+
+  uint32_t declared_size = 0u;
+  if (payload_size >= sizeof(declared_size)) {
+    std::memcpy(&declared_size, payload, sizeof(declared_size));
+  }
+
+  if (declared_size == payload_size - sizeof(declared_size) &&
+      payload_size >= (sizeof(flatbuffers::uoffset_t) * 2u) + flatbuffers::kFileIdentifierLength) {
+    const uint8_t *inner_payload = payload + sizeof(declared_size);
+    const size_t inner_size = payload_size - sizeof(declared_size);
+    ::flatbuffers::Verifier inner_verifier(inner_payload, inner_size);
+    if (OMMBufferHasIdentifier(inner_payload) && VerifyOMMBuffer(inner_verifier)) {
       catalog->push_back(DecodeOmmRecord(GetOMM(inner_payload)));
       return true;
     }
-    return false;
   }
-  ::flatbuffers::Verifier verifier(payload, payload_size);
-  if (!VerifyOMMBuffer(verifier)) {
-    return false;
+
+  if (payload_size >= sizeof(flatbuffers::uoffset_t) + flatbuffers::kFileIdentifierLength &&
+      OMMBufferHasIdentifier(payload)) {
+    ::flatbuffers::Verifier verifier(payload, payload_size);
+    if (VerifyOMMBuffer(verifier)) {
+      catalog->push_back(DecodeOmmRecord(GetOMM(payload)));
+      return true;
+    }
   }
-  catalog->push_back(DecodeOmmRecord(GetOMM(payload)));
-  return true;
+
+  return false;
 }
 
 static uint32_t ReadUint32LengthPrefix(const uint8_t *bytes, bool big_endian) {
@@ -1180,22 +1548,33 @@ static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
       &thread_pair_counts[0]
     );
 #else
-    std::vector<std::thread> threads;
-    threads.reserve(static_cast<size_t>(worker_count));
-    for (int worker_index = 0; worker_index < worker_count; worker_index += 1) {
-      threads.emplace_back([&, worker_index]() {
-        ScreenEphemerisSourceRange(
-          primaries,
-          secondaries,
-          config,
-          &next_primary_index,
-          &thread_events[worker_index],
-          &thread_pair_counts[worker_index]
-        );
-      });
-    }
-    for (auto &thread : threads) {
-      thread.join();
+    if (worker_count <= 1) {
+      ScreenEphemerisSourceRange(
+        primaries,
+        secondaries,
+        config,
+        &next_primary_index,
+        &thread_events[0],
+        &thread_pair_counts[0]
+      );
+    } else {
+      std::vector<std::thread> threads;
+      threads.reserve(static_cast<size_t>(worker_count));
+      for (int worker_index = 0; worker_index < worker_count; worker_index += 1) {
+        threads.emplace_back([&, worker_index]() {
+          ScreenEphemerisSourceRange(
+            primaries,
+            secondaries,
+            config,
+            &next_primary_index,
+            &thread_events[worker_index],
+            &thread_pair_counts[worker_index]
+          );
+        });
+      }
+      for (auto &thread : threads) {
+        thread.join();
+      }
     }
 #endif
 
@@ -1637,6 +2016,87 @@ static int HandleEmitCdm(void) {
   }
 }
 
+static int HandleEmitCsm(void) {
+  try {
+    const auto *request = DecodePairRequest();
+    if (!request) {
+      return 400;
+    }
+    conjunction::ConjunctionEvent event{};
+    if (request->primaryTrack() || request->secondaryTrack()) {
+      if (!request->primaryTrack() || !request->secondaryTrack()) {
+        SetError("invalid-track", "emit_csm requires both primaryTrack and secondaryTrack when using propagated tracks.");
+        return 400;
+      }
+      auto primary = DecodePropagatedTrack(request->primaryTrack());
+      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
+      if (!primary || !secondary) {
+        SetError("invalid-track", "Propagated CSM requests require at least two samples per track.");
+        return 400;
+      }
+
+      conjunction::ConjunctionEngine engine;
+      engine.set_pc_method("alfano");
+      engine.set_combined_radius_m(request->radius1M(), request->radius2M());
+      event = ToLegacyConjunctionEvent(engine.assess(
+        *primary,
+        *secondary,
+        request->startJd(),
+        request->durationDays()
+      ));
+    } else {
+      event = conjunction::assess_conjunction(
+        DecodeTleRecord(request->tle1()),
+        DecodeTleRecord(request->tle2()),
+        request->startJd(),
+        request->durationDays(),
+        request->radius1M(),
+        request->radius2M()
+      );
+    }
+
+    std::vector<uint8_t> payload(4096u);
+    int32_t written = conjunction::conjunction_to_csm(
+      event,
+      payload.data(),
+      static_cast<uint32_t>(payload.size())
+    );
+    while (written == -2) {
+      payload.resize(payload.size() * 2u);
+      written = conjunction::conjunction_to_csm(
+        event,
+        payload.data(),
+        static_cast<uint32_t>(payload.size())
+      );
+    }
+    if (written < 0) {
+      SetError("emit-csm-failed", "Failed to serialize conjunction event as CSM.");
+      return 500;
+    }
+    payload.resize(static_cast<size_t>(written));
+
+    if (plugin_push_output_typed(
+          "csm",
+          "CSM.fbs",
+          "$CSM",
+          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
+          "CSM",
+          0,
+          static_cast<uint32_t>(payload.size()),
+          kAlignedBinaryAlignment,
+          payload.data(),
+          static_cast<uint32_t>(payload.size())
+        ) < 0) {
+      SetError("output-failed", "Failed to push CSM output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("emit-csm-failed", ex.what());
+    return 500;
+  }
+}
+
 static int HandleFindTca(void) {
   try {
     const auto *request = DecodePairRequest();
@@ -1762,6 +2222,247 @@ static int HandleComputePc(void) {
     return 0;
   } catch (const std::exception &ex) {
     SetError("compute-pc-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleComputePcFromCdm(void) {
+  try {
+    const auto *frame = FindInputFrame("cdm");
+    if (!frame || frame->payload.empty()) {
+      SetError("invalid-cdm-frame", "CDM input frame is missing or empty.");
+      return 400;
+    }
+
+    const auto result = conjunction::compute_pc_from_cdm(
+      frame->payload.data(),
+      static_cast<uint32_t>(frame->payload.size())
+    );
+    const auto payload = BuildPcPayload(result);
+    if (!PushAlignedBinaryOutput(
+          "result",
+          "orbpro.conjunction.ConjunctionPcResult",
+          "CAPC",
+          "ConjunctionPcResult",
+          payload
+        )) {
+      SetError("output-failed", "Failed to push compute_pc_from_cdm output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::invalid_argument &ex) {
+    SetError("invalid-cdm-frame", ex.what());
+    return 400;
+  } catch (const std::exception &ex) {
+    SetError("compute-pc-from-cdm-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleParseCdmKvn(void) {
+  try {
+    const auto *frame = FindInputFrame("kvn");
+    if (!frame || frame->payload.empty()) {
+      SetError("invalid-kvn-frame", "CDM KVN input frame is missing or empty.");
+      return 400;
+    }
+
+    std::vector<uint8_t> payload(8192u);
+    int32_t written = conjunction::cdm_kvn_to_sds(
+      reinterpret_cast<const char *>(frame->payload.data()),
+      static_cast<uint32_t>(frame->payload.size()),
+      payload.data(),
+      static_cast<uint32_t>(payload.size())
+    );
+    while (written == -2) {
+      payload.resize(payload.size() * 2u);
+      written = conjunction::cdm_kvn_to_sds(
+        reinterpret_cast<const char *>(frame->payload.data()),
+        static_cast<uint32_t>(frame->payload.size()),
+        payload.data(),
+        static_cast<uint32_t>(payload.size())
+      );
+    }
+    if (written < 0) {
+      SetError("invalid-kvn-frame", "Failed to parse CDM KVN input.");
+      return 400;
+    }
+    payload.resize(static_cast<size_t>(written));
+
+    if (plugin_push_output_typed(
+          "cdm",
+          "CDM.fbs",
+          "$CDM",
+          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
+          "CDM",
+          0,
+          static_cast<uint32_t>(payload.size()),
+          kAlignedBinaryAlignment,
+          payload.data(),
+          static_cast<uint32_t>(payload.size())
+        ) < 0) {
+      SetError("output-failed", "Failed to push parsed CDM output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("parse-cdm-kvn-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleWriteCdmKvn(void) {
+  try {
+    const auto *frame = FindInputFrame("cdm");
+    if (!frame || frame->payload.empty()) {
+      SetError("invalid-cdm-frame", "CDM input frame is missing or empty.");
+      return 400;
+    }
+
+    std::vector<char> payload(8192u);
+    int32_t written = conjunction::cdm_sds_to_kvn(
+      frame->payload.data(),
+      static_cast<uint32_t>(frame->payload.size()),
+      payload.data(),
+      static_cast<uint32_t>(payload.size())
+    );
+    while (written == -2) {
+      payload.resize(payload.size() * 2u);
+      written = conjunction::cdm_sds_to_kvn(
+        frame->payload.data(),
+        static_cast<uint32_t>(frame->payload.size()),
+        payload.data(),
+        static_cast<uint32_t>(payload.size())
+      );
+    }
+    if (written < 0) {
+      SetError("invalid-cdm-frame", "Failed to write CDM KVN output.");
+      return 400;
+    }
+    payload.resize(static_cast<size_t>(written));
+
+    if (plugin_push_output_typed(
+          "kvn",
+          "text/plain",
+          "",
+          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_Flatbuffer),
+          "CdmKvnText",
+          0,
+          static_cast<uint32_t>(payload.size()),
+          1,
+          reinterpret_cast<const uint8_t *>(payload.data()),
+          static_cast<uint32_t>(payload.size())
+        ) < 0) {
+      SetError("output-failed", "Failed to push CDM KVN output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("write-cdm-kvn-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleParseCdmXml(void) {
+  try {
+    const auto *frame = FindInputFrame("xml");
+    if (!frame || frame->payload.empty()) {
+      SetError("invalid-xml-frame", "CDM XML input frame is missing or empty.");
+      return 400;
+    }
+
+    std::vector<uint8_t> payload(8192u);
+    int32_t written = conjunction::cdm_xml_to_sds(
+      reinterpret_cast<const char *>(frame->payload.data()),
+      static_cast<uint32_t>(frame->payload.size()),
+      payload.data(),
+      static_cast<uint32_t>(payload.size())
+    );
+    while (written == -2) {
+      payload.resize(payload.size() * 2u);
+      written = conjunction::cdm_xml_to_sds(
+        reinterpret_cast<const char *>(frame->payload.data()),
+        static_cast<uint32_t>(frame->payload.size()),
+        payload.data(),
+        static_cast<uint32_t>(payload.size())
+      );
+    }
+    if (written < 0) {
+      SetError("invalid-xml-frame", "Failed to parse CDM XML input.");
+      return 400;
+    }
+    payload.resize(static_cast<size_t>(written));
+
+    if (plugin_push_output_typed(
+          "cdm",
+          "CDM.fbs",
+          "$CDM",
+          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
+          "CDM",
+          0,
+          static_cast<uint32_t>(payload.size()),
+          kAlignedBinaryAlignment,
+          payload.data(),
+          static_cast<uint32_t>(payload.size())
+        ) < 0) {
+      SetError("output-failed", "Failed to push parsed CDM output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("parse-cdm-xml-failed", ex.what());
+    return 500;
+  }
+}
+
+static int HandleWriteCdmXml(void) {
+  try {
+    const auto *frame = FindInputFrame("cdm");
+    if (!frame || frame->payload.empty()) {
+      SetError("invalid-cdm-frame", "CDM input frame is missing or empty.");
+      return 400;
+    }
+
+    std::vector<char> payload(8192u);
+    int32_t written = conjunction::cdm_sds_to_xml(
+      frame->payload.data(),
+      static_cast<uint32_t>(frame->payload.size()),
+      payload.data(),
+      static_cast<uint32_t>(payload.size())
+    );
+    while (written == -2) {
+      payload.resize(payload.size() * 2u);
+      written = conjunction::cdm_sds_to_xml(
+        frame->payload.data(),
+        static_cast<uint32_t>(frame->payload.size()),
+        payload.data(),
+        static_cast<uint32_t>(payload.size())
+      );
+    }
+    if (written < 0) {
+      SetError("invalid-cdm-frame", "Failed to write CDM XML output.");
+      return 400;
+    }
+    payload.resize(static_cast<size_t>(written));
+
+    if (plugin_push_output_typed(
+          "xml",
+          "text/xml",
+          "",
+          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_Flatbuffer),
+          "CdmXmlText",
+          0,
+          static_cast<uint32_t>(payload.size()),
+          1,
+          reinterpret_cast<const uint8_t *>(payload.data()),
+          static_cast<uint32_t>(payload.size())
+        ) < 0) {
+      SetError("output-failed", "Failed to push CDM XML output.");
+      return 500;
+    }
+    return 0;
+  } catch (const std::exception &ex) {
+    SetError("write-cdm-xml-failed", ex.what());
     return 500;
   }
 }
