@@ -28,11 +28,9 @@
 #include "ENC_generated.h"
 #include "KMF_generated.h"
 #include "LGR_generated.h"
+#include "PIV_generated.h"
 #include "PLG_generated.h"
-#include "PluginInvokeRequest_generated.h"
-#include "PluginInvokeResponse_generated.h"
 #include "REC_generated.h"
-#include "TypedArenaBuffer_generated.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -470,39 +468,62 @@ static bool publish_ipfs_bytes(const std::vector<uint8_t>&, std::string&) {
 }
 #endif
 
-using namespace orbpro::invoke;
-
 static flatbuffers::DetachedBuffer build_error_response(const char* msg) {
     flatbuffers::FlatBufferBuilder fbb(256);
+    const auto code_off = fbb.CreateString("invoke-error");
     const auto msg_off = fbb.CreateString(msg);
-    PluginInvokeResponseBuilder rb(fbb);
-    rb.add_status_code(1);
-    rb.add_error_message(msg_off);
-    FinishPluginInvokeResponseBuffer(fbb, rb.Finish());
+    const auto response = CreatePIVResponse(
+        fbb,
+        1,
+        pivStatus::FAILED,
+        false,
+        0,
+        0,
+        0,
+        code_off,
+        msg_off,
+        0);
+    const auto root = CreatePIV(fbb, 0, response);
+    FinishPIVBuffer(fbb, root);
     return fbb.Release();
 }
 
 static flatbuffers::DetachedBuffer build_bytes_response(const uint8_t* data, size_t len) {
     flatbuffers::FlatBufferBuilder fbb(len + 512);
     const auto arena_vec = fbb.CreateVector(data, len);
-    using namespace orbpro::stream;
-    TypedArenaBufferBuilder tb(fbb);
-    tb.add_offset(0);
-    tb.add_size(static_cast<uint32_t>(len));
-    const auto frame = tb.Finish();
+    const auto port = fbb.CreateString("response");
+    const auto frame = CreateTAB(
+        fbb,
+        0,
+        static_cast<uint32_t>(len),
+        1,
+        payloadWireFormat::FLATBUFFER,
+        0,
+        bufferMutability::IMMUTABLE,
+        bufferOwnership::HOST_OWNED,
+        0,
+        port);
     const auto frames = fbb.CreateVector(&frame, 1);
 
-    PluginInvokeResponseBuilder rb(fbb);
-    rb.add_status_code(0);
-    rb.add_output_frames(frames);
-    rb.add_payload_arena(arena_vec);
-    FinishPluginInvokeResponseBuffer(fbb, rb.Finish());
+    const auto response = CreatePIVResponse(
+        fbb,
+        0,
+        pivStatus::OK,
+        false,
+        0,
+        frames,
+        arena_vec,
+        0,
+        0,
+        0);
+    const auto root = CreatePIV(fbb, 0, response);
+    FinishPIVBuffer(fbb, root);
     return fbb.Release();
 }
 
-static flatbuffers::DetachedBuffer handle_deliver_plugin(const PluginInvokeRequest* req) {
-    const auto* frames = req->input_frames();
-    const auto* arena = req->payload_arena();
+static flatbuffers::DetachedBuffer handle_deliver_plugin(const PIVRequest* req) {
+    const auto* frames = req->INPUTS();
+    const auto* arena = req->PAYLOAD_ARENA();
     if (!frames || frames->size() < 2) {
         return build_error_response("deliver_plugin requires at least 2 input frames");
     }
@@ -515,24 +536,24 @@ static flatbuffers::DetachedBuffer handle_deliver_plugin(const PluginInvokeReque
     if (!key_frame || !cid_frame) {
         return build_error_response("missing input frames");
     }
-    if (key_frame->size() != KEY_BYTES || key_frame->offset() + key_frame->size() > arena->size()) {
+    if (key_frame->SIZE() != KEY_BYTES || key_frame->OFFSET() + key_frame->SIZE() > arena->size()) {
         return build_error_response("client public key must be 32 bytes");
     }
-    if (cid_frame->size() == 0 || cid_frame->offset() + cid_frame->size() > arena->size()) {
+    if (cid_frame->SIZE() == 0 || cid_frame->OFFSET() + cid_frame->SIZE() > arena->size()) {
         return build_error_response("CID is empty");
     }
 
-    const uint8_t* client_pub = arena->data() + key_frame->offset();
-    const char* source_cid_ptr = reinterpret_cast<const char*>(arena->data() + cid_frame->offset());
-    const std::string source_cid(source_cid_ptr, cid_frame->size());
+    const uint8_t* client_pub = arena->data() + key_frame->OFFSET();
+    const char* source_cid_ptr = reinterpret_cast<const char*>(arena->data() + cid_frame->OFFSET());
+    const std::string source_cid(source_cid_ptr, cid_frame->SIZE());
 
     DeliveryMetadata metadata;
     if (frames->size() >= 3) {
         const auto* metadata_frame = frames->Get(2);
         if (metadata_frame &&
-            metadata_frame->size() > 0 &&
-            metadata_frame->offset() + metadata_frame->size() <= arena->size()) {
-            metadata = parse_metadata(arena->data() + metadata_frame->offset(), metadata_frame->size(), source_cid);
+            metadata_frame->SIZE() > 0 &&
+            metadata_frame->OFFSET() + metadata_frame->SIZE() <= arena->size()) {
+            metadata = parse_metadata(arena->data() + metadata_frame->OFFSET(), metadata_frame->SIZE(), source_cid);
         }
     }
     if (metadata.req_id.empty()) {
@@ -547,7 +568,7 @@ static flatbuffers::DetachedBuffer handle_deliver_plugin(const PluginInvokeReque
     }
 
     std::vector<uint8_t> plugin_bytes;
-    if (!fetch_ipfs_bytes(source_cid_ptr, cid_frame->size(), plugin_bytes)) {
+    if (!fetch_ipfs_bytes(source_cid_ptr, cid_frame->SIZE(), plugin_bytes)) {
         return build_error_response("IPFS fetch failed");
     }
     if (plugin_bytes.empty()) {
@@ -686,13 +707,22 @@ uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t
         return nullptr;
     }
 
-    flatbuffers::Verifier verifier(req_ptr, req_len);
-    if (!VerifyPluginInvokeRequestBuffer(verifier)) {
+    if (req_len < 8 || !PIVBufferHasIdentifier(req_ptr)) {
         *out_len_ptr = 0;
         return nullptr;
     }
-    const PluginInvokeRequest* req = GetPluginInvokeRequest(req_ptr);
-    const char* method = req->method_id() ? req->method_id()->c_str() : "";
+    flatbuffers::Verifier verifier(req_ptr, req_len);
+    if (!VerifyPIVBuffer(verifier)) {
+        *out_len_ptr = 0;
+        return nullptr;
+    }
+    const PIV* envelope = GetPIV(req_ptr);
+    const PIVRequest* req = envelope ? envelope->REQUEST() : nullptr;
+    if (!req) {
+        *out_len_ptr = 0;
+        return nullptr;
+    }
+    const char* method = req->METHOD_ID() ? req->METHOD_ID()->c_str() : "";
 
     flatbuffers::DetachedBuffer response;
     if (strcmp(method, "deliver_plugin") == 0) {

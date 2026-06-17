@@ -166,4 +166,24 @@ int protection_key_server_check_key_rotation(void) {
     return 0;
 }
 
+int configure_runtime(void) {
+    return protection_key_server_configure_runtime();
+}
+
+int get_public_key(void) {
+    return protection_key_server_get_public_key();
+}
+
+int request_challenge(void) {
+    return protection_key_server_request_challenge();
+}
+
+int handle_key_request(void) {
+    return protection_key_server_handle_key_request();
+}
+
+int check_key_rotation(void) {
+    return protection_key_server_check_key_rotation();
+}
+
 }  // extern "C"

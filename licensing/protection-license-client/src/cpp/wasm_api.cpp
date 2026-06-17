@@ -174,4 +174,20 @@ int protection_license_client_decrypt_and_verify(void) {
     return 0;
 }
 
+int get_dek(void) {
+    return protection_license_client_get_dek();
+}
+
+int decrypt(void) {
+    return protection_license_client_decrypt();
+}
+
+int verify(void) {
+    return protection_license_client_verify();
+}
+
+int decrypt_and_verify(void) {
+    return protection_license_client_decrypt_and_verify();
+}
+
 }  // extern "C"

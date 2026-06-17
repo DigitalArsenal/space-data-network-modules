@@ -23,7 +23,6 @@ import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import createFlatc from "flatc-wasm/module";
 import {
   signModuleArtifact,
   verifyModuleArtifact,
@@ -42,10 +41,6 @@ const TOOLCHAIN_STAMP_PATH = path.join(BUILD_DIR, ".emsdk-path");
 const CORE_SDS_GENERATED_DIR = path.resolve(
   __dirname,
   "../core/src/cpp/generated/sds",
-);
-const LEGACY_INVOKE_GENERATED_DIR = path.resolve(
-  __dirname,
-  "../protection-key-server/src/cpp/generated",
 );
 const MODULE_SIGNING_KEYPAIR_PATH = path.resolve(
   __dirname,
@@ -127,70 +122,6 @@ function syncToolchainStamp() {
     fs.rmSync(path.join(BUILD_DIR, "libcryptopp.a"), { force: true });
   }
   fs.writeFileSync(TOOLCHAIN_STAMP_PATH, `${EMSDK_DIR}\n`, "utf8");
-}
-
-// ── FlatBuffer C++ header generation ─────────────────────────────────────────
-
-async function generateFlatbufferHeaders(outDir) {
-  console.log("  Generating FlatBuffer C++ headers...");
-  fs.mkdirSync(outDir, { recursive: true });
-
-  const legacyHeaders = [
-    "PluginInvokeRequest_generated.h",
-    "PluginInvokeResponse_generated.h",
-    "TypedArenaBuffer_generated.h",
-  ];
-  if (
-    legacyHeaders.every((header) =>
-      fs.existsSync(path.join(LEGACY_INVOKE_GENERATED_DIR, header)),
-    )
-  ) {
-    for (const header of legacyHeaders) {
-      fs.copyFileSync(
-        path.join(LEGACY_INVOKE_GENERATED_DIR, header),
-        path.join(outDir, header),
-      );
-    }
-    console.log(`  Using tracked invoke headers: ${LEGACY_INVOKE_GENERATED_DIR}`);
-    return;
-  }
-
-  const sdkSchemasDir = path.join(__dirname, "node_modules", "space-data-module-sdk", "schemas");
-  if (!fs.existsSync(sdkSchemasDir)) {
-    throw new Error(
-      `space-data-module-sdk schemas not found.\nRun: npm install`,
-    );
-  }
-  const flatc = await createFlatc();
-
-  const sdkSchemaFiles = [
-    "PluginInvokeRequest.fbs",
-    "PluginInvokeResponse.fbs",
-    "TypedArenaBuffer.fbs",
-  ];
-  const ensureDir = (p) => { try { flatc.FS.mkdir(p); } catch {} };
-  ensureDir("/schemas");
-  ensureDir("/schemas/sdk");
-  ensureDir("/out_cpp");
-
-  for (const sf of sdkSchemaFiles) {
-    flatc.FS.writeFile(
-      `/schemas/sdk/${sf}`,
-      fs.readFileSync(path.join(sdkSchemasDir, sf), "utf8"),
-    );
-  }
-  for (const sf of sdkSchemaFiles) {
-    const rc = flatc.callMain([
-      "--cpp", "--cpp-std", "c++17", "--gen-object-api",
-      "-I", "/schemas/sdk", "-o", "/out_cpp", `/schemas/sdk/${sf}`,
-    ]);
-    if (rc !== 0) throw new Error(`flatc failed for ${sf}`);
-    const hdr = `${path.basename(sf, ".fbs")}_generated.h`;
-    fs.writeFileSync(
-      path.join(outDir, hdr),
-      flatc.FS.readFile(`/out_cpp/${hdr}`, { encoding: "utf8" }),
-    );
-  }
 }
 
 // ── Crypto++ source provisioning ──────────────────────────────────────────────
@@ -346,17 +277,15 @@ async function main() {
     "ENC_generated.h",
     "KMF_generated.h",
     "LGR_generated.h",
+    "PIV_generated.h",
     "PLG_generated.h",
     "REC_generated.h",
+    "TAB_generated.h",
   ]) {
     if (!fs.existsSync(path.join(CORE_SDS_GENERATED_DIR, requiredHeader))) {
       throw new Error(`Core SDS generated header not found: ${path.join(CORE_SDS_GENERATED_DIR, requiredHeader)}`);
     }
   }
-
-  // Generate invoke FlatBuffer headers
-  const fbbHeadersDir = path.join(BUILD_DIR, "fbb-headers");
-  await generateFlatbufferHeaders(fbbHeadersDir);
 
   // Ensure Crypto++ sources
   const { srcDir: cryptoppSrc, parentDir: cryptoppParent } =
@@ -389,7 +318,7 @@ uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
     `${shellQuote(emxx)} -O2 -std=c++17 -fwasm-exceptions ` +
       `-DSDN_WASI_PLUGIN=1 ` +
       `-DCRYPTOPP_DISABLE_ASM=1 -DCRYPTOPP_DISABLE_SSSE3=1 -DCRYPTOPP_DISABLE_AESNI=1 ` +
-      `-I${shellQuote(cryptoppParent)} -I${shellQuote(cryptoppSrc)} -I${shellQuote(fbbHeadersDir)} -I${shellQuote(CORE_SDS_GENERATED_DIR)} -I${shellQuote(flatbuffersInclude)} ` +
+      `-I${shellQuote(cryptoppParent)} -I${shellQuote(cryptoppSrc)} -I${shellQuote(CORE_SDS_GENERATED_DIR)} -I${shellQuote(flatbuffersInclude)} ` +
       `${shellQuote(srcPath)} ${shellQuote(manifestExportsPath)} ${shellQuote(cryptoppLib)} ` +
       `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 ` +
       `-sINITIAL_MEMORY=16777216 -sALLOW_MEMORY_GROWTH=1 ` +
