@@ -8,9 +8,12 @@ import {
   validateArtifactWithStandards,
   validateManifestWithStandards,
 } from "space-data-module-sdk";
+import { verifyModuleArtifact } from "space-data-module-sdk/bundle";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
+const DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
+  "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78";
 
 test("manifest declares the sensor coverage analysis contract", async () => {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -73,4 +76,12 @@ test("built artifact exposes the canonical direct invoke and command compatibili
   assert.ok(inspection.exports.includes("plugin_alloc"));
   assert.ok(inspection.exports.includes("plugin_free"));
   assert.ok(inspection.exports.includes("compute_sensor_coverage"));
+});
+
+test("built artifact carries a trusted SDS module signature", async () => {
+  const signature = await verifyModuleArtifact(fs.readFileSync(WASM_PATH), {
+    trustedPublicKeys: [DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
+    requireSignature: true,
+  });
+  assert.equal(signature.publicKeyHex, DEV_MODULE_SIGNER_PUBLIC_KEY_HEX);
 });

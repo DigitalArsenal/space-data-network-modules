@@ -7,11 +7,27 @@ const packageDir = process.cwd();
 const repoRoot = path.resolve(packageDir, "../..");
 const packageRequire = createRequire(path.join(packageDir, "package.json"));
 const sdk = await import(pathToFileURL(packageRequire.resolve("space-data-module-sdk")).href);
+const bundle = await import(pathToFileURL(packageRequire.resolve("space-data-module-sdk/bundle")).href);
 const manifestPath = path.join(packageDir, "plugin-manifest.json");
 const sourcePath = path.join(packageDir, "src/cpp/module.cpp");
 const commonPath = path.join(repoRoot, "common/hypersonic_module_common.cpp.inc");
 const outputDir = path.join(packageDir, "dist/isomorphic");
 const outputPath = path.join(outputDir, "module.wasm");
+const moduleSigningKeypairCandidates = [
+  process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH,
+  path.resolve(
+    repoRoot,
+    "../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
+  ),
+  path.resolve(
+    repoRoot,
+    "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
+  ),
+  path.resolve(
+    repoRoot,
+    "../space-data-module-sdk/test/support/dev-module-signing-keypair.json",
+  ),
+].filter(Boolean);
 
 async function directoryExists(candidate) {
   try {
@@ -32,6 +48,40 @@ async function resolveStandardsRoot() {
     }
   }
   return null;
+}
+
+async function fileExists(candidate) {
+  try {
+    return (await stat(candidate)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function resolveModuleSigningKeypairPath() {
+  for (const candidate of moduleSigningKeypairCandidates) {
+    if (await fileExists(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error(
+    "Module signing keypair not found. Set SDM_MODULE_SIGNING_KEYPAIR_PATH " +
+      `or provide one of: ${moduleSigningKeypairCandidates.join(", ")}`,
+  );
+}
+
+async function signCompiledArtifact(wasmBytes) {
+  const keypairPath = await resolveModuleSigningKeypairPath();
+  const keypair = JSON.parse(await readFile(keypairPath, "utf8"));
+  const signed = await bundle.signModuleArtifact(wasmBytes, {
+    privateKeySeedHex: keypair.privateKeySeedHex,
+    keyId: keypair.keyId ?? null,
+  });
+  await bundle.verifyModuleArtifact(signed.wasmBytes, {
+    trustedPublicKeys: [keypair.publicKeyHex],
+    requireSignature: true,
+  });
+  return signed.wasmBytes;
 }
 
 async function readSdsCppHeaders(manifest) {
@@ -76,7 +126,8 @@ const compilation = await sdk.compileModuleFromSource({
   outputPath,
 });
 
-await writeFile(outputPath, compilation.wasmBytes);
+const signedWasmBytes = await signCompiledArtifact(compilation.wasmBytes);
+await writeFile(outputPath, signedWasmBytes);
 
 console.log(
   JSON.stringify(
