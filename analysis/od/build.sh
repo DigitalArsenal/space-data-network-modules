@@ -78,6 +78,8 @@ cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
 cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
 cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+node "$SCRIPT_DIR/../../scripts/sign-module-artifact.mjs" \
+    "$ISOMORPHIC_DIST_DIR/module.wasm"
 
 echo ""
 echo "=== Build Complete ==="

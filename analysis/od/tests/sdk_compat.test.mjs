@@ -10,11 +10,14 @@ import {
   generateManifestHarnessPlan,
   materializeHarnessScenario,
 } from "space-data-module-sdk/testing";
+import { verifyModuleArtifact } from "space-data-module-sdk/bundle";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
 const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
+const DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
+  "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78";
 const MINIMAL_MEME = `created:2026-03-10 20:32:53 UTC
 ephemeris_start:2026-03-10 20:16:42 UTC ephemeris_stop:2026-03-13 20:16:42 UTC step_size:60
 ephemeris_source:blend
@@ -86,6 +89,17 @@ test("built artifact passes SDK compliance checks", async () => {
     wasmPath: fileURLToPath(ISOMORPHIC_WASM_PATH),
   });
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
+});
+
+test("built artifact carries a trusted SDS module signature", async () => {
+  const signature = await verifyModuleArtifact(
+    fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    {
+      trustedPublicKeys: [DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
+      requireSignature: true,
+    },
+  );
+  assert.equal(signature.publicKeyHex, DEV_MODULE_SIGNER_PUBLIC_KEY_HEX);
 });
 
 test("built artifact exposes the standalone isomorphic surface", async () => {
