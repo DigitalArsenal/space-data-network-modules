@@ -6,10 +6,12 @@ import process from "node:process";
 import crypto from "crypto";
 import os from "node:os";
 import { fileURLToPath } from "url";
-import { protectModuleArtifact } from "space-data-module-sdk/compiler";
+import {
+  getInvokeCppSchemaHeaders,
+  protectModuleArtifact,
+} from "space-data-module-sdk/compiler";
 import { writeEmbeddedManifestArtifacts } from "space-data-module-sdk/manifest";
 
-import { getInvokeCppSchemaHeaders } from "../../../../ancillary-packages/space-data-module-sdk/src/compiler/flatcSupport.js";
 import { shouldRebuild, writeBuildHash } from "../../../OrbPro/packages/orbpro-integration/build-cache.js";
 import { requireFlatbuffersCppInclude } from "../../../OrbPro/packages/orbpro-integration/flatbuffers-include.js";
 import {
