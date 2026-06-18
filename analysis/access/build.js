@@ -33,13 +33,26 @@ const PLUGIN_SDK_INCLUDE = path.join(
   ORBPRO_ROOT,
   "packages/orbpro-integration/sdk/include",
 );
-const STACK_FLATBUFFERS_INCLUDE = path.resolve(
-  __dirname,
-  "../../../flatbuffers/include",
-);
-const SDS_ACW_CPP_HEADER = path.resolve(
-  __dirname,
-  "../../../spacedatastandards.org/lib/cpp/ACW/main_generated.h",
+const STACK_FLATBUFFERS_INCLUDE_CANDIDATES = [
+  path.resolve(MODULES_ROOT, "../flatbuffers/include"),
+  path.resolve(ORBPRO_ROOT, "../flatbuffers/include"),
+];
+const SDS_ACW_CPP_HEADER = resolveExistingFile(
+  [
+    path.resolve(
+      MODULES_ROOT,
+      "../spacedatastandards.org/lib/cpp/ACW/main_generated.h",
+    ),
+    path.resolve(
+      ORBPRO_ROOT,
+      "packages/spacedatastandards.org/lib/cpp/ACW/main_generated.h",
+    ),
+    path.resolve(
+      ORBPRO_ROOT,
+      "../spacedatastandards.org/lib/cpp/ACW/main_generated.h",
+    ),
+  ],
+  "SDS ACW generated header",
 );
 const [
   { shouldRebuild, writeBuildHash },
@@ -81,6 +94,15 @@ const {
   readEmceptionFile,
   withEmceptionWorkspace,
 } = emceptionBuild;
+
+function resolveExistingFile(candidates, label) {
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error(`${label} not found. Searched: ${candidates.join(", ")}`);
+}
 
 async function writeInvokeSchemaHeaders(outputDir) {
   fs.rmSync(outputDir, { recursive: true, force: true });
@@ -151,7 +173,7 @@ async function build() {
 
   const srcDir = path.join(__dirname, "src");
   const flatbuffersCppInclude = requireFlatbuffersCppInclude(process.env, [
-    STACK_FLATBUFFERS_INCLUDE,
+    ...STACK_FLATBUFFERS_INCLUDE_CANDIDATES,
   ]);
   const wasmPath = path.join(DIST_DIR, "access.wasm");
   const loaderPath = path.join(DIST_DIR, "access.mjs");
