@@ -8,7 +8,27 @@ import {
   encodePluginInvokeRequest,
 } from "space-data-module-sdk/invoke";
 
-export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", import.meta.url);
+const ISOMORPHIC_WASM_RELATIVE_PATH = "./dist/isomorphic/module.wasm";
+
+class LazyModuleUrl {
+  get href() {
+    return getIsomorphicWasmPath().href;
+  }
+
+  get protocol() {
+    return getIsomorphicWasmPath().protocol;
+  }
+
+  toString() {
+    return this.href;
+  }
+
+  [Symbol.toPrimitive]() {
+    return this.href;
+  }
+}
+
+export const isomorphicWasmPath = new LazyModuleUrl();
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -18,6 +38,16 @@ const NODE_SCHEME = "node";
 
 function nodeSpecifier(name) {
   return `${NODE_SCHEME}:${name}`;
+}
+
+export function getIsomorphicWasmPath() {
+  const importMetaUrl = import.meta.url;
+  if (typeof importMetaUrl !== "string" || importMetaUrl.length === 0) {
+    throw new Error(
+      "Unable to resolve client-decrypt isomorphic WASM URL because import.meta.url is unavailable. Pass wasmBytes, wasmBinary, loadWasmBytes, or wasmUrl.",
+    );
+  }
+  return new URL(ISOMORPHIC_WASM_RELATIVE_PATH, importMetaUrl);
 }
 
 function toUint8Array(value) {
@@ -42,8 +72,9 @@ async function readNodeFile(url) {
 }
 
 async function loadLocalWasmBytes() {
-  if (isomorphicWasmPath.protocol === "file:") {
-    return readNodeFile(isomorphicWasmPath);
+  const wasmPath = getIsomorphicWasmPath();
+  if (wasmPath.protocol === "file:") {
+    return readNodeFile(wasmPath);
   }
   throw new Error(
     "Client-decrypt cannot read local wasm bytes in this runtime. Pass wasmBytes, wasmBinary, loadWasmBytes, or wasmUrl.",
@@ -252,6 +283,7 @@ export async function createClientDecrypt(options = {}) {
 
 const packageApi = Object.assign(createClientDecrypt, {
   createClientDecrypt,
+  getIsomorphicWasmPath,
   isomorphicWasmPath,
 });
 
