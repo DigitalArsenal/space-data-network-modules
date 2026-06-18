@@ -29,6 +29,9 @@ const BROWSER_DIST_DIR = path.join(DIST_DIR, "browser");
 const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
 const MANIFEST_JSON_PATH = path.join(__dirname, "manifest.json");
 const DIST_MANIFEST_JSON_PATH = path.join(DIST_DIR, "manifest.json");
+const ACCESS_PUBLICATION_SIGNING_MNEMONIC =
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const ACCESS_PUBLICATION_TIMESTAMP = "2026-01-02T03:04:05.006Z";
 const PLUGIN_SDK_INCLUDE = path.join(
   ORBPRO_ROOT,
   "packages/orbpro-integration/sdk/include",
@@ -292,6 +295,8 @@ async function build() {
     wasmBytes: new Uint8Array(wasmBinary),
     manifest: pluginManifest,
     artifactId: "access-runtime",
+    mnemonic: ACCESS_PUBLICATION_SIGNING_MNEMONIC,
+    publishTimestamp: ACCESS_PUBLICATION_TIMESTAMP,
   });
   fs.writeFileSync(
     publicationRecordsPath,
