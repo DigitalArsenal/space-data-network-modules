@@ -5,25 +5,14 @@ import path from "path";
 import process from "node:process";
 import crypto from "crypto";
 import os from "node:os";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import {
   getInvokeCppSchemaHeaders,
   protectModuleArtifact,
 } from "space-data-module-sdk/compiler";
 import { writeEmbeddedManifestArtifacts } from "space-data-module-sdk/manifest";
 
-import { shouldRebuild, writeBuildHash } from "../../../OrbPro/packages/orbpro-integration/build-cache.js";
-import { requireFlatbuffersCppInclude } from "../../../OrbPro/packages/orbpro-integration/flatbuffers-include.js";
-import {
-  compileSourceObjects,
-  createEmscriptenSetting,
-  describePreferredEmscriptenBackend,
-  formatEmscriptenBareList,
-  linkEmscriptenArtifact,
-  readEmceptionFile,
-  withEmceptionWorkspace,
-} from "../../../OrbPro/scripts/sdn-emception-build.js";
-import { normalizeNodeEsmLoader } from "../../../OrbPro/packages/orbpro-integration/protected-loader-hardening.js";
+import { resolveOrbProRoot } from "../../scripts/lib/resolve-orbpro-root.mjs";
 import {
   ACCESS_MANIFEST_BYTES_SYMBOL,
   ACCESS_MANIFEST_SIZE_SYMBOL,
@@ -33,7 +22,8 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ORBPRO_ROOT = path.resolve(__dirname, "../../../OrbPro");
+const MODULES_ROOT = path.resolve(__dirname, "../..");
+const ORBPRO_ROOT = resolveOrbProRoot(MODULES_ROOT);
 const DIST_DIR = path.join(__dirname, "dist");
 const BROWSER_DIST_DIR = path.join(DIST_DIR, "browser");
 const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
@@ -51,6 +41,46 @@ const SDS_ACW_CPP_HEADER = path.resolve(
   __dirname,
   "../../../spacedatastandards.org/lib/cpp/ACW/main_generated.h",
 );
+const [
+  { shouldRebuild, writeBuildHash },
+  { requireFlatbuffersCppInclude },
+  emceptionBuild,
+  { normalizeNodeEsmLoader },
+] = await Promise.all([
+  import(
+    pathToFileURL(
+      path.join(ORBPRO_ROOT, "packages/orbpro-integration/build-cache.js"),
+    ).href
+  ),
+  import(
+    pathToFileURL(
+      path.join(
+        ORBPRO_ROOT,
+        "packages/orbpro-integration/flatbuffers-include.js",
+      ),
+    ).href
+  ),
+  import(
+    pathToFileURL(path.join(ORBPRO_ROOT, "scripts/sdn-emception-build.js")).href
+  ),
+  import(
+    pathToFileURL(
+      path.join(
+        ORBPRO_ROOT,
+        "packages/orbpro-integration/protected-loader-hardening.js",
+      ),
+    ).href
+  ),
+]);
+const {
+  compileSourceObjects,
+  createEmscriptenSetting,
+  describePreferredEmscriptenBackend,
+  formatEmscriptenBareList,
+  linkEmscriptenArtifact,
+  readEmceptionFile,
+  withEmceptionWorkspace,
+} = emceptionBuild;
 
 async function writeInvokeSchemaHeaders(outputDir) {
   fs.rmSync(outputDir, { recursive: true, force: true });
