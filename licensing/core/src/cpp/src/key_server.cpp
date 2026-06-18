@@ -65,6 +65,7 @@ constexpr int64_t kDefaultMaxSkewMs = 5LL * 60LL * 1000LL;
 constexpr int64_t kDefaultChallengeTtlMs = 60LL * 1000LL;
 constexpr size_t kEncNonceBytes = 12;
 constexpr size_t kRecipientKeyIdBytes = 8;
+constexpr size_t kProviderSignatureBytes = 64;
 constexpr uint16_t kKmfKeyBytesFieldId = 4;
 constexpr const char* kGrantPayloadContext =
     "space-data-network/module-delivery/grant/v1";
@@ -1433,6 +1434,35 @@ std::vector<uint8_t> build_lgr_granted_bytes(
       builder.GetBufferPointer() + builder.GetSize());
 }
 
+bool replace_lgr_provider_signature(
+    std::vector<uint8_t>* grant_bytes,
+    const uint8_t* provider_signature,
+    size_t provider_signature_len) {
+  if (!grant_bytes || !provider_signature ||
+      provider_signature_len != kProviderSignatureBytes ||
+      grant_bytes->empty()) {
+    return false;
+  }
+  flatbuffers::Verifier verifier(grant_bytes->data(), grant_bytes->size());
+  if (!VerifyLGRBuffer(verifier)) {
+    return false;
+  }
+  auto* grant = flatbuffers::GetMutableRoot<LGR>(grant_bytes->data());
+  if (!grant) {
+    return false;
+  }
+  const auto* signature_vector = grant->PROVIDER_SIGNATURE();
+  if (!signature_vector ||
+      signature_vector->size() != provider_signature_len) {
+    return false;
+  }
+  std::memcpy(
+      const_cast<uint8_t*>(signature_vector->Data()),
+      provider_signature,
+      provider_signature_len);
+  return true;
+}
+
 std::vector<uint8_t> build_lgr_denied_bytes(
     std::string_view request_id,
     std::string_view module_id,
@@ -2516,7 +2546,8 @@ int32_t key_server_handle_message(
     secure_zero_publication(&publication);
     return kServerCryptoError;
   }
-  const std::vector<uint8_t> unsigned_grant_bytes = build_lgr_granted_bytes(
+  std::array<uint8_t, kProviderSignatureBytes> zero_provider_signature{};
+  std::vector<uint8_t> grant_response_bytes = build_lgr_granted_bytes(
       pending.request_id,
       pending.module_id,
       pending.module_version,
@@ -2530,12 +2561,12 @@ int32_t key_server_handle_message(
       publication.descriptor,
       wrapped,
       g_provider_signing_public,
-      nullptr,
-      0);
-  std::array<uint8_t, 64> provider_signature{};
+      zero_provider_signature.data(),
+      zero_provider_signature.size());
+  std::array<uint8_t, kProviderSignatureBytes> provider_signature{};
   if (!ed25519_sign_detached(
-          unsigned_grant_bytes.data(),
-          unsigned_grant_bytes.size(),
+          grant_response_bytes.data(),
+          grant_response_bytes.size(),
           g_provider_signing_seed.data(),
           g_provider_signing_seed.size(),
           g_provider_signing_public.data(),
@@ -2544,26 +2575,16 @@ int32_t key_server_handle_message(
     secure_zero_publication(&publication);
     return kServerCryptoError;
   }
-  response_out = build_lgr_granted_bytes(
-      pending.request_id,
-      pending.module_id,
-      pending.module_version,
-      pending.requester_peer_id,
-      pending.requester_xpub,
-      pending.requested_domain,
-      pending.requested_timeout_ms,
-      pending.expires_at_ms,
-      publication.descriptor.REQUIRED_SCOPE,
-      g_capability_token,
-      publication.descriptor,
-      wrapped,
-      g_provider_signing_public,
-      provider_signature.data(),
-      provider_signature.size());
+  if (!replace_lgr_provider_signature(
+          &grant_response_bytes,
+          provider_signature.data(),
+          provider_signature.size())) {
+    secure_zero_publication(&publication);
+    secure_zero(provider_signature.data(), provider_signature.size());
+    return kServerCryptoError;
+  }
+  response_out.assign(grant_response_bytes.begin(), grant_response_bytes.end());
   secure_zero_publication(&publication);
-  secure_zero(
-      const_cast<uint8_t*>(unsigned_grant_bytes.data()),
-      unsigned_grant_bytes.size());
   secure_zero(provider_signature.data(), provider_signature.size());
   return 0;
 }
