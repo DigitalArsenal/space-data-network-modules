@@ -6,6 +6,7 @@ import test from "node:test";
 import { Builder } from "flatbuffers";
 import clientDecrypt, {
   createClientDecrypt,
+  getIsomorphicWasmPath,
   isomorphicWasmPath,
 } from "../index.js";
 import {
@@ -206,7 +207,9 @@ async function buildProtectedPublicationGrantResponseFixture(
 test("package entrypoint exposes the awaited client-decrypt API", async (t) => {
   assert.equal(typeof createClientDecrypt, "function");
   assert.equal(clientDecrypt.createClientDecrypt, createClientDecrypt);
+  assert.equal(clientDecrypt.getIsomorphicWasmPath, getIsomorphicWasmPath);
   assert.equal(clientDecrypt.isomorphicWasmPath.href, isomorphicWasmPath.href);
+  assert.equal(isomorphicWasmPath.href, getIsomorphicWasmPath().href);
 
   const { publicKey, privateKey } = await generateX25519KeyPair();
   const plaintext = new Uint8Array([
@@ -247,10 +250,20 @@ test("package entrypoint avoids literal node: imports so browser bundlers can pa
   assert.equal(source.includes("node:"), false);
 });
 
+test("package entrypoint resolves local wasm URL lazily for browser bundles", () => {
+  const source = fs.readFileSync(new URL("../index.js", import.meta.url), "utf8");
+
+  assert.doesNotMatch(
+    source,
+    /export const isomorphicWasmPath\s*=\s*new URL\(/u,
+  );
+  assert.match(source, /function getIsomorphicWasmPath\(\)/u);
+});
+
 test("built wasm artifacts carry the trusted module signature", async () => {
   for (const artifactUrl of [
     new URL("../dist/client-decrypt.wasm", import.meta.url),
-    isomorphicWasmPath,
+    getIsomorphicWasmPath(),
   ]) {
     const result = await verifyModuleArtifact(fs.readFileSync(artifactUrl), {
       trustedPublicKeys: [TRUSTED_DEV_MODULE_SIGNER_PUBLIC_KEY_HEX],
