@@ -24,11 +24,13 @@ const {
   SCVTimeGridT,
   SCVT,
   SCVVec3T,
+  scvAnalysisMode,
   scvBodyKind,
   scvCoordinateFrame,
   scvEnvelopeKind,
   scvGeometryDomain,
   scvIntervalCategory,
+  scvMetricSeriesKind,
   scvResultState,
   scvSensorShapeKind,
 } = await import(pathToFileURL(`${STANDARDS_ROOT}/lib/js/SCV/main.js`).href);
@@ -36,6 +38,314 @@ const JSON_COVERAGE_REQUEST_TYPE = Object.freeze({
   schemaName: "SensorCoverageCompatibilityJson",
   fileIdentifier: "JSON",
   rootTypeName: "SensorCoverageCompatibilityRequest",
+});
+const WGS84_A = 6378137.0;
+const WGS84_B = 6356752.3142451793;
+const WGS84_E2 = 1.0 - (WGS84_B * WGS84_B) / (WGS84_A * WGS84_A);
+
+test("sensor coverage FOM accumulation culls grid candidates by swath bounds before polygon tests", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const accumulateStart = source.indexOf("void accumulate_swaths");
+  const accumulateStop = source.indexOf("void merge_intervals");
+  assert.notEqual(accumulateStart, -1);
+  assert.notEqual(accumulateStop, -1);
+  const accumulateSource = source.slice(accumulateStart, accumulateStop);
+
+  assert.match(source, /struct SwathBounds/);
+  assert.match(source, /SwathBounds swath_bounds/);
+  assert.match(source, /CellRange candidate_cell_range/);
+  assert.doesNotMatch(accumulateSource, /for \(auto& cell : cells\)/);
+  assert.match(accumulateSource, /row <= range\.maxRow/);
+  assert.match(accumulateSource, /column <= range\.maxColumn/);
+});
+
+test("sensor coverage FOM analytics use a grid-first exact visibility kernel", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const computeStart = source.indexOf("extern \"C\" int compute_sensor_coverage");
+  const computeSource = source.slice(computeStart);
+  const kernelStart = source.indexOf("void accumulate_grid_analytics");
+  const kernelStop = source.indexOf("void merge_intervals");
+  assert.notEqual(computeStart, -1);
+  assert.notEqual(kernelStart, -1);
+  assert.notEqual(kernelStop, -1);
+  const kernelSource = source.slice(kernelStart, kernelStop);
+
+  assert.match(source, /struct GridCellGeometry/);
+  assert.match(source, /Vec3 surfacePosition/);
+  assert.match(source, /Vec3 surfaceNormal/);
+  assert.match(source, /bool cell_visible_from_state/);
+  assert.match(source, /VisibilityInterval refined_visibility_interval/);
+  assert.match(computeSource, /accumulate_grid_analytics\(\*cells, tracks, swaths, grid\)/);
+  assert.doesNotMatch(computeSource, /accumulate_swaths\(cells, swaths, grid\)/);
+  assert.doesNotMatch(kernelSource, /point_in_polygon/);
+});
+
+test("sensor coverage grid analytics indexes generated swaths without quadratic lookup", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const kernelStart = source.indexOf("void accumulate_grid_analytics");
+  const kernelStop = source.indexOf("void merge_intervals");
+  assert.notEqual(kernelStart, -1);
+  assert.notEqual(kernelStop, -1);
+  const kernelSource = source.slice(kernelStart, kernelStop);
+
+  assert.doesNotMatch(source, /find_swath_segment/);
+  assert.match(source, /index_swaths_by_sensor/);
+  assert.match(source, /std::map<int, std::vector<const SwathSegment\*>>/);
+  assert.match(kernelSource, /size_t swath_index = 0;/);
+  assert.match(kernelSource, /const std::vector<const SwathSegment\*>& track_swaths/);
+  assert.match(kernelSource, /track_swaths\[swath_index\]/);
+});
+
+test("sensor coverage analytics-only path uses local footprint candidates without serializing visualization swaths", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const computeStart = source.indexOf("extern \"C\" int compute_sensor_coverage");
+  assert.notEqual(computeStart, -1);
+  const computeSource = source.slice(computeStart);
+
+  assert.match(source, /accumulate_grid_analytics\(\*cells, tracks, grid\)/);
+  assert.match(source, /compute_footprints\(track\.states, track\.sensor\)/);
+  assert.match(source, /build_swath_segments\(track_footprints\)/);
+  assert.match(computeSource, /if \(!analytics_only_output\)/);
+  assert.match(computeSource, /if \(analytics_only_output\) \{\s+accumulate_grid_analytics\(\*cells, tracks, grid\);/);
+});
+
+test("sensor coverage analytics-only path uses analytic candidate bounds for fallback nadir conic sensors", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const directKernelStart = source.indexOf(
+    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+  );
+  const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
+  assert.notEqual(directKernelStart, -1);
+  assert.notEqual(directKernelStop, -1);
+  const directKernelSource = source.slice(directKernelStart, directKernelStop);
+
+  assert.match(source, /bool uses_fallback_nadir_conic_bounds/);
+  assert.match(source, /struct NadirConicCandidateWindow/);
+  assert.match(source, /NadirConicCandidateWindow nadir_conic_candidate_window/);
+  assert.match(directKernelSource, /uses_fallback_nadir_conic_bounds\(track\)/);
+  assert.match(directKernelSource, /nadir_conic_candidate_window\(track\.sensor, start, stop, grid\)/);
+  assert.match(directKernelSource, /bounds = candidate_window\.bounds/);
+});
+
+test("sensor coverage fallback nadir analytics culls rectangle candidates by angular distance", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const directKernelStart = source.indexOf(
+    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+  );
+  const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
+  assert.notEqual(directKernelStart, -1);
+  assert.notEqual(directKernelStop, -1);
+  const directKernelSource = source.slice(directKernelStart, directKernelStop);
+
+  assert.match(source, /struct NadirConicCandidateFilter/);
+  assert.match(source, /struct NadirConicCandidateWindow/);
+  assert.match(source, /NadirConicCandidateWindow nadir_conic_candidate_window/);
+  assert.match(source, /bool cell_matches_nadir_conic_candidate_filter/);
+  assert.match(directKernelSource, /nadir_filter = candidate_window\.filter/);
+  assert.match(directKernelSource, /cell_matches_nadir_conic_candidate_filter\(cell, nadir_filter\)/);
+  assert.ok(
+    directKernelSource.indexOf("cell_matches_nadir_conic_candidate_filter") <
+      directKernelSource.indexOf("refined_visibility_interval"),
+    "nadir angular culling must run before exact interval refinement",
+  );
+});
+
+test("sensor coverage fallback nadir candidate culling avoids per-cell inverse trig", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const matcherStart = source.indexOf("bool cell_matches_nadir_conic_candidate_filter");
+  const matcherStop = source.indexOf("bool surface_sample_visible_from_resolved_state", matcherStart);
+  assert.notEqual(matcherStart, -1);
+  assert.notEqual(matcherStop, -1);
+  const matcherSource = source.slice(matcherStart, matcherStop);
+
+  assert.match(source, /double cosRadius = -1.0;/);
+  assert.match(source, /double sinRadius = 0.0;/);
+  assert.match(source, /filter\.cosRadius = std::cos/);
+  assert.match(source, /filter\.sinRadius = std::sin/);
+  assert.match(
+    matcherSource,
+    /filter\.cosRadius \* cell\.bounds\.cosAngularRadius/,
+  );
+  assert.match(matcherSource, /filter\.sinRadius \* cell\.bounds\.sinAngularRadius/);
+  assert.match(matcherSource, />= cos_expanded_radius/);
+  assert.doesNotMatch(matcherSource, /central_angle_rad/);
+});
+
+test("sensor coverage grid cells carry cached tile and angular bounds metadata", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const createStart = source.indexOf("std::vector<Cell> create_cells");
+  const createStop = source.indexOf("void ensure_cell_geometry", createStart);
+  const matcherStart = source.indexOf("bool cell_matches_nadir_conic_candidate_filter");
+  const matcherStop = source.indexOf("bool surface_sample_visible_from_resolved_state", matcherStart);
+  assert.notEqual(createStart, -1);
+  assert.notEqual(createStop, -1);
+  assert.notEqual(matcherStart, -1);
+  assert.notEqual(matcherStop, -1);
+  const createSource = source.slice(createStart, createStop);
+  const matcherSource = source.slice(matcherStart, matcherStop);
+
+  assert.match(source, /constexpr int kGridTileRowSpan = 8;/);
+  assert.match(source, /constexpr int kGridTileColumnSpan = 8;/);
+  assert.match(source, /struct CellBounds/);
+  assert.match(source, /int tileId = 0;/);
+  assert.match(source, /double angularRadiusRad = 0.0;/);
+  assert.match(source, /double cosAngularRadius = 1.0;/);
+  assert.match(source, /double sinAngularRadius = 0.0;/);
+  assert.match(source, /CellBounds cell_bounds_for\(int row, int column, const GridConfig& grid\)/);
+  assert.match(createSource, /cell\.bounds = cell_bounds_for\(row, column, grid\);/);
+  assert.match(createSource, /cell\.surfaceUnit = cell\.bounds\.centerUnit;/);
+  assert.match(matcherSource, /cos_expanded_radius/);
+  assert.doesNotMatch(matcherSource, /cell_surface_unit\(cell\)/);
+});
+
+test("sensor coverage exact grid geometry is built lazily for candidate cells", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const createStart = source.indexOf("std::vector<Cell> create_cells");
+  const createStop = source.indexOf("void ensure_cell_geometry", createStart);
+  const kernelStart = source.indexOf(
+    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+  );
+  const kernelStop = source.indexOf("void merge_intervals", kernelStart);
+  assert.notEqual(createStart, -1);
+  assert.notEqual(createStop, -1);
+  assert.notEqual(kernelStart, -1);
+  assert.notEqual(kernelStop, -1);
+  const createSource = source.slice(createStart, createStop);
+  const kernelSource = source.slice(kernelStart, kernelStop);
+
+  assert.match(source, /bool geometryReady = false;/);
+  assert.match(source, /bool surfaceUnitReady = false;/);
+  assert.match(source, /void ensure_cell_geometry\(Cell& cell, const GridConfig& grid\)/);
+  assert.match(source, /Vec3 cell_surface_unit\(Cell& cell\)/);
+  assert.doesNotMatch(createSource, /grid_cell_geometry/);
+  assert.match(kernelSource, /ensure_cell_geometry\(cell, grid\)/);
+  assert.ok(
+    kernelSource.indexOf("ensure_cell_geometry(cell, grid)") <
+      kernelSource.indexOf("refined_visibility_interval"),
+    "exact geometry must be built before exact interval refinement",
+  );
+});
+
+test("sensor coverage caches immutable grid cells across analysis windows", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const computeStart = source.indexOf("extern \"C\" int compute_sensor_coverage");
+  assert.notEqual(computeStart, -1);
+  const computeSource = source.slice(computeStart);
+
+  assert.match(source, /constexpr size_t kGridCellCacheMaxEntries = 4;/);
+  assert.match(source, /struct CachedGridCells/);
+  assert.match(source, /std::string grid_cache_key\(const GridConfig& grid\)/);
+  assert.match(source, /void reset_cell_accumulators\(Cell& cell\)/);
+  assert.match(source, /std::vector<Cell>& cached_grid_cells_for\(const GridConfig& grid\)/);
+  assert.match(source, /reset_cell_accumulators\(cell\);/);
+  assert.match(computeSource, /std::vector<Cell>\* cells = nullptr;/);
+  assert.match(computeSource, /cells = &cached_grid_cells_for\(grid\);/);
+  assert.doesNotMatch(computeSource, /create_cells\(grid\)/);
+});
+
+test("sensor coverage exact visibility resolves endpoint frames once per state window", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const intervalStart = source.indexOf("VisibilityInterval refined_visibility_interval");
+  const intervalStop = source.indexOf("std::map<int, std::vector<const SwathSegment*>>", intervalStart);
+  const directKernelStart = source.indexOf(
+    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+  );
+  const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
+  assert.notEqual(intervalStart, -1);
+  assert.notEqual(intervalStop, -1);
+  assert.notEqual(directKernelStart, -1);
+  assert.notEqual(directKernelStop, -1);
+  const intervalSource = source.slice(intervalStart, intervalStop);
+  const directKernelSource = source.slice(directKernelStart, directKernelStop);
+  const resolvedIndex = directKernelSource.indexOf(
+    "const std::vector<ResolvedVisibilityState> resolved_states =",
+  );
+  const candidateLoopIndex = directKernelSource.indexOf("for (int row = range.minRow");
+
+  assert.match(source, /struct ResolvedVisibilityState/);
+  assert.match(source, /ResolvedVisibilityState resolve_visibility_state\(const State& state\)/);
+  assert.match(source, /std::vector<ResolvedVisibilityState> resolve_visibility_states/);
+  assert.match(source, /bool cell_visible_from_resolved_state/);
+  assert.notEqual(resolvedIndex, -1);
+  assert.notEqual(candidateLoopIndex, -1);
+  assert.ok(
+    resolvedIndex < candidateLoopIndex,
+    "endpoint frames must be resolved before iterating candidate cells",
+  );
+  assert.match(directKernelSource, /const ResolvedVisibilityState& start_resolved = resolved_states\[state_index\];/);
+  assert.match(directKernelSource, /const ResolvedVisibilityState& stop_resolved = resolved_states\[state_index \+ 1\];/);
+  assert.match(intervalSource, /cell_visible_from_resolved_state\(cell, sensor, start\)/);
+  assert.match(intervalSource, /cell_visible_from_resolved_state\(cell, sensor, stop\)/);
+  assert.doesNotMatch(intervalSource, /resolve_sensor_frame/);
+});
+
+test("sensor coverage exact visibility only probes midpoint after endpoint checks", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const intervalStart = source.indexOf("VisibilityInterval refined_visibility_interval");
+  const intervalStop = source.indexOf("std::map<int, std::vector<const SwathSegment*>>", intervalStart);
+  assert.notEqual(intervalStart, -1);
+  assert.notEqual(intervalStop, -1);
+  const intervalSource = source.slice(intervalStart, intervalStop);
+  const midpointIndex = intervalSource.indexOf("visible_mid");
+  const endpointExitIndex = intervalSource.indexOf("if (!visible_start && visible_stop)");
+  assert.notEqual(midpointIndex, -1);
+  assert.notEqual(endpointExitIndex, -1);
+  assert.ok(
+    midpointIndex > endpointExitIndex,
+    "midpoint visibility should only be evaluated after endpoint-only cases",
+  );
+});
+
+test("sensor coverage transition refinement has an explicit bounded accuracy budget", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const transitionStart = source.indexOf("double refined_transition_time");
+  const transitionStop = source.indexOf("VisibilityInterval refined_visibility_interval", transitionStart);
+  assert.notEqual(transitionStart, -1);
+  assert.notEqual(transitionStop, -1);
+  const transitionSource = source.slice(transitionStart, transitionStop);
+
+  assert.match(source, /constexpr int kVisibilityTransitionRefinementIterations = 8;/);
+  assert.match(transitionSource, /iteration < kVisibilityTransitionRefinementIterations/);
+  assert.doesNotMatch(transitionSource, /iteration < 12/);
 });
 
 function decodeScvFrames(response) {
@@ -203,6 +513,99 @@ function createSeparatedContributorCoverageRequest() {
   };
 }
 
+function geodeticToEcef(latitudeDeg, longitudeDeg, altitudeM = 0) {
+  const latitude = latitudeDeg * (Math.PI / 180);
+  const longitude = longitudeDeg * (Math.PI / 180);
+  const sinLatitude = Math.sin(latitude);
+  const cosLatitude = Math.cos(latitude);
+  const sinLongitude = Math.sin(longitude);
+  const cosLongitude = Math.cos(longitude);
+  const normalRadius =
+    WGS84_A / Math.sqrt(1.0 - WGS84_E2 * sinLatitude * sinLatitude);
+  return {
+    x: (normalRadius + altitudeM) * cosLatitude * cosLongitude,
+    y: (normalRadius + altitudeM) * cosLatitude * sinLongitude,
+    z: (normalRadius * (1.0 - WGS84_E2) + altitudeM) * sinLatitude,
+  };
+}
+
+function highLatitudeNadirState(latitudeDeg, longitudeDeg, elapsedSeconds) {
+  const latitude = latitudeDeg * (Math.PI / 180);
+  const longitude = longitudeDeg * (Math.PI / 180);
+  const ground = geodeticToEcef(latitudeDeg, longitudeDeg, 0);
+  const position = geodeticToEcef(latitudeDeg, longitudeDeg, 500000);
+  const boresightLength = Math.hypot(
+    ground.x - position.x,
+    ground.y - position.y,
+    ground.z - position.z,
+  );
+  const east = {
+    x: -Math.sin(longitude),
+    y: Math.cos(longitude),
+    z: 0,
+  };
+  const north = {
+    x: -Math.sin(latitude) * Math.cos(longitude),
+    y: -Math.sin(latitude) * Math.sin(longitude),
+    z: Math.cos(latitude),
+  };
+  return {
+    elapsedSeconds,
+    position,
+    velocity: {
+      x: 7612.608173223869 * east.x,
+      y: 7612.608173223869 * east.y,
+      z: 7612.608173223869 * east.z,
+    },
+    sensorFrame: {
+      boresight: {
+        x: (ground.x - position.x) / boresightLength,
+        y: (ground.y - position.y) / boresightLength,
+        z: (ground.z - position.z) / boresightLength,
+      },
+      xAxis: east,
+      yAxis: north,
+    },
+  };
+}
+
+function createHighLatitudeWgs84CoverageRequest() {
+  return {
+    coverageSource: {
+      brand: "OrbPro",
+      mode: "WGS84 high-latitude nadir regression",
+      attachedToPropagatedEntity: true,
+      positionPropertyType: "PropagatedPositionProperty",
+      sensorFrameSource: "entity.computeModelMatrix",
+    },
+    sensor: {
+      sensorId: 11,
+      type: "conic",
+      outerHalfAngleRad: 0.04,
+      radiusMeters: 1600000,
+      angularSamples: 24,
+    },
+    states: [
+      highLatitudeNadirState(60, -0.03, 0),
+      highLatitudeNadirState(60, 0, 600),
+      highLatitudeNadirState(60, 0.03, 1200),
+    ],
+    grid: {
+      minLatitudeDeg: 58,
+      maxLatitudeDeg: 62,
+      minLongitudeDeg: -2,
+      maxLongitudeDeg: 2,
+      latitudeStepDeg: 0.5,
+      longitudeStepDeg: 0.5,
+    },
+    timeSpan: {
+      startSeconds: 0,
+      stopSeconds: 1200,
+    },
+    figureOfMerit: "percent_coverage",
+  };
+}
+
 function createScvCoverageRequestPayload({ windowCount = 2 } = {}) {
   const earthRadius = 6378137.0;
   const orbitRadius = earthRadius + 500000.0;
@@ -275,6 +678,182 @@ function createScvCoverageRequestPayload({ windowCount = 2 } = {}) {
       ),
     ],
     stateSamples,
+  );
+  const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
+  const builder = new flatbuffers.Builder(1024);
+  SCV.finishSCVBuffer(builder, envelope.pack(builder));
+  return builder.asUint8Array();
+}
+
+function createScvAnalyticsOnlyCoverageRequestPayload({ windowCount = 2 } = {}) {
+  const earthRadius = 6378137.0;
+  const orbitRadius = earthRadius + 500000.0;
+  const speed = 7612.608173223869;
+  const stepSeconds = 600;
+  const makeState = (theta, elapsedSeconds) =>
+    new SCVStateSampleT(
+      7,
+      elapsedSeconds,
+      new SCVVec3T(
+        orbitRadius * Math.cos(theta),
+        orbitRadius * Math.sin(theta),
+        0,
+      ),
+      new SCVVec3T(-speed * Math.sin(theta), speed * Math.cos(theta), 0),
+      0,
+      0,
+      0,
+      1,
+      scvCoordinateFrame.BODY_FIXED,
+    );
+  const stateSamples = [];
+  for (let index = 0; index <= windowCount; index++) {
+    const fraction = windowCount > 0 ? index / windowCount : 0;
+    stateSamples.push(makeState(-0.04 + 0.08 * fraction, index * stepSeconds));
+  }
+  const request = new SCVCoverageRequestT(
+    "scv-analytics-only-test",
+    BigInt("43"),
+    scvAnalysisMode.COVERAGE,
+    new SCVEllipsoidT(
+      scvBodyKind.EARTH,
+      "Earth",
+      earthRadius,
+      6356752.314245,
+      earthRadius,
+      scvCoordinateFrame.BODY_FIXED,
+    ),
+    new SCVTimeGridT(null, 0, 0, windowCount * stepSeconds, stepSeconds, 0, windowCount),
+    new SCVCoverageGridT(
+      "regional-grid",
+      scvGeometryDomain.SURFACE,
+      scvCoordinateFrame.BODY_FIXED,
+      -8,
+      8,
+      -12,
+      12,
+      4,
+      4,
+      0,
+      24,
+      4,
+    ),
+    [
+      new SCVSensorT(
+        7,
+        "sensor-7",
+        "SCV request sensor",
+        scvSensorShapeKind.CONIC,
+        scvCoordinateFrame.BODY_FIXED,
+        null,
+        null,
+        null,
+        null,
+        0.22 * (180 / Math.PI),
+        0,
+        0,
+        0,
+        1600000,
+      ),
+    ],
+    stateSamples,
+    [],
+    [],
+    [scvMetricSeriesKind.PERCENT_COVERED],
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    false,
+  );
+  const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
+  const builder = new flatbuffers.Builder(1024);
+  SCV.finishSCVBuffer(builder, envelope.pack(builder));
+  return builder.asUint8Array();
+}
+
+function createScvSwathOnlyCoverageRequestPayload({ windowCount = 2 } = {}) {
+  const earthRadius = 6378137.0;
+  const orbitRadius = earthRadius + 500000.0;
+  const speed = 7612.608173223869;
+  const stepSeconds = 600;
+  const makeState = (theta, elapsedSeconds) =>
+    new SCVStateSampleT(
+      7,
+      elapsedSeconds,
+      new SCVVec3T(
+        orbitRadius * Math.cos(theta),
+        orbitRadius * Math.sin(theta),
+        0,
+      ),
+      new SCVVec3T(-speed * Math.sin(theta), speed * Math.cos(theta), 0),
+      0,
+      0,
+      0,
+      1,
+      scvCoordinateFrame.BODY_FIXED,
+    );
+  const stateSamples = [];
+  for (let index = 0; index <= windowCount; index++) {
+    const fraction = windowCount > 0 ? index / windowCount : 0;
+    stateSamples.push(makeState(-0.04 + 0.08 * fraction, index * stepSeconds));
+  }
+  const request = new SCVCoverageRequestT(
+    "scv-swath-only-test",
+    BigInt("44"),
+    scvAnalysisMode.SWATH,
+    new SCVEllipsoidT(
+      scvBodyKind.EARTH,
+      "Earth",
+      earthRadius,
+      6356752.314245,
+      earthRadius,
+      scvCoordinateFrame.BODY_FIXED,
+    ),
+    new SCVTimeGridT(null, 0, 0, windowCount * stepSeconds, stepSeconds, 0, windowCount),
+    new SCVCoverageGridT(
+      "regional-grid",
+      scvGeometryDomain.SURFACE,
+      scvCoordinateFrame.BODY_FIXED,
+      -8,
+      8,
+      -12,
+      12,
+      4,
+      4,
+      0,
+      24,
+      4,
+    ),
+    [
+      new SCVSensorT(
+        7,
+        "sensor-7",
+        "SCV request sensor",
+        scvSensorShapeKind.CONIC,
+        scvCoordinateFrame.BODY_FIXED,
+        null,
+        null,
+        null,
+        null,
+        0.22 * (180 / Math.PI),
+        0,
+        0,
+        0,
+        1600000,
+      ),
+    ],
+    stateSamples,
+    [],
+    [],
+    [],
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    true,
   );
   const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
   const builder = new flatbuffers.Builder(1024);
@@ -408,6 +987,111 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(result.TOTAL_SENSORS(), 1);
     assert.equal(result.TOTAL_WINDOWS(), 2);
     assert.equal(result.cellStatsLength(), 24);
+    assertRenderableScvGeometry(result, 2);
+  });
+
+  test(`sensor coverage module honors SCV analytics-only products without packed geometry on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await harness.invoke({
+      methodId: "compute_sensor_coverage",
+      inputs: [
+        {
+          portId: "coverage",
+          typeRef: {
+            schemaName: "SCV/main.fbs",
+            fileIdentifier: "$SCV",
+            rootTypeName: "SCV",
+          },
+          payload: createScvAnalyticsOnlyCoverageRequestPayload(),
+        },
+      ],
+    });
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(
+      response.outputs.some((frame) => frame.typeRef?.fileIdentifier === "JSON"),
+      false,
+      "SCV analytics-only request must not emit JSON compatibility results",
+    );
+    const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
+    assert.ok(resultEnvelope, "missing canonical SCV result output frame");
+    const result = resultEnvelope.envelope.RESULT();
+    assert.ok(result, "missing SCV RESULT payload");
+    assert.equal(result.TOTAL_SENSORS(), 1);
+    assert.equal(result.TOTAL_WINDOWS(), 2);
+    assert.equal(result.cellStatsLength(), 24);
+    const summary = JSON.parse(result.MESSAGE());
+    assert.equal(summary.contract, "orbpro.coverage.scv-summary.v0");
+    assert.equal(summary.provider, "sensor-coverage-analysis");
+    assert.equal(summary.statistics.activeSensorCount, 1);
+    assert.equal(summary.statistics.totalWindows, 2);
+    assert.equal(summary.statistics.totalCells, result.cellStatsLength());
+    assert.equal(summary.statistics.totalIntervalCount, result.intervalsLength());
+    assert.ok(Number.isFinite(summary.statistics.percentCoverage));
+    assert.ok(Number.isFinite(summary.statistics.meanRevisitTimeSec));
+    assert.ok(Number.isFinite(summary.statistics.meanResponseTimeSec));
+    assert.ok(
+      result.timeSeriesLength() > 0,
+      "SCV analytics result must carry module-authored metric time-series products",
+    );
+    const metricKinds = new Set();
+    for (let index = 0; index < result.timeSeriesLength(); index += 1) {
+      metricKinds.add(result.TIME_SERIES(index).METRIC_KIND());
+    }
+    assert.ok(metricKinds.has(scvMetricSeriesKind.PERCENT_COVERED));
+    assert.ok(metricKinds.has(scvMetricSeriesKind.ACCESS_COUNT));
+    assert.ok(metricKinds.has(scvMetricSeriesKind.CONTACT_DURATION_SECONDS));
+    assert.ok(metricKinds.has(scvMetricSeriesKind.REVISIT_SECONDS));
+    assert.ok(metricKinds.has(scvMetricSeriesKind.GAP_SECONDS));
+    assert.ok(metricKinds.has(scvMetricSeriesKind.REDUNDANCY));
+    assert.equal(result.GEOMETRY(), null);
+  });
+
+  test(`sensor coverage module honors SCV swath mode without grid analytics on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await harness.invoke({
+      methodId: "compute_sensor_coverage",
+      inputs: [
+        {
+          portId: "coverage",
+          typeRef: {
+            schemaName: "SCV/main.fbs",
+            fileIdentifier: "$SCV",
+            rootTypeName: "SCV",
+          },
+          payload: createScvSwathOnlyCoverageRequestPayload(),
+        },
+      ],
+    });
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(
+      response.outputs.some((frame) => frame.typeRef?.fileIdentifier === "JSON"),
+      false,
+      "SCV swath request must not emit JSON compatibility results",
+    );
+    const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
+    assert.ok(resultEnvelope, "missing canonical SCV result output frame");
+    const result = resultEnvelope.envelope.RESULT();
+    assert.ok(result, "missing SCV RESULT payload");
+    assert.equal(result.TOTAL_SENSORS(), 1);
+    assert.equal(result.TOTAL_WINDOWS(), 2);
+    assert.equal(result.cellStatsLength(), 0);
+    assert.equal(result.intervalsLength(), 0);
     assertRenderableScvGeometry(result, 2);
   });
 
@@ -686,6 +1370,87 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       result.figureOfMerit.products.response_time.values.length,
       result.grid.cellCount,
     );
+  });
+
+  test(`sensor coverage module can return authoritative swath-only geometry without FOM accumulation on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const request = createSingleSensorCoverageRequest();
+    request.figureOfMerit = "none";
+    request.outputMode = "swath_only";
+
+    const result = await invokeJsonRequest(
+      harness,
+      request,
+      {
+        methodId: "compute_sensor_coverage",
+        inputPortId: "coverage",
+        outputPortId: "coverage",
+        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
+      },
+    );
+
+    assert.equal(result.provider, "sensor-coverage-analysis");
+    assert.equal(result.statistics.activeSensorCount, 1);
+    assert.equal(result.swaths.length, 2);
+    assert.equal(result.aggregateGeometry.full.polygonCount, result.swaths.length);
+    assert.equal(result.cells.length, 0);
+    assert.equal(result.coverageIntervals.length, 0);
+    assert.equal(result.figureOfMerit.type, "none");
+    assert.deepEqual(result.figureOfMerit.values, []);
+    assert.deepEqual(result.figureOfMerit.products, {});
+  });
+
+  test(`sensor coverage module can return analytics-only FOM without serializing swath visualization products on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const request = createSeparatedContributorCoverageRequest();
+    request.figureOfMerit = "percent_coverage";
+    request.outputMode = "analytics_only";
+
+    const response = await harness.invoke({
+      methodId: "compute_sensor_coverage",
+      inputs: [
+        {
+          portId: "coverage",
+          typeRef: JSON_COVERAGE_REQUEST_TYPE,
+          payload: Buffer.from(JSON.stringify(request), "utf8"),
+        },
+      ],
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const jsonFrame = response.outputs.find(
+      (frame) => frame.typeRef?.fileIdentifier === "JSON",
+    );
+    assert.ok(jsonFrame, "analytics-only request must emit JSON analytics");
+    assert.equal(
+      findScvEnvelope(response, scvEnvelopeKind.RESULT),
+      undefined,
+      "analytics-only JSON request must not emit unused SCV visualization frames",
+    );
+    const result = JSON.parse(new TextDecoder().decode(jsonFrame.payload));
+
+    assert.equal(result.provider, "sensor-coverage-analysis");
+    assert.equal(result.statistics.activeSensorCount, 2);
+    assert.equal(result.statistics.swathCount, 0);
+    assert.ok(result.cells.length > 0);
+    assert.equal(result.cells.length, result.statistics.accessedCells);
+    assert.ok(result.coverageIntervals.length > 0);
+    assert.equal(result.figureOfMerit.type, "percent_coverage");
+    assert.equal(result.swaths.length, 0);
+    assert.equal(result.aggregateGeometry.full.polygonCount, 0);
   });
 
   test(`sensor coverage module accepts a 1000-sensor analysis without splitting work per sensor on ${runtimeKind}`, async (t) => {
@@ -1230,6 +1995,39 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(
       offNadirResult.coverageSource.sensorFrameSource,
       "entity.computeModelMatrix",
+    );
+  });
+
+  test(`sensor coverage module projects footprints on the WGS84 ellipsoid on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      createHighLatitudeWgs84CoverageRequest(),
+      {
+        methodId: "compute_sensor_coverage",
+        inputPortId: "coverage",
+        outputPortId: "coverage",
+        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
+      },
+    );
+
+    assert.equal(result.provider, "sensor-coverage-analysis");
+    assert.equal(result.footprints.length, 3);
+    assert.ok(result.swaths.length >= 2);
+    assert.ok(
+      result.footprints.every(
+        (footprint) => Math.abs(footprint.center.latitudeDeg - 60) < 1.0e-4,
+      ),
+      `WGS84 geodetic nadir centers should stay near 60 deg latitude, got ${result.footprints
+        .map((footprint) => footprint.center.latitudeDeg.toFixed(6))
+        .join(", ")}`,
     );
   });
 

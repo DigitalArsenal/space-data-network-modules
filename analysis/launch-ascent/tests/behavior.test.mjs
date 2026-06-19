@@ -13,6 +13,11 @@ const INVOKE = {
   methodId: "simulate_launch_ascent",
   inputPortId: "ascent",
   outputPortId: "launch",
+  inputTypeRef: {
+    schemaName: "LDM.fbs",
+    fileIdentifier: "$LDM",
+    rootTypeName: "LDM",
+  },
 };
 
 const EARTH_MU_M3_S2 = 3.986004418e14;
@@ -98,7 +103,11 @@ function cloneRequest(overrides = {}) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`launch ascent simulation composes atmosphere and hypersonics samples on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -119,9 +128,27 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
           massKg: 12_000,
         },
         samples: [
-          { id: "liftoff", elapsedSeconds: 0, altitudeM: 0, speedMps: 0, massKg: 12_000 },
-          { id: "max-q", elapsedSeconds: 55, altitudeM: 10_000, speedMps: 1_500, massKg: 9_500 },
-          { id: "upper-stage", elapsedSeconds: 180, altitudeM: 30_000, speedMps: 2_200, massKg: 5_000 },
+          {
+            id: "liftoff",
+            elapsedSeconds: 0,
+            altitudeM: 0,
+            speedMps: 0,
+            massKg: 12_000,
+          },
+          {
+            id: "max-q",
+            elapsedSeconds: 55,
+            altitudeM: 10_000,
+            speedMps: 1_500,
+            massKg: 9_500,
+          },
+          {
+            id: "upper-stage",
+            elapsedSeconds: 180,
+            altitudeM: 30_000,
+            speedMps: 2_200,
+            massKg: 5_000,
+          },
         ],
       },
       INVOKE,
@@ -130,7 +157,12 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(result.provider, "launch-ascent-analysis");
     assert.equal(result.status, "nominal");
     assert.equal(result.maxDynamicPressure.sampleId, "max-q");
-    assertClose(result.maxDynamicPressure.valuePa, 465_200, 2_500, "max dynamic pressure");
+    assertClose(
+      result.maxDynamicPressure.valuePa,
+      465_200,
+      2_500,
+      "max dynamic pressure",
+    );
     assert.ok(result.maxMach.value > 7);
     assert.deepEqual(
       result.events.map((entry) => entry.event),
@@ -140,7 +172,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`launch ascent integrates to a closed-loop SECO on the target orbit on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -154,7 +190,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(result.trajectorySource, "module-generated-target-orbit");
     const samples = result.trajectorySamples;
     assert.ok(samples.length >= 35);
-    assert.equal(samples[0].phase, "liftoff", "first generated sample should be liftoff");
+    assert.equal(
+      samples[0].phase,
+      "liftoff",
+      "first generated sample should be liftoff",
+    );
     assert.equal(
       samples.at(-1).phase,
       "orbital-insertion",
@@ -166,7 +206,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // numbers to check are the inertial orbit elements, not the ECEF speed.
     const orbit = result.achievedOrbit;
     assertClose(orbit.inertialSpeedMps, 7_790, 30, "inertial insertion speed");
-    assert.ok(orbit.eccentricity < 0.01, `near-circular orbit, e=${orbit.eccentricity}`);
+    assert.ok(
+      orbit.eccentricity < 0.01,
+      `near-circular orbit, e=${orbit.eccentricity}`,
+    );
     assertClose(orbit.apoapsisM, 200_000, 15_000, "apoapsis");
     assertClose(orbit.periapsisM, 200_000, 15_000, "periapsis");
     assertClose(orbit.inclinationDeg, 51.6, 3.0, "ISS-class inclination");
@@ -181,7 +224,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result.deltaV.fromStationaryLaunchMps > 8_800);
     assert.ok(result.deltaV.fromStationaryLaunchMps < 10_500);
     assert.ok(result.deltaV.earthRotationBoostMps > 250);
-    assert.ok(result.deltaV.gravityLossMps > 1_000, "gravity loss integrated along trajectory");
+    assert.ok(
+      result.deltaV.gravityLossMps > 1_000,
+      "gravity loss integrated along trajectory",
+    );
     assert.ok(result.deltaV.fromStableOrbitDeorbitMps > 40);
     assert.ok(result.deltaV.fromStableOrbitDeorbitMps < 200);
     assert.equal(result.hypersonicConditions.length, samples.length);
@@ -207,7 +253,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`launch ascent matches Crew Dragon Demo-1 published telemetry checkpoints on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -230,13 +280,16 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // closed-loop profile, and webcast OCR itself quantizes the reference.
     const result = await invokeJsonRequest(
       harness,
-      cloneRequest({ guidance: { durationSeconds: 700, sampleStepSeconds: 2 } }),
+      cloneRequest({
+        guidance: { durationSeconds: 700, sampleStepSeconds: 2 },
+      }),
       INVOKE,
     );
     const samples = result.trajectorySamples;
     const sampleAt = (time) =>
       samples.reduce((best, sample) =>
-        Math.abs(sample.elapsedSeconds - time) < Math.abs(best.elapsedSeconds - time)
+        Math.abs(sample.elapsedSeconds - time) <
+        Math.abs(best.elapsedSeconds - time)
           ? sample
           : best,
       );
@@ -248,37 +301,98 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       `max-Q at ${result.maxDynamicPressure.elapsedSeconds} s should fall in the published throttle bucket`,
     );
     const maxQ = sampleAt(59);
-    assertClose(maxQ.speedMps, 281, 100, "T+59 s speed vs DM-1 webcast 281 m/s");
-    assertClose(maxQ.altitudeM, 7_600, 3_000, "T+59 s altitude vs DM-1 webcast 7.6 km");
+    assertClose(
+      maxQ.speedMps,
+      281,
+      100,
+      "T+59 s speed vs DM-1 webcast 281 m/s",
+    );
+    assertClose(
+      maxQ.altitudeM,
+      7_600,
+      3_000,
+      "T+59 s altitude vs DM-1 webcast 7.6 km",
+    );
 
     // Mid first-stage checkpoints.
-    assertClose(sampleAt(120).speedMps, 1_050, 160, "T+120 s speed vs DM-1 webcast 1050 m/s");
-    assertClose(sampleAt(120).altitudeM, 41_400, 6_000, "T+120 s altitude vs DM-1 webcast 41.4 km");
-    assertClose(sampleAt(150).speedMps, 1_715, 260, "T+150 s speed vs DM-1 webcast 1715 m/s");
-    assertClose(sampleAt(150).altitudeM, 74_600, 11_000, "T+150 s altitude vs DM-1 webcast 74.6 km");
+    assertClose(
+      sampleAt(120).speedMps,
+      1_050,
+      160,
+      "T+120 s speed vs DM-1 webcast 1050 m/s",
+    );
+    assertClose(
+      sampleAt(120).altitudeM,
+      41_400,
+      6_000,
+      "T+120 s altitude vs DM-1 webcast 41.4 km",
+    );
+    assertClose(
+      sampleAt(150).speedMps,
+      1_715,
+      260,
+      "T+150 s speed vs DM-1 webcast 1715 m/s",
+    );
+    assertClose(
+      sampleAt(150).altitudeM,
+      74_600,
+      11_000,
+      "T+150 s altitude vs DM-1 webcast 74.6 km",
+    );
 
     // MECO: scheduled at the published T+158 s; state must bracket telemetry.
     const meco = result.phaseEvents.find((event) => event.event === "meco");
     assert.ok(meco, "meco phase event present");
     assertClose(meco.elapsedSeconds, 158, 1, "MECO time");
-    assertClose(meco.speedMps, 1_881, 290, "MECO speed vs DM-1 webcast 1881 m/s (±15%)");
-    assertClose(meco.altitudeM, 85_300, 10_000, "MECO altitude vs DM-1 webcast 85.3 km");
+    assertClose(
+      meco.speedMps,
+      1_881,
+      290,
+      "MECO speed vs DM-1 webcast 1881 m/s (±15%)",
+    );
+    assertClose(
+      meco.altitudeM,
+      85_300,
+      10_000,
+      "MECO altitude vs DM-1 webcast 85.3 km",
+    );
 
     // Stage-2 ignition: published SES-1 at T+169 s.
-    const ses1 = result.phaseEvents.find((event) => event.event === "stage2_ignition");
+    const ses1 = result.phaseEvents.find(
+      (event) => event.event === "stage2_ignition",
+    );
     assert.ok(ses1, "stage2_ignition phase event present");
     assertClose(ses1.elapsedSeconds, 169, 1, "SES-1 time");
 
     // SECO: closed-loop cutoff vs the published last stage-2 frame.
     const seco = result.phaseEvents.find((event) => event.event === "seco");
     assert.ok(seco, "seco phase event present");
-    assertClose(seco.elapsedSeconds, 548.9, 45, "SECO time vs DM-1 last frame T+548.9 s");
-    assertClose(seco.speedMps, 7_547, 250, "SECO speed vs DM-1 webcast 7547 m/s");
-    assertClose(seco.altitudeM, 198_000, 8_000, "SECO altitude vs DM-1 webcast 198 km");
+    assertClose(
+      seco.elapsedSeconds,
+      548.9,
+      45,
+      "SECO time vs DM-1 last frame T+548.9 s",
+    );
+    assertClose(
+      seco.speedMps,
+      7_547,
+      250,
+      "SECO speed vs DM-1 webcast 7547 m/s",
+    );
+    assertClose(
+      seco.altitudeM,
+      198_000,
+      8_000,
+      "SECO altitude vs DM-1 webcast 198 km",
+    );
   });
 
   test(`launch ascent upper-stage throttle materially changes the achieved orbit on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -321,7 +435,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       Number.isFinite(reducedThrottle.achievedOrbit?.apoapsisM),
       "reduced-throttle run should report achieved orbit",
     );
-    assert.ok(fullThrottle.launchTrajectory.secoReached, "full throttle reaches SECO");
+    assert.ok(
+      fullThrottle.launchTrajectory.secoReached,
+      "full throttle reaches SECO",
+    );
     // Throttling the upper stage to 62% drops its thrust-to-weight enough
     // that gravity losses keep it from ever reaching the target orbital
     // energy: with real dynamics the run must not reach SECO and must end
@@ -343,8 +460,355 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     );
   });
 
+  test(`explicit staged boost continues past target-orbit energy on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      cloneRequest({
+        guidance: {
+          durationSeconds: 940,
+          sampleStepSeconds: 10,
+          explicitStagePlan: true,
+          continueAfterTargetOrbit: true,
+          boosterMultiplier: 9.0,
+          stages: [
+            {
+              name: "Booster ascent",
+              startSeconds: 0,
+              endSeconds: 158,
+              throttle: 1.0,
+            },
+            {
+              name: "Upper insertion",
+              startSeconds: 169,
+              endSeconds: 700,
+              throttle: 1.0,
+            },
+            {
+              name: "Stage 3",
+              startSeconds: 700,
+              endSeconds: 820,
+              throttle: 1.1,
+            },
+            {
+              name: "Stage 4",
+              startSeconds: 820,
+              endSeconds: 940,
+              throttle: 1.1,
+            },
+          ],
+          throttleSchedule: [
+            { elapsedSeconds: 0, throttle: 1.0 },
+            { elapsedSeconds: 158, throttle: 0.0 },
+            { elapsedSeconds: 169, throttle: 1.0 },
+            { elapsedSeconds: 700, throttle: 1.1 },
+            { elapsedSeconds: 820, throttle: 1.1 },
+            { elapsedSeconds: 940, throttle: 0.0 },
+          ],
+        },
+      }),
+      INVOKE,
+    );
+
+    const samples = result.trajectorySamples;
+    assert.ok(samples.length >= 90, "extended boost should emit dense samples");
+    assert.ok(
+      result.launchTrajectory.targetOrbitEnergyReached,
+      "extended boost crosses target-orbit energy",
+    );
+    assert.ok(
+      result.launchTrajectory.secoReached,
+      "extended boost records a terminal cutoff",
+    );
+    const phaseEventNames = result.phaseEvents.map((event) => event.event);
+    assert.ok(
+      phaseEventNames.includes("stage3_ignition"),
+      "explicit guidance stage rows must ignite stage 3",
+    );
+    assert.ok(
+      phaseEventNames.includes("stage3_cutoff"),
+      "explicit guidance stage rows must burn stage 3 to cutoff",
+    );
+    assert.ok(
+      phaseEventNames.includes("stage4_ignition"),
+      "explicit guidance stage rows must ignite stage 4",
+    );
+    assert.ok(
+      phaseEventNames.includes("stage4_cutoff"),
+      "explicit guidance stage rows must burn stage 4 to cutoff",
+    );
+    assert.ok(
+      result.insertionState.elapsedSeconds >= 930,
+      `terminal insertion should be near the requested 940 s, got ${result.insertionState.elapsedSeconds}`,
+    );
+    assert.equal(samples.at(-1).phase, "orbital-insertion");
+    assert.ok(
+      result.achievedOrbit.inertialSpeedMps > 8_000,
+      "continued physical boost should raise terminal inertial speed",
+    );
+    assert.ok(
+      result.achievedOrbit.apoapsisM > 13_200_000,
+      `post-target prograde burn should raise apoapsis beyond 13,200 km, got ${result.achievedOrbit.apoapsisM}`,
+    );
+    assert.ok(
+      result.achievedOrbit.specificEnergyJkg > -15_300_000,
+      `post-target prograde burn should raise specific energy, got ${result.achievedOrbit.specificEnergyJkg}`,
+    );
+    assert.ok(
+      result.deltaV.fromStationaryLaunchMps > 10_200,
+      "continued physical boost should raise reported launch delta-v",
+    );
+  });
+
+  test(`explicit staged boost remains orbital with maximum booster scaling on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      cloneRequest({
+        guidance: {
+          durationSeconds: 940,
+          sampleStepSeconds: 10,
+          explicitStagePlan: true,
+          continueAfterTargetOrbit: true,
+          boosterMultiplier: 9.0,
+          stages: [
+            {
+              name: "Booster ascent",
+              startSeconds: 0,
+              endSeconds: 158,
+              throttle: 1.0,
+            },
+            {
+              name: "Upper insertion",
+              startSeconds: 169,
+              endSeconds: 700,
+              throttle: 1.0,
+            },
+            {
+              name: "Stage 3",
+              startSeconds: 700,
+              endSeconds: 820,
+              throttle: 1.1,
+            },
+            {
+              name: "Stage 4",
+              startSeconds: 820,
+              endSeconds: 940,
+              throttle: 1.1,
+            },
+          ],
+          throttleSchedule: [
+            { elapsedSeconds: 0, throttle: 1.0 },
+            { elapsedSeconds: 158, throttle: 0.0 },
+            { elapsedSeconds: 169, throttle: 1.0 },
+            { elapsedSeconds: 700, throttle: 1.1 },
+            { elapsedSeconds: 820, throttle: 1.1 },
+            { elapsedSeconds: 940, throttle: 0.0 },
+          ],
+        },
+      }),
+      INVOKE,
+    );
+
+    assert.ok(
+      result.launchTrajectory.targetOrbitEnergyReached,
+      "booster-scaled explicit boost should still cross target-orbit energy",
+    );
+    assert.ok(
+      result.achievedOrbit.periapsisM > 80_000,
+      `booster-scaled terminal periapsis ${result.achievedOrbit.periapsisM} should stay above reentry interface`,
+    );
+    assert.ok(
+      result.maxDynamicPressure.valuePa < 80_000,
+      `booster-scaled max-Q ${result.maxDynamicPressure.valuePa} Pa should remain in a controlled ascent envelope`,
+    );
+  });
+
+  test(`Sandcastle staged boost request reaches the farthest physical trajectory at UI max boosters on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      cloneRequest({
+        vehicle: {
+          name: "Falcon 9 Block 5 / Crew Dragon",
+        },
+        targetOrbit: {
+          reentryInterfaceAltitudeM: 80_000,
+        },
+        guidance: {
+          durationSeconds: 940,
+          sampleStepSeconds: 10,
+          explicitStagePlan: true,
+          continueAfterTargetOrbit: true,
+          boosterMultiplier: 100.0,
+          stages: [
+            {
+              name: "Booster ascent",
+              startSeconds: 0,
+              endSeconds: 158,
+              throttle: 1.0,
+            },
+            {
+              name: "Upper insertion",
+              startSeconds: 169,
+              endSeconds: 700,
+              throttle: 1.0,
+            },
+            {
+              name: "Stage 3",
+              startSeconds: 700,
+              endSeconds: 820,
+              throttle: 1.1,
+            },
+            {
+              name: "Stage 4",
+              startSeconds: 820,
+              endSeconds: 940,
+              throttle: 1.1,
+            },
+          ],
+        },
+      }),
+      INVOKE,
+    );
+
+    assert.ok(
+      result.launchTrajectory.targetOrbitEnergyReached,
+      "UI max boosters should still cross target-orbit energy",
+    );
+    assert.ok(
+      result.launchTrajectory.continuedAfterTargetOrbit,
+      "UI max boosters should keep burning after target-orbit energy",
+    );
+    assert.ok(
+      !result.launchTrajectory.impactReached,
+      "UI max boosters should not terminate at impact",
+    );
+    assert.equal(result.trajectorySamples.at(-1).phase, "orbital-insertion");
+    assert.ok(
+      ["elliptic", "escape"].includes(result.achievedOrbit.orbitClass),
+      `UI max boosters should return an orbital/escape conic, got ${result.achievedOrbit.orbitClass}`,
+    );
+    assert.ok(
+      result.achievedOrbit.apoapsisM > 7_000_000 ||
+        result.achievedOrbit.orbitClass === "escape",
+      `UI max boosters should produce a high-energy terminal trajectory, got apoapsis ${result.achievedOrbit.apoapsisM} and class ${result.achievedOrbit.orbitClass}`,
+    );
+    assert.ok(
+      result.deltaV.fromStationaryLaunchMps > 11_000,
+      "UI max boosters should raise reported launch delta-v",
+    );
+  });
+
+  test(`failed explicit staged boost terminates at impact instead of tunneling through Earth on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(
+      harness,
+      cloneRequest({
+        guidance: {
+          durationSeconds: 940,
+          sampleStepSeconds: 10,
+          explicitStagePlan: true,
+          continueAfterTargetOrbit: true,
+          boosterMultiplier: 1.0,
+          stages: [
+            {
+              name: "Booster ascent",
+              startSeconds: 0,
+              endSeconds: 158,
+              throttle: 1.0,
+            },
+            {
+              name: "Upper insertion",
+              startSeconds: 169,
+              endSeconds: 700,
+              throttle: 1.0,
+            },
+            {
+              name: "Stage 3",
+              startSeconds: 700,
+              endSeconds: 820,
+              throttle: 1.1,
+            },
+            {
+              name: "Stage 4",
+              startSeconds: 820,
+              endSeconds: 940,
+              throttle: 1.1,
+            },
+          ],
+        },
+      }),
+      INVOKE,
+    );
+
+    const samples = result.trajectorySamples;
+    const last = samples.at(-1);
+    assert.ok(
+      result.launchTrajectory.impactReached,
+      "failed explicit stack should report ground impact",
+    );
+    assert.equal(last.phase, "ascent-impact");
+    assert.ok(
+      last.altitudeM >= -1.0,
+      `terminal altitude ${last.altitudeM} m should not tunnel below Earth`,
+    );
+    assert.ok(
+      result.phaseEvents.some((event) => event.event === "impact"),
+      "impact event should be emitted",
+    );
+  });
+
   test(`vacuum coast preserves inertial orbital energy on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -361,7 +825,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
         vehicle: { referenceAreaM2: 10.75, massKg: 20_000 },
         initialState: {
           positionEcefM: [orbitRadiusM, 0, 0],
-          velocityEcefMps: [0, circularSpeedMps - EARTH_ROTATION_RAD_S * orbitRadiusM, 0],
+          velocityEcefMps: [
+            0,
+            circularSpeedMps - EARTH_ROTATION_RAD_S * orbitRadiusM,
+            0,
+          ],
           massKg: 20_000,
         },
         stages: [
@@ -395,7 +863,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`generated ascent samples are kinematically smooth on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -405,7 +877,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     const result = await invokeJsonRequest(
       harness,
-      cloneRequest({ guidance: { durationSeconds: 700, sampleStepSeconds: 2 } }),
+      cloneRequest({
+        guidance: { durationSeconds: 700, sampleStepSeconds: 2 },
+      }),
       INVOKE,
     );
     const samples = result.trajectorySamples;
@@ -436,7 +910,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`initialState seeds a continuing phase exactly from terminalState on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -446,7 +924,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     const first = await invokeJsonRequest(
       harness,
-      cloneRequest({ guidance: { durationSeconds: 300, sampleStepSeconds: 5 } }),
+      cloneRequest({
+        guidance: { durationSeconds: 300, sampleStepSeconds: 5 },
+      }),
       INVOKE,
     );
     const seam = first.terminalState;

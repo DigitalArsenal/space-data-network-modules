@@ -8,6 +8,16 @@ import {
 } from "../../../tests/lib/isomorphicHarness.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const INVOKE = {
+  methodId: "evaluate_hypersonic_state_batch",
+  inputPortId: "trajectory",
+  outputPortId: "conditions",
+  inputTypeRef: {
+    schemaName: "OEM.fbs",
+    fileIdentifier: "$OEM",
+    rootTypeName: "OEM",
+  },
+};
 
 function assertClose(actual, expected, tolerance, label) {
   assert.ok(
@@ -18,7 +28,11 @@ function assertClose(actual, expected, tolerance, label) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`hypersonic state batch evaluates Mach, q, and heating on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -46,11 +60,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
           },
         ],
       },
-      {
-        methodId: "evaluate_hypersonic_state_batch",
-        inputPortId: "trajectory",
-        outputPortId: "conditions",
-      },
+      INVOKE,
     );
 
     assert.equal(result.provider, "hypersonics-propagator");
@@ -65,16 +75,35 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // (223.252 K, not 223.15 K: US76 layers are defined in geopotential
     // altitude H = r0*Z/(r0+Z); H(10 km) = 9.9843 km.)
     assertClose(condition.atmosphere.densityKgM3, 0.41351, 0.002, "density");
-    assertClose(condition.atmosphere.temperatureK, 223.252, 0.02, "temperature");
+    assertClose(
+      condition.atmosphere.temperatureK,
+      223.252,
+      0.02,
+      "temperature",
+    );
     // a = sqrt(1.4 * 287.053 * 223.252) = 299.53 m/s -> M = 1500/299.53 = 5.008
     assertClose(condition.mach, 5.008, 0.02, "Mach number");
-    assertClose(condition.dynamicPressurePa, 465_200, 2_500, "dynamic pressure");
-    assertClose(condition.stagnationHeatFluxWm2, 561_000, 8_000, "Sutton-Graves heat flux");
+    assertClose(
+      condition.dynamicPressurePa,
+      465_200,
+      2_500,
+      "dynamic pressure",
+    );
+    assertClose(
+      condition.stagnationHeatFluxWm2,
+      561_000,
+      8_000,
+      "Sutton-Graves heat flux",
+    );
     assert.ok(condition.reynoldsNumber > 1_000_000);
   });
 
   test(`NRLMSISE00 atmosphere model is rejected with a clear error on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -87,6 +116,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       inputs: [
         {
           portId: "trajectory",
+          typeRef: INVOKE.inputTypeRef,
           payload: Buffer.from(
             JSON.stringify({
               atmosphereModel: "NRLMSISE00",
@@ -107,7 +137,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`US76_EXPONENTIAL_EXTENSION extends honestly above 86 km on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -124,18 +158,19 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
           { id: "high", altitudeM: 120_000, speedMps: 7_000 },
         ],
       },
-      {
-        methodId: "evaluate_hypersonic_state_batch",
-        inputPortId: "trajectory",
-        outputPortId: "conditions",
-      },
+      INVOKE,
     );
 
     assert.equal(result.count, 2);
     const low = result.conditions[0];
     const high = result.conditions[1];
     // Below 86 km the extension is exactly US76 (published 10 km values).
-    assertClose(low.atmosphere.temperatureK, 223.252, 0.02, "US76 temperature at 10 km");
+    assertClose(
+      low.atmosphere.temperatureK,
+      223.252,
+      0.02,
+      "US76 temperature at 10 km",
+    );
     // Above 86 km: crude isothermal extension — positive, decreasing density.
     assert.ok(high.atmosphere.densityKgM3 > 0);
     assert.ok(high.atmosphere.densityKgM3 < low.atmosphere.densityKgM3);

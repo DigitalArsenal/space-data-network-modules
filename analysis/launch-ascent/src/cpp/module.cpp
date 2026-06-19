@@ -170,6 +170,31 @@ bool number_array3(const std::string& json, const std::string& key, Vec3* out) {
   return true;
 }
 
+bool bool_value(const std::string& json, const std::string& key, bool fallback) {
+  const size_t key_pos = json.find("\"" + key + "\"");
+  if (key_pos == std::string::npos) {
+    return fallback;
+  }
+  const size_t colon = json.find(':', key_pos);
+  if (colon == std::string::npos) {
+    return fallback;
+  }
+  size_t cursor = colon + 1;
+  while (
+    cursor < json.size() &&
+    (json[cursor] == ' ' || json[cursor] == '\n' || json[cursor] == '\t' || json[cursor] == '\r')
+  ) {
+    ++cursor;
+  }
+  if (json.compare(cursor, 4, "true") == 0) {
+    return true;
+  }
+  if (json.compare(cursor, 5, "false") == 0) {
+    return false;
+  }
+  return fallback;
+}
+
 struct ThrottlePoint {
   double elapsedSeconds = 0.0;
   double throttle = 1.0;
@@ -402,6 +427,7 @@ struct AscentConfig {
   double pitchOverDurationSeconds = 16.0;
   double pitchKickAngleDeg = 2.5;       // tuned to the DM-1 lofted crew profile
   double maxSensedAccelG = 3.0;         // within DM-1 telemetry envelope (max ~3.3 g)
+  double maxDynamicPressurePa = 75000.0;
   double steerGainKp = 1.2e-4;          // upper-stage PD altitude gains (tuned)
   double steerGainKd = 2.2e-2;
   double minPitchSin = -0.42;
@@ -413,6 +439,9 @@ struct AscentConfig {
   Vec3 initialVelocityEcefMps;
   double initialMassKg = -1.0;
   double epochOffsetSeconds = 0.0;
+  bool explicitStagePlan = false;
+  bool continueAfterTargetOrbit = false;
+  double boosterMultiplier = 1.0;
 };
 
 std::vector<StageSpec> default_falcon9_stages() {
@@ -435,6 +464,106 @@ std::vector<StageSpec> default_falcon9_stages() {
   stage2.dryMassKg = 4000.0;           // spaceflight101 Falcon 9 FT data sheet
   stage2.coastAfterSeconds = 0.0;
   return {stage1, stage2};
+}
+
+struct GuidanceStageRow {
+  double startSeconds = 0.0;
+  double endSeconds = 0.0;
+  double throttle = 1.0;
+  StageSpec stage;
+};
+
+void scale_first_stage_for_boosters(std::vector<StageSpec>* stages, double booster_multiplier) {
+  if (!stages || stages->empty() || booster_multiplier <= 1.0) {
+    return;
+  }
+  StageSpec& stage = (*stages)[0];
+  stage.thrustVacuumN *= booster_multiplier;
+  stage.thrustSeaLevelN *= booster_multiplier;
+  stage.propellantMassKg *= booster_multiplier;
+  stage.dryMassKg *= booster_multiplier;
+}
+
+std::vector<GuidanceStageRow> guidance_rows_from_stage_objects(
+  const std::vector<std::string>& stage_objects
+) {
+  std::vector<GuidanceStageRow> rows;
+  if (stage_objects.empty()) {
+    return {};
+  }
+  const std::vector<StageSpec> defaults = default_falcon9_stages();
+  rows.reserve(stage_objects.size());
+  for (size_t index = 0; index < stage_objects.size(); ++index) {
+    const std::string& object = stage_objects[index];
+    const StageSpec base = index == 0 ? defaults[0] : defaults[1];
+    const double fallback_start = rows.empty() ? 0.0 : rows.back().endSeconds;
+    const double start = std::max(0.0, number_value(object, "startSeconds", fallback_start));
+    const double end = std::max(start, number_value(object, "endSeconds", start + base.burnSeconds));
+    GuidanceStageRow row{};
+    row.startSeconds = start;
+    row.endSeconds = end;
+    row.stage = base;
+    row.stage.burnSeconds = std::max(0.0, end - start);
+    row.stage.coastAfterSeconds = 0.0;
+    row.throttle = clamp_throttle(number_value(object, "throttle", 1.0));
+    const double requested_propellant =
+      row.stage.mdotKgS() * row.stage.burnSeconds * row.throttle;
+    if (requested_propellant > 0.0 && base.propellantMassKg > 0.0) {
+      const double tankage_scale = requested_propellant / base.propellantMassKg;
+      row.stage.propellantMassKg = requested_propellant;
+      row.stage.dryMassKg = base.dryMassKg * std::max(0.2, tankage_scale);
+    }
+    rows.push_back(row);
+  }
+
+  std::sort(rows.begin(), rows.end(), [](const auto& left, const auto& right) {
+    return left.startSeconds < right.startSeconds;
+  });
+  return rows;
+}
+
+std::vector<StageSpec> stages_from_guidance_rows(
+  const std::vector<GuidanceStageRow>& rows
+) {
+  std::vector<StageSpec> stages;
+  stages.reserve(rows.size());
+  for (size_t index = 0; index < rows.size(); ++index) {
+    StageSpec stage = rows[index].stage;
+    if (index + 1 < rows.size()) {
+      stage.coastAfterSeconds = std::max(0.0, rows[index + 1].startSeconds - rows[index].endSeconds);
+    }
+    stages.push_back(stage);
+  }
+  return stages;
+}
+
+std::vector<ThrottlePoint> throttle_schedule_from_guidance_rows(
+  const std::vector<GuidanceStageRow>& rows
+) {
+  std::vector<ThrottlePoint> schedule;
+  schedule.reserve(rows.size() * 2 + 1);
+  for (size_t index = 0; index < rows.size(); ++index) {
+    const auto& row = rows[index];
+    schedule.push_back({row.startSeconds, row.throttle});
+    const bool next_starts_at_cutoff =
+      index + 1 < rows.size() &&
+      std::fabs(rows[index + 1].startSeconds - row.endSeconds) < 1e-6;
+    if (!next_starts_at_cutoff) {
+      schedule.push_back({row.endSeconds, 0.0});
+    }
+  }
+  std::sort(schedule.begin(), schedule.end(), [](const auto& left, const auto& right) {
+    return left.elapsedSeconds < right.elapsedSeconds;
+  });
+  std::vector<ThrottlePoint> deduped;
+  for (const auto& point : schedule) {
+    if (!deduped.empty() && std::fabs(deduped.back().elapsedSeconds - point.elapsedSeconds) < 1e-6) {
+      deduped.back() = point;
+    } else {
+      deduped.push_back(point);
+    }
+  }
+  return deduped;
 }
 
 AscentConfig parse_ascent_config(const std::string& request, const Vehicle& vehicle) {
@@ -464,8 +593,29 @@ AscentConfig parse_ascent_config(const std::string& request, const Vehicle& vehi
     number_value(guidance, "pitchKickAngleDeg", config.pitchKickAngleDeg);
   config.maxSensedAccelG =
     std::max(1.2, number_value(guidance, "maxSensedAccelerationG", config.maxSensedAccelG));
+  config.maxDynamicPressurePa =
+    std::max(0.0, number_value(guidance, "maxDynamicPressurePa", config.maxDynamicPressurePa));
   config.steerGainKp = number_value(guidance, "steerGainKp", config.steerGainKp);
   config.steerGainKd = number_value(guidance, "steerGainKd", config.steerGainKd);
+  config.explicitStagePlan = bool_value(guidance, "explicitStagePlan", false);
+  config.continueAfterTargetOrbit = bool_value(guidance, "continueAfterTargetOrbit", false);
+  config.boosterMultiplier =
+    std::max(1.0, number_value(guidance, "boosterMultiplier", config.boosterMultiplier));
+  if (config.boosterMultiplier > 1.0) {
+    const double boost_blend =
+      std::min(1.0, std::log(config.boosterMultiplier) / std::log(9.0));
+    if (guidance.find("\"verticalRiseSeconds\"") == std::string::npos) {
+      config.verticalRiseSeconds =
+        std::max(4.0, config.verticalRiseSeconds - 4.0 * boost_blend);
+    }
+    if (guidance.find("\"pitchOverDurationSeconds\"") == std::string::npos) {
+      config.pitchOverDurationSeconds =
+        std::max(8.0, config.pitchOverDurationSeconds - 8.0 * boost_blend);
+    }
+    if (guidance.find("\"pitchKickAngleDeg\"") == std::string::npos) {
+      config.pitchKickAngleDeg += 5.5 * boost_blend;
+    }
+  }
   config.throttleSchedule = parse_throttle_schedule(guidance, config.durationSeconds);
 
   config.dragAreaM2 = vehicle.referenceAreaM2 > 0.0 ? vehicle.referenceAreaM2 : config.dragAreaM2;
@@ -478,10 +628,19 @@ AscentConfig parse_ascent_config(const std::string& request, const Vehicle& vehi
   config.atmosphere.exponentialScaleHeightM =
     number_value(request, "atmosphereScaleHeightM", config.atmosphere.exponentialScaleHeightM);
 
-  const auto stage_objects = object_array(request, "stages");
-  if (stage_objects.empty()) {
-    config.stages = default_falcon9_stages();
+  const auto guidance_stage_objects = object_array(guidance, "stages");
+  const std::vector<GuidanceStageRow> guidance_rows =
+    (config.explicitStagePlan || config.continueAfterTargetOrbit)
+      ? guidance_rows_from_stage_objects(guidance_stage_objects)
+      : std::vector<GuidanceStageRow>{};
+  if (!guidance_rows.empty()) {
+    config.stages = stages_from_guidance_rows(guidance_rows);
+    config.throttleSchedule = throttle_schedule_from_guidance_rows(guidance_rows);
   } else {
+    const auto stage_objects = object_array(request, "stages");
+    if (stage_objects.empty()) {
+      config.stages = default_falcon9_stages();
+    } else {
     const std::vector<StageSpec> defaults = default_falcon9_stages();
     for (size_t index = 0; index < stage_objects.size(); ++index) {
       const auto& object = stage_objects[index];
@@ -499,7 +658,9 @@ AscentConfig parse_ascent_config(const std::string& request, const Vehicle& vehi
       stage.coastAfterSeconds = number_value(object, "coastAfterSeconds", base.coastAfterSeconds);
       config.stages.push_back(stage);
     }
+    }
   }
+  scale_first_stage_for_boosters(&config.stages, config.boosterMultiplier);
 
   if (!initial_state.empty()) {
     Vec3 position{};
@@ -542,6 +703,12 @@ struct AscentResult {
   std::vector<LaunchTrajectoryPoint> points;
   std::vector<PhaseEvent> phaseEvents;
   bool secoReached = false;
+  bool targetOrbitEnergyReached = false;
+  bool continuedAfterTargetOrbit = false;
+  bool impactReached = false;
+  double targetOrbitEnergyElapsedSeconds = -1.0;
+  double targetOrbitEnergyAltitudeM = 0.0;
+  double targetOrbitEnergySpeedMps = 0.0;
   double gravityLossMps = 0.0;
   double dragLossMps = 0.0;
   double steeringLossMps = 0.0;
@@ -561,6 +728,7 @@ struct SegmentContext {
   int stageIndex = -1;  // -1 -> unpowered coast
   double stageIgnitionMassKg = 0.0;
   double propellantBudgetKg = 0.0;
+  bool continueProgradeAfterTargetOrbit = false;
 };
 
 Vec3 thrust_direction(
@@ -606,6 +774,12 @@ Vec3 thrust_direction(
   const double r_mag = norm(state.r);
   const Vec3 omega{0.0, 0.0, kEarthRotationRadS};
   const Vec3 v_inertial = state.v + cross(omega, state.r);
+  if (segment.continueProgradeAfterTargetOrbit) {
+    const double inertial_speed = norm(v_inertial);
+    if (inertial_speed > 1.0) {
+      return v_inertial * (1.0 / inertial_speed);
+    }
+  }
   const double vr = dot(v_inertial, r_hat);
   Vec3 v_horizontal = v_inertial - r_hat * vr;
   double vh = norm(v_horizontal);
@@ -689,6 +863,16 @@ Derivative ascent_dynamics(
       const double sensed_limit_n = config.maxSensedAccelG * kG0 * state.m;
       if (thrust_n * throttle > sensed_limit_n) {
         throttle = sensed_limit_n / thrust_n;
+      }
+      const double dynamic_pressure_pa = 0.5 * rho * speed * speed;
+      if (
+        config.maxDynamicPressurePa > 0.0 &&
+        dynamic_pressure_pa > config.maxDynamicPressurePa * 0.85
+      ) {
+        const double q_blend =
+          (config.maxDynamicPressurePa - dynamic_pressure_pa) /
+          (config.maxDynamicPressurePa * 0.15);
+        throttle *= clamp01(q_blend);
       }
       throttle = std::max(0.0, throttle);
       if (throttle > 0.0) {
@@ -862,7 +1046,23 @@ AscentResult integrate_ascent(const AscentConfig& config) {
     if (seg.stageIndex < 0) {
       return "stage-separation";
     }
-    return seg.stageIndex == 0 ? "first-stage" : "second-stage";
+    return seg.stageIndex == 0
+      ? "first-stage"
+      : "stage-" + std::to_string(seg.stageIndex + 1);
+  };
+
+  auto record_target_orbit_energy = [&](double event_t, const AscentState& event_state) {
+    if (result.targetOrbitEnergyReached) {
+      return;
+    }
+    double lat = 0.0;
+    double lon = 0.0;
+    double alt = 0.0;
+    ecef_to_geodetic(event_state.r, &lat, &lon, &alt);
+    result.targetOrbitEnergyReached = true;
+    result.targetOrbitEnergyElapsedSeconds = event_t;
+    result.targetOrbitEnergyAltitudeM = alt;
+    result.targetOrbitEnergySpeedMps = norm(event_state.v);
   };
 
   for (size_t seg_idx = 0; seg_idx < plan.size() && !done; ++seg_idx) {
@@ -909,6 +1109,8 @@ AscentResult integrate_ascent(const AscentConfig& config) {
       for (int step = 0; step < substeps && !done; ++step) {
         const AscentState prev = state;
         const double t_prev = t;
+        context.continueProgradeAfterTargetOrbit =
+          config.continueAfterTargetOrbit && result.targetOrbitEnergyReached;
         // Loss bookkeeping (reporting only; trapezoid on segment endpoints).
         const Derivative d0 = ascent_dynamics(config, context, t, state);
         state = rk4_step(config, context, t, state, h);
@@ -932,7 +1134,30 @@ AscentResult integrate_ascent(const AscentConfig& config) {
             std::max(-1.0, std::min(1.0, dot(thrust_dir, normalized(prev.v))));
           const StageSpec& stage = config.stages[static_cast<size_t>(context.stageIndex)];
           steering_loss +=
-            (stage.thrustVacuumN / std::max(prev.m, 1.0)) * (1.0 - cos_alpha) * h;
+              (stage.thrustVacuumN / std::max(prev.m, 1.0)) * (1.0 - cos_alpha) * h;
+        }
+
+        double current_lat = 0.0;
+        double current_lon = 0.0;
+        double current_alt = 0.0;
+        ecef_to_geodetic(state.r, &current_lat, &current_lon, &current_alt);
+        if (t > 1.0 && current_alt <= 0.0) {
+          const double fraction =
+            alt > 0.0 ? alt / std::max(alt - current_alt, 1e-9) : 0.0;
+          if (fraction > 0.0 && fraction < 1.0) {
+            state = rk4_step(config, context, t_prev, prev, h * fraction);
+            t = t_prev + h * fraction;
+            ecef_to_geodetic(state.r, &current_lat, &current_lon, &current_alt);
+          }
+          result.impactReached = true;
+          result.phaseEvents.push_back({
+            "impact",
+            t,
+            std::max(0.0, current_alt),
+            norm(state.v),
+          });
+          done = true;
+          break;
         }
 
         // Closed-loop SECO: cut when the inertial specific orbital energy
@@ -941,13 +1166,20 @@ AscentResult integrate_ascent(const AscentConfig& config) {
         if (context.stageIndex >= 1) {
           const double e_prev = specific_orbit_energy(prev);
           const double e_now = specific_orbit_energy(state);
-          if (e_now >= seco_energy && e_prev < seco_energy) {
+          if (!result.targetOrbitEnergyReached && e_now >= seco_energy && e_prev < seco_energy) {
             const double fraction =
               (seco_energy - e_prev) / std::max(e_now - e_prev, 1e-9);
-            state = rk4_step(config, context, t_prev, prev, h * fraction);
-            t = t_prev + h * fraction;
-            result.secoReached = true;
-            done = true;
+            const AscentState target_state = rk4_step(config, context, t_prev, prev, h * fraction);
+            const double target_t = t_prev + h * fraction;
+            record_target_orbit_energy(target_t, target_state);
+            if (!config.continueAfterTargetOrbit) {
+              state = target_state;
+              t = target_t;
+              result.secoReached = true;
+              done = true;
+            } else {
+              result.continuedAfterTargetOrbit = true;
+            }
           }
         }
       }
@@ -957,7 +1189,15 @@ AscentResult integrate_ascent(const AscentConfig& config) {
       if (sample_due) {
         const bool is_terminal = done || (t >= t_end - 1e-9);
         std::string phase = current_phase(seg);
-        if (is_terminal && (result.secoReached || seg_idx + 1 >= plan.size())) {
+        if (result.impactReached) {
+          phase = "ascent-impact";
+        } else if (
+          is_terminal &&
+          (
+            (!config.continueAfterTargetOrbit && result.secoReached) ||
+            seg_idx + 1 >= plan.size()
+          )
+        ) {
           phase = "orbital-insertion";
         }
         result.points.push_back(
@@ -972,7 +1212,8 @@ AscentResult integrate_ascent(const AscentConfig& config) {
       }
     }
 
-    if (seg.stageIndex >= 0 && !done) {
+    const bool segment_reached_cutoff = t >= seg.endTime - 1e-9;
+    if (seg.stageIndex >= 0 && segment_reached_cutoff) {
       // Stage burnout event + jettison (dry mass and any residual propellant
       // leave with the spent stage at burnout; separation coast follows).
       const StageSpec& stage = config.stages[static_cast<size_t>(seg.stageIndex)];
@@ -995,6 +1236,27 @@ AscentResult integrate_ascent(const AscentConfig& config) {
   }
 
   if (result.secoReached) {
+    if (result.targetOrbitEnergyReached) {
+      result.phaseEvents.push_back({
+        "target_orbit_energy",
+        result.targetOrbitEnergyElapsedSeconds,
+        result.targetOrbitEnergyAltitudeM,
+        result.targetOrbitEnergySpeedMps,
+      });
+    }
+    double lat = 0.0;
+    double lon = 0.0;
+    double alt = 0.0;
+    ecef_to_geodetic(state.r, &lat, &lon, &alt);
+    result.phaseEvents.push_back({"seco", t, alt, norm(state.v)});
+  } else if (result.targetOrbitEnergyReached) {
+    result.secoReached = true;
+    result.phaseEvents.push_back({
+      "target_orbit_energy",
+      result.targetOrbitEnergyElapsedSeconds,
+      result.targetOrbitEnergyAltitudeM,
+      result.targetOrbitEnergySpeedMps,
+    });
     double lat = 0.0;
     double lon = 0.0;
     double alt = 0.0;
@@ -1004,17 +1266,23 @@ AscentResult integrate_ascent(const AscentConfig& config) {
 
   // Guarantee a terminal sample exists at the final integration time.
   if (result.points.empty() || std::fabs(result.points.back().sample.elapsedSeconds - t) > 1e-6) {
+    const std::string terminal_phase = result.impactReached
+      ? "ascent-impact"
+      : (result.secoReached ? "orbital-insertion" : "ascent-truncated");
     result.points.push_back(make_point(
       config,
       t,
       state,
       start_lat,
       start_lon,
-      result.secoReached ? "orbital-insertion" : "ascent-truncated",
+      terminal_phase,
       sample_index));
   } else if (result.secoReached) {
     result.points.back().phase = "orbital-insertion";
     result.points.back().sample.id = "orbital-insertion-" + std::to_string(result.points.size() - 1);
+  } else if (result.impactReached) {
+    result.points.back().phase = "ascent-impact";
+    result.points.back().sample.id = "ascent-impact-" + std::to_string(result.points.size() - 1);
   }
   if (!result.points.empty()) {
     result.points.front().phase = "liftoff";
@@ -1044,6 +1312,15 @@ double max_heading_step_deg(const std::vector<LaunchTrajectoryPoint>& points) {
 std::string vec3_json(const Vec3& value) {
   char buffer[128];
   std::snprintf(buffer, sizeof(buffer), "[%.12g,%.12g,%.12g]", value.x, value.y, value.z);
+  return buffer;
+}
+
+std::string number_json(double value) {
+  if (!std::isfinite(value)) {
+    return "null";
+  }
+  char buffer[64];
+  std::snprintf(buffer, sizeof(buffer), "%.12g", value);
   return buffer;
 }
 
@@ -1187,36 +1464,42 @@ std::string achieved_orbit_json(const AscentResult& result) {
   const double eccentricity = norm(e_vec);
   double semi_major_axis = 0.0;
   double apoapsis = 0.0;
+  bool has_apoapsis = false;
   double periapsis = 0.0;
   if (energy < -1e-9) {
     semi_major_axis = -kEarthMuM3S2 / (2.0 * energy);
     apoapsis = semi_major_axis * (1.0 + eccentricity) - kEarthMeanRadiusM;
-    periapsis = semi_major_axis * (1.0 - eccentricity) - kEarthMeanRadiusM;
+    has_apoapsis = true;
+  } else if (energy > 1e-9) {
+    semi_major_axis = -kEarthMuM3S2 / (2.0 * energy);
+  }
+  if (h_mag > 0.0) {
+    const double semi_latus_rectum = (h_mag * h_mag) / kEarthMuM3S2;
+    periapsis = semi_latus_rectum / std::max(1.0 + eccentricity, 1e-9) - kEarthMeanRadiusM;
   }
   const double inclination_deg =
     h_mag > 0.0 ? rad_to_deg(std::acos(std::max(-1.0, std::min(1.0, h_vec.z / h_mag)))) : 0.0;
   const double vr = dot(v_inertial, normalized(r));
   const double vt = std::sqrt(std::max(0.0, speed * speed - vr * vr));
 
-  char buffer[1024];
-  std::snprintf(
-    buffer,
-    sizeof(buffer),
-    "{\"apoapsisM\":%.12g,\"periapsisM\":%.12g,"
-    "\"semiMajorAxisM\":%.12g,\"eccentricity\":%.12g,"
-    "\"inclinationDeg\":%.12g,"
-    "\"inertialSpeedMps\":%.12g,\"tangentialSpeedMps\":%.12g,"
-    "\"radialSpeedMps\":%.12g,\"earthRotationBoostMps\":%.12g}",
-    apoapsis,
-    periapsis,
-    semi_major_axis,
-    eccentricity,
-    inclination_deg,
-    speed,
-    vt,
-    vr,
-    kEarthRotationRadS * r_mag * std::sqrt(std::max(0.0, 1.0 - std::pow(r.z / r_mag, 2.0))));
-  return buffer;
+  const std::string orbit_class = energy > 1e-9
+    ? "escape"
+    : (energy < -1e-9 ? "elliptic" : "parabolic");
+  return
+    "{\"apoapsisM\":" + (has_apoapsis ? number_json(apoapsis) : "null") +
+    ",\"periapsisM\":" + number_json(periapsis) +
+    ",\"semiMajorAxisM\":" + number_json(semi_major_axis) +
+    ",\"eccentricity\":" + number_json(eccentricity) +
+    ",\"inclinationDeg\":" + number_json(inclination_deg) +
+    ",\"inertialSpeedMps\":" + number_json(speed) +
+    ",\"tangentialSpeedMps\":" + number_json(vt) +
+    ",\"radialSpeedMps\":" + number_json(vr) +
+    ",\"specificEnergyJkg\":" + number_json(energy) +
+    ",\"orbitClass\":" + quote(orbit_class) +
+    ",\"earthRotationBoostMps\":" +
+      number_json(kEarthRotationRadS * r_mag *
+        std::sqrt(std::max(0.0, 1.0 - std::pow(r.z / r_mag, 2.0)))) +
+    "}";
 }
 
 }  // namespace
@@ -1326,9 +1609,13 @@ extern "C" int simulate_launch_ascent(void) {
     "\"hypersonicConditions\":" + join_conditions(conditions) + "," +
     std::string(summary) + ","
     "\"trajectorySamples\":" + (generated ? launch_trajectory_json(ascent.points) : "[]") + ","
-    "\"launchTrajectory\":{\"sampleCount\":" + std::to_string(samples.size()) +
-      ",\"maxHeadingStepDeg\":" + std::to_string(max_heading_step_deg(ascent.points)) +
-      ",\"secoReached\":" + (ascent.secoReached ? "true" : "false") + "},"
+	    "\"launchTrajectory\":{\"sampleCount\":" + std::to_string(samples.size()) +
+	      ",\"maxHeadingStepDeg\":" + std::to_string(max_heading_step_deg(ascent.points)) +
+	      ",\"secoReached\":" + (ascent.secoReached ? "true" : "false") +
+	      ",\"targetOrbitEnergyReached\":" + (ascent.targetOrbitEnergyReached ? "true" : "false") +
+	      ",\"continuedAfterTargetOrbit\":" + (ascent.continuedAfterTargetOrbit ? "true" : "false") +
+	      ",\"impactReached\":" + (ascent.impactReached ? "true" : "false") +
+	      "},"
     "\"phaseEvents\":" + (generated ? phase_events_json(ascent.phaseEvents) : "[]") + ","
     "\"terminalState\":" + (generated ? terminal_state_json(ascent, config) : "null") + ","
     "\"deltaV\":" + delta_v_json(request, config, ascent) + ","

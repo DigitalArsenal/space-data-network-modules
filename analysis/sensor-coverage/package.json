@@ -5,7 +5,8 @@
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node ../../scripts/build-sdk-compiled-module.mjs",
-    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/benchmark_harness.test.mjs",
+    "benchmark:coverage": "node benchmarks/sensor-coverage-benchmark.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {

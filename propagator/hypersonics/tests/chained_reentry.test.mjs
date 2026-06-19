@@ -22,6 +22,16 @@ const REENTRY_WASM = new URL(
   "../../../analysis/reentry/dist/isomorphic/module.wasm",
   import.meta.url,
 );
+const REENTRY_SCENARIO_TYPE_REF = {
+  schemaName: "RDM.fbs",
+  fileIdentifier: "$RDM",
+  rootTypeName: "RDM",
+};
+const HYPERSONICS_TRAJECTORY_TYPE_REF = {
+  schemaName: "OEM.fbs",
+  fileIdentifier: "$OEM",
+  rootTypeName: "OEM",
+};
 
 // Apollo-class capsule reentry, generated trajectory (the reentry module's
 // closed-form 3-DOF integrator emits trajectorySamples with id /
@@ -87,6 +97,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       inputs: [
         {
           portId: "scenario",
+          typeRef: REENTRY_SCENARIO_TYPE_REF,
           payload: Buffer.from(JSON.stringify(REENTRY_REQUEST), "utf8"),
         },
       ],
@@ -103,14 +114,21 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     // THE HOP: module A's response bytes become module B's input frame with
     // no JSON decode / re-serialize on the host. forwardOutputFrameAsInput
-    // reuses the exact payload view from A's response arena.
+    // reuses the exact payload view from A's response arena while declaring
+    // the consumer method's accepted trajectory type on the input descriptor.
     const forwarded = forwardOutputFrameAsInput(reentryFrame, {
       portId: "trajectory",
+      typeRef: HYPERSONICS_TRAJECTORY_TYPE_REF,
     });
     assert.equal(
       forwarded.payload,
       reentryFrame.payload,
       "forwarded descriptor must reference module A's bytes, not a copy",
+    );
+    assert.equal(
+      forwarded.typeRef,
+      HYPERSONICS_TRAJECTORY_TYPE_REF,
+      "forwarded descriptor must carry the consumer input type metadata",
     );
 
     const hypersonicsResponse = await hypersonics.invoke({
