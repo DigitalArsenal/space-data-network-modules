@@ -13,6 +13,11 @@ const INVOKE = {
   methodId: "simulate_reentry",
   inputPortId: "scenario",
   outputPortId: "reentry",
+  inputTypeRef: {
+    schemaName: "RDM.fbs",
+    fileIdentifier: "$RDM",
+    rootTypeName: "RDM",
+  },
 };
 
 const EARTH_MU_M3_S2 = 3.986004418e14;
@@ -93,7 +98,11 @@ function inertialSpecificEnergy(sample) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`reentry simulation composes atmosphere and hypersonics samples on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -114,8 +123,18 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
           massKg: 900,
         },
         samples: [
-          { id: "entry-interface", elapsedSeconds: 0, altitudeM: 80_000, speedMps: 11_000 },
-          { id: "max-q", elapsedSeconds: 110, altitudeM: 10_000, speedMps: 1_500 },
+          {
+            id: "entry-interface",
+            elapsedSeconds: 0,
+            altitudeM: 80_000,
+            speedMps: 11_000,
+          },
+          {
+            id: "max-q",
+            elapsedSeconds: 110,
+            altitudeM: 10_000,
+            speedMps: 1_500,
+          },
           { id: "impact", elapsedSeconds: 240, altitudeM: 0, speedMps: 200 },
         ],
       },
@@ -128,14 +147,23 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(result.outcome, "impact");
     assert.equal(result.trajectorySamples.length, 3);
     assert.equal(result.peakDynamicPressure.sampleId, "max-q");
-    assertClose(result.peakDynamicPressure.valuePa, 465_200, 2_500, "peak dynamic pressure");
+    assertClose(
+      result.peakDynamicPressure.valuePa,
+      465_200,
+      2_500,
+      "peak dynamic pressure",
+    );
     assert.equal(result.peakHeating.sampleId, "entry-interface");
     assert.ok(result.peakHeating.valueWm2 > result.peakDynamicPressure.valuePa);
     assert.equal(result.impactPoint.altitudeM, 0);
   });
 
   test(`reentry module integrates a physical entry-corridor trajectory on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -183,7 +211,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(result.trajectorySource, "module-generated-entry-corridor");
     assert.equal(result.outcome, "impact");
     const samples = result.trajectorySamples;
-    assert.ok(samples.length >= 100, `expected dense sampling, got ${samples.length}`);
+    assert.ok(
+      samples.length >= 100,
+      `expected dense sampling, got ${samples.length}`,
+    );
     assertClose(samples[0].altitudeM, 121_920, 1, "entry interface altitude");
     assertClose(samples.at(-1).altitudeM, 0, 1, "impact altitude");
 
@@ -220,10 +251,14 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     }
     assert.ok(
       Math.max(
-        ...samples.slice(1).map(
-          (sample, index) => sample.elapsedSeconds - samples[index].elapsedSeconds,
-        ),
-      ) <= 2.0 + 1e-9,
+        ...samples
+          .slice(1)
+          .map(
+            (sample, index) =>
+              sample.elapsedSeconds - samples[index].elapsedSeconds,
+          ),
+      ) <=
+        2.0 + 1e-9,
       "atmospheric sample cadence at or below 2 s",
     );
 
@@ -246,7 +281,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`ballistic entry matches the Allen-Eggers closed form (NACA Report 1381) on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -308,9 +347,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     const samples = result.trajectorySamples;
     const peak = peakAeroDeceleration(samples);
 
-    const aMaxTheory = (entrySpeedMps ** 2 * sinTheta) / (2 * Math.E * scaleHeightM);
+    const aMaxTheory =
+      (entrySpeedMps ** 2 * sinTheta) / (2 * Math.E * scaleHeightM);
     const altitudeTheory =
-      scaleHeightM * Math.log((rho0 * scaleHeightM) / (ballisticCoefficient * sinTheta));
+      scaleHeightM *
+      Math.log((rho0 * scaleHeightM) / (ballisticCoefficient * sinTheta));
     const speedAtPeakTheory = entrySpeedMps / Math.sqrt(Math.E);
 
     // <=2% agreement on both peak-deceleration magnitude and altitude. The
@@ -338,7 +379,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`Apollo 11 class lunar-return entry produces published-range load factors on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -432,7 +477,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`vacuum coast preserves inertial orbital energy on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -449,7 +498,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
         vehicle: { referenceAreaM2: 12.3, massKg: 9_616 },
         initialState: {
           positionEcefM: [orbitRadiusM, 0, 0],
-          velocityEcefMps: [0, circularSpeedMps - EARTH_ROTATION_RAD_S * orbitRadiusM, 0],
+          velocityEcefMps: [
+            0,
+            circularSpeedMps - EARTH_ROTATION_RAD_S * orbitRadiusM,
+            0,
+          ],
           massKg: 9_616,
         },
         corridor: {
@@ -476,7 +529,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`generated samples are kinematically smooth on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -488,7 +545,12 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       harness,
       {
         atmosphereModel: "US76",
-        vehicle: { referenceAreaM2: 12.3, referenceLengthM: 4.0, noseRadiusM: 3.0, massKg: 9_616 },
+        vehicle: {
+          referenceAreaM2: 12.3,
+          referenceLengthM: 4.0,
+          noseRadiusM: 3.0,
+          massKg: 9_616,
+        },
         entryInterface: {
           latitudeDeg: 24.0,
           longitudeDeg: -100.0,
@@ -530,7 +592,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`initialState seeds a continuing phase exactly from terminalState on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
@@ -540,7 +606,12 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     const baseRequest = {
       atmosphereModel: "US76",
-      vehicle: { referenceAreaM2: 12.3, referenceLengthM: 4.0, noseRadiusM: 3.0, massKg: 9_616 },
+      vehicle: {
+        referenceAreaM2: 12.3,
+        referenceLengthM: 4.0,
+        noseRadiusM: 3.0,
+        massKg: 9_616,
+      },
       entryInterface: {
         latitudeDeg: 24.0,
         longitudeDeg: -100.0,
@@ -591,7 +662,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`Crew Dragon entry hits the published drogue-deploy gate on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(
+      runtimeKind,
+      WASM_PATH,
+      t,
+    );
     if (!harness) {
       return;
     }
