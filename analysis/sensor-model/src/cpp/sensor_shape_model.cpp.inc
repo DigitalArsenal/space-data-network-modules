@@ -18,7 +18,7 @@ double sensor_clamp(double value, double minValue, double maxValue) {
   return std::max(minValue, std::min(maxValue, value));
 }
 
-bool finite_or_zero(double value) {
+double finite_or_zero(double value) {
   return std::isfinite(value) ? value : 0.0;
 }
 

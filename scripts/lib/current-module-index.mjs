@@ -1,7 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const IGNORED_DIRS = new Set([".git", "deps", "dist", "node_modules"]);
+const IGNORED_DIRS = new Set([
+  ".build",
+  ".emcache",
+  ".git",
+  "CMakeFiles",
+  "build",
+  "build-browser",
+  "build-isomorphic",
+  "build-native",
+  "build-wasm",
+  "deps",
+  "dist",
+  "node_modules",
+]);
 
 const PARITY_UPDATE_MODULES = new Set([
   "analysis/access",
