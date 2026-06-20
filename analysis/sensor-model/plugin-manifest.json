@@ -1,0 +1,81 @@
+{
+  "pluginId": "sensor-model",
+  "name": "Sensor Model",
+  "version": "0.1.0",
+  "description": "Evaluates canonical SCV sensor shape contracts through a shared C++ sensor geometry core.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "evaluate_sensor_shape",
+      "displayName": "Evaluate Sensor Shape",
+      "inputPorts": [
+        {
+          "portId": "sensor",
+          "acceptedTypeSets": [
+            {
+              "setId": "sensor-model-scv-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "SCV/main.fbs",
+                  "fileIdentifier": "$SCV",
+                  "rootTypeName": "SCV",
+                  "wireFormat": "flatbuffer",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Canonical SDS SCV request envelope carrying the sensor shape contract to evaluate."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Required canonical SDS SCV request envelope."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sensor-model-scv-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "SCV/main.fbs",
+                  "fileIdentifier": "$SCV",
+                  "rootTypeName": "SCV",
+                  "wireFormat": "flatbuffer",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Canonical SDS SCV result envelope with sensor model status."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Sensor shape evaluation result stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Evaluates an SCV sensor shape contract and emits an SCV result envelope."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "SCV/main.fbs",
+      "fileIdentifier": "$SCV",
+      "rootTypeName": "SCV",
+      "wireFormat": "flatbuffer",
+      "requiredAlignment": 8,
+      "description": "Canonical binary request/result ABI for sensor model evaluation."
+    }
+  ],
+  "timers": [],
+  "protocols": [],
+  "abiVersion": 1
+}

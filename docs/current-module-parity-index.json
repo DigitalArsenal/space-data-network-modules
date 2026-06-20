@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-05-26T13:51:18.973Z",
-  "moduleCount": 39,
-  "parityScopeModuleCount": 25,
-  "isomorphicWasmCount": 39,
+  "generatedAt": "2026-06-20T14:36:52.849Z",
+  "moduleCount": 40,
+  "parityScopeModuleCount": 26,
+  "isomorphicWasmCount": 40,
   "missingIsomorphicWasm": [],
-  "browserWasmEdgeTargetCount": 27,
+  "browserWasmEdgeTargetCount": 28,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -20,6 +20,7 @@
     "analysis/od",
     "analysis/reentry",
     "analysis/sensor-coverage",
+    "analysis/sensor-model",
     "analysis/swath",
     "basilisk/runtime",
     "foundation/attitude-math",
@@ -98,7 +99,7 @@
       ],
       "cxxSourceFileCount": 27,
       "cSourceFileCount": 0,
-      "testFileCount": 64,
+      "testFileCount": 65,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -188,6 +189,7 @@
         "tests/lib/sgp4TrackHarness.mjs",
         "tests/lib/wasmedgePthreadRunner.mjs",
         "tests/ocmOemTrackAdapter.test.mjs",
+        "tests/pivInvokeContract.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/sdnDataApiStream.test.mjs",
         "tests/sdnOmmPartitionedRunner.test.mjs",
@@ -575,9 +577,41 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": true,
       "action": "update-for-parity",
+      "sourceFiles": [
+        "src/cpp/module.cpp"
+      ],
+      "testFiles": [
+        "tests/behavior.test.mjs",
+        "tests/benchmark_harness.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/sensor-model",
+      "pluginId": "sensor-model",
+      "name": "Sensor Model",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "evaluate_sensor_shape"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": true,
+      "action": "review-before-parity-use",
       "sourceFiles": [
         "src/cpp/module.cpp"
       ],
@@ -2343,15 +2377,18 @@
       "hasBrowserWasmEdgeTargets": true,
       "hasIsomorphicWasm": true,
       "sourceLanguages": [
+        "c",
         "c++"
       ],
-      "cxxSourceFileCount": 9,
-      "cSourceFileCount": 0,
-      "testFileCount": 12,
+      "cxxSourceFileCount": 10,
+      "cSourceFileCount": 1,
+      "testFileCount": 18,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "build/CMakeFiles/4.0.0/CompilerIdCXX/CMakeCXXCompilerId.cpp",
+        "src/cpp/build-native/CMakeFiles/4.0.0/CompilerIdC/CMakeCCompilerId.c",
+        "src/cpp/build-native/CMakeFiles/4.0.0/CompilerIdCXX/CMakeCXXCompilerId.cpp",
         "src/cpp/src/nrlmsise00.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
@@ -2368,6 +2405,12 @@
         "build/CMakeFiles/test_sixdof.dir/tests/test_sixdof.cpp.o.d",
         "build/test_atmosphere",
         "build/test_sixdof",
+        "src/cpp/build-native/CMakeFiles/test_atmosphere.dir/tests/test_atmosphere.cpp.o",
+        "src/cpp/build-native/CMakeFiles/test_atmosphere.dir/tests/test_atmosphere.cpp.o.d",
+        "src/cpp/build-native/CMakeFiles/test_sixdof.dir/tests/test_sixdof.cpp.o",
+        "src/cpp/build-native/CMakeFiles/test_sixdof.dir/tests/test_sixdof.cpp.o.d",
+        "src/cpp/build-native/test_atmosphere",
+        "src/cpp/build-native/test_sixdof",
         "src/cpp/tests/test_atmosphere.cpp",
         "src/cpp/tests/test_sixdof.cpp",
         "tests/behavior.test.mjs",
@@ -2443,7 +2486,7 @@
       ],
       "cxxSourceFileCount": 25,
       "cSourceFileCount": 0,
-      "testFileCount": 9,
+      "testFileCount": 10,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -2475,6 +2518,7 @@
       ],
       "testFiles": [
         "tests/direct-entry.test.mjs",
+        "tests/drag_atmosphere.test.mjs",
         "tests/fixtures/hosted-runtime/hpop.single-plugin.flow.json",
         "tests/fixtures/request.propagate.json",
         "tests/fixtures/tudat.reference.json",
@@ -2505,7 +2549,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -2513,6 +2557,7 @@
       ],
       "testFiles": [
         "tests/behavior.test.mjs",
+        "tests/chained_reentry.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
