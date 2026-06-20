@@ -36,20 +36,41 @@ test("manifest declares the sensor coverage analysis contract", async () => {
   assert.equal(
     inputTypes.some((typeRef) => typeRef.acceptsAnyFlatbuffer === true),
     false,
-    "sensor coverage input must use explicit SDS/compatibility type refs",
+    "sensor coverage input must use the explicit SDS SCV type ref",
   );
   assert.equal(
     outputTypes.some((typeRef) => typeRef.acceptsAnyFlatbuffer === true),
     false,
-    "sensor coverage output must use explicit SDS/compatibility type refs",
+    "sensor coverage output must use the explicit SDS SCV type ref",
   );
   assert.deepEqual(
-    inputTypes.map((typeRef) => typeRef.fileIdentifier).sort(),
-    ["$SCV", "JSON"],
+    inputTypes,
+    [
+      {
+        schemaName: "SCV/main.fbs",
+        fileIdentifier: "$SCV",
+        rootTypeName: "SCV",
+        wireFormat: "flatbuffer",
+        requiredAlignment: 8,
+      },
+    ],
   );
   assert.deepEqual(
-    outputTypes.map((typeRef) => typeRef.fileIdentifier).sort(),
-    ["$SCV", "JSON"],
+    outputTypes,
+    [
+      {
+        schemaName: "SCV/main.fbs",
+        fileIdentifier: "$SCV",
+        rootTypeName: "SCV",
+        wireFormat: "flatbuffer",
+        requiredAlignment: 8,
+      },
+    ],
+  );
+  assert.equal(
+    JSON.stringify(manifest).includes("SensorCoverageCompatibilityJson"),
+    false,
+    "sensor coverage is SCV-only and must not advertise JSON compatibility",
   );
   assert.equal(
     manifest.schemasUsed.some(

@@ -20,11 +20,6 @@
               "setId": "coverage-scv-request",
               "allowedTypes": [
                 {
-                  "schemaName": "SensorCoverageCompatibilityJson",
-                  "fileIdentifier": "JSON",
-                  "rootTypeName": "SensorCoverageCompatibilityRequest"
-                },
-                {
                   "schemaName": "SCV/main.fbs",
                   "fileIdentifier": "$SCV",
                   "rootTypeName": "SCV",
@@ -32,13 +27,13 @@
                   "requiredAlignment": 8
                 }
               ],
-              "description": "Canonical SDS SCV FlatBuffer request payload with explicit JSON compatibility fallback during migration."
+              "description": "Canonical SDS SCV FlatBuffer request payload."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Required canonical SDS SCV request envelope or explicit JSON compatibility adapter."
+          "description": "Required canonical SDS SCV request envelope."
         }
       ],
       "outputPorts": [
@@ -49,11 +44,6 @@
               "setId": "coverage-scv-result",
               "allowedTypes": [
                 {
-                  "schemaName": "SensorCoverageCompatibilityJson",
-                  "fileIdentifier": "JSON",
-                  "rootTypeName": "SensorCoverageCompatibilityResult"
-                },
-                {
                   "schemaName": "SCV/main.fbs",
                   "fileIdentifier": "$SCV",
                   "rootTypeName": "SCV",
@@ -61,13 +51,13 @@
                   "requiredAlignment": 8
                 }
               ],
-              "description": "Canonical SDS SCV progress/result envelopes with explicit JSON compatibility fallback during migration."
+              "description": "Canonical SDS SCV progress/result envelopes."
             }
           ],
           "minStreams": 0,
           "maxStreams": 3,
           "required": false,
-          "description": "Coverage result stream: SCV progress/result frames plus optional JSON compatibility result."
+          "description": "Coverage result stream: SCV progress/result frames."
         }
       ],
       "maxBatch": 1,

@@ -25,7 +25,7 @@ async function runWorkerTasks() {
         scenario: requestEntry.scenario,
         grid: requestEntry.grid,
         mode: requestEntry.mode,
-        requestFormat: requestEntry.requestFormat ?? "json",
+        requestFormat: requestEntry.requestFormat ?? "scv",
         startSeconds: task.window.startSeconds,
         stopSeconds: task.window.stopSeconds,
       });

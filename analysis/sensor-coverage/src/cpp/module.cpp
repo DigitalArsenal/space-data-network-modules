@@ -4,6 +4,13 @@ using namespace sdn_hypersonics;
 
 namespace {
 
+// The module build concatenates these shared core files from symlinks in this
+// directory before this source is compiled.
+#if 0
+#include "sensor_shape_model.h"
+#include "sensor_shape_model.cpp.inc"
+#endif
+
 constexpr double kEarthRadiusM = 6378137.0;
 constexpr double kWgs84A = 6378137.0;
 constexpr double kWgs84B = 6356752.3142451793;
@@ -75,6 +82,7 @@ struct SensorConfig {
   double yHalfAngleRad = 0.12;
   double radiusMeters = 1500000.0;
   int angularSamples = 32;
+  SensorShapeContract shapeContract;
 };
 
 struct SensorTrack {
@@ -415,12 +423,39 @@ SensorConfig parse_sensor_config(const std::string& sensor_json, int fallback_se
   config.yHalfAngleRad = clamp(number_value(sensor_json, "yHalfAngleRad", config.outerHalfAngleRad), 0.01, 1.2);
   config.radiusMeters = std::max(1.0, number_value(sensor_json, "radiusMeters", 1500000.0));
   config.angularSamples = static_cast<int>(clamp(number_value(sensor_json, "angularSamples", 32.0), 8.0, 96.0));
+  if (config.type == "rectangular") {
+    config.shapeContract = make_rectangular_shape(
+      config.xHalfAngleRad,
+      config.yHalfAngleRad,
+      0.0,
+      config.radiusMeters);
+  } else {
+    config.shapeContract = make_conic_shape(
+      config.outerHalfAngleRad,
+      0.0,
+      0.0,
+      2.0 * 3.14159265358979323846,
+      0.0,
+      config.radiusMeters);
+  }
   return config;
 }
 
 SensorConfig parse_sensor(const std::string& request) {
   const std::string sensor = object_value(request, "sensor");
   return parse_sensor_config(sensor.empty() ? request : sensor);
+}
+
+bool is_supported_scv_shape_kind(scvSensorShapeKind shape_kind) {
+  switch (shape_kind) {
+    case scvSensorShapeKind_CONIC:
+    case scvSensorShapeKind_RECTANGULAR:
+    case scvSensorShapeKind_SAR_ANNULAR_SECTOR:
+    case scvSensorShapeKind_CUSTOM_POLYGON:
+      return true;
+    default:
+      return false;
+  }
 }
 
 Vec3 parse_vec3(const std::string& object) {
@@ -611,29 +646,50 @@ SensorConfig sensor_from_scv(const SCVSensor* sensor, int fallback_sensor_id) {
   SensorConfig config{};
   if (!sensor) {
     config.sensorId = fallback_sensor_id;
+    config.shapeContract = make_conic_shape(config.outerHalfAngleRad, 0.0, 0.0, 2.0 * 3.14159265358979323846, 0.0, config.radiusMeters);
     return config;
   }
   config.sensorId = static_cast<int>(sensor->SENSOR_ID());
-  if (sensor->SHAPE() == scvSensorShapeKind_RECTANGULAR) {
-    config.type = "rectangular";
+  config.shapeContract = parse_sensor_shape_contract(sensor);
+  if (const SCVSensorShapeContract* shape = sensor->SHAPE_CONTRACT()) {
+    if (!is_supported_scv_shape_kind(shape->SHAPE_KIND())) {
+      config.shapeContract.supported = false;
+      config.shapeContract.unsupportedReason = "unsupported sensor shape in SHAPE_CONTRACT()";
+    }
+  } else if (
+    sensor->SHAPE() != scvSensorShapeKind_CONIC &&
+    sensor->SHAPE() != scvSensorShapeKind_RECTANGULAR
+  ) {
+    config.shapeContract.supported = false;
+    config.shapeContract.unsupportedReason =
+      sensor->SHAPE() == scvSensorShapeKind_CUSTOM_POLYGON
+        ? "CUSTOM_POLYGON requires exact polygon geometry"
+        : "SHAPE_CONTRACT() is required for this SCV sensor shape";
   }
-  const double half_angle_deg = sensor->HALF_ANGLE_DEG();
-  if (half_angle_deg > 0.0) {
-    config.outerHalfAngleRad = clamp(half_angle_deg / kRadiansToDegrees, 0.01, 1.2);
+  if (config.shapeContract.kind == SensorShapeKind::CustomPolygon) {
+    config.shapeContract.supported = false;
+    config.shapeContract.unsupportedReason = "CUSTOM_POLYGON requires exact polygon geometry";
   }
-  const double cross_track_deg = sensor->CROSS_TRACK_HALF_ANGLE_DEG();
-  const double along_track_deg = sensor->ALONG_TRACK_HALF_ANGLE_DEG();
-  config.xHalfAngleRad = clamp(
-    (cross_track_deg > 0.0 ? cross_track_deg : half_angle_deg) / kRadiansToDegrees,
-    0.01,
-    1.2);
-  config.yHalfAngleRad = clamp(
-    (along_track_deg > 0.0 ? along_track_deg : half_angle_deg) / kRadiansToDegrees,
-    0.01,
-    1.2);
-  const double max_range = sensor->MAX_RANGE_M();
-  if (max_range > 0.0) {
-    config.radiusMeters = max_range;
+  switch (config.shapeContract.kind) {
+    case SensorShapeKind::Rectangular:
+      config.type = "rectangular";
+      config.xHalfAngleRad = clamp(config.shapeContract.crossTrackHalfAngleRad, 0.01, 1.2);
+      config.yHalfAngleRad = clamp(config.shapeContract.alongTrackHalfAngleRad, 0.01, 1.2);
+      config.outerHalfAngleRad = std::max(config.xHalfAngleRad, config.yHalfAngleRad);
+      break;
+    case SensorShapeKind::SarAnnularSector:
+    case SensorShapeKind::Conic:
+      config.type = "conic";
+      config.outerHalfAngleRad = clamp(config.shapeContract.outerHalfAngleRad, 0.01, 1.2);
+      config.xHalfAngleRad = config.outerHalfAngleRad;
+      config.yHalfAngleRad = config.outerHalfAngleRad;
+      break;
+    case SensorShapeKind::CustomPolygon:
+      config.type = "custom_polygon";
+      break;
+  }
+  if (config.shapeContract.maxRangeM > 0.0) {
+    config.radiusMeters = config.shapeContract.maxRangeM;
   }
   return config;
 }
@@ -711,15 +767,19 @@ bool parse_coverage_input(const std::string& payload, CoverageInput& input, std:
     input.scvSwathOnly = request->ANALYSIS_MODE() == scvAnalysisMode_SWATH;
     input.includePackedGeometry =
       !has_explicit_products || request->INCLUDE_PACKED_GEOMETRY();
+    for (const auto& track : input.tracks) {
+      if (!track.sensor.shapeContract.supported) {
+        error = track.sensor.shapeContract.unsupportedReason.empty()
+          ? "unsupported sensor shape"
+          : track.sensor.shapeContract.unsupportedReason;
+        return false;
+      }
+    }
     return true;
   }
 
-  input.isScv = false;
-  input.includePackedGeometry = true;
-  input.scvSwathOnly = false;
-  input.grid = parse_grid(payload);
-  input.tracks = parse_sensor_tracks(payload);
-  return true;
+  error = "Input port \"coverage\" must contain an SDS SCV FlatBuffer.";
+  return false;
 }
 
 CellBounds cell_bounds_for(int row, int column, const GridConfig& grid) {
@@ -884,22 +944,12 @@ std::vector<ResolvedVisibilityState> resolve_visibility_states(const std::vector
 
 std::vector<Vec3> sensor_directions(const SensorConfig& sensor, Vec3 boresight, Vec3 x_axis, Vec3 y_axis) {
   std::vector<Vec3> directions;
-  if (sensor.type == "rectangular") {
-    const double sx = std::tan(sensor.xHalfAngleRad);
-    const double sy = std::tan(sensor.yHalfAngleRad);
-    const double signs[4][2] = {{-1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}, {1.0, -1.0}};
-    for (const auto& sign : signs) {
-      directions.push_back(normalize(add(add(boresight, scale(x_axis, sign[0] * sx)), scale(y_axis, sign[1] * sy))));
-    }
-    return directions;
-  }
-
-  const double cos_angle = std::cos(sensor.outerHalfAngleRad);
-  const double sin_angle = std::sin(sensor.outerHalfAngleRad);
-  for (int index = 0; index < sensor.angularSamples; ++index) {
-    const double clock = 2.0 * 3.14159265358979323846 * static_cast<double>(index) / static_cast<double>(sensor.angularSamples);
-    const Vec3 lateral = add(scale(x_axis, std::cos(clock)), scale(y_axis, std::sin(clock)));
-    directions.push_back(normalize(add(scale(boresight, cos_angle), scale(lateral, sin_angle))));
+  SensorShapeContract boundary_contract = sensor.shapeContract;
+  boundary_contract.boundarySamples = std::max(sensor.angularSamples, boundary_contract.boundarySamples);
+  for (const SensorVec3& local : generate_sensor_boundary_directions(boundary_contract)) {
+    directions.push_back(normalize(add(
+      add(scale(x_axis, local.x), scale(y_axis, local.y)),
+      scale(boresight, local.z))));
   }
   return directions;
 }
@@ -1167,8 +1217,13 @@ double nadir_conic_angular_radius_deg(const SensorConfig& sensor, const State& s
   return angular_radius * kRadiansToDegrees + cell_margin + 1.0e-9;
 }
 
-bool uses_fallback_nadir_conic_bounds(const SensorTrack& track) {
-  if (track.sensor.type != "conic") {
+bool uses_full_clock_solid_conic_fast_bounds(const SensorTrack& track) {
+  const SensorShapeContract& contract = track.sensor.shapeContract;
+  if (
+    contract.kind != SensorShapeKind::Conic ||
+    contract.innerHalfAngleRad > 1.0e-12 ||
+    !contract.clockRange.fullCircle
+  ) {
     return false;
   }
   for (const auto& state : track.states) {
@@ -1177,6 +1232,16 @@ bool uses_fallback_nadir_conic_bounds(const SensorTrack& track) {
     }
   }
   return true;
+}
+
+SwathBounds conservative_grid_bounds(const GridConfig& grid) {
+  SwathBounds bounds{};
+  bounds.minLatitudeDeg = grid.minLat;
+  bounds.maxLatitudeDeg = grid.maxLat;
+  bounds.minLongitudeDeg = grid.minLon;
+  bounds.maxLongitudeDeg = grid.maxLon;
+  bounds.crossesDateline = true;
+  return bounds;
 }
 
 NadirConicCandidateWindow nadir_conic_candidate_window(
@@ -1303,14 +1368,14 @@ bool surface_sample_visible_from_resolved_state(
     return false;
   }
 
-  if (sensor.type == "rectangular") {
-    const double along_angle = std::atan2(dot(look, frame.xAxis), forward);
-    const double cross_angle = std::atan2(dot(look, frame.yAxis), forward);
-    return std::fabs(along_angle) <= sensor.xHalfAngleRad &&
-      std::fabs(cross_angle) <= sensor.yHalfAngleRad;
-  }
-
-  return forward >= std::cos(sensor.outerHalfAngleRad);
+  const SensorClassification classification = classify_local_look(
+    sensor.shapeContract,
+    {
+      dot(sensor_to_cell, frame.xAxis),
+      dot(sensor_to_cell, frame.yAxis),
+      dot(sensor_to_cell, frame.boresight),
+    });
+  return classification.inside;
 }
 
 bool cell_visible_from_resolved_state(
@@ -1499,7 +1564,9 @@ void accumulate_grid_analytics(
       }
 
       const auto polygon = segment_polygon(swath);
-      const SwathBounds bounds = swath_bounds(polygon);
+      const SwathBounds bounds = uses_full_clock_solid_conic_fast_bounds(track)
+        ? swath_bounds(polygon)
+        : conservative_grid_bounds(grid);
       const CellRange range = candidate_cell_range(bounds, grid);
       for (int row = range.minRow; row <= range.maxRow; ++row) {
         for (int column = range.minColumn; column <= range.maxColumn; ++column) {
@@ -1529,7 +1596,7 @@ void accumulate_grid_analytics(
     if (track.states.size() < 2) {
       continue;
     }
-    const bool use_nadir_bounds = uses_fallback_nadir_conic_bounds(track);
+    const bool use_nadir_bounds = uses_full_clock_solid_conic_fast_bounds(track);
     std::vector<SwathSegment> track_swaths;
     if (!use_nadir_bounds) {
       const std::vector<FootprintSample> track_footprints =
@@ -1569,7 +1636,9 @@ void accumulate_grid_analytics(
           continue;
         }
         const auto polygon = segment_polygon(swath);
-        bounds = swath_bounds(polygon);
+        bounds = uses_full_clock_solid_conic_fast_bounds(track)
+          ? swath_bounds(polygon)
+          : conservative_grid_bounds(grid);
       }
 
       const CellRange range = candidate_cell_range(bounds, grid);
@@ -2478,16 +2547,12 @@ extern "C" int compute_sensor_coverage(void) {
     return fail("missing-states", "Coverage request must include at least two propagated sensor-owner states.");
   }
 
-  const std::string output_mode = input.isScv
-    ? std::string("")
-    : string_value(request_payload, "outputMode", "");
+  const std::string output_mode = "";
   const bool swath_only_output =
-    (!input.isScv && output_mode == "swath_only") ||
-    (input.isScv && input.scvSwathOnly);
+    input.scvSwathOnly;
   const bool analytics_only_output =
     !swath_only_output &&
-    ((!input.isScv && output_mode == "analytics_only") ||
-      (input.isScv && !input.includePackedGeometry));
+    !input.includePackedGeometry;
 
   const uint32_t total_windows = total_window_count(tracks);
   const uint32_t progress_stride = std::max<uint32_t>(1, total_windows / 20);
@@ -2546,16 +2611,11 @@ extern "C" int compute_sensor_coverage(void) {
   const double duration = grid.stop - grid.start;
   const std::string fom_type = swath_only_output
     ? std::string("none")
-    : input.isScv
-      ? std::string("percent_coverage")
-      : string_value(request_payload, "figureOfMerit", "percent_coverage");
+    : std::string("percent_coverage");
   const bool aggregate_output =
-    output_mode == "aggregate_differential_geometry" ||
-    output_mode == "swath_only" ||
+    swath_only_output ||
     tracks.size() > 1;
-  const std::string coverage_source = input.isScv
-    ? std::string("")
-    : object_value(request_payload, "coverageSource");
+  const std::string coverage_source = "";
   const std::vector<SwathSegment> empty_swaths;
   const std::vector<SwathSegment>& response_swaths =
     analytics_only_output ? empty_swaths : swaths;
@@ -2588,20 +2648,6 @@ extern "C" int compute_sensor_coverage(void) {
     "\"assumptions\":[\"OrbPro Sensor-owned propagated states define the coverage source\","
     "\"swath polygons are continuous along-track left/right footprint bands\","
     "\"grid cells are secondary figure-of-merit samples accumulated from swath geometry\"]}";
-
-  if (!input.isScv) {
-    const int json_status = emit_json(
-      "coverage",
-      "SensorCoverageCompatibilityJson",
-      "JSON",
-      response);
-    if (json_status != 0) {
-      return json_status;
-    }
-    if (analytics_only_output) {
-      return 0;
-    }
-  }
 
   const int progress_status =
     emit_scv_progress_frame(tracks, total_windows, total_windows);

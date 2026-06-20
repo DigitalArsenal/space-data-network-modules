@@ -6,7 +6,6 @@ import { Worker } from "node:worker_threads";
 
 import {
   createStandaloneHarness,
-  invokeJsonRequest,
 } from "../../../tests/lib/isomorphicHarness.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -49,11 +48,6 @@ const {
   scvSensorShapeKind,
 } = await import(pathToFileURL(`${STANDARDS_ROOT}/lib/js/SCV/main.js`).href);
 
-export const JSON_COVERAGE_REQUEST_TYPE = Object.freeze({
-  schemaName: "SensorCoverageCompatibilityJson",
-  fileIdentifier: "JSON",
-  rootTypeName: "SensorCoverageCompatibilityRequest",
-});
 export const SCV_COVERAGE_REQUEST_TYPE = Object.freeze({
   schemaName: "SCV/main.fbs",
   fileIdentifier: "$SCV",
@@ -145,7 +139,7 @@ const BENCHMARK_MODES = Object.freeze([
   "visual-preview",
   "full-day-backfill",
 ]);
-const REQUEST_FORMATS = Object.freeze(["json", "scv"]);
+const REQUEST_FORMATS = Object.freeze(["scv"]);
 
 const MIN_BACKFILL_WORKER_COUNT = 1;
 const MAX_BACKFILL_WORKER_COUNT = 8;
@@ -245,7 +239,7 @@ export function createBenchmarkReportSkeleton({
   gridNames = ["coarse"],
   repeatCount = 1,
   mode = "priority-fom",
-  requestFormat = "json",
+  requestFormat = "scv",
   windowStartSeconds = 0,
   windowSeconds = null,
   backfillWorkerCount = null,
@@ -603,28 +597,12 @@ export async function invokeCoverageBenchmarkRequest(
     scenario,
     grid,
     mode = "priority-fom",
-    requestFormat = "json",
+    requestFormat = "scv",
     startSeconds = 0,
     stopSeconds = scenario.priorityWindowSeconds,
   },
 ) {
   const effectiveMode = mode === "full-day-backfill" ? "priority-fom" : mode;
-  if (requestFormat === "json") {
-    const request = createCoverageBenchmarkRequest({
-      scenario,
-      grid,
-      mode: effectiveMode,
-      startSeconds,
-      stopSeconds,
-    });
-    const result = await invokeJsonRequest(harness, request, {
-      methodId: "compute_sensor_coverage",
-      inputPortId: "coverage",
-      outputPortId: "coverage",
-      inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-    });
-    return outputSummaryForResult(result);
-  }
   if (requestFormat === "scv") {
     const payload = createScvCoverageBenchmarkPayload({
       scenario,
@@ -680,7 +658,7 @@ export async function runRequestBenchmark(
         const before = performance.now();
         let outputSummary;
         if (invoke) {
-          const request = createCoverageBenchmarkRequest({
+          const payload = createScvCoverageBenchmarkPayload({
             scenario: requestEntry.scenario,
             grid: requestEntry.grid,
             mode:
@@ -690,11 +668,15 @@ export async function runRequestBenchmark(
             startSeconds: window.startSeconds,
             stopSeconds: window.stopSeconds,
           });
-          const result = await invoke(harness, request, {
+          const result = await invoke(harness, {
             methodId: "compute_sensor_coverage",
-            inputPortId: "coverage",
-            outputPortId: "coverage",
-            inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
+            inputs: [
+              {
+                portId: "coverage",
+                typeRef: SCV_COVERAGE_REQUEST_TYPE,
+                payload,
+              },
+            ],
           });
           outputSummary = outputSummaryForResult(result);
         } else {
@@ -702,7 +684,7 @@ export async function runRequestBenchmark(
             scenario: requestEntry.scenario,
             grid: requestEntry.grid,
             mode: requestEntry.mode,
-            requestFormat: requestEntry.requestFormat ?? "json",
+            requestFormat: requestEntry.requestFormat ?? "scv",
             startSeconds: window.startSeconds,
             stopSeconds: window.stopSeconds,
           });
@@ -720,7 +702,7 @@ export async function runRequestBenchmark(
     gridName: requestEntry.grid.name,
     gridCellCount: requestEntry.grid.cellCount,
     mode: requestEntry.mode,
-    requestFormat: requestEntry.requestFormat ?? "json",
+    requestFormat: requestEntry.requestFormat ?? "scv",
     repeatCount: requestEntry.repeatCount,
     windowCount: windows.length,
     parallelWorkerCount: activeHarnesses.length,
@@ -816,7 +798,7 @@ export async function runRequestBenchmarkInWorkerThreads(
     gridName: requestEntry.grid.name,
     gridCellCount: requestEntry.grid.cellCount,
     mode: requestEntry.mode,
-    requestFormat: requestEntry.requestFormat ?? "json",
+    requestFormat: requestEntry.requestFormat ?? "scv",
     repeatCount: requestEntry.repeatCount,
     windowCount: windows.length,
     parallelWorkerCount: taskGroups.length,
@@ -1020,7 +1002,7 @@ function parseCliArgs(argv) {
     gridNames: ["coarse"],
     repeatCount: 1,
     mode: "priority-fom",
-    requestFormat: "json",
+    requestFormat: "scv",
     dryRun: false,
     json: false,
     assertThresholds: false,
