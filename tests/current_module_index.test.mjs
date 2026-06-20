@@ -40,6 +40,10 @@ test("current module parity index ignores generated build output directories", (
     );
     fs.writeFileSync(path.join(moduleRoot, "src", "cpp", "module.cpp"), "int run() { return 0; }\n");
     fs.writeFileSync(
+      path.join(moduleRoot, "src", "cpp", "model.cpp.inc"),
+      "int helper() { return 1; }\n",
+    );
+    fs.writeFileSync(
       path.join(moduleRoot, "src", "cpp", "build-native", "CMakeFiles", "CompilerIdC.c"),
       "int main(void) { return 0; }\n",
     );
@@ -49,7 +53,8 @@ test("current module parity index ignores generated build output directories", (
     const index = createCurrentModuleIndex(repoRoot);
     const module = index.modules.find((entry) => entry.modulePath === "analysis/example");
     assert.ok(module, "temporary module should be inventoried");
-    assert.deepEqual(module.sourceFiles, ["src/cpp/module.cpp"]);
+    assert.deepEqual(module.sourceFiles, ["src/cpp/model.cpp.inc", "src/cpp/module.cpp"]);
+    assert.equal(module.cxxSourceFileCount, 2);
     assert.deepEqual(module.testFiles, ["tests/behavior.test.mjs"]);
   } finally {
     fs.rmSync(repoRoot, { recursive: true, force: true });

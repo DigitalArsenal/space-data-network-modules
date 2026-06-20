@@ -7,6 +7,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const SRC_DIR = fileURLToPath(new URL("../src/cpp/", import.meta.url));
+const MODULE_CPP_PATH = fileURLToPath(new URL("../src/cpp/module.cpp", import.meta.url));
+const STANDARDS_CPP_DIR = fileURLToPath(
+  new URL("../../../../spacedatastandards.org/lib/cpp/", import.meta.url),
+);
+const FLATBUFFERS_INCLUDE_DIR = fileURLToPath(
+  new URL("../../../../flatbuffers/include/", import.meta.url),
+);
 
 const CPP_BEHAVIOR_TEST = String.raw`
 #include <cmath>
@@ -168,32 +175,141 @@ int main() {
 }
 `;
 
-test("shared C++ sensor shape model executes closed-form behavior checks", () => {
+const CPP_SDS_CONTRACT_TEST = String.raw`
+#include "flatbuffers/flatbuffers.h"
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#include "SCV/main_generated.h"
+
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+
+#include "sensor_shape_model.h"
+#include "sensor_shape_model.cpp.inc"
+
+using namespace sdn_hypersonics;
+
+namespace {
+
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kDegreesToRadians = kPi / 180.0;
+
+bool near(double left, double right, double tolerance = 1.0e-10) {
+  return std::fabs(left - right) <= tolerance;
+}
+
+void require(bool condition, const std::string& message) {
+  if (!condition) {
+    std::cerr << message << "\n";
+    std::exit(1);
+  }
+}
+
+}  // namespace
+
+int main() {
+  flatbuffers::FlatBufferBuilder builder(1024);
+  auto shape = CreateSCVSensorShapeContract(
+      builder,
+      scvSensorShapeKind_RECTANGULAR,
+      scvSensorAxisConvention_LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT,
+      scvSensorRangeBoundaryKind_LOCAL_Z_PLANE,
+      0.0,
+      0.0,
+      0.0,
+      360.0,
+      12.0,
+      18.0,
+      0.0,
+      0.0,
+      0.0,
+      20.0,
+      200.0);
+  auto sensor = CreateSCVSensor(
+      builder,
+      42,
+      0,
+      0,
+      scvSensorShapeKind_RECTANGULAR,
+      scvCoordinateFrame_UNKNOWN,
+      0,
+      0,
+      0,
+      0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0,
+      scvCoordinateFrame_UNKNOWN,
+      shape);
+  builder.Finish(sensor);
+
+  const SCVSensor* parsedSensor = flatbuffers::GetRoot<SCVSensor>(builder.GetBufferPointer());
+  const SensorShapeContract contract = parse_sensor_shape_contract(parsedSensor);
+  require(contract.kind == SensorShapeKind::Rectangular, "SHAPE_KIND must parse rectangular contracts");
+  require(contract.rangeBoundary == SensorRangeBoundaryKind::LocalZPlane, "RANGE_BOUNDARY must parse local-z-plane contracts");
+  require(near(contract.crossTrackHalfAngleRad, 12.0 * kDegreesToRadians), "X_HALF_ANGLE_DEG must be preserved");
+  require(near(contract.alongTrackHalfAngleRad, 18.0 * kDegreesToRadians), "Y_HALF_ANGLE_DEG must be preserved");
+  require(near(contract.minRangeM, 20.0), "MIN_RANGE_M must be preserved");
+  require(near(contract.maxRangeM, 200.0), "MAX_RANGE_M must be preserved");
+  return 0;
+}
+`;
+
+function compileAndRunCpp(source, { includeDirs = [SRC_DIR], label = "C++ harness" } = {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sensor-shape-model-"));
   try {
-    const sourcePath = path.join(tmpDir, "behavior.cpp");
-    const executablePath = path.join(tmpDir, "behavior");
-    fs.writeFileSync(sourcePath, CPP_BEHAVIOR_TEST);
+    const sourcePath = path.join(tmpDir, "harness.cpp");
+    const executablePath = path.join(tmpDir, "harness");
+    fs.writeFileSync(sourcePath, source);
 
     const compiler = process.env.CXX || "c++";
+    const includeArgs = includeDirs.flatMap((includeDir) => ["-I", includeDir]);
     const compile = spawnSync(
       compiler,
-      ["-std=c++17", "-O0", "-I", SRC_DIR, sourcePath, "-o", executablePath],
+      ["-std=c++17", "-O0", ...includeArgs, sourcePath, "-o", executablePath],
       { encoding: "utf8" },
     );
     assert.equal(
       compile.status,
       0,
-      `failed to compile C++ behavior harness\nstdout:\n${compile.stdout}\nstderr:\n${compile.stderr}`,
+      `failed to compile ${label}\nstdout:\n${compile.stdout}\nstderr:\n${compile.stderr}`,
     );
 
     const run = spawnSync(executablePath, [], { encoding: "utf8" });
     assert.equal(
       run.status,
       0,
-      `C++ behavior harness failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`,
+      `${label} failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`,
     );
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+}
+
+test("shared C++ sensor shape model executes closed-form behavior checks", () => {
+  compileAndRunCpp(CPP_BEHAVIOR_TEST, { label: "C++ behavior harness" });
+});
+
+test("shared C++ parser compiles against current SDS sensor contract headers", () => {
+  compileAndRunCpp(CPP_SDS_CONTRACT_TEST, {
+    includeDirs: [SRC_DIR, STANDARDS_CPP_DIR, FLATBUFFERS_INCLUDE_DIR],
+    label: "SDS contract parser harness",
+  });
+});
+
+test("module source evaluates request sensors and rejects unsupported contracts", () => {
+  const source = fs.readFileSync(MODULE_CPP_PATH, "utf8");
+  assert.match(source, /REQUEST\(\)->SENSORS\(\)|request->SENSORS\(\)/);
+  assert.match(source, /parse_sensor_shape_contract\(/);
+  assert.match(source, /generate_sensor_boundary_directions\(/);
+  assert.match(source, /classify_local_look\(/);
+  assert.match(source, /fail\(\s*"missing-sensors"/);
+  assert.match(source, /fail\(\s*"unsupported-shape"/);
+  assert.match(source, /SensorShapeKind::CustomPolygon/);
 });

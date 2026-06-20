@@ -78,7 +78,7 @@ export function createCurrentModuleIndex(repoRoot) {
       hasBrowserWasmEdgeTargets,
       hasIsomorphicWasm,
       sourceLanguages,
-      cxxSourceFileCount: sourceFiles.filter((file) => [".cc", ".cpp", ".cxx"].includes(path.extname(file))).length,
+      cxxSourceFileCount: sourceFiles.filter(isCxxSourceFile).length,
       cSourceFileCount: sourceFiles.filter((file) => path.extname(file) === ".c").length,
       testFileCount: testFiles.length,
       parityScope,
@@ -155,7 +155,11 @@ function walk(dir, predicate) {
 }
 
 function isSourceFile(file) {
-  return [".c", ".cc", ".cpp", ".cxx"].includes(path.extname(file));
+  return [".c", ".cc", ".cpp", ".cxx"].includes(path.extname(file)) || file.endsWith(".cpp.inc");
+}
+
+function isCxxSourceFile(file) {
+  return [".cc", ".cpp", ".cxx"].includes(path.extname(file)) || file.endsWith(".cpp.inc");
 }
 
 function isTestFile(file) {
@@ -168,7 +172,7 @@ function sourceLanguage(file) {
   if (extension === ".c") {
     return "c";
   }
-  if ([".cc", ".cpp", ".cxx"].includes(extension)) {
+  if ([".cc", ".cpp", ".cxx"].includes(extension) || file.endsWith(".cpp.inc")) {
     return "c++";
   }
   return null;

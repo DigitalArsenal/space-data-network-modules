@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-20T14:43:54.883Z",
+  "generatedAt": "2026-06-20T15:01:14.808Z",
   "moduleCount": 40,
   "parityScopeModuleCount": 26,
   "isomorphicWasmCount": 40,
@@ -576,13 +576,14 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 1,
+      "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
       "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
-        "src/cpp/module.cpp"
+        "src/cpp/module.cpp",
+        "src/cpp/sensor_shape_model.cpp.inc"
       ],
       "testFiles": [
         "tests/behavior.test.mjs",

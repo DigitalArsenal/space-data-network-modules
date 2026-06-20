@@ -23,6 +23,11 @@ enum class SensorShapeKind : uint8_t {
   CustomPolygon,
 };
 
+enum class SensorRangeBoundaryKind : uint8_t {
+  RadialSpherical,
+  LocalZPlane,
+};
+
 struct SensorClockRange {
   double startRad = 0.0;
   double stopRad = 0.0;
@@ -33,6 +38,7 @@ struct SensorClockRange {
 
 struct SensorShapeContract {
   SensorShapeKind kind = SensorShapeKind::Conic;
+  SensorRangeBoundaryKind rangeBoundary = SensorRangeBoundaryKind::RadialSpherical;
   double outerHalfAngleRad = 0.0;
   double innerHalfAngleRad = 0.0;
   double crossTrackHalfAngleRad = 0.0;

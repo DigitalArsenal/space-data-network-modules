@@ -11,6 +11,10 @@ const bundle = await import(pathToFileURL(packageRequire.resolve("space-data-mod
 const manifestPath = path.join(packageDir, "plugin-manifest.json");
 const sourcePath = path.join(packageDir, "src/cpp/module.cpp");
 const commonPath = path.join(repoRoot, "common/hypersonic_module_common.cpp.inc");
+const localSharedSourceCandidates = [
+  path.join(packageDir, "src/cpp/sensor_shape_model.h"),
+  path.join(packageDir, "src/cpp/sensor_shape_model.cpp.inc"),
+];
 const outputDir = path.join(packageDir, "dist/isomorphic");
 const outputPath = path.join(outputDir, "module.wasm");
 const moduleSigningKeypairCandidates = [
@@ -111,11 +115,22 @@ async function readSdsCppHeaders(manifest) {
   return headers.join("\n\n");
 }
 
+async function readLocalSharedCppSources() {
+  const sources = [];
+  for (const candidate of localSharedSourceCandidates) {
+    if (await fileExists(candidate)) {
+      sources.push(await readFile(candidate, "utf8"));
+    }
+  }
+  return sources.join("\n\n");
+}
+
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const commonSource = await readFile(commonPath, "utf8");
+const localSharedSource = await readLocalSharedCppSources();
 const moduleSource = await readFile(sourcePath, "utf8");
 const sdsCppHeaders = await readSdsCppHeaders(manifest);
-const sourceCode = `${sdsCppHeaders}\n${commonSource}\n${moduleSource}`;
+const sourceCode = `${sdsCppHeaders}\n${commonSource}\n${localSharedSource}\n${moduleSource}`;
 
 await mkdir(outputDir, { recursive: true });
 

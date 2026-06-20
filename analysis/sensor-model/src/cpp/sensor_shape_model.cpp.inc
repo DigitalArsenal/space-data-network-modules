@@ -100,6 +100,13 @@ bool range_is_accepted(const SensorShapeContract& contract, double rangeM) {
   return true;
 }
 
+SensorShapeContract with_range_boundary(
+    SensorShapeContract contract,
+    SensorRangeBoundaryKind rangeBoundary) {
+  contract.rangeBoundary = rangeBoundary;
+  return contract;
+}
+
 }  // namespace
 
 SensorVec3 add_vectors(SensorVec3 left, SensorVec3 right) {
@@ -273,6 +280,37 @@ SensorShapeContract parse_sensor_shape_contract(const SensorShapeContract& contr
 }
 
 #ifdef FLATBUFFERS_GENERATED_MAIN_H_
+namespace {
+
+SensorRangeBoundaryKind parse_sensor_range_boundary(
+    scvSensorRangeBoundaryKind rangeBoundary) {
+  switch (rangeBoundary) {
+    case scvSensorRangeBoundaryKind_LOCAL_Z_PLANE:
+      return SensorRangeBoundaryKind::LocalZPlane;
+    case scvSensorRangeBoundaryKind_RADIAL_SPHERICAL:
+    default:
+      return SensorRangeBoundaryKind::RadialSpherical;
+  }
+}
+
+std::vector<SensorVec3> parse_polygon_vertices(
+    const flatbuffers::Vector<flatbuffers::Offset<SCVVec3>>* vertices) {
+  std::vector<SensorVec3> parsed;
+  if (!vertices) {
+    return parsed;
+  }
+  parsed.reserve(vertices->size());
+  for (flatbuffers::uoffset_t index = 0; index < vertices->size(); ++index) {
+    const SCVVec3* vertex = vertices->Get(index);
+    if (vertex) {
+      parsed.push_back({vertex->X(), vertex->Y(), vertex->Z()});
+    }
+  }
+  return parsed;
+}
+
+}  // namespace
+
 SensorShapeContract parse_sensor_shape_contract(const ::SCVSensor* sensor) {
   if (!sensor) {
     return make_conic_shape(0.0);
@@ -289,7 +327,7 @@ SensorShapeContract parse_sensor_shape_contract(const ::SCVSensor* sensor) {
       case scvSensorShapeKind_RECTANGULAR:
         return make_rectangular_shape(crossTrack, alongTrack, minRange, maxRange);
       case scvSensorShapeKind_CUSTOM_POLYGON:
-        return make_custom_polygon_unsupported_shape({});
+        return make_custom_polygon_unsupported_shape(parse_polygon_vertices(sensor->POLYGON_VERTICES()));
       case scvSensorShapeKind_SAR_ANNULAR_SECTOR:
       case scvSensorShapeKind_CONIC:
       default:
@@ -301,26 +339,36 @@ SensorShapeContract parse_sensor_shape_contract(const ::SCVSensor* sensor) {
   const double inner = shape->INNER_HALF_ANGLE_DEG() * kSensorDegreesToRadians;
   const double minClock = shape->MIN_CLOCK_ANGLE_DEG() * kSensorDegreesToRadians;
   const double maxClock = shape->MAX_CLOCK_ANGLE_DEG() * kSensorDegreesToRadians;
-  switch (shape->SHAPE()) {
+  const SensorRangeBoundaryKind rangeBoundary =
+      parse_sensor_range_boundary(shape->RANGE_BOUNDARY());
+  switch (shape->SHAPE_KIND()) {
     case scvSensorShapeKind_RECTANGULAR:
-      return make_rectangular_shape(
-          shape->X_HALF_ANGLE_DEG() * kSensorDegreesToRadians,
-          shape->Y_HALF_ANGLE_DEG() * kSensorDegreesToRadians,
-          shape->MIN_RANGE_M(),
-          shape->MAX_RANGE_M());
+      return with_range_boundary(
+          make_rectangular_shape(
+              shape->X_HALF_ANGLE_DEG() * kSensorDegreesToRadians,
+              shape->Y_HALF_ANGLE_DEG() * kSensorDegreesToRadians,
+              shape->MIN_RANGE_M(),
+              shape->MAX_RANGE_M()),
+          rangeBoundary);
     case scvSensorShapeKind_CUSTOM_POLYGON:
-      return make_custom_polygon_unsupported_shape({});
+      return with_range_boundary(
+          make_custom_polygon_unsupported_shape(parse_polygon_vertices(shape->POLYGON_VERTICES())),
+          rangeBoundary);
     case scvSensorShapeKind_SAR_ANNULAR_SECTOR:
-      return make_sar_annular_sector_shape(
-          shape->INNER_LOOK_ANGLE_DEG() * kSensorDegreesToRadians,
-          shape->OUTER_LOOK_ANGLE_DEG() * kSensorDegreesToRadians,
-          minClock,
-          maxClock,
-          shape->MIN_RANGE_M(),
-          shape->MAX_RANGE_M());
+      return with_range_boundary(
+          make_sar_annular_sector_shape(
+              shape->INNER_LOOK_ANGLE_DEG() * kSensorDegreesToRadians,
+              shape->OUTER_LOOK_ANGLE_DEG() * kSensorDegreesToRadians,
+              minClock,
+              maxClock,
+              shape->MIN_RANGE_M(),
+              shape->MAX_RANGE_M()),
+          rangeBoundary);
     case scvSensorShapeKind_CONIC:
     default:
-      return make_conic_shape(outer, inner, minClock, maxClock, shape->MIN_RANGE_M(), shape->MAX_RANGE_M());
+      return with_range_boundary(
+          make_conic_shape(outer, inner, minClock, maxClock, shape->MIN_RANGE_M(), shape->MAX_RANGE_M()),
+          rangeBoundary);
   }
 }
 #else
