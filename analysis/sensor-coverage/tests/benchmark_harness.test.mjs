@@ -122,6 +122,8 @@ test("sensor coverage benchmark can build SDS SCV binary requests for benchmark 
   assert.equal(SCV_COVERAGE_REQUEST_TYPE.schemaName, "SCV/main.fbs");
   assert.equal(SCV_COVERAGE_REQUEST_TYPE.fileIdentifier, "$SCV");
   assert.equal(SCV_COVERAGE_REQUEST_TYPE.rootTypeName, "SCV");
+  assert.equal(SCV_COVERAGE_REQUEST_TYPE.wireFormat, "flatbuffer");
+  assert.equal(SCV_COVERAGE_REQUEST_TYPE.requiredAlignment, 8);
   assert.ok(priorityPayload instanceof Uint8Array);
 
   const priorityEnvelope = SCV.getRootAsSCV(

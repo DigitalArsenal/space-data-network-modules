@@ -52,6 +52,8 @@ export const SCV_COVERAGE_REQUEST_TYPE = Object.freeze({
   schemaName: "SCV/main.fbs",
   fileIdentifier: "$SCV",
   rootTypeName: "SCV",
+  wireFormat: "flatbuffer",
+  requiredAlignment: 8,
 });
 
 export const BENCHMARK_THRESHOLDS = Object.freeze({
