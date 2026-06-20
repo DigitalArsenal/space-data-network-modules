@@ -19,7 +19,6 @@ constexpr double kWgs84B2 = kWgs84B * kWgs84B;
 constexpr double kWgs84E2 = 1.0 - kWgs84B2 / kWgs84A2;
 constexpr double kWgs84Ep2 = kWgs84A2 / kWgs84B2 - 1.0;
 constexpr double kRadiansToDegrees = 180.0 / 3.14159265358979323846;
-constexpr int kCoverageGeometryChunkSize = 256;
 constexpr int kVisibilityTransitionRefinementIterations = 8;
 constexpr size_t kGridCellCacheMaxEntries = 4;
 constexpr int kGridTileRowSpan = 8;
@@ -76,12 +75,6 @@ struct ResolvedVisibilityState {
 
 struct SensorConfig {
   int sensorId = 0;
-  std::string type = "conic";
-  double outerHalfAngleRad = 0.20;
-  double xHalfAngleRad = 0.12;
-  double yHalfAngleRad = 0.12;
-  double radiusMeters = 1500000.0;
-  int angularSamples = 32;
   SensorShapeContract shapeContract;
 };
 
@@ -255,10 +248,6 @@ double magnitude(Vec3 value) {
   return std::sqrt(dot(value, value));
 }
 
-bool is_finite_vec(Vec3 value) {
-  return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
 Vec3 normalize(Vec3 value, Vec3 fallback = {1.0, 0.0, 0.0}) {
   const double length = magnitude(value);
   if (!(length > 0.0) || !std::isfinite(length)) {
@@ -397,55 +386,6 @@ bool intersect_earth(Vec3 origin, Vec3 direction, double max_range, Vec3& result
   return true;
 }
 
-GridConfig parse_grid(const std::string& request) {
-  const std::string grid = object_value(request, "grid");
-  const std::string time_span = object_value(request, "timeSpan");
-  GridConfig config{};
-  config.minLat = number_value(grid, "minLatitudeDeg", -8.0);
-  config.maxLat = number_value(grid, "maxLatitudeDeg", 8.0);
-  config.minLon = number_value(grid, "minLongitudeDeg", -12.0);
-  config.maxLon = number_value(grid, "maxLongitudeDeg", 12.0);
-  config.latStep = std::max(0.01, number_value(grid, "latitudeStepDeg", 2.0));
-  config.lonStep = std::max(0.01, number_value(grid, "longitudeStepDeg", 2.0));
-  config.start = number_value(time_span, "startSeconds", 0.0);
-  config.stop = number_value(time_span, "stopSeconds", 3600.0);
-  config.rows = std::max(1, static_cast<int>(std::ceil((config.maxLat - config.minLat) / config.latStep)));
-  config.columns = std::max(1, static_cast<int>(std::ceil((config.maxLon - config.minLon) / config.lonStep)));
-  return config;
-}
-
-SensorConfig parse_sensor_config(const std::string& sensor_json, int fallback_sensor_id = 0) {
-  SensorConfig config{};
-  config.sensorId = static_cast<int>(number_value(sensor_json, "sensorId", static_cast<double>(fallback_sensor_id)));
-  config.type = string_value(sensor_json, "type", "conic");
-  config.outerHalfAngleRad = clamp(number_value(sensor_json, "outerHalfAngleRad", 0.20), 0.01, 1.2);
-  config.xHalfAngleRad = clamp(number_value(sensor_json, "xHalfAngleRad", config.outerHalfAngleRad), 0.01, 1.2);
-  config.yHalfAngleRad = clamp(number_value(sensor_json, "yHalfAngleRad", config.outerHalfAngleRad), 0.01, 1.2);
-  config.radiusMeters = std::max(1.0, number_value(sensor_json, "radiusMeters", 1500000.0));
-  config.angularSamples = static_cast<int>(clamp(number_value(sensor_json, "angularSamples", 32.0), 8.0, 96.0));
-  if (config.type == "rectangular") {
-    config.shapeContract = make_rectangular_shape(
-      config.xHalfAngleRad,
-      config.yHalfAngleRad,
-      0.0,
-      config.radiusMeters);
-  } else {
-    config.shapeContract = make_conic_shape(
-      config.outerHalfAngleRad,
-      0.0,
-      0.0,
-      2.0 * 3.14159265358979323846,
-      0.0,
-      config.radiusMeters);
-  }
-  return config;
-}
-
-SensorConfig parse_sensor(const std::string& request) {
-  const std::string sensor = object_value(request, "sensor");
-  return parse_sensor_config(sensor.empty() ? request : sensor);
-}
-
 bool is_supported_scv_shape_kind(scvSensorShapeKind shape_kind) {
   switch (shape_kind) {
     case scvSensorShapeKind_CONIC:
@@ -456,96 +396,6 @@ bool is_supported_scv_shape_kind(scvSensorShapeKind shape_kind) {
     default:
       return false;
   }
-}
-
-Vec3 parse_vec3(const std::string& object) {
-  return {
-    number_value(object, "x", 0.0),
-    number_value(object, "y", 0.0),
-    number_value(object, "z", 0.0),
-  };
-}
-
-SensorFrame parse_sensor_frame(const std::string& object) {
-  const std::string sensor_frame = object_value(object, "sensorFrame");
-  SensorFrame frame{};
-  if (sensor_frame.empty()) {
-    return frame;
-  }
-  frame.boresight = parse_vec3(object_value(sensor_frame, "boresight"));
-  frame.xAxis = parse_vec3(object_value(sensor_frame, "xAxis"));
-  frame.yAxis = parse_vec3(object_value(sensor_frame, "yAxis"));
-  frame.valid =
-    is_finite_vec(frame.boresight) &&
-    is_finite_vec(frame.xAxis) &&
-    is_finite_vec(frame.yAxis) &&
-    magnitude(frame.boresight) > 0.0 &&
-    magnitude(frame.xAxis) > 0.0 &&
-    magnitude(frame.yAxis) > 0.0;
-  return frame;
-}
-
-std::vector<State> parse_states(const std::string& request) {
-  const auto objects = object_array(request, "states");
-  std::vector<State> states;
-  states.reserve(objects.size());
-  for (const auto& object : objects) {
-    const std::string position = object_value(object, "position");
-    const std::string velocity = object_value(object, "velocity");
-    State state{};
-    state.elapsedSeconds = number_value(object, "elapsedSeconds", 0.0);
-    state.position = {
-      number_value(position, "x", 0.0),
-      number_value(position, "y", 0.0),
-      number_value(position, "z", 0.0),
-    };
-    state.velocity = {
-      number_value(velocity, "x", 0.0),
-      number_value(velocity, "y", 0.0),
-      number_value(velocity, "z", 0.0),
-    };
-    state.sensorFrame = parse_sensor_frame(object);
-    if (
-      std::isfinite(state.elapsedSeconds) &&
-      magnitude(state.position) > kEarthRadiusM + 1.0 &&
-      magnitude(state.velocity) > 0.0
-    ) {
-      states.push_back(state);
-    }
-  }
-  std::sort(states.begin(), states.end(), [](const State& left, const State& right) {
-    return left.elapsedSeconds < right.elapsedSeconds;
-  });
-  return states;
-}
-
-std::vector<SensorTrack> parse_sensor_tracks(const std::string& request) {
-  const auto sensor_objects = object_array(request, "sensors");
-  std::vector<SensorTrack> tracks;
-  if (!sensor_objects.empty()) {
-    tracks.reserve(sensor_objects.size());
-    for (size_t index = 0; index < sensor_objects.size(); ++index) {
-      const auto& sensor_object = sensor_objects[index];
-      const std::string nested_sensor = object_value(sensor_object, "sensor");
-      SensorTrack track{};
-      track.sensor = parse_sensor_config(
-        nested_sensor.empty() ? sensor_object : nested_sensor,
-        static_cast<int>(index));
-      track.states = parse_states(sensor_object);
-      if (track.states.size() >= 2) {
-        tracks.push_back(track);
-      }
-    }
-    return tracks;
-  }
-
-  SensorTrack track{};
-  track.sensor = parse_sensor(request);
-  track.states = parse_states(request);
-  if (track.states.size() >= 2) {
-    tracks.push_back(track);
-  }
-  return tracks;
 }
 
 Vec3 vec3_from_scv(const SCVVec3* value) {
@@ -646,7 +496,8 @@ SensorConfig sensor_from_scv(const SCVSensor* sensor, int fallback_sensor_id) {
   SensorConfig config{};
   if (!sensor) {
     config.sensorId = fallback_sensor_id;
-    config.shapeContract = make_conic_shape(config.outerHalfAngleRad, 0.0, 0.0, 2.0 * 3.14159265358979323846, 0.0, config.radiusMeters);
+    config.shapeContract.supported = false;
+    config.shapeContract.unsupportedReason = "SCV sensor entry is missing";
     return config;
   }
   config.sensorId = static_cast<int>(sensor->SENSOR_ID());
@@ -669,27 +520,6 @@ SensorConfig sensor_from_scv(const SCVSensor* sensor, int fallback_sensor_id) {
   if (config.shapeContract.kind == SensorShapeKind::CustomPolygon) {
     config.shapeContract.supported = false;
     config.shapeContract.unsupportedReason = "CUSTOM_POLYGON requires exact polygon geometry";
-  }
-  switch (config.shapeContract.kind) {
-    case SensorShapeKind::Rectangular:
-      config.type = "rectangular";
-      config.xHalfAngleRad = clamp(config.shapeContract.crossTrackHalfAngleRad, 0.01, 1.2);
-      config.yHalfAngleRad = clamp(config.shapeContract.alongTrackHalfAngleRad, 0.01, 1.2);
-      config.outerHalfAngleRad = std::max(config.xHalfAngleRad, config.yHalfAngleRad);
-      break;
-    case SensorShapeKind::SarAnnularSector:
-    case SensorShapeKind::Conic:
-      config.type = "conic";
-      config.outerHalfAngleRad = clamp(config.shapeContract.outerHalfAngleRad, 0.01, 1.2);
-      config.xHalfAngleRad = config.outerHalfAngleRad;
-      config.yHalfAngleRad = config.outerHalfAngleRad;
-      break;
-    case SensorShapeKind::CustomPolygon:
-      config.type = "custom_polygon";
-      break;
-  }
-  if (config.shapeContract.maxRangeM > 0.0) {
-    config.radiusMeters = config.shapeContract.maxRangeM;
   }
   return config;
 }
@@ -942,10 +772,20 @@ std::vector<ResolvedVisibilityState> resolve_visibility_states(const std::vector
   return resolved;
 }
 
+double sensor_max_range_m(const SensorConfig& sensor) {
+  return sensor.shapeContract.maxRangeM > 0.0
+    ? sensor.shapeContract.maxRangeM
+    : 1.0e100;
+}
+
+double sensor_outer_half_angle_rad(const SensorConfig& sensor) {
+  return std::max(0.0, sensor.shapeContract.outerHalfAngleRad);
+}
+
 std::vector<Vec3> sensor_directions(const SensorConfig& sensor, Vec3 boresight, Vec3 x_axis, Vec3 y_axis) {
   std::vector<Vec3> directions;
   SensorShapeContract boundary_contract = sensor.shapeContract;
-  boundary_contract.boundarySamples = std::max(sensor.angularSamples, boundary_contract.boundarySamples);
+  boundary_contract.boundarySamples = std::max(8, boundary_contract.boundarySamples);
   for (const SensorVec3& local : generate_sensor_boundary_directions(boundary_contract)) {
     directions.push_back(normalize(add(
       add(scale(x_axis, local.x), scale(y_axis, local.y)),
@@ -957,8 +797,9 @@ std::vector<Vec3> sensor_directions(const SensorConfig& sensor, Vec3 boresight, 
 FootprintSample compute_footprint(const State& state, const SensorConfig& sensor) {
   const SensorFrame frame = resolve_sensor_frame(state);
   const Vec3 subpoint = geodetic_surface_point(state.position);
+  const double max_range_m = sensor_max_range_m(sensor);
   Vec3 center_point = subpoint;
-  intersect_earth(state.position, frame.boresight, sensor.radiusMeters, center_point);
+  intersect_earth(state.position, frame.boresight, max_range_m, center_point);
 
   FootprintSample sample{};
   sample.sensorId = sensor.sensorId;
@@ -969,7 +810,7 @@ FootprintSample compute_footprint(const State& state, const SensorConfig& sensor
   double right_metric = 1.0e100;
   for (const Vec3& direction : sensor_directions(sensor, frame.boresight, frame.xAxis, frame.yAxis)) {
     Vec3 hit;
-    if (!intersect_earth(state.position, direction, sensor.radiusMeters, hit)) {
+    if (!intersect_earth(state.position, direction, max_range_m, hit)) {
       continue;
     }
     const Vertex vertex = to_cartographic(hit);
@@ -1186,20 +1027,22 @@ double nadir_conic_footprint_angular_radius_rad(const SensorConfig& sensor, cons
     return 0.0;
   }
 
+  const double outer_half_angle_rad = sensor_outer_half_angle_rad(sensor);
   const double sin_argument = clamp(
-    spacecraft_radius / kEarthRadiusM * std::sin(sensor.outerHalfAngleRad),
+    spacecraft_radius / kEarthRadiusM * std::sin(outer_half_angle_rad),
     -1.0,
     1.0);
-  double fov_radius = std::asin(sin_argument) - sensor.outerHalfAngleRad;
+  double fov_radius = std::asin(sin_argument) - outer_half_angle_rad;
   if (!std::isfinite(fov_radius) || fov_radius < 0.0) {
     fov_radius = 0.0;
   }
 
   double range_radius = 3.14159265358979323846;
-  if (sensor.radiusMeters > 0.0) {
+  const double max_range_m = sensor.shapeContract.maxRangeM;
+  if (max_range_m > 0.0) {
     const double cosine = clamp(
       (spacecraft_radius * spacecraft_radius + kEarthRadiusM * kEarthRadiusM -
-        sensor.radiusMeters * sensor.radiusMeters) /
+        max_range_m * max_range_m) /
         (2.0 * spacecraft_radius * kEarthRadiusM),
       -1.0,
       1.0);
@@ -1353,7 +1196,7 @@ bool surface_sample_visible_from_resolved_state(
   const SensorFrame& frame = resolved.frame;
   const Vec3 sensor_to_cell = subtract(surface_position, state.position);
   const double range = magnitude(sensor_to_cell);
-  if (!(range > 0.0) || !std::isfinite(range) || range > sensor.radiusMeters) {
+  if (!(range > 0.0) || !std::isfinite(range)) {
     return false;
   }
 
@@ -1748,64 +1591,6 @@ void update_cell_statistics(Cell& cell, const GridConfig& grid) {
     response_gap_count > 0 ? response_gap_sum / response_gap_count : 0.0;
 }
 
-std::string color_json(double percent) {
-  const double u = clamp(percent / 100.0, 0.0, 1.0);
-  const int red = static_cast<int>(std::round(245.0 * u + 10.0));
-  const int green = static_cast<int>(std::round(190.0 * (1.0 - std::fabs(u - 0.5) * 2.0) + 35.0));
-  const int blue = static_cast<int>(std::round(235.0 * (1.0 - u) + 20.0));
-  const int alpha = percent > 0.0 ? 190 : 35;
-  char buffer[128];
-  std::snprintf(buffer, sizeof(buffer), "[%d,%d,%d,%d]", red, green, blue, alpha);
-  return buffer;
-}
-
-std::string vertex_json(const Vertex& vertex) {
-  char buffer[160];
-  std::snprintf(
-    buffer,
-    sizeof(buffer),
-    "{\"latitudeDeg\":%.12g,\"longitudeDeg\":%.12g}",
-    vertex.latitudeDeg,
-    vertex.longitudeDeg);
-  return buffer;
-}
-
-std::string interval_json(const Interval& interval) {
-  char buffer[192];
-  std::snprintf(
-    buffer,
-    sizeof(buffer),
-    "{\"startSeconds\":%.12g,\"stopSeconds\":%.12g,\"durationSec\":%.12g}",
-    interval.start,
-    interval.stop,
-    interval.stop - interval.start);
-  return buffer;
-}
-
-std::string intervals_json(const std::vector<Interval>& intervals) {
-  std::string output = "[";
-  for (size_t index = 0; index < intervals.size(); ++index) {
-    if (index > 0) {
-      output += ",";
-    }
-    output += interval_json(intervals[index]);
-  }
-  output += "]";
-  return output;
-}
-
-std::string sensor_ids_json(const std::vector<int>& sensor_ids) {
-  std::string output = "[";
-  for (size_t index = 0; index < sensor_ids.size(); ++index) {
-    if (index > 0) {
-      output += ",";
-    }
-    output += std::to_string(sensor_ids[index]);
-  }
-  output += "]";
-  return output;
-}
-
 std::vector<uint64_t> sensor_bitset_words(const std::vector<int>& sensor_ids) {
   int max_sensor_id = -1;
   for (const int sensor_id : sensor_ids) {
@@ -1827,300 +1612,6 @@ std::vector<uint64_t> sensor_bitset_words(const std::vector<int>& sensor_ids) {
     words[word_index] |= bit;
   }
   return words;
-}
-
-uint32_t legacy_sensor_mask(const std::vector<int>& sensor_ids) {
-  uint32_t mask = 0;
-  for (const int sensor_id : sensor_ids) {
-    if (sensor_id >= 0 && sensor_id < 32) {
-      mask |= static_cast<uint32_t>(1u << sensor_id);
-    }
-  }
-  return mask;
-}
-
-std::string sensor_bitset_words_json(const std::vector<int>& sensor_ids) {
-  const auto words = sensor_bitset_words(sensor_ids);
-  std::string output = "[";
-  for (size_t index = 0; index < words.size(); ++index) {
-    if (index > 0) {
-      output += ",";
-    }
-    output += "\"";
-    output += std::to_string(words[index]);
-    output += "\"";
-  }
-  output += "]";
-  return output;
-}
-
-std::string cells_json(const std::vector<Cell>& cells, double duration, bool sparse = false) {
-  std::string output = "[";
-  bool first = true;
-  for (size_t index = 0; index < cells.size(); ++index) {
-    const auto& cell = cells[index];
-    if (sparse && cell.accessCount <= 0 && cell.intervals.empty() && cell.totalAccess <= 0.0) {
-      continue;
-    }
-    if (!first) {
-      output += ",";
-    }
-    first = false;
-    const double percent = duration > 0.0 ? 100.0 * cell.totalAccess / duration : 0.0;
-    char buffer[1024];
-    std::snprintf(
-      buffer,
-      sizeof(buffer),
-      "{\"index\":%d,\"row\":%d,\"column\":%d,\"latitudeDeg\":%.12g,"
-      "\"longitudeDeg\":%.12g,\"accessCount\":%d,\"revisitCount\":%d,"
-      "\"totalAccessDurationSec\":%.12g,\"percentCoverage\":%.12g,"
-      "\"maxGapDurationSec\":%.12g,\"meanRevisitTimeSec\":%.12g,"
-      "\"firstResponseTimeSec\":%.12g,\"maxResponseTimeSec\":%.12g,"
-      "\"meanResponseTimeSec\":%.12g,\"totalGapDurationSec\":%.12g,"
-      "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"sensorIds\":",
-      cell.index,
-      cell.row,
-      cell.column,
-      cell.latitude,
-      cell.longitude,
-      cell.accessCount,
-      cell.revisitCount,
-      cell.totalAccess,
-      percent,
-      cell.maxGap,
-      cell.meanRevisit,
-      cell.firstResponse,
-      cell.maxResponse,
-      cell.meanResponse,
-      cell.totalGap,
-      cell.contributingSensorIds.size(),
-      cell.sensorMask);
-    output += buffer;
-    output += sensor_ids_json(cell.contributingSensorIds);
-    output += ",\"sensorBitsetWords\":";
-    output += sensor_bitset_words_json(cell.contributingSensorIds);
-    output += ",\"colorRgba\":";
-    output += color_json(percent);
-    output += ",\"intervals\":";
-    output += intervals_json(cell.intervals);
-    output += "}";
-  }
-  output += "]";
-  return output;
-}
-
-std::string coverage_intervals_json(const std::vector<Cell>& cells) {
-  std::string output = "[";
-  bool first = true;
-  for (const auto& cell : cells) {
-    for (const auto& interval : cell.intervals) {
-      if (!first) {
-        output += ",";
-      }
-      first = false;
-      char buffer[512];
-      std::snprintf(
-        buffer,
-        sizeof(buffer),
-        "{\"cellIndex\":%d,\"row\":%d,\"column\":%d,"
-        "\"startSeconds\":%.12g,\"stopSeconds\":%.12g,\"durationSec\":%.12g,"
-        "\"sensorContributionCount\":%zu,\"sensorMask\":%u,\"sensorIds\":",
-        cell.index,
-        cell.row,
-        cell.column,
-        interval.start,
-        interval.stop,
-        interval.stop - interval.start,
-        interval.contributingSensorIds.size(),
-        legacy_sensor_mask(interval.contributingSensorIds));
-      output += buffer;
-      output += sensor_ids_json(interval.contributingSensorIds);
-      output += ",\"sensorBitsetWords\":";
-      output += sensor_bitset_words_json(interval.contributingSensorIds);
-      output += "}";
-    }
-  }
-  output += "]";
-  return output;
-}
-
-double fom_value_for_cell(
-  const Cell& cell,
-  const std::string& fom_type,
-  double duration,
-  std::string& units) {
-  double value = cell.totalAccess;
-  units = "seconds";
-  if (fom_type == "access_count") {
-    value = cell.accessCount;
-    units = "count";
-  } else if (fom_type == "percent_coverage") {
-    value = duration > 0.0 ? 100.0 * cell.totalAccess / duration : 0.0;
-    units = "percent";
-  } else if (fom_type == "max_gap_duration" || fom_type == "gap_time") {
-    value = cell.maxGap;
-    units = "seconds";
-  } else if (fom_type == "mean_revisit_time" || fom_type == "revisit_time") {
-    value = cell.meanRevisit;
-    units = "seconds";
-  } else if (fom_type == "response_time") {
-    value = cell.firstResponse;
-    units = "seconds";
-  }
-  return value;
-}
-
-std::string fom_values_json(
-  const std::vector<Cell>& cells,
-  const std::string& fom_type,
-  double duration,
-  std::string& units) {
-  std::string values = "[";
-  for (size_t index = 0; index < cells.size(); ++index) {
-    if (index > 0) {
-      values += ",";
-    }
-    const double value = fom_value_for_cell(cells[index], fom_type, duration, units);
-    char buffer[64];
-    std::snprintf(buffer, sizeof(buffer), "%.12g", value);
-    values += buffer;
-  }
-  values += "]";
-  return values;
-}
-
-std::string fom_product_json(
-  const std::vector<Cell>& cells,
-  const std::string& fom_type,
-  double duration) {
-  std::string units = "seconds";
-  const std::string values = fom_values_json(cells, fom_type, duration, units);
-  return "{\"type\":" + quote(fom_type) + ",\"units\":" + quote(units) + ",\"values\":" + values + "}";
-}
-
-std::string fom_products_json(const std::vector<Cell>& cells, double duration) {
-  return std::string("{") +
-    "\"percent_coverage\":" + fom_product_json(cells, "percent_coverage", duration) + "," +
-    "\"gap_time\":" + fom_product_json(cells, "gap_time", duration) + "," +
-    "\"revisit_time\":" + fom_product_json(cells, "revisit_time", duration) + "," +
-    "\"response_time\":" + fom_product_json(cells, "response_time", duration) +
-    "}";
-}
-
-std::string fom_json(const std::vector<Cell>& cells, const std::string& fom_type, double duration) {
-  if (fom_type == "none") {
-    return "{\"type\":\"none\",\"units\":\"\",\"values\":[],\"products\":{}}";
-  }
-  std::string units = "seconds";
-  const std::string values = fom_values_json(cells, fom_type, duration, units);
-  return "{\"type\":" + quote(fom_type) + ",\"units\":" + quote(units) +
-    ",\"values\":" + values + ",\"products\":" + fom_products_json(cells, duration) + "}";
-}
-
-std::string swaths_json(const std::vector<SwathSegment>& segments, double duration) {
-  std::string output = "[";
-  for (size_t index = 0; index < segments.size(); ++index) {
-    if (index > 0) {
-      output += ",";
-    }
-    const auto& segment = segments[index];
-    const double percent = duration > 0.0 ? 100.0 * (segment.stop - segment.start) / duration : 0.0;
-    char header[512];
-    std::snprintf(
-      header,
-      sizeof(header),
-      "{\"index\":%d,\"sensorId\":%d,\"kind\":\"orekit_along_track_swath\","
-      "\"startSeconds\":%.12g,\"stopSeconds\":%.12g,"
-      "\"totalAccessDurationSec\":%.12g,\"percentCoverage\":%.12g,\"colorRgba\":%s,",
-      segment.index,
-      segment.sensorId,
-      segment.start,
-      segment.stop,
-      segment.stop - segment.start,
-      percent,
-      color_json(percent).c_str());
-    output += header;
-    output += "\"leftEdge\":[" + vertex_json(segment.leftStart) + "," + vertex_json(segment.leftStop) + "],";
-    output += "\"rightEdge\":[" + vertex_json(segment.rightStart) + "," + vertex_json(segment.rightStop) + "],";
-    output += "\"centerline\":[" + vertex_json(segment.centerStart) + "," + vertex_json(segment.centerStop) + "],";
-    output += "\"vertices\":[" + vertex_json(segment.leftStart) + "," + vertex_json(segment.leftStop) + "," +
-      vertex_json(segment.rightStop) + "," + vertex_json(segment.rightStart) + "]}";
-  }
-  output += "]";
-  return output;
-}
-
-std::string footprints_json(const std::vector<FootprintSample>& samples) {
-  std::string output = "[";
-  for (size_t index = 0; index < samples.size(); ++index) {
-    if (index > 0) {
-      output += ",";
-    }
-    const auto& sample = samples[index];
-    char header[256];
-    std::snprintf(
-      header,
-      sizeof(header),
-      "{\"sensorId\":%d,\"elapsedSeconds\":%.12g,\"center\":%s,\"vertices\":[",
-      sample.sensorId,
-      sample.elapsedSeconds,
-      vertex_json(sample.center).c_str());
-    output += header;
-    for (size_t vertex_index = 0; vertex_index < sample.vertices.size(); ++vertex_index) {
-      if (vertex_index > 0) {
-        output += ",";
-      }
-      output += vertex_json(sample.vertices[vertex_index]);
-    }
-    output += "]}";
-  }
-  output += "]";
-  return output;
-}
-
-std::string aggregate_geometry_json(const std::vector<SwathSegment>& segments, size_t active_sensor_count) {
-  size_t vertex_count = 0;
-  std::string deltas = "[";
-  for (size_t index = 0; index < segments.size(); ++index) {
-    if (index > 0) {
-      deltas += ",";
-    }
-    const auto& segment = segments[index];
-    vertex_count += 4;
-    char delta[512];
-    std::snprintf(
-      delta,
-      sizeof(delta),
-      "{\"operation\":\"add\",\"polygonIndex\":%zu,\"swathIndex\":%d,"
-      "\"sensorId\":%d,\"chunkId\":%zu,\"startSeconds\":%.12g,\"stopSeconds\":%.12g}",
-      index,
-      segment.index,
-      segment.sensorId,
-      index / static_cast<size_t>(kCoverageGeometryChunkSize),
-      segment.start,
-      segment.stop);
-    deltas += delta;
-  }
-  deltas += "]";
-
-  char header[1024];
-  std::snprintf(
-    header,
-    sizeof(header),
-    "{\"contract\":\"orbpro.coverage.aggregate.v0\","
-    "\"aggregation\":\"all_active_sensors\","
-    "\"operationMode\":\"additive_deltas\","
-    "\"activeSensorCount\":%zu,"
-    "\"chunkSize\":%d,"
-    "\"full\":{\"kind\":\"multipolygon\",\"polygonCount\":%zu,\"ringCount\":%zu,"
-    "\"vertexCount\":%zu,\"ringReference\":\"swaths[].vertices\"},"
-    "\"deltas\":",
-    active_sensor_count,
-    kCoverageGeometryChunkSize,
-    segments.size(),
-    segments.size(),
-    vertex_count);
-  return std::string(header) + deltas + "}";
 }
 
 struct CoverageStatistics {
@@ -2605,49 +2096,11 @@ extern "C" int compute_sensor_coverage(void) {
   const std::vector<Cell>& response_cells = cells == nullptr ? empty_cells : *cells;
   const CoverageStatistics statistics =
     coverage_statistics(response_cells, tracks.size(), swaths.size(), total_windows);
-  const std::string statistics_json = coverage_statistics_json(statistics);
   const std::string scv_summary_message = scv_summary_message_json(statistics);
 
-  const double duration = grid.stop - grid.start;
-  const std::string fom_type = swath_only_output
-    ? std::string("none")
-    : std::string("percent_coverage");
-  const bool aggregate_output =
-    swath_only_output ||
-    tracks.size() > 1;
-  const std::string coverage_source = "";
   const std::vector<SwathSegment> empty_swaths;
   const std::vector<SwathSegment>& response_swaths =
     analytics_only_output ? empty_swaths : swaths;
-  char header[2048];
-  std::snprintf(
-    header,
-    sizeof(header),
-    "{\"provider\":\"sensor-coverage-analysis\",\"status\":\"nominal\","
-    "\"swathMode\":\"orekit_along_track_swath\","
-    "\"coverageSource\":%s,"
-    "\"grid\":{\"rows\":%d,\"columns\":%d,\"cellCount\":%zu,"
-    "\"latitudeStepDeg\":%.12g,\"longitudeStepDeg\":%.12g},"
-    "\"statistics\":%s,",
-    coverage_source.empty() ? "{}" : coverage_source.c_str(),
-    grid.rows,
-    grid.columns,
-    response_cells.size(),
-    grid.latStep,
-    grid.lonStep,
-    statistics_json.c_str());
-
-  std::string response = std::string(header) +
-    "\"cells\":" + cells_json(response_cells, duration, analytics_only_output) + "," +
-    "\"coverageIntervals\":" + coverage_intervals_json(response_cells) + "," +
-    "\"figureOfMerit\":" + fom_json(response_cells, fom_type, duration) + "," +
-    "\"footprints\":" +
-      ((analytics_only_output || aggregate_output) ? std::string("[]") : footprints_json(footprints)) + "," +
-    "\"swaths\":" + swaths_json(response_swaths, duration) + "," +
-    "\"aggregateGeometry\":" + aggregate_geometry_json(response_swaths, tracks.size()) + "," +
-    "\"assumptions\":[\"OrbPro Sensor-owned propagated states define the coverage source\","
-    "\"swath polygons are continuous along-track left/right footprint bands\","
-    "\"grid cells are secondary figure-of-merit samples accumulated from swath geometry\"]}";
 
   const int progress_status =
     emit_scv_progress_frame(tracks, total_windows, total_windows);
@@ -2655,15 +2108,15 @@ extern "C" int compute_sensor_coverage(void) {
     return progress_status;
   }
 
-    const std::vector<uint8_t> scv_result =
-      build_scv_result(
-        grid,
-        tracks,
-        response_cells,
-        response_swaths,
-        total_windows,
-        input.includePackedGeometry,
-        scv_summary_message);
+  const std::vector<uint8_t> scv_result =
+    build_scv_result(
+      grid,
+      tracks,
+      response_cells,
+      response_swaths,
+      total_windows,
+      input.includePackedGeometry,
+      scv_summary_message);
   return emit_bytes(
     "coverage",
     "SCV/main.fbs",

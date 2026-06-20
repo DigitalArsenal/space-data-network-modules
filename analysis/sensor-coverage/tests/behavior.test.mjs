@@ -85,6 +85,10 @@ test("sensor coverage source rejects non-SCV invocation instead of parsing compa
   assert.match(parseSource, /must contain an SDS SCV FlatBuffer/i);
   assert.doesNotMatch(parseSource, /parse_grid\(payload\)/);
   assert.doesNotMatch(parseSource, /parse_sensor_tracks\(payload\)/);
+  assert.doesNotMatch(source, /\bGridConfig parse_grid\(/);
+  assert.doesNotMatch(source, /\bSensorConfig parse_sensor_config\(/);
+  assert.doesNotMatch(source, /\bSensorConfig parse_sensor\(/);
+  assert.doesNotMatch(source, /\bstd::vector<SensorTrack> parse_sensor_tracks\(/);
   assert.doesNotMatch(source, /SensorCoverageCompatibilityJson/);
 });
 
