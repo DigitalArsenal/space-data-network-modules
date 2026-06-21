@@ -17,6 +17,7 @@ const FLATBUFFERS_INCLUDE_DIR = fileURLToPath(
 
 const CPP_BEHAVIOR_TEST = String.raw`
 #include <cmath>
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -137,6 +138,62 @@ void test_sar_annular_sector_classification() {
       "SAR look beyond outer angle should classify outside");
 }
 
+SensorShapeContract conformance_shape(const std::string& name) {
+  if (name == "solid-conic") {
+    return make_conic_shape(kPi / 6.0, 0.0, 0.0, kTwoPi, 0.0, 100.0);
+  }
+  if (name == "inner-cutout") {
+    return make_conic_shape(kPi / 4.0, kPi / 18.0, 0.0, kTwoPi, 0.0, 100.0);
+  }
+  if (name == "partial-clock-sector") {
+    return make_conic_shape(kPi / 4.0, 0.0, 0.0, kPi / 2.0, 0.0, 100.0);
+  }
+  if (name == "wrapped-clock-sector") {
+    return make_conic_shape(kPi / 4.0, 0.0, 5.0 * kPi / 3.0, kPi / 3.0, 0.0, 100.0);
+  }
+  if (name == "rectangular") {
+    return make_rectangular_shape(kPi / 8.0, kPi / 10.0, 0.0, 100.0);
+  }
+  if (name == "sar-annular-sector") {
+    return make_sar_annular_sector_shape(kPi / 9.0, kPi / 4.0, -kPi / 6.0, kPi / 6.0, 0.0, 100.0);
+  }
+  return make_custom_polygon_unsupported_shape({});
+}
+
+void require_contains_label(
+    const std::vector<std::string>& labels,
+    const std::string& label,
+    const std::string& vectorName) {
+  require(
+      std::find(labels.begin(), labels.end(), label) != labels.end(),
+      vectorName + " missing conformance label " + label);
+}
+
+void require_conformance_vector(
+    const std::string& name,
+    const SensorVec3& inside,
+    const SensorVec3& outside) {
+  const SensorShapeContract shape = conformance_shape(name);
+  const SensorClassification insideClassification = classify_local_look(shape, inside);
+  const SensorClassification outsideClassification = classify_local_look(shape, outside);
+  require(insideClassification.supported, name + " inside classification must be supported");
+  require(outsideClassification.supported, name + " outside classification must be supported");
+  require(insideClassification.inside, name + " inside vector must classify inside");
+  require(!outsideClassification.inside, name + " outside vector must classify outside");
+  require(insideClassification.lookRangeM <= 100.0 + 1.0e-9, name + " inside range must honor radius");
+  require(outsideClassification.lookRangeM <= 100.0 + 1.0e-9, name + " outside vector must stay within radius");
+  require_contains_label(shape.conformanceLabels, name, name);
+}
+
+void test_shared_conformance_vectors() {
+  require_conformance_vector("solid-conic", {0.0, 0.0, 50.0}, {50.0, 0.0, 50.0});
+  require_conformance_vector("inner-cutout", {20.0, 0.0, 50.0}, {1.0, 0.0, 50.0});
+  require_conformance_vector("partial-clock-sector", {20.0, 20.0, 50.0}, {-20.0, 20.0, 50.0});
+  require_conformance_vector("wrapped-clock-sector", {20.0, 0.0, 50.0}, {0.0, 20.0, 50.0});
+  require_conformance_vector("rectangular", {10.0, 5.0, 50.0}, {30.0, 0.0, 50.0});
+  require_conformance_vector("sar-annular-sector", {20.0, 0.0, 50.0}, {0.0, 20.0, 50.0});
+}
+
 void test_custom_polygon_unsupported() {
   const SensorShapeContract custom = make_custom_polygon_unsupported_shape({{1.0, 0.0, 0.0}});
   const SensorClassification classification = classify_local_look(custom, {0.0, 0.0, 1.0});
@@ -169,6 +226,7 @@ int main() {
   test_conic_classification();
   test_rectangular_classification();
   test_sar_annular_sector_classification();
+  test_shared_conformance_vectors();
   test_custom_polygon_unsupported();
   test_boundary_generation();
   return 0;

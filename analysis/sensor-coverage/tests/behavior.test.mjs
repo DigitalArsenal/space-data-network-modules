@@ -575,6 +575,236 @@ function solidConicContract() {
   );
 }
 
+function radiansToDegrees(value) {
+  return (value * 180.0) / Math.PI;
+}
+
+const SENSOR_SHAPE_CONFORMANCE_VECTORS = [
+  {
+    name: "solid-conic",
+    type: "conic",
+    inside: [0, 0, 50],
+    outside: [50, 0, 50],
+    shape: {
+      outerHalfAngleRad: Math.PI / 6,
+      innerHalfAngleRad: 0,
+      minimumClockAngleRad: 0,
+      maximumClockAngleRad: Math.PI * 2,
+      radiusMeters: 100,
+    },
+  },
+  {
+    name: "inner-cutout",
+    type: "conic",
+    inside: [20, 0, 50],
+    outside: [1, 0, 50],
+    shape: {
+      outerHalfAngleRad: Math.PI / 4,
+      innerHalfAngleRad: Math.PI / 18,
+      minimumClockAngleRad: 0,
+      maximumClockAngleRad: Math.PI * 2,
+      radiusMeters: 100,
+    },
+  },
+  {
+    name: "partial-clock-sector",
+    type: "conic",
+    inside: [20, 20, 50],
+    outside: [-20, 20, 50],
+    shape: {
+      outerHalfAngleRad: Math.PI / 4,
+      innerHalfAngleRad: 0,
+      minimumClockAngleRad: 0,
+      maximumClockAngleRad: Math.PI / 2,
+      radiusMeters: 100,
+    },
+  },
+  {
+    name: "wrapped-clock-sector",
+    type: "conic",
+    inside: [20, 0, 50],
+    outside: [0, 20, 50],
+    shape: {
+      outerHalfAngleRad: Math.PI / 4,
+      innerHalfAngleRad: 0,
+      minimumClockAngleRad: (5 * Math.PI) / 3,
+      maximumClockAngleRad: Math.PI / 3,
+      radiusMeters: 100,
+    },
+  },
+  {
+    name: "rectangular",
+    type: "rectangular",
+    inside: [10, 5, 50],
+    outside: [30, 0, 50],
+    shape: {
+      xHalfAngleRad: Math.PI / 8,
+      yHalfAngleRad: Math.PI / 10,
+      radiusMeters: 100,
+    },
+  },
+  {
+    name: "sar-annular-sector",
+    type: "sar",
+    inside: [20, 0, 50],
+    outside: [0, 20, 50],
+    shape: {
+      innerLookAngleRad: Math.PI / 9,
+      outerLookAngleRad: Math.PI / 4,
+      minimumClockAngleRad: -Math.PI / 6,
+      maximumClockAngleRad: Math.PI / 6,
+      radiusMeters: 100,
+      sarSamplingDensity: 2,
+    },
+  },
+];
+
+function conformanceShapeContract(vector, radiusMeters = vector.shape.radiusMeters) {
+  const shape = vector.shape;
+  if (vector.type === "conic") {
+    return new SCVSensorShapeContractT(
+      scvSensorShapeKind.CONIC,
+      0,
+      scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+      radiansToDegrees(shape.outerHalfAngleRad),
+      radiansToDegrees(shape.innerHalfAngleRad),
+      radiansToDegrees(shape.minimumClockAngleRad),
+      radiansToDegrees(shape.maximumClockAngleRad),
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      radiusMeters,
+    );
+  }
+  if (vector.type === "rectangular") {
+    return new SCVSensorShapeContractT(
+      scvSensorShapeKind.RECTANGULAR,
+      0,
+      scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+      0,
+      0,
+      0,
+      360,
+      radiansToDegrees(shape.xHalfAngleRad),
+      radiansToDegrees(shape.yHalfAngleRad),
+      0,
+      0,
+      1,
+      0,
+      radiusMeters,
+    );
+  }
+  if (vector.type === "sar") {
+    return new SCVSensorShapeContractT(
+      scvSensorShapeKind.SAR_ANNULAR_SECTOR,
+      0,
+      scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+      0,
+      0,
+      radiansToDegrees(shape.minimumClockAngleRad),
+      radiansToDegrees(shape.maximumClockAngleRad),
+      0,
+      0,
+      radiansToDegrees(shape.innerLookAngleRad),
+      radiansToDegrees(shape.outerLookAngleRad),
+      shape.sarSamplingDensity,
+      0,
+      radiusMeters,
+    );
+  }
+  throw new Error(`Unsupported conformance vector type: ${vector.type}`);
+}
+
+function createScvConformanceCoveragePayload(vector) {
+  const earthRadius = 6378137.0;
+  // The module clamps SCV grid resolution to 0.01 degrees, so scale the
+  // 100 m local vectors uniformly while preserving their angular contracts.
+  const coverageScale = 100.0;
+  const sensorAltitudeM = 50.0 * coverageScale;
+  const radiusMeters = vector.shape.radiusMeters * coverageScale;
+  const sensorPosition = new SCVVec3T(earthRadius + sensorAltitudeM, 0, 0);
+  const sensorVelocity = new SCVVec3T(0, 7600, 0);
+  const makeState = (elapsedSeconds) =>
+    new SCVStateSampleT(
+      9,
+      elapsedSeconds,
+      sensorPosition,
+      sensorVelocity,
+      0,
+      0,
+      0,
+      1,
+      scvCoordinateFrame.BODY_FIXED,
+    );
+  const shapeContract = conformanceShapeContract(vector, radiusMeters);
+  const request = new SCVCoverageRequestT(
+    `shape-conformance-${vector.name}`,
+    BigInt("909"),
+    scvAnalysisMode.COVERAGE,
+    new SCVEllipsoidT(
+      scvBodyKind.EARTH,
+      "Earth",
+      earthRadius,
+      6356752.314245,
+      earthRadius,
+      scvCoordinateFrame.BODY_FIXED,
+    ),
+    new SCVTimeGridT(null, 0, 0, 1, 1, 0, 1),
+    new SCVCoverageGridT(
+      "shape-conformance-grid",
+      scvGeometryDomain.SURFACE,
+      scvCoordinateFrame.BODY_FIXED,
+      -0.025,
+      0.025,
+      -0.025,
+      0.025,
+      0.01,
+      0.01,
+      0,
+      25,
+      0.01,
+    ),
+    [
+      new SCVSensorT(
+        9,
+        "sensor-shape-conformance",
+        `SCV ${vector.name} conformance sensor`,
+        shapeContract.SHAPE_KIND,
+        scvCoordinateFrame.BODY_FIXED,
+        null,
+        null,
+        null,
+        null,
+        radiansToDegrees(vector.shape.outerHalfAngleRad ?? 0),
+        radiansToDegrees(vector.shape.xHalfAngleRad ?? 0),
+        radiansToDegrees(vector.shape.yHalfAngleRad ?? 0),
+        0,
+        radiusMeters,
+        [],
+        scvCoordinateFrame.UNKNOWN,
+        shapeContract,
+      ),
+    ],
+    [makeState(0), makeState(1)],
+    [],
+    [],
+    [scvMetricSeriesKind.PERCENT_COVERED],
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    false,
+  );
+  const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
+  const builder = new flatbuffers.Builder(1024);
+  SCV.finishSCVBuffer(builder, envelope.pack(builder));
+  return builder.asUint8Array();
+}
+
 function createSingleSensorCoverageRequest() {
   const earthRadius = 6378137.0;
   const orbitRadius = earthRadius + 500000.0;
@@ -1269,7 +1499,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assertRenderableScvGeometry(result, 2);
   });
 
-  test(`sensor coverage module applies SCV SHAPE_CONTRACT semantics on ${runtimeKind}`, async (t) => {
+  test(`sensor coverage module applies shared sensor-shape conformance vectors on ${runtimeKind}`, async (t) => {
     const harness = await createSensorCoverageHarness(runtimeKind, t);
     if (!harness) {
       return;
@@ -1278,76 +1508,8 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const contracts = {
-      conic: solidConicContract(),
-      rectangular: new SCVSensorShapeContractT(
-        scvSensorShapeKind.RECTANGULAR,
-        0,
-        scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
-        0,
-        0,
-        0,
-        360,
-        0.5,
-        0.5,
-        0,
-        0,
-        0,
-        0,
-        700000,
-      ),
-      sar: new SCVSensorShapeContractT(
-        scvSensorShapeKind.SAR_ANNULAR_SECTOR,
-        0,
-        scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
-        0,
-        0,
-        300,
-        60,
-        0,
-        0,
-        5,
-        14,
-        1,
-        0,
-        1600000,
-      ),
-      innerCutout: new SCVSensorShapeContractT(
-        scvSensorShapeKind.CONIC,
-        0,
-        scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
-        14,
-        12,
-        0,
-        360,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1600000,
-      ),
-      partialClock: new SCVSensorShapeContractT(
-        scvSensorShapeKind.CONIC,
-        0,
-        scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
-        14,
-        0,
-        80,
-        100,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1600000,
-      ),
-    };
-
     const results = new Map();
-    for (const [name, contract] of Object.entries(contracts)) {
+    for (const vector of SENSOR_SHAPE_CONFORMANCE_VECTORS) {
       const response = await harness.invoke({
         methodId: "compute_sensor_coverage",
         inputs: [
@@ -1358,27 +1520,58 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
               fileIdentifier: "$SCV",
               rootTypeName: "SCV",
             },
-            payload: createScvShapeContractCoveragePayload(contract),
+            payload: createScvConformanceCoveragePayload(vector),
           },
         ],
       });
-      assert.equal(response.statusCode, 0, `${name}: ${response.errorMessage}`);
+      assert.equal(response.statusCode, 0, `${vector.name}: ${response.errorMessage}`);
       const result = findScvEnvelope(response, scvEnvelopeKind.RESULT)?.envelope.RESULT();
-      assert.ok(result, `${name}: missing SCV result`);
-      results.set(name, {
+      assert.ok(result, `${vector.name}: missing SCV result`);
+      results.set(vector.name, {
         total: scvCellCoverageTotal(result),
         coveredCellIds: scvCoveredCellIds(result),
+        fractionTotal: (() => {
+          let total = 0;
+          for (let index = 0; index < result.cellStatsLength(); index += 1) {
+            total += result.CELL_STATS(index).COVERAGE_FRACTION();
+          }
+          return total;
+        })(),
+        totalSensors: result.TOTAL_SENSORS(),
+        totalWindows: result.TOTAL_WINDOWS(),
+        totalCells: result.cellStatsLength(),
       });
     }
 
-    assert.ok(results.get("conic").total > 0, "solid conic should cover at least one cell");
-    for (const name of ["rectangular", "sar", "innerCutout", "partialClock"]) {
-      assert.notDeepEqual(
-        results.get(name).coveredCellIds,
-        results.get("conic").coveredCellIds,
-        `${name} should not silently reuse solid-conic coverage semantics`,
-      );
-    }
+    const solid = results.get("solid-conic");
+    const rectangular = results.get("rectangular");
+    const sar = results.get("sar-annular-sector");
+    const partialClock = results.get("partial-clock-sector");
+    const innerCutout = results.get("inner-cutout");
+
+    const resultSummary = JSON.stringify(Array.from(results.entries()));
+    assert.ok(
+      solid.total > 0,
+      `solid conic should cover at least one cell: ${resultSummary}`,
+    );
+    assert.notEqual(
+      solid.fractionTotal,
+      rectangular.fractionTotal,
+      "conic coverage fraction must differ from rectangular",
+    );
+    assert.notEqual(
+      solid.fractionTotal,
+      sar.fractionTotal,
+      "conic coverage fraction must differ from SAR",
+    );
+    assert.ok(
+      partialClock.total < solid.total,
+      `partial-clock covered cell count (${partialClock.total}) must be less than full-clock conic (${solid.total})`,
+    );
+    assert.ok(
+      innerCutout.total < solid.total,
+      `inner-cutout covered cell count (${innerCutout.total}) must be less than solid conic (${solid.total})`,
+    );
   });
 
   test(`sensor coverage module explicitly rejects SCV CUSTOM_POLYGON on ${runtimeKind}`, async (t) => {
