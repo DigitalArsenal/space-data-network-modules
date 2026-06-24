@@ -12,6 +12,10 @@ assert.ok(fs.existsSync(indexPath), "missing current module parity index");
 
 const checked = JSON.parse(fs.readFileSync(indexPath, "utf8"));
 const current = createCurrentModuleIndex(repoRoot);
+const expectedParityScopeTargetGaps = [
+  "analysis/sensor-coverage",
+  "analysis/sensor-model",
+];
 
 assert.equal(checked.moduleCount, current.moduleCount, "module count drifted");
 assert.equal(checked.parityScopeModuleCount, current.parityScopeModuleCount, "parity module count drifted");
@@ -25,7 +29,11 @@ assert.ok(checked.parityScopeModuleCount >= 14, "parity-scope module inventory i
 assert.ok(checked.isomorphicWasmCount >= 29, "isomorphic module inventory is unexpectedly small");
 assert.deepEqual(checked.missingIsomorphicWasm.sort(), []);
 assert.deepEqual(checked.parityScopeMissingCxx.sort(), []);
-assert.deepEqual(checked.parityScopeTargetGaps.sort(), []);
+assert.deepEqual(
+  checked.parityScopeTargetGaps.sort(),
+  expectedParityScopeTargetGaps,
+  "unexpected parity runtime target gaps",
+);
 
 for (const requiredModule of [
   "analysis/conjunction-assessment",

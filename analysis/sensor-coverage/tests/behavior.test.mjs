@@ -4,12 +4,17 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import {
-  STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
+  invokeBinaryRequest,
 } from "../../../tests/lib/isomorphicHarness.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const MANIFEST = JSON.parse(
+  fs.readFileSync(new URL("../plugin-manifest.json", import.meta.url), "utf8"),
+);
+const SENSOR_COVERAGE_RUNTIME_KINDS = Object.freeze(
+  MANIFEST.runtimeTargets.includes("browser") ? ["browser"] : [],
+);
 const STANDARDS_ROOT = resolveStandardsRoot();
 const flatbuffers = await import(
   pathToFileURL(`${STANDARDS_ROOT}/node_modules/flatbuffers/mjs/flatbuffers.js`).href
@@ -20,6 +25,7 @@ const {
   SCVCoverageRequestT,
   SCVEllipsoidT,
   SCVSensorT,
+  SCVSensorShapeContractT,
   SCVStateSampleT,
   SCVTimeGridT,
   SCVT,
@@ -29,47 +35,115 @@ const {
   scvCoordinateFrame,
   scvEnvelopeKind,
   scvGeometryDomain,
+  scvGeometryEncoding,
   scvIntervalCategory,
   scvMetricSeriesKind,
+  scvRasterProductEncoding,
+  scvRasterProductKind,
+  scvSensorRangeBoundaryKind,
   scvResultState,
   scvSensorShapeKind,
 } = await import(pathToFileURL(`${STANDARDS_ROOT}/lib/js/SCV/main.js`).href);
-const JSON_COVERAGE_REQUEST_TYPE = Object.freeze({
-  schemaName: "SensorCoverageCompatibilityJson",
-  fileIdentifier: "JSON",
-  rootTypeName: "SensorCoverageCompatibilityRequest",
-});
+const {
+  SENSOR_SHAPE_CONFORMANCE_VECTORS,
+} = await import(
+  pathToFileURL(
+    `${STANDARDS_ROOT}/test/fixtures/scvSensorShapeConformanceVectors.mjs`,
+  ).href
+);
 const WGS84_A = 6378137.0;
 const WGS84_B = 6356752.3142451793;
 const WGS84_E2 = 1.0 - (WGS84_B * WGS84_B) / (WGS84_A * WGS84_A);
+const SENSOR_COVERAGE_METHOD_ID = "compute_sensor_coverage";
+const SENSOR_COVERAGE_PORT_ID = "coverage";
+const SENSOR_COVERAGE_TYPE_REF = Object.freeze({
+  schemaName: "SCV/main.fbs",
+  fileIdentifier: "$SCV",
+  rootTypeName: "SCV",
+});
 
-test("sensor coverage FOM accumulation culls grid candidates by swath bounds before polygon tests", () => {
+test("sensor coverage source delegates SCV shape semantics to the shared sensor model core", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
   );
-  const accumulateStart = source.indexOf("void accumulate_swaths");
-  const accumulateStop = source.indexOf("void merge_intervals");
-  assert.notEqual(accumulateStart, -1);
-  assert.notEqual(accumulateStop, -1);
-  const accumulateSource = source.slice(accumulateStart, accumulateStop);
+  const visibilityStart = source.indexOf("bool surface_sample_visible_from_resolved_state");
+  const visibilityStop = source.indexOf("bool cell_visible_from_resolved_state", visibilityStart);
+  assert.notEqual(visibilityStart, -1);
+  assert.notEqual(visibilityStop, -1);
+  const visibilitySource = source.slice(visibilityStart, visibilityStop);
 
-  assert.match(source, /struct SwathBounds/);
-  assert.match(source, /SwathBounds swath_bounds/);
-  assert.match(source, /CellRange candidate_cell_range/);
-  assert.doesNotMatch(accumulateSource, /for \(auto& cell : cells\)/);
-  assert.match(accumulateSource, /row <= range\.maxRow/);
-  assert.match(accumulateSource, /column <= range\.maxColumn/);
+  assert.match(source, /#include "sensor_shape_model\.h"/);
+  assert.match(source, /#include "sensor_shape_model\.cpp\.inc"/);
+  assert.match(source, /#include "SCV\/main_generated\.h"/);
+  assert.match(source, /parse_sensor_shape_contract\(sensor\)/);
+  assert.match(source, /sensor->SHAPE_CONTRACT\(\)/);
+  assert.doesNotMatch(source, /sensor->SHAPE\(\)/);
+  assert.match(source, /classify_local_look\(/);
+  assert.match(source, /generate_sensor_boundary_directions\(/);
+  assert.match(source, /scvSensorShapeKind_SAR_ANNULAR_SECTOR/);
+  assert.match(source, /CUSTOM_POLYGON requires exact polygon geometry/);
+  assert.match(visibilitySource, /classify_local_look\(/);
+  assert.doesNotMatch(visibilitySource, /sensor\.type == "rectangular"/);
+  assert.doesNotMatch(visibilitySource, /std::cos\(sensor\.outerHalfAngleRad\)/);
+  assert.doesNotMatch(source, /\buses_full_clock_solid_conic_fast_bounds\b/);
+  assert.doesNotMatch(source, /\bnadir_conic_footprint_angular_radius_rad\b/);
+  assert.doesNotMatch(source, /\bnadir_conic_candidate_window\b/);
+  assert.doesNotMatch(source, /\bcell_matches_nadir_conic_candidate_filter\b/);
 });
 
-test("sensor coverage FOM analytics use a grid-first exact visibility kernel", () => {
+test("sensor coverage source rejects non-SCV invocation at the FlatBuffer boundary", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const parseStart = source.indexOf("bool parse_coverage_input");
+  const parseStop = source.indexOf("CellBounds cell_bounds_for", parseStart);
+  assert.notEqual(parseStart, -1);
+  assert.notEqual(parseStop, -1);
+  const parseSource = source.slice(parseStart, parseStop);
+
+  assert.match(parseSource, /must contain an SDS SCV FlatBuffer/i);
+  assert.doesNotMatch(parseSource, /parse_grid\(payload\)/);
+  assert.doesNotMatch(parseSource, /parse_sensor_tracks\(payload\)/);
+  assert.doesNotMatch(source, /\bGridConfig parse_grid\(/);
+  assert.doesNotMatch(source, /\bSensorConfig parse_sensor_config\(/);
+  assert.doesNotMatch(source, /\bSensorConfig parse_sensor\(/);
+  assert.doesNotMatch(source, /\bstd::vector<SensorTrack> parse_sensor_tracks\(/);
+});
+
+test("sensor coverage tests resolve only canonical spacedatastandards.org bindings", () => {
+  const source = fs.readFileSync(new URL(import.meta.url), "utf8");
+  const resolverStart = source.lastIndexOf("function resolveStandardsRoot()");
+  const resolverStop = source.indexOf("function createScvShapeContractCoveragePayload", resolverStart);
+  assert.notEqual(resolverStart, -1);
+  assert.notEqual(resolverStop, -1);
+  const resolverSource = source.slice(resolverStart, resolverStop);
+
+  assert.match(resolverSource, /spacedatastandards\.org/);
+  assert.doesNotMatch(resolverSource, /sds-wasm-module-architecture/);
+});
+
+test("sensor coverage source does not preserve polygon-swath analytics accumulation", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(source, /\bbool point_in_polygon\(/);
+  assert.doesNotMatch(source, /\bvoid accumulate_swaths\(/);
+  assert.doesNotMatch(source, /point_in_polygon\(/);
+  assert.doesNotMatch(source, /accumulate_swaths\(/);
+});
+
+test("sensor coverage FOM products use a grid-first exact visibility kernel", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
   );
   const computeStart = source.indexOf("extern \"C\" int compute_sensor_coverage");
   const computeSource = source.slice(computeStart);
-  const kernelStart = source.indexOf("void accumulate_grid_analytics");
+  const kernelStart = source.indexOf("void accumulate_grid_coverage_products");
   const kernelStop = source.indexOf("void merge_intervals");
   assert.notEqual(computeStart, -1);
   assert.notEqual(kernelStart, -1);
@@ -81,17 +155,17 @@ test("sensor coverage FOM analytics use a grid-first exact visibility kernel", (
   assert.match(source, /Vec3 surfaceNormal/);
   assert.match(source, /bool cell_visible_from_state/);
   assert.match(source, /VisibilityInterval refined_visibility_interval/);
-  assert.match(computeSource, /accumulate_grid_analytics\(\*cells, tracks, swaths, grid\)/);
+  assert.match(computeSource, /accumulate_grid_coverage_products\(\*cells, tracks, swaths, grid\)/);
   assert.doesNotMatch(computeSource, /accumulate_swaths\(cells, swaths, grid\)/);
   assert.doesNotMatch(kernelSource, /point_in_polygon/);
 });
 
-test("sensor coverage grid analytics indexes generated swaths without quadratic lookup", () => {
+test("sensor coverage grid coverage products indexes generated swaths without quadratic lookup", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
   );
-  const kernelStart = source.indexOf("void accumulate_grid_analytics");
+  const kernelStart = source.indexOf("void accumulate_grid_coverage_products");
   const kernelStop = source.indexOf("void merge_intervals");
   assert.notEqual(kernelStart, -1);
   assert.notEqual(kernelStop, -1);
@@ -105,124 +179,125 @@ test("sensor coverage grid analytics indexes generated swaths without quadratic 
   assert.match(kernelSource, /track_swaths\[swath_index\]/);
 });
 
-test("sensor coverage analytics-only path uses local footprint candidates without serializing visualization swaths", () => {
+test("sensor coverage metric-product path goes directly to exact visibility without local footprint candidates", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
   );
   const computeStart = source.indexOf("extern \"C\" int compute_sensor_coverage");
+  const directKernelStart = source.indexOf(
+    "void accumulate_grid_coverage_products(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+  );
+  const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
   assert.notEqual(computeStart, -1);
+  assert.notEqual(directKernelStart, -1);
+  assert.notEqual(directKernelStop, -1);
   const computeSource = source.slice(computeStart);
+  const directKernelSource = source.slice(directKernelStart, directKernelStop);
 
-  assert.match(source, /accumulate_grid_analytics\(\*cells, tracks, grid\)/);
-  assert.match(source, /compute_footprints\(track\.states, track\.sensor\)/);
-  assert.match(source, /build_swath_segments\(track_footprints\)/);
-  assert.match(computeSource, /if \(!analytics_only_output\)/);
-  assert.match(computeSource, /if \(analytics_only_output\) \{\s+accumulate_grid_analytics\(\*cells, tracks, grid\);/);
+  assert.match(source, /accumulate_grid_coverage_products\(\*cells, tracks, grid\)/);
+  assert.match(computeSource, /if \(!metric_product_output\)/);
+  assert.match(computeSource, /if \(metric_product_output\) \{\s+accumulate_grid_coverage_products\(\*cells, tracks, grid\);/);
+  assert.doesNotMatch(
+    directKernelSource,
+    /compute_footprints\(track\.states, track\.sensor\)/,
+  );
+  assert.doesNotMatch(directKernelSource, /build_swath_segments\(track_footprints\)/);
 });
 
-test("sensor coverage analytics-only path uses analytic candidate bounds for fallback nadir conic sensors", () => {
+test("sensor coverage module source does not serialize FOM products as SCV time-series vectors", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(source, /SCVTimeSeriesPoint/);
+  assert.doesNotMatch(source, /CreateSCVTimeSeriesPoint/);
+  assert.doesNotMatch(source, /\btime_series\b/);
+  assert.doesNotMatch(source, /&time_series/);
+});
+
+test("sensor coverage module source does not serialize cell or interval object vectors", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(source, /std::vector<flatbuffers::Offset<SCVCellStat>>/);
+  assert.doesNotMatch(source, /std::vector<flatbuffers::Offset<SCVInterval>>/);
+  assert.doesNotMatch(source, /CreateSCVCellStat/);
+  assert.doesNotMatch(source, /CreateSCVInterval/);
+  assert.doesNotMatch(source, /&cell_stats/);
+  assert.doesNotMatch(source, /&intervals/);
+});
+
+test("sensor coverage module source does not serialize latitude-band object vectors", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(source, /std::vector<flatbuffers::Offset<SCVLatitudeBandStat>>/);
+  assert.doesNotMatch(source, /CreateSCVLatitudeBandStat/);
+  assert.doesNotMatch(source, /&latitude_bands/);
+});
+
+test("sensor coverage exact kernels do not pre-cull cells with coverage-local sensor geometry", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
   );
   const directKernelStart = source.indexOf(
-    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+    "void accumulate_grid_coverage_products(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
   );
   const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
   assert.notEqual(directKernelStart, -1);
   assert.notEqual(directKernelStop, -1);
   const directKernelSource = source.slice(directKernelStart, directKernelStop);
 
-  assert.match(source, /bool uses_fallback_nadir_conic_bounds/);
-  assert.match(source, /struct NadirConicCandidateWindow/);
-  assert.match(source, /NadirConicCandidateWindow nadir_conic_candidate_window/);
-  assert.match(directKernelSource, /uses_fallback_nadir_conic_bounds\(track\)/);
-  assert.match(directKernelSource, /nadir_conic_candidate_window\(track\.sensor, start, stop, grid\)/);
-  assert.match(directKernelSource, /bounds = candidate_window\.bounds/);
-});
-
-test("sensor coverage fallback nadir analytics culls rectangle candidates by angular distance", () => {
-  const source = fs.readFileSync(
-    new URL("../src/cpp/module.cpp", import.meta.url),
-    "utf8",
-  );
-  const directKernelStart = source.indexOf(
-    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
-  );
-  const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
-  assert.notEqual(directKernelStart, -1);
-  assert.notEqual(directKernelStop, -1);
-  const directKernelSource = source.slice(directKernelStart, directKernelStop);
-
-  assert.match(source, /struct NadirConicCandidateFilter/);
-  assert.match(source, /struct NadirConicCandidateWindow/);
-  assert.match(source, /NadirConicCandidateWindow nadir_conic_candidate_window/);
-  assert.match(source, /bool cell_matches_nadir_conic_candidate_filter/);
-  assert.match(directKernelSource, /nadir_filter = candidate_window\.filter/);
-  assert.match(directKernelSource, /cell_matches_nadir_conic_candidate_filter\(cell, nadir_filter\)/);
+  assert.doesNotMatch(source, /\bSwathBounds\b/);
+  assert.doesNotMatch(source, /\bCellRange\b/);
+  assert.doesNotMatch(source, /\bNadirConicCandidateFilter\b/);
+  assert.doesNotMatch(source, /\bNadirConicCandidateWindow\b/);
+  assert.doesNotMatch(source, /\bnadir_conic_/);
+  assert.doesNotMatch(source, /\bcandidate_cell_range\b/);
+  assert.doesNotMatch(source, /\bswath_bounds\b/);
+  assert.doesNotMatch(source, /\bcell_matches_nadir_conic_candidate_filter\b/);
+  assert.match(directKernelSource, /for \(int row = 0; row < grid\.rows; \+\+row\)/);
+  assert.match(directKernelSource, /for \(int column = 0; column < grid\.columns; \+\+column\)/);
   assert.ok(
-    directKernelSource.indexOf("cell_matches_nadir_conic_candidate_filter") <
+    directKernelSource.indexOf("ensure_cell_geometry(cell, grid)") <
       directKernelSource.indexOf("refined_visibility_interval"),
-    "nadir angular culling must run before exact interval refinement",
+    "every candidate cell must reach exact shared-core interval refinement after geometry is available",
   );
 });
 
-test("sensor coverage fallback nadir candidate culling avoids per-cell inverse trig", () => {
-  const source = fs.readFileSync(
-    new URL("../src/cpp/module.cpp", import.meta.url),
-    "utf8",
-  );
-  const matcherStart = source.indexOf("bool cell_matches_nadir_conic_candidate_filter");
-  const matcherStop = source.indexOf("bool surface_sample_visible_from_resolved_state", matcherStart);
-  assert.notEqual(matcherStart, -1);
-  assert.notEqual(matcherStop, -1);
-  const matcherSource = source.slice(matcherStart, matcherStop);
-
-  assert.match(source, /double cosRadius = -1.0;/);
-  assert.match(source, /double sinRadius = 0.0;/);
-  assert.match(source, /filter\.cosRadius = std::cos/);
-  assert.match(source, /filter\.sinRadius = std::sin/);
-  assert.match(
-    matcherSource,
-    /filter\.cosRadius \* cell\.bounds\.cosAngularRadius/,
-  );
-  assert.match(matcherSource, /filter\.sinRadius \* cell\.bounds\.sinAngularRadius/);
-  assert.match(matcherSource, />= cos_expanded_radius/);
-  assert.doesNotMatch(matcherSource, /central_angle_rad/);
-});
-
-test("sensor coverage grid cells carry cached tile and angular bounds metadata", () => {
+test("sensor coverage grid cells carry cached tile and surface-unit metadata", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
   );
   const createStart = source.indexOf("std::vector<Cell> create_cells");
   const createStop = source.indexOf("void ensure_cell_geometry", createStart);
-  const matcherStart = source.indexOf("bool cell_matches_nadir_conic_candidate_filter");
-  const matcherStop = source.indexOf("bool surface_sample_visible_from_resolved_state", matcherStart);
   assert.notEqual(createStart, -1);
   assert.notEqual(createStop, -1);
-  assert.notEqual(matcherStart, -1);
-  assert.notEqual(matcherStop, -1);
   const createSource = source.slice(createStart, createStop);
-  const matcherSource = source.slice(matcherStart, matcherStop);
 
   assert.match(source, /constexpr int kGridTileRowSpan = 8;/);
   assert.match(source, /constexpr int kGridTileColumnSpan = 8;/);
   assert.match(source, /struct CellBounds/);
   assert.match(source, /int tileId = 0;/);
-  assert.match(source, /double angularRadiusRad = 0.0;/);
-  assert.match(source, /double cosAngularRadius = 1.0;/);
-  assert.match(source, /double sinAngularRadius = 0.0;/);
+  assert.doesNotMatch(source, /double angularRadiusRad = 0.0;/);
+  assert.doesNotMatch(source, /double cosAngularRadius = 1.0;/);
+  assert.doesNotMatch(source, /double sinAngularRadius = 0.0;/);
   assert.match(source, /CellBounds cell_bounds_for\(int row, int column, const GridConfig& grid\)/);
   assert.match(createSource, /cell\.bounds = cell_bounds_for\(row, column, grid\);/);
   assert.match(createSource, /cell\.surfaceUnit = cell\.bounds\.centerUnit;/);
-  assert.match(matcherSource, /cos_expanded_radius/);
-  assert.doesNotMatch(matcherSource, /cell_surface_unit\(cell\)/);
+  assert.doesNotMatch(source, /cos_expanded_radius/);
+  assert.doesNotMatch(source, /cell_matches_nadir_conic_candidate_filter/);
 });
 
-test("sensor coverage exact grid geometry is built lazily for candidate cells", () => {
+test("sensor coverage exact grid geometry is built lazily for all grid cells", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
@@ -230,7 +305,7 @@ test("sensor coverage exact grid geometry is built lazily for candidate cells", 
   const createStart = source.indexOf("std::vector<Cell> create_cells");
   const createStop = source.indexOf("void ensure_cell_geometry", createStart);
   const kernelStart = source.indexOf(
-    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+    "void accumulate_grid_coverage_products(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
   );
   const kernelStop = source.indexOf("void merge_intervals", kernelStart);
   assert.notEqual(createStart, -1);
@@ -243,8 +318,9 @@ test("sensor coverage exact grid geometry is built lazily for candidate cells", 
   assert.match(source, /bool geometryReady = false;/);
   assert.match(source, /bool surfaceUnitReady = false;/);
   assert.match(source, /void ensure_cell_geometry\(Cell& cell, const GridConfig& grid\)/);
-  assert.match(source, /Vec3 cell_surface_unit\(Cell& cell\)/);
+  assert.doesNotMatch(source, /Vec3 cell_surface_unit\(Cell& cell\)/);
   assert.doesNotMatch(createSource, /grid_cell_geometry/);
+  assert.doesNotMatch(kernelSource, /candidate_cell_range/);
   assert.match(kernelSource, /ensure_cell_geometry\(cell, grid\)/);
   assert.ok(
     kernelSource.indexOf("ensure_cell_geometry(cell, grid)") <
@@ -281,7 +357,7 @@ test("sensor coverage exact visibility resolves endpoint frames once per state w
   const intervalStart = source.indexOf("VisibilityInterval refined_visibility_interval");
   const intervalStop = source.indexOf("std::map<int, std::vector<const SwathSegment*>>", intervalStart);
   const directKernelStart = source.indexOf(
-    "void accumulate_grid_analytics(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+    "void accumulate_grid_coverage_products(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
   );
   const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
   assert.notEqual(intervalStart, -1);
@@ -293,7 +369,7 @@ test("sensor coverage exact visibility resolves endpoint frames once per state w
   const resolvedIndex = directKernelSource.indexOf(
     "const std::vector<ResolvedVisibilityState> resolved_states =",
   );
-  const candidateLoopIndex = directKernelSource.indexOf("for (int row = range.minRow");
+  const candidateLoopIndex = directKernelSource.indexOf("for (int row = 0; row < grid.rows");
 
   assert.match(source, /struct ResolvedVisibilityState/);
   assert.match(source, /ResolvedVisibilityState resolve_visibility_state\(const State& state\)/);
@@ -367,29 +443,400 @@ function findScvEnvelope(response, envelopeKind) {
   );
 }
 
-function assertRenderableScvGeometry(result, expectedSegments) {
+function assertSharedMemoryBuffer(memoryBuffer) {
+  assert.ok(
+    typeof SharedArrayBuffer === "function" &&
+      memoryBuffer instanceof SharedArrayBuffer,
+    "module product regions must reference SharedArrayBuffer-backed WASM memory",
+  );
+}
+
+function regionDescriptors(owner) {
+  const regions = new Map();
+  const length = owner.memoryRegionsLength();
+  for (let index = 0; index < length; index += 1) {
+    const region = owner.MEMORY_REGIONS(index);
+    assert.ok(region, `SCV memory region ${index} is missing`);
+    assert.equal(region.SHARED(), true, "SCV memory regions must be shared");
+    assert.equal(region.MUTABLE(), false, "SCV product regions must be immutable");
+    assert.ok(region.BYTE_OFFSET() > 0n, "SCV memory region offset must be non-zero");
+    assert.ok(region.BYTE_LENGTH() > 0n, "SCV memory region length must be non-zero");
+    assert.ok(region.ALIGNMENT() >= 4, "SCV memory region alignment must be declared");
+    regions.set(`${region.REGION_ID()}:${region.RECORD_INDEX()}`, region);
+  }
+  return regions;
+}
+
+function regionTypedArray(memoryBuffer, region, ArrayCtor, expectedLength, name) {
+  assertSharedMemoryBuffer(memoryBuffer);
+  const byteOffset = Number(region.BYTE_OFFSET());
+  const byteLength = Number(region.BYTE_LENGTH());
+  assert.equal(
+    byteLength,
+    expectedLength * ArrayCtor.BYTES_PER_ELEMENT,
+    `${name} region byte length must match element count`,
+  );
+  assert.equal(
+    byteOffset % ArrayCtor.BYTES_PER_ELEMENT,
+    0,
+    `${name} region must be aligned to its element width`,
+  );
+  return new ArrayCtor(memoryBuffer, byteOffset, expectedLength);
+}
+
+function regionFor(regions, regionId, recordIndex, name) {
+  const region = regions.get(`${regionId}:${recordIndex}`);
+  assert.ok(region, `${name} must reference a declared SCV memory region`);
+  return region;
+}
+
+function assertRenderableScvGeometry(result, expectedSegments, memoryBuffer) {
   const geometry = result.GEOMETRY();
   assert.ok(geometry, "SCV result must include packed geometry for rendering");
   assert.equal(geometry.WINDOW_COUNT(), expectedSegments);
-  assert.equal(geometry.segmentIdsLength(), expectedSegments);
-  assert.equal(geometry.sensorIdsLength(), expectedSegments);
   assert.equal(geometry.segmentsLength(), expectedSegments);
-  assert.equal(geometry.revealCoordsLength(), expectedSegments * 8);
-  assert.equal(geometry.indicesLength(), expectedSegments * 6);
-  assert.equal(geometry.SEGMENT_IDS(0), 0);
-  assert.equal(geometry.INDICES(0), 0);
-  assert.equal(geometry.INDICES(5), 3);
+  assert.equal(geometry.ENCODING(), scvGeometryEncoding.SHARED_MEMORY_OFFSET);
+  assert.equal(geometry.positionsLength(), 0);
+  assert.equal(geometry.normalsLength(), 0);
+  assert.equal(geometry.stLength(), 0);
+  assert.equal(geometry.revealCoordsLength(), 0);
+  assert.equal(geometry.indicesLength(), 0);
+  assert.ok(
+    geometry.memoryRegionsLength() >= 5,
+    "SCV geometry must declare module-owned regions for positions, normals, ST, reveal coordinates, and indices",
+  );
   const firstSegment = geometry.SEGMENTS(0);
   assert.ok(firstSegment, "SCV geometry must include segment descriptors");
   assert.equal(firstSegment.VERTEX_COUNT(), 4);
   assert.equal(firstSegment.INDEX_COUNT(), 6);
   assert.equal(firstSegment.START_OFFSET_SEC(), 0);
+  const regions = regionDescriptors(geometry);
+  const positions = regionTypedArray(
+    memoryBuffer,
+    regionFor(regions, geometry.POSITIONS_REGION_ID(), geometry.POSITIONS_RECORD_INDEX(), "POSITIONS"),
+    Float32Array,
+    expectedSegments * 12,
+    "POSITIONS",
+  );
+  const normals = regionTypedArray(
+    memoryBuffer,
+    regionFor(regions, geometry.NORMALS_REGION_ID(), geometry.NORMALS_RECORD_INDEX(), "NORMALS"),
+    Float32Array,
+    expectedSegments * 12,
+    "NORMALS",
+  );
+  const sts = regionTypedArray(
+    memoryBuffer,
+    regionFor(regions, geometry.ST_REGION_ID(), geometry.ST_RECORD_INDEX(), "ST"),
+    Float32Array,
+    expectedSegments * 8,
+    "ST",
+  );
+  const indices = regionTypedArray(
+    memoryBuffer,
+    regionFor(regions, geometry.INDICES_REGION_ID(), geometry.INDICES_RECORD_INDEX(), "INDICES"),
+    Uint32Array,
+    expectedSegments * 6,
+    "INDICES",
+  );
+  assert.equal(indices[0], 0);
+  assert.equal(indices[5], 3);
+  for (let index = 0; index < positions.length; index++) {
+    assert.ok(
+      Number.isFinite(positions[index]),
+      `SCV geometry POSITIONS[${index}] must be finite`,
+    );
+  }
+  for (let index = 0; index < normals.length; index += 3) {
+    const normalMagnitude = Math.hypot(
+      normals[index],
+      normals[index + 1],
+      normals[index + 2],
+    );
+    assert.ok(
+      Math.abs(normalMagnitude - 1) < 1.0e-3,
+      `SCV geometry normal ${index / 3} must be unit length`,
+    );
+  }
+  for (let index = 0; index < sts.length; index++) {
+    const value = sts[index];
+    assert.ok(
+      value >= 0 && value <= 1,
+      `SCV geometry ST[${index}] must be normalized`,
+    );
+  }
+}
+
+function assertPackedScvRasterProducts(result, expected, memoryBuffer) {
+  assert.equal(
+    typeof result.RASTER_PRODUCTS,
+    "function",
+    "SCVResult must expose generated RASTER_PRODUCTS accessor",
+  );
+  const rasterProducts = result.RASTER_PRODUCTS();
+  assert.ok(
+    rasterProducts,
+    "SCV result must include module-authored packed raster products",
+  );
+  assert.equal(rasterProducts.CELL_COUNT(), expected.cellCount);
+  assert.equal(rasterProducts.ROWS(), expected.rows);
+  assert.equal(rasterProducts.COLUMNS(), expected.columns);
+  assert.equal(rasterProducts.BUCKET_COUNT(), expected.bucketCount);
+  assert.equal(rasterProducts.WORDS_PER_BUCKET(), expected.wordsPerBucket);
+  assert.ok(
+    rasterProducts.bandsLength() >= expected.minimumBandCount,
+    `expected at least ${expected.minimumBandCount} packed raster bands`,
+  );
+  assert.ok(
+    rasterProducts.memoryRegionsLength() >= expected.minimumBandCount,
+    "SCV raster products must declare module-owned memory regions for every packed band",
+  );
+  const regions = regionDescriptors(rasterProducts);
+  for (let index = 0; index < rasterProducts.bandsLength(); index += 1) {
+    const band = rasterProducts.BANDS(index);
+    assert.ok(band, `SCV raster band ${index} is missing`);
+    assert.ok(band.MEMORY_REGION_ID() > 0, "SCV raster bands must reference memory regions");
+    assert.equal(band.float32ValuesLength(), 0);
+    assert.equal(band.float64ValuesLength(), 0);
+    assert.equal(band.uint32ValuesLength(), 0);
+    regionFor(
+      regions,
+      band.MEMORY_REGION_ID(),
+      band.MEMORY_RECORD_INDEX(),
+      `raster band ${band.PRODUCT_KIND()}`,
+    );
+  }
+  if (memoryBuffer) {
+    assertSharedMemoryBuffer(memoryBuffer);
+  }
+  return rasterProducts;
+}
+
+function scvRasterBand(result, productKind) {
+  const rasterProducts = result.RASTER_PRODUCTS();
+  assert.ok(rasterProducts, "SCV result must include packed raster products");
+  for (let index = 0; index < rasterProducts.bandsLength(); index += 1) {
+    const band = rasterProducts.BANDS(index);
+    if (band.PRODUCT_KIND() === productKind) {
+      return band;
+    }
+  }
+  assert.fail(`missing packed raster band ${productKind}`);
+}
+
+function scvRasterBandValues(result, productKind, memoryBuffer) {
+  const rasterProducts = result.RASTER_PRODUCTS();
+  const regions = regionDescriptors(rasterProducts);
+  const band = scvRasterBand(result, productKind);
+  const region = regionFor(
+    regions,
+    band.MEMORY_REGION_ID(),
+    band.MEMORY_RECORD_INDEX(),
+    `raster band ${productKind}`,
+  );
+  if (band.ENCODING() === scvRasterProductEncoding.FLOAT32) {
+    return regionTypedArray(
+      memoryBuffer,
+      region,
+      Float32Array,
+      band.CELL_COUNT() * Math.max(1, band.COMPONENTS_PER_CELL()),
+      `raster band ${productKind}`,
+    );
+  }
+  if (band.ENCODING() === scvRasterProductEncoding.FLOAT64) {
+    const componentCount = Math.max(1, band.COMPONENTS_PER_CELL());
+    const recordCount = band.BUCKET_COUNT() > 0 ? band.BUCKET_COUNT() : band.CELL_COUNT();
+    return regionTypedArray(
+      memoryBuffer,
+      region,
+      Float64Array,
+      recordCount * componentCount,
+      `raster band ${productKind}`,
+    );
+  }
+  if (
+    band.ENCODING() === scvRasterProductEncoding.UINT32 ||
+    band.ENCODING() === scvRasterProductEncoding.BITSET_UINT32
+  ) {
+    const recordCount =
+      band.BUCKET_COUNT() > 0
+        ? band.BUCKET_COUNT() * Math.max(1, band.WORDS_PER_BUCKET())
+        : band.CELL_COUNT() * Math.max(1, band.COMPONENTS_PER_CELL());
+    return regionTypedArray(
+      memoryBuffer,
+      region,
+      Uint32Array,
+      recordCount,
+      `raster band ${productKind}`,
+    );
+  }
+  if (band.ENCODING() === scvRasterProductEncoding.UINT8) {
+    const recordCount =
+      band.BUCKET_COUNT() > 0
+        ? band.BUCKET_COUNT() * band.CELL_COUNT()
+        : band.CELL_COUNT();
+    return regionTypedArray(
+      memoryBuffer,
+      region,
+      Uint8Array,
+      recordCount * Math.max(1, band.COMPONENTS_PER_CELL()),
+      `raster band ${productKind}`,
+    );
+  }
+  assert.fail(`unsupported raster band encoding ${band.ENCODING()}`);
+}
+
+function assertTypedAggregateStatistics(result) {
+  const statistics = result.AGGREGATE_STATISTICS();
+  assert.ok(statistics, "SCV result must include typed aggregate statistics");
+  assert.equal(statistics.ACTIVE_SENSOR_COUNT(), result.TOTAL_SENSORS());
+  assert.equal(statistics.TOTAL_WINDOWS(), result.TOTAL_WINDOWS());
+  const rasterProducts = result.RASTER_PRODUCTS();
+  if (rasterProducts) {
+    assert.equal(statistics.TOTAL_CELLS(), rasterProducts.CELL_COUNT());
+  }
+  assert.ok(statistics.TOTAL_CELLS() >= 0);
+  assert.ok(statistics.TOTAL_INTERVAL_COUNT() >= 0);
+  assert.ok(Number.isFinite(statistics.TOTAL_ACCESS_DURATION_SEC()));
+  assert.ok(Number.isFinite(statistics.TOTAL_GAP_DURATION_SEC()));
+  assert.ok(Number.isFinite(statistics.MAX_GAP_DURATION_SEC()));
+  assert.ok(Number.isFinite(statistics.MEAN_REVISIT_TIME_SEC()));
+  assert.ok(Number.isFinite(statistics.MAX_RESPONSE_TIME_SEC()));
+  assert.ok(Number.isFinite(statistics.MEAN_RESPONSE_TIME_SEC()));
+  assert.ok(Number.isFinite(statistics.PERCENT_COVERAGE()));
+  assert.doesNotMatch(
+    result.MESSAGE() ?? "",
+    /scv-summary|\"statistics\"|\"contract\"/,
+    "SCV MESSAGE must be diagnostic text, not coverage-summary JSON",
+  );
+  return statistics;
+}
+
+function assertNoInlineScvCellOrIntervalVectors(result) {
+  assert.equal(
+    typeof result.cellStatsLength,
+    "undefined",
+    "SCV RESULT bindings must not expose inline per-cell statistic vectors",
+  );
+  assert.equal(
+    typeof result.intervalsLength,
+    "undefined",
+    "SCV RESULT bindings must not expose inline access interval vectors",
+  );
+}
+
+function assertNoInlineScvLatitudeBandVectors(result) {
+  assert.equal(
+    typeof result.latitudeBandsLength,
+    "undefined",
+    "SCV RESULT bindings must not expose inline latitude-band statistic vectors",
+  );
+}
+
+function assertNoInlineScvTimeSeries(result) {
+  assert.equal(
+    typeof result.timeSeriesLength,
+    "undefined",
+    "SCV RESULT bindings must not expose inline FOM/current-access metric time-series vectors",
+  );
+}
+
+function assertRasterBandMetricKind(result, productKind, metricKind) {
+  const band = scvRasterBand(result, productKind);
+  assert.equal(
+    band.METRIC_KIND(),
+    metricKind,
+    `packed raster band ${productKind} must advertise requested metric kind`,
+  );
+  return band;
+}
+
+function assertRequestedPerCellRasterProducts(result, requestedProducts) {
+  for (const product of requestedProducts) {
+    if (product === scvMetricSeriesKind.PERCENT_COVERED) {
+      assertRasterBandMetricKind(
+        result,
+        scvRasterProductKind.PERCENT_COVERAGE,
+        product,
+      );
+    } else if (product === scvMetricSeriesKind.ACCESS_COUNT) {
+      for (const productKind of [
+        scvRasterProductKind.PASS_COUNT,
+        scvRasterProductKind.PASS_COUNT_RGBA,
+        scvRasterProductKind.CURRENT_ACCESS_BITSET,
+        scvRasterProductKind.CURRENT_ACCESS_RGBA,
+        scvRasterProductKind.BUCKET_ACTIVE_CELL_COUNT,
+      ]) {
+        assertRasterBandMetricKind(result, productKind, product);
+      }
+    } else if (product === scvMetricSeriesKind.CONTACT_DURATION_SECONDS) {
+      assertRasterBandMetricKind(
+        result,
+        scvRasterProductKind.CONTACT_DURATION_SECONDS,
+        product,
+      );
+    } else if (product === scvMetricSeriesKind.REVISIT_SECONDS) {
+      assertRasterBandMetricKind(
+        result,
+        scvRasterProductKind.REVISIT_SECONDS,
+        product,
+      );
+    } else if (product === scvMetricSeriesKind.GAP_SECONDS) {
+      assertRasterBandMetricKind(
+        result,
+        scvRasterProductKind.GAP_SECONDS,
+        product,
+      );
+    } else if (product === scvMetricSeriesKind.REDUNDANCY) {
+      assertRasterBandMetricKind(
+        result,
+        scvRasterProductKind.REDUNDANCY,
+        product,
+      );
+    }
+  }
+}
+
+function scvPercentCoverageValues(result, memoryBuffer) {
+  const rasterProducts = result.RASTER_PRODUCTS();
+  assert.ok(rasterProducts, "SCV result must include packed raster products");
+  const values = scvRasterBandValues(
+    result,
+    scvRasterProductKind.PERCENT_COVERAGE,
+    memoryBuffer,
+  );
+  assert.equal(values.length, rasterProducts.CELL_COUNT());
+  return values;
+}
+
+function scvCoveredCellCount(result, memoryBuffer) {
+  return scvPercentCoverageValues(result, memoryBuffer).reduce(
+    (total, value) => total + (value > 0 ? 1 : 0),
+    0,
+  );
+}
+
+function scvCoveredCellIds(result, memoryBuffer) {
+  const ids = [];
+  const values = scvPercentCoverageValues(result, memoryBuffer);
+  for (let index = 0; index < values.length; index += 1) {
+    if (values[index] > 0) {
+      ids.push(index);
+    }
+  }
+  return ids;
+}
+
+function scvCoverageFractionTotal(result, memoryBuffer) {
+  return scvPercentCoverageValues(result, memoryBuffer).reduce(
+    (total, value) => total + value / 100.0,
+    0,
+  );
 }
 
 function resolveStandardsRoot() {
   const candidates = [
     process.env.SPACE_DATA_STANDARDS_ROOT,
-    new URL("../../../../sds-wasm-module-architecture", import.meta.url).pathname,
     new URL("../../../../spacedatastandards.org", import.meta.url).pathname,
     new URL("../node_modules/spacedatastandards.org", import.meta.url).pathname,
   ].filter(Boolean);
@@ -399,6 +846,269 @@ function resolveStandardsRoot() {
     }
   }
   throw new Error("Unable to resolve SDS SCV JavaScript bindings.");
+}
+
+function createScvShapeContractCoveragePayload(shapeContract, options = {}) {
+  const earthRadius = 6378137.0;
+  const orbitRadius = earthRadius + 500000.0;
+  const speed = 7612.608173223869;
+  const makeState = (theta, elapsedSeconds) =>
+    new SCVStateSampleT(
+      3,
+      elapsedSeconds,
+      new SCVVec3T(
+        orbitRadius * Math.cos(theta),
+        orbitRadius * Math.sin(theta),
+        0,
+      ),
+      new SCVVec3T(-speed * Math.sin(theta), speed * Math.cos(theta), 0),
+      0,
+      0,
+      0,
+      1,
+      scvCoordinateFrame.BODY_FIXED,
+    );
+  const stateSamples = [
+    makeState(-0.04, 0),
+    makeState(0, 600),
+    makeState(0.04, 1200),
+  ].slice(0, options.stateSampleCount ?? 3);
+  const request = new SCVCoverageRequestT(
+    `shape-contract-${shapeContract.SHAPE_KIND}`,
+    BigInt("303"),
+    scvAnalysisMode.COVERAGE,
+    new SCVEllipsoidT(
+      scvBodyKind.EARTH,
+      "Earth",
+      earthRadius,
+      6356752.314245,
+      earthRadius,
+      scvCoordinateFrame.BODY_FIXED,
+    ),
+    new SCVTimeGridT(null, 0, 0, 1200, 600, 0, 2),
+    new SCVCoverageGridT(
+      "shape-contract-grid",
+      scvGeometryDomain.SURFACE,
+      scvCoordinateFrame.BODY_FIXED,
+      -10,
+      10,
+      -16,
+      16,
+      2,
+      2,
+      0,
+      160,
+      10,
+    ),
+    [
+      new SCVSensorT(
+        3,
+        "sensor-shape-contract",
+        "SCV shape contract sensor",
+        scvCoordinateFrame.BODY_FIXED,
+        null,
+        null,
+        null,
+        null,
+        shapeContract,
+      ),
+    ],
+    stateSamples,
+    [],
+    [],
+    [scvMetricSeriesKind.PERCENT_COVERED],
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    false,
+  );
+  const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
+  const builder = new flatbuffers.Builder(1024);
+  SCV.finishSCVBuffer(builder, envelope.pack(builder));
+  return builder.asUint8Array();
+}
+
+function solidConicContract() {
+  return new SCVSensorShapeContractT(
+    scvSensorShapeKind.CONIC,
+    0,
+    scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+    14,
+    0,
+    0,
+    360,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1600000,
+  );
+}
+
+function radiansToDegrees(value) {
+  return (value * 180.0) / Math.PI;
+}
+
+function conicShapeContract(outerHalfAngleRad = 0.22, maxRangeM = 1600000) {
+  return new SCVSensorShapeContractT(
+    scvSensorShapeKind.CONIC,
+    0,
+    scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+    radiansToDegrees(outerHalfAngleRad),
+    0,
+    0,
+    360,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    maxRangeM,
+  );
+}
+
+function conformanceShapeContract(vector, radiusMeters = vector.shape.radiusMeters) {
+  const shape = vector.shape;
+  const minRangeMeters = shape.minRangeMeters ?? 0;
+  if (vector.type === "conic") {
+    return new SCVSensorShapeContractT(
+      scvSensorShapeKind.CONIC,
+      0,
+      scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+      radiansToDegrees(shape.outerHalfAngleRad),
+      radiansToDegrees(shape.innerHalfAngleRad),
+      radiansToDegrees(shape.minimumClockAngleRad),
+      radiansToDegrees(shape.maximumClockAngleRad),
+      0,
+      0,
+      0,
+      0,
+      1,
+      minRangeMeters,
+      radiusMeters,
+    );
+  }
+  if (vector.type === "rectangular") {
+    return new SCVSensorShapeContractT(
+      scvSensorShapeKind.RECTANGULAR,
+      0,
+      scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+      0,
+      0,
+      0,
+      360,
+      radiansToDegrees(shape.xHalfAngleRad),
+      radiansToDegrees(shape.yHalfAngleRad),
+      0,
+      0,
+      1,
+      minRangeMeters,
+      radiusMeters,
+    );
+  }
+  if (vector.type === "sar") {
+    return new SCVSensorShapeContractT(
+      scvSensorShapeKind.SAR_ANNULAR_SECTOR,
+      0,
+      scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+      0,
+      0,
+      radiansToDegrees(shape.minimumClockAngleRad),
+      radiansToDegrees(shape.maximumClockAngleRad),
+      0,
+      0,
+      radiansToDegrees(shape.innerLookAngleRad),
+      radiansToDegrees(shape.outerLookAngleRad),
+      shape.sarSamplingDensity,
+      minRangeMeters,
+      radiusMeters,
+    );
+  }
+  throw new Error(`Unsupported conformance vector type: ${vector.type}`);
+}
+
+function createScvConformanceCoveragePayload(vector) {
+  const earthRadius = 6378137.0;
+  // The module clamps SCV grid resolution to 0.01 degrees, so scale the
+  // 100 m local vectors uniformly while preserving their angular contracts.
+  const coverageScale = 100.0;
+  const sensorAltitudeM = 50.0 * coverageScale;
+  const radiusMeters = vector.shape.radiusMeters * coverageScale;
+  const sensorPosition = new SCVVec3T(earthRadius + sensorAltitudeM, 0, 0);
+  const sensorVelocity = new SCVVec3T(0, 7600, 0);
+  const makeState = (elapsedSeconds) =>
+    new SCVStateSampleT(
+      9,
+      elapsedSeconds,
+      sensorPosition,
+      sensorVelocity,
+      0,
+      0,
+      0,
+      1,
+      scvCoordinateFrame.BODY_FIXED,
+    );
+  const shapeContract = conformanceShapeContract(vector, radiusMeters);
+  const request = new SCVCoverageRequestT(
+    `shape-conformance-${vector.name}`,
+    BigInt("909"),
+    scvAnalysisMode.COVERAGE,
+    new SCVEllipsoidT(
+      scvBodyKind.EARTH,
+      "Earth",
+      earthRadius,
+      6356752.314245,
+      earthRadius,
+      scvCoordinateFrame.BODY_FIXED,
+    ),
+    new SCVTimeGridT(null, 0, 0, 1, 1, 0, 1),
+    new SCVCoverageGridT(
+      "shape-conformance-grid",
+      scvGeometryDomain.SURFACE,
+      scvCoordinateFrame.BODY_FIXED,
+      -0.025,
+      0.025,
+      -0.025,
+      0.025,
+      0.01,
+      0.01,
+      0,
+      25,
+      0.01,
+    ),
+    [
+      new SCVSensorT(
+        9,
+        "sensor-shape-conformance",
+        `SCV ${vector.name} conformance sensor`,
+        scvCoordinateFrame.BODY_FIXED,
+        null,
+        null,
+        null,
+        null,
+        shapeContract,
+      ),
+    ],
+    [makeState(0), makeState(1)],
+    [],
+    [],
+    [scvMetricSeriesKind.PERCENT_COVERED],
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    false,
+  );
+  const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
+  const builder = new flatbuffers.Builder(1024);
+  SCV.finishSCVBuffer(builder, envelope.pack(builder));
+  return builder.asUint8Array();
 }
 
 function createSingleSensorCoverageRequest() {
@@ -606,7 +1316,10 @@ function createHighLatitudeWgs84CoverageRequest() {
   };
 }
 
-function createScvCoverageRequestPayload({ windowCount = 2 } = {}) {
+function createScvCoverageRequestPayload({
+  windowCount = 2,
+  requestedProducts = [scvMetricSeriesKind.PERCENT_COVERED],
+} = {}) {
   const earthRadius = 6378137.0;
   const orbitRadius = earthRadius + 500000.0;
   const speed = 7612.608173223869;
@@ -664,20 +1377,24 @@ function createScvCoverageRequestPayload({ windowCount = 2 } = {}) {
         7,
         "sensor-7",
         "SCV request sensor",
-        scvSensorShapeKind.CONIC,
         scvCoordinateFrame.BODY_FIXED,
         null,
         null,
         null,
         null,
-        0.22 * (180 / Math.PI),
-        0,
-        0,
-        0,
-        1600000,
+        conicShapeContract(0.22, 1600000),
       ),
     ],
     stateSamples,
+    [],
+    [],
+    requestedProducts,
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    true,
   );
   const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
   const builder = new flatbuffers.Builder(1024);
@@ -685,7 +1402,10 @@ function createScvCoverageRequestPayload({ windowCount = 2 } = {}) {
   return builder.asUint8Array();
 }
 
-function createScvAnalyticsOnlyCoverageRequestPayload({ windowCount = 2 } = {}) {
+function createScvMetricProductCoverageRequestPayload({
+  windowCount = 2,
+  requestedProducts = [scvMetricSeriesKind.PERCENT_COVERED],
+} = {}) {
   const earthRadius = 6378137.0;
   const orbitRadius = earthRadius + 500000.0;
   const speed = 7612.608173223869;
@@ -712,7 +1432,7 @@ function createScvAnalyticsOnlyCoverageRequestPayload({ windowCount = 2 } = {}) 
     stateSamples.push(makeState(-0.04 + 0.08 * fraction, index * stepSeconds));
   }
   const request = new SCVCoverageRequestT(
-    "scv-analytics-only-test",
+    "scv-metric-product-test",
     BigInt("43"),
     scvAnalysisMode.COVERAGE,
     new SCVEllipsoidT(
@@ -743,23 +1463,18 @@ function createScvAnalyticsOnlyCoverageRequestPayload({ windowCount = 2 } = {}) 
         7,
         "sensor-7",
         "SCV request sensor",
-        scvSensorShapeKind.CONIC,
         scvCoordinateFrame.BODY_FIXED,
         null,
         null,
         null,
         null,
-        0.22 * (180 / Math.PI),
-        0,
-        0,
-        0,
-        1600000,
+        conicShapeContract(0.22, 1600000),
       ),
     ],
     stateSamples,
     [],
     [],
-    [scvMetricSeriesKind.PERCENT_COVERED],
+    requestedProducts,
     0,
     0,
     0,
@@ -773,7 +1488,109 @@ function createScvAnalyticsOnlyCoverageRequestPayload({ windowCount = 2 } = {}) 
   return builder.asUint8Array();
 }
 
-function createScvSwathOnlyCoverageRequestPayload({ windowCount = 2 } = {}) {
+function createScvMultiSensorMetricProductCoverageRequestPayload({
+  sensorCount = 16,
+  windowCount = 5,
+  requestedProducts = [scvMetricSeriesKind.ACCESS_COUNT],
+} = {}) {
+  const earthRadius = 6378137.0;
+  const orbitRadius = earthRadius + 500000.0;
+  const speed = 7612.608173223869;
+  const stepSeconds = 10;
+  const sensors = [];
+  const stateSamples = [];
+  for (let sensorIndex = 0; sensorIndex < sensorCount; sensorIndex++) {
+    sensors.push(
+      new SCVSensorT(
+        sensorIndex,
+        `sensor-${sensorIndex}`,
+        `SCV multi-sensor request sensor ${sensorIndex}`,
+        scvCoordinateFrame.BODY_FIXED,
+        null,
+        null,
+        null,
+        null,
+        conicShapeContract(0.22, 1600000),
+      ),
+    );
+    const phaseOffset = (sensorIndex / Math.max(1, sensorCount)) * 0.02;
+    for (let index = 0; index <= windowCount; index++) {
+      const fraction = windowCount > 0 ? index / windowCount : 0;
+      const theta = -0.04 + 0.08 * fraction + phaseOffset;
+      stateSamples.push(
+        new SCVStateSampleT(
+          sensorIndex,
+          index * stepSeconds,
+          new SCVVec3T(
+            orbitRadius * Math.cos(theta),
+            orbitRadius * Math.sin(theta),
+            0,
+          ),
+          new SCVVec3T(-speed * Math.sin(theta), speed * Math.cos(theta), 0),
+          0,
+          0,
+          0,
+          1,
+          scvCoordinateFrame.BODY_FIXED,
+        ),
+      );
+    }
+  }
+
+  const request = new SCVCoverageRequestT(
+    "scv-multi-sensor-metric-product-test",
+    BigInt("44"),
+    scvAnalysisMode.COVERAGE,
+    new SCVEllipsoidT(
+      scvBodyKind.EARTH,
+      "Earth",
+      earthRadius,
+      6356752.314245,
+      earthRadius,
+      scvCoordinateFrame.BODY_FIXED,
+    ),
+    new SCVTimeGridT(
+      null,
+      0,
+      0,
+      windowCount * stepSeconds,
+      stepSeconds,
+      0,
+      windowCount,
+    ),
+    new SCVCoverageGridT(
+      "single-cell-grid",
+      scvGeometryDomain.SURFACE,
+      scvCoordinateFrame.BODY_FIXED,
+      -2,
+      2,
+      -2,
+      2,
+      4,
+      4,
+      0,
+      1,
+      4,
+    ),
+    sensors,
+    stateSamples,
+    [],
+    [],
+    requestedProducts,
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    false,
+  );
+  const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
+  const builder = new flatbuffers.Builder(1024);
+  SCV.finishSCVBuffer(builder, envelope.pack(builder));
+  return builder.asUint8Array();
+}
+
+function createScvSwathPreviewCoverageRequestPayload({ windowCount = 2 } = {}) {
   const earthRadius = 6378137.0;
   const orbitRadius = earthRadius + 500000.0;
   const speed = 7612.608173223869;
@@ -800,7 +1617,7 @@ function createScvSwathOnlyCoverageRequestPayload({ windowCount = 2 } = {}) {
     stateSamples.push(makeState(-0.04 + 0.08 * fraction, index * stepSeconds));
   }
   const request = new SCVCoverageRequestT(
-    "scv-swath-only-test",
+    "scv-swath-preview-test",
     BigInt("44"),
     scvAnalysisMode.SWATH,
     new SCVEllipsoidT(
@@ -831,17 +1648,12 @@ function createScvSwathOnlyCoverageRequestPayload({ windowCount = 2 } = {}) {
         7,
         "sensor-7",
         "SCV request sensor",
-        scvSensorShapeKind.CONIC,
         scvCoordinateFrame.BODY_FIXED,
         null,
         null,
         null,
         null,
-        0.22 * (180 / Math.PI),
-        0,
-        0,
-        0,
-        1600000,
+        conicShapeContract(0.22, 1600000),
       ),
     ],
     stateSamples,
@@ -919,20 +1731,24 @@ function createScvOffNadirCoverageRequestPayload(offNadirAlongTrackRad = 0) {
         0,
         "sensor-0",
         "SCV off-nadir parity sensor",
-        scvSensorShapeKind.CONIC,
         scvCoordinateFrame.BODY_FIXED,
         null,
         null,
         null,
         null,
-        halfAngleDeg,
-        0,
-        0,
-        0,
-        1600000,
+        conicShapeContract(0.08, 1600000),
       ),
     ],
     [makeState(-0.03, 0), makeState(0, 600), makeState(0.03, 1200)],
+    [],
+    [],
+    [scvMetricSeriesKind.PERCENT_COVERED],
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    true,
   );
   const envelope = new SCVT(scvEnvelopeKind.REQUEST, request);
   const builder = new flatbuffers.Builder(1024);
@@ -945,11 +1761,43 @@ function createSensorCoverageHarness(runtimeKind, t) {
     runtimeKind,
     WASM_PATH,
     t,
-    runtimeKind === "browser" ? { surface: "direct" } : {},
+    runtimeKind === "browser"
+        ? {
+            surface: "direct",
+            sharedMemory: true,
+            allowRawInvoke: false,
+            initialMemoryBytes: 64 * 1024 * 1024,
+            maximumMemoryBytes: 2 * 1024 * 1024 * 1024,
+          }
+      : {},
   );
 }
 
-for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
+function invokeSensorCoverageScv(harness, payload) {
+  return invokeBinaryRequest(harness, payload, {
+    methodId: SENSOR_COVERAGE_METHOD_ID,
+    inputPortId: SENSOR_COVERAGE_PORT_ID,
+    inputTypeRef: SENSOR_COVERAGE_TYPE_REF,
+    alignment: 8,
+  });
+}
+
+test("sensor coverage browser behavior harness disables raw direct invoke", async (t) => {
+  const harness = await createSensorCoverageHarness("browser", t);
+  if (!harness) {
+    return;
+  }
+  t.after(async () => {
+    await harness.destroy();
+  });
+
+  await assert.rejects(
+    harness.invokeRaw(new Uint8Array([0, 1, 2, 3])),
+    /raw direct invoke is disabled/i,
+  );
+});
+
+for (const runtimeKind of SENSOR_COVERAGE_RUNTIME_KINDS) {
   test(`sensor coverage module accepts an SDS SCV binary request frame on ${runtimeKind}`, async (t) => {
     const harness = await createSensorCoverageHarness(runtimeKind, t);
     if (!harness) {
@@ -959,26 +1807,16 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: {
-            schemaName: "SCV/main.fbs",
-            fileIdentifier: "$SCV",
-            rootTypeName: "SCV",
-          },
-          payload: createScvCoverageRequestPayload(),
-        },
-      ],
-    });
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvCoverageRequestPayload(),
+    );
 
     assert.equal(response.statusCode, 0, response.errorMessage);
     assert.equal(
       response.outputs.some((frame) => frame.typeRef?.fileIdentifier === "JSON"),
       false,
-      "SCV request path should not emit JSON compatibility results",
+      "SCV request path must not emit non-SCV result frames",
     );
     const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
     assert.ok(resultEnvelope, "missing canonical SCV result output frame");
@@ -986,11 +1824,13 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result, "missing SCV RESULT payload");
     assert.equal(result.TOTAL_SENSORS(), 1);
     assert.equal(result.TOTAL_WINDOWS(), 2);
-    assert.equal(result.cellStatsLength(), 24);
-    assertRenderableScvGeometry(result, 2);
+    assertNoInlineScvCellOrIntervalVectors(result);
+    assertNoInlineScvTimeSeries(result);
+    assert.equal(result.RASTER_PRODUCTS().CELL_COUNT(), 24);
+    assertRenderableScvGeometry(result, 2, harness.memory.buffer);
   });
 
-  test(`sensor coverage module honors SCV analytics-only products without packed geometry on ${runtimeKind}`, async (t) => {
+  test(`sensor coverage module emits SCV metric products as packed raster and aggregate descriptors on ${runtimeKind}`, async (t) => {
     const harness = await createSensorCoverageHarness(runtimeKind, t);
     if (!harness) {
       return;
@@ -999,26 +1839,16 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: {
-            schemaName: "SCV/main.fbs",
-            fileIdentifier: "$SCV",
-            rootTypeName: "SCV",
-          },
-          payload: createScvAnalyticsOnlyCoverageRequestPayload(),
-        },
-      ],
-    });
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvMetricProductCoverageRequestPayload(),
+    );
 
     assert.equal(response.statusCode, 0, response.errorMessage);
     assert.equal(
       response.outputs.some((frame) => frame.typeRef?.fileIdentifier === "JSON"),
       false,
-      "SCV analytics-only request must not emit JSON compatibility results",
+      "SCV metric-product request must not emit non-SCV result frames",
     );
     const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
     assert.ok(resultEnvelope, "missing canonical SCV result output frame");
@@ -1026,35 +1856,27 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result, "missing SCV RESULT payload");
     assert.equal(result.TOTAL_SENSORS(), 1);
     assert.equal(result.TOTAL_WINDOWS(), 2);
-    assert.equal(result.cellStatsLength(), 24);
-    const summary = JSON.parse(result.MESSAGE());
-    assert.equal(summary.contract, "orbpro.coverage.scv-summary.v0");
-    assert.equal(summary.provider, "sensor-coverage-analysis");
-    assert.equal(summary.statistics.activeSensorCount, 1);
-    assert.equal(summary.statistics.totalWindows, 2);
-    assert.equal(summary.statistics.totalCells, result.cellStatsLength());
-    assert.equal(summary.statistics.totalIntervalCount, result.intervalsLength());
-    assert.ok(Number.isFinite(summary.statistics.percentCoverage));
-    assert.ok(Number.isFinite(summary.statistics.meanRevisitTimeSec));
-    assert.ok(Number.isFinite(summary.statistics.meanResponseTimeSec));
-    assert.ok(
-      result.timeSeriesLength() > 0,
-      "SCV analytics result must carry module-authored metric time-series products",
+    const cellCount = 24;
+    assertNoInlineScvCellOrIntervalVectors(result);
+    assertTypedAggregateStatistics(result);
+    assertNoInlineScvTimeSeries(result);
+    assertPackedScvRasterProducts(result, {
+      cellCount,
+      rows: 4,
+      columns: 6,
+      bucketCount: result.TOTAL_WINDOWS(),
+      wordsPerBucket: Math.ceil(cellCount / 32),
+      minimumBandCount: 3,
+    }, harness.memory.buffer);
+    assertRasterBandMetricKind(
+      result,
+      scvRasterProductKind.PERCENT_COVERAGE,
+      scvMetricSeriesKind.PERCENT_COVERED,
     );
-    const metricKinds = new Set();
-    for (let index = 0; index < result.timeSeriesLength(); index += 1) {
-      metricKinds.add(result.TIME_SERIES(index).METRIC_KIND());
-    }
-    assert.ok(metricKinds.has(scvMetricSeriesKind.PERCENT_COVERED));
-    assert.ok(metricKinds.has(scvMetricSeriesKind.ACCESS_COUNT));
-    assert.ok(metricKinds.has(scvMetricSeriesKind.CONTACT_DURATION_SECONDS));
-    assert.ok(metricKinds.has(scvMetricSeriesKind.REVISIT_SECONDS));
-    assert.ok(metricKinds.has(scvMetricSeriesKind.GAP_SECONDS));
-    assert.ok(metricKinds.has(scvMetricSeriesKind.REDUNDANCY));
     assert.equal(result.GEOMETRY(), null);
   });
 
-  test(`sensor coverage module honors SCV swath mode without grid analytics on ${runtimeKind}`, async (t) => {
+  test(`sensor coverage module keeps metric-product time windows global across sensors on ${runtimeKind}`, async (t) => {
     const harness = await createSensorCoverageHarness(runtimeKind, t);
     if (!harness) {
       return;
@@ -1063,26 +1885,262 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: {
-            schemaName: "SCV/main.fbs",
-            fileIdentifier: "$SCV",
-            rootTypeName: "SCV",
-          },
-          payload: createScvSwathOnlyCoverageRequestPayload(),
-        },
-      ],
+    const sensorCount = 16;
+    const windowCount = 5;
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvMultiSensorMetricProductCoverageRequestPayload({
+        sensorCount,
+        windowCount,
+      }),
+    );
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
+    assert.ok(resultEnvelope, "missing canonical SCV result output frame");
+    const result = resultEnvelope.envelope.RESULT();
+    assert.ok(result, "missing SCV RESULT payload");
+    assert.equal(result.TOTAL_SENSORS(), sensorCount);
+    assert.equal(result.TOTAL_WINDOWS(), windowCount);
+    assertNoInlineScvCellOrIntervalVectors(result);
+    assertNoInlineScvTimeSeries(result);
+    assert.equal(result.RASTER_PRODUCTS().CELL_COUNT(), 1);
+    assert.equal(typeof result.HEATMAP, "undefined");
+    assert.equal(typeof result.heatmapLength, "undefined");
+    const activeCellCount = scvRasterBandValues(
+      result,
+      scvRasterProductKind.BUCKET_ACTIVE_CELL_COUNT,
+      harness.memory.buffer,
+    );
+    assert.equal(
+      activeCellCount.length,
+      windowCount,
+    );
+    assert.ok(
+      activeCellCount.some((value) => value > 0),
+      "bucket active-cell count must carry module-authored current-access values",
+    );
+  });
+
+  test(`sensor coverage module rejects SCV metric product requests without explicit products on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
     });
+
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvMetricProductCoverageRequestPayload({
+        requestedProducts: [],
+      }),
+    );
+
+    assert.notEqual(response.statusCode, 0);
+    assert.match(response.errorMessage, /REQUESTED_PRODUCTS/i);
+  });
+
+  test(`sensor coverage module emits requested per-cell packed raster products on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const requestedProducts = [
+      scvMetricSeriesKind.PERCENT_COVERED,
+      scvMetricSeriesKind.ACCESS_COUNT,
+      scvMetricSeriesKind.CONTACT_DURATION_SECONDS,
+      scvMetricSeriesKind.REVISIT_SECONDS,
+      scvMetricSeriesKind.GAP_SECONDS,
+      scvMetricSeriesKind.REDUNDANCY,
+    ];
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvMetricProductCoverageRequestPayload({
+        requestedProducts,
+      }),
+    );
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
+    assert.ok(resultEnvelope, "missing canonical SCV result output frame");
+    const result = resultEnvelope.envelope.RESULT();
+    assert.ok(result, "missing SCV RESULT payload");
+    assertNoInlineScvCellOrIntervalVectors(result);
+    assertNoInlineScvTimeSeries(result);
+    assertRequestedPerCellRasterProducts(result, requestedProducts);
+    assert.equal(typeof result.HEATMAP, "undefined");
+    assert.equal(typeof result.heatmapLength, "undefined");
+
+    const columns = 6;
+    const rows = 4;
+    const cellCount = rows * columns;
+    const rasterProducts = assertPackedScvRasterProducts(result, {
+      cellCount,
+      rows,
+      columns,
+      bucketCount: result.TOTAL_WINDOWS(),
+      wordsPerBucket: Math.ceil(cellCount / 32),
+      minimumBandCount: 14,
+    }, harness.memory.buffer);
+    const passCountValues = scvRasterBandValues(
+      result,
+      scvRasterProductKind.PASS_COUNT,
+      harness.memory.buffer,
+    );
+    assert.equal(passCountValues.length, cellCount);
+    assert.ok(passCountValues.every((value) => value >= 0));
+    assert.ok(
+      passCountValues.some((value) => value > 0),
+      "PASS_COUNT raster must contain module-authored covered cells",
+    );
+    const percentValues = scvRasterBandValues(
+      result,
+      scvRasterProductKind.PERCENT_COVERAGE,
+      harness.memory.buffer,
+    );
+    assert.equal(percentValues.length, cellCount);
+    assert.ok(
+      percentValues.every(
+        (value) => Number.isFinite(value) && value >= 0 && value <= 100,
+      ),
+      "PERCENT_COVERAGE raster must contain bounded finite percentages",
+    );
+    assert.ok(
+      percentValues.some((value) => value > 0),
+      "PERCENT_COVERAGE raster must contain module-authored covered cells",
+    );
+    const passCountRgbaBand = scvRasterBand(
+      result,
+      scvRasterProductKind.PASS_COUNT_RGBA,
+    );
+    assert.equal(passCountRgbaBand.ENCODING(), scvRasterProductEncoding.UINT8);
+    assert.equal(passCountRgbaBand.COMPONENTS_PER_CELL(), 4);
+    assert.equal(passCountRgbaBand.CELL_COUNT(), cellCount);
+    assert.equal(passCountRgbaBand.BUCKET_COUNT(), 0);
+    const passCountRgbaValues = scvRasterBandValues(
+      result,
+      scvRasterProductKind.PASS_COUNT_RGBA,
+      harness.memory.buffer,
+    );
+    assert.equal(passCountRgbaValues.length, cellCount * 4);
+    assert.ok(
+      passCountRgbaValues.some((value, index) => index % 4 === 3 && value > 0),
+      "PASS_COUNT_RGBA must contain module-authored visible alpha values",
+    );
+    const currentAccessRgbaBand = scvRasterBand(
+      result,
+      scvRasterProductKind.CURRENT_ACCESS_RGBA,
+    );
+    assert.equal(currentAccessRgbaBand.ENCODING(), scvRasterProductEncoding.UINT8);
+    assert.equal(currentAccessRgbaBand.COMPONENTS_PER_CELL(), 4);
+    assert.equal(currentAccessRgbaBand.CELL_COUNT(), cellCount);
+    assert.equal(currentAccessRgbaBand.BUCKET_COUNT(), result.TOTAL_WINDOWS());
+    const currentAccessRgbaValues = scvRasterBandValues(
+      result,
+      scvRasterProductKind.CURRENT_ACCESS_RGBA,
+      harness.memory.buffer,
+    );
+    assert.equal(
+      currentAccessRgbaValues.length,
+      result.TOTAL_WINDOWS() * cellCount * 4,
+    );
+    assert.ok(
+      currentAccessRgbaValues.some((value, index) => index % 4 === 3 && value > 0),
+      "CURRENT_ACCESS_RGBA must contain module-authored visible alpha values",
+    );
+    assert.equal(rasterProducts.CELL_COUNT(), cellCount);
+  });
+
+  test(`sensor coverage module maps requested SCV FOM and raster products exactly on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const requestedProducts = [
+      scvMetricSeriesKind.COVERED_CELL_COUNT,
+      scvMetricSeriesKind.OVERLAP_COUNT,
+      scvMetricSeriesKind.LATITUDE_BAND_COVERAGE,
+    ];
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvMetricProductCoverageRequestPayload({
+        requestedProducts,
+      }),
+    );
+
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
+    assert.ok(resultEnvelope, "missing canonical SCV result output frame");
+    const result = resultEnvelope.envelope.RESULT();
+    assert.ok(result, "missing SCV RESULT payload");
+    assert.equal(result.GEOMETRY(), null);
+    assertNoInlineScvCellOrIntervalVectors(result);
+    assertNoInlineScvLatitudeBandVectors(result);
+    assertNoInlineScvTimeSeries(result);
+    const statistics = assertTypedAggregateStatistics(result);
+    assert.ok(requestedProducts.includes(scvMetricSeriesKind.COVERED_CELL_COUNT));
+    assert.ok(requestedProducts.includes(scvMetricSeriesKind.OVERLAP_COUNT));
+    assert.ok(
+      requestedProducts.includes(scvMetricSeriesKind.LATITUDE_BAND_COVERAGE),
+    );
+    assert.ok(Number.isFinite(statistics.ACCESSED_CELLS()));
+    assert.ok(Number.isFinite(statistics.MULTI_ACCESS_CELLS()));
+    assert.equal(
+      typeof scvRasterProductKind.LATITUDE_BAND_COVERAGE,
+      "number",
+      "SDS SCV must define a packed latitude-band raster product kind",
+    );
+    const latitudeBand = scvRasterBand(
+      result,
+      scvRasterProductKind.LATITUDE_BAND_COVERAGE,
+    );
+    assert.equal(latitudeBand.METRIC_KIND(), scvMetricSeriesKind.LATITUDE_BAND_COVERAGE);
+    assert.equal(latitudeBand.ENCODING(), scvRasterProductEncoding.FLOAT64);
+    assert.equal(latitudeBand.COMPONENTS_PER_CELL(), 6);
+    assert.equal(latitudeBand.CELL_COUNT(), 4);
+    assert.equal(latitudeBand.BUCKET_COUNT(), 0);
+    const latitudeBandValues = scvRasterBandValues(
+      result,
+      scvRasterProductKind.LATITUDE_BAND_COVERAGE,
+      harness.memory.buffer,
+    );
+    assert.equal(latitudeBandValues.length, 24);
+    assert.equal(latitudeBandValues[0], -8);
+    assert.equal(latitudeBandValues[1], -4);
+    for (let index = 2; index < 6; index += 1) {
+      assert.ok(Number.isFinite(latitudeBandValues[index]));
+    }
+  });
+
+  test(`sensor coverage module honors SCV swath mode without grid coverage products on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvSwathPreviewCoverageRequestPayload(),
+    );
 
     assert.equal(response.statusCode, 0, response.errorMessage);
     assert.equal(
       response.outputs.some((frame) => frame.typeRef?.fileIdentifier === "JSON"),
       false,
-      "SCV swath request must not emit JSON compatibility results",
+      "SCV swath request must not emit non-SCV result frames",
     );
     const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
     assert.ok(resultEnvelope, "missing canonical SCV result output frame");
@@ -1090,9 +2148,174 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result, "missing SCV RESULT payload");
     assert.equal(result.TOTAL_SENSORS(), 1);
     assert.equal(result.TOTAL_WINDOWS(), 2);
-    assert.equal(result.cellStatsLength(), 0);
-    assert.equal(result.intervalsLength(), 0);
-    assertRenderableScvGeometry(result, 2);
+    assertNoInlineScvCellOrIntervalVectors(result);
+    assertNoInlineScvTimeSeries(result);
+    assertRenderableScvGeometry(result, 2, harness.memory.buffer);
+  });
+
+  test(`sensor coverage module applies shared sensor-shape conformance vectors on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const results = new Map();
+    for (const vector of SENSOR_SHAPE_CONFORMANCE_VECTORS) {
+      const response = await invokeSensorCoverageScv(
+        harness,
+        createScvConformanceCoveragePayload(vector),
+      );
+      assert.equal(response.statusCode, 0, `${vector.name}: ${response.errorMessage}`);
+      const result = findScvEnvelope(response, scvEnvelopeKind.RESULT)?.envelope.RESULT();
+      assert.ok(result, `${vector.name}: missing SCV result`);
+      assertNoInlineScvCellOrIntervalVectors(result);
+      assertNoInlineScvTimeSeries(result);
+      const rasterProducts = result.RASTER_PRODUCTS();
+      assert.ok(rasterProducts, `${vector.name}: missing SCV raster products`);
+      results.set(vector.name, {
+        total: scvCoveredCellCount(result, harness.memory.buffer),
+        coveredCellIds: scvCoveredCellIds(result, harness.memory.buffer),
+        fractionTotal: scvCoverageFractionTotal(result, harness.memory.buffer),
+        totalSensors: result.TOTAL_SENSORS(),
+        totalWindows: result.TOTAL_WINDOWS(),
+        totalCells: rasterProducts.CELL_COUNT(),
+      });
+    }
+
+    const solid = results.get("solid-conic");
+    const rectangular = results.get("rectangular");
+    const sar = results.get("sar-annular-sector");
+    const partialClock = results.get("partial-clock-sector");
+    const innerCutout = results.get("inner-cutout");
+
+    const resultSummary = JSON.stringify(Array.from(results.entries()));
+    assert.ok(
+      solid.total > 0,
+      `solid conic should cover at least one cell: ${resultSummary}`,
+    );
+    assert.notEqual(
+      solid.fractionTotal,
+      rectangular.fractionTotal,
+      "conic coverage fraction must differ from rectangular",
+    );
+    assert.notEqual(
+      solid.fractionTotal,
+      sar.fractionTotal,
+      "conic coverage fraction must differ from SAR",
+    );
+    assert.ok(
+      partialClock.total < solid.total,
+      `partial-clock covered cell count (${partialClock.total}) must be less than full-clock conic (${solid.total})`,
+    );
+    assert.ok(
+      innerCutout.total < solid.total,
+      `inner-cutout covered cell count (${innerCutout.total}) must be less than solid conic (${solid.total})`,
+    );
+  });
+
+  test(`sensor coverage module explicitly rejects SCV CUSTOM_POLYGON on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvShapeContractCoveragePayload(
+        new SCVSensorShapeContractT(
+          scvSensorShapeKind.CUSTOM_POLYGON,
+          0,
+          scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+          0,
+          0,
+          0,
+          360,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1600000,
+          [
+            new SCVVec3T(0, 0, 1),
+            new SCVVec3T(0.1, 0, 1),
+            new SCVVec3T(0, 0.1, 1),
+          ],
+          scvCoordinateFrame.BODY_FIXED,
+        ),
+      ),
+    );
+
+    assert.notEqual(response.statusCode, 0);
+    assert.match(response.errorMessage, /CUSTOM_POLYGON requires exact polygon geometry/);
+  });
+
+  test(`sensor coverage module rejects unsupported SCV shapes before state-count validation on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvShapeContractCoveragePayload(
+        new SCVSensorShapeContractT(
+          scvSensorShapeKind.CUSTOM_POLYGON,
+          0,
+          scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+          0,
+          0,
+          0,
+          360,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1600000,
+          [
+            new SCVVec3T(0, 0, 1),
+            new SCVVec3T(0.1, 0, 1),
+            new SCVVec3T(0, 0.1, 1),
+          ],
+          scvCoordinateFrame.BODY_FIXED,
+        ),
+        { stateSampleCount: 1 },
+      ),
+    );
+
+    assert.notEqual(response.statusCode, 0);
+    assert.match(response.errorMessage, /CUSTOM_POLYGON requires exact polygon geometry/);
+    assert.doesNotMatch(response.errorMessage, /missing-states|at least two propagated/i);
+  });
+
+  test(`sensor coverage module rejects non-SCV payloads on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await invokeSensorCoverageScv(
+      harness,
+      Buffer.from(JSON.stringify(createSingleSensorCoverageRequest()), "utf8"),
+    );
+
+    assert.notEqual(response.statusCode, 0);
+    assert.match(response.errorMessage, /SDS SCV FlatBuffer|valid SCV FlatBuffer/);
   });
 
   test(`sensor coverage module emits SDS SCV progress frames on ${runtimeKind}`, async (t) => {
@@ -1104,20 +2327,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: {
-            schemaName: "SCV/main.fbs",
-            fileIdentifier: "$SCV",
-            rootTypeName: "SCV",
-          },
-          payload: createScvCoverageRequestPayload(),
-        },
-      ],
-    });
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvCoverageRequestPayload(),
+    );
 
     assert.equal(response.statusCode, 0, response.errorMessage);
     const progressEnvelopes = decodeScvFrames(response)
@@ -1144,20 +2357,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: {
-            schemaName: "SCV/main.fbs",
-            fileIdentifier: "$SCV",
-            rootTypeName: "SCV",
-          },
-          payload: createScvCoverageRequestPayload({ windowCount: 5 }),
-        },
-      ],
-    });
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvCoverageRequestPayload({ windowCount: 5 }),
+    );
 
     assert.equal(response.statusCode, 0, response.errorMessage);
     const progressFrames = decodeScvFrames(response)
@@ -1194,19 +2397,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: JSON_COVERAGE_REQUEST_TYPE,
-          payload: Buffer.from(
-            JSON.stringify(createSingleSensorCoverageRequest()),
-            "utf8",
-          ),
-        },
-      ],
-    });
+    const response = await invokeSensorCoverageScv(
+      harness,
+      createScvCoverageRequestPayload(),
+    );
 
     assert.equal(response.statusCode, 0);
     const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
@@ -1221,814 +2415,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.equal(result.STATUS(), scvResultState.OK);
     assert.equal(result.TOTAL_SENSORS(), 1);
     assert.equal(result.TOTAL_WINDOWS(), 2);
-    assert.equal(result.cellStatsLength(), 24);
-    assertRenderableScvGeometry(result, 2);
-  });
-
-  test(`sensor coverage module aggregates all active sensors into one differential geometry product on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const earthRadius = 6378137.0;
-    const orbitRadius = earthRadius + 500000.0;
-    const speed = 7612.608173223869;
-    const makeState = (theta, elapsedSeconds) => ({
-      elapsedSeconds,
-      position: {
-        x: orbitRadius * Math.cos(theta),
-        y: orbitRadius * Math.sin(theta),
-        z: 0,
-      },
-      velocity: {
-        x: -speed * Math.sin(theta),
-        y: speed * Math.cos(theta),
-        z: 0,
-      },
-    });
-    const sharedStates = [
-      makeState(-0.08, 0),
-      makeState(-0.04, 600),
-      makeState(0, 1200),
-      makeState(0.04, 1800),
-      makeState(0.08, 2400),
-    ];
-
-    const sensors = Array.from({ length: 3 }, (_, sensorIndex) => ({
-      sensorId: sensorIndex,
-      type: "conic",
-      outerHalfAngleRad: 0.22,
-      radiusMeters: 1600000,
-      states: sharedStates,
-    }));
-
-    const result = await invokeJsonRequest(
-      harness,
-      {
-        coverageSource: {
-          brand: "OrbPro",
-          mode: "all active sensors in one analysis",
-          attachedToPropagatedEntity: true,
-          positionPropertyType: "PropagatedPositionProperty",
-          requestedSensorCount: sensors.length,
-        },
-        sensors,
-        grid: {
-          minLatitudeDeg: -8,
-          maxLatitudeDeg: 8,
-          minLongitudeDeg: -12,
-          maxLongitudeDeg: 12,
-          latitudeStepDeg: 2,
-          longitudeStepDeg: 2,
-        },
-        timeSpan: {
-          startSeconds: 0,
-          stopSeconds: 2400,
-        },
-        figureOfMerit: "percent_coverage",
-        outputMode: "aggregate_differential_geometry",
-      },
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    assert.equal(result.provider, "sensor-coverage-analysis");
-    assert.equal(result.statistics.activeSensorCount, 3);
-    assert.equal(result.swaths.length, 12);
-    assert.equal(result.aggregateGeometry.contract, "orbpro.coverage.aggregate.v0");
-    assert.equal(result.aggregateGeometry.aggregation, "all_active_sensors");
-    assert.equal(result.aggregateGeometry.operationMode, "additive_deltas");
-    assert.equal(result.aggregateGeometry.activeSensorCount, 3);
-    assert.equal(result.aggregateGeometry.full.kind, "multipolygon");
-    assert.equal(result.aggregateGeometry.full.polygonCount, result.swaths.length);
-    assert.equal(result.aggregateGeometry.full.ringReference, "swaths[].vertices");
-    assert.equal(result.aggregateGeometry.deltas.length, result.swaths.length);
-    assert.ok(
-      result.aggregateGeometry.deltas.every((delta) => delta.operation === "add"),
-    );
-    assert.ok(
-      result.aggregateGeometry.deltas.every((delta) =>
-        Number.isInteger(delta.chunkId),
-      ),
-    );
-    assert.ok(
-      result.cells.some((cell) => cell.sensorContributionCount > 1),
-      "expected at least one grid cell to record overlapping sensor contribution",
-    );
-    assert.ok(
-      Array.isArray(result.coverageIntervals),
-      "coverage result should expose merged access intervals",
-    );
-    assert.ok(result.coverageIntervals.length > 0);
-    assert.equal(
-      result.statistics.totalIntervalCount,
-      result.coverageIntervals.length,
-    );
-    assert.ok(Number.isFinite(result.statistics.maxGapDurationSec));
-    assert.ok(Number.isFinite(result.statistics.meanRevisitTimeSec));
-    assert.ok(Number.isFinite(result.statistics.maxResponseTimeSec));
-    assert.ok(Number.isFinite(result.statistics.meanResponseTimeSec));
-    assert.ok(Number.isInteger(result.statistics.totalRevisitCount));
-    assert.ok(
-      result.coverageIntervals.every(
-        (interval) =>
-          interval.stopSeconds > interval.startSeconds &&
-          interval.durationSec === interval.stopSeconds - interval.startSeconds,
-      ),
-    );
-    assert.ok(
-      result.cells.some(
-        (cell) =>
-          cell.intervals.length > 0 &&
-          Number.isFinite(cell.firstResponseTimeSec) &&
-          Number.isFinite(cell.maxResponseTimeSec),
-      ),
-      "expected covered cells to include interval and response metrics",
-    );
-    assert.deepEqual(
-      Object.keys(result.figureOfMerit.products).sort(),
-      [
-        "gap_time",
-        "percent_coverage",
-        "response_time",
-        "revisit_time",
-      ],
-    );
-    assert.equal(result.figureOfMerit.products.percent_coverage.units, "percent");
-    assert.equal(result.figureOfMerit.products.gap_time.units, "seconds");
-    assert.equal(result.figureOfMerit.products.revisit_time.units, "seconds");
-    assert.equal(result.figureOfMerit.products.response_time.units, "seconds");
-    assert.equal(
-      result.figureOfMerit.products.response_time.values.length,
-      result.grid.cellCount,
-    );
-  });
-
-  test(`sensor coverage module can return authoritative swath-only geometry without FOM accumulation on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const request = createSingleSensorCoverageRequest();
-    request.figureOfMerit = "none";
-    request.outputMode = "swath_only";
-
-    const result = await invokeJsonRequest(
-      harness,
-      request,
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    assert.equal(result.provider, "sensor-coverage-analysis");
-    assert.equal(result.statistics.activeSensorCount, 1);
-    assert.equal(result.swaths.length, 2);
-    assert.equal(result.aggregateGeometry.full.polygonCount, result.swaths.length);
-    assert.equal(result.cells.length, 0);
-    assert.equal(result.coverageIntervals.length, 0);
-    assert.equal(result.figureOfMerit.type, "none");
-    assert.deepEqual(result.figureOfMerit.values, []);
-    assert.deepEqual(result.figureOfMerit.products, {});
-  });
-
-  test(`sensor coverage module can return analytics-only FOM without serializing swath visualization products on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const request = createSeparatedContributorCoverageRequest();
-    request.figureOfMerit = "percent_coverage";
-    request.outputMode = "analytics_only";
-
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: JSON_COVERAGE_REQUEST_TYPE,
-          payload: Buffer.from(JSON.stringify(request), "utf8"),
-        },
-      ],
-    });
-    assert.equal(response.statusCode, 0, response.errorMessage);
-    const jsonFrame = response.outputs.find(
-      (frame) => frame.typeRef?.fileIdentifier === "JSON",
-    );
-    assert.ok(jsonFrame, "analytics-only request must emit JSON analytics");
-    assert.equal(
-      findScvEnvelope(response, scvEnvelopeKind.RESULT),
-      undefined,
-      "analytics-only JSON request must not emit unused SCV visualization frames",
-    );
-    const result = JSON.parse(new TextDecoder().decode(jsonFrame.payload));
-
-    assert.equal(result.provider, "sensor-coverage-analysis");
-    assert.equal(result.statistics.activeSensorCount, 2);
-    assert.equal(result.statistics.swathCount, 0);
-    assert.ok(result.cells.length > 0);
-    assert.equal(result.cells.length, result.statistics.accessedCells);
-    assert.ok(result.coverageIntervals.length > 0);
-    assert.equal(result.figureOfMerit.type, "percent_coverage");
-    assert.equal(result.swaths.length, 0);
-    assert.equal(result.aggregateGeometry.full.polygonCount, 0);
-  });
-
-  test(`sensor coverage module accepts a 1000-sensor analysis without splitting work per sensor on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const earthRadius = 6378137.0;
-    const orbitRadius = earthRadius + 550000.0;
-    const speed = 7560.0;
-    const sensors = Array.from({ length: 1000 }, (_, sensorIndex) => {
-      const phase = (2 * Math.PI * sensorIndex) / 1000;
-      const inclination = 0.22 * Math.sin(sensorIndex * 0.37);
-      const makeState = (theta, elapsedSeconds) => ({
-        elapsedSeconds,
-        position: {
-          x: orbitRadius * Math.cos(theta + phase),
-          y: orbitRadius * Math.sin(theta + phase),
-          z: orbitRadius * inclination * Math.sin(theta + phase),
-        },
-        velocity: {
-          x: -speed * Math.sin(theta + phase),
-          y: speed * Math.cos(theta + phase),
-          z: speed * inclination * Math.cos(theta + phase),
-        },
-      });
-      return {
-        sensorId: sensorIndex,
-        type: "conic",
-        outerHalfAngleRad: 0.055,
-        radiusMeters: 900000,
-        angularSamples: 8,
-        states: [makeState(0, 0), makeState(0.025, 180)],
-      };
-    });
-
-    const result = await invokeJsonRequest(
-      harness,
-      {
-        coverageSource: {
-          brand: "OrbPro",
-          mode: "1000 satellite aggregate coverage",
-          requestedSensorCount: sensors.length,
-        },
-        sensors,
-        grid: {
-          minLatitudeDeg: -30,
-          maxLatitudeDeg: 30,
-          minLongitudeDeg: -180,
-          maxLongitudeDeg: 180,
-          latitudeStepDeg: 15,
-          longitudeStepDeg: 30,
-        },
-        timeSpan: {
-          startSeconds: 0,
-          stopSeconds: 180,
-        },
-        figureOfMerit: "percent_coverage",
-        outputMode: "aggregate_differential_geometry",
-      },
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    assert.equal(result.statistics.activeSensorCount, 1000);
-    assert.equal(result.swaths.length, 1000);
-    assert.equal(result.aggregateGeometry.activeSensorCount, 1000);
-    assert.equal(result.aggregateGeometry.full.polygonCount, 1000);
-    assert.equal(result.aggregateGeometry.deltas.length, 1000);
-    assert.ok(result.statistics.accessedCells > 0);
-
-    const highSensorCell = result.cells.find(
-      (cell) =>
-        Array.isArray(cell.sensorIds) &&
-        cell.sensorIds.some((sensorId) => sensorId >= 32),
-    );
-    assert.ok(
-      highSensorCell,
-      "expected exact contributing sensor ids beyond the legacy 32-bit mask",
-    );
-    assert.equal(
-      highSensorCell.sensorContributionCount,
-      highSensorCell.sensorIds.length,
-    );
-    assert.ok(Array.isArray(highSensorCell.sensorBitsetWords));
-    assert.ok(
-      highSensorCell.sensorBitsetWords.length >=
-        Math.floor(Math.max(...highSensorCell.sensorIds) / 64) + 1,
-    );
-    assert.ok(
-      highSensorCell.sensorBitsetWords.every((word) => typeof word === "string"),
-      "JSON compatibility results should encode 64-bit bitset words as decimal strings",
-    );
-    assert.ok(
-      result.coverageIntervals.every((interval) => Array.isArray(interval.sensorIds)),
-      "coverage intervals should expose exact contributing sensor ids",
-    );
-  });
-
-  test(`sensor coverage intervals preserve exact per-interval contributors beyond 32 sensors on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const result = await invokeJsonRequest(
-      harness,
-      createSeparatedContributorCoverageRequest(),
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    const intervalsByCell = new Map();
-    for (const interval of result.coverageIntervals) {
-      const intervals = intervalsByCell.get(interval.cellIndex) ?? [];
-      intervals.push(interval);
-      intervalsByCell.set(interval.cellIndex, intervals);
-    }
-    const intervals = Array.from(intervalsByCell.values())
-      .find(
-        (entries) =>
-          entries.some((interval) => interval.sensorIds.includes(0)) &&
-          entries.some((interval) => interval.sensorIds.includes(33)),
-      )
-      ?.sort((left, right) => left.startSeconds - right.startSeconds) ?? [];
-    assert.equal(intervals.length, 2);
-    assert.deepEqual(intervals[0].sensorIds, [0]);
-    assert.deepEqual(intervals[1].sensorIds, [33]);
-    assert.equal(intervals[1].sensorContributionCount, 1);
-    assert.deepEqual(intervals[1].sensorBitsetWords, ["8589934592"]);
-  });
-
-  test(`sensor coverage SCV result emits canonical access intervals beyond 32 sensors on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const response = await harness.invoke({
-      methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: JSON_COVERAGE_REQUEST_TYPE,
-          payload: Buffer.from(
-            JSON.stringify(createSeparatedContributorCoverageRequest()),
-            "utf8",
-          ),
-        },
-      ],
-    });
-
-    assert.equal(response.statusCode, 0, response.errorMessage);
-    const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
-    assert.ok(resultEnvelope, "missing canonical SCV result output frame");
-    const result = resultEnvelope.envelope.RESULT();
-    assert.ok(result, "missing SCV RESULT payload");
-    assert.ok(result.intervalsLength() >= 2);
-
-    const intervals = Array.from(
-      { length: result.intervalsLength() },
-      (_, index) => result.INTERVALS(index),
-    );
-    const intervalsByCell = new Map();
-    for (const interval of intervals) {
-      const cellIntervals = intervalsByCell.get(interval.CELL_ID()) ?? [];
-      cellIntervals.push(interval);
-      intervalsByCell.set(interval.CELL_ID(), cellIntervals);
-    }
-    const cellIntervals =
-      Array.from(intervalsByCell.values())
-        .find(
-          (entries) =>
-            entries.some((interval) => interval.SENSOR_ID() === 0) &&
-            entries.some((interval) => interval.SENSOR_ID() === 33),
-        )
-        ?.sort((left, right) => left.START_OFFSET_SEC() - right.START_OFFSET_SEC()) ?? [];
-    assert.equal(cellIntervals.length, 2);
-    assert.equal(cellIntervals[0].SENSOR_ID(), 0);
-    assert.equal(cellIntervals[1].SENSOR_ID(), 33);
-    assert.equal(cellIntervals[0].INTERVAL_KIND(), scvIntervalCategory.ACCESS);
-    assert.equal(cellIntervals[1].INTERVAL_KIND(), scvIntervalCategory.ACCESS);
-    assert.equal(
-      cellIntervals[1].DURATION_SEC(),
-      cellIntervals[1].STOP_OFFSET_SEC() - cellIntervals[1].START_OFFSET_SEC(),
-    );
-    assert.ok(cellIntervals[1].START_OFFSET_SEC() >= 3600);
-  });
-
-  test(`sensor coverage module handles the dense 1000-satellite Sandcastle batch shape on ${runtimeKind}`, async (t) => {
-    if (runtimeKind !== "browser") {
-      t.skip("Dense Sandcastle batch stress is guarded on the browser worker path.");
-      return;
-    }
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const earthRadius = 6378137.0;
-    const orbitRadius = earthRadius + 500000.0;
-    const speed = 7612.608173223869;
-    const stateCount = 25;
-    const sensorCount = 400;
-    const stepSeconds = 5;
-    const meanMotion = speed / orbitRadius;
-    const sensors = Array.from({ length: sensorCount }, (_, sensorIndex) => {
-      const phase = (2 * Math.PI * sensorIndex) / 1000;
-      const ringIndex = Math.floor(sensorIndex / 25);
-      const inclinationScale = 0.12;
-      const makeState = (stateIndex) => {
-        const elapsedSeconds = stateIndex * stepSeconds;
-        const theta = -0.22 + phase + meanMotion * elapsedSeconds;
-        const zTheta = theta * 0.7 + ringIndex * ((2 * Math.PI) / 40);
-        return {
-          elapsedSeconds,
-          position: {
-            x: orbitRadius * Math.cos(theta),
-            y: orbitRadius * Math.sin(theta),
-            z: orbitRadius * inclinationScale * Math.sin(zTheta),
-          },
-          velocity: {
-            x: -speed * Math.sin(theta),
-            y: speed * Math.cos(theta),
-            z: speed * inclinationScale * 0.7 * Math.cos(zTheta),
-          },
-        };
-      };
-      return {
-        sensorId: sensorIndex,
-        type: "conic",
-        outerHalfAngleRad: (12.5 * Math.PI) / 180,
-        radiusMeters: 1600000,
-        angularSamples: 8,
-        states: Array.from({ length: stateCount }, (_, stateIndex) =>
-          makeState(stateIndex),
-        ),
-      };
-    });
-
-    const result = await invokeJsonRequest(
-      harness,
-      {
-        coverageSource: {
-          brand: "OrbPro",
-          mode: "1000 satellite aggregate coverage first worker batch",
-          requestedSensorCount: 1000,
-          batchStartSensorIndex: 0,
-          batchSensorCount: sensorCount,
-        },
-        sensors,
-        grid: {
-          minLatitudeDeg: -90,
-          maxLatitudeDeg: 90,
-          minLongitudeDeg: -180,
-          maxLongitudeDeg: 180,
-          latitudeStepDeg: 5,
-          longitudeStepDeg: 5,
-        },
-        timeSpan: {
-          startSeconds: 0,
-          stopSeconds: 120,
-        },
-        figureOfMerit: "percent_coverage",
-        outputMode: "aggregate_differential_geometry",
-      },
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    assert.equal(result.statistics.activeSensorCount, sensorCount);
-    assert.equal(result.swaths.length, sensorCount * (stateCount - 1));
-    assert.equal(result.aggregateGeometry.full.polygonCount, result.swaths.length);
-    assert.ok(result.statistics.accessedCells > 0);
-    assert.ok(result.coverageIntervals.length > 0);
-  });
-
-  test(`sensor coverage module derives moving Orekit-style swaths from sensor-attached states on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const earthRadius = 6378137.0;
-    const orbitRadius = earthRadius + 500000.0;
-    const speed = 7612.608173223869;
-    const makeState = (theta, elapsedSeconds) => ({
-      elapsedSeconds,
-      position: {
-        x: orbitRadius * Math.cos(theta),
-        y: orbitRadius * Math.sin(theta),
-        z: 0,
-      },
-      velocity: {
-        x: -speed * Math.sin(theta),
-        y: speed * Math.cos(theta),
-        z: 0,
-      },
-    });
-
-    const result = await invokeJsonRequest(
-      harness,
-      {
-        coverageSource: {
-          brand: "OrbPro",
-          mode: "OrbPro Sensor attached to propagated entity",
-          sensorObject: "Cesium.Sensor",
-          ownerEntityId: "orbpro-coverage-sat",
-          sensorEntityId: "orbpro-coverage-sat",
-          attachedToPropagatedEntity: true,
-          positionPropertyType: "PropagatedPositionProperty",
-          sampleCount: 5,
-        },
-        sensor: {
-          sensorId: 0,
-          type: "conic",
-          outerHalfAngleRad: 0.22,
-          radiusMeters: 1600000,
-        },
-        states: [
-          makeState(-0.08, 0),
-          makeState(-0.04, 600),
-          makeState(0, 1200),
-          makeState(0.04, 1800),
-          makeState(0.08, 2400),
-        ],
-        grid: {
-          minLatitudeDeg: -8,
-          maxLatitudeDeg: 8,
-          minLongitudeDeg: -12,
-          maxLongitudeDeg: 12,
-          latitudeStepDeg: 2,
-          longitudeStepDeg: 2,
-        },
-        timeSpan: {
-          startSeconds: 0,
-          stopSeconds: 2400,
-        },
-        figureOfMerit: "percent_coverage",
-        colorMap: "orbpro_coverage",
-      },
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    assert.equal(result.provider, "sensor-coverage-analysis");
-    assert.equal(result.coverageSource.brand, "OrbPro");
-    assert.equal(result.coverageSource.attachedToPropagatedEntity, true);
-    assert.equal(result.coverageSource.positionPropertyType, "PropagatedPositionProperty");
-    assert.equal(result.grid.cellCount, 96);
-    assert.equal(result.swathMode, "orekit_along_track_swath");
-    assert.equal(result.swaths.length, 4);
-    assert.ok(result.statistics.accessedCells > 0);
-    assert.ok(result.statistics.totalAccessDurationSec > 0);
-    assert.ok(result.statistics.percentCoverage > 0);
-    assert.ok(result.swaths.every((swath) => swath.kind === "orekit_along_track_swath"));
-    assert.ok(result.swaths.every((swath) => swath.vertices.length === 4));
-    assert.ok(result.swaths.every((swath) => swath.leftEdge.length === 2));
-    assert.ok(result.swaths.every((swath) => swath.rightEdge.length === 2));
-    assert.ok(result.swaths.every((swath) => swath.colorRgba.length === 4));
-    assert.notEqual(
-      result.swaths[0].vertices[0].longitudeDeg,
-      result.swaths.at(-1).vertices[0].longitudeDeg,
-    );
-    assert.ok(
-      result.swaths.at(-1).centerline[1].longitudeDeg >
-        result.swaths[0].centerline[0].longitudeDeg,
-    );
-    assert.equal(result.figureOfMerit.values.length, 96);
-    assert.equal(result.figureOfMerit.units, "percent");
-  });
-
-  test(`sensor coverage module honors the supplied time-dynamic sensor frame on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const earthRadius = 6378137.0;
-    const orbitRadius = earthRadius + 500000.0;
-    const speed = 7612.608173223869;
-    const offNadirRad = 0.28;
-    const makeState = (theta, elapsedSeconds, offNadirAlongTrackRad = 0) => {
-      const radial = {
-        x: Math.cos(theta),
-        y: Math.sin(theta),
-        z: 0,
-      };
-      const along = {
-        x: -Math.sin(theta),
-        y: Math.cos(theta),
-        z: 0,
-      };
-      const cross = {
-        x: 0,
-        y: 0,
-        z: 1,
-      };
-      const nadir = {
-        x: -radial.x,
-        y: -radial.y,
-        z: 0,
-      };
-      const cos = Math.cos(offNadirAlongTrackRad);
-      const sin = Math.sin(offNadirAlongTrackRad);
-      return {
-        elapsedSeconds,
-        position: {
-          x: orbitRadius * radial.x,
-          y: orbitRadius * radial.y,
-          z: 0,
-        },
-        velocity: {
-          x: speed * along.x,
-          y: speed * along.y,
-          z: 0,
-        },
-        sensorFrame: {
-          boresight: {
-            x: nadir.x * cos + along.x * sin,
-            y: nadir.y * cos + along.y * sin,
-            z: 0,
-          },
-          xAxis: {
-            x: along.x * cos - nadir.x * sin,
-            y: along.y * cos - nadir.y * sin,
-            z: 0,
-          },
-          yAxis: cross,
-        },
-      };
-    };
-    const baseRequest = {
-      coverageSource: {
-        brand: "OrbPro",
-        mode: "OrbPro Sensor attached to propagated entity",
-        sensorObject: "Cesium.Sensor",
-        attachedToPropagatedEntity: true,
-        positionPropertyType: "PropagatedPositionProperty",
-        sensorFrameSource: "entity.computeModelMatrix",
-      },
-      sensor: {
-        sensorId: 0,
-        type: "conic",
-        outerHalfAngleRad: 0.08,
-        radiusMeters: 1600000,
-      },
-      grid: {
-        minLatitudeDeg: -8,
-        maxLatitudeDeg: 8,
-        minLongitudeDeg: -16,
-        maxLongitudeDeg: 16,
-        latitudeStepDeg: 2,
-        longitudeStepDeg: 2,
-      },
-      timeSpan: {
-        startSeconds: 0,
-        stopSeconds: 1200,
-      },
-      figureOfMerit: "percent_coverage",
-      colorMap: "orbpro_coverage",
-    };
-
-    const nadirResult = await invokeJsonRequest(
-      harness,
-      {
-        ...baseRequest,
-        states: [
-          makeState(-0.03, 0),
-          makeState(0, 600),
-          makeState(0.03, 1200),
-        ],
-      },
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    const offNadirResult = await invokeJsonRequest(
-      harness,
-      {
-        ...baseRequest,
-        states: [
-          makeState(-0.03, 0, offNadirRad),
-          makeState(0, 600, offNadirRad),
-          makeState(0.03, 1200, offNadirRad),
-        ],
-      },
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    const nadirLongitude = nadirResult.swaths[0].centerline[0].longitudeDeg;
-    const offNadirLongitude =
-      offNadirResult.swaths[0].centerline[0].longitudeDeg;
-    assert.ok(
-      offNadirLongitude > nadirLongitude + 0.5,
-      `expected supplied sensor frame to move swath centerline, got ${nadirLongitude} and ${offNadirLongitude}`,
-    );
-    assert.equal(
-      offNadirResult.coverageSource.sensorFrameSource,
-      "entity.computeModelMatrix",
-    );
-  });
-
-  test(`sensor coverage module projects footprints on the WGS84 ellipsoid on ${runtimeKind}`, async (t) => {
-    const harness = await createSensorCoverageHarness(runtimeKind, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const result = await invokeJsonRequest(
-      harness,
-      createHighLatitudeWgs84CoverageRequest(),
-      {
-        methodId: "compute_sensor_coverage",
-        inputPortId: "coverage",
-        outputPortId: "coverage",
-        inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-      },
-    );
-
-    assert.equal(result.provider, "sensor-coverage-analysis");
-    assert.equal(result.footprints.length, 3);
-    assert.ok(result.swaths.length >= 2);
-    assert.ok(
-      result.footprints.every(
-        (footprint) => Math.abs(footprint.center.latitudeDeg - 60) < 1.0e-4,
-      ),
-      `WGS84 geodetic nadir centers should stay near 60 deg latitude, got ${result.footprints
-        .map((footprint) => footprint.center.latitudeDeg.toFixed(6))
-        .join(", ")}`,
-    );
+    assertNoInlineScvCellOrIntervalVectors(result);
+    assertNoInlineScvTimeSeries(result);
+    assert.equal(result.RASTER_PRODUCTS().CELL_COUNT(), 24);
+    assertRenderableScvGeometry(result, 2, harness.memory.buffer);
   });
 
   test(`sensor coverage SCV request preserves time-dynamic sensor attitude on ${runtimeKind}`, async (t) => {
@@ -2041,30 +2431,33 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     });
 
     const invokeScv = async (offNadirRad) => {
-      const response = await harness.invoke({
-        methodId: "compute_sensor_coverage",
-        inputs: [
-          {
-            portId: "coverage",
-            typeRef: {
-              schemaName: "SCV/main.fbs",
-              fileIdentifier: "$SCV",
-              rootTypeName: "SCV",
-            },
-            payload: createScvOffNadirCoverageRequestPayload(offNadirRad),
-          },
-        ],
-      });
+      const response = await invokeSensorCoverageScv(
+        harness,
+        createScvOffNadirCoverageRequestPayload(offNadirRad),
+      );
       assert.equal(response.statusCode, 0, response.errorMessage);
       const resultEnvelope = findScvEnvelope(response, scvEnvelopeKind.RESULT);
       assert.ok(resultEnvelope, "missing canonical SCV result output frame");
       const geometry = resultEnvelope.envelope.RESULT()?.GEOMETRY();
       assert.ok(geometry, "SCV result must include packed geometry");
       assert.ok(geometry.segmentsLength() > 0, "SCV geometry must include swath segments");
+      const regions = regionDescriptors(geometry);
+      const revealCoords = regionTypedArray(
+        harness.memory.buffer,
+        regionFor(
+          regions,
+          geometry.REVEAL_COORDS_REGION_ID(),
+          geometry.REVEAL_COORDS_RECORD_INDEX(),
+          "REVEAL_COORDS",
+        ),
+        Float32Array,
+        geometry.segmentsLength() * 8,
+        "REVEAL_COORDS",
+      );
       const firstSegment = geometry.SEGMENTS(0);
       const vertexOffset = firstSegment.VERTEX_OFFSET() * 2;
-      const leftStartLon = geometry.REVEAL_COORDS(vertexOffset);
-      const rightStartLon = geometry.REVEAL_COORDS(vertexOffset + 6);
+      const leftStartLon = revealCoords[vertexOffset];
+      const rightStartLon = revealCoords[vertexOffset + 6];
       return (leftStartLon + rightStartLon) / 2;
     };
 

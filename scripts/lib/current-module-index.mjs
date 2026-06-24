@@ -1,18 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const IGNORED_DIRS = new Set([".git", "deps", "dist", "node_modules"]);
+const IGNORED_DIRS = new Set([
+  ".build",
+  ".emcache",
+  ".git",
+  "CMakeFiles",
+  "build",
+  "build-browser",
+  "build-isomorphic",
+  "build-native",
+  "build-wasm",
+  "deps",
+  "dist",
+  "node_modules",
+]);
 
 const PARITY_UPDATE_MODULES = new Set([
   "analysis/access",
   "analysis/conjunction-assessment",
   "analysis/covariance",
-  "analysis/coverage",
   "analysis/lambert-izzo",
   "analysis/maneuver",
   "analysis/od",
   "analysis/sensor-coverage",
-  "analysis/swath",
   "basilisk/runtime",
   "foundation/attitude-math",
   "foundation/math-bspline",
@@ -50,6 +61,15 @@ export function createCurrentModuleIndex(repoRoot) {
       .sort();
     const hasIsomorphicWasm = fs.existsSync(path.join(moduleRoot, "dist", "isomorphic", "module.wasm"));
     const runtimeTargets = manifest.runtimeTargets ?? [];
+    const packageConfig = readPackageConfig(moduleRoot);
+    const isSharedBrowserDirectModule =
+      runtimeTargets.length === 1 &&
+      runtimeTargets.includes("browser") &&
+      Array.isArray(manifest.invokeSurfaces) &&
+      manifest.invokeSurfaces.length === 1 &&
+      manifest.invokeSurfaces.includes("direct") &&
+      packageConfig?.sdnModuleCompile?.sharedMemory === true &&
+      packageConfig?.sdnModuleCompile?.importedMemory === true;
     const hasBrowserWasmEdgeTargets =
       runtimeTargets.includes("browser") && runtimeTargets.includes("wasmedge");
     const sourceLanguages = [...new Set(sourceFiles.map(sourceLanguage).filter(Boolean))].sort();
@@ -63,9 +83,10 @@ export function createCurrentModuleIndex(repoRoot) {
       methodIds: (manifest.methods ?? []).map((method) => method.methodId).sort(),
       runtimeTargets,
       hasBrowserWasmEdgeTargets,
+      isSharedBrowserDirectModule,
       hasIsomorphicWasm,
       sourceLanguages,
-      cxxSourceFileCount: sourceFiles.filter((file) => [".cc", ".cpp", ".cxx"].includes(path.extname(file))).length,
+      cxxSourceFileCount: sourceFiles.filter(isCxxSourceFile).length,
       cSourceFileCount: sourceFiles.filter((file) => path.extname(file) === ".c").length,
       testFileCount: testFiles.length,
       parityScope,
@@ -93,6 +114,14 @@ export function createCurrentModuleIndex(repoRoot) {
       .map((entry) => entry.modulePath),
     modules,
   };
+}
+
+function readPackageConfig(moduleRoot) {
+  const packagePath = path.join(moduleRoot, "package.json");
+  if (!fs.existsSync(packagePath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(packagePath, "utf8"));
 }
 
 function classifyAction(modulePath, parityScope, hasIsomorphicWasm, sourceFiles) {
@@ -142,7 +171,11 @@ function walk(dir, predicate) {
 }
 
 function isSourceFile(file) {
-  return [".c", ".cc", ".cpp", ".cxx"].includes(path.extname(file));
+  return [".c", ".cc", ".cpp", ".cxx"].includes(path.extname(file)) || file.endsWith(".cpp.inc");
+}
+
+function isCxxSourceFile(file) {
+  return [".cc", ".cpp", ".cxx"].includes(path.extname(file)) || file.endsWith(".cpp.inc");
 }
 
 function isTestFile(file) {
@@ -155,7 +188,7 @@ function sourceLanguage(file) {
   if (extension === ".c") {
     return "c";
   }
-  if ([".cc", ".cpp", ".cxx"].includes(extension)) {
+  if ([".cc", ".cpp", ".cxx"].includes(extension) || file.endsWith(".cpp.inc")) {
     return "c++";
   }
   return null;

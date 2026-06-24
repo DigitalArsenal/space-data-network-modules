@@ -60,6 +60,24 @@ test("sensor coverage benchmark harness defines STK-class canonical scenarios an
   assert.equal(BENCHMARK_THRESHOLDS.requiresNoJsCoverageMath, true);
 });
 
+test("sensor coverage benchmark summarizes SCV results from aggregate and raster products", () => {
+  const source = fs.readFileSync(
+    new URL("../benchmarks/sensor-coverage-benchmark.mjs", import.meta.url),
+    "utf8",
+  );
+  const summaryStart = source.indexOf("function scvResultHasRasterBand");
+  const summaryStop = source.indexOf("function findScvResultEnvelope", summaryStart);
+  assert.notEqual(summaryStart, -1);
+  assert.notEqual(summaryStop, -1);
+  const summarySource = source.slice(summaryStart, summaryStop);
+
+  assert.match(summarySource, /AGGREGATE_STATISTICS\(\)/);
+  assert.match(summarySource, /RASTER_PRODUCTS\(\)/);
+  assert.doesNotMatch(summarySource, /CELL_STATS/);
+  assert.doesNotMatch(summarySource, /cellStatsLength/);
+  assert.doesNotMatch(summarySource, /intervalsLength/);
+});
+
 test("sensor coverage benchmark dry run emits a repeatable report skeleton", () => {
   const report = createBenchmarkReportSkeleton({
     runtimeKind: "browser",
@@ -80,7 +98,7 @@ test("sensor coverage benchmark dry run emits a repeatable report skeleton", () 
   assert.equal(report.stkComparison.status, "pending");
 });
 
-test("sensor coverage benchmark keeps FOM lanes analytics-only and visual lanes swath-only", () => {
+test("sensor coverage benchmark keeps FOM lanes metric-product and visual lanes swath-preview", () => {
   const scenario = CANONICAL_SCENARIOS[0];
   const grid = CANONICAL_GRID_SIZES[0];
   const priorityRequest = createCoverageBenchmarkRequest({
@@ -96,9 +114,9 @@ test("sensor coverage benchmark keeps FOM lanes analytics-only and visual lanes 
   });
 
   assert.equal(priorityRequest.figureOfMerit, "percent_coverage");
-  assert.equal(priorityRequest.outputMode, "analytics_only");
+  assert.equal(priorityRequest.outputMode, "metric_products");
   assert.equal(visualRequest.figureOfMerit, "none");
-  assert.equal(visualRequest.outputMode, "swath_only");
+  assert.equal(visualRequest.outputMode, "swath_preview");
 });
 
 test("sensor coverage benchmark can build SDS SCV binary requests for benchmark lanes", () => {
@@ -122,6 +140,8 @@ test("sensor coverage benchmark can build SDS SCV binary requests for benchmark 
   assert.equal(SCV_COVERAGE_REQUEST_TYPE.schemaName, "SCV/main.fbs");
   assert.equal(SCV_COVERAGE_REQUEST_TYPE.fileIdentifier, "$SCV");
   assert.equal(SCV_COVERAGE_REQUEST_TYPE.rootTypeName, "SCV");
+  assert.equal(SCV_COVERAGE_REQUEST_TYPE.wireFormat, "flatbuffer");
+  assert.equal(SCV_COVERAGE_REQUEST_TYPE.requiredAlignment, 8);
   assert.ok(priorityPayload instanceof Uint8Array);
 
   const priorityEnvelope = SCV.getRootAsSCV(

@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  createBrowserModuleHarness,
   inspectModule,
   validateArtifactWithStandards,
   validateManifestWithStandards,
@@ -20,12 +21,11 @@ test("manifest declares the sensor coverage analysis contract", async () => {
   const report = await validateManifestWithStandards(manifest);
   assert.equal(report.ok, true, JSON.stringify(report.issues, null, 2));
   assert.equal(manifest.pluginId, "sensor-coverage-analysis");
-  assert.equal(manifest.runtimeTargets.includes("browser"), true);
-  assert.equal(manifest.runtimeTargets.includes("wasmedge"), true);
+  assert.deepEqual(manifest.runtimeTargets, ["browser"]);
   assert.deepEqual(
     manifest.invokeSurfaces,
-    ["direct", "command"],
-    "browser coverage must advertise direct invoke while retaining command compatibility",
+    ["direct"],
+    "sensor coverage must expose direct invoke only; command mode would reintroduce a copy-based request path",
   );
   assert.equal(manifest.methods[0].methodId, "compute_sensor_coverage");
   const method = manifest.methods[0];
@@ -36,20 +36,52 @@ test("manifest declares the sensor coverage analysis contract", async () => {
   assert.equal(
     inputTypes.some((typeRef) => typeRef.acceptsAnyFlatbuffer === true),
     false,
-    "sensor coverage input must use explicit SDS/compatibility type refs",
+    "sensor coverage input must use the explicit SDS SCV type ref",
   );
   assert.equal(
     outputTypes.some((typeRef) => typeRef.acceptsAnyFlatbuffer === true),
     false,
-    "sensor coverage output must use explicit SDS/compatibility type refs",
+    "sensor coverage output must use the explicit SDS SCV type ref",
   );
   assert.deepEqual(
-    inputTypes.map((typeRef) => typeRef.fileIdentifier).sort(),
-    ["$SCV", "JSON"],
+    inputTypes,
+    [
+      {
+        schemaName: "SCV/main.fbs",
+        fileIdentifier: "$SCV",
+        rootTypeName: "SCV",
+        wireFormat: "flatbuffer",
+        requiredAlignment: 8,
+      },
+    ],
   );
   assert.deepEqual(
-    outputTypes.map((typeRef) => typeRef.fileIdentifier).sort(),
-    ["$SCV", "JSON"],
+    outputTypes,
+    [
+      {
+        schemaName: "SCV/main.fbs",
+        fileIdentifier: "$SCV",
+        rootTypeName: "SCV",
+        wireFormat: "flatbuffer",
+        requiredAlignment: 8,
+      },
+    ],
+  );
+  const declaredTypes = manifest.methods.flatMap((declaredMethod) =>
+    [...declaredMethod.inputPorts, ...declaredMethod.outputPorts].flatMap((port) =>
+      port.acceptedTypeSets.flatMap((typeSet) => typeSet.allowedTypes),
+    ),
+  );
+  assert.equal(
+    declaredTypes.every(
+      (typeRef) =>
+        typeRef.schemaName === "SCV/main.fbs" &&
+        typeRef.fileIdentifier === "$SCV" &&
+        typeRef.rootTypeName === "SCV" &&
+        typeRef.wireFormat === "flatbuffer",
+    ),
+    true,
+    "sensor coverage must advertise only canonical SDS SCV FlatBuffer ports",
   );
   assert.equal(
     manifest.schemasUsed.some(
@@ -61,7 +93,7 @@ test("manifest declares the sensor coverage analysis contract", async () => {
   );
 });
 
-test("built artifact exposes the canonical direct invoke and command compatibility surfaces", async () => {
+test("built artifact exposes the canonical direct invoke surface only", async () => {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const report = await validateArtifactWithStandards({
     manifest,
@@ -71,11 +103,44 @@ test("built artifact exposes the canonical direct invoke and command compatibili
 
   const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
   assert.equal(inspection.profile, "standalone");
-  assert.ok(inspection.exports.includes("_start"));
+  assert.equal(inspection.exports.includes("_start"), false);
   assert.ok(inspection.exports.includes("plugin_invoke_stream"));
   assert.ok(inspection.exports.includes("plugin_alloc"));
   assert.ok(inspection.exports.includes("plugin_free"));
   assert.ok(inspection.exports.includes("compute_sensor_coverage"));
+});
+
+test("built artifact imports shared memory for browser direct invoke", async (t) => {
+  if (typeof SharedArrayBuffer !== "function") {
+    t.skip("SharedArrayBuffer is not available in this runtime.");
+    return;
+  }
+
+  const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
+  assert.deepEqual(
+    inspection.imports.filter((entry) => entry.kind === "memory"),
+    [{ module: "env", name: "memory", kind: "memory" }],
+  );
+
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(WASM_PATH),
+    surface: "direct",
+    sharedMemory: true,
+    allowRawInvoke: false,
+    initialMemoryBytes: 64 * 1024 * 1024,
+    maximumMemoryBytes: 2 * 1024 * 1024 * 1024,
+  });
+  t.after(() => {
+    harness.destroy();
+  });
+
+  assert.equal(harness.memory.buffer instanceof SharedArrayBuffer, true);
+  assert.equal(typeof harness.instance.exports.plugin_invoke_stream, "function");
+  await assert.rejects(
+    harness.invokeRaw(new Uint8Array([0, 1, 2, 3])),
+    /raw direct invoke is disabled/i,
+    "sensor coverage browser compatibility must disable raw request-byte invoke",
+  );
 });
 
 test("built artifact carries a trusted SDS module signature", async () => {
