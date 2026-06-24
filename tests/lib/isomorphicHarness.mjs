@@ -39,6 +39,12 @@ export async function createStandaloneHarness(runtimeKind, wasmPath, options = {
       env: options.env,
       logOutput: options.logOutput,
       performance: options.performance,
+      wasmMemory: options.wasmMemory,
+      memory: options.memory,
+      sharedMemory: options.sharedMemory,
+      allowRawInvoke: options.allowRawInvoke,
+      initialMemoryBytes: options.initialMemoryBytes,
+      maximumMemoryBytes: options.maximumMemoryBytes,
     });
   }
 
@@ -84,6 +90,104 @@ export function assertSuccessfulResponse(
   const frame = response.outputs.find((entry) => entry.portId === outputPortId);
   assert.ok(frame, `missing ${outputPortId} output frame`);
   return frame.payload;
+}
+
+function toPayloadBytes(payload) {
+  if (payload instanceof Uint8Array) {
+    return payload;
+  }
+  if (ArrayBuffer.isView(payload)) {
+    return new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
+  }
+  if (payload instanceof ArrayBuffer) {
+    return new Uint8Array(payload);
+  }
+  throw new TypeError("Binary module requests require Uint8Array-compatible payload bytes.");
+}
+
+function isBrowserDirectHarness(harness) {
+  return harness?.runtime?.kind === "browser" && harness?.runtime?.surface === "direct";
+}
+
+export async function invokeBinaryRequest(
+  harness,
+  payload,
+  {
+    methodId = "invoke",
+    inputPortId = "request",
+    inputTypeRef = null,
+    alignment = 8,
+  } = {},
+) {
+  const payloadBytes = toPayloadBytes(payload);
+
+  if (!isBrowserDirectHarness(harness)) {
+    const response = await harness.invoke({
+      methodId,
+      inputs: [
+        {
+          portId: inputPortId,
+          typeRef: inputTypeRef,
+          payload: payloadBytes,
+        },
+      ],
+    });
+    return response;
+  }
+
+  if (
+    typeof SharedArrayBuffer !== "function" ||
+    !(harness.memory?.buffer instanceof SharedArrayBuffer)
+  ) {
+    throw new Error(
+      "Browser direct binary requests require SharedArrayBuffer-backed module memory.",
+    );
+  }
+  const alloc = harness.instance?.exports?.plugin_alloc;
+  const free = harness.instance?.exports?.plugin_free;
+  if (typeof alloc !== "function" || typeof free !== "function") {
+    throw new Error(
+      "Browser direct binary requests require plugin_alloc and plugin_free exports.",
+    );
+  }
+
+  const payloadSize = payloadBytes.byteLength;
+  const payloadPtr = payloadSize > 0 ? alloc(payloadSize) : 0;
+  if (payloadSize > 0 && !payloadPtr) {
+    throw new Error("plugin_alloc returned null for binary request payload.");
+  }
+  if (payloadSize > 0 && payloadPtr % alignment !== 0) {
+    if (payloadPtr > 0) {
+      free(payloadPtr, payloadSize);
+    }
+    throw new Error(
+      `plugin_alloc returned a payload pointer (${payloadPtr}) that is not ${alignment}-byte aligned.`,
+    );
+  }
+
+  try {
+    if (payloadSize > 0) {
+      new Uint8Array(harness.memory.buffer, payloadPtr, payloadSize).set(payloadBytes);
+    }
+    const response = await harness.invoke({
+      methodId,
+      externalArena: new Uint8Array(harness.memory.buffer),
+      inputs: [
+        {
+          portId: inputPortId,
+          typeRef: inputTypeRef,
+          offset: payloadPtr,
+          size: payloadSize,
+          alignment,
+        },
+      ],
+    });
+    return response;
+  } finally {
+    if (payloadSize > 0) {
+      free(payloadPtr, payloadSize);
+    }
+  }
 }
 
 export async function invokeJsonRequest(

@@ -110,7 +110,8 @@ including migrated module families and Basilisk-derived module families.
   - `foundation/` — `time`, `math-bspline`, `numerics`, `attitude-math`,
     `frames`, `orbits`
   - `propagator/` — `sgp4`, `hpop`, `atmosphere`, `cislunar`
-  - `analysis/` — `conjunction-assessment`, `maneuver`, `od`, `fastest-path`
+  - `analysis/` — `conjunction-assessment`, `maneuver`, `od`, `sensor-coverage`,
+    `sensor-model`
   - `basilisk/` — runtime seed package plus generated Basilisk module plan
   - `shaders/` — `sensor-shaders`, `viewshed-shader`
   - `licensing/` — `core`, `client-decrypt`, `protection-key-server`, `protection-license-client`

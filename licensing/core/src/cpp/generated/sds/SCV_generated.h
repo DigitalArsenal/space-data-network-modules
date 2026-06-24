@@ -25,6 +25,10 @@ struct SCVTimeGrid;
 struct SCVTimeGridBuilder;
 struct SCVTimeGridT;
 
+struct SCVSensorShapeContract;
+struct SCVSensorShapeContractBuilder;
+struct SCVSensorShapeContractT;
+
 struct SCVSensor;
 struct SCVSensorBuilder;
 struct SCVSensorT;
@@ -61,29 +65,9 @@ struct SCVSensorContribution;
 struct SCVSensorContributionBuilder;
 struct SCVSensorContributionT;
 
-struct SCVCellStat;
-struct SCVCellStatBuilder;
-struct SCVCellStatT;
-
-struct SCVInterval;
-struct SCVIntervalBuilder;
-struct SCVIntervalT;
-
-struct SCVLatitudeBandStat;
-struct SCVLatitudeBandStatBuilder;
-struct SCVLatitudeBandStatT;
-
-struct SCVTimeSeriesPoint;
-struct SCVTimeSeriesPointBuilder;
-struct SCVTimeSeriesPointT;
-
 struct SCVHistogramBin;
 struct SCVHistogramBinBuilder;
 struct SCVHistogramBinT;
-
-struct SCVHeatmapCell;
-struct SCVHeatmapCellBuilder;
-struct SCVHeatmapCellT;
 
 struct SCVSwathSegment;
 struct SCVSwathSegmentBuilder;
@@ -96,6 +80,18 @@ struct SCVMemoryRegionT;
 struct SCVPackedGeometryChunk;
 struct SCVPackedGeometryChunkBuilder;
 struct SCVPackedGeometryChunkT;
+
+struct SCVPackedRasterBand;
+struct SCVPackedRasterBandBuilder;
+struct SCVPackedRasterBandT;
+
+struct SCVPackedRasterProducts;
+struct SCVPackedRasterProductsBuilder;
+struct SCVPackedRasterProductsT;
+
+struct SCVAggregateStatistics;
+struct SCVAggregateStatisticsBuilder;
+struct SCVAggregateStatisticsT;
 
 struct SCVResult;
 struct SCVResultBuilder;
@@ -190,37 +186,40 @@ enum class scvCoordinateFrame : uint8_t {
   ECEF = 3,
   ECI = 4,
   CUSTOM = 5,
+  SENSOR_LOCAL = 6,
   MIN = UNKNOWN,
-  MAX = CUSTOM
+  MAX = SENSOR_LOCAL
 };
 
-inline const scvCoordinateFrame (&EnumValuesscvCoordinateFrame())[6] {
+inline const scvCoordinateFrame (&EnumValuesscvCoordinateFrame())[7] {
   static const scvCoordinateFrame values[] = {
     scvCoordinateFrame::UNKNOWN,
     scvCoordinateFrame::BODY_FIXED,
     scvCoordinateFrame::INERTIAL,
     scvCoordinateFrame::ECEF,
     scvCoordinateFrame::ECI,
-    scvCoordinateFrame::CUSTOM
+    scvCoordinateFrame::CUSTOM,
+    scvCoordinateFrame::SENSOR_LOCAL
   };
   return values;
 }
 
 inline const char * const *EnumNamesscvCoordinateFrame() {
-  static const char * const names[7] = {
+  static const char * const names[8] = {
     "UNKNOWN",
     "BODY_FIXED",
     "INERTIAL",
     "ECEF",
     "ECI",
     "CUSTOM",
+    "SENSOR_LOCAL",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamescvCoordinateFrame(scvCoordinateFrame e) {
-  if (::flatbuffers::IsOutRange(e, scvCoordinateFrame::UNKNOWN, scvCoordinateFrame::CUSTOM)) return "";
+  if (::flatbuffers::IsOutRange(e, scvCoordinateFrame::UNKNOWN, scvCoordinateFrame::SENSOR_LOCAL)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesscvCoordinateFrame()[index];
 }
@@ -265,33 +264,93 @@ enum class scvSensorShapeKind : uint8_t {
   CONIC = 0,
   RECTANGULAR = 1,
   CUSTOM_POLYGON = 2,
+  SAR_ANNULAR_SECTOR = 3,
   MIN = CONIC,
-  MAX = CUSTOM_POLYGON
+  MAX = SAR_ANNULAR_SECTOR
 };
 
-inline const scvSensorShapeKind (&EnumValuesscvSensorShapeKind())[3] {
+inline const scvSensorShapeKind (&EnumValuesscvSensorShapeKind())[4] {
   static const scvSensorShapeKind values[] = {
     scvSensorShapeKind::CONIC,
     scvSensorShapeKind::RECTANGULAR,
-    scvSensorShapeKind::CUSTOM_POLYGON
+    scvSensorShapeKind::CUSTOM_POLYGON,
+    scvSensorShapeKind::SAR_ANNULAR_SECTOR
   };
   return values;
 }
 
 inline const char * const *EnumNamesscvSensorShapeKind() {
-  static const char * const names[4] = {
+  static const char * const names[5] = {
     "CONIC",
     "RECTANGULAR",
     "CUSTOM_POLYGON",
+    "SAR_ANNULAR_SECTOR",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamescvSensorShapeKind(scvSensorShapeKind e) {
-  if (::flatbuffers::IsOutRange(e, scvSensorShapeKind::CONIC, scvSensorShapeKind::CUSTOM_POLYGON)) return "";
+  if (::flatbuffers::IsOutRange(e, scvSensorShapeKind::CONIC, scvSensorShapeKind::SAR_ANNULAR_SECTOR)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesscvSensorShapeKind()[index];
+}
+
+enum class scvSensorAxisConvention : uint8_t {
+  LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT = 0,
+  MIN = LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT,
+  MAX = LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT
+};
+
+inline const scvSensorAxisConvention (&EnumValuesscvSensorAxisConvention())[1] {
+  static const scvSensorAxisConvention values[] = {
+    scvSensorAxisConvention::LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesscvSensorAxisConvention() {
+  static const char * const names[2] = {
+    "LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamescvSensorAxisConvention(scvSensorAxisConvention e) {
+  if (::flatbuffers::IsOutRange(e, scvSensorAxisConvention::LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT, scvSensorAxisConvention::LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesscvSensorAxisConvention()[index];
+}
+
+enum class scvSensorRangeBoundaryKind : uint8_t {
+  RADIAL_SPHERICAL = 0,
+  LOCAL_Z_PLANE = 1,
+  MIN = RADIAL_SPHERICAL,
+  MAX = LOCAL_Z_PLANE
+};
+
+inline const scvSensorRangeBoundaryKind (&EnumValuesscvSensorRangeBoundaryKind())[2] {
+  static const scvSensorRangeBoundaryKind values[] = {
+    scvSensorRangeBoundaryKind::RADIAL_SPHERICAL,
+    scvSensorRangeBoundaryKind::LOCAL_Z_PLANE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesscvSensorRangeBoundaryKind() {
+  static const char * const names[3] = {
+    "RADIAL_SPHERICAL",
+    "LOCAL_Z_PLANE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamescvSensorRangeBoundaryKind(scvSensorRangeBoundaryKind e) {
+  if (::flatbuffers::IsOutRange(e, scvSensorRangeBoundaryKind::RADIAL_SPHERICAL, scvSensorRangeBoundaryKind::LOCAL_Z_PLANE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesscvSensorRangeBoundaryKind()[index];
 }
 
 enum class scvGeometryDomain : uint8_t {
@@ -367,45 +426,6 @@ inline const char *EnumNamescvResultState(scvResultState e) {
   if (::flatbuffers::IsOutRange(e, scvResultState::OK, scvResultState::FAILED)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesscvResultState()[index];
-}
-
-enum class scvIntervalCategory : uint8_t {
-  ACCESS = 0,
-  COVERAGE = 1,
-  GAP = 2,
-  REVISIT = 3,
-  OVERLAP = 4,
-  MIN = ACCESS,
-  MAX = OVERLAP
-};
-
-inline const scvIntervalCategory (&EnumValuesscvIntervalCategory())[5] {
-  static const scvIntervalCategory values[] = {
-    scvIntervalCategory::ACCESS,
-    scvIntervalCategory::COVERAGE,
-    scvIntervalCategory::GAP,
-    scvIntervalCategory::REVISIT,
-    scvIntervalCategory::OVERLAP
-  };
-  return values;
-}
-
-inline const char * const *EnumNamesscvIntervalCategory() {
-  static const char * const names[6] = {
-    "ACCESS",
-    "COVERAGE",
-    "GAP",
-    "REVISIT",
-    "OVERLAP",
-    nullptr
-  };
-  return names;
-}
-
-inline const char *EnumNamescvIntervalCategory(scvIntervalCategory e) {
-  if (::flatbuffers::IsOutRange(e, scvIntervalCategory::ACCESS, scvIntervalCategory::OVERLAP)) return "";
-  const size_t index = static_cast<size_t>(e);
-  return EnumNamesscvIntervalCategory()[index];
 }
 
 enum class scvMetricSeriesKind : uint16_t {
@@ -493,6 +513,114 @@ inline const char *EnumNamescvGeometryEncoding(scvGeometryEncoding e) {
   if (::flatbuffers::IsOutRange(e, scvGeometryEncoding::FLAT_FLOAT32, scvGeometryEncoding::SHARED_MEMORY_OFFSET)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesscvGeometryEncoding()[index];
+}
+
+enum class scvRasterProductKind : uint16_t {
+  CELL_BOUNDS_DEG = 0,
+  CELL_CENTERS_DEG = 1,
+  PERCENT_COVERAGE = 2,
+  PASS_COUNT = 3,
+  CONTACT_DURATION_SECONDS = 4,
+  REVISIT_SECONDS = 5,
+  GAP_SECONDS = 6,
+  REDUNDANCY = 7,
+  CURRENT_ACCESS_BITSET = 8,
+  BUCKET_START_SECONDS = 9,
+  BUCKET_STOP_SECONDS = 10,
+  BUCKET_ACTIVE_CELL_COUNT = 11,
+  PASS_COUNT_RGBA = 12,
+  CURRENT_ACCESS_RGBA = 13,
+  LATITUDE_BAND_COVERAGE = 14,
+  MIN = CELL_BOUNDS_DEG,
+  MAX = LATITUDE_BAND_COVERAGE
+};
+
+inline const scvRasterProductKind (&EnumValuesscvRasterProductKind())[15] {
+  static const scvRasterProductKind values[] = {
+    scvRasterProductKind::CELL_BOUNDS_DEG,
+    scvRasterProductKind::CELL_CENTERS_DEG,
+    scvRasterProductKind::PERCENT_COVERAGE,
+    scvRasterProductKind::PASS_COUNT,
+    scvRasterProductKind::CONTACT_DURATION_SECONDS,
+    scvRasterProductKind::REVISIT_SECONDS,
+    scvRasterProductKind::GAP_SECONDS,
+    scvRasterProductKind::REDUNDANCY,
+    scvRasterProductKind::CURRENT_ACCESS_BITSET,
+    scvRasterProductKind::BUCKET_START_SECONDS,
+    scvRasterProductKind::BUCKET_STOP_SECONDS,
+    scvRasterProductKind::BUCKET_ACTIVE_CELL_COUNT,
+    scvRasterProductKind::PASS_COUNT_RGBA,
+    scvRasterProductKind::CURRENT_ACCESS_RGBA,
+    scvRasterProductKind::LATITUDE_BAND_COVERAGE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesscvRasterProductKind() {
+  static const char * const names[16] = {
+    "CELL_BOUNDS_DEG",
+    "CELL_CENTERS_DEG",
+    "PERCENT_COVERAGE",
+    "PASS_COUNT",
+    "CONTACT_DURATION_SECONDS",
+    "REVISIT_SECONDS",
+    "GAP_SECONDS",
+    "REDUNDANCY",
+    "CURRENT_ACCESS_BITSET",
+    "BUCKET_START_SECONDS",
+    "BUCKET_STOP_SECONDS",
+    "BUCKET_ACTIVE_CELL_COUNT",
+    "PASS_COUNT_RGBA",
+    "CURRENT_ACCESS_RGBA",
+    "LATITUDE_BAND_COVERAGE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamescvRasterProductKind(scvRasterProductKind e) {
+  if (::flatbuffers::IsOutRange(e, scvRasterProductKind::CELL_BOUNDS_DEG, scvRasterProductKind::LATITUDE_BAND_COVERAGE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesscvRasterProductKind()[index];
+}
+
+enum class scvRasterProductEncoding : uint8_t {
+  FLOAT32 = 0,
+  FLOAT64 = 1,
+  UINT32 = 2,
+  BITSET_UINT32 = 3,
+  UINT8 = 4,
+  MIN = FLOAT32,
+  MAX = UINT8
+};
+
+inline const scvRasterProductEncoding (&EnumValuesscvRasterProductEncoding())[5] {
+  static const scvRasterProductEncoding values[] = {
+    scvRasterProductEncoding::FLOAT32,
+    scvRasterProductEncoding::FLOAT64,
+    scvRasterProductEncoding::UINT32,
+    scvRasterProductEncoding::BITSET_UINT32,
+    scvRasterProductEncoding::UINT8
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesscvRasterProductEncoding() {
+  static const char * const names[6] = {
+    "FLOAT32",
+    "FLOAT64",
+    "UINT32",
+    "BITSET_UINT32",
+    "UINT8",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamescvRasterProductEncoding(scvRasterProductEncoding e) {
+  if (::flatbuffers::IsOutRange(e, scvRasterProductEncoding::FLOAT32, scvRasterProductEncoding::UINT8)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesscvRasterProductEncoding()[index];
 }
 
 struct SCVVec3T : public ::flatbuffers::NativeTable {
@@ -857,87 +985,87 @@ inline ::flatbuffers::Offset<SCVTimeGrid> CreateSCVTimeGridDirect(
 
 ::flatbuffers::Offset<SCVTimeGrid> CreateSCVTimeGrid(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTimeGridT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct SCVSensorT : public ::flatbuffers::NativeTable {
-  typedef SCVSensor TableType;
-  uint32_t SENSOR_ID = 0;
-  std::string OBJECT_ID{};
-  std::string NAME{};
-  scvSensorShapeKind SHAPE = scvSensorShapeKind::CONIC;
-  scvCoordinateFrame FRAME = scvCoordinateFrame::UNKNOWN;
-  std::unique_ptr<SCVVec3T> POSITION_M{};
-  std::unique_ptr<SCVVec3T> VELOCITY_MPS{};
-  std::unique_ptr<SCVVec3T> BORESIGHT_UNIT{};
-  std::unique_ptr<SCVVec3T> UP_UNIT{};
-  double HALF_ANGLE_DEG = 0.0;
-  double CROSS_TRACK_HALF_ANGLE_DEG = 0.0;
-  double ALONG_TRACK_HALF_ANGLE_DEG = 0.0;
+struct SCVSensorShapeContractT : public ::flatbuffers::NativeTable {
+  typedef SCVSensorShapeContract TableType;
+  scvSensorShapeKind SHAPE_KIND = scvSensorShapeKind::CONIC;
+  scvSensorAxisConvention AXIS_CONVENTION = scvSensorAxisConvention::LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT;
+  scvSensorRangeBoundaryKind RANGE_BOUNDARY = scvSensorRangeBoundaryKind::RADIAL_SPHERICAL;
+  double OUTER_HALF_ANGLE_DEG = 0.0;
+  double INNER_HALF_ANGLE_DEG = 0.0;
+  double MIN_CLOCK_ANGLE_DEG = 0.0;
+  double MAX_CLOCK_ANGLE_DEG = 360.0;
+  double X_HALF_ANGLE_DEG = 0.0;
+  double Y_HALF_ANGLE_DEG = 0.0;
+  double INNER_LOOK_ANGLE_DEG = 0.0;
+  double OUTER_LOOK_ANGLE_DEG = 0.0;
+  double SAR_SAMPLING_DENSITY = 0.0;
   double MIN_RANGE_M = 0.0;
   double MAX_RANGE_M = 0.0;
   std::vector<std::unique_ptr<SCVVec3T>> POLYGON_VERTICES{};
   scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN;
-  SCVSensorT() = default;
-  SCVSensorT(const SCVSensorT &o);
-  SCVSensorT(SCVSensorT&&) FLATBUFFERS_NOEXCEPT = default;
-  SCVSensorT &operator=(SCVSensorT o) FLATBUFFERS_NOEXCEPT;
+  SCVSensorShapeContractT() = default;
+  SCVSensorShapeContractT(const SCVSensorShapeContractT &o);
+  SCVSensorShapeContractT(SCVSensorShapeContractT&&) FLATBUFFERS_NOEXCEPT = default;
+  SCVSensorShapeContractT &operator=(SCVSensorShapeContractT o) FLATBUFFERS_NOEXCEPT;
 };
 
-struct SCVSensor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef SCVSensorT NativeTableType;
-  typedef SCVSensorBuilder Builder;
+struct SCVSensorShapeContract FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SCVSensorShapeContractT NativeTableType;
+  typedef SCVSensorShapeContractBuilder Builder;
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SENSOR_ID = 4,
-    VT_OBJECT_ID = 6,
-    VT_NAME = 8,
-    VT_SHAPE = 10,
-    VT_FRAME = 12,
-    VT_POSITION_M = 14,
-    VT_VELOCITY_MPS = 16,
-    VT_BORESIGHT_UNIT = 18,
-    VT_UP_UNIT = 20,
-    VT_HALF_ANGLE_DEG = 22,
-    VT_CROSS_TRACK_HALF_ANGLE_DEG = 24,
-    VT_ALONG_TRACK_HALF_ANGLE_DEG = 26,
+    VT_SHAPE_KIND = 4,
+    VT_AXIS_CONVENTION = 6,
+    VT_RANGE_BOUNDARY = 8,
+    VT_OUTER_HALF_ANGLE_DEG = 10,
+    VT_INNER_HALF_ANGLE_DEG = 12,
+    VT_MIN_CLOCK_ANGLE_DEG = 14,
+    VT_MAX_CLOCK_ANGLE_DEG = 16,
+    VT_X_HALF_ANGLE_DEG = 18,
+    VT_Y_HALF_ANGLE_DEG = 20,
+    VT_INNER_LOOK_ANGLE_DEG = 22,
+    VT_OUTER_LOOK_ANGLE_DEG = 24,
+    VT_SAR_SAMPLING_DENSITY = 26,
     VT_MIN_RANGE_M = 28,
     VT_MAX_RANGE_M = 30,
     VT_POLYGON_VERTICES = 32,
     VT_POLYGON_FRAME = 34
   };
-  uint32_t SENSOR_ID() const {
-    return GetField<uint32_t>(VT_SENSOR_ID, 0);
+  scvSensorShapeKind SHAPE_KIND() const {
+    return static_cast<scvSensorShapeKind>(GetField<uint8_t>(VT_SHAPE_KIND, 0));
   }
-  const ::flatbuffers::String *OBJECT_ID() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
+  scvSensorAxisConvention AXIS_CONVENTION() const {
+    return static_cast<scvSensorAxisConvention>(GetField<uint8_t>(VT_AXIS_CONVENTION, 0));
   }
-  const ::flatbuffers::String *NAME() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  scvSensorRangeBoundaryKind RANGE_BOUNDARY() const {
+    return static_cast<scvSensorRangeBoundaryKind>(GetField<uint8_t>(VT_RANGE_BOUNDARY, 0));
   }
-  scvSensorShapeKind SHAPE() const {
-    return static_cast<scvSensorShapeKind>(GetField<uint8_t>(VT_SHAPE, 0));
+  double OUTER_HALF_ANGLE_DEG() const {
+    return GetField<double>(VT_OUTER_HALF_ANGLE_DEG, 0.0);
   }
-  scvCoordinateFrame FRAME() const {
-    return static_cast<scvCoordinateFrame>(GetField<uint8_t>(VT_FRAME, 0));
+  double INNER_HALF_ANGLE_DEG() const {
+    return GetField<double>(VT_INNER_HALF_ANGLE_DEG, 0.0);
   }
-  const SCVVec3 *POSITION_M() const {
-    return GetPointer<const SCVVec3 *>(VT_POSITION_M);
+  double MIN_CLOCK_ANGLE_DEG() const {
+    return GetField<double>(VT_MIN_CLOCK_ANGLE_DEG, 0.0);
   }
-  const SCVVec3 *VELOCITY_MPS() const {
-    return GetPointer<const SCVVec3 *>(VT_VELOCITY_MPS);
+  double MAX_CLOCK_ANGLE_DEG() const {
+    return GetField<double>(VT_MAX_CLOCK_ANGLE_DEG, 360.0);
   }
-  const SCVVec3 *BORESIGHT_UNIT() const {
-    return GetPointer<const SCVVec3 *>(VT_BORESIGHT_UNIT);
+  double X_HALF_ANGLE_DEG() const {
+    return GetField<double>(VT_X_HALF_ANGLE_DEG, 0.0);
   }
-  const SCVVec3 *UP_UNIT() const {
-    return GetPointer<const SCVVec3 *>(VT_UP_UNIT);
+  double Y_HALF_ANGLE_DEG() const {
+    return GetField<double>(VT_Y_HALF_ANGLE_DEG, 0.0);
   }
-  double HALF_ANGLE_DEG() const {
-    return GetField<double>(VT_HALF_ANGLE_DEG, 0.0);
+  double INNER_LOOK_ANGLE_DEG() const {
+    return GetField<double>(VT_INNER_LOOK_ANGLE_DEG, 0.0);
   }
-  double CROSS_TRACK_HALF_ANGLE_DEG() const {
-    return GetField<double>(VT_CROSS_TRACK_HALF_ANGLE_DEG, 0.0);
+  double OUTER_LOOK_ANGLE_DEG() const {
+    return GetField<double>(VT_OUTER_LOOK_ANGLE_DEG, 0.0);
   }
-  double ALONG_TRACK_HALF_ANGLE_DEG() const {
-    return GetField<double>(VT_ALONG_TRACK_HALF_ANGLE_DEG, 0.0);
+  double SAR_SAMPLING_DENSITY() const {
+    return GetField<double>(VT_SAR_SAMPLING_DENSITY, 0.0);
   }
   double MIN_RANGE_M() const {
     return GetField<double>(VT_MIN_RANGE_M, 0.0);
@@ -954,12 +1082,245 @@ struct SCVSensor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_SHAPE_KIND, 1) &&
+           VerifyField<uint8_t>(verifier, VT_AXIS_CONVENTION, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RANGE_BOUNDARY, 1) &&
+           VerifyField<double>(verifier, VT_OUTER_HALF_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_INNER_HALF_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_MIN_CLOCK_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_MAX_CLOCK_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_X_HALF_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_Y_HALF_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_INNER_LOOK_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_OUTER_LOOK_ANGLE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_SAR_SAMPLING_DENSITY, 8) &&
+           VerifyField<double>(verifier, VT_MIN_RANGE_M, 8) &&
+           VerifyField<double>(verifier, VT_MAX_RANGE_M, 8) &&
+           VerifyOffset(verifier, VT_POLYGON_VERTICES) &&
+           verifier.VerifyVector(POLYGON_VERTICES()) &&
+           verifier.VerifyVectorOfTables(POLYGON_VERTICES()) &&
+           VerifyField<uint8_t>(verifier, VT_POLYGON_FRAME, 1) &&
+           verifier.EndTable();
+  }
+  SCVSensorShapeContractT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SCVSensorShapeContractT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SCVSensorShapeContract> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorShapeContractT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SCVSensorShapeContractBuilder {
+  typedef SCVSensorShapeContract Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SHAPE_KIND(scvSensorShapeKind SHAPE_KIND) {
+    fbb_.AddElement<uint8_t>(SCVSensorShapeContract::VT_SHAPE_KIND, static_cast<uint8_t>(SHAPE_KIND), 0);
+  }
+  void add_AXIS_CONVENTION(scvSensorAxisConvention AXIS_CONVENTION) {
+    fbb_.AddElement<uint8_t>(SCVSensorShapeContract::VT_AXIS_CONVENTION, static_cast<uint8_t>(AXIS_CONVENTION), 0);
+  }
+  void add_RANGE_BOUNDARY(scvSensorRangeBoundaryKind RANGE_BOUNDARY) {
+    fbb_.AddElement<uint8_t>(SCVSensorShapeContract::VT_RANGE_BOUNDARY, static_cast<uint8_t>(RANGE_BOUNDARY), 0);
+  }
+  void add_OUTER_HALF_ANGLE_DEG(double OUTER_HALF_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_OUTER_HALF_ANGLE_DEG, OUTER_HALF_ANGLE_DEG, 0.0);
+  }
+  void add_INNER_HALF_ANGLE_DEG(double INNER_HALF_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_INNER_HALF_ANGLE_DEG, INNER_HALF_ANGLE_DEG, 0.0);
+  }
+  void add_MIN_CLOCK_ANGLE_DEG(double MIN_CLOCK_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_MIN_CLOCK_ANGLE_DEG, MIN_CLOCK_ANGLE_DEG, 0.0);
+  }
+  void add_MAX_CLOCK_ANGLE_DEG(double MAX_CLOCK_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_MAX_CLOCK_ANGLE_DEG, MAX_CLOCK_ANGLE_DEG, 360.0);
+  }
+  void add_X_HALF_ANGLE_DEG(double X_HALF_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_X_HALF_ANGLE_DEG, X_HALF_ANGLE_DEG, 0.0);
+  }
+  void add_Y_HALF_ANGLE_DEG(double Y_HALF_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_Y_HALF_ANGLE_DEG, Y_HALF_ANGLE_DEG, 0.0);
+  }
+  void add_INNER_LOOK_ANGLE_DEG(double INNER_LOOK_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_INNER_LOOK_ANGLE_DEG, INNER_LOOK_ANGLE_DEG, 0.0);
+  }
+  void add_OUTER_LOOK_ANGLE_DEG(double OUTER_LOOK_ANGLE_DEG) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_OUTER_LOOK_ANGLE_DEG, OUTER_LOOK_ANGLE_DEG, 0.0);
+  }
+  void add_SAR_SAMPLING_DENSITY(double SAR_SAMPLING_DENSITY) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_SAR_SAMPLING_DENSITY, SAR_SAMPLING_DENSITY, 0.0);
+  }
+  void add_MIN_RANGE_M(double MIN_RANGE_M) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_MIN_RANGE_M, MIN_RANGE_M, 0.0);
+  }
+  void add_MAX_RANGE_M(double MAX_RANGE_M) {
+    fbb_.AddElement<double>(SCVSensorShapeContract::VT_MAX_RANGE_M, MAX_RANGE_M, 0.0);
+  }
+  void add_POLYGON_VERTICES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>>> POLYGON_VERTICES) {
+    fbb_.AddOffset(SCVSensorShapeContract::VT_POLYGON_VERTICES, POLYGON_VERTICES);
+  }
+  void add_POLYGON_FRAME(scvCoordinateFrame POLYGON_FRAME) {
+    fbb_.AddElement<uint8_t>(SCVSensorShapeContract::VT_POLYGON_FRAME, static_cast<uint8_t>(POLYGON_FRAME), 0);
+  }
+  explicit SCVSensorShapeContractBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SCVSensorShapeContract> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SCVSensorShapeContract>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContract(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    scvSensorShapeKind SHAPE_KIND = scvSensorShapeKind::CONIC,
+    scvSensorAxisConvention AXIS_CONVENTION = scvSensorAxisConvention::LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT,
+    scvSensorRangeBoundaryKind RANGE_BOUNDARY = scvSensorRangeBoundaryKind::RADIAL_SPHERICAL,
+    double OUTER_HALF_ANGLE_DEG = 0.0,
+    double INNER_HALF_ANGLE_DEG = 0.0,
+    double MIN_CLOCK_ANGLE_DEG = 0.0,
+    double MAX_CLOCK_ANGLE_DEG = 360.0,
+    double X_HALF_ANGLE_DEG = 0.0,
+    double Y_HALF_ANGLE_DEG = 0.0,
+    double INNER_LOOK_ANGLE_DEG = 0.0,
+    double OUTER_LOOK_ANGLE_DEG = 0.0,
+    double SAR_SAMPLING_DENSITY = 0.0,
+    double MIN_RANGE_M = 0.0,
+    double MAX_RANGE_M = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>>> POLYGON_VERTICES = 0,
+    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN) {
+  SCVSensorShapeContractBuilder builder_(_fbb);
+  builder_.add_MAX_RANGE_M(MAX_RANGE_M);
+  builder_.add_MIN_RANGE_M(MIN_RANGE_M);
+  builder_.add_SAR_SAMPLING_DENSITY(SAR_SAMPLING_DENSITY);
+  builder_.add_OUTER_LOOK_ANGLE_DEG(OUTER_LOOK_ANGLE_DEG);
+  builder_.add_INNER_LOOK_ANGLE_DEG(INNER_LOOK_ANGLE_DEG);
+  builder_.add_Y_HALF_ANGLE_DEG(Y_HALF_ANGLE_DEG);
+  builder_.add_X_HALF_ANGLE_DEG(X_HALF_ANGLE_DEG);
+  builder_.add_MAX_CLOCK_ANGLE_DEG(MAX_CLOCK_ANGLE_DEG);
+  builder_.add_MIN_CLOCK_ANGLE_DEG(MIN_CLOCK_ANGLE_DEG);
+  builder_.add_INNER_HALF_ANGLE_DEG(INNER_HALF_ANGLE_DEG);
+  builder_.add_OUTER_HALF_ANGLE_DEG(OUTER_HALF_ANGLE_DEG);
+  builder_.add_POLYGON_VERTICES(POLYGON_VERTICES);
+  builder_.add_POLYGON_FRAME(POLYGON_FRAME);
+  builder_.add_RANGE_BOUNDARY(RANGE_BOUNDARY);
+  builder_.add_AXIS_CONVENTION(AXIS_CONVENTION);
+  builder_.add_SHAPE_KIND(SHAPE_KIND);
+  return builder_.Finish();
+}
+
+struct SCVSensorShapeContract::Traits {
+  using type = SCVSensorShapeContract;
+  static auto constexpr Create = CreateSCVSensorShapeContract;
+};
+
+inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContractDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    scvSensorShapeKind SHAPE_KIND = scvSensorShapeKind::CONIC,
+    scvSensorAxisConvention AXIS_CONVENTION = scvSensorAxisConvention::LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT,
+    scvSensorRangeBoundaryKind RANGE_BOUNDARY = scvSensorRangeBoundaryKind::RADIAL_SPHERICAL,
+    double OUTER_HALF_ANGLE_DEG = 0.0,
+    double INNER_HALF_ANGLE_DEG = 0.0,
+    double MIN_CLOCK_ANGLE_DEG = 0.0,
+    double MAX_CLOCK_ANGLE_DEG = 360.0,
+    double X_HALF_ANGLE_DEG = 0.0,
+    double Y_HALF_ANGLE_DEG = 0.0,
+    double INNER_LOOK_ANGLE_DEG = 0.0,
+    double OUTER_LOOK_ANGLE_DEG = 0.0,
+    double SAR_SAMPLING_DENSITY = 0.0,
+    double MIN_RANGE_M = 0.0,
+    double MAX_RANGE_M = 0.0,
+    const std::vector<::flatbuffers::Offset<SCVVec3>> *POLYGON_VERTICES = nullptr,
+    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN) {
+  auto POLYGON_VERTICES__ = POLYGON_VERTICES ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>>(*POLYGON_VERTICES) : 0;
+  return CreateSCVSensorShapeContract(
+      _fbb,
+      SHAPE_KIND,
+      AXIS_CONVENTION,
+      RANGE_BOUNDARY,
+      OUTER_HALF_ANGLE_DEG,
+      INNER_HALF_ANGLE_DEG,
+      MIN_CLOCK_ANGLE_DEG,
+      MAX_CLOCK_ANGLE_DEG,
+      X_HALF_ANGLE_DEG,
+      Y_HALF_ANGLE_DEG,
+      INNER_LOOK_ANGLE_DEG,
+      OUTER_LOOK_ANGLE_DEG,
+      SAR_SAMPLING_DENSITY,
+      MIN_RANGE_M,
+      MAX_RANGE_M,
+      POLYGON_VERTICES__,
+      POLYGON_FRAME);
+}
+
+::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContract(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorShapeContractT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SCVSensorT : public ::flatbuffers::NativeTable {
+  typedef SCVSensor TableType;
+  uint32_t SENSOR_ID = 0;
+  std::string OBJECT_ID{};
+  std::string NAME{};
+  scvCoordinateFrame FRAME = scvCoordinateFrame::UNKNOWN;
+  std::unique_ptr<SCVVec3T> POSITION_M{};
+  std::unique_ptr<SCVVec3T> VELOCITY_MPS{};
+  std::unique_ptr<SCVVec3T> BORESIGHT_UNIT{};
+  std::unique_ptr<SCVVec3T> UP_UNIT{};
+  std::unique_ptr<SCVSensorShapeContractT> SHAPE_CONTRACT{};
+  SCVSensorT() = default;
+  SCVSensorT(const SCVSensorT &o);
+  SCVSensorT(SCVSensorT&&) FLATBUFFERS_NOEXCEPT = default;
+  SCVSensorT &operator=(SCVSensorT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct SCVSensor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SCVSensorT NativeTableType;
+  typedef SCVSensorBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SENSOR_ID = 4,
+    VT_OBJECT_ID = 6,
+    VT_NAME = 8,
+    VT_FRAME = 10,
+    VT_POSITION_M = 12,
+    VT_VELOCITY_MPS = 14,
+    VT_BORESIGHT_UNIT = 16,
+    VT_UP_UNIT = 18,
+    VT_SHAPE_CONTRACT = 20
+  };
+  uint32_t SENSOR_ID() const {
+    return GetField<uint32_t>(VT_SENSOR_ID, 0);
+  }
+  const ::flatbuffers::String *OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
+  }
+  const ::flatbuffers::String *NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  }
+  scvCoordinateFrame FRAME() const {
+    return static_cast<scvCoordinateFrame>(GetField<uint8_t>(VT_FRAME, 0));
+  }
+  const SCVVec3 *POSITION_M() const {
+    return GetPointer<const SCVVec3 *>(VT_POSITION_M);
+  }
+  const SCVVec3 *VELOCITY_MPS() const {
+    return GetPointer<const SCVVec3 *>(VT_VELOCITY_MPS);
+  }
+  const SCVVec3 *BORESIGHT_UNIT() const {
+    return GetPointer<const SCVVec3 *>(VT_BORESIGHT_UNIT);
+  }
+  const SCVVec3 *UP_UNIT() const {
+    return GetPointer<const SCVVec3 *>(VT_UP_UNIT);
+  }
+  const SCVSensorShapeContract *SHAPE_CONTRACT() const {
+    return GetPointer<const SCVSensorShapeContract *>(VT_SHAPE_CONTRACT);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SENSOR_ID, 4) &&
            VerifyOffset(verifier, VT_OBJECT_ID) &&
            verifier.VerifyString(OBJECT_ID()) &&
            VerifyOffset(verifier, VT_NAME) &&
            verifier.VerifyString(NAME()) &&
-           VerifyField<uint8_t>(verifier, VT_SHAPE, 1) &&
            VerifyField<uint8_t>(verifier, VT_FRAME, 1) &&
            VerifyOffset(verifier, VT_POSITION_M) &&
            verifier.VerifyTable(POSITION_M()) &&
@@ -969,15 +1330,8 @@ struct SCVSensor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyTable(BORESIGHT_UNIT()) &&
            VerifyOffset(verifier, VT_UP_UNIT) &&
            verifier.VerifyTable(UP_UNIT()) &&
-           VerifyField<double>(verifier, VT_HALF_ANGLE_DEG, 8) &&
-           VerifyField<double>(verifier, VT_CROSS_TRACK_HALF_ANGLE_DEG, 8) &&
-           VerifyField<double>(verifier, VT_ALONG_TRACK_HALF_ANGLE_DEG, 8) &&
-           VerifyField<double>(verifier, VT_MIN_RANGE_M, 8) &&
-           VerifyField<double>(verifier, VT_MAX_RANGE_M, 8) &&
-           VerifyOffset(verifier, VT_POLYGON_VERTICES) &&
-           verifier.VerifyVector(POLYGON_VERTICES()) &&
-           verifier.VerifyVectorOfTables(POLYGON_VERTICES()) &&
-           VerifyField<uint8_t>(verifier, VT_POLYGON_FRAME, 1) &&
+           VerifyOffset(verifier, VT_SHAPE_CONTRACT) &&
+           verifier.VerifyTable(SHAPE_CONTRACT()) &&
            verifier.EndTable();
   }
   SCVSensorT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -998,9 +1352,6 @@ struct SCVSensorBuilder {
   void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
     fbb_.AddOffset(SCVSensor::VT_NAME, NAME);
   }
-  void add_SHAPE(scvSensorShapeKind SHAPE) {
-    fbb_.AddElement<uint8_t>(SCVSensor::VT_SHAPE, static_cast<uint8_t>(SHAPE), 0);
-  }
   void add_FRAME(scvCoordinateFrame FRAME) {
     fbb_.AddElement<uint8_t>(SCVSensor::VT_FRAME, static_cast<uint8_t>(FRAME), 0);
   }
@@ -1016,26 +1367,8 @@ struct SCVSensorBuilder {
   void add_UP_UNIT(::flatbuffers::Offset<SCVVec3> UP_UNIT) {
     fbb_.AddOffset(SCVSensor::VT_UP_UNIT, UP_UNIT);
   }
-  void add_HALF_ANGLE_DEG(double HALF_ANGLE_DEG) {
-    fbb_.AddElement<double>(SCVSensor::VT_HALF_ANGLE_DEG, HALF_ANGLE_DEG, 0.0);
-  }
-  void add_CROSS_TRACK_HALF_ANGLE_DEG(double CROSS_TRACK_HALF_ANGLE_DEG) {
-    fbb_.AddElement<double>(SCVSensor::VT_CROSS_TRACK_HALF_ANGLE_DEG, CROSS_TRACK_HALF_ANGLE_DEG, 0.0);
-  }
-  void add_ALONG_TRACK_HALF_ANGLE_DEG(double ALONG_TRACK_HALF_ANGLE_DEG) {
-    fbb_.AddElement<double>(SCVSensor::VT_ALONG_TRACK_HALF_ANGLE_DEG, ALONG_TRACK_HALF_ANGLE_DEG, 0.0);
-  }
-  void add_MIN_RANGE_M(double MIN_RANGE_M) {
-    fbb_.AddElement<double>(SCVSensor::VT_MIN_RANGE_M, MIN_RANGE_M, 0.0);
-  }
-  void add_MAX_RANGE_M(double MAX_RANGE_M) {
-    fbb_.AddElement<double>(SCVSensor::VT_MAX_RANGE_M, MAX_RANGE_M, 0.0);
-  }
-  void add_POLYGON_VERTICES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>>> POLYGON_VERTICES) {
-    fbb_.AddOffset(SCVSensor::VT_POLYGON_VERTICES, POLYGON_VERTICES);
-  }
-  void add_POLYGON_FRAME(scvCoordinateFrame POLYGON_FRAME) {
-    fbb_.AddElement<uint8_t>(SCVSensor::VT_POLYGON_FRAME, static_cast<uint8_t>(POLYGON_FRAME), 0);
+  void add_SHAPE_CONTRACT(::flatbuffers::Offset<SCVSensorShapeContract> SHAPE_CONTRACT) {
+    fbb_.AddOffset(SCVSensor::VT_SHAPE_CONTRACT, SHAPE_CONTRACT);
   }
   explicit SCVSensorBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -1053,26 +1386,14 @@ inline ::flatbuffers::Offset<SCVSensor> CreateSCVSensor(
     uint32_t SENSOR_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
-    scvSensorShapeKind SHAPE = scvSensorShapeKind::CONIC,
     scvCoordinateFrame FRAME = scvCoordinateFrame::UNKNOWN,
     ::flatbuffers::Offset<SCVVec3> POSITION_M = 0,
     ::flatbuffers::Offset<SCVVec3> VELOCITY_MPS = 0,
     ::flatbuffers::Offset<SCVVec3> BORESIGHT_UNIT = 0,
     ::flatbuffers::Offset<SCVVec3> UP_UNIT = 0,
-    double HALF_ANGLE_DEG = 0.0,
-    double CROSS_TRACK_HALF_ANGLE_DEG = 0.0,
-    double ALONG_TRACK_HALF_ANGLE_DEG = 0.0,
-    double MIN_RANGE_M = 0.0,
-    double MAX_RANGE_M = 0.0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>>> POLYGON_VERTICES = 0,
-    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN) {
+    ::flatbuffers::Offset<SCVSensorShapeContract> SHAPE_CONTRACT = 0) {
   SCVSensorBuilder builder_(_fbb);
-  builder_.add_MAX_RANGE_M(MAX_RANGE_M);
-  builder_.add_MIN_RANGE_M(MIN_RANGE_M);
-  builder_.add_ALONG_TRACK_HALF_ANGLE_DEG(ALONG_TRACK_HALF_ANGLE_DEG);
-  builder_.add_CROSS_TRACK_HALF_ANGLE_DEG(CROSS_TRACK_HALF_ANGLE_DEG);
-  builder_.add_HALF_ANGLE_DEG(HALF_ANGLE_DEG);
-  builder_.add_POLYGON_VERTICES(POLYGON_VERTICES);
+  builder_.add_SHAPE_CONTRACT(SHAPE_CONTRACT);
   builder_.add_UP_UNIT(UP_UNIT);
   builder_.add_BORESIGHT_UNIT(BORESIGHT_UNIT);
   builder_.add_VELOCITY_MPS(VELOCITY_MPS);
@@ -1080,9 +1401,7 @@ inline ::flatbuffers::Offset<SCVSensor> CreateSCVSensor(
   builder_.add_NAME(NAME);
   builder_.add_OBJECT_ID(OBJECT_ID);
   builder_.add_SENSOR_ID(SENSOR_ID);
-  builder_.add_POLYGON_FRAME(POLYGON_FRAME);
   builder_.add_FRAME(FRAME);
-  builder_.add_SHAPE(SHAPE);
   return builder_.Finish();
 }
 
@@ -1096,40 +1415,25 @@ inline ::flatbuffers::Offset<SCVSensor> CreateSCVSensorDirect(
     uint32_t SENSOR_ID = 0,
     const char *OBJECT_ID = nullptr,
     const char *NAME = nullptr,
-    scvSensorShapeKind SHAPE = scvSensorShapeKind::CONIC,
     scvCoordinateFrame FRAME = scvCoordinateFrame::UNKNOWN,
     ::flatbuffers::Offset<SCVVec3> POSITION_M = 0,
     ::flatbuffers::Offset<SCVVec3> VELOCITY_MPS = 0,
     ::flatbuffers::Offset<SCVVec3> BORESIGHT_UNIT = 0,
     ::flatbuffers::Offset<SCVVec3> UP_UNIT = 0,
-    double HALF_ANGLE_DEG = 0.0,
-    double CROSS_TRACK_HALF_ANGLE_DEG = 0.0,
-    double ALONG_TRACK_HALF_ANGLE_DEG = 0.0,
-    double MIN_RANGE_M = 0.0,
-    double MAX_RANGE_M = 0.0,
-    const std::vector<::flatbuffers::Offset<SCVVec3>> *POLYGON_VERTICES = nullptr,
-    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN) {
+    ::flatbuffers::Offset<SCVSensorShapeContract> SHAPE_CONTRACT = 0) {
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
-  auto POLYGON_VERTICES__ = POLYGON_VERTICES ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>>(*POLYGON_VERTICES) : 0;
   return CreateSCVSensor(
       _fbb,
       SENSOR_ID,
       OBJECT_ID__,
       NAME__,
-      SHAPE,
       FRAME,
       POSITION_M,
       VELOCITY_MPS,
       BORESIGHT_UNIT,
       UP_UNIT,
-      HALF_ANGLE_DEG,
-      CROSS_TRACK_HALF_ANGLE_DEG,
-      ALONG_TRACK_HALF_ANGLE_DEG,
-      MIN_RANGE_M,
-      MAX_RANGE_M,
-      POLYGON_VERTICES__,
-      POLYGON_FRAME);
+      SHAPE_CONTRACT);
 }
 
 ::flatbuffers::Offset<SCVSensor> CreateSCVSensor(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2495,608 +2799,6 @@ struct SCVSensorContribution::Traits {
 
 ::flatbuffers::Offset<SCVSensorContribution> CreateSCVSensorContribution(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorContributionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct SCVCellStatT : public ::flatbuffers::NativeTable {
-  typedef SCVCellStat TableType;
-  uint32_t CELL_ID = 0;
-  double LATITUDE_DEG = 0.0;
-  double LONGITUDE_DEG = 0.0;
-  double ALTITUDE_M = 0.0;
-  uint32_t COVERED_WINDOW_COUNT = 0;
-  uint32_t TOTAL_WINDOW_COUNT = 0;
-  double COVERAGE_FRACTION = 0.0;
-  double MEAN_REVISIT_SEC = 0.0;
-  double MAX_GAP_SEC = 0.0;
-  double MEAN_GAP_SEC = 0.0;
-  double REDUNDANCY = 0.0;
-  std::vector<uint32_t> SENSOR_IDS{};
-  std::vector<uint64_t> SENSOR_BITSET_WORDS{};
-};
-
-struct SCVCellStat FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef SCVCellStatT NativeTableType;
-  typedef SCVCellStatBuilder Builder;
-  struct Traits;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_CELL_ID = 4,
-    VT_LATITUDE_DEG = 6,
-    VT_LONGITUDE_DEG = 8,
-    VT_ALTITUDE_M = 10,
-    VT_COVERED_WINDOW_COUNT = 12,
-    VT_TOTAL_WINDOW_COUNT = 14,
-    VT_COVERAGE_FRACTION = 16,
-    VT_MEAN_REVISIT_SEC = 18,
-    VT_MAX_GAP_SEC = 20,
-    VT_MEAN_GAP_SEC = 22,
-    VT_REDUNDANCY = 24,
-    VT_SENSOR_IDS = 26,
-    VT_SENSOR_BITSET_WORDS = 28
-  };
-  uint32_t CELL_ID() const {
-    return GetField<uint32_t>(VT_CELL_ID, 0);
-  }
-  double LATITUDE_DEG() const {
-    return GetField<double>(VT_LATITUDE_DEG, 0.0);
-  }
-  double LONGITUDE_DEG() const {
-    return GetField<double>(VT_LONGITUDE_DEG, 0.0);
-  }
-  double ALTITUDE_M() const {
-    return GetField<double>(VT_ALTITUDE_M, 0.0);
-  }
-  uint32_t COVERED_WINDOW_COUNT() const {
-    return GetField<uint32_t>(VT_COVERED_WINDOW_COUNT, 0);
-  }
-  uint32_t TOTAL_WINDOW_COUNT() const {
-    return GetField<uint32_t>(VT_TOTAL_WINDOW_COUNT, 0);
-  }
-  double COVERAGE_FRACTION() const {
-    return GetField<double>(VT_COVERAGE_FRACTION, 0.0);
-  }
-  double MEAN_REVISIT_SEC() const {
-    return GetField<double>(VT_MEAN_REVISIT_SEC, 0.0);
-  }
-  double MAX_GAP_SEC() const {
-    return GetField<double>(VT_MAX_GAP_SEC, 0.0);
-  }
-  double MEAN_GAP_SEC() const {
-    return GetField<double>(VT_MEAN_GAP_SEC, 0.0);
-  }
-  double REDUNDANCY() const {
-    return GetField<double>(VT_REDUNDANCY, 0.0);
-  }
-  const ::flatbuffers::Vector<uint32_t> *SENSOR_IDS() const {
-    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_SENSOR_IDS);
-  }
-  const ::flatbuffers::Vector<uint64_t> *SENSOR_BITSET_WORDS() const {
-    return GetPointer<const ::flatbuffers::Vector<uint64_t> *>(VT_SENSOR_BITSET_WORDS);
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_CELL_ID, 4) &&
-           VerifyField<double>(verifier, VT_LATITUDE_DEG, 8) &&
-           VerifyField<double>(verifier, VT_LONGITUDE_DEG, 8) &&
-           VerifyField<double>(verifier, VT_ALTITUDE_M, 8) &&
-           VerifyField<uint32_t>(verifier, VT_COVERED_WINDOW_COUNT, 4) &&
-           VerifyField<uint32_t>(verifier, VT_TOTAL_WINDOW_COUNT, 4) &&
-           VerifyField<double>(verifier, VT_COVERAGE_FRACTION, 8) &&
-           VerifyField<double>(verifier, VT_MEAN_REVISIT_SEC, 8) &&
-           VerifyField<double>(verifier, VT_MAX_GAP_SEC, 8) &&
-           VerifyField<double>(verifier, VT_MEAN_GAP_SEC, 8) &&
-           VerifyField<double>(verifier, VT_REDUNDANCY, 8) &&
-           VerifyOffset(verifier, VT_SENSOR_IDS) &&
-           verifier.VerifyVector(SENSOR_IDS()) &&
-           VerifyOffset(verifier, VT_SENSOR_BITSET_WORDS) &&
-           verifier.VerifyVector(SENSOR_BITSET_WORDS()) &&
-           verifier.EndTable();
-  }
-  SCVCellStatT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(SCVCellStatT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<SCVCellStat> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVCellStatT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct SCVCellStatBuilder {
-  typedef SCVCellStat Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_CELL_ID(uint32_t CELL_ID) {
-    fbb_.AddElement<uint32_t>(SCVCellStat::VT_CELL_ID, CELL_ID, 0);
-  }
-  void add_LATITUDE_DEG(double LATITUDE_DEG) {
-    fbb_.AddElement<double>(SCVCellStat::VT_LATITUDE_DEG, LATITUDE_DEG, 0.0);
-  }
-  void add_LONGITUDE_DEG(double LONGITUDE_DEG) {
-    fbb_.AddElement<double>(SCVCellStat::VT_LONGITUDE_DEG, LONGITUDE_DEG, 0.0);
-  }
-  void add_ALTITUDE_M(double ALTITUDE_M) {
-    fbb_.AddElement<double>(SCVCellStat::VT_ALTITUDE_M, ALTITUDE_M, 0.0);
-  }
-  void add_COVERED_WINDOW_COUNT(uint32_t COVERED_WINDOW_COUNT) {
-    fbb_.AddElement<uint32_t>(SCVCellStat::VT_COVERED_WINDOW_COUNT, COVERED_WINDOW_COUNT, 0);
-  }
-  void add_TOTAL_WINDOW_COUNT(uint32_t TOTAL_WINDOW_COUNT) {
-    fbb_.AddElement<uint32_t>(SCVCellStat::VT_TOTAL_WINDOW_COUNT, TOTAL_WINDOW_COUNT, 0);
-  }
-  void add_COVERAGE_FRACTION(double COVERAGE_FRACTION) {
-    fbb_.AddElement<double>(SCVCellStat::VT_COVERAGE_FRACTION, COVERAGE_FRACTION, 0.0);
-  }
-  void add_MEAN_REVISIT_SEC(double MEAN_REVISIT_SEC) {
-    fbb_.AddElement<double>(SCVCellStat::VT_MEAN_REVISIT_SEC, MEAN_REVISIT_SEC, 0.0);
-  }
-  void add_MAX_GAP_SEC(double MAX_GAP_SEC) {
-    fbb_.AddElement<double>(SCVCellStat::VT_MAX_GAP_SEC, MAX_GAP_SEC, 0.0);
-  }
-  void add_MEAN_GAP_SEC(double MEAN_GAP_SEC) {
-    fbb_.AddElement<double>(SCVCellStat::VT_MEAN_GAP_SEC, MEAN_GAP_SEC, 0.0);
-  }
-  void add_REDUNDANCY(double REDUNDANCY) {
-    fbb_.AddElement<double>(SCVCellStat::VT_REDUNDANCY, REDUNDANCY, 0.0);
-  }
-  void add_SENSOR_IDS(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> SENSOR_IDS) {
-    fbb_.AddOffset(SCVCellStat::VT_SENSOR_IDS, SENSOR_IDS);
-  }
-  void add_SENSOR_BITSET_WORDS(::flatbuffers::Offset<::flatbuffers::Vector<uint64_t>> SENSOR_BITSET_WORDS) {
-    fbb_.AddOffset(SCVCellStat::VT_SENSOR_BITSET_WORDS, SENSOR_BITSET_WORDS);
-  }
-  explicit SCVCellStatBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<SCVCellStat> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<SCVCellStat>(end);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<SCVCellStat> CreateSCVCellStat(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t CELL_ID = 0,
-    double LATITUDE_DEG = 0.0,
-    double LONGITUDE_DEG = 0.0,
-    double ALTITUDE_M = 0.0,
-    uint32_t COVERED_WINDOW_COUNT = 0,
-    uint32_t TOTAL_WINDOW_COUNT = 0,
-    double COVERAGE_FRACTION = 0.0,
-    double MEAN_REVISIT_SEC = 0.0,
-    double MAX_GAP_SEC = 0.0,
-    double MEAN_GAP_SEC = 0.0,
-    double REDUNDANCY = 0.0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> SENSOR_IDS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint64_t>> SENSOR_BITSET_WORDS = 0) {
-  SCVCellStatBuilder builder_(_fbb);
-  builder_.add_REDUNDANCY(REDUNDANCY);
-  builder_.add_MEAN_GAP_SEC(MEAN_GAP_SEC);
-  builder_.add_MAX_GAP_SEC(MAX_GAP_SEC);
-  builder_.add_MEAN_REVISIT_SEC(MEAN_REVISIT_SEC);
-  builder_.add_COVERAGE_FRACTION(COVERAGE_FRACTION);
-  builder_.add_ALTITUDE_M(ALTITUDE_M);
-  builder_.add_LONGITUDE_DEG(LONGITUDE_DEG);
-  builder_.add_LATITUDE_DEG(LATITUDE_DEG);
-  builder_.add_SENSOR_BITSET_WORDS(SENSOR_BITSET_WORDS);
-  builder_.add_SENSOR_IDS(SENSOR_IDS);
-  builder_.add_TOTAL_WINDOW_COUNT(TOTAL_WINDOW_COUNT);
-  builder_.add_COVERED_WINDOW_COUNT(COVERED_WINDOW_COUNT);
-  builder_.add_CELL_ID(CELL_ID);
-  return builder_.Finish();
-}
-
-struct SCVCellStat::Traits {
-  using type = SCVCellStat;
-  static auto constexpr Create = CreateSCVCellStat;
-};
-
-inline ::flatbuffers::Offset<SCVCellStat> CreateSCVCellStatDirect(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t CELL_ID = 0,
-    double LATITUDE_DEG = 0.0,
-    double LONGITUDE_DEG = 0.0,
-    double ALTITUDE_M = 0.0,
-    uint32_t COVERED_WINDOW_COUNT = 0,
-    uint32_t TOTAL_WINDOW_COUNT = 0,
-    double COVERAGE_FRACTION = 0.0,
-    double MEAN_REVISIT_SEC = 0.0,
-    double MAX_GAP_SEC = 0.0,
-    double MEAN_GAP_SEC = 0.0,
-    double REDUNDANCY = 0.0,
-    const std::vector<uint32_t> *SENSOR_IDS = nullptr,
-    const std::vector<uint64_t> *SENSOR_BITSET_WORDS = nullptr) {
-  auto SENSOR_IDS__ = SENSOR_IDS ? _fbb.CreateVector<uint32_t>(*SENSOR_IDS) : 0;
-  auto SENSOR_BITSET_WORDS__ = SENSOR_BITSET_WORDS ? _fbb.CreateVector<uint64_t>(*SENSOR_BITSET_WORDS) : 0;
-  return CreateSCVCellStat(
-      _fbb,
-      CELL_ID,
-      LATITUDE_DEG,
-      LONGITUDE_DEG,
-      ALTITUDE_M,
-      COVERED_WINDOW_COUNT,
-      TOTAL_WINDOW_COUNT,
-      COVERAGE_FRACTION,
-      MEAN_REVISIT_SEC,
-      MAX_GAP_SEC,
-      MEAN_GAP_SEC,
-      REDUNDANCY,
-      SENSOR_IDS__,
-      SENSOR_BITSET_WORDS__);
-}
-
-::flatbuffers::Offset<SCVCellStat> CreateSCVCellStat(::flatbuffers::FlatBufferBuilder &_fbb, const SCVCellStatT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
-struct SCVIntervalT : public ::flatbuffers::NativeTable {
-  typedef SCVInterval TableType;
-  uint32_t SENSOR_ID = 0;
-  uint32_t TARGET_ID = 0;
-  scvIntervalCategory INTERVAL_KIND = scvIntervalCategory::ACCESS;
-  double START_OFFSET_SEC = 0.0;
-  double STOP_OFFSET_SEC = 0.0;
-  double DURATION_SEC = 0.0;
-  double MIN_RANGE_M = 0.0;
-  double MAX_ELEVATION_DEG = 0.0;
-  uint32_t CELL_ID = 0;
-};
-
-struct SCVInterval FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef SCVIntervalT NativeTableType;
-  typedef SCVIntervalBuilder Builder;
-  struct Traits;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SENSOR_ID = 4,
-    VT_TARGET_ID = 6,
-    VT_INTERVAL_KIND = 8,
-    VT_START_OFFSET_SEC = 10,
-    VT_STOP_OFFSET_SEC = 12,
-    VT_DURATION_SEC = 14,
-    VT_MIN_RANGE_M = 16,
-    VT_MAX_ELEVATION_DEG = 18,
-    VT_CELL_ID = 20
-  };
-  uint32_t SENSOR_ID() const {
-    return GetField<uint32_t>(VT_SENSOR_ID, 0);
-  }
-  uint32_t TARGET_ID() const {
-    return GetField<uint32_t>(VT_TARGET_ID, 0);
-  }
-  scvIntervalCategory INTERVAL_KIND() const {
-    return static_cast<scvIntervalCategory>(GetField<uint8_t>(VT_INTERVAL_KIND, 0));
-  }
-  double START_OFFSET_SEC() const {
-    return GetField<double>(VT_START_OFFSET_SEC, 0.0);
-  }
-  double STOP_OFFSET_SEC() const {
-    return GetField<double>(VT_STOP_OFFSET_SEC, 0.0);
-  }
-  double DURATION_SEC() const {
-    return GetField<double>(VT_DURATION_SEC, 0.0);
-  }
-  double MIN_RANGE_M() const {
-    return GetField<double>(VT_MIN_RANGE_M, 0.0);
-  }
-  double MAX_ELEVATION_DEG() const {
-    return GetField<double>(VT_MAX_ELEVATION_DEG, 0.0);
-  }
-  uint32_t CELL_ID() const {
-    return GetField<uint32_t>(VT_CELL_ID, 0);
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_SENSOR_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_TARGET_ID, 4) &&
-           VerifyField<uint8_t>(verifier, VT_INTERVAL_KIND, 1) &&
-           VerifyField<double>(verifier, VT_START_OFFSET_SEC, 8) &&
-           VerifyField<double>(verifier, VT_STOP_OFFSET_SEC, 8) &&
-           VerifyField<double>(verifier, VT_DURATION_SEC, 8) &&
-           VerifyField<double>(verifier, VT_MIN_RANGE_M, 8) &&
-           VerifyField<double>(verifier, VT_MAX_ELEVATION_DEG, 8) &&
-           VerifyField<uint32_t>(verifier, VT_CELL_ID, 4) &&
-           verifier.EndTable();
-  }
-  SCVIntervalT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(SCVIntervalT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<SCVInterval> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVIntervalT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct SCVIntervalBuilder {
-  typedef SCVInterval Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_SENSOR_ID(uint32_t SENSOR_ID) {
-    fbb_.AddElement<uint32_t>(SCVInterval::VT_SENSOR_ID, SENSOR_ID, 0);
-  }
-  void add_TARGET_ID(uint32_t TARGET_ID) {
-    fbb_.AddElement<uint32_t>(SCVInterval::VT_TARGET_ID, TARGET_ID, 0);
-  }
-  void add_INTERVAL_KIND(scvIntervalCategory INTERVAL_KIND) {
-    fbb_.AddElement<uint8_t>(SCVInterval::VT_INTERVAL_KIND, static_cast<uint8_t>(INTERVAL_KIND), 0);
-  }
-  void add_START_OFFSET_SEC(double START_OFFSET_SEC) {
-    fbb_.AddElement<double>(SCVInterval::VT_START_OFFSET_SEC, START_OFFSET_SEC, 0.0);
-  }
-  void add_STOP_OFFSET_SEC(double STOP_OFFSET_SEC) {
-    fbb_.AddElement<double>(SCVInterval::VT_STOP_OFFSET_SEC, STOP_OFFSET_SEC, 0.0);
-  }
-  void add_DURATION_SEC(double DURATION_SEC) {
-    fbb_.AddElement<double>(SCVInterval::VT_DURATION_SEC, DURATION_SEC, 0.0);
-  }
-  void add_MIN_RANGE_M(double MIN_RANGE_M) {
-    fbb_.AddElement<double>(SCVInterval::VT_MIN_RANGE_M, MIN_RANGE_M, 0.0);
-  }
-  void add_MAX_ELEVATION_DEG(double MAX_ELEVATION_DEG) {
-    fbb_.AddElement<double>(SCVInterval::VT_MAX_ELEVATION_DEG, MAX_ELEVATION_DEG, 0.0);
-  }
-  void add_CELL_ID(uint32_t CELL_ID) {
-    fbb_.AddElement<uint32_t>(SCVInterval::VT_CELL_ID, CELL_ID, 0);
-  }
-  explicit SCVIntervalBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<SCVInterval> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<SCVInterval>(end);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<SCVInterval> CreateSCVInterval(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t SENSOR_ID = 0,
-    uint32_t TARGET_ID = 0,
-    scvIntervalCategory INTERVAL_KIND = scvIntervalCategory::ACCESS,
-    double START_OFFSET_SEC = 0.0,
-    double STOP_OFFSET_SEC = 0.0,
-    double DURATION_SEC = 0.0,
-    double MIN_RANGE_M = 0.0,
-    double MAX_ELEVATION_DEG = 0.0,
-    uint32_t CELL_ID = 0) {
-  SCVIntervalBuilder builder_(_fbb);
-  builder_.add_MAX_ELEVATION_DEG(MAX_ELEVATION_DEG);
-  builder_.add_MIN_RANGE_M(MIN_RANGE_M);
-  builder_.add_DURATION_SEC(DURATION_SEC);
-  builder_.add_STOP_OFFSET_SEC(STOP_OFFSET_SEC);
-  builder_.add_START_OFFSET_SEC(START_OFFSET_SEC);
-  builder_.add_CELL_ID(CELL_ID);
-  builder_.add_TARGET_ID(TARGET_ID);
-  builder_.add_SENSOR_ID(SENSOR_ID);
-  builder_.add_INTERVAL_KIND(INTERVAL_KIND);
-  return builder_.Finish();
-}
-
-struct SCVInterval::Traits {
-  using type = SCVInterval;
-  static auto constexpr Create = CreateSCVInterval;
-};
-
-::flatbuffers::Offset<SCVInterval> CreateSCVInterval(::flatbuffers::FlatBufferBuilder &_fbb, const SCVIntervalT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
-struct SCVLatitudeBandStatT : public ::flatbuffers::NativeTable {
-  typedef SCVLatitudeBandStat TableType;
-  double MIN_LAT_DEG = 0.0;
-  double MAX_LAT_DEG = 0.0;
-  double COVERAGE_FRACTION = 0.0;
-  double MEAN_REVISIT_SEC = 0.0;
-  double MAX_GAP_SEC = 0.0;
-  double MEAN_REDUNDANCY = 0.0;
-};
-
-struct SCVLatitudeBandStat FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef SCVLatitudeBandStatT NativeTableType;
-  typedef SCVLatitudeBandStatBuilder Builder;
-  struct Traits;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_MIN_LAT_DEG = 4,
-    VT_MAX_LAT_DEG = 6,
-    VT_COVERAGE_FRACTION = 8,
-    VT_MEAN_REVISIT_SEC = 10,
-    VT_MAX_GAP_SEC = 12,
-    VT_MEAN_REDUNDANCY = 14
-  };
-  double MIN_LAT_DEG() const {
-    return GetField<double>(VT_MIN_LAT_DEG, 0.0);
-  }
-  double MAX_LAT_DEG() const {
-    return GetField<double>(VT_MAX_LAT_DEG, 0.0);
-  }
-  double COVERAGE_FRACTION() const {
-    return GetField<double>(VT_COVERAGE_FRACTION, 0.0);
-  }
-  double MEAN_REVISIT_SEC() const {
-    return GetField<double>(VT_MEAN_REVISIT_SEC, 0.0);
-  }
-  double MAX_GAP_SEC() const {
-    return GetField<double>(VT_MAX_GAP_SEC, 0.0);
-  }
-  double MEAN_REDUNDANCY() const {
-    return GetField<double>(VT_MEAN_REDUNDANCY, 0.0);
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<double>(verifier, VT_MIN_LAT_DEG, 8) &&
-           VerifyField<double>(verifier, VT_MAX_LAT_DEG, 8) &&
-           VerifyField<double>(verifier, VT_COVERAGE_FRACTION, 8) &&
-           VerifyField<double>(verifier, VT_MEAN_REVISIT_SEC, 8) &&
-           VerifyField<double>(verifier, VT_MAX_GAP_SEC, 8) &&
-           VerifyField<double>(verifier, VT_MEAN_REDUNDANCY, 8) &&
-           verifier.EndTable();
-  }
-  SCVLatitudeBandStatT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(SCVLatitudeBandStatT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<SCVLatitudeBandStat> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVLatitudeBandStatT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct SCVLatitudeBandStatBuilder {
-  typedef SCVLatitudeBandStat Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_MIN_LAT_DEG(double MIN_LAT_DEG) {
-    fbb_.AddElement<double>(SCVLatitudeBandStat::VT_MIN_LAT_DEG, MIN_LAT_DEG, 0.0);
-  }
-  void add_MAX_LAT_DEG(double MAX_LAT_DEG) {
-    fbb_.AddElement<double>(SCVLatitudeBandStat::VT_MAX_LAT_DEG, MAX_LAT_DEG, 0.0);
-  }
-  void add_COVERAGE_FRACTION(double COVERAGE_FRACTION) {
-    fbb_.AddElement<double>(SCVLatitudeBandStat::VT_COVERAGE_FRACTION, COVERAGE_FRACTION, 0.0);
-  }
-  void add_MEAN_REVISIT_SEC(double MEAN_REVISIT_SEC) {
-    fbb_.AddElement<double>(SCVLatitudeBandStat::VT_MEAN_REVISIT_SEC, MEAN_REVISIT_SEC, 0.0);
-  }
-  void add_MAX_GAP_SEC(double MAX_GAP_SEC) {
-    fbb_.AddElement<double>(SCVLatitudeBandStat::VT_MAX_GAP_SEC, MAX_GAP_SEC, 0.0);
-  }
-  void add_MEAN_REDUNDANCY(double MEAN_REDUNDANCY) {
-    fbb_.AddElement<double>(SCVLatitudeBandStat::VT_MEAN_REDUNDANCY, MEAN_REDUNDANCY, 0.0);
-  }
-  explicit SCVLatitudeBandStatBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<SCVLatitudeBandStat> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<SCVLatitudeBandStat>(end);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<SCVLatitudeBandStat> CreateSCVLatitudeBandStat(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    double MIN_LAT_DEG = 0.0,
-    double MAX_LAT_DEG = 0.0,
-    double COVERAGE_FRACTION = 0.0,
-    double MEAN_REVISIT_SEC = 0.0,
-    double MAX_GAP_SEC = 0.0,
-    double MEAN_REDUNDANCY = 0.0) {
-  SCVLatitudeBandStatBuilder builder_(_fbb);
-  builder_.add_MEAN_REDUNDANCY(MEAN_REDUNDANCY);
-  builder_.add_MAX_GAP_SEC(MAX_GAP_SEC);
-  builder_.add_MEAN_REVISIT_SEC(MEAN_REVISIT_SEC);
-  builder_.add_COVERAGE_FRACTION(COVERAGE_FRACTION);
-  builder_.add_MAX_LAT_DEG(MAX_LAT_DEG);
-  builder_.add_MIN_LAT_DEG(MIN_LAT_DEG);
-  return builder_.Finish();
-}
-
-struct SCVLatitudeBandStat::Traits {
-  using type = SCVLatitudeBandStat;
-  static auto constexpr Create = CreateSCVLatitudeBandStat;
-};
-
-::flatbuffers::Offset<SCVLatitudeBandStat> CreateSCVLatitudeBandStat(::flatbuffers::FlatBufferBuilder &_fbb, const SCVLatitudeBandStatT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
-struct SCVTimeSeriesPointT : public ::flatbuffers::NativeTable {
-  typedef SCVTimeSeriesPoint TableType;
-  scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED;
-  double TIME_OFFSET_SEC = 0.0;
-  uint32_t WINDOW_INDEX = 0;
-  double VALUE = 0.0;
-  uint32_t SENSOR_ID = 0;
-  uint32_t CELL_ID = 0;
-};
-
-struct SCVTimeSeriesPoint FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef SCVTimeSeriesPointT NativeTableType;
-  typedef SCVTimeSeriesPointBuilder Builder;
-  struct Traits;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_METRIC_KIND = 4,
-    VT_TIME_OFFSET_SEC = 6,
-    VT_WINDOW_INDEX = 8,
-    VT_VALUE = 10,
-    VT_SENSOR_ID = 12,
-    VT_CELL_ID = 14
-  };
-  scvMetricSeriesKind METRIC_KIND() const {
-    return static_cast<scvMetricSeriesKind>(GetField<uint16_t>(VT_METRIC_KIND, 0));
-  }
-  double TIME_OFFSET_SEC() const {
-    return GetField<double>(VT_TIME_OFFSET_SEC, 0.0);
-  }
-  uint32_t WINDOW_INDEX() const {
-    return GetField<uint32_t>(VT_WINDOW_INDEX, 0);
-  }
-  double VALUE() const {
-    return GetField<double>(VT_VALUE, 0.0);
-  }
-  uint32_t SENSOR_ID() const {
-    return GetField<uint32_t>(VT_SENSOR_ID, 0);
-  }
-  uint32_t CELL_ID() const {
-    return GetField<uint32_t>(VT_CELL_ID, 0);
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint16_t>(verifier, VT_METRIC_KIND, 2) &&
-           VerifyField<double>(verifier, VT_TIME_OFFSET_SEC, 8) &&
-           VerifyField<uint32_t>(verifier, VT_WINDOW_INDEX, 4) &&
-           VerifyField<double>(verifier, VT_VALUE, 8) &&
-           VerifyField<uint32_t>(verifier, VT_SENSOR_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_CELL_ID, 4) &&
-           verifier.EndTable();
-  }
-  SCVTimeSeriesPointT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(SCVTimeSeriesPointT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<SCVTimeSeriesPoint> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTimeSeriesPointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct SCVTimeSeriesPointBuilder {
-  typedef SCVTimeSeriesPoint Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_METRIC_KIND(scvMetricSeriesKind METRIC_KIND) {
-    fbb_.AddElement<uint16_t>(SCVTimeSeriesPoint::VT_METRIC_KIND, static_cast<uint16_t>(METRIC_KIND), 0);
-  }
-  void add_TIME_OFFSET_SEC(double TIME_OFFSET_SEC) {
-    fbb_.AddElement<double>(SCVTimeSeriesPoint::VT_TIME_OFFSET_SEC, TIME_OFFSET_SEC, 0.0);
-  }
-  void add_WINDOW_INDEX(uint32_t WINDOW_INDEX) {
-    fbb_.AddElement<uint32_t>(SCVTimeSeriesPoint::VT_WINDOW_INDEX, WINDOW_INDEX, 0);
-  }
-  void add_VALUE(double VALUE) {
-    fbb_.AddElement<double>(SCVTimeSeriesPoint::VT_VALUE, VALUE, 0.0);
-  }
-  void add_SENSOR_ID(uint32_t SENSOR_ID) {
-    fbb_.AddElement<uint32_t>(SCVTimeSeriesPoint::VT_SENSOR_ID, SENSOR_ID, 0);
-  }
-  void add_CELL_ID(uint32_t CELL_ID) {
-    fbb_.AddElement<uint32_t>(SCVTimeSeriesPoint::VT_CELL_ID, CELL_ID, 0);
-  }
-  explicit SCVTimeSeriesPointBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<SCVTimeSeriesPoint> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<SCVTimeSeriesPoint>(end);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<SCVTimeSeriesPoint> CreateSCVTimeSeriesPoint(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED,
-    double TIME_OFFSET_SEC = 0.0,
-    uint32_t WINDOW_INDEX = 0,
-    double VALUE = 0.0,
-    uint32_t SENSOR_ID = 0,
-    uint32_t CELL_ID = 0) {
-  SCVTimeSeriesPointBuilder builder_(_fbb);
-  builder_.add_VALUE(VALUE);
-  builder_.add_TIME_OFFSET_SEC(TIME_OFFSET_SEC);
-  builder_.add_CELL_ID(CELL_ID);
-  builder_.add_SENSOR_ID(SENSOR_ID);
-  builder_.add_WINDOW_INDEX(WINDOW_INDEX);
-  builder_.add_METRIC_KIND(METRIC_KIND);
-  return builder_.Finish();
-}
-
-struct SCVTimeSeriesPoint::Traits {
-  using type = SCVTimeSeriesPoint;
-  static auto constexpr Create = CreateSCVTimeSeriesPoint;
-};
-
-::flatbuffers::Offset<SCVTimeSeriesPoint> CreateSCVTimeSeriesPoint(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTimeSeriesPointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
 struct SCVHistogramBinT : public ::flatbuffers::NativeTable {
   typedef SCVHistogramBin TableType;
   scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED;
@@ -3199,109 +2901,6 @@ struct SCVHistogramBin::Traits {
 };
 
 ::flatbuffers::Offset<SCVHistogramBin> CreateSCVHistogramBin(::flatbuffers::FlatBufferBuilder &_fbb, const SCVHistogramBinT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
-struct SCVHeatmapCellT : public ::flatbuffers::NativeTable {
-  typedef SCVHeatmapCell TableType;
-  scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED;
-  uint32_t X_INDEX = 0;
-  uint32_t Y_INDEX = 0;
-  double VALUE = 0.0;
-  uint32_t SENSOR_COUNT = 0;
-};
-
-struct SCVHeatmapCell FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef SCVHeatmapCellT NativeTableType;
-  typedef SCVHeatmapCellBuilder Builder;
-  struct Traits;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_METRIC_KIND = 4,
-    VT_X_INDEX = 6,
-    VT_Y_INDEX = 8,
-    VT_VALUE = 10,
-    VT_SENSOR_COUNT = 12
-  };
-  scvMetricSeriesKind METRIC_KIND() const {
-    return static_cast<scvMetricSeriesKind>(GetField<uint16_t>(VT_METRIC_KIND, 0));
-  }
-  uint32_t X_INDEX() const {
-    return GetField<uint32_t>(VT_X_INDEX, 0);
-  }
-  uint32_t Y_INDEX() const {
-    return GetField<uint32_t>(VT_Y_INDEX, 0);
-  }
-  double VALUE() const {
-    return GetField<double>(VT_VALUE, 0.0);
-  }
-  uint32_t SENSOR_COUNT() const {
-    return GetField<uint32_t>(VT_SENSOR_COUNT, 0);
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint16_t>(verifier, VT_METRIC_KIND, 2) &&
-           VerifyField<uint32_t>(verifier, VT_X_INDEX, 4) &&
-           VerifyField<uint32_t>(verifier, VT_Y_INDEX, 4) &&
-           VerifyField<double>(verifier, VT_VALUE, 8) &&
-           VerifyField<uint32_t>(verifier, VT_SENSOR_COUNT, 4) &&
-           verifier.EndTable();
-  }
-  SCVHeatmapCellT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(SCVHeatmapCellT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<SCVHeatmapCell> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVHeatmapCellT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct SCVHeatmapCellBuilder {
-  typedef SCVHeatmapCell Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_METRIC_KIND(scvMetricSeriesKind METRIC_KIND) {
-    fbb_.AddElement<uint16_t>(SCVHeatmapCell::VT_METRIC_KIND, static_cast<uint16_t>(METRIC_KIND), 0);
-  }
-  void add_X_INDEX(uint32_t X_INDEX) {
-    fbb_.AddElement<uint32_t>(SCVHeatmapCell::VT_X_INDEX, X_INDEX, 0);
-  }
-  void add_Y_INDEX(uint32_t Y_INDEX) {
-    fbb_.AddElement<uint32_t>(SCVHeatmapCell::VT_Y_INDEX, Y_INDEX, 0);
-  }
-  void add_VALUE(double VALUE) {
-    fbb_.AddElement<double>(SCVHeatmapCell::VT_VALUE, VALUE, 0.0);
-  }
-  void add_SENSOR_COUNT(uint32_t SENSOR_COUNT) {
-    fbb_.AddElement<uint32_t>(SCVHeatmapCell::VT_SENSOR_COUNT, SENSOR_COUNT, 0);
-  }
-  explicit SCVHeatmapCellBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<SCVHeatmapCell> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<SCVHeatmapCell>(end);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<SCVHeatmapCell> CreateSCVHeatmapCell(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED,
-    uint32_t X_INDEX = 0,
-    uint32_t Y_INDEX = 0,
-    double VALUE = 0.0,
-    uint32_t SENSOR_COUNT = 0) {
-  SCVHeatmapCellBuilder builder_(_fbb);
-  builder_.add_VALUE(VALUE);
-  builder_.add_SENSOR_COUNT(SENSOR_COUNT);
-  builder_.add_Y_INDEX(Y_INDEX);
-  builder_.add_X_INDEX(X_INDEX);
-  builder_.add_METRIC_KIND(METRIC_KIND);
-  return builder_.Finish();
-}
-
-struct SCVHeatmapCell::Traits {
-  using type = SCVHeatmapCell;
-  static auto constexpr Create = CreateSCVHeatmapCell;
-};
-
-::flatbuffers::Offset<SCVHeatmapCell> CreateSCVHeatmapCell(::flatbuffers::FlatBufferBuilder &_fbb, const SCVHeatmapCellT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct SCVSwathSegmentT : public ::flatbuffers::NativeTable {
   typedef SCVSwathSegment TableType;
@@ -4145,6 +3744,646 @@ inline ::flatbuffers::Offset<SCVPackedGeometryChunk> CreateSCVPackedGeometryChun
 
 ::flatbuffers::Offset<SCVPackedGeometryChunk> CreateSCVPackedGeometryChunk(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedGeometryChunkT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct SCVPackedRasterBandT : public ::flatbuffers::NativeTable {
+  typedef SCVPackedRasterBand TableType;
+  scvRasterProductKind PRODUCT_KIND = scvRasterProductKind::CELL_BOUNDS_DEG;
+  scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED;
+  scvRasterProductEncoding ENCODING = scvRasterProductEncoding::FLOAT32;
+  uint32_t COMPONENTS_PER_CELL = 0;
+  uint32_t CELL_COUNT = 0;
+  uint32_t BUCKET_COUNT = 0;
+  uint32_t WORDS_PER_BUCKET = 0;
+  uint32_t MEMORY_REGION_ID = 0;
+  uint32_t MEMORY_RECORD_INDEX = 0;
+  std::vector<float> FLOAT32_VALUES{};
+  std::vector<double> FLOAT64_VALUES{};
+  std::vector<uint32_t> UINT32_VALUES{};
+};
+
+struct SCVPackedRasterBand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SCVPackedRasterBandT NativeTableType;
+  typedef SCVPackedRasterBandBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_PRODUCT_KIND = 4,
+    VT_METRIC_KIND = 6,
+    VT_ENCODING = 8,
+    VT_COMPONENTS_PER_CELL = 10,
+    VT_CELL_COUNT = 12,
+    VT_BUCKET_COUNT = 14,
+    VT_WORDS_PER_BUCKET = 16,
+    VT_MEMORY_REGION_ID = 18,
+    VT_MEMORY_RECORD_INDEX = 20,
+    VT_FLOAT32_VALUES = 22,
+    VT_FLOAT64_VALUES = 24,
+    VT_UINT32_VALUES = 26
+  };
+  scvRasterProductKind PRODUCT_KIND() const {
+    return static_cast<scvRasterProductKind>(GetField<uint16_t>(VT_PRODUCT_KIND, 0));
+  }
+  scvMetricSeriesKind METRIC_KIND() const {
+    return static_cast<scvMetricSeriesKind>(GetField<uint16_t>(VT_METRIC_KIND, 0));
+  }
+  scvRasterProductEncoding ENCODING() const {
+    return static_cast<scvRasterProductEncoding>(GetField<uint8_t>(VT_ENCODING, 0));
+  }
+  uint32_t COMPONENTS_PER_CELL() const {
+    return GetField<uint32_t>(VT_COMPONENTS_PER_CELL, 0);
+  }
+  uint32_t CELL_COUNT() const {
+    return GetField<uint32_t>(VT_CELL_COUNT, 0);
+  }
+  uint32_t BUCKET_COUNT() const {
+    return GetField<uint32_t>(VT_BUCKET_COUNT, 0);
+  }
+  uint32_t WORDS_PER_BUCKET() const {
+    return GetField<uint32_t>(VT_WORDS_PER_BUCKET, 0);
+  }
+  uint32_t MEMORY_REGION_ID() const {
+    return GetField<uint32_t>(VT_MEMORY_REGION_ID, 0);
+  }
+  uint32_t MEMORY_RECORD_INDEX() const {
+    return GetField<uint32_t>(VT_MEMORY_RECORD_INDEX, 0);
+  }
+  const ::flatbuffers::Vector<float> *FLOAT32_VALUES() const {
+    return GetPointer<const ::flatbuffers::Vector<float> *>(VT_FLOAT32_VALUES);
+  }
+  const ::flatbuffers::Vector<double> *FLOAT64_VALUES() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_FLOAT64_VALUES);
+  }
+  const ::flatbuffers::Vector<uint32_t> *UINT32_VALUES() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_UINT32_VALUES);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint16_t>(verifier, VT_PRODUCT_KIND, 2) &&
+           VerifyField<uint16_t>(verifier, VT_METRIC_KIND, 2) &&
+           VerifyField<uint8_t>(verifier, VT_ENCODING, 1) &&
+           VerifyField<uint32_t>(verifier, VT_COMPONENTS_PER_CELL, 4) &&
+           VerifyField<uint32_t>(verifier, VT_CELL_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_BUCKET_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_WORDS_PER_BUCKET, 4) &&
+           VerifyField<uint32_t>(verifier, VT_MEMORY_REGION_ID, 4) &&
+           VerifyField<uint32_t>(verifier, VT_MEMORY_RECORD_INDEX, 4) &&
+           VerifyOffset(verifier, VT_FLOAT32_VALUES) &&
+           verifier.VerifyVector(FLOAT32_VALUES()) &&
+           VerifyOffset(verifier, VT_FLOAT64_VALUES) &&
+           verifier.VerifyVector(FLOAT64_VALUES()) &&
+           VerifyOffset(verifier, VT_UINT32_VALUES) &&
+           verifier.VerifyVector(UINT32_VALUES()) &&
+           verifier.EndTable();
+  }
+  SCVPackedRasterBandT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SCVPackedRasterBandT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SCVPackedRasterBand> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterBandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SCVPackedRasterBandBuilder {
+  typedef SCVPackedRasterBand Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_PRODUCT_KIND(scvRasterProductKind PRODUCT_KIND) {
+    fbb_.AddElement<uint16_t>(SCVPackedRasterBand::VT_PRODUCT_KIND, static_cast<uint16_t>(PRODUCT_KIND), 0);
+  }
+  void add_METRIC_KIND(scvMetricSeriesKind METRIC_KIND) {
+    fbb_.AddElement<uint16_t>(SCVPackedRasterBand::VT_METRIC_KIND, static_cast<uint16_t>(METRIC_KIND), 0);
+  }
+  void add_ENCODING(scvRasterProductEncoding ENCODING) {
+    fbb_.AddElement<uint8_t>(SCVPackedRasterBand::VT_ENCODING, static_cast<uint8_t>(ENCODING), 0);
+  }
+  void add_COMPONENTS_PER_CELL(uint32_t COMPONENTS_PER_CELL) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterBand::VT_COMPONENTS_PER_CELL, COMPONENTS_PER_CELL, 0);
+  }
+  void add_CELL_COUNT(uint32_t CELL_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterBand::VT_CELL_COUNT, CELL_COUNT, 0);
+  }
+  void add_BUCKET_COUNT(uint32_t BUCKET_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterBand::VT_BUCKET_COUNT, BUCKET_COUNT, 0);
+  }
+  void add_WORDS_PER_BUCKET(uint32_t WORDS_PER_BUCKET) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterBand::VT_WORDS_PER_BUCKET, WORDS_PER_BUCKET, 0);
+  }
+  void add_MEMORY_REGION_ID(uint32_t MEMORY_REGION_ID) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterBand::VT_MEMORY_REGION_ID, MEMORY_REGION_ID, 0);
+  }
+  void add_MEMORY_RECORD_INDEX(uint32_t MEMORY_RECORD_INDEX) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterBand::VT_MEMORY_RECORD_INDEX, MEMORY_RECORD_INDEX, 0);
+  }
+  void add_FLOAT32_VALUES(::flatbuffers::Offset<::flatbuffers::Vector<float>> FLOAT32_VALUES) {
+    fbb_.AddOffset(SCVPackedRasterBand::VT_FLOAT32_VALUES, FLOAT32_VALUES);
+  }
+  void add_FLOAT64_VALUES(::flatbuffers::Offset<::flatbuffers::Vector<double>> FLOAT64_VALUES) {
+    fbb_.AddOffset(SCVPackedRasterBand::VT_FLOAT64_VALUES, FLOAT64_VALUES);
+  }
+  void add_UINT32_VALUES(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> UINT32_VALUES) {
+    fbb_.AddOffset(SCVPackedRasterBand::VT_UINT32_VALUES, UINT32_VALUES);
+  }
+  explicit SCVPackedRasterBandBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SCVPackedRasterBand> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SCVPackedRasterBand>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SCVPackedRasterBand> CreateSCVPackedRasterBand(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    scvRasterProductKind PRODUCT_KIND = scvRasterProductKind::CELL_BOUNDS_DEG,
+    scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED,
+    scvRasterProductEncoding ENCODING = scvRasterProductEncoding::FLOAT32,
+    uint32_t COMPONENTS_PER_CELL = 0,
+    uint32_t CELL_COUNT = 0,
+    uint32_t BUCKET_COUNT = 0,
+    uint32_t WORDS_PER_BUCKET = 0,
+    uint32_t MEMORY_REGION_ID = 0,
+    uint32_t MEMORY_RECORD_INDEX = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<float>> FLOAT32_VALUES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> FLOAT64_VALUES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> UINT32_VALUES = 0) {
+  SCVPackedRasterBandBuilder builder_(_fbb);
+  builder_.add_UINT32_VALUES(UINT32_VALUES);
+  builder_.add_FLOAT64_VALUES(FLOAT64_VALUES);
+  builder_.add_FLOAT32_VALUES(FLOAT32_VALUES);
+  builder_.add_MEMORY_RECORD_INDEX(MEMORY_RECORD_INDEX);
+  builder_.add_MEMORY_REGION_ID(MEMORY_REGION_ID);
+  builder_.add_WORDS_PER_BUCKET(WORDS_PER_BUCKET);
+  builder_.add_BUCKET_COUNT(BUCKET_COUNT);
+  builder_.add_CELL_COUNT(CELL_COUNT);
+  builder_.add_COMPONENTS_PER_CELL(COMPONENTS_PER_CELL);
+  builder_.add_METRIC_KIND(METRIC_KIND);
+  builder_.add_PRODUCT_KIND(PRODUCT_KIND);
+  builder_.add_ENCODING(ENCODING);
+  return builder_.Finish();
+}
+
+struct SCVPackedRasterBand::Traits {
+  using type = SCVPackedRasterBand;
+  static auto constexpr Create = CreateSCVPackedRasterBand;
+};
+
+inline ::flatbuffers::Offset<SCVPackedRasterBand> CreateSCVPackedRasterBandDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    scvRasterProductKind PRODUCT_KIND = scvRasterProductKind::CELL_BOUNDS_DEG,
+    scvMetricSeriesKind METRIC_KIND = scvMetricSeriesKind::PERCENT_COVERED,
+    scvRasterProductEncoding ENCODING = scvRasterProductEncoding::FLOAT32,
+    uint32_t COMPONENTS_PER_CELL = 0,
+    uint32_t CELL_COUNT = 0,
+    uint32_t BUCKET_COUNT = 0,
+    uint32_t WORDS_PER_BUCKET = 0,
+    uint32_t MEMORY_REGION_ID = 0,
+    uint32_t MEMORY_RECORD_INDEX = 0,
+    const std::vector<float> *FLOAT32_VALUES = nullptr,
+    const std::vector<double> *FLOAT64_VALUES = nullptr,
+    const std::vector<uint32_t> *UINT32_VALUES = nullptr) {
+  auto FLOAT32_VALUES__ = FLOAT32_VALUES ? _fbb.CreateVector<float>(*FLOAT32_VALUES) : 0;
+  auto FLOAT64_VALUES__ = FLOAT64_VALUES ? _fbb.CreateVector<double>(*FLOAT64_VALUES) : 0;
+  auto UINT32_VALUES__ = UINT32_VALUES ? _fbb.CreateVector<uint32_t>(*UINT32_VALUES) : 0;
+  return CreateSCVPackedRasterBand(
+      _fbb,
+      PRODUCT_KIND,
+      METRIC_KIND,
+      ENCODING,
+      COMPONENTS_PER_CELL,
+      CELL_COUNT,
+      BUCKET_COUNT,
+      WORDS_PER_BUCKET,
+      MEMORY_REGION_ID,
+      MEMORY_RECORD_INDEX,
+      FLOAT32_VALUES__,
+      FLOAT64_VALUES__,
+      UINT32_VALUES__);
+}
+
+::flatbuffers::Offset<SCVPackedRasterBand> CreateSCVPackedRasterBand(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterBandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SCVPackedRasterProductsT : public ::flatbuffers::NativeTable {
+  typedef SCVPackedRasterProducts TableType;
+  std::string JOB_ID{};
+  uint64_t TRACE_ID = 0;
+  std::unique_ptr<SCVCoverageGridT> GRID{};
+  std::unique_ptr<SCVTimeGridT> TIME_GRID{};
+  uint32_t ROWS = 0;
+  uint32_t COLUMNS = 0;
+  uint32_t CELL_COUNT = 0;
+  uint32_t BUCKET_COUNT = 0;
+  uint32_t WORDS_PER_BUCKET = 0;
+  std::vector<std::unique_ptr<SCVMemoryRegionT>> MEMORY_REGIONS{};
+  std::vector<std::unique_ptr<SCVPackedRasterBandT>> BANDS{};
+  SCVPackedRasterProductsT() = default;
+  SCVPackedRasterProductsT(const SCVPackedRasterProductsT &o);
+  SCVPackedRasterProductsT(SCVPackedRasterProductsT&&) FLATBUFFERS_NOEXCEPT = default;
+  SCVPackedRasterProductsT &operator=(SCVPackedRasterProductsT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct SCVPackedRasterProducts FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SCVPackedRasterProductsT NativeTableType;
+  typedef SCVPackedRasterProductsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_JOB_ID = 4,
+    VT_TRACE_ID = 6,
+    VT_GRID = 8,
+    VT_TIME_GRID = 10,
+    VT_ROWS = 12,
+    VT_COLUMNS = 14,
+    VT_CELL_COUNT = 16,
+    VT_BUCKET_COUNT = 18,
+    VT_WORDS_PER_BUCKET = 20,
+    VT_MEMORY_REGIONS = 22,
+    VT_BANDS = 24
+  };
+  const ::flatbuffers::String *JOB_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_JOB_ID);
+  }
+  uint64_t TRACE_ID() const {
+    return GetField<uint64_t>(VT_TRACE_ID, 0);
+  }
+  const SCVCoverageGrid *GRID() const {
+    return GetPointer<const SCVCoverageGrid *>(VT_GRID);
+  }
+  const SCVTimeGrid *TIME_GRID() const {
+    return GetPointer<const SCVTimeGrid *>(VT_TIME_GRID);
+  }
+  uint32_t ROWS() const {
+    return GetField<uint32_t>(VT_ROWS, 0);
+  }
+  uint32_t COLUMNS() const {
+    return GetField<uint32_t>(VT_COLUMNS, 0);
+  }
+  uint32_t CELL_COUNT() const {
+    return GetField<uint32_t>(VT_CELL_COUNT, 0);
+  }
+  uint32_t BUCKET_COUNT() const {
+    return GetField<uint32_t>(VT_BUCKET_COUNT, 0);
+  }
+  uint32_t WORDS_PER_BUCKET() const {
+    return GetField<uint32_t>(VT_WORDS_PER_BUCKET, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVMemoryRegion>> *MEMORY_REGIONS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVMemoryRegion>> *>(VT_MEMORY_REGIONS);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVPackedRasterBand>> *BANDS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVPackedRasterBand>> *>(VT_BANDS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_JOB_ID) &&
+           verifier.VerifyString(JOB_ID()) &&
+           VerifyField<uint64_t>(verifier, VT_TRACE_ID, 8) &&
+           VerifyOffset(verifier, VT_GRID) &&
+           verifier.VerifyTable(GRID()) &&
+           VerifyOffset(verifier, VT_TIME_GRID) &&
+           verifier.VerifyTable(TIME_GRID()) &&
+           VerifyField<uint32_t>(verifier, VT_ROWS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_COLUMNS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_CELL_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_BUCKET_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_WORDS_PER_BUCKET, 4) &&
+           VerifyOffset(verifier, VT_MEMORY_REGIONS) &&
+           verifier.VerifyVector(MEMORY_REGIONS()) &&
+           verifier.VerifyVectorOfTables(MEMORY_REGIONS()) &&
+           VerifyOffset(verifier, VT_BANDS) &&
+           verifier.VerifyVector(BANDS()) &&
+           verifier.VerifyVectorOfTables(BANDS()) &&
+           verifier.EndTable();
+  }
+  SCVPackedRasterProductsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SCVPackedRasterProductsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SCVPackedRasterProducts> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterProductsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SCVPackedRasterProductsBuilder {
+  typedef SCVPackedRasterProducts Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_JOB_ID(::flatbuffers::Offset<::flatbuffers::String> JOB_ID) {
+    fbb_.AddOffset(SCVPackedRasterProducts::VT_JOB_ID, JOB_ID);
+  }
+  void add_TRACE_ID(uint64_t TRACE_ID) {
+    fbb_.AddElement<uint64_t>(SCVPackedRasterProducts::VT_TRACE_ID, TRACE_ID, 0);
+  }
+  void add_GRID(::flatbuffers::Offset<SCVCoverageGrid> GRID) {
+    fbb_.AddOffset(SCVPackedRasterProducts::VT_GRID, GRID);
+  }
+  void add_TIME_GRID(::flatbuffers::Offset<SCVTimeGrid> TIME_GRID) {
+    fbb_.AddOffset(SCVPackedRasterProducts::VT_TIME_GRID, TIME_GRID);
+  }
+  void add_ROWS(uint32_t ROWS) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterProducts::VT_ROWS, ROWS, 0);
+  }
+  void add_COLUMNS(uint32_t COLUMNS) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterProducts::VT_COLUMNS, COLUMNS, 0);
+  }
+  void add_CELL_COUNT(uint32_t CELL_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterProducts::VT_CELL_COUNT, CELL_COUNT, 0);
+  }
+  void add_BUCKET_COUNT(uint32_t BUCKET_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterProducts::VT_BUCKET_COUNT, BUCKET_COUNT, 0);
+  }
+  void add_WORDS_PER_BUCKET(uint32_t WORDS_PER_BUCKET) {
+    fbb_.AddElement<uint32_t>(SCVPackedRasterProducts::VT_WORDS_PER_BUCKET, WORDS_PER_BUCKET, 0);
+  }
+  void add_MEMORY_REGIONS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVMemoryRegion>>> MEMORY_REGIONS) {
+    fbb_.AddOffset(SCVPackedRasterProducts::VT_MEMORY_REGIONS, MEMORY_REGIONS);
+  }
+  void add_BANDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVPackedRasterBand>>> BANDS) {
+    fbb_.AddOffset(SCVPackedRasterProducts::VT_BANDS, BANDS);
+  }
+  explicit SCVPackedRasterProductsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SCVPackedRasterProducts> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SCVPackedRasterProducts>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SCVPackedRasterProducts> CreateSCVPackedRasterProducts(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> JOB_ID = 0,
+    uint64_t TRACE_ID = 0,
+    ::flatbuffers::Offset<SCVCoverageGrid> GRID = 0,
+    ::flatbuffers::Offset<SCVTimeGrid> TIME_GRID = 0,
+    uint32_t ROWS = 0,
+    uint32_t COLUMNS = 0,
+    uint32_t CELL_COUNT = 0,
+    uint32_t BUCKET_COUNT = 0,
+    uint32_t WORDS_PER_BUCKET = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVMemoryRegion>>> MEMORY_REGIONS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVPackedRasterBand>>> BANDS = 0) {
+  SCVPackedRasterProductsBuilder builder_(_fbb);
+  builder_.add_TRACE_ID(TRACE_ID);
+  builder_.add_BANDS(BANDS);
+  builder_.add_MEMORY_REGIONS(MEMORY_REGIONS);
+  builder_.add_WORDS_PER_BUCKET(WORDS_PER_BUCKET);
+  builder_.add_BUCKET_COUNT(BUCKET_COUNT);
+  builder_.add_CELL_COUNT(CELL_COUNT);
+  builder_.add_COLUMNS(COLUMNS);
+  builder_.add_ROWS(ROWS);
+  builder_.add_TIME_GRID(TIME_GRID);
+  builder_.add_GRID(GRID);
+  builder_.add_JOB_ID(JOB_ID);
+  return builder_.Finish();
+}
+
+struct SCVPackedRasterProducts::Traits {
+  using type = SCVPackedRasterProducts;
+  static auto constexpr Create = CreateSCVPackedRasterProducts;
+};
+
+inline ::flatbuffers::Offset<SCVPackedRasterProducts> CreateSCVPackedRasterProductsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *JOB_ID = nullptr,
+    uint64_t TRACE_ID = 0,
+    ::flatbuffers::Offset<SCVCoverageGrid> GRID = 0,
+    ::flatbuffers::Offset<SCVTimeGrid> TIME_GRID = 0,
+    uint32_t ROWS = 0,
+    uint32_t COLUMNS = 0,
+    uint32_t CELL_COUNT = 0,
+    uint32_t BUCKET_COUNT = 0,
+    uint32_t WORDS_PER_BUCKET = 0,
+    const std::vector<::flatbuffers::Offset<SCVMemoryRegion>> *MEMORY_REGIONS = nullptr,
+    const std::vector<::flatbuffers::Offset<SCVPackedRasterBand>> *BANDS = nullptr) {
+  auto JOB_ID__ = JOB_ID ? _fbb.CreateString(JOB_ID) : 0;
+  auto MEMORY_REGIONS__ = MEMORY_REGIONS ? _fbb.CreateVector<::flatbuffers::Offset<SCVMemoryRegion>>(*MEMORY_REGIONS) : 0;
+  auto BANDS__ = BANDS ? _fbb.CreateVector<::flatbuffers::Offset<SCVPackedRasterBand>>(*BANDS) : 0;
+  return CreateSCVPackedRasterProducts(
+      _fbb,
+      JOB_ID__,
+      TRACE_ID,
+      GRID,
+      TIME_GRID,
+      ROWS,
+      COLUMNS,
+      CELL_COUNT,
+      BUCKET_COUNT,
+      WORDS_PER_BUCKET,
+      MEMORY_REGIONS__,
+      BANDS__);
+}
+
+::flatbuffers::Offset<SCVPackedRasterProducts> CreateSCVPackedRasterProducts(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterProductsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SCVAggregateStatisticsT : public ::flatbuffers::NativeTable {
+  typedef SCVAggregateStatistics TableType;
+  uint32_t TOTAL_CELLS = 0;
+  uint32_t ACCESSED_CELLS = 0;
+  uint32_t MULTI_ACCESS_CELLS = 0;
+  uint32_t ACTIVE_SENSOR_COUNT = 0;
+  uint32_t SWATH_COUNT = 0;
+  uint32_t TOTAL_WINDOWS = 0;
+  uint32_t TOTAL_INTERVAL_COUNT = 0;
+  uint32_t TOTAL_REVISIT_COUNT = 0;
+  double TOTAL_ACCESS_DURATION_SEC = 0.0;
+  double TOTAL_GAP_DURATION_SEC = 0.0;
+  double MAX_GAP_DURATION_SEC = 0.0;
+  double MEAN_REVISIT_TIME_SEC = 0.0;
+  double MAX_RESPONSE_TIME_SEC = 0.0;
+  double MEAN_RESPONSE_TIME_SEC = 0.0;
+  double PERCENT_COVERAGE = 0.0;
+};
+
+struct SCVAggregateStatistics FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SCVAggregateStatisticsT NativeTableType;
+  typedef SCVAggregateStatisticsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TOTAL_CELLS = 4,
+    VT_ACCESSED_CELLS = 6,
+    VT_MULTI_ACCESS_CELLS = 8,
+    VT_ACTIVE_SENSOR_COUNT = 10,
+    VT_SWATH_COUNT = 12,
+    VT_TOTAL_WINDOWS = 14,
+    VT_TOTAL_INTERVAL_COUNT = 16,
+    VT_TOTAL_REVISIT_COUNT = 18,
+    VT_TOTAL_ACCESS_DURATION_SEC = 20,
+    VT_TOTAL_GAP_DURATION_SEC = 22,
+    VT_MAX_GAP_DURATION_SEC = 24,
+    VT_MEAN_REVISIT_TIME_SEC = 26,
+    VT_MAX_RESPONSE_TIME_SEC = 28,
+    VT_MEAN_RESPONSE_TIME_SEC = 30,
+    VT_PERCENT_COVERAGE = 32
+  };
+  uint32_t TOTAL_CELLS() const {
+    return GetField<uint32_t>(VT_TOTAL_CELLS, 0);
+  }
+  uint32_t ACCESSED_CELLS() const {
+    return GetField<uint32_t>(VT_ACCESSED_CELLS, 0);
+  }
+  uint32_t MULTI_ACCESS_CELLS() const {
+    return GetField<uint32_t>(VT_MULTI_ACCESS_CELLS, 0);
+  }
+  uint32_t ACTIVE_SENSOR_COUNT() const {
+    return GetField<uint32_t>(VT_ACTIVE_SENSOR_COUNT, 0);
+  }
+  uint32_t SWATH_COUNT() const {
+    return GetField<uint32_t>(VT_SWATH_COUNT, 0);
+  }
+  uint32_t TOTAL_WINDOWS() const {
+    return GetField<uint32_t>(VT_TOTAL_WINDOWS, 0);
+  }
+  uint32_t TOTAL_INTERVAL_COUNT() const {
+    return GetField<uint32_t>(VT_TOTAL_INTERVAL_COUNT, 0);
+  }
+  uint32_t TOTAL_REVISIT_COUNT() const {
+    return GetField<uint32_t>(VT_TOTAL_REVISIT_COUNT, 0);
+  }
+  double TOTAL_ACCESS_DURATION_SEC() const {
+    return GetField<double>(VT_TOTAL_ACCESS_DURATION_SEC, 0.0);
+  }
+  double TOTAL_GAP_DURATION_SEC() const {
+    return GetField<double>(VT_TOTAL_GAP_DURATION_SEC, 0.0);
+  }
+  double MAX_GAP_DURATION_SEC() const {
+    return GetField<double>(VT_MAX_GAP_DURATION_SEC, 0.0);
+  }
+  double MEAN_REVISIT_TIME_SEC() const {
+    return GetField<double>(VT_MEAN_REVISIT_TIME_SEC, 0.0);
+  }
+  double MAX_RESPONSE_TIME_SEC() const {
+    return GetField<double>(VT_MAX_RESPONSE_TIME_SEC, 0.0);
+  }
+  double MEAN_RESPONSE_TIME_SEC() const {
+    return GetField<double>(VT_MEAN_RESPONSE_TIME_SEC, 0.0);
+  }
+  double PERCENT_COVERAGE() const {
+    return GetField<double>(VT_PERCENT_COVERAGE, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_TOTAL_CELLS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_ACCESSED_CELLS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_MULTI_ACCESS_CELLS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_ACTIVE_SENSOR_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SWATH_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_TOTAL_WINDOWS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_TOTAL_INTERVAL_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_TOTAL_REVISIT_COUNT, 4) &&
+           VerifyField<double>(verifier, VT_TOTAL_ACCESS_DURATION_SEC, 8) &&
+           VerifyField<double>(verifier, VT_TOTAL_GAP_DURATION_SEC, 8) &&
+           VerifyField<double>(verifier, VT_MAX_GAP_DURATION_SEC, 8) &&
+           VerifyField<double>(verifier, VT_MEAN_REVISIT_TIME_SEC, 8) &&
+           VerifyField<double>(verifier, VT_MAX_RESPONSE_TIME_SEC, 8) &&
+           VerifyField<double>(verifier, VT_MEAN_RESPONSE_TIME_SEC, 8) &&
+           VerifyField<double>(verifier, VT_PERCENT_COVERAGE, 8) &&
+           verifier.EndTable();
+  }
+  SCVAggregateStatisticsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SCVAggregateStatisticsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SCVAggregateStatistics> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAggregateStatisticsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SCVAggregateStatisticsBuilder {
+  typedef SCVAggregateStatistics Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_TOTAL_CELLS(uint32_t TOTAL_CELLS) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_TOTAL_CELLS, TOTAL_CELLS, 0);
+  }
+  void add_ACCESSED_CELLS(uint32_t ACCESSED_CELLS) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_ACCESSED_CELLS, ACCESSED_CELLS, 0);
+  }
+  void add_MULTI_ACCESS_CELLS(uint32_t MULTI_ACCESS_CELLS) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_MULTI_ACCESS_CELLS, MULTI_ACCESS_CELLS, 0);
+  }
+  void add_ACTIVE_SENSOR_COUNT(uint32_t ACTIVE_SENSOR_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_ACTIVE_SENSOR_COUNT, ACTIVE_SENSOR_COUNT, 0);
+  }
+  void add_SWATH_COUNT(uint32_t SWATH_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_SWATH_COUNT, SWATH_COUNT, 0);
+  }
+  void add_TOTAL_WINDOWS(uint32_t TOTAL_WINDOWS) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_TOTAL_WINDOWS, TOTAL_WINDOWS, 0);
+  }
+  void add_TOTAL_INTERVAL_COUNT(uint32_t TOTAL_INTERVAL_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_TOTAL_INTERVAL_COUNT, TOTAL_INTERVAL_COUNT, 0);
+  }
+  void add_TOTAL_REVISIT_COUNT(uint32_t TOTAL_REVISIT_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVAggregateStatistics::VT_TOTAL_REVISIT_COUNT, TOTAL_REVISIT_COUNT, 0);
+  }
+  void add_TOTAL_ACCESS_DURATION_SEC(double TOTAL_ACCESS_DURATION_SEC) {
+    fbb_.AddElement<double>(SCVAggregateStatistics::VT_TOTAL_ACCESS_DURATION_SEC, TOTAL_ACCESS_DURATION_SEC, 0.0);
+  }
+  void add_TOTAL_GAP_DURATION_SEC(double TOTAL_GAP_DURATION_SEC) {
+    fbb_.AddElement<double>(SCVAggregateStatistics::VT_TOTAL_GAP_DURATION_SEC, TOTAL_GAP_DURATION_SEC, 0.0);
+  }
+  void add_MAX_GAP_DURATION_SEC(double MAX_GAP_DURATION_SEC) {
+    fbb_.AddElement<double>(SCVAggregateStatistics::VT_MAX_GAP_DURATION_SEC, MAX_GAP_DURATION_SEC, 0.0);
+  }
+  void add_MEAN_REVISIT_TIME_SEC(double MEAN_REVISIT_TIME_SEC) {
+    fbb_.AddElement<double>(SCVAggregateStatistics::VT_MEAN_REVISIT_TIME_SEC, MEAN_REVISIT_TIME_SEC, 0.0);
+  }
+  void add_MAX_RESPONSE_TIME_SEC(double MAX_RESPONSE_TIME_SEC) {
+    fbb_.AddElement<double>(SCVAggregateStatistics::VT_MAX_RESPONSE_TIME_SEC, MAX_RESPONSE_TIME_SEC, 0.0);
+  }
+  void add_MEAN_RESPONSE_TIME_SEC(double MEAN_RESPONSE_TIME_SEC) {
+    fbb_.AddElement<double>(SCVAggregateStatistics::VT_MEAN_RESPONSE_TIME_SEC, MEAN_RESPONSE_TIME_SEC, 0.0);
+  }
+  void add_PERCENT_COVERAGE(double PERCENT_COVERAGE) {
+    fbb_.AddElement<double>(SCVAggregateStatistics::VT_PERCENT_COVERAGE, PERCENT_COVERAGE, 0.0);
+  }
+  explicit SCVAggregateStatisticsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SCVAggregateStatistics> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SCVAggregateStatistics>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SCVAggregateStatistics> CreateSCVAggregateStatistics(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t TOTAL_CELLS = 0,
+    uint32_t ACCESSED_CELLS = 0,
+    uint32_t MULTI_ACCESS_CELLS = 0,
+    uint32_t ACTIVE_SENSOR_COUNT = 0,
+    uint32_t SWATH_COUNT = 0,
+    uint32_t TOTAL_WINDOWS = 0,
+    uint32_t TOTAL_INTERVAL_COUNT = 0,
+    uint32_t TOTAL_REVISIT_COUNT = 0,
+    double TOTAL_ACCESS_DURATION_SEC = 0.0,
+    double TOTAL_GAP_DURATION_SEC = 0.0,
+    double MAX_GAP_DURATION_SEC = 0.0,
+    double MEAN_REVISIT_TIME_SEC = 0.0,
+    double MAX_RESPONSE_TIME_SEC = 0.0,
+    double MEAN_RESPONSE_TIME_SEC = 0.0,
+    double PERCENT_COVERAGE = 0.0) {
+  SCVAggregateStatisticsBuilder builder_(_fbb);
+  builder_.add_PERCENT_COVERAGE(PERCENT_COVERAGE);
+  builder_.add_MEAN_RESPONSE_TIME_SEC(MEAN_RESPONSE_TIME_SEC);
+  builder_.add_MAX_RESPONSE_TIME_SEC(MAX_RESPONSE_TIME_SEC);
+  builder_.add_MEAN_REVISIT_TIME_SEC(MEAN_REVISIT_TIME_SEC);
+  builder_.add_MAX_GAP_DURATION_SEC(MAX_GAP_DURATION_SEC);
+  builder_.add_TOTAL_GAP_DURATION_SEC(TOTAL_GAP_DURATION_SEC);
+  builder_.add_TOTAL_ACCESS_DURATION_SEC(TOTAL_ACCESS_DURATION_SEC);
+  builder_.add_TOTAL_REVISIT_COUNT(TOTAL_REVISIT_COUNT);
+  builder_.add_TOTAL_INTERVAL_COUNT(TOTAL_INTERVAL_COUNT);
+  builder_.add_TOTAL_WINDOWS(TOTAL_WINDOWS);
+  builder_.add_SWATH_COUNT(SWATH_COUNT);
+  builder_.add_ACTIVE_SENSOR_COUNT(ACTIVE_SENSOR_COUNT);
+  builder_.add_MULTI_ACCESS_CELLS(MULTI_ACCESS_CELLS);
+  builder_.add_ACCESSED_CELLS(ACCESSED_CELLS);
+  builder_.add_TOTAL_CELLS(TOTAL_CELLS);
+  return builder_.Finish();
+}
+
+struct SCVAggregateStatistics::Traits {
+  using type = SCVAggregateStatistics;
+  static auto constexpr Create = CreateSCVAggregateStatistics;
+};
+
+::flatbuffers::Offset<SCVAggregateStatistics> CreateSCVAggregateStatistics(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAggregateStatisticsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct SCVResultT : public ::flatbuffers::NativeTable {
   typedef SCVResult TableType;
   std::string JOB_ID{};
@@ -4154,15 +4393,12 @@ struct SCVResultT : public ::flatbuffers::NativeTable {
   std::unique_ptr<SCVEllipsoidT> TARGET_BODY{};
   uint32_t TOTAL_SENSORS = 0;
   uint32_t TOTAL_WINDOWS = 0;
-  std::vector<std::unique_ptr<SCVCellStatT>> CELL_STATS{};
-  std::vector<std::unique_ptr<SCVIntervalT>> INTERVALS{};
-  std::vector<std::unique_ptr<SCVLatitudeBandStatT>> LATITUDE_BANDS{};
-  std::vector<std::unique_ptr<SCVTimeSeriesPointT>> TIME_SERIES{};
   std::vector<std::unique_ptr<SCVHistogramBinT>> HISTOGRAMS{};
-  std::vector<std::unique_ptr<SCVHeatmapCellT>> HEATMAP{};
   std::vector<std::unique_ptr<SCVSensorContributionT>> CONTRIBUTIONS{};
   std::unique_ptr<SCVPackedGeometryChunkT> GEOMETRY{};
+  std::unique_ptr<SCVPackedRasterProductsT> RASTER_PRODUCTS{};
   std::string MESSAGE{};
+  std::unique_ptr<SCVAggregateStatisticsT> AGGREGATE_STATISTICS{};
   SCVResultT() = default;
   SCVResultT(const SCVResultT &o);
   SCVResultT(SCVResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -4181,15 +4417,12 @@ struct SCVResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_TARGET_BODY = 12,
     VT_TOTAL_SENSORS = 14,
     VT_TOTAL_WINDOWS = 16,
-    VT_CELL_STATS = 18,
-    VT_INTERVALS = 20,
-    VT_LATITUDE_BANDS = 22,
-    VT_TIME_SERIES = 24,
-    VT_HISTOGRAMS = 26,
-    VT_HEATMAP = 28,
-    VT_CONTRIBUTIONS = 30,
-    VT_GEOMETRY = 32,
-    VT_MESSAGE = 34
+    VT_HISTOGRAMS = 18,
+    VT_CONTRIBUTIONS = 20,
+    VT_GEOMETRY = 22,
+    VT_RASTER_PRODUCTS = 24,
+    VT_MESSAGE = 26,
+    VT_AGGREGATE_STATISTICS = 28
   };
   const ::flatbuffers::String *JOB_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_JOB_ID);
@@ -4212,23 +4445,8 @@ struct SCVResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t TOTAL_WINDOWS() const {
     return GetField<uint32_t>(VT_TOTAL_WINDOWS, 0);
   }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVCellStat>> *CELL_STATS() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVCellStat>> *>(VT_CELL_STATS);
-  }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVInterval>> *INTERVALS() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVInterval>> *>(VT_INTERVALS);
-  }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVLatitudeBandStat>> *LATITUDE_BANDS() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVLatitudeBandStat>> *>(VT_LATITUDE_BANDS);
-  }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVTimeSeriesPoint>> *TIME_SERIES() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVTimeSeriesPoint>> *>(VT_TIME_SERIES);
-  }
   const ::flatbuffers::Vector<::flatbuffers::Offset<SCVHistogramBin>> *HISTOGRAMS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVHistogramBin>> *>(VT_HISTOGRAMS);
-  }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVHeatmapCell>> *HEATMAP() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVHeatmapCell>> *>(VT_HEATMAP);
   }
   const ::flatbuffers::Vector<::flatbuffers::Offset<SCVSensorContribution>> *CONTRIBUTIONS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVSensorContribution>> *>(VT_CONTRIBUTIONS);
@@ -4236,8 +4454,14 @@ struct SCVResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const SCVPackedGeometryChunk *GEOMETRY() const {
     return GetPointer<const SCVPackedGeometryChunk *>(VT_GEOMETRY);
   }
+  const SCVPackedRasterProducts *RASTER_PRODUCTS() const {
+    return GetPointer<const SCVPackedRasterProducts *>(VT_RASTER_PRODUCTS);
+  }
   const ::flatbuffers::String *MESSAGE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_MESSAGE);
+  }
+  const SCVAggregateStatistics *AGGREGATE_STATISTICS() const {
+    return GetPointer<const SCVAggregateStatistics *>(VT_AGGREGATE_STATISTICS);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -4252,31 +4476,20 @@ struct SCVResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyTable(TARGET_BODY()) &&
            VerifyField<uint32_t>(verifier, VT_TOTAL_SENSORS, 4) &&
            VerifyField<uint32_t>(verifier, VT_TOTAL_WINDOWS, 4) &&
-           VerifyOffset(verifier, VT_CELL_STATS) &&
-           verifier.VerifyVector(CELL_STATS()) &&
-           verifier.VerifyVectorOfTables(CELL_STATS()) &&
-           VerifyOffset(verifier, VT_INTERVALS) &&
-           verifier.VerifyVector(INTERVALS()) &&
-           verifier.VerifyVectorOfTables(INTERVALS()) &&
-           VerifyOffset(verifier, VT_LATITUDE_BANDS) &&
-           verifier.VerifyVector(LATITUDE_BANDS()) &&
-           verifier.VerifyVectorOfTables(LATITUDE_BANDS()) &&
-           VerifyOffset(verifier, VT_TIME_SERIES) &&
-           verifier.VerifyVector(TIME_SERIES()) &&
-           verifier.VerifyVectorOfTables(TIME_SERIES()) &&
            VerifyOffset(verifier, VT_HISTOGRAMS) &&
            verifier.VerifyVector(HISTOGRAMS()) &&
            verifier.VerifyVectorOfTables(HISTOGRAMS()) &&
-           VerifyOffset(verifier, VT_HEATMAP) &&
-           verifier.VerifyVector(HEATMAP()) &&
-           verifier.VerifyVectorOfTables(HEATMAP()) &&
            VerifyOffset(verifier, VT_CONTRIBUTIONS) &&
            verifier.VerifyVector(CONTRIBUTIONS()) &&
            verifier.VerifyVectorOfTables(CONTRIBUTIONS()) &&
            VerifyOffset(verifier, VT_GEOMETRY) &&
            verifier.VerifyTable(GEOMETRY()) &&
+           VerifyOffset(verifier, VT_RASTER_PRODUCTS) &&
+           verifier.VerifyTable(RASTER_PRODUCTS()) &&
            VerifyOffset(verifier, VT_MESSAGE) &&
            verifier.VerifyString(MESSAGE()) &&
+           VerifyOffset(verifier, VT_AGGREGATE_STATISTICS) &&
+           verifier.VerifyTable(AGGREGATE_STATISTICS()) &&
            verifier.EndTable();
   }
   SCVResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -4309,23 +4522,8 @@ struct SCVResultBuilder {
   void add_TOTAL_WINDOWS(uint32_t TOTAL_WINDOWS) {
     fbb_.AddElement<uint32_t>(SCVResult::VT_TOTAL_WINDOWS, TOTAL_WINDOWS, 0);
   }
-  void add_CELL_STATS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVCellStat>>> CELL_STATS) {
-    fbb_.AddOffset(SCVResult::VT_CELL_STATS, CELL_STATS);
-  }
-  void add_INTERVALS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVInterval>>> INTERVALS) {
-    fbb_.AddOffset(SCVResult::VT_INTERVALS, INTERVALS);
-  }
-  void add_LATITUDE_BANDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVLatitudeBandStat>>> LATITUDE_BANDS) {
-    fbb_.AddOffset(SCVResult::VT_LATITUDE_BANDS, LATITUDE_BANDS);
-  }
-  void add_TIME_SERIES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVTimeSeriesPoint>>> TIME_SERIES) {
-    fbb_.AddOffset(SCVResult::VT_TIME_SERIES, TIME_SERIES);
-  }
   void add_HISTOGRAMS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVHistogramBin>>> HISTOGRAMS) {
     fbb_.AddOffset(SCVResult::VT_HISTOGRAMS, HISTOGRAMS);
-  }
-  void add_HEATMAP(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVHeatmapCell>>> HEATMAP) {
-    fbb_.AddOffset(SCVResult::VT_HEATMAP, HEATMAP);
   }
   void add_CONTRIBUTIONS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVSensorContribution>>> CONTRIBUTIONS) {
     fbb_.AddOffset(SCVResult::VT_CONTRIBUTIONS, CONTRIBUTIONS);
@@ -4333,8 +4531,14 @@ struct SCVResultBuilder {
   void add_GEOMETRY(::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY) {
     fbb_.AddOffset(SCVResult::VT_GEOMETRY, GEOMETRY);
   }
+  void add_RASTER_PRODUCTS(::flatbuffers::Offset<SCVPackedRasterProducts> RASTER_PRODUCTS) {
+    fbb_.AddOffset(SCVResult::VT_RASTER_PRODUCTS, RASTER_PRODUCTS);
+  }
   void add_MESSAGE(::flatbuffers::Offset<::flatbuffers::String> MESSAGE) {
     fbb_.AddOffset(SCVResult::VT_MESSAGE, MESSAGE);
+  }
+  void add_AGGREGATE_STATISTICS(::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS) {
+    fbb_.AddOffset(SCVResult::VT_AGGREGATE_STATISTICS, AGGREGATE_STATISTICS);
   }
   explicit SCVResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -4356,26 +4560,20 @@ inline ::flatbuffers::Offset<SCVResult> CreateSCVResult(
     ::flatbuffers::Offset<SCVEllipsoid> TARGET_BODY = 0,
     uint32_t TOTAL_SENSORS = 0,
     uint32_t TOTAL_WINDOWS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVCellStat>>> CELL_STATS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVInterval>>> INTERVALS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVLatitudeBandStat>>> LATITUDE_BANDS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVTimeSeriesPoint>>> TIME_SERIES = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVHistogramBin>>> HISTOGRAMS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVHeatmapCell>>> HEATMAP = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVSensorContribution>>> CONTRIBUTIONS = 0,
     ::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> MESSAGE = 0) {
+    ::flatbuffers::Offset<SCVPackedRasterProducts> RASTER_PRODUCTS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MESSAGE = 0,
+    ::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS = 0) {
   SCVResultBuilder builder_(_fbb);
   builder_.add_TRACE_ID(TRACE_ID);
+  builder_.add_AGGREGATE_STATISTICS(AGGREGATE_STATISTICS);
   builder_.add_MESSAGE(MESSAGE);
+  builder_.add_RASTER_PRODUCTS(RASTER_PRODUCTS);
   builder_.add_GEOMETRY(GEOMETRY);
   builder_.add_CONTRIBUTIONS(CONTRIBUTIONS);
-  builder_.add_HEATMAP(HEATMAP);
   builder_.add_HISTOGRAMS(HISTOGRAMS);
-  builder_.add_TIME_SERIES(TIME_SERIES);
-  builder_.add_LATITUDE_BANDS(LATITUDE_BANDS);
-  builder_.add_INTERVALS(INTERVALS);
-  builder_.add_CELL_STATS(CELL_STATS);
   builder_.add_TOTAL_WINDOWS(TOTAL_WINDOWS);
   builder_.add_TOTAL_SENSORS(TOTAL_SENSORS);
   builder_.add_TARGET_BODY(TARGET_BODY);
@@ -4399,22 +4597,14 @@ inline ::flatbuffers::Offset<SCVResult> CreateSCVResultDirect(
     ::flatbuffers::Offset<SCVEllipsoid> TARGET_BODY = 0,
     uint32_t TOTAL_SENSORS = 0,
     uint32_t TOTAL_WINDOWS = 0,
-    const std::vector<::flatbuffers::Offset<SCVCellStat>> *CELL_STATS = nullptr,
-    const std::vector<::flatbuffers::Offset<SCVInterval>> *INTERVALS = nullptr,
-    const std::vector<::flatbuffers::Offset<SCVLatitudeBandStat>> *LATITUDE_BANDS = nullptr,
-    const std::vector<::flatbuffers::Offset<SCVTimeSeriesPoint>> *TIME_SERIES = nullptr,
     const std::vector<::flatbuffers::Offset<SCVHistogramBin>> *HISTOGRAMS = nullptr,
-    const std::vector<::flatbuffers::Offset<SCVHeatmapCell>> *HEATMAP = nullptr,
     const std::vector<::flatbuffers::Offset<SCVSensorContribution>> *CONTRIBUTIONS = nullptr,
     ::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY = 0,
-    const char *MESSAGE = nullptr) {
+    ::flatbuffers::Offset<SCVPackedRasterProducts> RASTER_PRODUCTS = 0,
+    const char *MESSAGE = nullptr,
+    ::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS = 0) {
   auto JOB_ID__ = JOB_ID ? _fbb.CreateString(JOB_ID) : 0;
-  auto CELL_STATS__ = CELL_STATS ? _fbb.CreateVector<::flatbuffers::Offset<SCVCellStat>>(*CELL_STATS) : 0;
-  auto INTERVALS__ = INTERVALS ? _fbb.CreateVector<::flatbuffers::Offset<SCVInterval>>(*INTERVALS) : 0;
-  auto LATITUDE_BANDS__ = LATITUDE_BANDS ? _fbb.CreateVector<::flatbuffers::Offset<SCVLatitudeBandStat>>(*LATITUDE_BANDS) : 0;
-  auto TIME_SERIES__ = TIME_SERIES ? _fbb.CreateVector<::flatbuffers::Offset<SCVTimeSeriesPoint>>(*TIME_SERIES) : 0;
   auto HISTOGRAMS__ = HISTOGRAMS ? _fbb.CreateVector<::flatbuffers::Offset<SCVHistogramBin>>(*HISTOGRAMS) : 0;
-  auto HEATMAP__ = HEATMAP ? _fbb.CreateVector<::flatbuffers::Offset<SCVHeatmapCell>>(*HEATMAP) : 0;
   auto CONTRIBUTIONS__ = CONTRIBUTIONS ? _fbb.CreateVector<::flatbuffers::Offset<SCVSensorContribution>>(*CONTRIBUTIONS) : 0;
   auto MESSAGE__ = MESSAGE ? _fbb.CreateString(MESSAGE) : 0;
   return CreateSCVResult(
@@ -4426,15 +4616,12 @@ inline ::flatbuffers::Offset<SCVResult> CreateSCVResultDirect(
       TARGET_BODY,
       TOTAL_SENSORS,
       TOTAL_WINDOWS,
-      CELL_STATS__,
-      INTERVALS__,
-      LATITUDE_BANDS__,
-      TIME_SERIES__,
       HISTOGRAMS__,
-      HEATMAP__,
       CONTRIBUTIONS__,
       GEOMETRY,
-      MESSAGE__);
+      RASTER_PRODUCTS,
+      MESSAGE__,
+      AGGREGATE_STATISTICS);
 }
 
 ::flatbuffers::Offset<SCVResult> CreateSCVResult(::flatbuffers::FlatBufferBuilder &_fbb, const SCVResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -4447,6 +4634,7 @@ struct SCVT : public ::flatbuffers::NativeTable {
   std::unique_ptr<SCVCancelT> CANCEL{};
   std::unique_ptr<SCVResultT> RESULT{};
   std::unique_ptr<SCVPackedGeometryChunkT> GEOMETRY{};
+  std::unique_ptr<SCVPackedRasterProductsT> RASTER_PRODUCTS{};
   SCVT() = default;
   SCVT(const SCVT &o);
   SCVT(SCVT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -4463,7 +4651,8 @@ struct SCV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PROGRESS = 8,
     VT_CANCEL = 10,
     VT_RESULT = 12,
-    VT_GEOMETRY = 14
+    VT_GEOMETRY = 14,
+    VT_RASTER_PRODUCTS = 16
   };
   scvEnvelopeKind ENVELOPE_KIND() const {
     return static_cast<scvEnvelopeKind>(GetField<uint8_t>(VT_ENVELOPE_KIND, 0));
@@ -4483,6 +4672,9 @@ struct SCV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const SCVPackedGeometryChunk *GEOMETRY() const {
     return GetPointer<const SCVPackedGeometryChunk *>(VT_GEOMETRY);
   }
+  const SCVPackedRasterProducts *RASTER_PRODUCTS() const {
+    return GetPointer<const SCVPackedRasterProducts *>(VT_RASTER_PRODUCTS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -4497,6 +4689,8 @@ struct SCV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyTable(RESULT()) &&
            VerifyOffset(verifier, VT_GEOMETRY) &&
            verifier.VerifyTable(GEOMETRY()) &&
+           VerifyOffset(verifier, VT_RASTER_PRODUCTS) &&
+           verifier.VerifyTable(RASTER_PRODUCTS()) &&
            verifier.EndTable();
   }
   SCVT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -4526,6 +4720,9 @@ struct SCVBuilder {
   void add_GEOMETRY(::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY) {
     fbb_.AddOffset(SCV::VT_GEOMETRY, GEOMETRY);
   }
+  void add_RASTER_PRODUCTS(::flatbuffers::Offset<SCVPackedRasterProducts> RASTER_PRODUCTS) {
+    fbb_.AddOffset(SCV::VT_RASTER_PRODUCTS, RASTER_PRODUCTS);
+  }
   explicit SCVBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -4544,8 +4741,10 @@ inline ::flatbuffers::Offset<SCV> CreateSCV(
     ::flatbuffers::Offset<SCVProgress> PROGRESS = 0,
     ::flatbuffers::Offset<SCVCancel> CANCEL = 0,
     ::flatbuffers::Offset<SCVResult> RESULT = 0,
-    ::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY = 0) {
+    ::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY = 0,
+    ::flatbuffers::Offset<SCVPackedRasterProducts> RASTER_PRODUCTS = 0) {
   SCVBuilder builder_(_fbb);
+  builder_.add_RASTER_PRODUCTS(RASTER_PRODUCTS);
   builder_.add_GEOMETRY(GEOMETRY);
   builder_.add_RESULT(RESULT);
   builder_.add_CANCEL(CANCEL);
@@ -4679,19 +4878,19 @@ inline ::flatbuffers::Offset<SCVTimeGrid> SCVTimeGrid::Pack(::flatbuffers::FlatB
       _GRID_INDEX_COUNT);
 }
 
-inline SCVSensorT::SCVSensorT(const SCVSensorT &o)
-      : SENSOR_ID(o.SENSOR_ID),
-        OBJECT_ID(o.OBJECT_ID),
-        NAME(o.NAME),
-        SHAPE(o.SHAPE),
-        FRAME(o.FRAME),
-        POSITION_M((o.POSITION_M) ? new SCVVec3T(*o.POSITION_M) : nullptr),
-        VELOCITY_MPS((o.VELOCITY_MPS) ? new SCVVec3T(*o.VELOCITY_MPS) : nullptr),
-        BORESIGHT_UNIT((o.BORESIGHT_UNIT) ? new SCVVec3T(*o.BORESIGHT_UNIT) : nullptr),
-        UP_UNIT((o.UP_UNIT) ? new SCVVec3T(*o.UP_UNIT) : nullptr),
-        HALF_ANGLE_DEG(o.HALF_ANGLE_DEG),
-        CROSS_TRACK_HALF_ANGLE_DEG(o.CROSS_TRACK_HALF_ANGLE_DEG),
-        ALONG_TRACK_HALF_ANGLE_DEG(o.ALONG_TRACK_HALF_ANGLE_DEG),
+inline SCVSensorShapeContractT::SCVSensorShapeContractT(const SCVSensorShapeContractT &o)
+      : SHAPE_KIND(o.SHAPE_KIND),
+        AXIS_CONVENTION(o.AXIS_CONVENTION),
+        RANGE_BOUNDARY(o.RANGE_BOUNDARY),
+        OUTER_HALF_ANGLE_DEG(o.OUTER_HALF_ANGLE_DEG),
+        INNER_HALF_ANGLE_DEG(o.INNER_HALF_ANGLE_DEG),
+        MIN_CLOCK_ANGLE_DEG(o.MIN_CLOCK_ANGLE_DEG),
+        MAX_CLOCK_ANGLE_DEG(o.MAX_CLOCK_ANGLE_DEG),
+        X_HALF_ANGLE_DEG(o.X_HALF_ANGLE_DEG),
+        Y_HALF_ANGLE_DEG(o.Y_HALF_ANGLE_DEG),
+        INNER_LOOK_ANGLE_DEG(o.INNER_LOOK_ANGLE_DEG),
+        OUTER_LOOK_ANGLE_DEG(o.OUTER_LOOK_ANGLE_DEG),
+        SAR_SAMPLING_DENSITY(o.SAR_SAMPLING_DENSITY),
         MIN_RANGE_M(o.MIN_RANGE_M),
         MAX_RANGE_M(o.MAX_RANGE_M),
         POLYGON_FRAME(o.POLYGON_FRAME) {
@@ -4699,23 +4898,119 @@ inline SCVSensorT::SCVSensorT(const SCVSensorT &o)
   for (const auto &POLYGON_VERTICES_ : o.POLYGON_VERTICES) { POLYGON_VERTICES.emplace_back((POLYGON_VERTICES_) ? new SCVVec3T(*POLYGON_VERTICES_) : nullptr); }
 }
 
+inline SCVSensorShapeContractT &SCVSensorShapeContractT::operator=(SCVSensorShapeContractT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SHAPE_KIND, o.SHAPE_KIND);
+  std::swap(AXIS_CONVENTION, o.AXIS_CONVENTION);
+  std::swap(RANGE_BOUNDARY, o.RANGE_BOUNDARY);
+  std::swap(OUTER_HALF_ANGLE_DEG, o.OUTER_HALF_ANGLE_DEG);
+  std::swap(INNER_HALF_ANGLE_DEG, o.INNER_HALF_ANGLE_DEG);
+  std::swap(MIN_CLOCK_ANGLE_DEG, o.MIN_CLOCK_ANGLE_DEG);
+  std::swap(MAX_CLOCK_ANGLE_DEG, o.MAX_CLOCK_ANGLE_DEG);
+  std::swap(X_HALF_ANGLE_DEG, o.X_HALF_ANGLE_DEG);
+  std::swap(Y_HALF_ANGLE_DEG, o.Y_HALF_ANGLE_DEG);
+  std::swap(INNER_LOOK_ANGLE_DEG, o.INNER_LOOK_ANGLE_DEG);
+  std::swap(OUTER_LOOK_ANGLE_DEG, o.OUTER_LOOK_ANGLE_DEG);
+  std::swap(SAR_SAMPLING_DENSITY, o.SAR_SAMPLING_DENSITY);
+  std::swap(MIN_RANGE_M, o.MIN_RANGE_M);
+  std::swap(MAX_RANGE_M, o.MAX_RANGE_M);
+  std::swap(POLYGON_VERTICES, o.POLYGON_VERTICES);
+  std::swap(POLYGON_FRAME, o.POLYGON_FRAME);
+  return *this;
+}
+
+inline SCVSensorShapeContractT *SCVSensorShapeContract::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SCVSensorShapeContractT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SCVSensorShapeContract::UnPackTo(SCVSensorShapeContractT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SHAPE_KIND(); _o->SHAPE_KIND = _e; }
+  { auto _e = AXIS_CONVENTION(); _o->AXIS_CONVENTION = _e; }
+  { auto _e = RANGE_BOUNDARY(); _o->RANGE_BOUNDARY = _e; }
+  { auto _e = OUTER_HALF_ANGLE_DEG(); _o->OUTER_HALF_ANGLE_DEG = _e; }
+  { auto _e = INNER_HALF_ANGLE_DEG(); _o->INNER_HALF_ANGLE_DEG = _e; }
+  { auto _e = MIN_CLOCK_ANGLE_DEG(); _o->MIN_CLOCK_ANGLE_DEG = _e; }
+  { auto _e = MAX_CLOCK_ANGLE_DEG(); _o->MAX_CLOCK_ANGLE_DEG = _e; }
+  { auto _e = X_HALF_ANGLE_DEG(); _o->X_HALF_ANGLE_DEG = _e; }
+  { auto _e = Y_HALF_ANGLE_DEG(); _o->Y_HALF_ANGLE_DEG = _e; }
+  { auto _e = INNER_LOOK_ANGLE_DEG(); _o->INNER_LOOK_ANGLE_DEG = _e; }
+  { auto _e = OUTER_LOOK_ANGLE_DEG(); _o->OUTER_LOOK_ANGLE_DEG = _e; }
+  { auto _e = SAR_SAMPLING_DENSITY(); _o->SAR_SAMPLING_DENSITY = _e; }
+  { auto _e = MIN_RANGE_M(); _o->MIN_RANGE_M = _e; }
+  { auto _e = MAX_RANGE_M(); _o->MAX_RANGE_M = _e; }
+  { auto _e = POLYGON_VERTICES(); if (_e) { _o->POLYGON_VERTICES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->POLYGON_VERTICES[_i]) { _e->Get(_i)->UnPackTo(_o->POLYGON_VERTICES[_i].get(), _resolver); } else { _o->POLYGON_VERTICES[_i] = std::unique_ptr<SCVVec3T>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->POLYGON_VERTICES.resize(0); } }
+  { auto _e = POLYGON_FRAME(); _o->POLYGON_FRAME = _e; }
+}
+
+inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContract(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorShapeContractT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SCVSensorShapeContract::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SCVSensorShapeContract> SCVSensorShapeContract::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorShapeContractT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVSensorShapeContractT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SHAPE_KIND = _o->SHAPE_KIND;
+  auto _AXIS_CONVENTION = _o->AXIS_CONVENTION;
+  auto _RANGE_BOUNDARY = _o->RANGE_BOUNDARY;
+  auto _OUTER_HALF_ANGLE_DEG = _o->OUTER_HALF_ANGLE_DEG;
+  auto _INNER_HALF_ANGLE_DEG = _o->INNER_HALF_ANGLE_DEG;
+  auto _MIN_CLOCK_ANGLE_DEG = _o->MIN_CLOCK_ANGLE_DEG;
+  auto _MAX_CLOCK_ANGLE_DEG = _o->MAX_CLOCK_ANGLE_DEG;
+  auto _X_HALF_ANGLE_DEG = _o->X_HALF_ANGLE_DEG;
+  auto _Y_HALF_ANGLE_DEG = _o->Y_HALF_ANGLE_DEG;
+  auto _INNER_LOOK_ANGLE_DEG = _o->INNER_LOOK_ANGLE_DEG;
+  auto _OUTER_LOOK_ANGLE_DEG = _o->OUTER_LOOK_ANGLE_DEG;
+  auto _SAR_SAMPLING_DENSITY = _o->SAR_SAMPLING_DENSITY;
+  auto _MIN_RANGE_M = _o->MIN_RANGE_M;
+  auto _MAX_RANGE_M = _o->MAX_RANGE_M;
+  auto _POLYGON_VERTICES = _o->POLYGON_VERTICES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>> (_o->POLYGON_VERTICES.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVVec3(*__va->__fbb, __va->__o->POLYGON_VERTICES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _POLYGON_FRAME = _o->POLYGON_FRAME;
+  return CreateSCVSensorShapeContract(
+      _fbb,
+      _SHAPE_KIND,
+      _AXIS_CONVENTION,
+      _RANGE_BOUNDARY,
+      _OUTER_HALF_ANGLE_DEG,
+      _INNER_HALF_ANGLE_DEG,
+      _MIN_CLOCK_ANGLE_DEG,
+      _MAX_CLOCK_ANGLE_DEG,
+      _X_HALF_ANGLE_DEG,
+      _Y_HALF_ANGLE_DEG,
+      _INNER_LOOK_ANGLE_DEG,
+      _OUTER_LOOK_ANGLE_DEG,
+      _SAR_SAMPLING_DENSITY,
+      _MIN_RANGE_M,
+      _MAX_RANGE_M,
+      _POLYGON_VERTICES,
+      _POLYGON_FRAME);
+}
+
+inline SCVSensorT::SCVSensorT(const SCVSensorT &o)
+      : SENSOR_ID(o.SENSOR_ID),
+        OBJECT_ID(o.OBJECT_ID),
+        NAME(o.NAME),
+        FRAME(o.FRAME),
+        POSITION_M((o.POSITION_M) ? new SCVVec3T(*o.POSITION_M) : nullptr),
+        VELOCITY_MPS((o.VELOCITY_MPS) ? new SCVVec3T(*o.VELOCITY_MPS) : nullptr),
+        BORESIGHT_UNIT((o.BORESIGHT_UNIT) ? new SCVVec3T(*o.BORESIGHT_UNIT) : nullptr),
+        UP_UNIT((o.UP_UNIT) ? new SCVVec3T(*o.UP_UNIT) : nullptr),
+        SHAPE_CONTRACT((o.SHAPE_CONTRACT) ? new SCVSensorShapeContractT(*o.SHAPE_CONTRACT) : nullptr) {
+}
+
 inline SCVSensorT &SCVSensorT::operator=(SCVSensorT o) FLATBUFFERS_NOEXCEPT {
   std::swap(SENSOR_ID, o.SENSOR_ID);
   std::swap(OBJECT_ID, o.OBJECT_ID);
   std::swap(NAME, o.NAME);
-  std::swap(SHAPE, o.SHAPE);
   std::swap(FRAME, o.FRAME);
   std::swap(POSITION_M, o.POSITION_M);
   std::swap(VELOCITY_MPS, o.VELOCITY_MPS);
   std::swap(BORESIGHT_UNIT, o.BORESIGHT_UNIT);
   std::swap(UP_UNIT, o.UP_UNIT);
-  std::swap(HALF_ANGLE_DEG, o.HALF_ANGLE_DEG);
-  std::swap(CROSS_TRACK_HALF_ANGLE_DEG, o.CROSS_TRACK_HALF_ANGLE_DEG);
-  std::swap(ALONG_TRACK_HALF_ANGLE_DEG, o.ALONG_TRACK_HALF_ANGLE_DEG);
-  std::swap(MIN_RANGE_M, o.MIN_RANGE_M);
-  std::swap(MAX_RANGE_M, o.MAX_RANGE_M);
-  std::swap(POLYGON_VERTICES, o.POLYGON_VERTICES);
-  std::swap(POLYGON_FRAME, o.POLYGON_FRAME);
+  std::swap(SHAPE_CONTRACT, o.SHAPE_CONTRACT);
   return *this;
 }
 
@@ -4731,19 +5026,12 @@ inline void SCVSensor::UnPackTo(SCVSensorT *_o, const ::flatbuffers::resolver_fu
   { auto _e = SENSOR_ID(); _o->SENSOR_ID = _e; }
   { auto _e = OBJECT_ID(); if (_e) _o->OBJECT_ID = _e->str(); }
   { auto _e = NAME(); if (_e) _o->NAME = _e->str(); }
-  { auto _e = SHAPE(); _o->SHAPE = _e; }
   { auto _e = FRAME(); _o->FRAME = _e; }
   { auto _e = POSITION_M(); if (_e) { if(_o->POSITION_M) { _e->UnPackTo(_o->POSITION_M.get(), _resolver); } else { _o->POSITION_M = std::unique_ptr<SCVVec3T>(_e->UnPack(_resolver)); } } else if (_o->POSITION_M) { _o->POSITION_M.reset(); } }
   { auto _e = VELOCITY_MPS(); if (_e) { if(_o->VELOCITY_MPS) { _e->UnPackTo(_o->VELOCITY_MPS.get(), _resolver); } else { _o->VELOCITY_MPS = std::unique_ptr<SCVVec3T>(_e->UnPack(_resolver)); } } else if (_o->VELOCITY_MPS) { _o->VELOCITY_MPS.reset(); } }
   { auto _e = BORESIGHT_UNIT(); if (_e) { if(_o->BORESIGHT_UNIT) { _e->UnPackTo(_o->BORESIGHT_UNIT.get(), _resolver); } else { _o->BORESIGHT_UNIT = std::unique_ptr<SCVVec3T>(_e->UnPack(_resolver)); } } else if (_o->BORESIGHT_UNIT) { _o->BORESIGHT_UNIT.reset(); } }
   { auto _e = UP_UNIT(); if (_e) { if(_o->UP_UNIT) { _e->UnPackTo(_o->UP_UNIT.get(), _resolver); } else { _o->UP_UNIT = std::unique_ptr<SCVVec3T>(_e->UnPack(_resolver)); } } else if (_o->UP_UNIT) { _o->UP_UNIT.reset(); } }
-  { auto _e = HALF_ANGLE_DEG(); _o->HALF_ANGLE_DEG = _e; }
-  { auto _e = CROSS_TRACK_HALF_ANGLE_DEG(); _o->CROSS_TRACK_HALF_ANGLE_DEG = _e; }
-  { auto _e = ALONG_TRACK_HALF_ANGLE_DEG(); _o->ALONG_TRACK_HALF_ANGLE_DEG = _e; }
-  { auto _e = MIN_RANGE_M(); _o->MIN_RANGE_M = _e; }
-  { auto _e = MAX_RANGE_M(); _o->MAX_RANGE_M = _e; }
-  { auto _e = POLYGON_VERTICES(); if (_e) { _o->POLYGON_VERTICES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->POLYGON_VERTICES[_i]) { _e->Get(_i)->UnPackTo(_o->POLYGON_VERTICES[_i].get(), _resolver); } else { _o->POLYGON_VERTICES[_i] = std::unique_ptr<SCVVec3T>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->POLYGON_VERTICES.resize(0); } }
-  { auto _e = POLYGON_FRAME(); _o->POLYGON_FRAME = _e; }
+  { auto _e = SHAPE_CONTRACT(); if (_e) { if(_o->SHAPE_CONTRACT) { _e->UnPackTo(_o->SHAPE_CONTRACT.get(), _resolver); } else { _o->SHAPE_CONTRACT = std::unique_ptr<SCVSensorShapeContractT>(_e->UnPack(_resolver)); } } else if (_o->SHAPE_CONTRACT) { _o->SHAPE_CONTRACT.reset(); } }
 }
 
 inline ::flatbuffers::Offset<SCVSensor> CreateSCVSensor(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4757,37 +5045,23 @@ inline ::flatbuffers::Offset<SCVSensor> SCVSensor::Pack(::flatbuffers::FlatBuffe
   auto _SENSOR_ID = _o->SENSOR_ID;
   auto _OBJECT_ID = _o->OBJECT_ID.empty() ? 0 : _fbb.CreateString(_o->OBJECT_ID);
   auto _NAME = _o->NAME.empty() ? 0 : _fbb.CreateString(_o->NAME);
-  auto _SHAPE = _o->SHAPE;
   auto _FRAME = _o->FRAME;
   auto _POSITION_M = _o->POSITION_M ? CreateSCVVec3(_fbb, _o->POSITION_M.get(), _rehasher) : 0;
   auto _VELOCITY_MPS = _o->VELOCITY_MPS ? CreateSCVVec3(_fbb, _o->VELOCITY_MPS.get(), _rehasher) : 0;
   auto _BORESIGHT_UNIT = _o->BORESIGHT_UNIT ? CreateSCVVec3(_fbb, _o->BORESIGHT_UNIT.get(), _rehasher) : 0;
   auto _UP_UNIT = _o->UP_UNIT ? CreateSCVVec3(_fbb, _o->UP_UNIT.get(), _rehasher) : 0;
-  auto _HALF_ANGLE_DEG = _o->HALF_ANGLE_DEG;
-  auto _CROSS_TRACK_HALF_ANGLE_DEG = _o->CROSS_TRACK_HALF_ANGLE_DEG;
-  auto _ALONG_TRACK_HALF_ANGLE_DEG = _o->ALONG_TRACK_HALF_ANGLE_DEG;
-  auto _MIN_RANGE_M = _o->MIN_RANGE_M;
-  auto _MAX_RANGE_M = _o->MAX_RANGE_M;
-  auto _POLYGON_VERTICES = _o->POLYGON_VERTICES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>> (_o->POLYGON_VERTICES.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVVec3(*__va->__fbb, __va->__o->POLYGON_VERTICES[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _POLYGON_FRAME = _o->POLYGON_FRAME;
+  auto _SHAPE_CONTRACT = _o->SHAPE_CONTRACT ? CreateSCVSensorShapeContract(_fbb, _o->SHAPE_CONTRACT.get(), _rehasher) : 0;
   return CreateSCVSensor(
       _fbb,
       _SENSOR_ID,
       _OBJECT_ID,
       _NAME,
-      _SHAPE,
       _FRAME,
       _POSITION_M,
       _VELOCITY_MPS,
       _BORESIGHT_UNIT,
       _UP_UNIT,
-      _HALF_ANGLE_DEG,
-      _CROSS_TRACK_HALF_ANGLE_DEG,
-      _ALONG_TRACK_HALF_ANGLE_DEG,
-      _MIN_RANGE_M,
-      _MAX_RANGE_M,
-      _POLYGON_VERTICES,
-      _POLYGON_FRAME);
+      _SHAPE_CONTRACT);
 }
 
 inline SCVStateSampleT::SCVStateSampleT(const SCVStateSampleT &o)
@@ -5306,200 +5580,6 @@ inline ::flatbuffers::Offset<SCVSensorContribution> SCVSensorContribution::Pack(
       _CONTRIBUTION_COUNT);
 }
 
-inline SCVCellStatT *SCVCellStat::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::make_unique<SCVCellStatT>();
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void SCVCellStat::UnPackTo(SCVCellStatT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = CELL_ID(); _o->CELL_ID = _e; }
-  { auto _e = LATITUDE_DEG(); _o->LATITUDE_DEG = _e; }
-  { auto _e = LONGITUDE_DEG(); _o->LONGITUDE_DEG = _e; }
-  { auto _e = ALTITUDE_M(); _o->ALTITUDE_M = _e; }
-  { auto _e = COVERED_WINDOW_COUNT(); _o->COVERED_WINDOW_COUNT = _e; }
-  { auto _e = TOTAL_WINDOW_COUNT(); _o->TOTAL_WINDOW_COUNT = _e; }
-  { auto _e = COVERAGE_FRACTION(); _o->COVERAGE_FRACTION = _e; }
-  { auto _e = MEAN_REVISIT_SEC(); _o->MEAN_REVISIT_SEC = _e; }
-  { auto _e = MAX_GAP_SEC(); _o->MAX_GAP_SEC = _e; }
-  { auto _e = MEAN_GAP_SEC(); _o->MEAN_GAP_SEC = _e; }
-  { auto _e = REDUNDANCY(); _o->REDUNDANCY = _e; }
-  { auto _e = SENSOR_IDS(); if (_e) { _o->SENSOR_IDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SENSOR_IDS[_i] = _e->Get(_i); } } else { _o->SENSOR_IDS.resize(0); } }
-  { auto _e = SENSOR_BITSET_WORDS(); if (_e) { _o->SENSOR_BITSET_WORDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SENSOR_BITSET_WORDS[_i] = _e->Get(_i); } } else { _o->SENSOR_BITSET_WORDS.resize(0); } }
-}
-
-inline ::flatbuffers::Offset<SCVCellStat> CreateSCVCellStat(::flatbuffers::FlatBufferBuilder &_fbb, const SCVCellStatT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return SCVCellStat::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<SCVCellStat> SCVCellStat::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVCellStatT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVCellStatT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _CELL_ID = _o->CELL_ID;
-  auto _LATITUDE_DEG = _o->LATITUDE_DEG;
-  auto _LONGITUDE_DEG = _o->LONGITUDE_DEG;
-  auto _ALTITUDE_M = _o->ALTITUDE_M;
-  auto _COVERED_WINDOW_COUNT = _o->COVERED_WINDOW_COUNT;
-  auto _TOTAL_WINDOW_COUNT = _o->TOTAL_WINDOW_COUNT;
-  auto _COVERAGE_FRACTION = _o->COVERAGE_FRACTION;
-  auto _MEAN_REVISIT_SEC = _o->MEAN_REVISIT_SEC;
-  auto _MAX_GAP_SEC = _o->MAX_GAP_SEC;
-  auto _MEAN_GAP_SEC = _o->MEAN_GAP_SEC;
-  auto _REDUNDANCY = _o->REDUNDANCY;
-  auto _SENSOR_IDS = _o->SENSOR_IDS.size() ? _fbb.CreateVector(_o->SENSOR_IDS) : 0;
-  auto _SENSOR_BITSET_WORDS = _o->SENSOR_BITSET_WORDS.size() ? _fbb.CreateVector(_o->SENSOR_BITSET_WORDS) : 0;
-  return CreateSCVCellStat(
-      _fbb,
-      _CELL_ID,
-      _LATITUDE_DEG,
-      _LONGITUDE_DEG,
-      _ALTITUDE_M,
-      _COVERED_WINDOW_COUNT,
-      _TOTAL_WINDOW_COUNT,
-      _COVERAGE_FRACTION,
-      _MEAN_REVISIT_SEC,
-      _MAX_GAP_SEC,
-      _MEAN_GAP_SEC,
-      _REDUNDANCY,
-      _SENSOR_IDS,
-      _SENSOR_BITSET_WORDS);
-}
-
-inline SCVIntervalT *SCVInterval::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::make_unique<SCVIntervalT>();
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void SCVInterval::UnPackTo(SCVIntervalT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = SENSOR_ID(); _o->SENSOR_ID = _e; }
-  { auto _e = TARGET_ID(); _o->TARGET_ID = _e; }
-  { auto _e = INTERVAL_KIND(); _o->INTERVAL_KIND = _e; }
-  { auto _e = START_OFFSET_SEC(); _o->START_OFFSET_SEC = _e; }
-  { auto _e = STOP_OFFSET_SEC(); _o->STOP_OFFSET_SEC = _e; }
-  { auto _e = DURATION_SEC(); _o->DURATION_SEC = _e; }
-  { auto _e = MIN_RANGE_M(); _o->MIN_RANGE_M = _e; }
-  { auto _e = MAX_ELEVATION_DEG(); _o->MAX_ELEVATION_DEG = _e; }
-  { auto _e = CELL_ID(); _o->CELL_ID = _e; }
-}
-
-inline ::flatbuffers::Offset<SCVInterval> CreateSCVInterval(::flatbuffers::FlatBufferBuilder &_fbb, const SCVIntervalT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return SCVInterval::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<SCVInterval> SCVInterval::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVIntervalT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVIntervalT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _SENSOR_ID = _o->SENSOR_ID;
-  auto _TARGET_ID = _o->TARGET_ID;
-  auto _INTERVAL_KIND = _o->INTERVAL_KIND;
-  auto _START_OFFSET_SEC = _o->START_OFFSET_SEC;
-  auto _STOP_OFFSET_SEC = _o->STOP_OFFSET_SEC;
-  auto _DURATION_SEC = _o->DURATION_SEC;
-  auto _MIN_RANGE_M = _o->MIN_RANGE_M;
-  auto _MAX_ELEVATION_DEG = _o->MAX_ELEVATION_DEG;
-  auto _CELL_ID = _o->CELL_ID;
-  return CreateSCVInterval(
-      _fbb,
-      _SENSOR_ID,
-      _TARGET_ID,
-      _INTERVAL_KIND,
-      _START_OFFSET_SEC,
-      _STOP_OFFSET_SEC,
-      _DURATION_SEC,
-      _MIN_RANGE_M,
-      _MAX_ELEVATION_DEG,
-      _CELL_ID);
-}
-
-inline SCVLatitudeBandStatT *SCVLatitudeBandStat::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::make_unique<SCVLatitudeBandStatT>();
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void SCVLatitudeBandStat::UnPackTo(SCVLatitudeBandStatT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = MIN_LAT_DEG(); _o->MIN_LAT_DEG = _e; }
-  { auto _e = MAX_LAT_DEG(); _o->MAX_LAT_DEG = _e; }
-  { auto _e = COVERAGE_FRACTION(); _o->COVERAGE_FRACTION = _e; }
-  { auto _e = MEAN_REVISIT_SEC(); _o->MEAN_REVISIT_SEC = _e; }
-  { auto _e = MAX_GAP_SEC(); _o->MAX_GAP_SEC = _e; }
-  { auto _e = MEAN_REDUNDANCY(); _o->MEAN_REDUNDANCY = _e; }
-}
-
-inline ::flatbuffers::Offset<SCVLatitudeBandStat> CreateSCVLatitudeBandStat(::flatbuffers::FlatBufferBuilder &_fbb, const SCVLatitudeBandStatT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return SCVLatitudeBandStat::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<SCVLatitudeBandStat> SCVLatitudeBandStat::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVLatitudeBandStatT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVLatitudeBandStatT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _MIN_LAT_DEG = _o->MIN_LAT_DEG;
-  auto _MAX_LAT_DEG = _o->MAX_LAT_DEG;
-  auto _COVERAGE_FRACTION = _o->COVERAGE_FRACTION;
-  auto _MEAN_REVISIT_SEC = _o->MEAN_REVISIT_SEC;
-  auto _MAX_GAP_SEC = _o->MAX_GAP_SEC;
-  auto _MEAN_REDUNDANCY = _o->MEAN_REDUNDANCY;
-  return CreateSCVLatitudeBandStat(
-      _fbb,
-      _MIN_LAT_DEG,
-      _MAX_LAT_DEG,
-      _COVERAGE_FRACTION,
-      _MEAN_REVISIT_SEC,
-      _MAX_GAP_SEC,
-      _MEAN_REDUNDANCY);
-}
-
-inline SCVTimeSeriesPointT *SCVTimeSeriesPoint::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::make_unique<SCVTimeSeriesPointT>();
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void SCVTimeSeriesPoint::UnPackTo(SCVTimeSeriesPointT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = METRIC_KIND(); _o->METRIC_KIND = _e; }
-  { auto _e = TIME_OFFSET_SEC(); _o->TIME_OFFSET_SEC = _e; }
-  { auto _e = WINDOW_INDEX(); _o->WINDOW_INDEX = _e; }
-  { auto _e = VALUE(); _o->VALUE = _e; }
-  { auto _e = SENSOR_ID(); _o->SENSOR_ID = _e; }
-  { auto _e = CELL_ID(); _o->CELL_ID = _e; }
-}
-
-inline ::flatbuffers::Offset<SCVTimeSeriesPoint> CreateSCVTimeSeriesPoint(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTimeSeriesPointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return SCVTimeSeriesPoint::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<SCVTimeSeriesPoint> SCVTimeSeriesPoint::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTimeSeriesPointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVTimeSeriesPointT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _METRIC_KIND = _o->METRIC_KIND;
-  auto _TIME_OFFSET_SEC = _o->TIME_OFFSET_SEC;
-  auto _WINDOW_INDEX = _o->WINDOW_INDEX;
-  auto _VALUE = _o->VALUE;
-  auto _SENSOR_ID = _o->SENSOR_ID;
-  auto _CELL_ID = _o->CELL_ID;
-  return CreateSCVTimeSeriesPoint(
-      _fbb,
-      _METRIC_KIND,
-      _TIME_OFFSET_SEC,
-      _WINDOW_INDEX,
-      _VALUE,
-      _SENSOR_ID,
-      _CELL_ID);
-}
-
 inline SCVHistogramBinT *SCVHistogramBin::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<SCVHistogramBinT>();
   UnPackTo(_o.get(), _resolver);
@@ -5536,44 +5616,6 @@ inline ::flatbuffers::Offset<SCVHistogramBin> SCVHistogramBin::Pack(::flatbuffer
       _MAX_VALUE,
       _COUNT,
       _WEIGHT);
-}
-
-inline SCVHeatmapCellT *SCVHeatmapCell::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::make_unique<SCVHeatmapCellT>();
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void SCVHeatmapCell::UnPackTo(SCVHeatmapCellT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = METRIC_KIND(); _o->METRIC_KIND = _e; }
-  { auto _e = X_INDEX(); _o->X_INDEX = _e; }
-  { auto _e = Y_INDEX(); _o->Y_INDEX = _e; }
-  { auto _e = VALUE(); _o->VALUE = _e; }
-  { auto _e = SENSOR_COUNT(); _o->SENSOR_COUNT = _e; }
-}
-
-inline ::flatbuffers::Offset<SCVHeatmapCell> CreateSCVHeatmapCell(::flatbuffers::FlatBufferBuilder &_fbb, const SCVHeatmapCellT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return SCVHeatmapCell::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<SCVHeatmapCell> SCVHeatmapCell::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVHeatmapCellT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVHeatmapCellT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _METRIC_KIND = _o->METRIC_KIND;
-  auto _X_INDEX = _o->X_INDEX;
-  auto _Y_INDEX = _o->Y_INDEX;
-  auto _VALUE = _o->VALUE;
-  auto _SENSOR_COUNT = _o->SENSOR_COUNT;
-  return CreateSCVHeatmapCell(
-      _fbb,
-      _METRIC_KIND,
-      _X_INDEX,
-      _Y_INDEX,
-      _VALUE,
-      _SENSOR_COUNT);
 }
 
 inline SCVSwathSegmentT *SCVSwathSegment::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -5862,6 +5904,220 @@ inline ::flatbuffers::Offset<SCVPackedGeometryChunk> SCVPackedGeometryChunk::Pac
       _SEGMENTS);
 }
 
+inline SCVPackedRasterBandT *SCVPackedRasterBand::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SCVPackedRasterBandT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SCVPackedRasterBand::UnPackTo(SCVPackedRasterBandT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = PRODUCT_KIND(); _o->PRODUCT_KIND = _e; }
+  { auto _e = METRIC_KIND(); _o->METRIC_KIND = _e; }
+  { auto _e = ENCODING(); _o->ENCODING = _e; }
+  { auto _e = COMPONENTS_PER_CELL(); _o->COMPONENTS_PER_CELL = _e; }
+  { auto _e = CELL_COUNT(); _o->CELL_COUNT = _e; }
+  { auto _e = BUCKET_COUNT(); _o->BUCKET_COUNT = _e; }
+  { auto _e = WORDS_PER_BUCKET(); _o->WORDS_PER_BUCKET = _e; }
+  { auto _e = MEMORY_REGION_ID(); _o->MEMORY_REGION_ID = _e; }
+  { auto _e = MEMORY_RECORD_INDEX(); _o->MEMORY_RECORD_INDEX = _e; }
+  { auto _e = FLOAT32_VALUES(); if (_e) { _o->FLOAT32_VALUES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->FLOAT32_VALUES[_i] = _e->Get(_i); } } else { _o->FLOAT32_VALUES.resize(0); } }
+  { auto _e = FLOAT64_VALUES(); if (_e) { _o->FLOAT64_VALUES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->FLOAT64_VALUES[_i] = _e->Get(_i); } } else { _o->FLOAT64_VALUES.resize(0); } }
+  { auto _e = UINT32_VALUES(); if (_e) { _o->UINT32_VALUES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->UINT32_VALUES[_i] = _e->Get(_i); } } else { _o->UINT32_VALUES.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<SCVPackedRasterBand> CreateSCVPackedRasterBand(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterBandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SCVPackedRasterBand::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SCVPackedRasterBand> SCVPackedRasterBand::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterBandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVPackedRasterBandT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _PRODUCT_KIND = _o->PRODUCT_KIND;
+  auto _METRIC_KIND = _o->METRIC_KIND;
+  auto _ENCODING = _o->ENCODING;
+  auto _COMPONENTS_PER_CELL = _o->COMPONENTS_PER_CELL;
+  auto _CELL_COUNT = _o->CELL_COUNT;
+  auto _BUCKET_COUNT = _o->BUCKET_COUNT;
+  auto _WORDS_PER_BUCKET = _o->WORDS_PER_BUCKET;
+  auto _MEMORY_REGION_ID = _o->MEMORY_REGION_ID;
+  auto _MEMORY_RECORD_INDEX = _o->MEMORY_RECORD_INDEX;
+  auto _FLOAT32_VALUES = _o->FLOAT32_VALUES.size() ? _fbb.CreateVector(_o->FLOAT32_VALUES) : 0;
+  auto _FLOAT64_VALUES = _o->FLOAT64_VALUES.size() ? _fbb.CreateVector(_o->FLOAT64_VALUES) : 0;
+  auto _UINT32_VALUES = _o->UINT32_VALUES.size() ? _fbb.CreateVector(_o->UINT32_VALUES) : 0;
+  return CreateSCVPackedRasterBand(
+      _fbb,
+      _PRODUCT_KIND,
+      _METRIC_KIND,
+      _ENCODING,
+      _COMPONENTS_PER_CELL,
+      _CELL_COUNT,
+      _BUCKET_COUNT,
+      _WORDS_PER_BUCKET,
+      _MEMORY_REGION_ID,
+      _MEMORY_RECORD_INDEX,
+      _FLOAT32_VALUES,
+      _FLOAT64_VALUES,
+      _UINT32_VALUES);
+}
+
+inline SCVPackedRasterProductsT::SCVPackedRasterProductsT(const SCVPackedRasterProductsT &o)
+      : JOB_ID(o.JOB_ID),
+        TRACE_ID(o.TRACE_ID),
+        GRID((o.GRID) ? new SCVCoverageGridT(*o.GRID) : nullptr),
+        TIME_GRID((o.TIME_GRID) ? new SCVTimeGridT(*o.TIME_GRID) : nullptr),
+        ROWS(o.ROWS),
+        COLUMNS(o.COLUMNS),
+        CELL_COUNT(o.CELL_COUNT),
+        BUCKET_COUNT(o.BUCKET_COUNT),
+        WORDS_PER_BUCKET(o.WORDS_PER_BUCKET) {
+  MEMORY_REGIONS.reserve(o.MEMORY_REGIONS.size());
+  for (const auto &MEMORY_REGIONS_ : o.MEMORY_REGIONS) { MEMORY_REGIONS.emplace_back((MEMORY_REGIONS_) ? new SCVMemoryRegionT(*MEMORY_REGIONS_) : nullptr); }
+  BANDS.reserve(o.BANDS.size());
+  for (const auto &BANDS_ : o.BANDS) { BANDS.emplace_back((BANDS_) ? new SCVPackedRasterBandT(*BANDS_) : nullptr); }
+}
+
+inline SCVPackedRasterProductsT &SCVPackedRasterProductsT::operator=(SCVPackedRasterProductsT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(JOB_ID, o.JOB_ID);
+  std::swap(TRACE_ID, o.TRACE_ID);
+  std::swap(GRID, o.GRID);
+  std::swap(TIME_GRID, o.TIME_GRID);
+  std::swap(ROWS, o.ROWS);
+  std::swap(COLUMNS, o.COLUMNS);
+  std::swap(CELL_COUNT, o.CELL_COUNT);
+  std::swap(BUCKET_COUNT, o.BUCKET_COUNT);
+  std::swap(WORDS_PER_BUCKET, o.WORDS_PER_BUCKET);
+  std::swap(MEMORY_REGIONS, o.MEMORY_REGIONS);
+  std::swap(BANDS, o.BANDS);
+  return *this;
+}
+
+inline SCVPackedRasterProductsT *SCVPackedRasterProducts::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SCVPackedRasterProductsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SCVPackedRasterProducts::UnPackTo(SCVPackedRasterProductsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = JOB_ID(); if (_e) _o->JOB_ID = _e->str(); }
+  { auto _e = TRACE_ID(); _o->TRACE_ID = _e; }
+  { auto _e = GRID(); if (_e) { if(_o->GRID) { _e->UnPackTo(_o->GRID.get(), _resolver); } else { _o->GRID = std::unique_ptr<SCVCoverageGridT>(_e->UnPack(_resolver)); } } else if (_o->GRID) { _o->GRID.reset(); } }
+  { auto _e = TIME_GRID(); if (_e) { if(_o->TIME_GRID) { _e->UnPackTo(_o->TIME_GRID.get(), _resolver); } else { _o->TIME_GRID = std::unique_ptr<SCVTimeGridT>(_e->UnPack(_resolver)); } } else if (_o->TIME_GRID) { _o->TIME_GRID.reset(); } }
+  { auto _e = ROWS(); _o->ROWS = _e; }
+  { auto _e = COLUMNS(); _o->COLUMNS = _e; }
+  { auto _e = CELL_COUNT(); _o->CELL_COUNT = _e; }
+  { auto _e = BUCKET_COUNT(); _o->BUCKET_COUNT = _e; }
+  { auto _e = WORDS_PER_BUCKET(); _o->WORDS_PER_BUCKET = _e; }
+  { auto _e = MEMORY_REGIONS(); if (_e) { _o->MEMORY_REGIONS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->MEMORY_REGIONS[_i]) { _e->Get(_i)->UnPackTo(_o->MEMORY_REGIONS[_i].get(), _resolver); } else { _o->MEMORY_REGIONS[_i] = std::unique_ptr<SCVMemoryRegionT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->MEMORY_REGIONS.resize(0); } }
+  { auto _e = BANDS(); if (_e) { _o->BANDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->BANDS[_i]) { _e->Get(_i)->UnPackTo(_o->BANDS[_i].get(), _resolver); } else { _o->BANDS[_i] = std::unique_ptr<SCVPackedRasterBandT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->BANDS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<SCVPackedRasterProducts> CreateSCVPackedRasterProducts(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterProductsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SCVPackedRasterProducts::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SCVPackedRasterProducts> SCVPackedRasterProducts::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVPackedRasterProductsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVPackedRasterProductsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _JOB_ID = _o->JOB_ID.empty() ? 0 : _fbb.CreateString(_o->JOB_ID);
+  auto _TRACE_ID = _o->TRACE_ID;
+  auto _GRID = _o->GRID ? CreateSCVCoverageGrid(_fbb, _o->GRID.get(), _rehasher) : 0;
+  auto _TIME_GRID = _o->TIME_GRID ? CreateSCVTimeGrid(_fbb, _o->TIME_GRID.get(), _rehasher) : 0;
+  auto _ROWS = _o->ROWS;
+  auto _COLUMNS = _o->COLUMNS;
+  auto _CELL_COUNT = _o->CELL_COUNT;
+  auto _BUCKET_COUNT = _o->BUCKET_COUNT;
+  auto _WORDS_PER_BUCKET = _o->WORDS_PER_BUCKET;
+  auto _MEMORY_REGIONS = _o->MEMORY_REGIONS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVMemoryRegion>> (_o->MEMORY_REGIONS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVMemoryRegion(*__va->__fbb, __va->__o->MEMORY_REGIONS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _BANDS = _o->BANDS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVPackedRasterBand>> (_o->BANDS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVPackedRasterBand(*__va->__fbb, __va->__o->BANDS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return CreateSCVPackedRasterProducts(
+      _fbb,
+      _JOB_ID,
+      _TRACE_ID,
+      _GRID,
+      _TIME_GRID,
+      _ROWS,
+      _COLUMNS,
+      _CELL_COUNT,
+      _BUCKET_COUNT,
+      _WORDS_PER_BUCKET,
+      _MEMORY_REGIONS,
+      _BANDS);
+}
+
+inline SCVAggregateStatisticsT *SCVAggregateStatistics::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SCVAggregateStatisticsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SCVAggregateStatistics::UnPackTo(SCVAggregateStatisticsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = TOTAL_CELLS(); _o->TOTAL_CELLS = _e; }
+  { auto _e = ACCESSED_CELLS(); _o->ACCESSED_CELLS = _e; }
+  { auto _e = MULTI_ACCESS_CELLS(); _o->MULTI_ACCESS_CELLS = _e; }
+  { auto _e = ACTIVE_SENSOR_COUNT(); _o->ACTIVE_SENSOR_COUNT = _e; }
+  { auto _e = SWATH_COUNT(); _o->SWATH_COUNT = _e; }
+  { auto _e = TOTAL_WINDOWS(); _o->TOTAL_WINDOWS = _e; }
+  { auto _e = TOTAL_INTERVAL_COUNT(); _o->TOTAL_INTERVAL_COUNT = _e; }
+  { auto _e = TOTAL_REVISIT_COUNT(); _o->TOTAL_REVISIT_COUNT = _e; }
+  { auto _e = TOTAL_ACCESS_DURATION_SEC(); _o->TOTAL_ACCESS_DURATION_SEC = _e; }
+  { auto _e = TOTAL_GAP_DURATION_SEC(); _o->TOTAL_GAP_DURATION_SEC = _e; }
+  { auto _e = MAX_GAP_DURATION_SEC(); _o->MAX_GAP_DURATION_SEC = _e; }
+  { auto _e = MEAN_REVISIT_TIME_SEC(); _o->MEAN_REVISIT_TIME_SEC = _e; }
+  { auto _e = MAX_RESPONSE_TIME_SEC(); _o->MAX_RESPONSE_TIME_SEC = _e; }
+  { auto _e = MEAN_RESPONSE_TIME_SEC(); _o->MEAN_RESPONSE_TIME_SEC = _e; }
+  { auto _e = PERCENT_COVERAGE(); _o->PERCENT_COVERAGE = _e; }
+}
+
+inline ::flatbuffers::Offset<SCVAggregateStatistics> CreateSCVAggregateStatistics(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAggregateStatisticsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SCVAggregateStatistics::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SCVAggregateStatistics> SCVAggregateStatistics::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAggregateStatisticsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVAggregateStatisticsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _TOTAL_CELLS = _o->TOTAL_CELLS;
+  auto _ACCESSED_CELLS = _o->ACCESSED_CELLS;
+  auto _MULTI_ACCESS_CELLS = _o->MULTI_ACCESS_CELLS;
+  auto _ACTIVE_SENSOR_COUNT = _o->ACTIVE_SENSOR_COUNT;
+  auto _SWATH_COUNT = _o->SWATH_COUNT;
+  auto _TOTAL_WINDOWS = _o->TOTAL_WINDOWS;
+  auto _TOTAL_INTERVAL_COUNT = _o->TOTAL_INTERVAL_COUNT;
+  auto _TOTAL_REVISIT_COUNT = _o->TOTAL_REVISIT_COUNT;
+  auto _TOTAL_ACCESS_DURATION_SEC = _o->TOTAL_ACCESS_DURATION_SEC;
+  auto _TOTAL_GAP_DURATION_SEC = _o->TOTAL_GAP_DURATION_SEC;
+  auto _MAX_GAP_DURATION_SEC = _o->MAX_GAP_DURATION_SEC;
+  auto _MEAN_REVISIT_TIME_SEC = _o->MEAN_REVISIT_TIME_SEC;
+  auto _MAX_RESPONSE_TIME_SEC = _o->MAX_RESPONSE_TIME_SEC;
+  auto _MEAN_RESPONSE_TIME_SEC = _o->MEAN_RESPONSE_TIME_SEC;
+  auto _PERCENT_COVERAGE = _o->PERCENT_COVERAGE;
+  return CreateSCVAggregateStatistics(
+      _fbb,
+      _TOTAL_CELLS,
+      _ACCESSED_CELLS,
+      _MULTI_ACCESS_CELLS,
+      _ACTIVE_SENSOR_COUNT,
+      _SWATH_COUNT,
+      _TOTAL_WINDOWS,
+      _TOTAL_INTERVAL_COUNT,
+      _TOTAL_REVISIT_COUNT,
+      _TOTAL_ACCESS_DURATION_SEC,
+      _TOTAL_GAP_DURATION_SEC,
+      _MAX_GAP_DURATION_SEC,
+      _MEAN_REVISIT_TIME_SEC,
+      _MAX_RESPONSE_TIME_SEC,
+      _MEAN_RESPONSE_TIME_SEC,
+      _PERCENT_COVERAGE);
+}
+
 inline SCVResultT::SCVResultT(const SCVResultT &o)
       : JOB_ID(o.JOB_ID),
         TRACE_ID(o.TRACE_ID),
@@ -5871,19 +6127,11 @@ inline SCVResultT::SCVResultT(const SCVResultT &o)
         TOTAL_SENSORS(o.TOTAL_SENSORS),
         TOTAL_WINDOWS(o.TOTAL_WINDOWS),
         GEOMETRY((o.GEOMETRY) ? new SCVPackedGeometryChunkT(*o.GEOMETRY) : nullptr),
-        MESSAGE(o.MESSAGE) {
-  CELL_STATS.reserve(o.CELL_STATS.size());
-  for (const auto &CELL_STATS_ : o.CELL_STATS) { CELL_STATS.emplace_back((CELL_STATS_) ? new SCVCellStatT(*CELL_STATS_) : nullptr); }
-  INTERVALS.reserve(o.INTERVALS.size());
-  for (const auto &INTERVALS_ : o.INTERVALS) { INTERVALS.emplace_back((INTERVALS_) ? new SCVIntervalT(*INTERVALS_) : nullptr); }
-  LATITUDE_BANDS.reserve(o.LATITUDE_BANDS.size());
-  for (const auto &LATITUDE_BANDS_ : o.LATITUDE_BANDS) { LATITUDE_BANDS.emplace_back((LATITUDE_BANDS_) ? new SCVLatitudeBandStatT(*LATITUDE_BANDS_) : nullptr); }
-  TIME_SERIES.reserve(o.TIME_SERIES.size());
-  for (const auto &TIME_SERIES_ : o.TIME_SERIES) { TIME_SERIES.emplace_back((TIME_SERIES_) ? new SCVTimeSeriesPointT(*TIME_SERIES_) : nullptr); }
+        RASTER_PRODUCTS((o.RASTER_PRODUCTS) ? new SCVPackedRasterProductsT(*o.RASTER_PRODUCTS) : nullptr),
+        MESSAGE(o.MESSAGE),
+        AGGREGATE_STATISTICS((o.AGGREGATE_STATISTICS) ? new SCVAggregateStatisticsT(*o.AGGREGATE_STATISTICS) : nullptr) {
   HISTOGRAMS.reserve(o.HISTOGRAMS.size());
   for (const auto &HISTOGRAMS_ : o.HISTOGRAMS) { HISTOGRAMS.emplace_back((HISTOGRAMS_) ? new SCVHistogramBinT(*HISTOGRAMS_) : nullptr); }
-  HEATMAP.reserve(o.HEATMAP.size());
-  for (const auto &HEATMAP_ : o.HEATMAP) { HEATMAP.emplace_back((HEATMAP_) ? new SCVHeatmapCellT(*HEATMAP_) : nullptr); }
   CONTRIBUTIONS.reserve(o.CONTRIBUTIONS.size());
   for (const auto &CONTRIBUTIONS_ : o.CONTRIBUTIONS) { CONTRIBUTIONS.emplace_back((CONTRIBUTIONS_) ? new SCVSensorContributionT(*CONTRIBUTIONS_) : nullptr); }
 }
@@ -5896,15 +6144,12 @@ inline SCVResultT &SCVResultT::operator=(SCVResultT o) FLATBUFFERS_NOEXCEPT {
   std::swap(TARGET_BODY, o.TARGET_BODY);
   std::swap(TOTAL_SENSORS, o.TOTAL_SENSORS);
   std::swap(TOTAL_WINDOWS, o.TOTAL_WINDOWS);
-  std::swap(CELL_STATS, o.CELL_STATS);
-  std::swap(INTERVALS, o.INTERVALS);
-  std::swap(LATITUDE_BANDS, o.LATITUDE_BANDS);
-  std::swap(TIME_SERIES, o.TIME_SERIES);
   std::swap(HISTOGRAMS, o.HISTOGRAMS);
-  std::swap(HEATMAP, o.HEATMAP);
   std::swap(CONTRIBUTIONS, o.CONTRIBUTIONS);
   std::swap(GEOMETRY, o.GEOMETRY);
+  std::swap(RASTER_PRODUCTS, o.RASTER_PRODUCTS);
   std::swap(MESSAGE, o.MESSAGE);
+  std::swap(AGGREGATE_STATISTICS, o.AGGREGATE_STATISTICS);
   return *this;
 }
 
@@ -5924,15 +6169,12 @@ inline void SCVResult::UnPackTo(SCVResultT *_o, const ::flatbuffers::resolver_fu
   { auto _e = TARGET_BODY(); if (_e) { if(_o->TARGET_BODY) { _e->UnPackTo(_o->TARGET_BODY.get(), _resolver); } else { _o->TARGET_BODY = std::unique_ptr<SCVEllipsoidT>(_e->UnPack(_resolver)); } } else if (_o->TARGET_BODY) { _o->TARGET_BODY.reset(); } }
   { auto _e = TOTAL_SENSORS(); _o->TOTAL_SENSORS = _e; }
   { auto _e = TOTAL_WINDOWS(); _o->TOTAL_WINDOWS = _e; }
-  { auto _e = CELL_STATS(); if (_e) { _o->CELL_STATS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->CELL_STATS[_i]) { _e->Get(_i)->UnPackTo(_o->CELL_STATS[_i].get(), _resolver); } else { _o->CELL_STATS[_i] = std::unique_ptr<SCVCellStatT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->CELL_STATS.resize(0); } }
-  { auto _e = INTERVALS(); if (_e) { _o->INTERVALS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->INTERVALS[_i]) { _e->Get(_i)->UnPackTo(_o->INTERVALS[_i].get(), _resolver); } else { _o->INTERVALS[_i] = std::unique_ptr<SCVIntervalT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->INTERVALS.resize(0); } }
-  { auto _e = LATITUDE_BANDS(); if (_e) { _o->LATITUDE_BANDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->LATITUDE_BANDS[_i]) { _e->Get(_i)->UnPackTo(_o->LATITUDE_BANDS[_i].get(), _resolver); } else { _o->LATITUDE_BANDS[_i] = std::unique_ptr<SCVLatitudeBandStatT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->LATITUDE_BANDS.resize(0); } }
-  { auto _e = TIME_SERIES(); if (_e) { _o->TIME_SERIES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->TIME_SERIES[_i]) { _e->Get(_i)->UnPackTo(_o->TIME_SERIES[_i].get(), _resolver); } else { _o->TIME_SERIES[_i] = std::unique_ptr<SCVTimeSeriesPointT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->TIME_SERIES.resize(0); } }
   { auto _e = HISTOGRAMS(); if (_e) { _o->HISTOGRAMS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->HISTOGRAMS[_i]) { _e->Get(_i)->UnPackTo(_o->HISTOGRAMS[_i].get(), _resolver); } else { _o->HISTOGRAMS[_i] = std::unique_ptr<SCVHistogramBinT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->HISTOGRAMS.resize(0); } }
-  { auto _e = HEATMAP(); if (_e) { _o->HEATMAP.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->HEATMAP[_i]) { _e->Get(_i)->UnPackTo(_o->HEATMAP[_i].get(), _resolver); } else { _o->HEATMAP[_i] = std::unique_ptr<SCVHeatmapCellT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->HEATMAP.resize(0); } }
   { auto _e = CONTRIBUTIONS(); if (_e) { _o->CONTRIBUTIONS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->CONTRIBUTIONS[_i]) { _e->Get(_i)->UnPackTo(_o->CONTRIBUTIONS[_i].get(), _resolver); } else { _o->CONTRIBUTIONS[_i] = std::unique_ptr<SCVSensorContributionT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->CONTRIBUTIONS.resize(0); } }
   { auto _e = GEOMETRY(); if (_e) { if(_o->GEOMETRY) { _e->UnPackTo(_o->GEOMETRY.get(), _resolver); } else { _o->GEOMETRY = std::unique_ptr<SCVPackedGeometryChunkT>(_e->UnPack(_resolver)); } } else if (_o->GEOMETRY) { _o->GEOMETRY.reset(); } }
+  { auto _e = RASTER_PRODUCTS(); if (_e) { if(_o->RASTER_PRODUCTS) { _e->UnPackTo(_o->RASTER_PRODUCTS.get(), _resolver); } else { _o->RASTER_PRODUCTS = std::unique_ptr<SCVPackedRasterProductsT>(_e->UnPack(_resolver)); } } else if (_o->RASTER_PRODUCTS) { _o->RASTER_PRODUCTS.reset(); } }
   { auto _e = MESSAGE(); if (_e) _o->MESSAGE = _e->str(); }
+  { auto _e = AGGREGATE_STATISTICS(); if (_e) { if(_o->AGGREGATE_STATISTICS) { _e->UnPackTo(_o->AGGREGATE_STATISTICS.get(), _resolver); } else { _o->AGGREGATE_STATISTICS = std::unique_ptr<SCVAggregateStatisticsT>(_e->UnPack(_resolver)); } } else if (_o->AGGREGATE_STATISTICS) { _o->AGGREGATE_STATISTICS.reset(); } }
 }
 
 inline ::flatbuffers::Offset<SCVResult> CreateSCVResult(::flatbuffers::FlatBufferBuilder &_fbb, const SCVResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -5950,15 +6192,12 @@ inline ::flatbuffers::Offset<SCVResult> SCVResult::Pack(::flatbuffers::FlatBuffe
   auto _TARGET_BODY = _o->TARGET_BODY ? CreateSCVEllipsoid(_fbb, _o->TARGET_BODY.get(), _rehasher) : 0;
   auto _TOTAL_SENSORS = _o->TOTAL_SENSORS;
   auto _TOTAL_WINDOWS = _o->TOTAL_WINDOWS;
-  auto _CELL_STATS = _o->CELL_STATS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVCellStat>> (_o->CELL_STATS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVCellStat(*__va->__fbb, __va->__o->CELL_STATS[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _INTERVALS = _o->INTERVALS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVInterval>> (_o->INTERVALS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVInterval(*__va->__fbb, __va->__o->INTERVALS[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _LATITUDE_BANDS = _o->LATITUDE_BANDS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVLatitudeBandStat>> (_o->LATITUDE_BANDS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVLatitudeBandStat(*__va->__fbb, __va->__o->LATITUDE_BANDS[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _TIME_SERIES = _o->TIME_SERIES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVTimeSeriesPoint>> (_o->TIME_SERIES.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVTimeSeriesPoint(*__va->__fbb, __va->__o->TIME_SERIES[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _HISTOGRAMS = _o->HISTOGRAMS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVHistogramBin>> (_o->HISTOGRAMS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVHistogramBin(*__va->__fbb, __va->__o->HISTOGRAMS[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _HEATMAP = _o->HEATMAP.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVHeatmapCell>> (_o->HEATMAP.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVHeatmapCell(*__va->__fbb, __va->__o->HEATMAP[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _CONTRIBUTIONS = _o->CONTRIBUTIONS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVSensorContribution>> (_o->CONTRIBUTIONS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVSensorContribution(*__va->__fbb, __va->__o->CONTRIBUTIONS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _GEOMETRY = _o->GEOMETRY ? CreateSCVPackedGeometryChunk(_fbb, _o->GEOMETRY.get(), _rehasher) : 0;
+  auto _RASTER_PRODUCTS = _o->RASTER_PRODUCTS ? CreateSCVPackedRasterProducts(_fbb, _o->RASTER_PRODUCTS.get(), _rehasher) : 0;
   auto _MESSAGE = _o->MESSAGE.empty() ? 0 : _fbb.CreateString(_o->MESSAGE);
+  auto _AGGREGATE_STATISTICS = _o->AGGREGATE_STATISTICS ? CreateSCVAggregateStatistics(_fbb, _o->AGGREGATE_STATISTICS.get(), _rehasher) : 0;
   return CreateSCVResult(
       _fbb,
       _JOB_ID,
@@ -5968,15 +6207,12 @@ inline ::flatbuffers::Offset<SCVResult> SCVResult::Pack(::flatbuffers::FlatBuffe
       _TARGET_BODY,
       _TOTAL_SENSORS,
       _TOTAL_WINDOWS,
-      _CELL_STATS,
-      _INTERVALS,
-      _LATITUDE_BANDS,
-      _TIME_SERIES,
       _HISTOGRAMS,
-      _HEATMAP,
       _CONTRIBUTIONS,
       _GEOMETRY,
-      _MESSAGE);
+      _RASTER_PRODUCTS,
+      _MESSAGE,
+      _AGGREGATE_STATISTICS);
 }
 
 inline SCVT::SCVT(const SCVT &o)
@@ -5985,7 +6221,8 @@ inline SCVT::SCVT(const SCVT &o)
         PROGRESS((o.PROGRESS) ? new SCVProgressT(*o.PROGRESS) : nullptr),
         CANCEL((o.CANCEL) ? new SCVCancelT(*o.CANCEL) : nullptr),
         RESULT((o.RESULT) ? new SCVResultT(*o.RESULT) : nullptr),
-        GEOMETRY((o.GEOMETRY) ? new SCVPackedGeometryChunkT(*o.GEOMETRY) : nullptr) {
+        GEOMETRY((o.GEOMETRY) ? new SCVPackedGeometryChunkT(*o.GEOMETRY) : nullptr),
+        RASTER_PRODUCTS((o.RASTER_PRODUCTS) ? new SCVPackedRasterProductsT(*o.RASTER_PRODUCTS) : nullptr) {
 }
 
 inline SCVT &SCVT::operator=(SCVT o) FLATBUFFERS_NOEXCEPT {
@@ -5995,6 +6232,7 @@ inline SCVT &SCVT::operator=(SCVT o) FLATBUFFERS_NOEXCEPT {
   std::swap(CANCEL, o.CANCEL);
   std::swap(RESULT, o.RESULT);
   std::swap(GEOMETRY, o.GEOMETRY);
+  std::swap(RASTER_PRODUCTS, o.RASTER_PRODUCTS);
   return *this;
 }
 
@@ -6013,6 +6251,7 @@ inline void SCV::UnPackTo(SCVT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = CANCEL(); if (_e) { if(_o->CANCEL) { _e->UnPackTo(_o->CANCEL.get(), _resolver); } else { _o->CANCEL = std::unique_ptr<SCVCancelT>(_e->UnPack(_resolver)); } } else if (_o->CANCEL) { _o->CANCEL.reset(); } }
   { auto _e = RESULT(); if (_e) { if(_o->RESULT) { _e->UnPackTo(_o->RESULT.get(), _resolver); } else { _o->RESULT = std::unique_ptr<SCVResultT>(_e->UnPack(_resolver)); } } else if (_o->RESULT) { _o->RESULT.reset(); } }
   { auto _e = GEOMETRY(); if (_e) { if(_o->GEOMETRY) { _e->UnPackTo(_o->GEOMETRY.get(), _resolver); } else { _o->GEOMETRY = std::unique_ptr<SCVPackedGeometryChunkT>(_e->UnPack(_resolver)); } } else if (_o->GEOMETRY) { _o->GEOMETRY.reset(); } }
+  { auto _e = RASTER_PRODUCTS(); if (_e) { if(_o->RASTER_PRODUCTS) { _e->UnPackTo(_o->RASTER_PRODUCTS.get(), _resolver); } else { _o->RASTER_PRODUCTS = std::unique_ptr<SCVPackedRasterProductsT>(_e->UnPack(_resolver)); } } else if (_o->RASTER_PRODUCTS) { _o->RASTER_PRODUCTS.reset(); } }
 }
 
 inline ::flatbuffers::Offset<SCV> CreateSCV(::flatbuffers::FlatBufferBuilder &_fbb, const SCVT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6029,6 +6268,7 @@ inline ::flatbuffers::Offset<SCV> SCV::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _CANCEL = _o->CANCEL ? CreateSCVCancel(_fbb, _o->CANCEL.get(), _rehasher) : 0;
   auto _RESULT = _o->RESULT ? CreateSCVResult(_fbb, _o->RESULT.get(), _rehasher) : 0;
   auto _GEOMETRY = _o->GEOMETRY ? CreateSCVPackedGeometryChunk(_fbb, _o->GEOMETRY.get(), _rehasher) : 0;
+  auto _RASTER_PRODUCTS = _o->RASTER_PRODUCTS ? CreateSCVPackedRasterProducts(_fbb, _o->RASTER_PRODUCTS.get(), _rehasher) : 0;
   return CreateSCV(
       _fbb,
       _ENVELOPE_KIND,
@@ -6036,7 +6276,8 @@ inline ::flatbuffers::Offset<SCV> SCV::Pack(::flatbuffers::FlatBufferBuilder &_f
       _PROGRESS,
       _CANCEL,
       _RESULT,
-      _GEOMETRY);
+      _GEOMETRY,
+      _RASTER_PRODUCTS);
 }
 
 inline const SCV *GetSCV(const void *buf) {

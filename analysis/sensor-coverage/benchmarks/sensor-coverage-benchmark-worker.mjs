@@ -9,13 +9,24 @@ import {
 } from "./sensor-coverage-benchmark.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const SHARED_MEMORY_INITIAL_BYTES = 64 * 1024 * 1024;
+const SHARED_MEMORY_MAXIMUM_BYTES = 2 * 1024 * 1024 * 1024;
+
+function browserDirectHarnessOptions() {
+  return {
+    surface: "direct",
+    sharedMemory: true,
+    initialMemoryBytes: SHARED_MEMORY_INITIAL_BYTES,
+    maximumMemoryBytes: SHARED_MEMORY_MAXIMUM_BYTES,
+  };
+}
 
 async function runWorkerTasks() {
   const { runtimeKind, requestEntry, tasks } = workerData;
   const harness = await createStandaloneHarness(
     runtimeKind,
     WASM_PATH,
-    runtimeKind === "browser" ? { surface: "direct" } : {},
+    runtimeKind === "browser" ? browserDirectHarnessOptions() : {},
   );
   try {
     const results = [];
@@ -25,7 +36,7 @@ async function runWorkerTasks() {
         scenario: requestEntry.scenario,
         grid: requestEntry.grid,
         mode: requestEntry.mode,
-        requestFormat: requestEntry.requestFormat ?? "json",
+        requestFormat: requestEntry.requestFormat ?? "scv",
         startSeconds: task.window.startSeconds,
         stopSeconds: task.window.stopSeconds,
       });

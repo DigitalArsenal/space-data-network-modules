@@ -3,7 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DEFAULT_SDK_ROOT="$(cd "$ROOT_DIR/.." && pwd)/space-data-module-sdk"
-SDK_ROOT="${SPACE_DATA_MODULE_SDK_ROOT:-$DEFAULT_SDK_ROOT}"
+if [ -n "${SPACE_DATA_MODULE_SDK_ROOT:-}" ]; then
+    SDK_ROOT_CANDIDATES=("$SPACE_DATA_MODULE_SDK_ROOT")
+else
+    SDK_ROOT_CANDIDATES=(
+        "$DEFAULT_SDK_ROOT"
+        "$ROOT_DIR/../../ancillary-packages/space-data-module-sdk"
+    )
+fi
 # Paths are family-prefixed to match the submodule's subfolder layout.
 PACKAGES=(
     propagator/atmosphere
@@ -16,6 +23,8 @@ PACKAGES=(
     analysis/launch-ascent
     analysis/maneuver
     analysis/od
+    analysis/sensor-model
+    analysis/sensor-coverage
     basilisk/runtime
 )
 
@@ -23,12 +32,20 @@ if [ "$#" -gt 0 ]; then
     PACKAGES=("$@")
 fi
 
-if [ ! -f "$SDK_ROOT/package.json" ]; then
+SDK_ROOT=""
+for candidate in "${SDK_ROOT_CANDIDATES[@]}"; do
+    if [ -f "$candidate/package.json" ]; then
+        SDK_ROOT="$(cd "$candidate" && pwd)"
+        break
+    fi
+done
+
+if [ -z "$SDK_ROOT" ]; then
     echo "SPACE_DATA_MODULE_SDK_ROOT must point to a space-data-module-sdk checkout." >&2
-    echo "Resolved SDK root: $SDK_ROOT" >&2
+    echo "Checked SDK roots:" >&2
+    printf '  %s\n' "${SDK_ROOT_CANDIDATES[@]}" >&2
     exit 1
 fi
-SDK_ROOT="$(cd "$SDK_ROOT" && pwd)"
 
 if ! command -v wasmedge >/dev/null 2>&1; then
     echo "Install the wasmedge CLI before running SDK compatibility tests." >&2

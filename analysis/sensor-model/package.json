@@ -1,12 +1,11 @@
 {
-  "name": "space-data-network-plugin-sensor-coverage",
+  "name": "space-data-network-plugin-sensor-model",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node ../../scripts/build-sdk-compiled-module.mjs",
-    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/benchmark_harness.test.mjs",
-    "benchmark:coverage": "node benchmarks/sensor-coverage-benchmark.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "sdnModuleCompile": {

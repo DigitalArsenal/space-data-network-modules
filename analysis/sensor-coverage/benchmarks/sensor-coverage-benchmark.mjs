@@ -6,11 +6,23 @@ import { Worker } from "node:worker_threads";
 
 import {
   createStandaloneHarness,
-  invokeJsonRequest,
+  invokeBinaryRequest,
 } from "../../../tests/lib/isomorphicHarness.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const WORKER_PATH = new URL("./sensor-coverage-benchmark-worker.mjs", import.meta.url);
+const SHARED_MEMORY_INITIAL_BYTES = 64 * 1024 * 1024;
+const SHARED_MEMORY_MAXIMUM_BYTES = 2 * 1024 * 1024 * 1024;
+
+function browserDirectHarnessOptions() {
+  return {
+    surface: "direct",
+    sharedMemory: true,
+    allowRawInvoke: false,
+    initialMemoryBytes: SHARED_MEMORY_INITIAL_BYTES,
+    maximumMemoryBytes: SHARED_MEMORY_MAXIMUM_BYTES,
+  };
+}
 
 function resolveStandardsRoot() {
   const candidates = [
@@ -35,6 +47,7 @@ const {
   SCVCoverageGridT,
   SCVCoverageRequestT,
   SCVEllipsoidT,
+  SCVSensorShapeContractT,
   SCVSensorT,
   SCVStateSampleT,
   SCVTimeGridT,
@@ -46,18 +59,18 @@ const {
   scvEnvelopeKind,
   scvGeometryDomain,
   scvMetricSeriesKind,
+  scvRasterProductKind,
+  scvSensorAxisConvention,
+  scvSensorRangeBoundaryKind,
   scvSensorShapeKind,
 } = await import(pathToFileURL(`${STANDARDS_ROOT}/lib/js/SCV/main.js`).href);
 
-export const JSON_COVERAGE_REQUEST_TYPE = Object.freeze({
-  schemaName: "SensorCoverageCompatibilityJson",
-  fileIdentifier: "JSON",
-  rootTypeName: "SensorCoverageCompatibilityRequest",
-});
 export const SCV_COVERAGE_REQUEST_TYPE = Object.freeze({
   schemaName: "SCV/main.fbs",
   fileIdentifier: "$SCV",
   rootTypeName: "SCV",
+  wireFormat: "flatbuffer",
+  requiredAlignment: 8,
 });
 
 export const BENCHMARK_THRESHOLDS = Object.freeze({
@@ -145,7 +158,7 @@ const BENCHMARK_MODES = Object.freeze([
   "visual-preview",
   "full-day-backfill",
 ]);
-const REQUEST_FORMATS = Object.freeze(["json", "scv"]);
+const REQUEST_FORMATS = Object.freeze(["scv"]);
 
 const MIN_BACKFILL_WORKER_COUNT = 1;
 const MAX_BACKFILL_WORKER_COUNT = 8;
@@ -245,7 +258,7 @@ export function createBenchmarkReportSkeleton({
   gridNames = ["coarse"],
   repeatCount = 1,
   mode = "priority-fom",
-  requestFormat = "json",
+  requestFormat = "scv",
   windowStartSeconds = 0,
   windowSeconds = null,
   backfillWorkerCount = null,
@@ -342,12 +355,30 @@ function createSensorTrack(scenario, sensorIndex, startSeconds, stopSeconds) {
   states.push(createState(scenario, sensorIndex, stopSeconds));
   return {
     sensorId: sensorIndex,
-    type: "conic",
-    outerHalfAngleRad: scenario.halfAngleRad,
-    radiusMeters: scenario.radiusMeters,
-    angularSamples: scenario.angularSamples,
     states,
   };
+}
+
+function createBenchmarkShapeContract(scenario) {
+  const halfAngleDeg = scenario.halfAngleRad * (180 / Math.PI);
+  return new SCVSensorShapeContractT(
+    scvSensorShapeKind.CONIC,
+    scvSensorAxisConvention.LOCAL_X_RIGHT_Y_UP_Z_BORESIGHT,
+    scvSensorRangeBoundaryKind.RADIAL_SPHERICAL,
+    halfAngleDeg,
+    0,
+    0,
+    360,
+    0,
+    0,
+    0,
+    0,
+    scenario.angularSamples,
+    0,
+    scenario.radiusMeters,
+    [],
+    scvCoordinateFrame.UNKNOWN,
+  );
 }
 
 export function createCoverageBenchmarkRequest({
@@ -387,7 +418,7 @@ export function createCoverageBenchmarkRequest({
       stopSeconds,
     },
     figureOfMerit: visualOnly ? "none" : "percent_coverage",
-    outputMode: visualOnly ? "swath_only" : "analytics_only",
+    outputMode: visualOnly ? "swath_preview" : "metric_products",
   };
 }
 
@@ -401,24 +432,18 @@ export function createScvCoverageBenchmarkPayload({
   const visualOnly = mode === "visual-preview";
   const sensors = [];
   const stateSamples = [];
-  const halfAngleDeg = scenario.halfAngleRad * (180 / Math.PI);
   for (let sensorIndex = 0; sensorIndex < scenario.satelliteCount; sensorIndex += 1) {
     sensors.push(
       new SCVSensorT(
         sensorIndex,
         `benchmark-sensor-${sensorIndex}`,
         `Benchmark sensor ${sensorIndex}`,
-        scvSensorShapeKind.CONIC,
         scvCoordinateFrame.BODY_FIXED,
         null,
         null,
         null,
         null,
-        halfAngleDeg,
-        0,
-        0,
-        0,
-        scenario.radiusMeters,
+        createBenchmarkShapeContract(scenario),
       ),
     );
     const track = createSensorTrack(
@@ -555,22 +580,30 @@ export function outputSummaryForResult(result) {
   };
 }
 
-export function outputSummaryForScvResult(result) {
-  let accessedCells = 0;
-  for (let index = 0; index < result.cellStatsLength(); index += 1) {
-    const cell = result.CELL_STATS(index);
-    if (cell?.COVERAGE_FRACTION() > 0) {
-      accessedCells += 1;
+function scvResultHasRasterBand(result, productKind) {
+  const rasterProducts = result.RASTER_PRODUCTS();
+  if (!rasterProducts) {
+    return false;
+  }
+  for (let index = 0; index < rasterProducts.bandsLength(); index += 1) {
+    if (rasterProducts.BANDS(index)?.PRODUCT_KIND() === productKind) {
+      return true;
     }
   }
+  return false;
+}
+
+export function outputSummaryForScvResult(result) {
+  const statistics = result.AGGREGATE_STATISTICS();
   const geometry = result.GEOMETRY();
+  const hasPercentCoverage =
+    scvResultHasRasterBand(result, scvRasterProductKind.PERCENT_COVERAGE);
   return {
-    activeSensorCount: result.TOTAL_SENSORS(),
+    activeSensorCount: statistics?.ACTIVE_SENSOR_COUNT() ?? result.TOTAL_SENSORS(),
     swathCount: geometry?.segmentsLength?.() ?? 0,
-    accessedCells,
-    coverageIntervalCount: result.intervalsLength(),
-    figureOfMeritType:
-      result.cellStatsLength() > 0 ? "percent_coverage" : "none",
+    accessedCells: statistics?.ACCESSED_CELLS() ?? null,
+    coverageIntervalCount: statistics?.TOTAL_INTERVAL_COUNT() ?? 0,
+    figureOfMeritType: hasPercentCoverage ? "percent_coverage" : "none",
   };
 }
 
@@ -603,28 +636,12 @@ export async function invokeCoverageBenchmarkRequest(
     scenario,
     grid,
     mode = "priority-fom",
-    requestFormat = "json",
+    requestFormat = "scv",
     startSeconds = 0,
     stopSeconds = scenario.priorityWindowSeconds,
   },
 ) {
   const effectiveMode = mode === "full-day-backfill" ? "priority-fom" : mode;
-  if (requestFormat === "json") {
-    const request = createCoverageBenchmarkRequest({
-      scenario,
-      grid,
-      mode: effectiveMode,
-      startSeconds,
-      stopSeconds,
-    });
-    const result = await invokeJsonRequest(harness, request, {
-      methodId: "compute_sensor_coverage",
-      inputPortId: "coverage",
-      outputPortId: "coverage",
-      inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
-    });
-    return outputSummaryForResult(result);
-  }
   if (requestFormat === "scv") {
     const payload = createScvCoverageBenchmarkPayload({
       scenario,
@@ -633,15 +650,11 @@ export async function invokeCoverageBenchmarkRequest(
       startSeconds,
       stopSeconds,
     });
-    const response = await harness.invoke({
+    const response = await invokeBinaryRequest(harness, payload, {
       methodId: "compute_sensor_coverage",
-      inputs: [
-        {
-          portId: "coverage",
-          typeRef: SCV_COVERAGE_REQUEST_TYPE,
-          payload,
-        },
-      ],
+      inputPortId: "coverage",
+      inputTypeRef: SCV_COVERAGE_REQUEST_TYPE,
+      alignment: 8,
     });
     const result = findScvResultEnvelope(response).RESULT();
     if (!result) {
@@ -680,7 +693,7 @@ export async function runRequestBenchmark(
         const before = performance.now();
         let outputSummary;
         if (invoke) {
-          const request = createCoverageBenchmarkRequest({
+          const payload = createScvCoverageBenchmarkPayload({
             scenario: requestEntry.scenario,
             grid: requestEntry.grid,
             mode:
@@ -690,11 +703,15 @@ export async function runRequestBenchmark(
             startSeconds: window.startSeconds,
             stopSeconds: window.stopSeconds,
           });
-          const result = await invoke(harness, request, {
+          const result = await invoke(harness, {
             methodId: "compute_sensor_coverage",
-            inputPortId: "coverage",
-            outputPortId: "coverage",
-            inputTypeRef: JSON_COVERAGE_REQUEST_TYPE,
+            inputs: [
+              {
+                portId: "coverage",
+                typeRef: SCV_COVERAGE_REQUEST_TYPE,
+                payload,
+              },
+            ],
           });
           outputSummary = outputSummaryForResult(result);
         } else {
@@ -702,7 +719,7 @@ export async function runRequestBenchmark(
             scenario: requestEntry.scenario,
             grid: requestEntry.grid,
             mode: requestEntry.mode,
-            requestFormat: requestEntry.requestFormat ?? "json",
+            requestFormat: requestEntry.requestFormat ?? "scv",
             startSeconds: window.startSeconds,
             stopSeconds: window.stopSeconds,
           });
@@ -720,7 +737,7 @@ export async function runRequestBenchmark(
     gridName: requestEntry.grid.name,
     gridCellCount: requestEntry.grid.cellCount,
     mode: requestEntry.mode,
-    requestFormat: requestEntry.requestFormat ?? "json",
+    requestFormat: requestEntry.requestFormat ?? "scv",
     repeatCount: requestEntry.repeatCount,
     windowCount: windows.length,
     parallelWorkerCount: activeHarnesses.length,
@@ -816,7 +833,7 @@ export async function runRequestBenchmarkInWorkerThreads(
     gridName: requestEntry.grid.name,
     gridCellCount: requestEntry.grid.cellCount,
     mode: requestEntry.mode,
-    requestFormat: requestEntry.requestFormat ?? "json",
+    requestFormat: requestEntry.requestFormat ?? "scv",
     repeatCount: requestEntry.repeatCount,
     windowCount: windows.length,
     parallelWorkerCount: taskGroups.length,
@@ -957,7 +974,7 @@ export async function runBenchmark(options = {}) {
         await createStandaloneHarness(
           report.runtimeKind,
           WASM_PATH,
-          report.runtimeKind === "browser" ? { surface: "direct" } : {},
+          report.runtimeKind === "browser" ? browserDirectHarnessOptions() : {},
         ),
       );
     }
@@ -1020,7 +1037,7 @@ function parseCliArgs(argv) {
     gridNames: ["coarse"],
     repeatCount: 1,
     mode: "priority-fom",
-    requestFormat: "json",
+    requestFormat: "scv",
     dryRun: false,
     json: false,
     assertThresholds: false,

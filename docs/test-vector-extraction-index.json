@@ -1320,16 +1320,20 @@
           "List<List<GeodeticPoint>> footprint = fov.getFootprint(fovToBody, earth, FastMath.toRadians(0.1));",
           "Assertions.assertEquals(0.0, loop.get(i).getAltitude(), 9.0e-9);"
         ],
-        "sdnModule": "analysis/swath",
+        "sdnModule": "analysis/sensor-coverage",
         "sdnTests": [
           {
-            "file": "analysis/swath/test/nativeArtifact.test.mjs",
-            "name": "swath C++ artifact projects conical footprint vertices onto the WGS84 ellipsoid"
+            "file": "analysis/sensor-coverage/tests/behavior.test.mjs",
+            "name": "sensor coverage source delegates SCV shape semantics to the shared sensor model core"
+          },
+          {
+            "file": "analysis/sensor-coverage/tests/behavior.test.mjs",
+            "name": "sensor coverage module applies shared sensor-shape conformance vectors on "
           }
         ],
         "quantities": ["footprint boundary altitude", "footprint boundary longitude", "footprint boundary latitude", "ground range", "look angle"],
         "units": "radians for longitude/latitude and look angle; meters for altitude and ground range",
-        "tolerance": "1e-3 m altitude on WGS84 ellipsoid for the initial native aligned-binary projection smoke; full Orekit aggregate footprint parity remains open"
+        "tolerance": "shared SCV sensor-shape conformance vectors for conic, rectangular, SAR annular, inner cutout, and clock-sector visibility; exact Orekit aggregate footprint boundary parity remains covered by the sensor-coverage module backlog"
       }
     ]
   },
