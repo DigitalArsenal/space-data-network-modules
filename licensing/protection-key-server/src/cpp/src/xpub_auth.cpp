@@ -121,9 +121,9 @@ bool DeriveChildPub(const uint8_t parent_pub[kCompressedPubKeyBytes],
   return true;
 }
 
-bool XpubDerivesSigner(const std::string& xpub_base58,
-                       const std::vector<uint32_t>& path,
-                       const uint8_t signer_pub33[kCompressedPubKeyBytes]) {
+bool DeriveXpubChildPub(const std::string& xpub_base58,
+                        const std::vector<uint32_t>& path,
+                        uint8_t out_pub33[kCompressedPubKeyBytes]) {
   uint8_t pub[kCompressedPubKeyBytes];
   uint8_t cc[kChainCodeBytes];
   if (!ParseXpub(xpub_base58, pub, cc)) return false;
@@ -135,7 +135,68 @@ bool XpubDerivesSigner(const std::string& xpub_base58,
     std::memcpy(pub, npub, kCompressedPubKeyBytes);
     std::memcpy(cc, ncc, kChainCodeBytes);
   }
-  return std::memcmp(pub, signer_pub33, kCompressedPubKeyBytes) == 0;
+  std::memcpy(out_pub33, pub, kCompressedPubKeyBytes);
+  return true;
+}
+
+bool XpubDerivesSigner(const std::string& xpub_base58,
+                       const std::vector<uint32_t>& path,
+                       const uint8_t signer_pub33[kCompressedPubKeyBytes]) {
+  uint8_t derived[kCompressedPubKeyBytes];
+  if (!DeriveXpubChildPub(xpub_base58, path, derived)) return false;
+  return std::memcmp(derived, signer_pub33, kCompressedPubKeyBytes) == 0;
+}
+
+bool AuthorizeIdentityBlock(const uint8_t* block, std::size_t block_len,
+                            const uint8_t* bound_msg, std::size_t bound_len,
+                            const std::vector<std::string>& allowed_xpubs,
+                            std::string* out_xpub) {
+  std::size_t off = 0;
+  const auto avail = [&](std::size_t n) { return off + n <= block_len; };
+
+  if (!avail(2)) return false;
+  const uint16_t xpub_len = static_cast<uint16_t>((block[off] << 8) | block[off + 1]);
+  off += 2;
+  if (xpub_len == 0 || !avail(xpub_len)) return false;
+  const std::string xpub(reinterpret_cast<const char*>(block + off), xpub_len);
+  off += xpub_len;
+
+  if (!avail(1)) return false;
+  const uint8_t path_len = block[off++];
+  std::vector<uint32_t> path(path_len);
+  if (!avail(static_cast<std::size_t>(path_len) * 4)) return false;
+  for (uint8_t i = 0; i < path_len; ++i) {
+    path[i] = (static_cast<uint32_t>(block[off]) << 24) |
+              (static_cast<uint32_t>(block[off + 1]) << 16) |
+              (static_cast<uint32_t>(block[off + 2]) << 8) |
+              static_cast<uint32_t>(block[off + 3]);
+    off += 4;
+  }
+
+  if (!avail(1)) return false;
+  const uint8_t sig_len = block[off++];
+  if (sig_len == 0 || !avail(sig_len)) return false;
+  const uint8_t* sig = block + off;
+  off += sig_len;
+
+  // Reject trailing garbage (the block must be exactly consumed).
+  if (off != block_len) return false;
+
+  // Early allowlist check (cheap) before the EC work.
+  if (!allowed_xpubs.empty()) {
+    bool listed = false;
+    for (const std::string& a : allowed_xpubs) {
+      if (a == xpub) { listed = true; break; }
+    }
+    if (!listed) return false;
+  }
+
+  uint8_t derived[kCompressedPubKeyBytes];
+  if (!DeriveXpubChildPub(xpub, path, derived)) return false;
+  if (!VerifySecp256k1(derived, bound_msg, bound_len, sig, sig_len)) return false;
+
+  if (out_xpub != nullptr) *out_xpub = xpub;
+  return true;
 }
 
 bool VerifySecp256k1(const uint8_t pub33[kCompressedPubKeyBytes],

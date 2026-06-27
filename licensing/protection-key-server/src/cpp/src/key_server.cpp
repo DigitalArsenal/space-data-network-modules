@@ -64,6 +64,7 @@ enum ServerStatus : int32_t {
   kServerChallengeExpired = 12,
   kServerChallengeReplay = 13,
   kServerChallengeRateLimited = 14,
+  kServerUnauthorized = 15,
 };
 
 struct PendingChallenge {
@@ -80,6 +81,8 @@ int64_t g_expires_at_ms = 0;
 int64_t g_max_skew_ms = kDefaultMaxSkewMs;
 int64_t g_challenge_ttl_ms = kDefaultChallengeTtlMs;
 uint32_t g_active_key_version = 1;
+// Per-module xpub allowlist (PKI identity gate). Empty = no allowlist enforced.
+std::vector<std::string> g_allowed_xpubs;
 
 std::mutex g_challenge_mutex;
 std::unordered_map<std::string, PendingChallenge> g_pending_challenges;
@@ -664,6 +667,45 @@ void build_challenge_error_json(int32_t error, std::vector<uint8_t>* response_ou
   response_out->assign(json.begin(), json.end());
 }
 
+// Extract a JSON array of plain strings ("field":["a","b"]). xpubs are base58 with
+// no escape sequences, so this does not handle JSON string escapes.
+void extract_json_string_array_field(
+    std::string_view text,
+    std::string_view field,
+    std::vector<std::string>* out) {
+  out->clear();
+  std::string needle;
+  needle.reserve(field.size() + 2);
+  needle.push_back('"');
+  needle.append(field.data(), field.size());
+  needle.push_back('"');
+  const size_t key_pos = text.find(needle);
+  if (key_pos == std::string_view::npos) return;
+  size_t cursor = text.find('[', key_pos + needle.size());
+  if (cursor == std::string_view::npos) return;
+  ++cursor;
+  while (cursor < text.size()) {
+    cursor = skip_json_whitespace(text, cursor);
+    if (cursor >= text.size()) return;
+    const char ch = text[cursor];
+    if (ch == ']') return;
+    if (ch == ',') {
+      ++cursor;
+      continue;
+    }
+    if (ch != '"') return;
+    ++cursor;
+    const size_t start = cursor;
+    while (cursor < text.size() && text[cursor] != '"') ++cursor;
+    if (cursor >= text.size()) {
+      out->clear();
+      return;
+    }
+    out->emplace_back(text.substr(start, cursor - start));
+    ++cursor;
+  }
+}
+
 bool parse_runtime_config(
     std::string_view json,
     CryptoPP::SecByteBlock* private_key_out,
@@ -761,10 +803,15 @@ int32_t handle_key_packet(
   const uint16_t request_blob_len =
       read_u16_be(request_packet + 56 + kClientPublicKeyBytes + kSaltBytes);
   if (request_blob_len < kGcmIvBytes + kGcmTagBytes ||
-      request_packet_len != kRequestHeaderBytes + request_blob_len) {
+      request_packet_len < kRequestHeaderBytes + request_blob_len) {
     return kServerMalformed;
   }
   const uint8_t* request_blob = request_packet + kRequestHeaderBytes;
+  // Optional trailing PKI identity block (present iff the packet is longer than
+  // header + blob). Verified below only when the module declares an xpub allowlist.
+  const size_t identity_offset = kRequestHeaderBytes + request_blob_len;
+  const uint8_t* identity_block = request_packet + identity_offset;
+  const size_t identity_block_len = request_packet_len - identity_offset;
 
   const int32_t challenge_status = consume_challenge(
       request_packet + 8,
@@ -830,6 +877,27 @@ int32_t handle_key_packet(
     secure_zero(request_key, sizeof(request_key));
     secure_zero(request_plaintext.data(), request_plaintext.size());
     return kServerLicenseExpired;
+  }
+
+  // PKI identity gate (replaces web-origin/domain gating): when the module
+  // declares an xpub allowlist, the request MUST carry an identity block proving
+  // the requester controls a key derived from an allowed xpub. The signature is
+  // bound to challenge_id || client ECDH public key (replay + recipient binding).
+  if (!g_allowed_xpubs.empty()) {
+    uint8_t bound[kChallengeIdBytes + kClientPublicKeyBytes];
+    std::memcpy(bound, request_packet + 8, kChallengeIdBytes);
+    std::memcpy(bound + kChallengeIdBytes, client_public_key, kClientPublicKeyBytes);
+    std::string verified_xpub;
+    const bool authorized = protection_key_server::AuthorizeIdentityBlock(
+        identity_block, identity_block_len, bound, sizeof(bound),
+        g_allowed_xpubs, &verified_xpub);
+    secure_zero(bound, sizeof(bound));
+    if (!authorized) {
+      secure_zero(shared_secret.BytePtr(), shared_secret.size());
+      secure_zero(request_key, sizeof(request_key));
+      secure_zero(request_plaintext.data(), request_plaintext.size());
+      return kServerUnauthorized;
+    }
   }
 
   std::array<uint8_t, kResponsePlaintextBytes> response_plaintext{};
@@ -941,6 +1009,7 @@ int32_t key_server_configure_runtime(
   g_max_skew_ms = next_max_skew_ms;
   g_challenge_ttl_ms = next_challenge_ttl_ms;
   g_active_key_version = next_key_version;
+  extract_json_string_array_field(config_text, "allowedXpubs", &g_allowed_xpubs);
   g_initialized = true;
 
   const std::string json =
