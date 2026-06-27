@@ -1,5 +1,7 @@
 #include "key_server_api.h"
 
+#include "xpub_auth.h"
+
 #include "KeyBrokerRequest_generated.h"
 #include "KeyBrokerResponse_generated.h"
 #include "PublicKeyResponse_generated.h"
