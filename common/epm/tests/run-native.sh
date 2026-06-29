@@ -1,6 +1,6 @@
 #!/bin/bash
-# Build + run the EPM signing-content tests natively (reuses Crypto++ from the
-# protection-key-server native build for ed25519).
+# Build + run the EPM signing-content and verify tests natively (reuses Crypto++
+# from the protection-key-server native build for ed25519).
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")/.." && pwd)"    # common/epm
 COMMON="$(cd "$DIR/.." && pwd)"            # common
@@ -15,8 +15,12 @@ fi
 [ -e "$CPPBUILD/cryptopp" ] || ln -s cryptopp-src "$CPPBUILD/cryptopp"
 
 CXX="${CXX:-$(command -v clang++ 2>/dev/null || echo /opt/homebrew/opt/llvm/bin/clang++)}"
-"$CXX" -std=c++17 -O2 -I"$DIR" -I"$CPPBUILD" \
-  "$COMMON/jcs/jcs.cpp" "$DIR/epm_content.cpp" "$DIR/tests/epm_content_test.cpp" \
-  "$CRYPTOPP/libcryptopp.a" \
-  -o "$DIR/tests/epm_content_test"
-"$DIR/tests/epm_content_test"
+SRC=("$COMMON/jcs/jcs.cpp" "$DIR/epm_content.cpp" "$DIR/epm_verify.cpp")
+
+for test in epm_content_test epm_verify_test; do
+  "$CXX" -std=c++17 -O2 -I"$DIR" -I"$CPPBUILD" \
+    "${SRC[@]}" "$DIR/tests/${test}.cpp" "$CRYPTOPP/libcryptopp.a" \
+    -o "$DIR/tests/${test}"
+  "$DIR/tests/${test}"
+  rm -f "$DIR/tests/${test}"
+done
