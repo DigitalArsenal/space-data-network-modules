@@ -15,6 +15,8 @@
 #include "PublicKeyResponse_generated.h"
 #include "REC_generated.h"
 
+#include "epm_authorize.h"  // shared isomorphic EPM verify + xpub gate (common/epm)
+
 #include <flatbuffers/encryption.h>
 #include <flatbuffers/flatbuffers.h>
 
@@ -964,6 +966,27 @@ bool ed25519_verify_detached(
     return false;
   }
   return sdm_hostcall::find_json_bool(response.meta, "result", valid_out);
+}
+
+// Module-delivery xpub gate: verify a re-sent $EPM (shared isomorphic common code)
+// and decide membership against the per-module allowlist. The ed25519 verify is the
+// module's host call, so the same gate logic runs in the browser and on wasmedge.
+// Wired into the grant flow once the message carries the EPM (LCH.REQUESTER_EPM)
+// and the per-module allowlist arrives (PLG.ALLOWED_XPUBS).
+[[maybe_unused]] sdn::epm::AuthorizeResult authorize_requester_epm(
+    const uint8_t* epm_bytes,
+    size_t epm_len,
+    const uint8_t* proven_signing_pubkey,
+    const std::vector<std::string>& allowed_xpubs,
+    int64_t now_unix,
+    int64_t max_age_seconds) {
+  const sdn::epm::Ed25519Verify verify =
+      [](const uint8_t* m, size_t ml, const uint8_t* s, size_t sl, const uint8_t* p) -> bool {
+        bool valid = false;
+        return ed25519_verify_detached(m, ml, p, 32, s, sl, &valid) && valid;
+      };
+  return sdn::epm::AuthorizeModuleRequest(
+      epm_bytes, epm_len, proven_signing_pubkey, allowed_xpubs, now_unix, max_age_seconds, verify);
 }
 
 std::vector<uint8_t> build_lch_bytes(
