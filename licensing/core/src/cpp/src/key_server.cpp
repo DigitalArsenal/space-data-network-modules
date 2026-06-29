@@ -49,6 +49,8 @@ namespace {
 
 constexpr uint8_t kProtocolVersion = 3;
 constexpr size_t kChallengeIdBytes = 16;
+// Max age (seconds) of a re-sent EPM's SIGNATURE_TIMESTAMP accepted at grant time.
+constexpr int64_t kEpmMaxAgeSeconds = 300;
 constexpr size_t kChallengeTokenRawBytes = 32;
 constexpr size_t kChallengeTokenHexBytes = kChallengeTokenRawBytes * 2;
 constexpr size_t kProofBytes = 32;
@@ -85,6 +87,7 @@ enum ServerStatus : int32_t {
   kServerChallengeExpired = 12,
   kServerChallengeReplay = 13,
   kServerChallengeRateLimited = 14,
+  kServerUnauthorized = 15,
 };
 
 struct PendingChallenge {
@@ -118,6 +121,7 @@ struct PendingGrantMessage {
   std::array<uint8_t, 32> challenge_nonce{};
   uint64_t expires_at_ms = 0;
   std::vector<uint8_t> challenge_bytes{};
+  std::vector<uint8_t> requester_epm{};  // re-sent $EPM; xpub binding verified at proof time
 };
 
 bool g_initialized = false;
@@ -2332,15 +2336,18 @@ int32_t key_server_handle_message(
       return 0;
     }
 
-    bool domain_allowed =
-        publication.descriptor.ALLOWED_DOMAINS.empty();
-    for (const auto& allowed_domain : publication.descriptor.ALLOWED_DOMAINS) {
-      if (allowed_domain == requested_domain) {
-        domain_allowed = true;
+    // PKI xpub allowlist (replaces ALLOWED_DOMAINS): early membership filter on the
+    // claimed xpub. The cryptographic binding of that xpub to the requester's proven
+    // ed25519 signing key (via the re-sent EPM) is verified at proof time below.
+    bool xpub_allowed =
+        publication.descriptor.ALLOWED_XPUBS.empty();
+    for (const auto& allowed_xpub : publication.descriptor.ALLOWED_XPUBS) {
+      if (allowed_xpub == requester_xpub) {
+        xpub_allowed = true;
         break;
       }
     }
-    if (!domain_allowed) {
+    if (!xpub_allowed) {
       secure_zero_publication(&publication);
       response_out = build_lch_bytes(
           licensingChallengeMessageType::Error,
@@ -2361,8 +2368,8 @@ int32_t key_server_handle_message(
           0,
           0,
           g_provider_peer_id,
-          "domain_not_allowed",
-          "requester domain is not allowed for this module");
+          "xpub_not_allowed",
+          "requester xpub is not allowed for this module");
       return 0;
     }
     if (publication.descriptor.MAX_GRANT_TIMEOUT_MS != 0 &&
@@ -2460,6 +2467,9 @@ int32_t key_server_handle_message(
     pending.requested_timeout_ms = requested_timeout_ms;
     pending.requested_at_ms = requested_at_ms;
     pending.provider_peer_id = g_provider_peer_id;
+    if (const auto* epm = challenge_request->REQUESTER_EPM()) {
+      pending.requester_epm.assign(epm->Data(), epm->Data() + epm->size());
+    }
     std::memcpy(
         pending.requester_signing_pubkey.data(),
         challenge_request->REQUESTER_SIGNING_PUBKEY()->Data(),
@@ -2553,6 +2563,23 @@ int32_t key_server_handle_message(
   ModulePublication publication{};
   if (!load_publication(pending.publication_key, &publication)) {
     return kServerVersionNotFound;
+  }
+
+  // Authoritative PKI gate: when the module declares an xpub allowlist, the re-sent
+  // EPM must verify and bind the now-proven ed25519 signing key to the requester's
+  // xpub (cross-curve attestation), and that xpub must equal the allowlisted one.
+  if (!publication.descriptor.ALLOWED_XPUBS.empty()) {
+    const sdn::epm::AuthorizeResult gate = authorize_requester_epm(
+        pending.requester_epm.data(),
+        pending.requester_epm.size(),
+        pending.requester_signing_pubkey.data(),
+        publication.descriptor.ALLOWED_XPUBS,
+        now_ms() / 1000,
+        kEpmMaxAgeSeconds);
+    if (!gate.ok || gate.xpub != pending.requester_xpub) {
+      secure_zero_publication(&publication);
+      return kServerUnauthorized;
+    }
   }
 
   WrappedGrantPayload wrapped{};

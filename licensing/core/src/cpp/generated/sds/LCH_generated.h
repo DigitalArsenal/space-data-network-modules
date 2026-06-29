@@ -101,6 +101,7 @@ struct LCHT : public ::flatbuffers::NativeTable {
   std::string PROVIDER_PEER_ID{};
   std::string ERROR_CODE{};
   std::string ERROR_MESSAGE{};
+  std::vector<uint8_t> REQUESTER_EPM{};
 };
 
 /// Licensing challenge message
@@ -125,7 +126,8 @@ struct LCH FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_EXPIRES_AT = 30,
     VT_PROVIDER_PEER_ID = 32,
     VT_ERROR_CODE = 34,
-    VT_ERROR_MESSAGE = 36
+    VT_ERROR_MESSAGE = 36,
+    VT_REQUESTER_EPM = 38
   };
   /// Message type
   licensingChallengeMessageType MESSAGE_TYPE() const {
@@ -195,6 +197,12 @@ struct LCH FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *ERROR_MESSAGE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ERROR_MESSAGE);
   }
+  /// Requester's full $EPM (Entity Profile) FlatBuffer, re-sent per grant for
+  /// freshness. Verified in-module to bind the requester's xpub identity to its
+  /// authenticated ed25519 signing key (cross-curve attestation).
+  const ::flatbuffers::Vector<uint8_t> *REQUESTER_EPM() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_REQUESTER_EPM);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -227,6 +235,8 @@ struct LCH FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(ERROR_CODE()) &&
            VerifyOffset(verifier, VT_ERROR_MESSAGE) &&
            verifier.VerifyString(ERROR_MESSAGE()) &&
+           VerifyOffset(verifier, VT_REQUESTER_EPM) &&
+           verifier.VerifyVector(REQUESTER_EPM()) &&
            verifier.EndTable();
   }
   LCHT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -289,6 +299,9 @@ struct LCHBuilder {
   void add_ERROR_MESSAGE(::flatbuffers::Offset<::flatbuffers::String> ERROR_MESSAGE) {
     fbb_.AddOffset(LCH::VT_ERROR_MESSAGE, ERROR_MESSAGE);
   }
+  void add_REQUESTER_EPM(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> REQUESTER_EPM) {
+    fbb_.AddOffset(LCH::VT_REQUESTER_EPM, REQUESTER_EPM);
+  }
   explicit LCHBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -320,11 +333,13 @@ inline ::flatbuffers::Offset<LCH> CreateLCH(
     uint64_t EXPIRES_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PROVIDER_PEER_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ERROR_CODE = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> ERROR_MESSAGE = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> ERROR_MESSAGE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> REQUESTER_EPM = 0) {
   LCHBuilder builder_(_fbb);
   builder_.add_EXPIRES_AT(EXPIRES_AT);
   builder_.add_REQUESTED_AT(REQUESTED_AT);
   builder_.add_REQUESTED_TIMEOUT_MS(REQUESTED_TIMEOUT_MS);
+  builder_.add_REQUESTER_EPM(REQUESTER_EPM);
   builder_.add_ERROR_MESSAGE(ERROR_MESSAGE);
   builder_.add_ERROR_CODE(ERROR_CODE);
   builder_.add_PROVIDER_PEER_ID(PROVIDER_PEER_ID);
@@ -365,7 +380,8 @@ inline ::flatbuffers::Offset<LCH> CreateLCHDirect(
     uint64_t EXPIRES_AT = 0,
     const char *PROVIDER_PEER_ID = nullptr,
     const char *ERROR_CODE = nullptr,
-    const char *ERROR_MESSAGE = nullptr) {
+    const char *ERROR_MESSAGE = nullptr,
+    const std::vector<uint8_t> *REQUESTER_EPM = nullptr) {
   auto REQUEST_ID__ = REQUEST_ID ? _fbb.CreateString(REQUEST_ID) : 0;
   auto MODULE_ID__ = MODULE_ID ? _fbb.CreateString(MODULE_ID) : 0;
   auto MODULE_VERSION__ = MODULE_VERSION ? _fbb.CreateString(MODULE_VERSION) : 0;
@@ -378,6 +394,7 @@ inline ::flatbuffers::Offset<LCH> CreateLCHDirect(
   auto PROVIDER_PEER_ID__ = PROVIDER_PEER_ID ? _fbb.CreateString(PROVIDER_PEER_ID) : 0;
   auto ERROR_CODE__ = ERROR_CODE ? _fbb.CreateString(ERROR_CODE) : 0;
   auto ERROR_MESSAGE__ = ERROR_MESSAGE ? _fbb.CreateString(ERROR_MESSAGE) : 0;
+  auto REQUESTER_EPM__ = REQUESTER_EPM ? _fbb.CreateVector<uint8_t>(*REQUESTER_EPM) : 0;
   return CreateLCH(
       _fbb,
       MESSAGE_TYPE,
@@ -396,7 +413,8 @@ inline ::flatbuffers::Offset<LCH> CreateLCHDirect(
       EXPIRES_AT,
       PROVIDER_PEER_ID__,
       ERROR_CODE__,
-      ERROR_MESSAGE__);
+      ERROR_MESSAGE__,
+      REQUESTER_EPM__);
 }
 
 ::flatbuffers::Offset<LCH> CreateLCH(::flatbuffers::FlatBufferBuilder &_fbb, const LCHT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -427,6 +445,7 @@ inline void LCH::UnPackTo(LCHT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = PROVIDER_PEER_ID(); if (_e) _o->PROVIDER_PEER_ID = _e->str(); }
   { auto _e = ERROR_CODE(); if (_e) _o->ERROR_CODE = _e->str(); }
   { auto _e = ERROR_MESSAGE(); if (_e) _o->ERROR_MESSAGE = _e->str(); }
+  { auto _e = REQUESTER_EPM(); if (_e) { _o->REQUESTER_EPM.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->REQUESTER_EPM.begin()); } }
 }
 
 inline ::flatbuffers::Offset<LCH> CreateLCH(::flatbuffers::FlatBufferBuilder &_fbb, const LCHT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -454,6 +473,7 @@ inline ::flatbuffers::Offset<LCH> LCH::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _PROVIDER_PEER_ID = _o->PROVIDER_PEER_ID.empty() ? 0 : _fbb.CreateString(_o->PROVIDER_PEER_ID);
   auto _ERROR_CODE = _o->ERROR_CODE.empty() ? 0 : _fbb.CreateString(_o->ERROR_CODE);
   auto _ERROR_MESSAGE = _o->ERROR_MESSAGE.empty() ? 0 : _fbb.CreateString(_o->ERROR_MESSAGE);
+  auto _REQUESTER_EPM = _o->REQUESTER_EPM.size() ? _fbb.CreateVector(_o->REQUESTER_EPM) : 0;
   return CreateLCH(
       _fbb,
       _MESSAGE_TYPE,
@@ -472,7 +492,8 @@ inline ::flatbuffers::Offset<LCH> LCH::Pack(::flatbuffers::FlatBufferBuilder &_f
       _EXPIRES_AT,
       _PROVIDER_PEER_ID,
       _ERROR_CODE,
-      _ERROR_MESSAGE);
+      _ERROR_MESSAGE,
+      _REQUESTER_EPM);
 }
 
 inline const LCH *GetLCH(const void *buf) {
