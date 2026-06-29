@@ -62,6 +62,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "FCS_generated.h"
 #include "FPC_generated.h"
 #include "FRM_generated.h"
+#include "FSM_generated.h"
+#include "FSP_generated.h"
 #include "GDI_generated.h"
 #include "GEO_generated.h"
 #include "GJN_generated.h"
@@ -356,11 +358,13 @@ enum class RecordType : uint8_t {
   WTH = 164,
   XTC = 165,
   SCV = 166,
+  FSM = 167,
+  FSP = 168,
   MIN = NONE,
-  MAX = SCV
+  MAX = FSP
 };
 
-inline const RecordType (&EnumValuesRecordType())[167] {
+inline const RecordType (&EnumValuesRecordType())[169] {
   static const RecordType values[] = {
     RecordType::NONE,
     RecordType::ACL,
@@ -528,13 +532,15 @@ inline const RecordType (&EnumValuesRecordType())[167] {
     RecordType::WPN,
     RecordType::WTH,
     RecordType::XTC,
-    RecordType::SCV
+    RecordType::SCV,
+    RecordType::FSM,
+    RecordType::FSP
   };
   return values;
 }
 
 inline const char * const *EnumNamesRecordType() {
-  static const char * const names[168] = {
+  static const char * const names[170] = {
     "NONE",
     "ACL",
     "ACM",
@@ -702,13 +708,15 @@ inline const char * const *EnumNamesRecordType() {
     "WTH",
     "XTC",
     "SCV",
+    "FSM",
+    "FSP",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameRecordType(RecordType e) {
-  if (::flatbuffers::IsOutRange(e, RecordType::NONE, RecordType::SCV)) return "";
+  if (::flatbuffers::IsOutRange(e, RecordType::NONE, RecordType::FSP)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesRecordType()[index];
 }
@@ -1381,6 +1389,14 @@ template<> struct RecordTypeTraits<SCV> {
   static const RecordType enum_value = RecordType::SCV;
 };
 
+template<> struct RecordTypeTraits<FSM> {
+  static const RecordType enum_value = RecordType::FSM;
+};
+
+template<> struct RecordTypeTraits<FSP> {
+  static const RecordType enum_value = RecordType::FSP;
+};
+
 template<typename T> struct RecordTypeUnionTraits {
   static const RecordType enum_value = RecordType::NONE;
 };
@@ -2047,6 +2063,14 @@ template<> struct RecordTypeUnionTraits<XTCT> {
 
 template<> struct RecordTypeUnionTraits<SCVT> {
   static const RecordType enum_value = RecordType::SCV;
+};
+
+template<> struct RecordTypeUnionTraits<FSMT> {
+  static const RecordType enum_value = RecordType::FSM;
+};
+
+template<> struct RecordTypeUnionTraits<FSPT> {
+  static const RecordType enum_value = RecordType::FSP;
 };
 
 struct RecordTypeUnion {
@@ -3407,6 +3431,22 @@ struct RecordTypeUnion {
     return type == RecordType::SCV ?
       reinterpret_cast<const SCVT *>(value) : nullptr;
   }
+  FSMT *AsFSM() {
+    return type == RecordType::FSM ?
+      reinterpret_cast<FSMT *>(value) : nullptr;
+  }
+  const FSMT *AsFSM() const {
+    return type == RecordType::FSM ?
+      reinterpret_cast<const FSMT *>(value) : nullptr;
+  }
+  FSPT *AsFSP() {
+    return type == RecordType::FSP ?
+      reinterpret_cast<FSPT *>(value) : nullptr;
+  }
+  const FSPT *AsFSP() const {
+    return type == RecordType::FSP ?
+      reinterpret_cast<const FSPT *>(value) : nullptr;
+  }
 };
 
 template <bool B = false>
@@ -3935,6 +3975,12 @@ struct Record FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   const SCV *value_as_SCV() const {
     return value_type() == RecordType::SCV ? static_cast<const SCV *>(value()) : nullptr;
+  }
+  const FSM *value_as_FSM() const {
+    return value_type() == RecordType::FSM ? static_cast<const FSM *>(value()) : nullptr;
+  }
+  const FSP *value_as_FSP() const {
+    return value_type() == RecordType::FSP ? static_cast<const FSP *>(value()) : nullptr;
   }
   /// Standard identifier (e.g., "OMM", "CDM", "CAT")
   const ::flatbuffers::String *standard() const {
@@ -4617,6 +4663,14 @@ template<> inline const XTC *Record::value_as<XTC>() const {
 
 template<> inline const SCV *Record::value_as<SCV>() const {
   return value_as_SCV();
+}
+
+template<> inline const FSM *Record::value_as<FSM>() const {
+  return value_as_FSM();
+}
+
+template<> inline const FSP *Record::value_as<FSP>() const {
+  return value_as_FSP();
 }
 
 struct RecordBuilder {
@@ -5510,6 +5564,14 @@ inline bool VerifyRecordType(::flatbuffers::VerifierTemplate<B> &verifier, const
       auto ptr = reinterpret_cast<const SCV *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case RecordType::FSM: {
+      auto ptr = reinterpret_cast<const FSM *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::FSP: {
+      auto ptr = reinterpret_cast<const FSP *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     default: return true;
   }
 }
@@ -6194,6 +6256,14 @@ inline void *RecordTypeUnion::UnPack(const void *obj, RecordType type, const ::f
       auto ptr = reinterpret_cast<const SCV *>(obj);
       return ptr->UnPack(resolver);
     }
+    case RecordType::FSM: {
+      auto ptr = reinterpret_cast<const FSM *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::FSP: {
+      auto ptr = reinterpret_cast<const FSP *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -6865,6 +6935,14 @@ inline ::flatbuffers::Offset<void> RecordTypeUnion::Pack(::flatbuffers::FlatBuff
       auto ptr = reinterpret_cast<const SCVT *>(value);
       return CreateSCV(_fbb, ptr, _rehasher).Union();
     }
+    case RecordType::FSM: {
+      auto ptr = reinterpret_cast<const FSMT *>(value);
+      return CreateFSM(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::FSP: {
+      auto ptr = reinterpret_cast<const FSPT *>(value);
+      return CreateFSP(_fbb, ptr, _rehasher).Union();
+    }
     default: return 0;
   }
 }
@@ -7533,6 +7611,14 @@ inline RecordTypeUnion::RecordTypeUnion(const RecordTypeUnion &u) : type(u.type)
     }
     case RecordType::SCV: {
       value = new SCVT(*reinterpret_cast<SCVT *>(u.value));
+      break;
+    }
+    case RecordType::FSM: {
+      value = new FSMT(*reinterpret_cast<FSMT *>(u.value));
+      break;
+    }
+    case RecordType::FSP: {
+      value = new FSPT(*reinterpret_cast<FSPT *>(u.value));
       break;
     }
     default:
@@ -8369,6 +8455,16 @@ inline void RecordTypeUnion::Reset() {
     }
     case RecordType::SCV: {
       auto ptr = reinterpret_cast<SCVT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::FSM: {
+      auto ptr = reinterpret_cast<FSMT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::FSP: {
+      auto ptr = reinterpret_cast<FSPT *>(value);
       delete ptr;
       break;
     }

@@ -1875,6 +1875,7 @@ struct PLGT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<FlatBufferTypeRefT>> SCHEMAS_USED{};
   std::vector<std::unique_ptr<PLGBuildArtifactT>> BUILD_ARTIFACTS{};
   std::vector<std::string> RUNTIME_TARGETS{};
+  std::vector<std::string> ALLOWED_XPUBS{};
   PLGT() = default;
   PLGT(const PLGT &o);
   PLGT(PLGT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1938,7 +1939,8 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PROTOCOLS = 100,
     VT_SCHEMAS_USED = 102,
     VT_BUILD_ARTIFACTS = 104,
-    VT_RUNTIME_TARGETS = 106
+    VT_RUNTIME_TARGETS = 106,
+    VT_ALLOWED_XPUBS = 108
   };
   /// Unique identifier for the plugin
   const ::flatbuffers::String *PLUGIN_ID() const {
@@ -2056,7 +2058,7 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *KEY_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_KEY_ID);
   }
-  /// Allowed requester domains for module grants
+  /// DEPRECATED (use ALLOWED_XPUBS): allowed requester domains for module grants.
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_DOMAINS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_ALLOWED_DOMAINS);
   }
@@ -2152,6 +2154,12 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   /// Opaque runtime-target tags (e.g. "wasmtime", "wasmedge", "browser").
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *RUNTIME_TARGETS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_RUNTIME_TARGETS);
+  }
+  /// Allowed requester xpub identities (BIP-32 account xpubs) for module grants.
+  /// PKI replacement for ALLOWED_DOMAINS: a requester whose verified EPM binds an
+  /// xpub in this list is granted. Empty list = no xpub allowlist gate.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_XPUBS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_ALLOWED_XPUBS);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -2265,6 +2273,9 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_RUNTIME_TARGETS) &&
            verifier.VerifyVector(RUNTIME_TARGETS()) &&
            verifier.VerifyVectorOfStrings(RUNTIME_TARGETS()) &&
+           VerifyOffset(verifier, VT_ALLOWED_XPUBS) &&
+           verifier.VerifyVector(ALLOWED_XPUBS()) &&
+           verifier.VerifyVectorOfStrings(ALLOWED_XPUBS()) &&
            verifier.EndTable();
   }
   PLGT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2432,6 +2443,9 @@ struct PLGBuilder {
   void add_RUNTIME_TARGETS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> RUNTIME_TARGETS) {
     fbb_.AddOffset(PLG::VT_RUNTIME_TARGETS, RUNTIME_TARGETS);
   }
+  void add_ALLOWED_XPUBS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_XPUBS) {
+    fbb_.AddOffset(PLG::VT_ALLOWED_XPUBS, ALLOWED_XPUBS);
+  }
   explicit PLGBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2499,13 +2513,15 @@ inline ::flatbuffers::Offset<PLG> CreatePLG(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGProtocolSpec>>> PROTOCOLS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<FlatBufferTypeRef>>> SCHEMAS_USED = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGBuildArtifact>>> BUILD_ARTIFACTS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> RUNTIME_TARGETS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> RUNTIME_TARGETS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_XPUBS = 0) {
   PLGBuilder builder_(_fbb);
   builder_.add_UPDATED_AT(UPDATED_AT);
   builder_.add_CREATED_AT(CREATED_AT);
   builder_.add_MAX_GRANT_TIMEOUT_MS(MAX_GRANT_TIMEOUT_MS);
   builder_.add_ENCRYPTED_WASM_SIZE(ENCRYPTED_WASM_SIZE);
   builder_.add_WASM_SIZE(WASM_SIZE);
+  builder_.add_ALLOWED_XPUBS(ALLOWED_XPUBS);
   builder_.add_RUNTIME_TARGETS(RUNTIME_TARGETS);
   builder_.add_BUILD_ARTIFACTS(BUILD_ARTIFACTS);
   builder_.add_SCHEMAS_USED(SCHEMAS_USED);
@@ -2614,7 +2630,8 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
     const std::vector<::flatbuffers::Offset<PLGProtocolSpec>> *PROTOCOLS = nullptr,
     const std::vector<::flatbuffers::Offset<FlatBufferTypeRef>> *SCHEMAS_USED = nullptr,
     const std::vector<::flatbuffers::Offset<PLGBuildArtifact>> *BUILD_ARTIFACTS = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *RUNTIME_TARGETS = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *RUNTIME_TARGETS = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_XPUBS = nullptr) {
   auto PLUGIN_ID__ = PLUGIN_ID ? _fbb.CreateString(PLUGIN_ID) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto VERSION__ = VERSION ? _fbb.CreateString(VERSION) : 0;
@@ -2655,6 +2672,7 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
   auto SCHEMAS_USED__ = SCHEMAS_USED ? _fbb.CreateVector<::flatbuffers::Offset<FlatBufferTypeRef>>(*SCHEMAS_USED) : 0;
   auto BUILD_ARTIFACTS__ = BUILD_ARTIFACTS ? _fbb.CreateVector<::flatbuffers::Offset<PLGBuildArtifact>>(*BUILD_ARTIFACTS) : 0;
   auto RUNTIME_TARGETS__ = RUNTIME_TARGETS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*RUNTIME_TARGETS) : 0;
+  auto ALLOWED_XPUBS__ = ALLOWED_XPUBS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*ALLOWED_XPUBS) : 0;
   return CreatePLG(
       _fbb,
       PLUGIN_ID__,
@@ -2708,7 +2726,8 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
       PROTOCOLS__,
       SCHEMAS_USED__,
       BUILD_ARTIFACTS__,
-      RUNTIME_TARGETS__);
+      RUNTIME_TARGETS__,
+      ALLOWED_XPUBS__);
 }
 
 ::flatbuffers::Offset<PLG> CreatePLG(::flatbuffers::FlatBufferBuilder &_fbb, const PLGT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3215,7 +3234,8 @@ inline PLGT::PLGT(const PLGT &o)
         LISTING_STATUS(o.LISTING_STATUS),
         SIGNATURE(o.SIGNATURE),
         INVOKE_SURFACES(o.INVOKE_SURFACES),
-        RUNTIME_TARGETS(o.RUNTIME_TARGETS) {
+        RUNTIME_TARGETS(o.RUNTIME_TARGETS),
+        ALLOWED_XPUBS(o.ALLOWED_XPUBS) {
   ENTRY_FUNCTIONS.reserve(o.ENTRY_FUNCTIONS.size());
   for (const auto &ENTRY_FUNCTIONS_ : o.ENTRY_FUNCTIONS) { ENTRY_FUNCTIONS.emplace_back((ENTRY_FUNCTIONS_) ? new EntryFunctionT(*ENTRY_FUNCTIONS_) : nullptr); }
   DEPENDENCIES.reserve(o.DEPENDENCIES.size());
@@ -3289,6 +3309,7 @@ inline PLGT &PLGT::operator=(PLGT o) FLATBUFFERS_NOEXCEPT {
   std::swap(SCHEMAS_USED, o.SCHEMAS_USED);
   std::swap(BUILD_ARTIFACTS, o.BUILD_ARTIFACTS);
   std::swap(RUNTIME_TARGETS, o.RUNTIME_TARGETS);
+  std::swap(ALLOWED_XPUBS, o.ALLOWED_XPUBS);
   return *this;
 }
 
@@ -3353,6 +3374,7 @@ inline void PLG::UnPackTo(PLGT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = SCHEMAS_USED(); if (_e) { _o->SCHEMAS_USED.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SCHEMAS_USED[_i]) { _e->Get(_i)->UnPackTo(_o->SCHEMAS_USED[_i].get(), _resolver); } else { _o->SCHEMAS_USED[_i] = std::unique_ptr<FlatBufferTypeRefT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SCHEMAS_USED.resize(0); } }
   { auto _e = BUILD_ARTIFACTS(); if (_e) { _o->BUILD_ARTIFACTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->BUILD_ARTIFACTS[_i]) { _e->Get(_i)->UnPackTo(_o->BUILD_ARTIFACTS[_i].get(), _resolver); } else { _o->BUILD_ARTIFACTS[_i] = std::unique_ptr<PLGBuildArtifactT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->BUILD_ARTIFACTS.resize(0); } }
   { auto _e = RUNTIME_TARGETS(); if (_e) { _o->RUNTIME_TARGETS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->RUNTIME_TARGETS[_i] = _e->Get(_i)->str(); } } else { _o->RUNTIME_TARGETS.resize(0); } }
+  { auto _e = ALLOWED_XPUBS(); if (_e) { _o->ALLOWED_XPUBS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ALLOWED_XPUBS[_i] = _e->Get(_i)->str(); } } else { _o->ALLOWED_XPUBS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<PLG> CreatePLG(::flatbuffers::FlatBufferBuilder &_fbb, const PLGT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3415,6 +3437,7 @@ inline ::flatbuffers::Offset<PLG> PLG::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _SCHEMAS_USED = _o->SCHEMAS_USED.size() ? _fbb.CreateVector<::flatbuffers::Offset<FlatBufferTypeRef>> (_o->SCHEMAS_USED.size(), [](size_t i, _VectorArgs *__va) { return CreateFlatBufferTypeRef(*__va->__fbb, __va->__o->SCHEMAS_USED[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _BUILD_ARTIFACTS = _o->BUILD_ARTIFACTS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLGBuildArtifact>> (_o->BUILD_ARTIFACTS.size(), [](size_t i, _VectorArgs *__va) { return CreatePLGBuildArtifact(*__va->__fbb, __va->__o->BUILD_ARTIFACTS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _RUNTIME_TARGETS = _o->RUNTIME_TARGETS.size() ? _fbb.CreateVectorOfStrings(_o->RUNTIME_TARGETS) : 0;
+  auto _ALLOWED_XPUBS = _o->ALLOWED_XPUBS.size() ? _fbb.CreateVectorOfStrings(_o->ALLOWED_XPUBS) : 0;
   return CreatePLG(
       _fbb,
       _PLUGIN_ID,
@@ -3468,7 +3491,8 @@ inline ::flatbuffers::Offset<PLG> PLG::Pack(::flatbuffers::FlatBufferBuilder &_f
       _PROTOCOLS,
       _SCHEMAS_USED,
       _BUILD_ARTIFACTS,
-      _RUNTIME_TARGETS);
+      _RUNTIME_TARGETS,
+      _ALLOWED_XPUBS);
 }
 
 inline const PLG *GetPLG(const void *buf) {
