@@ -25,9 +25,12 @@ if [ -z "$FBINC" ] || [ ! -f "$FBINC/flatbuffers/flatbuffers.h" ]; then
 fi
 
 CXX="${CXX:-$(command -v clang++ 2>/dev/null || echo /opt/homebrew/opt/llvm/bin/clang++)}"
-"$CXX" -std=c++17 -O2 -I"$DIR" -I"$EPMINC" -I"$FBINC" -I"$CPPBUILD" \
-  "$COMMON/jcs/jcs.cpp" "$DIR/epm_content.cpp" "$DIR/epm_verify.cpp" "$DIR/epm_fb.cpp" \
-  "$DIR/tests/epm_fb_test.cpp" "$CRYPTOPP/libcryptopp.a" \
-  -o "$DIR/tests/epm_fb_test"
-"$DIR/tests/epm_fb_test"
-rm -f "$DIR/tests/epm_fb_test"
+SRC=("$COMMON/jcs/jcs.cpp" "$DIR/epm_content.cpp" "$DIR/epm_verify.cpp" "$DIR/epm_fb.cpp" "$DIR/epm_authorize.cpp")
+
+for test in epm_fb_test epm_authorize_test; do
+  "$CXX" -std=c++17 -O2 -I"$DIR" -I"$EPMINC" -I"$FBINC" -I"$CPPBUILD" \
+    "${SRC[@]}" "$DIR/tests/${test}.cpp" "$CRYPTOPP/libcryptopp.a" \
+    -o "$DIR/tests/${test}"
+  "$DIR/tests/${test}"
+  rm -f "$DIR/tests/${test}"
+done
