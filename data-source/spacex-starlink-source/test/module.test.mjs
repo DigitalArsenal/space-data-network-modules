@@ -27,7 +27,9 @@ function standardModulePrefix(bytes) {
   let off = 8; // magic (4) + version (4)
   while (off < bytes.length) {
     const id = bytes[off];
-    if (id > 12) break; // non-standard section (e.g. the signature) -> module ends here
+    // Standard WASM section ids are 0..13 (13 = tag, from wasm exceptions). The
+    // appended module signature uses a non-standard id (16) -> module ends here.
+    if (id > 13) break;
     off += 1;
     let size = 0;
     let shift = 0;
