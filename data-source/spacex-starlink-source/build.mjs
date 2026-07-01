@@ -17,6 +17,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/bundle";
+import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/manifest";
+import createStarlinkSourcePluginManifest from "./manifest.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMSDK_DIR = path.resolve(process.env.SDN_LOCAL_EMSDK_DIR || path.join(__dirname, "deps", "emsdk"));
@@ -107,19 +109,30 @@ async function main() {
 
   const flatbuffersInclude = resolveFlatbuffersInclude();
 
-  // Manifest stub (real manifest embedding lands with the pull implementation).
+  // Embed the real manifest so the node sees the module's methods, host
+  // capabilities, and TIMERS. Encoded via the SDK's $PLG encoder — the same
+  // format every other compiled module uses and the Go node's PLG parser reads.
+  const manifestBytes = encodePlgManifest(legacyManifestToPlg(createStarlinkSourcePluginManifest()));
+  const manifestIdentifier = new TextDecoder().decode(manifestBytes.slice(4, 8));
+  if (manifestIdentifier !== "$PLG") {
+    throw new Error(`Embedded manifest is not a $PLG buffer (identifier: ${JSON.stringify(manifestIdentifier)})`);
+  }
+  const byteList = Array.from(manifestBytes)
+    .map((b) => "0x" + b.toString(16).padStart(2, "0"))
+    .join(",");
   const manifestExportsPath = path.join(DIST_DIR, "manifest-exports.cpp");
   fs.writeFileSync(
     manifestExportsPath,
     `#include <stddef.h>
 #include <stdint.h>
-static const uint8_t g_manifest[] = {0x00};
+static const uint8_t g_manifest[] = {${byteList}};
 extern "C" {
 __attribute__((visibility("default"))) const uint8_t* plugin_get_manifest_flatbuffer() { return g_manifest; }
-__attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
+__attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_size() { return ${manifestBytes.length}; }
 }
 `,
   );
+  console.log(`  Embedded manifest: ${manifestBytes.length} bytes`);
 
   const srcPath = path.join(SRC_DIR, "spacex_starlink_source.cpp");
   const outWasm = path.join(DIST_DIR, "spacex-starlink-source.wasm");
@@ -129,7 +142,7 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
   if (fs.existsSync(CORE_SDS_GENERATED_DIR)) includes.push(`-I${shellQuote(CORE_SDS_GENERATED_DIR)}`);
 
   run(
-    `${shellQuote(emxx)} -O2 -std=c++17 -fwasm-exceptions -DSDN_WASI_PLUGIN=1 ` +
+    `${shellQuote(emxx)} -O2 -std=c++17 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -DSDN_WASI_PLUGIN=1 ` +
       `${includes.join(" ")} ` +
       `${shellQuote(srcPath)} ${shellQuote(manifestExportsPath)} ` +
       `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 -sINITIAL_MEMORY=16777216 -sALLOW_MEMORY_GROWTH=1 ` +
@@ -138,9 +151,13 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
       `--no-entry -o ${shellQuote(outWasm)}`,
   );
 
+  // dist/isomorphic/module.wasm is the loadable runtime artifact — unsigned, like
+  // every other module — that the node instantiates directly in WasmEdge (which
+  // rejects the non-standard signature section). The signed, publishable
+  // distributable is dist/spacex-starlink-source.wasm.
   fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
   await signBuiltModule(outWasm);
-  await signBuiltModule(path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
+  console.log(`  Runtime artifact (loadable, unsigned): ${path.join(ISOMORPHIC_DIST_DIR, "module.wasm")}`);
   console.log(`\n✓ Build complete: ${outWasm}`);
 }
 
