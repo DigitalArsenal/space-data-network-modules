@@ -61,9 +61,9 @@ SensorVec3 scv_vec3(const SCVVec3* vector) {
 bool sensor_shape_contract_is_valid(
     const SensorShapeContract& contract,
     std::string& reason) {
-  if (contract.kind == SensorShapeKind::CustomPolygon || !contract.supported) {
+  if (!contract.supported) {
     reason = contract.unsupportedReason.empty()
-        ? "unsupported shape: custom polygon sensor contracts are not evaluated by sensor-model"
+        ? "unsupported sensor shape"
         : contract.unsupportedReason;
     return false;
   }
@@ -96,8 +96,13 @@ bool sensor_shape_contract_is_valid(
         return false;
       }
       return true;
-    case SensorShapeKind::Unknown:
     case SensorShapeKind::CustomPolygon:
+      if (contract.polygonVertices.size() < 3) {
+        reason = "invalid custom polygon: requires at least 3 boundary vertices";
+        return false;
+      }
+      return true;
+    case SensorShapeKind::Unknown:
       break;
   }
   reason = "unsupported shape";
@@ -158,9 +163,9 @@ extern "C" int evaluate_sensor_shape(void) {
     }
 
     const SensorShapeContract contract = parse_sensor_shape_contract(sensor);
-    if (contract.kind == SensorShapeKind::CustomPolygon || !contract.supported) {
+    if (!contract.supported) {
       const std::string message = contract.unsupportedReason.empty()
-          ? "unsupported shape: custom polygon sensor contracts are not evaluated by sensor-model"
+          ? "unsupported sensor shape"
           : contract.unsupportedReason;
       return fail("unsupported-shape", message.c_str());
     }
