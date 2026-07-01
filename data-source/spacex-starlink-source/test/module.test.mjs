@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyModuleArtifact } from "space-data-module-sdk/bundle";
+import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = path.join(__dirname, "..", "dist", "spacex-starlink-source.wasm");
@@ -19,46 +20,36 @@ const REQUIRED_EXPORTS = [
   "plugin_get_manifest_flatbuffer_size",
 ];
 
-/**
- * Strip the trailing non-standard sections (the appended module signature uses a
- * non-standard section id) so the standard WebAssembly module can be compiled.
- */
-function standardModulePrefix(bytes) {
-  let off = 8; // magic (4) + version (4)
-  while (off < bytes.length) {
-    const id = bytes[off];
-    // Standard WASM section ids are 0..13 (13 = tag, from wasm exceptions). The
-    // appended module signature uses a non-standard id (16) -> module ends here.
-    if (id > 13) break;
-    off += 1;
-    let size = 0;
-    let shift = 0;
-    let b;
-    do {
-      b = bytes[off++];
-      size |= (b & 0x7f) << shift;
-      shift += 7;
-    } while (b & 0x80);
-    off += size;
-  }
-  return bytes.subarray(0, off);
+// The pull's host-call HTTP fetch requires these space_data_module_host imports.
+const REQUIRED_HOST_IMPORTS = ["call", "response_len", "read_response"];
+
+function loadWasm() {
+  assert.ok(fs.existsSync(WASM_PATH), `built module not found at ${WASM_PATH}; run \`node build.mjs\` first`);
+  return new Uint8Array(fs.readFileSync(WASM_PATH));
 }
 
 test("module builds as a valid signed SDN artifact", async () => {
-  assert.ok(fs.existsSync(WASM_PATH), `built module not found at ${WASM_PATH}; run \`node build.mjs\` first`);
-  const wasm = fs.readFileSync(WASM_PATH);
   const keypair = JSON.parse(fs.readFileSync(KEYPAIR_PATH, "utf8"));
-  await verifyModuleArtifact(new Uint8Array(wasm), {
+  await verifyModuleArtifact(loadWasm(), {
     trustedPublicKeys: [keypair.publicKeyHex],
     requireSignature: true,
   });
 });
 
 test("module exports the canonical plugin ABI", async () => {
-  const wasm = fs.readFileSync(WASM_PATH);
-  const mod = await WebAssembly.compile(standardModulePrefix(new Uint8Array(wasm)));
-  const exports = WebAssembly.Module.exports(mod).map((e) => e.name);
+  // inspectModule handles the signed artifact via the SDK's canonical
+  // signature-strip (no hand-rolled section walking).
+  const { exports } = await inspectModule(loadWasm());
+  const names = exports.map((e) => (typeof e === "string" ? e : e.name));
   for (const name of REQUIRED_EXPORTS) {
-    assert.ok(exports.includes(name), `missing ABI export: ${name}`);
+    assert.ok(names.includes(name), `missing ABI export: ${name}`);
+  }
+});
+
+test("pull imports the space_data_module_host host-call bridge", async () => {
+  const { imports } = await inspectModule(loadWasm());
+  const hostImports = imports.filter((i) => i.module === "space_data_module_host").map((i) => i.name);
+  for (const name of REQUIRED_HOST_IMPORTS) {
+    assert.ok(hostImports.includes(name), `missing host-call import: ${name} (have: ${hostImports.join(", ")})`);
   }
 });
