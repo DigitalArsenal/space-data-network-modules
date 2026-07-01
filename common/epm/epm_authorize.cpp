@@ -32,7 +32,8 @@ AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm
                                        const uint8_t* proven_signing_pubkey,
                                        const std::vector<std::string>& allowed_xpubs,
                                        int64_t now_unix, int64_t max_age_seconds,
-                                       const Ed25519Verify& verify) {
+                                       const Ed25519Verify& verify,
+                                       const Secp256k1Verify& verify_secp256k1) {
   AuthorizeResult r;
 
   EpmFields fields;
@@ -42,14 +43,16 @@ AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm
     return r;
   }
 
+  // The signature length is scheme-dependent (64 for ed25519, variable DER for
+  // secp256k1); VerifyEpm validates it per signing key, so only reject an empty one.
   const std::vector<uint8_t> signature = HexDecode(signature_hex);
-  if (signature.size() != 64) {
+  if (signature.empty()) {
     r.error = "missing or malformed EPM signature";
     return r;
   }
 
   const VerifyResult v = VerifyEpm(fields, signature.data(), signature.size(),
-                                   proven_signing_pubkey, verify);
+                                   proven_signing_pubkey, verify, verify_secp256k1);
   if (!v.ok) {
     r.error = v.error;
     return r;
