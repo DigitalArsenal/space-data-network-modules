@@ -26,6 +26,10 @@
 // SpaceX Starlink public ephemeris listing (discover endpoint).
 static const char* kStarlinkDiscoverURL =
     "https://api.starlink.com/public-files/ephemerides/";
+// Node signing key slot (wallet_sign / keyslot.get) used to sign published PNMs.
+static const char* kSigningKeySlot = "node-signing";
+// PubSub topic the module publishes PNM pointers on.
+static const char* kPublishTopic = "sdn/data-source/spacex-starlink";
 
 extern "C" {
 
@@ -131,6 +135,68 @@ std::vector<uint8_t> base64_decode(const std::string& in) {
     return out;
 }
 
+std::string base64_encode(const uint8_t* data, size_t len) {
+    static const char* alpha =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    size_t i = 0;
+    for (; i + 3 <= len; i += 3) {
+        uint32_t n = (static_cast<uint32_t>(data[i]) << 16) |
+                     (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
+        out.push_back(alpha[(n >> 18) & 63]);
+        out.push_back(alpha[(n >> 12) & 63]);
+        out.push_back(alpha[(n >> 6) & 63]);
+        out.push_back(alpha[n & 63]);
+    }
+    if (i < len) {
+        uint32_t n = static_cast<uint32_t>(data[i]) << 16;
+        if (i + 1 < len) n |= static_cast<uint32_t>(data[i + 1]) << 8;
+        out.push_back(alpha[(n >> 18) & 63]);
+        out.push_back(alpha[(n >> 12) & 63]);
+        out.push_back(i + 1 < len ? alpha[(n >> 6) & 63] : '=');
+        out.push_back('=');
+    }
+    return out;
+}
+
+// Parse the binary segments trailing a hostcall envelope (after the JSON meta).
+std::vector<std::vector<uint8_t>> envelope_segments(const std::vector<uint8_t>& env) {
+    std::vector<std::vector<uint8_t>> segs;
+    if (env.size() < 4) return segs;
+    auto rd32 = [&](size_t off) -> uint32_t {
+        return static_cast<uint32_t>(env[off]) | (static_cast<uint32_t>(env[off + 1]) << 8) |
+               (static_cast<uint32_t>(env[off + 2]) << 16) | (static_cast<uint32_t>(env[off + 3]) << 24);
+    };
+    uint32_t meta_len = rd32(0);
+    size_t off = 4 + meta_len;
+    if (off + 4 > env.size()) return segs;
+    uint32_t seg_count = rd32(off);
+    off += 4;
+    for (uint32_t i = 0; i < seg_count && off + 4 <= env.size(); i++) {
+        uint32_t seg_len = rd32(off);
+        off += 4;
+        if (off + seg_len > env.size()) break;
+        segs.emplace_back(env.begin() + off, env.begin() + off + seg_len);
+        off += seg_len;
+    }
+    return segs;
+}
+
+// Extract raw result bytes from a cap response: a base64 "base64" field in the
+// meta result ({"__type":"bytes","base64":"..."}) or the first binary segment.
+std::vector<uint8_t> cap_result_bytes(const std::vector<uint8_t>& env) {
+    std::string meta = envelope_meta_json(env);
+    std::string b64;
+    if (json_string_field(meta, "base64", &b64)) return base64_decode(b64);
+    auto segs = envelope_segments(env);
+    if (!segs.empty()) return segs[0];
+    return {};
+}
+
+bool cap_ok(const std::vector<uint8_t>& env) {
+    return envelope_meta_json(env).find("\"ok\":true") != std::string::npos;
+}
+
 // JSON-escape a string for embedding in a request payload.
 std::string json_escape(const std::string& s) {
     std::string out;
@@ -155,6 +221,39 @@ std::vector<uint8_t> http_get(const std::string& url, long* status) {
     return std::vector<uint8_t>(body.begin(), body.end());
 }
 
+// STORAGE_WRITE: store raw FlatBuffer record bytes under a schema.
+bool storage_write(const std::string& schema, const uint8_t* data, size_t len) {
+    std::string payload = "{\"schema\":\"" + json_escape(schema) + "\",\"data\":\"" +
+                          base64_encode(data, len) + "\"}";
+    return cap_ok(hostcall("storage.write", payload));
+}
+
+// WALLET_SIGN (keyslot.get): fetch the node's signing key material by slot id.
+std::vector<uint8_t> keyslot_get(const std::string& slot_id) {
+    std::string payload = "{\"slotId\":\"" + json_escape(slot_id) + "\"}";
+    return cap_result_bytes(hostcall("keyslot.get", payload));
+}
+
+// CRYPTO_SIGN: sign data with the given key/algorithm; returns the signature.
+std::vector<uint8_t> crypto_sign(const std::string& algorithm, const std::vector<uint8_t>& key,
+                                 const uint8_t* data, size_t len) {
+    std::string payload = "{\"algorithm\":\"" + json_escape(algorithm) + "\",\"key\":\"" +
+                          base64_encode(key.data(), key.size()) + "\",\"data\":\"" +
+                          base64_encode(data, len) + "\"}";
+    std::vector<uint8_t> env = hostcall("crypto.sign", payload);
+    std::string meta = envelope_meta_json(env);
+    std::string sig_b64;
+    if (json_string_field(meta, "signature", &sig_b64)) return base64_decode(sig_b64);
+    return {};
+}
+
+// PUBSUB: publish a message (utf8) to a topic.
+bool pubsub_publish(const std::string& topic, const std::string& data) {
+    std::string payload = "{\"topic\":\"" + json_escape(topic) + "\",\"data\":\"" +
+                          json_escape(data) + "\"}";
+    return cap_ok(hostcall("pubsub.publish", payload));
+}
+
 // Count candidate ephemeris resources in a listing (href/name occurrences of the
 // Starlink MEME ephemeris file prefix). Refined against the real listing format
 // in later passes.
@@ -172,9 +271,33 @@ std::string run_pull() {
     long status = 0;
     std::vector<uint8_t> listing = http_get(kStarlinkDiscoverURL, &status);
     size_t discovered = count_discovered_resources(listing);
+
+    // Store the fetched records (STORAGE_WRITE). Real per-file parse/validate +
+    // per-record OEM storage is refined against the live listing format.
+    bool stored = !listing.empty() && storage_write("OEM", listing.data(), listing.size());
+
+    // Build a PNM provenance payload for this pull batch.
+    std::string pnm = "{\"source\":\"spacex-starlink\",\"url\":\"" + json_escape(kStarlinkDiscoverURL) +
+                      "\",\"discovered\":" + std::to_string(discovered) +
+                      ",\"bytes\":" + std::to_string(listing.size()) + "}";
+
+    // Sign the PNM with the node identity (WALLET_SIGN -> keyslot.get, CRYPTO_SIGN).
+    std::vector<uint8_t> key = keyslot_get(kSigningKeySlot);
+    std::vector<uint8_t> signature;
+    if (!key.empty()) {
+        signature = crypto_sign("ed25519", key, reinterpret_cast<const uint8_t*>(pnm.data()), pnm.size());
+    }
+
+    // Publish the signed PNM (PUBSUB).
+    std::string message = "{\"pnm\":" + pnm + ",\"signature\":\"" +
+                          base64_encode(signature.data(), signature.size()) + "\"}";
+    bool published = pubsub_publish(kPublishTopic, message);
+
     return "{\"ok\":true,\"discover_status\":" + std::to_string(status) +
            ",\"discovered\":" + std::to_string(discovered) +
-           ",\"listing_bytes\":" + std::to_string(listing.size()) + "}";
+           ",\"stored\":" + (stored ? "true" : "false") +
+           ",\"signed\":" + (signature.empty() ? "false" : "true") +
+           ",\"published\":" + (published ? "true" : "false") + "}";
 }
 
 }  // namespace

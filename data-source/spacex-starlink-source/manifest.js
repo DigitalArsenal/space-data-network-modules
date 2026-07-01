@@ -123,6 +123,7 @@ export function createStarlinkSourcePluginManifest() {
   const capabilities = [
     new HostCapabilityT(CapabilityKind.HTTP, null, true, "Fetch the Starlink ephemeris listing + files."),
     new HostCapabilityT(CapabilityKind.STORAGE_WRITE, null, true, "Store parsed ephemeris records."),
+    new HostCapabilityT(CapabilityKind.WALLET_SIGN, null, true, "Fetch the node signing key (keyslot) to sign the PNM."),
     new HostCapabilityT(CapabilityKind.CRYPTO_SIGN, null, true, "Sign the published PNM pointer."),
     new HostCapabilityT(CapabilityKind.PUBSUB, null, true, "Publish + stream the PNM to subscribers."),
   ];
