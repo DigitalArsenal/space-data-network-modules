@@ -42,10 +42,12 @@ const CORE_SDS_GENERATED_DIR = path.resolve(
   __dirname,
   "../core/src/cpp/generated/sds",
 );
-const MODULE_SIGNING_KEYPAIR_PATH = path.resolve(
-  __dirname,
-  "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
-);
+const MODULE_SIGNING_KEYPAIR_PATH =
+  process.env.SDN_MODULE_SIGNING_KEYPAIR ||
+  path.resolve(
+    __dirname,
+    "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
+  );
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
