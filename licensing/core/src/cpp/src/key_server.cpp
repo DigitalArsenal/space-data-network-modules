@@ -972,6 +972,36 @@ bool ed25519_verify_detached(
   return sdm_hostcall::find_json_bool(response.meta, "result", valid_out);
 }
 
+// secp256k1 ECDSA verify over the canonical EPM content. The host op does the
+// sha256(message) + DER-verify internally (contract: op "crypto.secp256k1.verify",
+// inputs {message, signature, publicKey}), mirroring the ed25519 host call. The
+// signature is DER (variable length) and the public key is a SEC1 point (33-byte
+// compressed or 65-byte uncompressed).
+bool secp256k1_verify_detached(
+    const uint8_t* message,
+    size_t message_len,
+    const uint8_t* public_key,
+    size_t public_key_len,
+    const uint8_t* signature,
+    size_t signature_len,
+    bool* valid_out) {
+  if (!message || !public_key || !signature || !valid_out ||
+      (public_key_len != 33 && public_key_len != 65) || signature_len == 0) {
+    return false;
+  }
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call(
+          "crypto.secp256k1.verify",
+          "{\"message\":{\"$bin\":0},\"signature\":{\"$bin\":1},\"publicKey\":{\"$bin\":2}}",
+          {{message, message_len},
+           {signature, signature_len},
+           {public_key, public_key_len}},
+          &response)) {
+    return false;
+  }
+  return sdm_hostcall::find_json_bool(response.meta, "result", valid_out);
+}
+
 // Module-delivery xpub gate: verify a re-sent $EPM (shared isomorphic common code)
 // and decide membership against the per-module allowlist. The ed25519 verify is the
 // module's host call, so the same gate logic runs in the browser and on wasmedge.
@@ -989,8 +1019,15 @@ bool ed25519_verify_detached(
         bool valid = false;
         return ed25519_verify_detached(m, ml, p, 32, s, sl, &valid) && valid;
       };
+  const sdn::epm::Secp256k1Verify verify_secp256k1 =
+      [](const uint8_t* m, size_t ml, const uint8_t* s, size_t sl,
+         const uint8_t* p, size_t pl) -> bool {
+        bool valid = false;
+        return secp256k1_verify_detached(m, ml, p, pl, s, sl, &valid) && valid;
+      };
   return sdn::epm::AuthorizeModuleRequest(
-      epm_bytes, epm_len, proven_signing_pubkey, allowed_xpubs, now_unix, max_age_seconds, verify);
+      epm_bytes, epm_len, proven_signing_pubkey, allowed_xpubs, now_unix, max_age_seconds,
+      verify, verify_secp256k1);
 }
 
 std::vector<uint8_t> build_lch_bytes(
