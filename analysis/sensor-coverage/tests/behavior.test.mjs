@@ -82,7 +82,7 @@ test("sensor coverage source delegates SCV shape semantics to the shared sensor 
   assert.match(source, /classify_local_look\(/);
   assert.match(source, /generate_sensor_boundary_directions\(/);
   assert.match(source, /scvSensorShapeKind_SAR_ANNULAR_SECTOR/);
-  assert.match(source, /CUSTOM_POLYGON requires exact polygon geometry/);
+  assert.match(source, /scvSensorShapeKind_CUSTOM_POLYGON/);
   assert.match(visibilitySource, /classify_local_look\(/);
   assert.doesNotMatch(visibilitySource, /sensor\.type == "rectangular"/);
   assert.doesNotMatch(visibilitySource, /std::cos\(sensor\.outerHalfAngleRad\)/);
@@ -2216,7 +2216,7 @@ for (const runtimeKind of SENSOR_COVERAGE_RUNTIME_KINDS) {
     );
   });
 
-  test(`sensor coverage module explicitly rejects SCV CUSTOM_POLYGON on ${runtimeKind}`, async (t) => {
+  test(`sensor coverage module evaluates SCV CUSTOM_POLYGON coverage on ${runtimeKind}`, async (t) => {
     const harness = await createSensorCoverageHarness(runtimeKind, t);
     if (!harness) {
       return;
@@ -2244,17 +2244,17 @@ for (const runtimeKind of SENSOR_COVERAGE_RUNTIME_KINDS) {
           0,
           1600000,
           [
-            new SCVVec3T(0, 0, 1),
-            new SCVVec3T(0.1, 0, 1),
-            new SCVVec3T(0, 0.1, 1),
+            new SCVVec3T(-0.3, -0.3, 1),
+            new SCVVec3T(0.3, -0.3, 1),
+            new SCVVec3T(0.3, 0.3, 1),
+            new SCVVec3T(-0.3, 0.3, 1),
           ],
           scvCoordinateFrame.BODY_FIXED,
         ),
       ),
     );
 
-    assert.notEqual(response.statusCode, 0);
-    assert.match(response.errorMessage, /CUSTOM_POLYGON requires exact polygon geometry/);
+    assert.equal(response.statusCode, 0, response.errorMessage);
   });
 
   test(`sensor coverage module rejects unsupported SCV shapes before state-count validation on ${runtimeKind}`, async (t) => {
@@ -2287,7 +2287,6 @@ for (const runtimeKind of SENSOR_COVERAGE_RUNTIME_KINDS) {
           [
             new SCVVec3T(0, 0, 1),
             new SCVVec3T(0.1, 0, 1),
-            new SCVVec3T(0, 0.1, 1),
           ],
           scvCoordinateFrame.BODY_FIXED,
         ),
@@ -2296,7 +2295,7 @@ for (const runtimeKind of SENSOR_COVERAGE_RUNTIME_KINDS) {
     );
 
     assert.notEqual(response.statusCode, 0);
-    assert.match(response.errorMessage, /CUSTOM_POLYGON requires exact polygon geometry/);
+    assert.match(response.errorMessage, /custom polygon/i);
     assert.doesNotMatch(response.errorMessage, /missing-states|at least two propagated/i);
   });
 

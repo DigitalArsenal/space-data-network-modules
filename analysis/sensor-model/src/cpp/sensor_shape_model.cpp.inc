@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace sdn_hypersonics {
 
@@ -44,7 +45,7 @@ void rebuild_conformance_labels(SensorShapeContract& contract) {
       append_label(contract.conformanceLabels, "sar-annular-sector");
       break;
     case SensorShapeKind::CustomPolygon:
-      append_label(contract.conformanceLabels, "custom-polygon-unsupported");
+      append_label(contract.conformanceLabels, "custom-polygon");
       break;
   }
   if (contract.innerHalfAngleRad > kSensorEpsilon) {
@@ -74,6 +75,63 @@ SensorVec3 rectangular_direction(double crossTrackAngleRad, double alongTrackAng
       std::tan(alongTrackAngleRad),
       1.0,
   });
+}
+
+// Gnomonic projection of a forward-facing (z>0) direction onto the boresight
+// tangent plane (z=1). Great circles map to straight lines, so a spherical
+// polygon whose edges are great-circle arcs becomes a straight-edged 2D polygon
+// here — the same convention rectangular sensors use (corners at tan(halfAngle)).
+bool project_boresight_tangent(const SensorVec3& direction, double& u, double& v) {
+  const SensorVec3 unit = normalize_vector(direction);
+  if (!(unit.z > kSensorEpsilon)) {
+    return false;
+  }
+  u = unit.x / unit.z;
+  v = unit.y / unit.z;
+  return true;
+}
+
+bool custom_polygon_is_valid(const std::vector<SensorVec3>& vertices) {
+  if (vertices.size() < 3) {
+    return false;
+  }
+  for (const SensorVec3& vertex : vertices) {
+    double u = 0.0;
+    double v = 0.0;
+    if (!project_boresight_tangent(vertex, u, v)) {
+      return false;  // vertex outside the forward hemisphere -> not representable
+    }
+  }
+  return true;
+}
+
+// Even-odd ray cast with an inclusive on-edge test (boundary counts as inside),
+// mirroring the "+ kSensorEpsilon" inclusive style of the analytic shapes.
+bool point_in_projected_polygon(
+    double px,
+    double py,
+    const std::vector<std::pair<double, double>>& polygon) {
+  bool inside = false;
+  const size_t count = polygon.size();
+  for (size_t i = 0, j = count - 1; i < count; j = i++) {
+    const double xi = polygon[i].first;
+    const double yi = polygon[i].second;
+    const double xj = polygon[j].first;
+    const double yj = polygon[j].second;
+    const double edgeCross = (xj - xi) * (py - yi) - (yj - yi) * (px - xi);
+    if (std::fabs(edgeCross) <= kSensorEpsilon &&
+        (px - xi) * (px - xj) <= kSensorEpsilon &&
+        (py - yi) * (py - yj) <= kSensorEpsilon) {
+      return true;  // exactly on this edge
+    }
+    if ((yi > py) != (yj > py)) {
+      const double intersectX = (xj - xi) * (py - yi) / (yj - yi) + xi;
+      if (px < intersectX) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
 }
 
 std::vector<double> sample_clock_angles(const SensorClockRange& range, int sampleCount) {
@@ -252,13 +310,21 @@ SensorShapeContract make_sar_annular_sector_shape(
   return contract;
 }
 
-SensorShapeContract make_custom_polygon_unsupported_shape(
-    const std::vector<SensorVec3>& vertices) {
+SensorShapeContract make_custom_polygon_shape(
+    const std::vector<SensorVec3>& vertices,
+    double minRangeM,
+    double maxRangeM) {
   SensorShapeContract contract{};
   contract.kind = SensorShapeKind::CustomPolygon;
   contract.polygonVertices = vertices;
-  contract.supported = false;
-  contract.unsupportedReason = "unsupported shape: custom polygon sensor contracts are not evaluated by the shared C++ core yet";
+  contract.minRangeM = std::max(0.0, finite_or_zero(minRangeM));
+  contract.maxRangeM = std::max(0.0, finite_or_zero(maxRangeM));
+  contract.clockRange = normalize_clock_range_rad(0.0, kSensorTwoPi);
+  contract.supported = custom_polygon_is_valid(vertices);
+  if (!contract.supported) {
+    contract.unsupportedReason =
+        "invalid custom polygon: requires at least 3 forward-facing (z>0) boundary vertices";
+  }
   rebuild_conformance_labels(contract);
   return contract;
 }
@@ -284,8 +350,11 @@ SensorShapeContract parse_sensor_shape_contract(const SensorShapeContract& contr
       normalized.clockRange.startRad,
       normalized.clockRange.fullCircle ? kSensorTwoPi : normalized.clockRange.stopRad);
   if (normalized.kind == SensorShapeKind::CustomPolygon) {
-    normalized.supported = false;
-    normalized.unsupportedReason = "unsupported shape: custom polygon sensor contracts are not evaluated by the shared C++ core yet";
+    normalized.supported = custom_polygon_is_valid(normalized.polygonVertices);
+    if (!normalized.supported && normalized.unsupportedReason.empty()) {
+      normalized.unsupportedReason =
+          "invalid custom polygon: requires at least 3 forward-facing (z>0) boundary vertices";
+    }
   } else if (normalized.kind == SensorShapeKind::Unknown) {
     normalized.supported = false;
     if (normalized.unsupportedReason.empty()) {
@@ -357,7 +426,10 @@ SensorShapeContract parse_sensor_shape_contract(const ::SCVSensor* sensor) {
           rangeBoundary);
     case scvSensorShapeKind_CUSTOM_POLYGON:
       return with_range_boundary(
-          make_custom_polygon_unsupported_shape(parse_polygon_vertices(shape->POLYGON_VERTICES())),
+          make_custom_polygon_shape(
+              parse_polygon_vertices(shape->POLYGON_VERTICES()),
+              shape->MIN_RANGE_M(),
+              shape->MAX_RANGE_M()),
           rangeBoundary);
     case scvSensorShapeKind_SAR_ANNULAR_SECTOR:
       return with_range_boundary(
@@ -436,11 +508,33 @@ SensorClassification classify_local_look(
           classification.boresightAngleRad <= contract.outerHalfAngleRad + kSensorEpsilon &&
           classification.boresightAngleRad + kSensorEpsilon >= contract.innerHalfAngleRad;
       break;
-    case SensorShapeKind::CustomPolygon:
-      classification.supported = false;
-      classification.inside = false;
-      classification.reason = "unsupported shape";
+    case SensorShapeKind::CustomPolygon: {
+      std::vector<std::pair<double, double>> projected;
+      projected.reserve(contract.polygonVertices.size());
+      bool projectable = true;
+      for (const SensorVec3& vertex : contract.polygonVertices) {
+        double u = 0.0;
+        double v = 0.0;
+        if (!project_boresight_tangent(vertex, u, v)) {
+          projectable = false;
+          break;
+        }
+        projected.emplace_back(u, v);
+      }
+      double lookU = 0.0;
+      double lookV = 0.0;
+      const bool lookForward = project_boresight_tangent(unitLook, lookU, lookV);
+      classification.inside =
+          classification.rangeAccepted &&
+          projectable &&
+          projected.size() >= 3 &&
+          lookForward &&
+          point_in_projected_polygon(lookU, lookV, projected);
+      if (!classification.inside && lookForward && projectable) {
+        classification.reason = "outside custom polygon";
+      }
       break;
+    }
   }
 
   if (!classification.rangeAccepted) {
@@ -456,6 +550,14 @@ std::vector<SensorVec3> generate_sensor_boundary_directions(
   const SensorShapeContract contract = parse_sensor_shape_contract(inputContract);
   std::vector<SensorVec3> directions;
   if (!contract.supported) {
+    return directions;
+  }
+
+  if (contract.kind == SensorShapeKind::CustomPolygon) {
+    directions.reserve(contract.polygonVertices.size());
+    for (const SensorVec3& vertex : contract.polygonVertices) {
+      directions.push_back(normalize_vector(vertex));
+    }
     return directions;
   }
 

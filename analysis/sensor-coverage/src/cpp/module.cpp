@@ -498,10 +498,6 @@ SensorConfig sensor_from_scv(const SCVSensor* sensor, int fallback_sensor_id) {
       config.shapeContract.unsupportedReason = "unsupported sensor shape in SHAPE_CONTRACT()";
     }
   }
-  if (config.shapeContract.kind == SensorShapeKind::CustomPolygon) {
-    config.shapeContract.supported = false;
-    config.shapeContract.unsupportedReason = "CUSTOM_POLYGON requires exact polygon geometry";
-  }
   return config;
 }
 
