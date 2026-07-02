@@ -4101,11 +4101,17 @@ GravityAcceleration computeSphericalHarmonicGravity(
         Re_r_power *= Re_r;  // For next degree
     }
 
-    // Scale by mu/r^2
+    // Scale by mu/r^2.
+    // All three spherical acceleration components share the mu/r^2 scale:
+    //   a_r   =  dU/dr,                U ~ mu/r  -> mu/r^2
+    //   a_lat = (1/r) dU/dlat          -> (1/r)(mu/r) = mu/r^2
+    //   a_lon = (1/(r cos lat)) dU/dlon-> mu/(r^2 cos lat)
+    // (Previously a_lat/a_lon carried an extra 1/r, collapsing the
+    //  latitudinal restoring term and shrinking J2's effect by ~r.)
     double muOverR2 = coeffs.mu / (r * r);
     ar *= -muOverR2;
-    alat *= muOverR2 / r;
-    along *= muOverR2 / (r * std::cos(latitude) + 1e-20);
+    alat *= muOverR2;
+    along *= muOverR2 / (std::cos(latitude) + 1e-20);
 
     // Convert from spherical to Cartesian
     double cosLat = std::cos(latitude);

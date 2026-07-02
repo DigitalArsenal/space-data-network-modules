@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-06-24T13:50:41.045Z",
-  "moduleCount": 38,
+  "generatedAt": "2026-07-02T16:19:36.837Z",
+  "moduleCount": 39,
   "parityScopeModuleCount": 24,
-  "isomorphicWasmCount": 38,
+  "isomorphicWasmCount": 39,
   "missingIsomorphicWasm": [],
-  "browserWasmEdgeTargetCount": 24,
+  "browserWasmEdgeTargetCount": 25,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [
     "analysis/sensor-coverage",
@@ -930,6 +930,37 @@
       ]
     },
     {
+      "modulePath": "data-source/spacex-starlink-source",
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "name": "SpaceX Starlink Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/spacex_starlink_source.cpp"
+      ],
+      "testFiles": [
+        "test/module.test.mjs"
+      ]
+    },
+    {
       "modulePath": "foundation/attitude-math",
       "pluginId": "com.digitalarsenal.foundation.attitude-math",
       "name": "Foundation Attitude Math",
@@ -1217,18 +1248,23 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 3,
+      "cxxSourceFileCount": 6,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
+        "src/cpp/src/fips_init.cpp",
         "src/cpp/src/key_server.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/wasm_api.cpp"
+        "src/cpp/src/xpub_auth.cpp",
+        "src/cpp/wasm_api.cpp",
+        "tests/xpub_auth_test.cpp"
       ],
       "testFiles": [
-        "tests/sdk_compat.test.mjs"
+        "tests/run-native.sh",
+        "tests/sdk_compat.test.mjs",
+        "tests/xpub_auth_test.cpp"
       ]
     },
     {
