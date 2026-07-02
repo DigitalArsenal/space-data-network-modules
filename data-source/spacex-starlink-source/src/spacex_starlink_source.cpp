@@ -23,9 +23,10 @@
 #include <string>
 #include <vector>
 
-// SpaceX Starlink public ephemeris listing (discover endpoint).
+// SpaceX Starlink public ephemeris listing (discover endpoint): MANIFEST.txt
+// lists one ephemeris filename per line (the bare directory URL 404s).
 static const char* kStarlinkDiscoverURL =
-    "https://api.starlink.com/public-files/ephemerides/";
+    "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
 // Node signing key slot (wallet_sign / keyslot.get) used to sign published PNMs.
 static const char* kSigningKeySlot = "node-signing";
 // PubSub topic the module publishes PNM pointers on.
