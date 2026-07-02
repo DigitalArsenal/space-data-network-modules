@@ -30,15 +30,19 @@ import {
 } from "space-data-module-sdk/transport";
 import {
   aesGcmEncrypt,
+  getWasmWallet,
   hkdfBytes,
   randomBytes,
+  secp256k1PublicKey,
   x25519SharedSecret,
 } from "space-data-module-sdk/utils/wasm-crypto";
 import {
   createSdkBrowserShimHarness,
 } from "./lib/sdkBrowserShimHarness.mjs";
 import {
+  buildRecWrappedKmfContentKeyFrame,
   decodeGrantResponse,
+  encodeGrantResponse,
 } from "../../../delivery/plugin-delivery/lib/module-delivery-codec.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -79,6 +83,10 @@ function fromBase64(b64) {
   return out;
 }
 
+function sha256Bytes(bytes) {
+  return new Uint8Array(createHash("sha256").update(bytes).digest());
+}
+
 function storeIpfsBytes(contentStore, bytes) {
   const cid = `bafy-source-${createHash("sha256").update(bytes).digest("hex").slice(0, 24)}`;
   contentStore.set(cid, bytes);
@@ -97,42 +105,9 @@ async function generateX25519KeyPair() {
   return generateX25519Keypair();
 }
 
-async function encryptArtifact(plaintext, recipientPublicKey, wrapInfo = "orbpro-key-server-artifact-wrap-v1") {
-  const ephemeral = await generateX25519KeyPair();
-  const shared = await x25519SharedSecret(ephemeral.privateKey, recipientPublicKey);
-
-  const hkdfSalt = await randomBytes(32);
-  const wrapKey = await hkdfBytes(
-    shared,
-    hkdfSalt,
-    new TextEncoder().encode(wrapInfo),
-    32,
-  );
-
-  const contentKey = await randomBytes(32);
-  const wrapIV = await randomBytes(12);
-  const wrapped = await aesGcmEncrypt(wrapKey, contentKey, wrapIV);
-
-  const contentIV = await randomBytes(12);
-  const encrypted = await aesGcmEncrypt(contentKey, plaintext, contentIV);
-
-  return {
-    keyEncryption: {
-      scheme: "ecies-x25519-hkdf-sha256-aes-256-gcm",
-      ephemeralPublicKeyHex: bytesToHex(ephemeral.publicKey),
-      hkdfSaltB64: toBase64(hkdfSalt),
-      wrapIvB64: toBase64(wrapIV),
-      wrappedKeyB64: toBase64(wrapped.ciphertext),
-      wrappedKeyTagB64: toBase64(wrapped.tag),
-    },
-    contentEncryption: {
-      algorithm: "aes-256-gcm",
-      ivB64: toBase64(contentIV),
-      tagB64: toBase64(encrypted.tag),
-      ciphertextB64: toBase64(encrypted.ciphertext),
-    },
-  };
-}
+// v1: the legacy JSON double-GCM envelope builder was removed with
+// decrypt_legacy_envelope; the SDS $LGR grant (buildSdsGrant, below) is the
+// only supported artifact envelope.
 
 // ── Test runner ─────────────────────────────────────────────────────────────
 
@@ -225,36 +200,79 @@ await test("load client-decrypt WASM", async () => {
   assert.ok(decryptHarness);
 });
 
-await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (orbpro info)", async () => {
+// hd-wallet-wasm encrypt (SDS $LGR grant) -> C++ WASM decrypt, both curves.
+async function buildSdsGrant(artifact, recipientPublicKey, keyExchange) {
+  const contentKey = await randomBytes(32);
+  const contentIv = await randomBytes(12);
+  const enc = await aesGcmEncrypt(contentKey, artifact, contentIv);
+  let ephemeral;
+  let sharedSecret;
+  let wrappingAlgorithm;
+  if (keyExchange === "secp256k1") {
+    const ephPriv = await randomBytes(32);
+    ephemeral = { privateKey: ephPriv, publicKey: await secp256k1PublicKey(ephPriv) };
+    const wallet = await getWasmWallet();
+    let raw = wallet.curves.secp256k1.ecdh(ephPriv, recipientPublicKey);
+    if (raw.length !== 32) { const o = new Uint8Array(32); o.set(raw, 32 - raw.length); raw = o; }
+    sharedSecret = raw;
+    wrappingAlgorithm = "secp256k1-hkdf-sha256-aes-256-ctr-rec";
+  } else {
+    ephemeral = await generateX25519KeyPair();
+    sharedSecret = await x25519SharedSecret(ephemeral.privateKey, recipientPublicKey);
+    wrappingAlgorithm = "x25519-hkdf-sha256-aes-256-ctr-rec";
+  }
+  const wrappedPayload = await buildRecWrappedKmfContentKeyFrame(contentKey, sharedSecret);
+  const packed = new Uint8Array(contentIv.length + enc.ciphertext.length + enc.tag.length);
+  packed.set(contentIv, 0);
+  packed.set(enc.ciphertext, contentIv.length);
+  packed.set(enc.tag, contentIv.length + enc.ciphertext.length);
+  const bundleHash = sha256Bytes(packed);
+  const cid = `bafy-e2e-${Buffer.from(bundleHash).toString("hex").slice(0, 24)}`;
+  const grantResponseBytes = encodeGrantResponse({
+    reqId: "req-e2e",
+    grantedDomain: "localhost",
+    grantedTimeoutMs: 30000,
+    expiresAtMs: 60000,
+    grantVerifierPublicKey: recipientPublicKey,
+    bundleDescriptor: {
+      cid, contentHash: bundleHash, sizeBytes: packed.length,
+      moduleId: "com.orbpro.e2e", moduleVersion: "1.0.0", runtime: "browser",
+      abi: "space-data-module-abi", entrypoint: "plugin_invoke_stream",
+      publicationCid: "bafy-e2e-pub", contentCodec: "application/wasm+encrypted",
+      encryptionCodec: "hkdf-sha256-aes-256-gcm",
+    },
+    wrappedContentKey: {
+      wrappingAlgorithm, recipientPublicKey,
+      ephemeralPublicKey: ephemeral.publicKey, nonce: contentIv,
+      ciphertext: wrappedPayload, tag: new Uint8Array(), keyMaterialRootType: "REC",
+    },
+  });
+  return { grantResponseBytes, packed };
+}
+
+await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (X25519 SDS grant)", async () => {
   const { publicKey, privateKey } = await generateX25519KeyPair();
   const artifact = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...crypto.getRandomValues(new Uint8Array(256)),
   ]);
-
-  const envelope = await encryptArtifact(artifact, publicKey, "orbpro-key-server-artifact-wrap-v1");
-  const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope));
-
+  const { grantResponseBytes, packed } = await buildSdsGrant(artifact, publicKey, "x25519");
   const result = await decryptHarness.invoke({
     methodId: "decrypt_artifact",
-    inputs: [{ payload: envelopeBytes }, { payload: privateKey }],
+    inputs: [{ payload: grantResponseBytes }, { payload: privateKey }, { payload: packed }],
   });
-
   assert.deepEqual(result.outputs[0].payload, artifact);
 });
 
-await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (plugin info)", async () => {
-  const { publicKey, privateKey } = await generateX25519KeyPair();
+await test("e2e: hd-wallet-wasm encrypt → C++ WASM decrypt (secp256k1 SDS grant)", async () => {
+  const privateKey = await randomBytes(32);
+  const publicKey = await secp256k1PublicKey(privateKey);
   const artifact = crypto.getRandomValues(new Uint8Array(1024));
-
-  const envelope = await encryptArtifact(artifact, publicKey, "plugin-key-server-artifact-wrap-v1");
-  const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope));
-
+  const { grantResponseBytes, packed } = await buildSdsGrant(artifact, publicKey, "secp256k1");
   const result = await decryptHarness.invoke({
     methodId: "decrypt_artifact",
-    inputs: [{ payload: envelopeBytes }, { payload: privateKey }],
+    inputs: [{ payload: grantResponseBytes }, { payload: privateKey }, { payload: packed }],
   });
-
   assert.deepEqual(result.outputs[0].payload, artifact);
 });
 

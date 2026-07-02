@@ -163,8 +163,13 @@ function buildWrappedContentKeyHeader(builder, wrapped = {}) {
     header.rootType ?? wrapped.keyMaterialRootType ?? "REC",
   );
 
+  // Unified ECIES: the key exchange is parameterized by the wrap algorithm
+  // (X25519 default; "secp256k1-..." selects the secp256k1 raw-X branch).
+  const wrapKeyExchange = String(wrapped.wrappingAlgorithm ?? "").startsWith("secp256k1")
+    ? KeyExchange.Secp256k1
+    : KeyExchange.X25519;
   ENC.startENC(builder);
-  ENC.addKeyExchange(builder, KeyExchange.X25519);
+  ENC.addKeyExchange(builder, wrapKeyExchange);
   ENC.addSymmetric(builder, SymmetricAlgo.AES_256_CTR);
   ENC.addKeyDerivation(builder, KDF.HKDF_SHA256);
   ENC.addEphemeralPublicKey(builder, ephemeralPublicKeyOffset);
