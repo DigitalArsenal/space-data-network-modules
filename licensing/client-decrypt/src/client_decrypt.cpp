@@ -36,13 +36,11 @@
 #include <cryptopp/modes.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/xed25519.h>
+#include <cryptopp/eccrypto.h>
+#include <cryptopp/oids.h>
+#include <cryptopp/nbtheory.h>
 #include <cryptopp/secblock.h>
 
-static const char WRAP_INFOS[][64] = {
-    "orbpro-key-server-artifact-wrap-v1",
-    "plugin-key-server-artifact-wrap-v1",
-};
-static const size_t WRAP_INFO_COUNT = 2;
 static const char MODULE_DELIVERY_GRANT_CONTEXT[] = "space-data-network/module-delivery/grant/v1";
 static const size_t KEY_BYTES = 32;
 static const size_t GCM_IV_BYTES = 12;
@@ -56,195 +54,11 @@ static const size_t REC_TRAILER_FOOTER_BYTES = 8;
 #include "../../../common/sdm_hostcall_wire.hpp"
 #endif
 
-static int b64_char_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+' || c == '-') return 62;
-    if (c == '/' || c == '_') return 63;
-    return -1;
-}
-
-static std::vector<uint8_t> base64_decode(const char* in, size_t in_len) {
-    std::vector<uint8_t> out;
-    out.reserve(in_len * 3 / 4);
-    int val = 0;
-    int bits = -8;
-    for (size_t i = 0; i < in_len; i++) {
-        const int v = b64_char_value(in[i]);
-        if (v < 0) {
-            continue;
-        }
-        val = (val << 6) + v;
-        bits += 6;
-        if (bits >= 0) {
-            out.push_back(static_cast<uint8_t>((val >> bits) & 0xff));
-            bits -= 8;
-        }
-    }
-    return out;
-}
-
-static std::vector<uint8_t> hex_decode(const char* in, size_t in_len) {
-    std::vector<uint8_t> out;
-    out.reserve(in_len / 2);
-    for (size_t i = 0; i + 1 < in_len; i += 2) {
-        auto nibble = [](char c) -> int {
-            if (c >= '0' && c <= '9') return c - '0';
-            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-            return -1;
-        };
-        const int hi = nibble(in[i]);
-        const int lo = nibble(in[i + 1]);
-        if (hi < 0 || lo < 0) {
-            break;
-        }
-        out.push_back(static_cast<uint8_t>((hi << 4) | lo));
-    }
-    return out;
-}
-
-static std::string json_get_string(const char* json, size_t json_len, const char* key) {
-    std::string needle = std::string("\"") + key + "\":\"";
-    const char* begin = json;
-    const char* end = json + json_len;
-    while (begin < end) {
-        const void* found = memmem(begin, static_cast<size_t>(end - begin), needle.data(), needle.size());
-        if (!found) {
-            return {};
-        }
-        const char* value_start = static_cast<const char*>(found) + needle.size();
-        const char* value_end = value_start;
-        while (value_end < end && *value_end != '"') {
-            value_end++;
-        }
-        return std::string(value_start, value_end);
-    }
-    return {};
-}
-
 struct DecryptResult {
     bool ok = false;
     std::vector<uint8_t> plaintext;
     std::string error;
 };
-
-static DecryptResult decrypt_legacy_envelope(
-    const char* envelope_json,
-    size_t json_len,
-    const uint8_t* priv_key,
-    size_t priv_len)
-{
-    DecryptResult result;
-    if (priv_len != KEY_BYTES) {
-        result.error = "private key must be 32 bytes";
-        return result;
-    }
-
-    const auto eph_pub_hex = json_get_string(envelope_json, json_len, "ephemeralPublicKeyHex");
-    const auto hkdf_salt_b64 = json_get_string(envelope_json, json_len, "hkdfSaltB64");
-    const auto wrap_iv_b64 = json_get_string(envelope_json, json_len, "wrapIvB64");
-    const auto wrapped_key_b64 = json_get_string(envelope_json, json_len, "wrappedKeyB64");
-    const auto wrapped_tag_b64 = json_get_string(envelope_json, json_len, "wrappedKeyTagB64");
-    const auto content_iv_b64 = json_get_string(envelope_json, json_len, "ivB64");
-    const auto content_tag_b64 = json_get_string(envelope_json, json_len, "tagB64");
-    const auto ciphertext_b64 = json_get_string(envelope_json, json_len, "ciphertextB64");
-
-    if (eph_pub_hex.empty() || hkdf_salt_b64.empty() || wrap_iv_b64.empty() ||
-        wrapped_key_b64.empty() || wrapped_tag_b64.empty() ||
-        content_iv_b64.empty() || content_tag_b64.empty() || ciphertext_b64.empty()) {
-        result.error = "missing envelope fields";
-        return result;
-    }
-
-    const auto eph_pub_bytes = hex_decode(eph_pub_hex.data(), eph_pub_hex.size());
-    const auto hkdf_salt = base64_decode(hkdf_salt_b64.data(), hkdf_salt_b64.size());
-    const auto wrap_iv = base64_decode(wrap_iv_b64.data(), wrap_iv_b64.size());
-    const auto wrapped_key = base64_decode(wrapped_key_b64.data(), wrapped_key_b64.size());
-    const auto wrapped_tag = base64_decode(wrapped_tag_b64.data(), wrapped_tag_b64.size());
-    const auto content_iv = base64_decode(content_iv_b64.data(), content_iv_b64.size());
-    const auto content_tag = base64_decode(content_tag_b64.data(), content_tag_b64.size());
-    const auto ciphertext = base64_decode(ciphertext_b64.data(), ciphertext_b64.size());
-
-    if (eph_pub_bytes.size() != KEY_BYTES) {
-        result.error = "invalid ephemeral public key";
-        return result;
-    }
-
-    try {
-        CryptoPP::x25519 x25519_scheme;
-        CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
-        if (!x25519_scheme.Agree(shared_secret, priv_key, eph_pub_bytes.data())) {
-            result.error = "X25519 key agreement failed";
-            return result;
-        }
-
-        CryptoPP::SecByteBlock content_key(KEY_BYTES);
-        bool unwrapped = false;
-        for (size_t i = 0; i < WRAP_INFO_COUNT && !unwrapped; i++) {
-            CryptoPP::SecByteBlock wrap_key(KEY_BYTES);
-            CryptoPP::HKDF<CryptoPP::SHA256> hkdf;
-            hkdf.DeriveKey(
-                wrap_key, KEY_BYTES,
-                shared_secret, KEY_BYTES,
-                hkdf_salt.data(), hkdf_salt.size(),
-                reinterpret_cast<const uint8_t*>(WRAP_INFOS[i]),
-                strlen(WRAP_INFOS[i])
-            );
-
-            std::vector<uint8_t> wrapped_combined;
-            wrapped_combined.reserve(wrapped_key.size() + wrapped_tag.size());
-            wrapped_combined.insert(wrapped_combined.end(), wrapped_key.begin(), wrapped_key.end());
-            wrapped_combined.insert(wrapped_combined.end(), wrapped_tag.begin(), wrapped_tag.end());
-
-            try {
-                CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
-                dec.SetKeyWithIV(wrap_key, KEY_BYTES, wrap_iv.data(), wrap_iv.size());
-                CryptoPP::ArraySink sink(content_key, KEY_BYTES);
-                CryptoPP::AuthenticatedDecryptionFilter filter(
-                    dec,
-                    &sink,
-                    CryptoPP::AuthenticatedDecryptionFilter::DEFAULT_FLAGS,
-                    GCM_TAG_BYTES
-                );
-                filter.Put(wrapped_combined.data(), wrapped_combined.size());
-                filter.MessageEnd();
-                unwrapped = true;
-            } catch (...) {
-            }
-        }
-
-        if (!unwrapped) {
-            result.error = "failed to unwrap content key with any HKDF info string";
-            return result;
-        }
-
-        std::vector<uint8_t> ciphertext_and_tag;
-        ciphertext_and_tag.reserve(ciphertext.size() + content_tag.size());
-        ciphertext_and_tag.insert(ciphertext_and_tag.end(), ciphertext.begin(), ciphertext.end());
-        ciphertext_and_tag.insert(ciphertext_and_tag.end(), content_tag.begin(), content_tag.end());
-
-        result.plaintext.resize(ciphertext.size());
-        CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
-        dec.SetKeyWithIV(content_key, KEY_BYTES, content_iv.data(), content_iv.size());
-        CryptoPP::ArraySink sink(result.plaintext.data(), result.plaintext.size());
-        CryptoPP::AuthenticatedDecryptionFilter filter(
-            dec,
-            &sink,
-            CryptoPP::AuthenticatedDecryptionFilter::DEFAULT_FLAGS,
-            GCM_TAG_BYTES
-        );
-        filter.Put(ciphertext_and_tag.data(), ciphertext_and_tag.size());
-        filter.MessageEnd();
-        result.ok = true;
-    } catch (const std::exception& ex) {
-        result.error = ex.what();
-        result.plaintext.clear();
-    }
-
-    return result;
-}
 
 #if defined(SDN_WASI_PLUGIN)
 static bool fetch_ipfs_bytes(const char* cid, size_t cid_len, std::vector<uint8_t>& out_bytes) {
@@ -263,6 +77,80 @@ static bool fetch_ipfs_bytes(const char*, size_t, std::vector<uint8_t>&) {
     return false;
 }
 #endif
+
+// compute_shared_secret dispatches the unified-ECIES ECDH on
+// ENC.KEY_EXCHANGE (docs/UNIFIED_ECIES.md): X25519 raw shared secret, or
+// secp256k1 raw X coordinate (RFC 5903 - NOT hashed), matching the Go
+// internal/ecies reference, the sdn-js wallet path, and
+// da-flatbuffers Secp256k1SharedSecret. priv is always 32 bytes; the
+// ephemeral public key is 32 bytes (X25519) or 33/65 bytes (secp256k1
+// compressed/uncompressed). Writes 32 bytes to out.
+static bool compute_shared_secret(
+    KeyExchange key_exchange,
+    const uint8_t* priv,
+    const uint8_t* pub,
+    size_t pub_len,
+    uint8_t* out,
+    std::string& error_out)
+{
+    if (key_exchange == KeyExchange::X25519) {
+        if (pub_len != KEY_BYTES) {
+            error_out = "X25519 ephemeral public key must be 32 bytes";
+            return false;
+        }
+        CryptoPP::x25519 x25519_scheme;
+        if (!x25519_scheme.Agree(out, priv, pub)) {
+            error_out = "X25519 key agreement failed";
+            return false;
+        }
+        return true;
+    }
+    if (key_exchange == KeyExchange::Secp256k1) {
+        try {
+            CryptoPP::ECDH<CryptoPP::ECP>::Domain ecdh(CryptoPP::ASN1::secp256k1());
+            CryptoPP::SecByteBlock uncompressed(65);
+            const uint8_t* pub_ptr = pub;
+            size_t pub_full_len = pub_len;
+            if (pub_len == 33 && (pub[0] == 0x02 || pub[0] == 0x03)) {
+                CryptoPP::Integer x(pub + 1, 32);
+                const CryptoPP::ECP& curve = ecdh.GetGroupParameters().GetCurve();
+                const CryptoPP::Integer& modulus = curve.GetField().GetModulus();
+                CryptoPP::Integer y2 = (x * x * x + 7) % modulus;
+                CryptoPP::Integer y = CryptoPP::ModularSquareRoot(y2, modulus);
+                CryptoPP::ECP::Point point(x, y);
+                if (!curve.VerifyPoint(point)) {
+                    error_out = "secp256k1 ephemeral public key is not on the curve";
+                    return false;
+                }
+                if ((pub[0] == 0x03) != y.IsOdd()) {
+                    y = modulus - y;
+                }
+                uncompressed[0] = 0x04;
+                x.Encode(uncompressed.BytePtr() + 1, 32);
+                y.Encode(uncompressed.BytePtr() + 33, 32);
+                pub_ptr = uncompressed.BytePtr();
+                pub_full_len = 65;
+            }
+            if (pub_full_len != 65 || pub_ptr[0] != 0x04) {
+                error_out = "secp256k1 ephemeral public key must be 33-byte compressed or 65-byte uncompressed";
+                return false;
+            }
+            CryptoPP::SecByteBlock priv_full(ecdh.PrivateKeyLength());
+            memset(priv_full.BytePtr(), 0, priv_full.size());
+            memcpy(priv_full.BytePtr() + priv_full.size() - KEY_BYTES, priv, KEY_BYTES);
+            if (!ecdh.Agree(out, priv_full.BytePtr(), pub_ptr)) {
+                error_out = "secp256k1 key agreement failed";
+                return false;
+            }
+            return true;
+        } catch (...) {
+            error_out = "secp256k1 key agreement threw";
+            return false;
+        }
+    }
+    error_out = "unsupported ENC key exchange";
+    return false;
+}
 
 static void derive_hkdf_key(
     const uint8_t* ikm,
@@ -459,27 +347,30 @@ static int decrypt_protected_publication_bundle(
     const auto* ephemeral_public_key = enc->EPHEMERAL_PUBLIC_KEY();
     const auto* nonce_start = enc->NONCE_START();
     if (recipient_private_key_len != KEY_BYTES ||
-        !ephemeral_public_key || ephemeral_public_key->size() != KEY_BYTES ||
+        !ephemeral_public_key || ephemeral_public_key->size() == 0 ||
         !nonce_start || nonce_start->size() != GCM_IV_BYTES) {
         error_out = "protected publication ENC record is missing required bytes";
         return -1;
     }
     const uint8_t symmetric_raw = static_cast<uint8_t>(enc->SYMMETRIC());
     const bool is_gcm = symmetric_raw == SYMMETRIC_ALGO_AES_256_GCM;
-    if (enc->KEY_EXCHANGE() != KeyExchange::X25519 ||
+    if ((enc->KEY_EXCHANGE() != KeyExchange::X25519 &&
+         enc->KEY_EXCHANGE() != KeyExchange::Secp256k1) ||
         (enc->SYMMETRIC() != SymmetricAlgo::AES_256_CTR && !is_gcm) ||
         enc->KEY_DERIVATION() != KDF::HKDF_SHA256) {
         error_out = "protected publication ENC record uses an unsupported cipher suite";
         return -1;
     }
 
-    CryptoPP::x25519 x25519_scheme;
     CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
-    if (!x25519_scheme.Agree(
-            shared_secret,
+    if (!compute_shared_secret(
+            enc->KEY_EXCHANGE(),
             recipient_private_key,
-            ephemeral_public_key->Data())) {
-        error_out = "protected publication X25519 key agreement failed";
+            ephemeral_public_key->Data(),
+            ephemeral_public_key->size(),
+            shared_secret,
+            error_out)) {
+        error_out = "protected publication key agreement failed: " + error_out;
         return -1;
     }
 
@@ -560,25 +451,27 @@ static bool unwrap_sds_wrapped_content_key(
     const auto* ephemeral_public_key =
         wrapped_header ? wrapped_header->EPHEMERAL_PUBLIC_KEY() : nullptr;
     const auto* payload = wrapped_payload;
-    if (!ephemeral_public_key || ephemeral_public_key->size() != KEY_BYTES ||
+    if (!ephemeral_public_key || ephemeral_public_key->size() == 0 ||
         !payload || payload->size() == 0) {
         error_out = "wrapped SDS content key missing required bytes";
         return false;
     }
-    if (wrapped_header->KEY_EXCHANGE() != KeyExchange::X25519 ||
+    if ((wrapped_header->KEY_EXCHANGE() != KeyExchange::X25519 &&
+         wrapped_header->KEY_EXCHANGE() != KeyExchange::Secp256k1) ||
         wrapped_header->SYMMETRIC() != SymmetricAlgo::AES_256_CTR ||
         wrapped_header->KEY_DERIVATION() != KDF::HKDF_SHA256) {
         error_out = "wrapped SDS content key uses an unsupported cipher suite";
         return false;
     }
 
-    CryptoPP::x25519 x25519_scheme;
     CryptoPP::SecByteBlock shared_secret(KEY_BYTES);
-    if (!x25519_scheme.Agree(
-            shared_secret,
+    if (!compute_shared_secret(
+            wrapped_header->KEY_EXCHANGE(),
             requester_private_key,
-            ephemeral_public_key->Data())) {
-        error_out = "X25519 key agreement failed";
+            ephemeral_public_key->Data(),
+            ephemeral_public_key->size(),
+            shared_secret,
+            error_out)) {
         return false;
     }
 
@@ -904,12 +797,10 @@ static std::vector<uint8_t> handle_decrypt_artifact(const PIVRequest* req) {
             private_key_len
         );
     } else {
-        decrypted = decrypt_legacy_envelope(
-            reinterpret_cast<const char*>(payload),
-            payload_len,
-            private_key,
-            private_key_len
-        );
+        // v1: the legacy JSON double-GCM envelope is gone; the SDS $LGR grant
+        // is the only supported artifact envelope.
+        decrypted.ok = false;
+        decrypted.error = "unsupported envelope: expected an SDS $LGR grant";
     }
 
     if (!decrypted.ok) {

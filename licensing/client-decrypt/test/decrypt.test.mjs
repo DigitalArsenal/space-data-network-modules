@@ -21,6 +21,12 @@ const WASM_PATH = path.resolve(__dirname, "../dist/isomorphic/module.wasm");
 // ── Inline artifact-crypto fixtures using hd-wallet-wasm via SDK ────────────
 
 
+function arraysEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 function bytesToHex(bytes) {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -45,51 +51,22 @@ function concat(...arrays) {
   return out;
 }
 
-async function generateX25519KeyPair() {
-  return generateX25519Keypair();
+async function secp256k1SharedSecretRawX(privateKey, publicKey) {
+  const wallet = await getWasmWallet();
+  const shared = wallet.curves.secp256k1.ecdh(privateKey, publicKey);
+  if (shared.length === 32) return shared;
+  const out = new Uint8Array(32);
+  out.set(shared, 32 - shared.length);
+  return out;
 }
 
-async function encryptArtifact(
-  plaintext,
-  recipientPublicKey,
-  wrapInfo = "orbpro-key-server-artifact-wrap-v1",
-) {
-  const ephemeral = await generateX25519KeyPair();
-  const sharedSecret = await x25519SharedSecret(
-    ephemeral.privateKey,
-    recipientPublicKey,
-  );
+async function generateSecp256k1KeyPair() {
+  const privateKey = await randomBytes(32);
+  return { privateKey, publicKey: await secp256k1PublicKey(privateKey) };
+}
 
-  const hkdfSalt = await randomBytes(32);
-  const wrapKey = await hkdfBytes(
-    sharedSecret,
-    hkdfSalt,
-    new TextEncoder().encode(wrapInfo),
-    32,
-  );
-  const contentKey = await randomBytes(32);
-  const wrapIV = await randomBytes(12);
-  const wrapped = await aesGcmEncrypt(wrapKey, contentKey, wrapIV);
-
-  const contentIV = await randomBytes(12);
-  const encrypted = await aesGcmEncrypt(contentKey, plaintext, contentIV);
-
-  return {
-    keyEncryption: {
-      scheme: "ecies-x25519-hkdf-sha256-aes-256-gcm",
-      ephemeralPublicKeyHex: bytesToHex(ephemeral.publicKey),
-      hkdfSaltB64: toBase64(hkdfSalt),
-      wrapIvB64: toBase64(wrapIV),
-      wrappedKeyB64: toBase64(wrapped.ciphertext),
-      wrappedKeyTagB64: toBase64(wrapped.tag),
-    },
-    contentEncryption: {
-      algorithm: "aes-256-gcm",
-      ivB64: toBase64(contentIV),
-      tagB64: toBase64(encrypted.tag),
-      ciphertextB64: toBase64(encrypted.ciphertext),
-    },
-  };
+async function generateX25519KeyPair() {
+  return generateX25519Keypair();
 }
 
 function fromBase64(b64) {
@@ -110,15 +87,24 @@ async function buildGrantResponseFixture(
   recipientPublicKey,
   metadata = {},
 ) {
-  const ephemeral = await generateX25519KeyPair();
+  const keyExchange = metadata.keyExchange ?? "x25519";
   const contentKey = await randomBytes(32);
   const contentIv = await randomBytes(12);
   const encryptedContent = await aesGcmEncrypt(contentKey, plaintext, contentIv);
 
-  const sharedSecret = await x25519SharedSecret(
-    ephemeral.privateKey,
-    recipientPublicKey,
-  );
+  let ephemeral;
+  let sharedSecret;
+  let wrappingAlgorithm;
+  if (keyExchange === "secp256k1") {
+    const ephPriv = await randomBytes(32);
+    ephemeral = { privateKey: ephPriv, publicKey: await secp256k1PublicKey(ephPriv) };
+    sharedSecret = await secp256k1SharedSecretRawX(ephPriv, recipientPublicKey);
+    wrappingAlgorithm = "secp256k1-hkdf-sha256-aes-256-ctr-rec";
+  } else {
+    ephemeral = await generateX25519KeyPair();
+    sharedSecret = await x25519SharedSecret(ephemeral.privateKey, recipientPublicKey);
+    wrappingAlgorithm = "x25519-hkdf-sha256-aes-256-ctr-rec";
+  }
   const wrapIv = await randomBytes(12);
   const wrappedContentKeyPayload = await buildRecWrappedKmfContentKeyFrame(
     contentKey,
@@ -157,7 +143,7 @@ async function buildGrantResponseFixture(
           metadata.encryptionCodec ?? "x25519-hkdf-sha256-aes-256-gcm",
       },
       wrappedContentKey: {
-        wrappingAlgorithm: "x25519-hkdf-sha256-aes-256-ctr-rec",
+        wrappingAlgorithm,
         recipientPublicKey,
         ephemeralPublicKey: ephemeral.publicKey,
         nonce: wrapIv,
@@ -179,8 +165,10 @@ import {
 } from "space-data-module-sdk/transport";
 import {
   aesGcmEncrypt,
+  getWasmWallet,
   hkdfBytes,
   randomBytes,
+  secp256k1PublicKey,
   x25519SharedSecret,
 } from "space-data-module-sdk/utils/wasm-crypto";
 import {
@@ -223,6 +211,48 @@ console.log(`Loaded ${path.basename(WASM_PATH)} (${wasmBytes.length} bytes)\n`);
 
 let harness;
 
+// Decrypt a plaintext through the SDS $LGR grant path (the v1 envelope) using a
+// shim harness with the encrypted bundle prefetched (no host IPFS).
+async function decryptViaGrant(plaintext, keyExchange = "x25519") {
+  const recipient =
+    keyExchange === "secp256k1"
+      ? await generateSecp256k1KeyPair()
+      : await generateX25519KeyPair();
+  const fixture = await buildGrantResponseFixture(plaintext, recipient.publicKey, {
+    keyExchange,
+  });
+  const shimHarness = await createSdkBrowserShimHarness({
+    wasmSource: wasmBytes,
+    surface: "direct",
+    maxRequestBytes: 1024 * 1024,
+    maxResponseBytes: 8 * 1024 * 1024,
+    dispatch(operation, params) {
+      if (operation === "host.runtimeTarget") return "browser";
+      if (operation === "host.listCapabilities") return [];
+      if (operation === "host.hasCapability") return false;
+      if (operation === "host.listOperations") return [];
+      if (operation === "clock.now") return Date.now();
+      if (operation === "random.bytes") {
+        return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
+      }
+      throw new Error(`Unsupported operation: ${operation}`);
+    },
+  });
+  try {
+    const result = await shimHarness.invoke({
+      methodId: "decrypt_artifact",
+      inputs: [
+        { payload: fixture.grantResponseBytes },
+        { payload: recipient.privateKey },
+        { payload: fixture.packedEncryptedBundle },
+      ],
+    });
+    return result.outputs?.[0]?.payload ?? null;
+  } finally {
+    await shimHarness.destroy();
+  }
+}
+
 await test("load client-decrypt module.wasm via browser harness", async () => {
   harness = await createBrowserModuleHarness({
     wasmSource: wasmBytes,
@@ -235,101 +265,76 @@ await test("load client-decrypt module.wasm via browser harness", async () => {
   );
 });
 
-await test("decrypt_artifact: round-trip with orbpro info string", async () => {
-  const { publicKey, privateKey } = await generateX25519KeyPair();
+await test("decrypt_artifact: X25519 SDS grant round-trip", async () => {
   const plaintext = new TextEncoder().encode(
     "hello from standalone decryption test",
   );
-
-  const envelope = await encryptArtifact(
-    plaintext,
-    publicKey,
-    "orbpro-key-server-artifact-wrap-v1",
-  );
-  const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope));
-
-  const result = await harness.invoke({
-    methodId: "decrypt_artifact",
-    inputs: [{ payload: envelopeBytes }, { payload: privateKey }],
-  });
-
-  assert.ok(result.outputs?.length >= 1, "should have at least one output");
-  const decrypted = result.outputs[0].payload;
+  const decrypted = await decryptViaGrant(plaintext, "x25519");
   assert.ok(decrypted instanceof Uint8Array, "output should be Uint8Array");
-  assert.deepEqual(
-    decrypted,
-    plaintext,
-    "decrypted bytes should match original plaintext",
-  );
+  assert.deepEqual(decrypted, plaintext, "decrypted bytes should match");
 });
 
-await test("decrypt_artifact: round-trip with plugin info string", async () => {
-  const { publicKey, privateKey } = await generateX25519KeyPair();
+await test("decrypt_artifact: secp256k1 SDS grant round-trip (unified ECIES)", async () => {
   const plaintext = new TextEncoder().encode(
-    "plugin-key-server test payload",
+    "secp256k1 unified-ECIES cross-runtime payload",
   );
-
-  const envelope = await encryptArtifact(
-    plaintext,
-    publicKey,
-    "plugin-key-server-artifact-wrap-v1",
-  );
-  const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope));
-
-  const result = await harness.invoke({
-    methodId: "decrypt_artifact",
-    inputs: [{ payload: envelopeBytes }, { payload: privateKey }],
-  });
-
-  const decrypted = result.outputs[0].payload;
-  assert.deepEqual(decrypted, plaintext);
+  const decrypted = await decryptViaGrant(plaintext, "secp256k1");
+  assert.deepEqual(decrypted, plaintext, "secp256k1 grant should decrypt");
 });
 
 await test("decrypt_artifact: binary WASM-like payload", async () => {
-  const { publicKey, privateKey } = await generateX25519KeyPair();
   const plaintext = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...crypto.getRandomValues(new Uint8Array(256)),
   ]);
-
-  const envelope = await encryptArtifact(plaintext, publicKey);
-  const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope));
-
-  const result = await harness.invoke({
-    methodId: "decrypt_artifact",
-    inputs: [{ payload: envelopeBytes }, { payload: privateKey }],
-  });
-
-  const decrypted = result.outputs[0].payload;
-  assert.deepEqual(
-    decrypted,
-    plaintext,
-    "binary payload should survive ECIES round-trip",
-  );
+  const decrypted = await decryptViaGrant(plaintext, "x25519");
+  assert.deepEqual(decrypted, plaintext, "binary payload should round-trip");
   assert.equal(decrypted[0], 0x00);
-  assert.equal(decrypted[1], 0x61);
-  assert.equal(decrypted[2], 0x73);
   assert.equal(decrypted[3], 0x6d);
 });
 
 await test("decrypt_artifact: wrong private key returns error", async () => {
-  const { publicKey } = await generateX25519KeyPair();
-  const { privateKey: wrongPrivKey } = await generateX25519KeyPair();
   const plaintext = new TextEncoder().encode("secret");
-
-  const envelope = await encryptArtifact(plaintext, publicKey);
-  const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope));
-
-  const result = await harness.invoke({
-    methodId: "decrypt_artifact",
-    inputs: [{ payload: envelopeBytes }, { payload: wrongPrivKey }],
+  const recipient = await generateX25519KeyPair();
+  const wrong = await generateX25519KeyPair();
+  const fixture = await buildGrantResponseFixture(plaintext, recipient.publicKey, {
+    keyExchange: "x25519",
   });
-
-  const hasError =
-    result.status !== 0 ||
-    result.errorMessage ||
-    !result.outputs?.[0]?.payload?.length;
-  assert.ok(hasError, "wrong key should produce an error or empty output");
+  const shimHarness = await createSdkBrowserShimHarness({
+    wasmSource: wasmBytes,
+    surface: "direct",
+    maxRequestBytes: 1024 * 1024,
+    maxResponseBytes: 4 * 1024 * 1024,
+    dispatch(operation, params) {
+      if (operation === "host.runtimeTarget") return "browser";
+      if (operation === "host.listCapabilities") return [];
+      if (operation === "host.hasCapability") return false;
+      if (operation === "host.listOperations") return [];
+      if (operation === "clock.now") return Date.now();
+      if (operation === "random.bytes") {
+        return crypto.getRandomValues(new Uint8Array(params?.length ?? 32));
+      }
+      throw new Error(`Unsupported operation: ${operation}`);
+    },
+  });
+  try {
+    const result = await shimHarness.invoke({
+      methodId: "decrypt_artifact",
+      inputs: [
+        { payload: fixture.grantResponseBytes },
+        { payload: wrong.privateKey },
+        { payload: fixture.packedEncryptedBundle },
+      ],
+    });
+    const hasError =
+      result.status !== 0 ||
+      result.errorMessage ||
+      !result.outputs?.[0]?.payload?.length ||
+      !arraysEqual(result.outputs[0].payload, plaintext);
+    assert.ok(hasError, "wrong key should not recover the plaintext");
+  } finally {
+    await shimHarness.destroy();
+  }
 });
 
 await test(
@@ -458,22 +463,9 @@ await test(
 );
 
 await test("decrypt_artifact: large payload (64 KB)", async () => {
-  const { publicKey, privateKey } = await generateX25519KeyPair();
   const plaintext = crypto.getRandomValues(new Uint8Array(65536));
-
-  const envelope = await encryptArtifact(plaintext, publicKey);
-  const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope));
-
-  const result = await harness.invoke({
-    methodId: "decrypt_artifact",
-    inputs: [{ payload: envelopeBytes }, { payload: privateKey }],
-  });
-
-  assert.deepEqual(
-    result.outputs[0].payload,
-    plaintext,
-    "64 KB payload should decrypt correctly",
-  );
+  const decrypted = await decryptViaGrant(plaintext, "x25519");
+  assert.deepEqual(decrypted, plaintext, "64 KB payload should decrypt");
 });
 
 // ── Cleanup ─────────────────────────────────────────────────────────────────
