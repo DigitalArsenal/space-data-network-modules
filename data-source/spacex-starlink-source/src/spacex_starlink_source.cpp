@@ -53,9 +53,20 @@ int32_t host_read_response(uint8_t* dst_ptr, int32_t dst_len);
 namespace {
 
 // Invoke a host capability op with a JSON payload; returns the raw envelope bytes.
+// The request payload must use the same hostcall envelope framing as responses
+// ([meta_len u32 LE][meta JSON][segment_count u32 LE]) — both the SDK host and
+// the Go node bridge decode it with decodeHostcallEnvelope.
 std::vector<uint8_t> hostcall(const std::string& op, const std::string& payload_json) {
+    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
+    uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
+    req[0] = static_cast<uint8_t>(meta_len & 0xff);
+    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
+    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
+    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
+    std::copy(payload_json.begin(), payload_json.end(), req.begin() + 4);
+    // Trailing 4 zero bytes = segment_count 0.
     host_call(reinterpret_cast<const uint8_t*>(op.data()), static_cast<int32_t>(op.size()),
-              reinterpret_cast<const uint8_t*>(payload_json.data()), static_cast<int32_t>(payload_json.size()));
+              req.data(), static_cast<int32_t>(req.size()));
     int32_t len = host_response_len();
     std::vector<uint8_t> buf(len > 0 ? static_cast<size_t>(len) : 0);
     if (len > 0) {
