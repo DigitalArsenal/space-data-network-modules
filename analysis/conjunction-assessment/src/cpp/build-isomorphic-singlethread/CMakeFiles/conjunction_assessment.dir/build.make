@@ -170,10 +170,24 @@ CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.s"
 	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/cdm_output.cpp -o CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.s
 
+CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o: CMakeFiles/conjunction_assessment.dir/flags.make
+CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o: /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/csm_output.cpp
+CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o: CMakeFiles/conjunction_assessment.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o"
+	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o -MF CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o.d -o CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o -c /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/csm_output.cpp
+
+CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.i"
+	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/csm_output.cpp > CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.i
+
+CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.s"
+	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/csm_output.cpp -o CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.s
+
 CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o: CMakeFiles/conjunction_assessment.dir/flags.make
 CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o: /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/pc_method.cpp
 CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o: CMakeFiles/conjunction_assessment.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o"
 	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o -MF CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o.d -o CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o -c /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/pc_method.cpp
 
 CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.i: cmake_force
@@ -187,7 +201,7 @@ CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.s: cmake_force
 CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o: CMakeFiles/conjunction_assessment.dir/flags.make
 CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o: /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/ephemeris_source.cpp
 CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o: CMakeFiles/conjunction_assessment.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o"
 	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o -MF CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o.d -o CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o -c /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/ephemeris_source.cpp
 
 CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.i: cmake_force
@@ -201,7 +215,7 @@ CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.s: cmake_force
 CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o: CMakeFiles/conjunction_assessment.dir/flags.make
 CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o: /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/conjunction_engine.cpp
 CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o: CMakeFiles/conjunction_assessment.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o"
 	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o -MF CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o.d -o CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o -c /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/conjunction_engine.cpp
 
 CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.i: cmake_force
@@ -215,7 +229,7 @@ CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.s: cmake_force
 CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o: CMakeFiles/conjunction_assessment.dir/flags.make
 CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o: /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/sgp4_propagator.cpp
 CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o: CMakeFiles/conjunction_assessment.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o"
 	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o -MF CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o.d -o CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o -c /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/sgp4_propagator.cpp
 
 CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.i: cmake_force
@@ -229,7 +243,7 @@ CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.s: cmake_force
 CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o: CMakeFiles/conjunction_assessment.dir/flags.make
 CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o: /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/plugin_runtime.cpp
 CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o: CMakeFiles/conjunction_assessment.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o"
 	/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/em++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o -MF CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o.d -o CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o -c /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/src/plugin_runtime.cpp
 
 CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.i: cmake_force
@@ -249,6 +263,7 @@ conjunction_assessment_OBJECTS = \
 "CMakeFiles/conjunction_assessment.dir/src/screening_internal.cpp.o" \
 "CMakeFiles/conjunction_assessment.dir/src/screening.cpp.o" \
 "CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.o" \
+"CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o" \
 "CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o" \
 "CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o" \
 "CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o" \
@@ -265,6 +280,7 @@ libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/resident_
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/screening_internal.cpp.o
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/screening.cpp.o
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.o
+libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o
@@ -272,7 +288,7 @@ libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/sgp4_prop
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/build.make
 libconjunction_assessment.a: CMakeFiles/conjunction_assessment.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Linking CXX static library libconjunction_assessment.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Linking CXX static library libconjunction_assessment.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/conjunction_assessment.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/conjunction_assessment.dir/link.txt --verbose=$(VERBOSE)
 

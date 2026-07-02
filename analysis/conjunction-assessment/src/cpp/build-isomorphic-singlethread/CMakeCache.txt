@@ -190,7 +190,7 @@ EMSCRIPTEN_FORCE_COMPILERS:BOOL=ON
 EMSCRIPTEN_GENERATE_BITCODE_STATIC_LIBRARIES:BOOL=OFF
 
 //Path to a file.
-FLATBUFFERS_INCLUDE_DIR:PATH=/opt/homebrew/include
+FLATBUFFERS_INCLUDE_DIR:PATH=/Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include
 
 //Value Computed by CMake
 conjunction_assessment_sdn_plugin_BINARY_DIR:STATIC=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread

@@ -624,21 +624,10 @@ CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.o: \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__locale_dir/wbuffer_convert.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__locale_dir/wstring_convert.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/cstdarg \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/include/conjunction/standards/CDM/main_generated.h \
-  /opt/homebrew/include/flatbuffers/flatbuffers.h \
-  /opt/homebrew/include/flatbuffers/array.h \
-  /opt/homebrew/include/flatbuffers/base.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/assert.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/set \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/is_transparent.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__fwd/set.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__iterator/erase_if_container.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__iterator/ranges_iterator_traits.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__node_handle \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__tree \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__fwd/map.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__type_traits/can_extract_key.h \
-  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__type_traits/remove_const_ref.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/include/conjunction/pc_method.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/include/conjunction/conjunction_engine.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/include/conjunction/ephemeris_source.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/include/conjunction/gp_json.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/functional \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/binary_negate.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/bind.h \
@@ -653,25 +642,40 @@ CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.o: \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__type_traits/strip_signature.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/boyer_moore_searcher.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/unordered_map \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/is_transparent.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__hash_table \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__type_traits/can_extract_key.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__type_traits/remove_const_ref.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__iterator/erase_if_container.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__iterator/ranges_iterator_traits.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__node_handle \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/default_searcher.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/not_fn.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__functional/perfect_forward.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/include/conjunction/standards/CDM/main_generated.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/flatbuffers.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/array.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/base.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/assert.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/set \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__fwd/set.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__tree \
+  /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__fwd/map.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/unistd.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/bits/posix.h \
-  /opt/homebrew/include/flatbuffers/stl_emulation.h \
-  /opt/homebrew/include/flatbuffers/vector.h \
-  /opt/homebrew/include/flatbuffers/buffer.h \
-  /opt/homebrew/include/flatbuffers/buffer_ref.h \
-  /opt/homebrew/include/flatbuffers/verifier.h \
-  /opt/homebrew/include/flatbuffers/detached_buffer.h \
-  /opt/homebrew/include/flatbuffers/allocator.h \
-  /opt/homebrew/include/flatbuffers/default_allocator.h \
-  /opt/homebrew/include/flatbuffers/flatbuffer_builder.h \
-  /opt/homebrew/include/flatbuffers/string.h \
-  /opt/homebrew/include/flatbuffers/struct.h \
-  /opt/homebrew/include/flatbuffers/table.h \
-  /opt/homebrew/include/flatbuffers/vector_downward.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/stl_emulation.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/vector.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/buffer.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/buffer_ref.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/verifier.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/detached_buffer.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/allocator.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/default_allocator.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/flatbuffer_builder.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/string.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/struct.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/table.h \
+  /Users/tj/software/orbpro-stack/repos/main-packages/flatbuffers/include/flatbuffers/vector_downward.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/sstream \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__ostream/basic_ostream.h \
   /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/emscripten/cache/sysroot/include/c++/v1/__ostream/put_character_sequence.h \
