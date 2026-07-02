@@ -335,7 +335,7 @@ function buildModuleDescriptor({
   version,
   keyId = `${moduleId}:${version}`,
   requiredScope = "orbpro.default",
-  allowedDomains = ["app.orbpro.test"],
+  allowedXpubs = [],
   maxGrantTimeoutMs = 30_000n,
 }) {
   const builder = new flatbuffers.Builder(512);
@@ -345,8 +345,10 @@ function buildModuleDescriptor({
   const descriptionOffset = builder.createString("Protected module fixture");
   const requiredScopeOffset = builder.createString(requiredScope);
   const keyIdOffset = builder.createString(keyId);
-  const allowedDomainOffsets = allowedDomains.map((domain) => builder.createString(domain));
-  const allowedDomainsOffset = PLG.createAllowedDomainsVector(builder, allowedDomainOffsets);
+  const allowedXpubOffsets = allowedXpubs.map((xpub) => builder.createString(xpub));
+  const allowedXpubsOffset = allowedXpubOffsets.length
+    ? PLG.createAllowedXpubsVector(builder, allowedXpubOffsets)
+    : 0;
 
   PLG.startPLG(builder);
   PLG.addPluginId(builder, pluginIdOffset);
@@ -358,7 +360,7 @@ function buildModuleDescriptor({
   PLG.addEncrypted(builder, true);
   PLG.addRequiredScope(builder, requiredScopeOffset);
   PLG.addKeyId(builder, keyIdOffset);
-  PLG.addAllowedDomains(builder, allowedDomainsOffset);
+  if (allowedXpubsOffset) PLG.addAllowedXpubs(builder, allowedXpubsOffset);
   PLG.addMaxGrantTimeoutMs(builder, maxGrantTimeoutMs);
   PLG.addCreatedAt(builder, BigInt(Date.now()));
   PLG.addUpdatedAt(builder, BigInt(Date.now()));

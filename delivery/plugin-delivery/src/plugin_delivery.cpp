@@ -608,7 +608,9 @@ static flatbuffers::DetachedBuffer handle_deliver_plugin(const PIVRequest* req) 
     descriptor.ENCRYPTED = true;
     descriptor.REQUIRED_SCOPE = DEFAULT_REQUIRED_SCOPE;
     descriptor.KEY_ID = "publication-content";
-    descriptor.ALLOWED_DOMAINS = {metadata.granted_domain};
+    // 1.136: PLG carries an XPUB allow-list, not domains; the granted domain
+    // stays on the LGR grant (below). The delivery descriptor imposes no
+    // requester allow-list of its own.
     descriptor.MAX_GRANT_TIMEOUT_MS = metadata.granted_timeout_ms;
     const auto descriptor_offset = CreatePLG(builder, &descriptor);
 

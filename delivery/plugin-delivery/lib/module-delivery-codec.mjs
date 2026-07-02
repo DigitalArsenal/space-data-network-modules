@@ -92,10 +92,18 @@ function buildPluginDescriptor(builder, payload = {}) {
     builder,
     descriptor.keyId ?? "publication-content",
   );
-  const allowedDomain = String(payload.grantedDomain ?? descriptor.allowedDomain ?? "localhost");
-  const allowedDomainOffset = createString(builder, allowedDomain);
-  const allowedDomainsOffset = allowedDomainOffset
-    ? PLG.createAllowedDomainsVector(builder, [allowedDomainOffset])
+  // 1.136: PLG carries an XPUB allow-list (ALLOWED_XPUBS); domains are
+  // vestigial and live only on the LGR grant fields below.
+  const allowedXpubs = Array.isArray(payload.allowedXpubs)
+    ? payload.allowedXpubs
+    : Array.isArray(descriptor.allowedXpubs)
+      ? descriptor.allowedXpubs
+      : [];
+  const allowedXpubOffsets = allowedXpubs
+    .map((xpub) => createString(builder, String(xpub)))
+    .filter(Boolean);
+  const allowedXpubsOffset = allowedXpubOffsets.length
+    ? PLG.createAllowedXpubsVector(builder, allowedXpubOffsets)
     : 0;
 
   PLG.startPLG(builder);
@@ -113,7 +121,7 @@ function buildPluginDescriptor(builder, payload = {}) {
   PLG.addEncrypted(builder, descriptor.encrypted ?? true);
   PLG.addRequiredScope(builder, requiredScopeOffset);
   PLG.addKeyId(builder, keyIdOffset);
-  PLG.addAllowedDomains(builder, allowedDomainsOffset);
+  if (allowedXpubsOffset) PLG.addAllowedXpubs(builder, allowedXpubsOffset);
   PLG.addMaxGrantTimeoutMs(
     builder,
     BigInt(Number(descriptor.maxGrantTimeoutMs ?? payload.grantedTimeoutMs ?? 0)),
@@ -261,9 +269,9 @@ function decodeDescriptor(descriptor) {
     moduleVersion: descriptor.VERSION() ?? undefined,
     keyId: descriptor.KEY_ID() ?? undefined,
     requiredScope: descriptor.REQUIRED_SCOPE() ?? undefined,
-    allowedDomains: Array.from(
-      { length: descriptor.allowedDomainsLength?.() ?? 0 },
-      (_, index) => descriptor.ALLOWED_DOMAINS(index),
+    allowedXpubs: Array.from(
+      { length: descriptor.allowedXpubsLength?.() ?? 0 },
+      (_, index) => descriptor.ALLOWED_XPUBS(index),
     ).filter(Boolean),
     maxGrantTimeoutMs: numberFromUint64(descriptor.MAX_GRANT_TIMEOUT_MS()),
     encrypted,
