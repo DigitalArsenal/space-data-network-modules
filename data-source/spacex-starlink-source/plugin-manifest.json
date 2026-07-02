@@ -1,0 +1,50 @@
+{
+  "pluginId": "com.orbpro.spacex-starlink-source",
+  "name": "SpaceX Starlink Data Source",
+  "version": "1.0.0",
+  "description": "Executable data-source: pulls SpaceX/Starlink ephemeris over HTTP on a timer, parses + validates, stores records, and signs + publishes a PNM pointer.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "storage_write",
+    "wallet_sign",
+    "crypto_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "starlink-pull",
+      "methodId": "pull",
+      "defaultIntervalMs": 3600000,
+      "description": "Periodic Starlink ephemeris pull (default hourly)."
+    }
+  ],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "pull",
+      "displayName": "Pull Starlink Ephemeris",
+      "description": "Fetches SpaceX/Starlink ephemeris over HTTP, parses + validates, stores the records, signs a PNM, and publishes it.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published PNMs",
+          "description": "PNM pointers published for each pulled + stored ephemeris batch.",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "data-source.starlink.pnm",
+              "description": "Signed PNM pointer for each published pull batch.",
+              "allowedTypes": [
+                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

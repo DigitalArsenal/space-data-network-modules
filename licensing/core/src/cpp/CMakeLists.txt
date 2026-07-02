@@ -16,6 +16,9 @@ find_path(
     FLATBUFFERS_INCLUDE_DIR
     NAMES flatbuffers/flatbuffers.h
     PATHS
+        "$ENV{SDN_FLATBUFFERS_INCLUDE_DIR}"
+        "$ENV{FLATBUFFERS_INCLUDE_DIR}"
+        "$ENV{DA_FLATBUFFERS_ROOT}/include"
         /opt/homebrew/include
         /opt/homebrew/opt/flatbuffers/include
         /usr/local/include
@@ -75,11 +78,18 @@ target_compile_definitions(
     CRYPTOPP_DISABLE_AESNI=1
 )
 
+get_filename_component(SDN_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../common" ABSOLUTE)
+
 add_library(
     licensing_core STATIC
     src/key_server.cpp
     src/license_client.cpp
     "${DA_FLATBUFFERS_ROOT}/src/encryption.cpp"
+    "${SDN_COMMON_DIR}/jcs/jcs.cpp"
+    "${SDN_COMMON_DIR}/epm/epm_content.cpp"
+    "${SDN_COMMON_DIR}/epm/epm_verify.cpp"
+    "${SDN_COMMON_DIR}/epm/epm_fb.cpp"
+    "${SDN_COMMON_DIR}/epm/epm_authorize.cpp"
 )
 target_compile_definitions(
     licensing_core PRIVATE
@@ -91,6 +101,8 @@ target_include_directories(
     generated
     generated/sds
     generated/keybroker
+    "${SDN_COMMON_DIR}"
+    "${SDN_COMMON_DIR}/epm"
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${DA_FLATBUFFERS_ROOT}/include"
 )

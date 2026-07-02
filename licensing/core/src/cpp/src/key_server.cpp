@@ -15,6 +15,8 @@
 #include "PublicKeyResponse_generated.h"
 #include "REC_generated.h"
 
+#include "epm_authorize.h"  // shared isomorphic EPM verify + xpub gate (common/epm)
+
 #include <flatbuffers/encryption.h>
 #include <flatbuffers/flatbuffers.h>
 
@@ -47,6 +49,8 @@ namespace {
 
 constexpr uint8_t kProtocolVersion = 3;
 constexpr size_t kChallengeIdBytes = 16;
+// Max age (seconds) of a re-sent EPM's SIGNATURE_TIMESTAMP accepted at grant time.
+constexpr int64_t kEpmMaxAgeSeconds = 300;
 constexpr size_t kChallengeTokenRawBytes = 32;
 constexpr size_t kChallengeTokenHexBytes = kChallengeTokenRawBytes * 2;
 constexpr size_t kProofBytes = 32;
@@ -83,6 +87,7 @@ enum ServerStatus : int32_t {
   kServerChallengeExpired = 12,
   kServerChallengeReplay = 13,
   kServerChallengeRateLimited = 14,
+  kServerUnauthorized = 15,
 };
 
 struct PendingChallenge {
@@ -116,6 +121,7 @@ struct PendingGrantMessage {
   std::array<uint8_t, 32> challenge_nonce{};
   uint64_t expires_at_ms = 0;
   std::vector<uint8_t> challenge_bytes{};
+  std::vector<uint8_t> requester_epm{};  // re-sent $EPM; xpub binding verified at proof time
 };
 
 bool g_initialized = false;
@@ -964,6 +970,64 @@ bool ed25519_verify_detached(
     return false;
   }
   return sdm_hostcall::find_json_bool(response.meta, "result", valid_out);
+}
+
+// secp256k1 ECDSA verify over the canonical EPM content. The host op does the
+// sha256(message) + DER-verify internally (contract: op "crypto.secp256k1.verify",
+// inputs {message, signature, publicKey}), mirroring the ed25519 host call. The
+// signature is DER (variable length) and the public key is a SEC1 point (33-byte
+// compressed or 65-byte uncompressed).
+bool secp256k1_verify_detached(
+    const uint8_t* message,
+    size_t message_len,
+    const uint8_t* public_key,
+    size_t public_key_len,
+    const uint8_t* signature,
+    size_t signature_len,
+    bool* valid_out) {
+  if (!message || !public_key || !signature || !valid_out ||
+      (public_key_len != 33 && public_key_len != 65) || signature_len == 0) {
+    return false;
+  }
+  sdm_hostcall::Response response;
+  if (!sdm_hostcall::call(
+          "crypto.secp256k1.verify",
+          "{\"message\":{\"$bin\":0},\"signature\":{\"$bin\":1},\"publicKey\":{\"$bin\":2}}",
+          {{message, message_len},
+           {signature, signature_len},
+           {public_key, public_key_len}},
+          &response)) {
+    return false;
+  }
+  return sdm_hostcall::find_json_bool(response.meta, "result", valid_out);
+}
+
+// Module-delivery xpub gate: verify a re-sent $EPM (shared isomorphic common code)
+// and decide membership against the per-module allowlist. The ed25519 verify is the
+// module's host call, so the same gate logic runs in the browser and on wasmedge.
+// Wired into the grant flow once the message carries the EPM (LCH.REQUESTER_EPM)
+// and the per-module allowlist arrives (PLG.ALLOWED_XPUBS).
+[[maybe_unused]] sdn::epm::AuthorizeResult authorize_requester_epm(
+    const uint8_t* epm_bytes,
+    size_t epm_len,
+    const uint8_t* proven_signing_pubkey,
+    const std::vector<std::string>& allowed_xpubs,
+    int64_t now_unix,
+    int64_t max_age_seconds) {
+  const sdn::epm::Ed25519Verify verify =
+      [](const uint8_t* m, size_t ml, const uint8_t* s, size_t sl, const uint8_t* p) -> bool {
+        bool valid = false;
+        return ed25519_verify_detached(m, ml, p, 32, s, sl, &valid) && valid;
+      };
+  const sdn::epm::Secp256k1Verify verify_secp256k1 =
+      [](const uint8_t* m, size_t ml, const uint8_t* s, size_t sl,
+         const uint8_t* p, size_t pl) -> bool {
+        bool valid = false;
+        return secp256k1_verify_detached(m, ml, p, pl, s, sl, &valid) && valid;
+      };
+  return sdn::epm::AuthorizeModuleRequest(
+      epm_bytes, epm_len, proven_signing_pubkey, allowed_xpubs, now_unix, max_age_seconds,
+      verify, verify_secp256k1);
 }
 
 std::vector<uint8_t> build_lch_bytes(
@@ -2309,8 +2373,9 @@ int32_t key_server_handle_message(
       return 0;
     }
 
-    // v1 xpub-auth: the publication allow-list is requester XPUBs
-    // (PLG.ALLOWED_XPUBS, 1.136). Empty list = open publication.
+    // PKI xpub allowlist: early membership filter on the claimed xpub. The
+    // cryptographic binding of that xpub to the requester's proven ed25519 signing
+    // key (via the re-sent EPM) is verified at proof time below.
     bool xpub_allowed =
         publication.descriptor.ALLOWED_XPUBS.empty();
     for (const auto& allowed_xpub : publication.descriptor.ALLOWED_XPUBS) {
@@ -2341,7 +2406,7 @@ int32_t key_server_handle_message(
           0,
           g_provider_peer_id,
           "xpub_not_allowed",
-          "requester domain is not allowed for this module");
+          "requester xpub is not allowed for this module");
       return 0;
     }
     if (publication.descriptor.MAX_GRANT_TIMEOUT_MS != 0 &&
@@ -2439,6 +2504,9 @@ int32_t key_server_handle_message(
     pending.requested_timeout_ms = requested_timeout_ms;
     pending.requested_at_ms = requested_at_ms;
     pending.provider_peer_id = g_provider_peer_id;
+    if (const auto* epm = challenge_request->REQUESTER_EPM()) {
+      pending.requester_epm.assign(epm->Data(), epm->Data() + epm->size());
+    }
     std::memcpy(
         pending.requester_signing_pubkey.data(),
         challenge_request->REQUESTER_SIGNING_PUBKEY()->Data(),
@@ -2532,6 +2600,23 @@ int32_t key_server_handle_message(
   ModulePublication publication{};
   if (!load_publication(pending.publication_key, &publication)) {
     return kServerVersionNotFound;
+  }
+
+  // Authoritative PKI gate: when the module declares an xpub allowlist, the re-sent
+  // EPM must verify and bind the now-proven ed25519 signing key to the requester's
+  // xpub (cross-curve attestation), and that xpub must equal the allowlisted one.
+  if (!publication.descriptor.ALLOWED_XPUBS.empty()) {
+    const sdn::epm::AuthorizeResult gate = authorize_requester_epm(
+        pending.requester_epm.data(),
+        pending.requester_epm.size(),
+        pending.requester_signing_pubkey.data(),
+        publication.descriptor.ALLOWED_XPUBS,
+        now_ms() / 1000,
+        kEpmMaxAgeSeconds);
+    if (!gate.ok || gate.xpub != pending.requester_xpub) {
+      secure_zero_publication(&publication);
+      return kServerUnauthorized;
+    }
   }
 
   WrappedGrantPayload wrapped{};

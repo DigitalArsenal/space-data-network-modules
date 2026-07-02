@@ -98,8 +98,8 @@ function ensureLocalEmscripten() {
   }
   if (!fs.existsSync(emccPath)) {
     console.log("  Installing local emsdk...");
-    run("./emsdk install latest", { cwd: EMSDK_DIR });
-    run("./emsdk activate latest", { cwd: EMSDK_DIR });
+    run("./emsdk install 6.0.1", { cwd: EMSDK_DIR });
+    run("./emsdk activate 6.0.1", { cwd: EMSDK_DIR });
   }
 
   activateLocalEmsdk();

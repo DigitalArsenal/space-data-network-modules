@@ -50,8 +50,8 @@ ensure_emscripten() {
         echo "Installing emsdk..."
         (
             cd "$EMSDK_DIR"
-            ./emsdk install latest
-            ./emsdk activate latest
+            ./emsdk install 6.0.1
+            ./emsdk activate 6.0.1
         )
     fi
 
