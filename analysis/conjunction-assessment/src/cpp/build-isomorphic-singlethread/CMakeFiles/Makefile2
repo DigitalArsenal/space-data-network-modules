@@ -91,7 +91,7 @@ clean: CMakeFiles/conjunction_assessment_wasm.dir/clean
 CMakeFiles/sgp4_lib.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/sgp4_lib.dir/build.make CMakeFiles/sgp4_lib.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/sgp4_lib.dir/build.make CMakeFiles/sgp4_lib.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34 "Built target sgp4_lib"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35 "Built target sgp4_lib"
 .PHONY : CMakeFiles/sgp4_lib.dir/all
 
 # Build rule for subdir invocation for target.
@@ -108,7 +108,7 @@ sgp4_lib: CMakeFiles/sgp4_lib.dir/rule
 # codegen rule for target.
 CMakeFiles/sgp4_lib.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/sgp4_lib.dir/build.make CMakeFiles/sgp4_lib.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34 "Finished codegen for target sgp4_lib"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35 "Finished codegen for target sgp4_lib"
 .PHONY : CMakeFiles/sgp4_lib.dir/codegen
 
 # clean rule for target.
@@ -123,12 +123,12 @@ CMakeFiles/sgp4_lib.dir/clean:
 CMakeFiles/conjunction_assessment.dir/all: CMakeFiles/sgp4_lib.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment.dir/build.make CMakeFiles/conjunction_assessment.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment.dir/build.make CMakeFiles/conjunction_assessment.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9,10,11,12,13 "Built target conjunction_assessment"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9,10,11,12,13,14 "Built target conjunction_assessment"
 .PHONY : CMakeFiles/conjunction_assessment.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/conjunction_assessment.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles 30
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles 31
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/conjunction_assessment.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles 0
 .PHONY : CMakeFiles/conjunction_assessment.dir/rule
@@ -140,7 +140,7 @@ conjunction_assessment: CMakeFiles/conjunction_assessment.dir/rule
 # codegen rule for target.
 CMakeFiles/conjunction_assessment.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment.dir/build.make CMakeFiles/conjunction_assessment.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9,10,11,12,13 "Finished codegen for target conjunction_assessment"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9,10,11,12,13,14 "Finished codegen for target conjunction_assessment"
 .PHONY : CMakeFiles/conjunction_assessment.dir/codegen
 
 # clean rule for target.
@@ -152,16 +152,16 @@ CMakeFiles/conjunction_assessment.dir/clean:
 # Target rules for target CMakeFiles/conjunction_assessment_wasm.dir
 
 # All Build rule for target.
-CMakeFiles/conjunction_assessment_wasm.dir/all: CMakeFiles/conjunction_assessment.dir/all
 CMakeFiles/conjunction_assessment_wasm.dir/all: CMakeFiles/sgp4_lib.dir/all
+CMakeFiles/conjunction_assessment_wasm.dir/all: CMakeFiles/conjunction_assessment.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment_wasm.dir/build.make CMakeFiles/conjunction_assessment_wasm.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment_wasm.dir/build.make CMakeFiles/conjunction_assessment_wasm.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=14,15,16,17 "Built target conjunction_assessment_wasm"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=15,16,17,18 "Built target conjunction_assessment_wasm"
 .PHONY : CMakeFiles/conjunction_assessment_wasm.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/conjunction_assessment_wasm.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles 34
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/conjunction_assessment_wasm.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles 0
 .PHONY : CMakeFiles/conjunction_assessment_wasm.dir/rule
@@ -173,7 +173,7 @@ conjunction_assessment_wasm: CMakeFiles/conjunction_assessment_wasm.dir/rule
 # codegen rule for target.
 CMakeFiles/conjunction_assessment_wasm.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment_wasm.dir/build.make CMakeFiles/conjunction_assessment_wasm.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=14,15,16,17 "Finished codegen for target conjunction_assessment_wasm"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles --progress-num=15,16,17,18 "Finished codegen for target conjunction_assessment_wasm"
 .PHONY : CMakeFiles/conjunction_assessment_wasm.dir/codegen
 
 # clean rule for target.

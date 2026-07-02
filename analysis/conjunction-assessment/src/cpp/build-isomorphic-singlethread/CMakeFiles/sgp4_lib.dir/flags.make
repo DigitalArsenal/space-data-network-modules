@@ -6,5 +6,5 @@ CXX_DEFINES =
 
 CXX_INCLUDES = -I/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/deps/sgp4/libsgp4
 
-CXX_FLAGS =  -O3 -flto -ffast-math -DNDEBUG -fwasm-exceptions -DCONJUNCTION_SINGLE_THREAD -O3 -DNDEBUG -std=gnu++17
+CXX_FLAGS =  -O3 -flto -DNDEBUG -fwasm-exceptions -DCONJUNCTION_SINGLE_THREAD -O3 -DNDEBUG -std=gnu++17
 

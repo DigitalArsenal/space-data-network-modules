@@ -5,6 +5,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/conjunction_assessment.dir/src/conjunction_assessment.cpp.o.d"
   "CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o"
   "CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o.d"
+  "CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o"
+  "CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o.d"
   "CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o"
   "CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o.d"
   "CMakeFiles/conjunction_assessment.dir/src/gp_json.cpp.o"

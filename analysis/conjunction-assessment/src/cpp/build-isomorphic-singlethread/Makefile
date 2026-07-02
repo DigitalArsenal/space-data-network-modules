@@ -611,6 +611,30 @@ src/conjunction_engine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment.dir/build.make CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.s
 .PHONY : src/conjunction_engine.cpp.s
 
+src/csm_output.o: src/csm_output.cpp.o
+.PHONY : src/csm_output.o
+
+# target to build an object file
+src/csm_output.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment.dir/build.make CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o
+.PHONY : src/csm_output.cpp.o
+
+src/csm_output.i: src/csm_output.cpp.i
+.PHONY : src/csm_output.i
+
+# target to preprocess a source file
+src/csm_output.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment.dir/build.make CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.i
+.PHONY : src/csm_output.cpp.i
+
+src/csm_output.s: src/csm_output.cpp.s
+.PHONY : src/csm_output.s
+
+# target to generate assembly for a file
+src/csm_output.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/conjunction_assessment.dir/build.make CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.s
+.PHONY : src/csm_output.cpp.s
+
 src/ephemeris_source.o: src/ephemeris_source.cpp.o
 .PHONY : src/ephemeris_source.o
 
@@ -967,6 +991,9 @@ help:
 	@echo "... src/conjunction_engine.o"
 	@echo "... src/conjunction_engine.i"
 	@echo "... src/conjunction_engine.s"
+	@echo "... src/csm_output.o"
+	@echo "... src/csm_output.i"
+	@echo "... src/csm_output.s"
 	@echo "... src/ephemeris_source.o"
 	@echo "... src/ephemeris_source.i"
 	@echo "... src/ephemeris_source.s"
