@@ -5,11 +5,11 @@
   "type": "Comms",
   "encrypted": false,
   "requiresProtection": false,
-  "description": "Simplified single-Lorentzian oxygen + water-vapor gaseous absorption (RfCommsCore.js port). NOT ITU-R P.676-13 conformant — Phase 2 of the audit characterizes deviation against P.676 reference values.",
+  "description": "Gaseous absorption: legacy simplified single-Lorentzian oxygen + water-vapor fits (RfCommsCore.js port, preserved verbatim) plus ITU-R P.676-13 Annex 1 §1 line-by-line specific attenuation (44 oxygen + 35 water-vapour lines, dry continuum) via the rf_gaseous_*_p676_db_per_km exports.",
   "wasmModule": {
     "file": "rf-atmospheric-gaseous.wasm",
     "loader": "rf-atmospheric-gaseous.mjs",
-    "hash": "29794e1e33a8da72df0c96dd27d4843f649ab814423dacdd70f2aed668ec54c1",
+    "hash": "a8b77921ca46aa71b0411d10609d39a5e341ad643d7fc686e9f6008eadff4130",
     "exports": [
       "plugin_init",
       "plugin_destroy",
@@ -17,6 +17,9 @@
       "rf_water_vapor_specific_attenuation_db_per_km",
       "rf_atmospheric_absorption_db",
       "rf_saturation_vapor_pressure_hpa",
+      "rf_gaseous_gamma0_p676_db_per_km",
+      "rf_gaseous_gammaw_p676_db_per_km",
+      "rf_gaseous_specific_attenuation_p676_db_per_km",
       "rf_atmospheric_gaseous_plugin_manifest_bytes",
       "rf_atmospheric_gaseous_plugin_manifest_size",
       "malloc",

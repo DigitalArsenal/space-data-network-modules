@@ -65,7 +65,7 @@ Module['ready'] = new Promise((resolve, reject) => {
   readyPromiseResolve = resolve;
   readyPromiseReject = reject;
 });
-["_plugin_init","_plugin_destroy","_rf_oxygen_specific_attenuation_db_per_km","_rf_water_vapor_specific_attenuation_db_per_km","_rf_atmospheric_absorption_db","_rf_saturation_vapor_pressure_hpa","_rf_atmospheric_gaseous_plugin_manifest_bytes","_rf_atmospheric_gaseous_plugin_manifest_size","_malloc","_free","_memory","___indirect_function_table","_fflush","onRuntimeInitialized"].forEach((prop) => {
+["_plugin_init","_plugin_destroy","_rf_oxygen_specific_attenuation_db_per_km","_rf_water_vapor_specific_attenuation_db_per_km","_rf_atmospheric_absorption_db","_rf_saturation_vapor_pressure_hpa","_rf_gaseous_gamma0_p676_db_per_km","_rf_gaseous_gammaw_p676_db_per_km","_rf_gaseous_specific_attenuation_p676_db_per_km","_rf_atmospheric_gaseous_plugin_manifest_bytes","_rf_atmospheric_gaseous_plugin_manifest_size","_malloc","_free","_memory","___indirect_function_table","_fflush","onRuntimeInitialized"].forEach((prop) => {
   if (!Object.getOwnPropertyDescriptor(Module['ready'], prop)) {
     Object.defineProperty(Module['ready'], prop, {
       get: () => abort('You are getting ' + prop + ' on the Promise object, instead of the instance. Use .then() to get called back with the instance, see the MODULARIZE docs in src/settings.js'),
@@ -1186,6 +1186,9 @@ var _rf_oxygen_specific_attenuation_db_per_km = Module['_rf_oxygen_specific_atte
 var _rf_water_vapor_specific_attenuation_db_per_km = Module['_rf_water_vapor_specific_attenuation_db_per_km'] = createExportWrapper('rf_water_vapor_specific_attenuation_db_per_km');
 var _rf_atmospheric_absorption_db = Module['_rf_atmospheric_absorption_db'] = createExportWrapper('rf_atmospheric_absorption_db');
 var _rf_saturation_vapor_pressure_hpa = Module['_rf_saturation_vapor_pressure_hpa'] = createExportWrapper('rf_saturation_vapor_pressure_hpa');
+var _rf_gaseous_gamma0_p676_db_per_km = Module['_rf_gaseous_gamma0_p676_db_per_km'] = createExportWrapper('rf_gaseous_gamma0_p676_db_per_km');
+var _rf_gaseous_gammaw_p676_db_per_km = Module['_rf_gaseous_gammaw_p676_db_per_km'] = createExportWrapper('rf_gaseous_gammaw_p676_db_per_km');
+var _rf_gaseous_specific_attenuation_p676_db_per_km = Module['_rf_gaseous_specific_attenuation_p676_db_per_km'] = createExportWrapper('rf_gaseous_specific_attenuation_p676_db_per_km');
 var _rf_atmospheric_gaseous_plugin_manifest_bytes = Module['_rf_atmospheric_gaseous_plugin_manifest_bytes'] = createExportWrapper('rf_atmospheric_gaseous_plugin_manifest_bytes');
 var _rf_atmospheric_gaseous_plugin_manifest_size = Module['_rf_atmospheric_gaseous_plugin_manifest_size'] = createExportWrapper('rf_atmospheric_gaseous_plugin_manifest_size');
 var ___errno_location = createExportWrapper('__errno_location');

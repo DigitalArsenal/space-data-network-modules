@@ -137,6 +137,52 @@ export async function createRfAtmosphericGaseousPlugin(options = {}) {
     saturationVaporPressureHpa(temperatureC) {
       return module._rf_saturation_vapor_pressure_hpa(Number(temperatureC));
     },
+    /**
+     * ITU-R P.676-13 Annex 1 §1 dry-air (oxygen + dry continuum) specific
+     * attenuation, dB/km. Strict P.676 semantics: dryPressureHpa is the
+     * DRY-air partial pressure (total barometric = dry + e).
+     */
+    gaseousGamma0P676DbPerKm(
+      frequencyGhz,
+      dryPressureHpa,
+      waterVapourDensityGM3,
+      temperatureK,
+    ) {
+      return module._rf_gaseous_gamma0_p676_db_per_km(
+        Number(frequencyGhz),
+        Number(dryPressureHpa),
+        Number(waterVapourDensityGM3),
+        Number(temperatureK),
+      );
+    },
+    /** ITU-R P.676-13 Annex 1 §1 water-vapour specific attenuation, dB/km. */
+    gaseousGammawP676DbPerKm(
+      frequencyGhz,
+      dryPressureHpa,
+      waterVapourDensityGM3,
+      temperatureK,
+    ) {
+      return module._rf_gaseous_gammaw_p676_db_per_km(
+        Number(frequencyGhz),
+        Number(dryPressureHpa),
+        Number(waterVapourDensityGM3),
+        Number(temperatureK),
+      );
+    },
+    /** ITU-R P.676-13 Annex 1 §1 total specific gaseous attenuation (gamma_o + gamma_w), dB/km. */
+    gaseousSpecificAttenuationP676DbPerKm(
+      frequencyGhz,
+      dryPressureHpa,
+      waterVapourDensityGM3,
+      temperatureK,
+    ) {
+      return module._rf_gaseous_specific_attenuation_p676_db_per_km(
+        Number(frequencyGhz),
+        Number(dryPressureHpa),
+        Number(waterVapourDensityGM3),
+        Number(temperatureK),
+      );
+    },
     destroy() {
       if (typeof module._plugin_destroy === "function") {
         module._plugin_destroy();

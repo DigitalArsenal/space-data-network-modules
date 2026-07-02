@@ -15,7 +15,7 @@ export const RF_ATMOS_PLUGIN_ID = "com.orbpro.rf-atmospheric-gaseous";
 export const RF_ATMOS_PLUGIN_NAME = "RF Atmospheric (Gaseous) Absorption";
 export const RF_ATMOS_PLUGIN_VERSION = "0.1.0";
 export const RF_ATMOS_PLUGIN_DESCRIPTION =
-  "Simplified single-Lorentzian oxygen + water-vapor gaseous absorption (RfCommsCore.js port). NOT ITU-R P.676-13 conformant — Phase 2 of the audit characterizes deviation against P.676 reference values.";
+  "Gaseous absorption: legacy simplified single-Lorentzian oxygen + water-vapor fits (RfCommsCore.js port, preserved verbatim) plus ITU-R P.676-13 Annex 1 §1 line-by-line specific attenuation (44 oxygen + 35 water-vapour lines, dry continuum) via the rf_gaseous_*_p676_db_per_km exports.";
 export const RF_ATMOS_MANIFEST_BYTES_SYMBOL =
   "rf_atmospheric_gaseous_plugin_manifest_bytes";
 export const RF_ATMOS_MANIFEST_SIZE_SYMBOL =
@@ -130,6 +130,27 @@ export function createRfAtmosphericGaseousPluginManifest() {
         ports[0],
         ports[1],
         "WMO No. 8 Annex 4.A.1 saturation vapor pressure over water in hPa.",
+      ),
+      createMethod(
+        "compute_p676_gamma0_db_per_km",
+        "Compute P.676-13 Dry-Air Specific Attenuation",
+        ports[0],
+        ports[1],
+        "ITU-R P.676-13 Annex 1 §1 line-by-line dry-air (oxygen + dry continuum) specific attenuation in dB/km.",
+      ),
+      createMethod(
+        "compute_p676_gammaw_db_per_km",
+        "Compute P.676-13 Water-Vapour Specific Attenuation",
+        ports[0],
+        ports[1],
+        "ITU-R P.676-13 Annex 1 §1 line-by-line water-vapour specific attenuation in dB/km.",
+      ),
+      createMethod(
+        "compute_p676_specific_attenuation_db_per_km",
+        "Compute P.676-13 Total Specific Gaseous Attenuation",
+        ports[0],
+        ports[1],
+        "ITU-R P.676-13 Annex 1 §1 total specific gaseous attenuation (gamma_o + gamma_w) in dB/km.",
       ),
     ],
     [],
