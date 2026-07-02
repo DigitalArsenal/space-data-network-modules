@@ -2309,15 +2309,17 @@ int32_t key_server_handle_message(
       return 0;
     }
 
-    bool domain_allowed =
-        publication.descriptor.ALLOWED_DOMAINS.empty();
-    for (const auto& allowed_domain : publication.descriptor.ALLOWED_DOMAINS) {
-      if (allowed_domain == requested_domain) {
-        domain_allowed = true;
+    // v1 xpub-auth: the publication allow-list is requester XPUBs
+    // (PLG.ALLOWED_XPUBS, 1.136). Empty list = open publication.
+    bool xpub_allowed =
+        publication.descriptor.ALLOWED_XPUBS.empty();
+    for (const auto& allowed_xpub : publication.descriptor.ALLOWED_XPUBS) {
+      if (allowed_xpub == requester_xpub) {
+        xpub_allowed = true;
         break;
       }
     }
-    if (!domain_allowed) {
+    if (!xpub_allowed) {
       secure_zero_publication(&publication);
       response_out = build_lch_bytes(
           licensingChallengeMessageType::Error,
@@ -2338,7 +2340,7 @@ int32_t key_server_handle_message(
           0,
           0,
           g_provider_peer_id,
-          "domain_not_allowed",
+          "xpub_not_allowed",
           "requester domain is not allowed for this module");
       return 0;
     }
