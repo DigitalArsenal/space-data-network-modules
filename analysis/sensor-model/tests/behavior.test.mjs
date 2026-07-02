@@ -209,7 +209,10 @@ SensorShapeContract conformance_shape(const std::string& name) {
   if (name == "sar-annular-sector") {
     return make_sar_annular_sector_shape(kPi / 9.0, kPi / 4.0, -kPi / 6.0, kPi / 6.0, 0.0, 100.0);
   }
-  return make_custom_polygon_unsupported_shape({});
+  return make_custom_polygon_shape(
+      {{-0.4, -0.4, 1.0}, {0.4, -0.4, 1.0}, {0.4, 0.4, 1.0}, {-0.4, 0.4, 1.0}},
+      0.0,
+      100.0);
 }
 
 void require_contains_label(
@@ -244,18 +247,36 @@ void test_shared_conformance_vectors() {
   require_conformance_vector("wrapped-clock-sector", {20.0, 0.0, 50.0}, {0.0, 20.0, 50.0});
   require_conformance_vector("rectangular", {10.0, 5.0, 50.0}, {30.0, 0.0, 50.0});
   require_conformance_vector("sar-annular-sector", {20.0, 0.0, 50.0}, {0.0, 20.0, 50.0});
+  require_conformance_vector("custom-polygon", {0.0, 0.0, 50.0}, {50.0, 0.0, 50.0});
 }
 
-void test_custom_polygon_unsupported() {
-  const SensorShapeContract custom = make_custom_polygon_unsupported_shape({{1.0, 0.0, 0.0}});
-  const SensorClassification classification = classify_local_look(custom, {0.0, 0.0, 1.0});
-  require(!custom.supported, "custom polygon contract must be marked unsupported");
-  require(!classification.supported, "custom polygon classification must be unsupported");
-  require(!classification.inside, "custom polygon classification must not claim containment");
-  require(classification.reason.find("unsupported shape") != std::string::npos,
-      "custom polygon classification must report unsupported shape");
-  require(generate_sensor_boundary_directions(custom).empty(),
-      "custom polygon boundary generation must be empty while unsupported");
+void test_custom_polygon_classification() {
+  const SensorShapeContract custom = make_custom_polygon_shape(
+      {{-0.4, -0.4, 1.0}, {0.4, -0.4, 1.0}, {0.4, 0.4, 1.0}, {-0.4, 0.4, 1.0}},
+      0.0,
+      100.0);
+  require(custom.supported, "custom polygon contract must be supported");
+  const SensorClassification insideClassification =
+      classify_local_look(custom, {0.0, 0.0, 50.0});
+  const SensorClassification outsideClassification =
+      classify_local_look(custom, {50.0, 0.0, 50.0});
+  require(insideClassification.supported,
+      "custom polygon inside classification must be supported");
+  require(insideClassification.inside,
+      "custom polygon boresight look must classify inside");
+  require(!outsideClassification.inside,
+      "custom polygon off-axis look must classify outside");
+  require(generate_sensor_boundary_directions(custom).size() == 4,
+      "custom polygon boundary generation must return its vertices");
+
+  const SensorShapeContract degenerate = make_custom_polygon_shape(
+      {{0.0, 0.0, 1.0}, {0.4, 0.0, 1.0}}, 0.0, 100.0);
+  require(!degenerate.supported,
+      "custom polygon with fewer than 3 vertices must be unsupported");
+  const SensorClassification degenerateClassification =
+      classify_local_look(degenerate, {0.0, 0.0, 50.0});
+  require(!degenerateClassification.inside,
+      "degenerate custom polygon must not claim containment");
 }
 
 void test_boundary_generation() {
@@ -279,7 +300,7 @@ int main() {
   test_rectangular_classification();
   test_sar_annular_sector_classification();
   test_shared_conformance_vectors();
-  test_custom_polygon_unsupported();
+  test_custom_polygon_classification();
   test_boundary_generation();
   return 0;
 }

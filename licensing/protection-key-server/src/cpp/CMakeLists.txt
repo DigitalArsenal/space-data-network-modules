@@ -55,9 +55,15 @@ target_compile_definitions(
     CRYPTOPP_DISABLE_AESNI=1
 )
 
+# NOTE: OpenSSL FIPS-into-wasm is a separate, unsolved spike (jimmy-park/openssl-cmake
+# cross-compiles OpenSSL native, not wasm, under emscripten; and the FIPS provider's
+# module-integrity self-test assumes a discrete loadable module, not a static wasm).
+# Scaffolding kept in src/fips_init.* but NOT linked. The xpub identity crypto below
+# (secp256k1/BIP32) is not FIPS-approvable and runs on Crypto++.
 add_library(
     protection_key_server_core STATIC
     src/key_server.cpp
+    src/xpub_auth.cpp
 )
 target_include_directories(
     protection_key_server_core PUBLIC

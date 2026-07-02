@@ -100,8 +100,10 @@ SensorShapeContract make_sar_annular_sector_shape(
     double clockStopRad,
     double minRangeM = 0.0,
     double maxRangeM = 0.0);
-SensorShapeContract make_custom_polygon_unsupported_shape(
-    const std::vector<SensorVec3>& vertices);
+SensorShapeContract make_custom_polygon_shape(
+    const std::vector<SensorVec3>& vertices,
+    double minRangeM = 0.0,
+    double maxRangeM = 0.0);
 SensorShapeContract make_unsupported_sensor_shape(
     const std::string& reason);
 

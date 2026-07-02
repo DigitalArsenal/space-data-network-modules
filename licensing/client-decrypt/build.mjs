@@ -42,10 +42,12 @@ const CORE_SDS_GENERATED_DIR = path.resolve(
   __dirname,
   "../core/src/cpp/generated/sds",
 );
-const MODULE_SIGNING_KEYPAIR_PATH = path.resolve(
-  __dirname,
-  "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
-);
+const MODULE_SIGNING_KEYPAIR_PATH =
+  process.env.SDN_MODULE_SIGNING_KEYPAIR ||
+  path.resolve(
+    __dirname,
+    "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json",
+  );
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -104,8 +106,8 @@ function ensureLocalEmscripten() {
   }
   if (!fs.existsSync(emccPath)) {
     console.log("  Installing local emsdk...");
-    run("./emsdk install latest", { cwd: EMSDK_DIR });
-    run("./emsdk activate latest", { cwd: EMSDK_DIR });
+    run("./emsdk install 6.0.1", { cwd: EMSDK_DIR });
+    run("./emsdk activate 6.0.1", { cwd: EMSDK_DIR });
   }
 
   activateLocalEmsdk();
