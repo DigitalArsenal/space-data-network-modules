@@ -100,7 +100,7 @@
       "dependencyId": "com.digitalarsenal.foundation.omm-json",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
       "version": "0.1.0",
-      "sha256": "f9005b0800ec114797f056dc915d4779cc3e51a2fe6ad003668c104b3c016dee",
+      "sha256": "d7b9474591017d029f2ec8e0d6b0ed190cd08c6da9a310d971f1ffc44c587483",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
