@@ -1,0 +1,207 @@
+{
+  "programId": "com.digitalarsenal.flows.data-retrieval",
+  "name": "SDN Data Retrieval Flow",
+  "version": "0.1.0",
+  "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; only the retrieval node's storage.flatsql_* capability hostcalls leave the sandbox.",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "route",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "gate",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "methodId": "dispatch",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "omm",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "methodId": "omm_bulk",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "methodId": "data_query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "branch",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "methodId": "branch",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tojson",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "methodId": "encode",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-decision",
+      "fromNodeId": "route",
+      "fromPortId": "decision",
+      "toNodeId": "gate",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "gate-omm-bulk",
+      "fromNodeId": "gate",
+      "fromPortId": "omm_bulk",
+      "toNodeId": "omm",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "gate-data-query",
+      "fromNodeId": "gate",
+      "fromPortId": "data_query",
+      "toNodeId": "query",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "gate-routed-decision",
+      "fromNodeId": "gate",
+      "fromPortId": "routed",
+      "toNodeId": "branch",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "gate-not-found",
+      "fromNodeId": "gate",
+      "fromPortId": "not_found",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "omm-stream",
+      "fromNodeId": "omm",
+      "fromPortId": "stream",
+      "toNodeId": "branch",
+      "toPortId": "stream",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "query-rows",
+      "fromNodeId": "query",
+      "fromPortId": "rows",
+      "toNodeId": "branch",
+      "toPortId": "stream",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "branch-flatbuffer-body",
+      "fromNodeId": "branch",
+      "fromPortId": "flatbuffer",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "branch-json-stream",
+      "fromNodeId": "branch",
+      "fromPortId": "json",
+      "toNodeId": "tojson",
+      "toPortId": "stream",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "branch-decision",
+      "fromNodeId": "branch",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "branch-etag",
+      "fromNodeId": "branch",
+      "fromPortId": "etag",
+      "toNodeId": "respond",
+      "toPortId": "etag",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tojson-body",
+      "fromNodeId": "tojson",
+      "fromPortId": "json",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.foundation.http-route",
+    "com.digitalarsenal.foundation.decision-gate",
+    "com.digitalarsenal.data-source.retrieval",
+    "com.digitalarsenal.foundation.omm-json",
+    "com.digitalarsenal.foundation.http-respond"
+  ]
+}
