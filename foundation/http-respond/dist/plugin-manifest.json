@@ -1,0 +1,132 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.http-respond",
+  "name": "SDN HTTP Respond",
+  "version": "0.1.0",
+  "description": "Single-purpose flow node: assembles one $HTR HttpResponse envelope from a routing-decision JSON frame (foundation/http-route contract) plus optional body / etag / error frames. Behavior: an \"error\" input (JSON {\"error\":msg}) wins over everything -> 502 application/json {\"error\":msg}; decision route=not_found -> 404 application/json {\"error\":decision.error|\"not found\"}; an \"etag\" input equal to decision.ifNoneMatch -> 304 with an etag header and empty body; otherwise 200 with the body frame verbatim (empty body when the frame is absent), content-type from decision.format (flatbuffer -> application/vnd.sdn.flatbuffers.stream, json -> application/json), x-sdn-record-count when derivable (the count of size-prefixed frames when format=flatbuffer and the body framing parses cleanly), and an etag header whenever the etag input is present. All response headers are lower-cased and sorted per the $HTR ABI. Pure compute — no capabilities.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "respond",
+      "displayName": "Assemble HTTP Response",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision UTF-8 JSON bytes from foundation/http-route (aligned-binary wire format): {\"route\",\"format\",\"ifNoneMatch\"?,\"error\"?,...}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Routing decision controlling status, content-type, and conditional-request handling."
+        },
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-body-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Response body bytes passed through verbatim: an ALIGNED size-prefixed FlatBuffer stream (decision.format=flatbuffer) or JSON bytes (decision.format=json)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional response body frame; absent means an empty 200 body."
+        },
+        {
+          "portId": "etag",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-etag-string-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Entity tag as raw UTF-8 string bytes. Compared verbatim against decision.ifNoneMatch for 304 handling and echoed as the etag response header."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional entity tag frame."
+        },
+        {
+          "portId": "error",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-upstream-error-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Upstream error as UTF-8 JSON bytes {\"error\":\"message\"} (plain text tolerated). Presence forces a 502 response."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional upstream-error frame; presence forces 502."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds the $HTR response: 502 on upstream error, 404 on not_found, 304 on ETag match, else 200 with negotiated content-type, optional x-sdn-record-count, and optional etag header."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "HttpResponseAbi.fbs",
+      "fileIdentifier": "$HTR",
+      "rootTypeName": "HttpResponse"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-http-respond-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

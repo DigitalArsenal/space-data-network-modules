@@ -1,0 +1,85 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.omm-json",
+  "name": "SDN OMM JSON Encoder",
+  "version": "0.1.0",
+  "description": "Single-purpose flow node: decodes an ALIGNED size-prefixed $OMM FlatBuffer stream (concatenated [u32le length][$OMM buffer] frames, as produced by the data-source/retrieval omm_bulk 'stream' port) into one JSON frame {\"records\":[{\"norad_cat_id\",\"object_name\",\"object_id\",\"epoch\",\"mean_motion\",\"eccentricity\",\"inclination\"}],\"count\":N}. Absent OMM string fields serialize as JSON null; doubles use round-trip (%.17g) formatting. Pure compute — no capabilities.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "encode",
+      "displayName": "Encode OMM Stream As JSON",
+      "inputPorts": [
+        {
+          "portId": "stream",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $OMM FlatBuffer stream: concatenated [u32le length][$OMM buffer] frames (zero-length prefixes tolerated as padding). An empty payload encodes as zero records."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $OMM stream to encode (verbatim output of data-source/retrieval omm_bulk)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "json",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-omm-json-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes {\"records\":[...],\"count\":N} carried with the aligned-binary wire format (alignment 1). SDK manifest rules cannot express a JSON-bytes type, so the port declares the generic flatbuffer ref; runtime frames carry aligned-binary TAB descriptors."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One JSON frame per input stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Decodes every size-prefixed $OMM frame (identifier + verifier checked per frame) and emits one JSON frame with the seven summary fields per record."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-omm-json-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
