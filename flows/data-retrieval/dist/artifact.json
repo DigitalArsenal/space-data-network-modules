@@ -65,7 +65,7 @@
       "dependencyId": "com.digitalarsenal.foundation.http-route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "version": "0.1.0",
-      "sha256": "666b0b6160b341bd3074e751d03252ec4c43fb795cdb8ac39d1fa9c2ce58a55b",
+      "sha256": "98bf53b1ca160953d05e192eb8f082b96b101f531602694d7fb8a3df1fd1a584",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "route": "sdm_guest_636f6d2e6469676974616c61_route"
@@ -76,7 +76,7 @@
       "dependencyId": "com.digitalarsenal.foundation.decision-gate",
       "pluginId": "com.digitalarsenal.foundation.decision-gate",
       "version": "0.1.0",
-      "sha256": "5c49cee99e5a6037131a416780631cb853c38cb06290847d210e5c7cdbbfe26c",
+      "sha256": "03427133318f8e7636701cd4f384479843c69b22d1c35d56c55ee2eef470dec3",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "dispatch": "sdm_guest_636f6d2e6469676974616c61_dispatch",
@@ -88,7 +88,7 @@
       "dependencyId": "com.digitalarsenal.data-source.retrieval",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "version": "0.1.0",
-      "sha256": "f4e6f09c9a94fa6c1fc947182422ff2233869c6e024bfe573a03f802d25d3d71",
+      "sha256": "f3a08e5fc9d0562d1ff0a7ce02e194d49b19bb9beb16a01166f755bc8317f17a",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "omm_bulk": "sdm_guest_636f6d2e6469676974616c61_omm_bulk",
@@ -100,7 +100,7 @@
       "dependencyId": "com.digitalarsenal.foundation.omm-json",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
       "version": "0.1.0",
-      "sha256": "d7b9474591017d029f2ec8e0d6b0ed190cd08c6da9a310d971f1ffc44c587483",
+      "sha256": "85371f55eadc0cba1c850fcdab22dba1ff1a811f917a216bb7255d3c5c0ae6df",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
@@ -111,7 +111,7 @@
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.1.0",
-      "sha256": "ed0cc28ad9888dece6edfc16160aad3bd25ed8d27c920341aed3d41a6c714f5b",
+      "sha256": "6e23a22ea1f6b9e93e6a855962e160f918ec839d59a6bf1d301516ced78e7ea9",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
