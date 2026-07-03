@@ -121,6 +121,41 @@ test("respond 200 flatbuffer: stream content-type, record count, etag, verbatim 
   assert.ok(names.every((name) => name === name.toLowerCase()));
 });
 
+test("respond 200 flatbuffer with a body-reference descriptor: $HTR BODY_REF fields, no inline body", async (t) => {
+  const decision = JSON.stringify({ route: "omm_bulk", format: "flatbuffer" });
+  const descriptor = JSON.stringify({
+    $sdnbodyref: 1,
+    token: 12,
+    size: 8_637_212,
+    frames: 29_000,
+    fnv1a64: "0011223344556677",
+  });
+  const response = await invokeRespond(t, [
+    bytesInput("decision", decision),
+    bytesInput("body", descriptor),
+    bytesInput("etag", 'W/"fnv1a64-0011223344556677"'),
+  ]);
+  const http = decodeResponseOutput(response);
+  assert.equal(http.status, 200);
+  assert.equal(findHttpHeader(http.headers, "Content-Type"), "application/vnd.sdn.flatbuffers.stream");
+  assert.equal(findHttpHeader(http.headers, "X-SDN-Record-Count"), "29000",
+    "record count comes from the descriptor's frames field");
+  assert.equal(findHttpHeader(http.headers, "ETag"), 'W/"fnv1a64-0011223344556677"');
+  assert.equal(http.body.length, 0, "referenced bodies carry no inline bytes");
+  assert.equal(Number(http.bodyRefToken), 12);
+  assert.equal(http.bodyRefSize, 8_637_212);
+});
+
+test("respond rejects a body-reference descriptor without token/size", async (t) => {
+  const decision = JSON.stringify({ route: "omm_bulk", format: "flatbuffer" });
+  const response = await invokeRespond(t, [
+    bytesInput("decision", decision),
+    bytesInput("body", JSON.stringify({ $sdnbodyref: 1 })),
+  ]);
+  assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, "invalid-body-ref");
+});
+
 test("respond 200 json: application/json, no record count, verbatim body", async (t) => {
   const decision = JSON.stringify({ route: "data_query", format: "json", sql: "SELECT 1" });
   const body = JSON.stringify({ records: [], count: 0 });

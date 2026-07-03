@@ -307,6 +307,51 @@ int fail_from_meta(const char* code, const std::string& meta, const char* fallba
     return 502;
 }
 
+// Body-reference delivery (loop C.5c): when the request carries
+// "deliver":"ref", the host MAY answer with result.ref =
+// {"token":..,"size":..,"frames":..,"fnv1a64":"<16 hex>"} and NO stream
+// segment — the stream bytes then never enter this module's memory; they are
+// substituted by the host at the egress sink ($HTR BODY_REF_TOKEN/SIZE).
+// This module passes the reference through as a small JSON descriptor frame
+// {"$sdnbodyref":1,...ref fields...} on the same output port the stream
+// bytes would have used. Hosts that ignore "deliver" keep returning segment
+// bytes, and this module falls back to verbatim byte passthrough.
+std::string body_ref_descriptor(const std::string& meta) {
+    const std::string result = json_object_slice(meta, "result");
+    if (result.empty()) return std::string();
+    const std::string ref = json_object_slice(result, "ref");
+    if (ref.empty() || ref[0] != '{') return std::string();
+    return "{\"$sdnbodyref\":1," + ref.substr(1);
+}
+
+// Push either the body-reference descriptor (ref delivery) or binary segment
+// 0 verbatim (byte delivery) on the given port. Returns the invoke status.
+int push_stream_or_ref(const char* port, const char* schema, const char* file_id,
+                       const char* root_type, const std::vector<uint8_t>& env,
+                       const std::string& meta, bool deliver_ref) {
+    if (deliver_ref) {
+        const std::string descriptor = body_ref_descriptor(meta);
+        if (!descriptor.empty()) {
+            const int32_t pushed = plugin_push_output_ex(
+                port, nullptr, nullptr,
+                PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
+                0, 1,
+                reinterpret_cast<const uint8_t*>(descriptor.data()),
+                static_cast<uint32_t>(descriptor.size()));
+            return pushed < 0 ? 500 : 0;
+        }
+        // Host ignored "deliver":"ref" — fall through to segment bytes.
+    }
+    const uint8_t* seg = nullptr;
+    uint32_t seg_len = 0;
+    envelope_first_segment(env, &seg, &seg_len);  // Zero rows -> empty stream.
+    const int32_t pushed = plugin_push_output_ex(
+        port, schema, file_id,
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root_type,
+        0, 8, seg, seg_len);
+    return pushed < 0 ? 500 : 0;
+}
+
 }  // namespace
 
 extern "C" {
@@ -371,13 +416,22 @@ int omm_bulk(void) {
         return 500;
     }
 
+    // Reference delivery is requested by the caller (the flow's gate injects
+    // "deliver":"ref" on the flatbuffer branch); never invented here.
+    std::string deliver;
+    if (!frame_overrides.empty()) {
+        json_string_field(frame_overrides, "deliver", &deliver);
+    }
+    const bool deliver_ref = deliver == "ref";
+
     char limit_buf[32];
     std::snprintf(limit_buf, sizeof(limit_buf), "%ld", query.limit);
     const std::string payload = std::string("{\"schema\":\"") + json_escape(query.schema) +
                                 "\",\"source\":\"" + json_escape(query.source) +
                                 "\",\"profile\":\"" + json_escape(query.profile) +
                                 "\",\"epoch\":" + format_number(query.epoch) +
-                                ",\"limit\":" + limit_buf + "}";
+                                ",\"limit\":" + limit_buf +
+                                (deliver_ref ? ",\"deliver\":\"ref\"" : "") + "}";
 
     const std::vector<uint8_t> env = hostcall("storage.flatsql_epoch_stream", payload);
     const std::string meta = envelope_meta_json(env);
@@ -386,14 +440,7 @@ int omm_bulk(void) {
                               "storage.flatsql_epoch_stream hostcall failed.");
     }
 
-    const uint8_t* seg = nullptr;
-    uint32_t seg_len = 0;
-    envelope_first_segment(env, &seg, &seg_len);  // Zero rows -> empty stream.
-    const int32_t pushed = plugin_push_output_ex(
-        "stream", "OMM.fbs", "$OMM",
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
-        0, 8, seg, seg_len);
-    return pushed < 0 ? 500 : 0;
+    return push_stream_or_ref("stream", "OMM.fbs", "$OMM", "OMM", env, meta, deliver_ref);
 }
 
 // data_query: extract {sql, params} from the SDS CAQ request frame and pass
@@ -427,6 +474,7 @@ int data_query(void) {
 
     std::string sql = query_text;
     std::string params_json = "[]";
+    std::string deliver;
     if (query_text[0] == '{') {
         std::string s;
         if (json_string_field(query_text, "sql", &s) && !s.empty()) {
@@ -434,10 +482,13 @@ int data_query(void) {
             const std::string params = json_array_slice(query_text, "params");
             if (!params.empty()) params_json = params;
         }
+        json_string_field(query_text, "deliver", &deliver);
     }
+    const bool deliver_ref = deliver == "ref";
 
     const std::string payload =
-        std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":" + params_json + "}";
+        std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":" + params_json +
+        (deliver_ref ? ",\"deliver\":\"ref\"" : "") + "}";
     const std::vector<uint8_t> env = hostcall("storage.flatsql_query_stream", payload);
     const std::string meta = envelope_meta_json(env);
     if (!meta_ok(meta)) {
@@ -445,14 +496,7 @@ int data_query(void) {
                               "storage.flatsql_query_stream hostcall failed.");
     }
 
-    const uint8_t* seg = nullptr;
-    uint32_t seg_len = 0;
-    envelope_first_segment(env, &seg, &seg_len);
-    const int32_t pushed = plugin_push_output_ex(
-        "rows", nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 8, seg, seg_len);
-    return pushed < 0 ? 500 : 0;
+    return push_stream_or_ref("rows", nullptr, nullptr, nullptr, env, meta, deliver_ref);
 }
 
 }  // extern "C"

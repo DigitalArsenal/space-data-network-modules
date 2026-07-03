@@ -22,7 +22,13 @@ import { fileURLToPath } from "node:url";
 import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
 import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/main.js";
 import { createFlowRuntimeHost, decodeFlowProgram } from "space-data-module-sdk/flow";
-import { decodeHttpResponse, encodeHttpRequest, findHttpHeader } from "space-data-module-sdk/http";
+import {
+  createBodyRefRegistry,
+  decodeHttpResponse,
+  encodeHttpRequest,
+  findHttpHeader,
+  fnv1a64Hex,
+} from "space-data-module-sdk/http";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const ARTIFACT_PATH = new URL("../dist/artifact.json", import.meta.url);
@@ -131,7 +137,7 @@ function decodeHostcallRequestMeta(bytes) {
   return metaText ? JSON.parse(metaText) : {};
 }
 
-function createHostcallStub({ failOps = {} } = {}) {
+function createHostcallStub({ failOps = {}, bodyRefs = null } = {}) {
   const calls = [];
   let memoryRef = { memory: null };
   let response = new Uint8Array(0);
@@ -147,6 +153,25 @@ function createHostcallStub({ failOps = {} } = {}) {
         return encodeHostcallEnvelope({ ok: true, result: FIXED_NOW_MS });
       case "storage.flatsql_epoch_stream":
       case "storage.flatsql_query_stream":
+        if (bodyRefs && params.deliver === "ref") {
+          // Reference-delivery host (loop C.5c): the stream bytes stay in the
+          // host's registry; only the descriptor fields cross into the flow.
+          const token = bodyRefs.put(OMM_STREAM);
+          return encodeHostcallEnvelope({
+            ok: true,
+            result: {
+              rows: RECORDS.length,
+              columns: 3,
+              frames: RECORDS.length,
+              ref: {
+                token,
+                size: OMM_STREAM.length,
+                frames: RECORDS.length,
+                fnv1a64: fnv1a64Hex(OMM_STREAM),
+              },
+            },
+          });
+        }
         return encodeHostcallEnvelope(
           { ok: true, result: { rows: RECORDS.length, columns: 3 } },
           [OMM_STREAM],
@@ -296,6 +321,87 @@ test("GET /omm/bulk without an epoch defaults through clock.now", async () => {
   );
   assert.equal(Math.trunc(flow.stub.calls[2].params.epoch), FIXED_NOW_MS / 1000);
   assert.equal(flow.stub.calls[2].params.limit, 50000, "compiled fallback limit");
+});
+
+// ---------------------------------------------------------------------------
+// Reference-delivery host (loop C.5c browser parity): the SAME artifact,
+// served by a JS host whose storage hostcall honors "deliver":"ref" — the
+// stream bytes never enter the flow's linear memory; the egress resolves the
+// $HTR BODY_REF against the host's body-ref registry exactly like the Go
+// htrPipe does.
+// ---------------------------------------------------------------------------
+
+test("GET /omm/bulk on a reference-delivery host: BODY_REF egress, byte-identical body, identical etag", async () => {
+  // Byte-path reference run first (host ignores deliver:ref): capture the
+  // in-wasm hashed etag.
+  const byteFlow = await createFlow();
+  const byteResponse = await pumpRequest(byteFlow, {
+    method: "GET",
+    path: "/omm/bulk",
+    query: `epoch=${EPOCH_SECONDS}&limit=100&profile=nearest`,
+  });
+  const byteEtag = findHttpHeader(byteResponse.headers, "etag");
+
+  const bodyRefs = createBodyRefRegistry();
+  const flow = await createFlow({ bodyRefs });
+  const responses = [];
+  flow.host.enqueueTriggerFrame(0, {
+    portId: "request",
+    bytes: encodeHttpRequest({
+      method: "GET",
+      path: "/omm/bulk",
+      query: `epoch=${EPOCH_SECONDS}&limit=100&profile=nearest`,
+    }),
+  });
+  await flow.host.drain(
+    {
+      "sdn.flow.egress:emit": ({ frames }) => {
+        for (const frame of frames) {
+          const http = decodeHttpResponse(frame.bytes);
+          // Host-side reference resolution (the JS counterpart of Go's
+          // htrPipe): substitute the registered buffer for the token.
+          if (http.bodyRefSize > 0) {
+            const bytes = bodyRefs.take(http.bodyRefToken);
+            assert.ok(bytes, "BODY_REF token must resolve in the host registry");
+            assert.equal(bytes.length, http.bodyRefSize);
+            http.body = bytes;
+          }
+          responses.push(http);
+        }
+        return { statusCode: 0 };
+      },
+    },
+    { maxIterations: 100 },
+  );
+
+  assert.equal(responses.length, 1);
+  const http = responses[0];
+  assert.equal(http.status, 200);
+  assert.equal(findHttpHeader(http.headers, "content-type"), "application/vnd.sdn.flatbuffers.stream");
+  assert.equal(findHttpHeader(http.headers, "x-sdn-record-count"), "2");
+  assert.deepEqual(new Uint8Array(http.body), OMM_STREAM,
+    "referenced body must be byte-identical to the engine stream");
+  assert.equal(
+    findHttpHeader(http.headers, "etag"),
+    byteEtag,
+    "host-computed fnv1a64 must produce the SAME etag as the in-wasm hashed-stream path",
+  );
+  assert.equal(bodyRefs.size(), 0, "the exchange consumed its reference");
+
+  // The deliver election reached the host op.
+  const epochCall = flow.stub.calls.find((c) => c.operation === "storage.flatsql_epoch_stream");
+  assert.equal(epochCall.params.deliver, "ref");
+
+  // 304 still works on the reference path (etag never depends on body bytes
+  // reaching the flow).
+  const notModified = await pumpRequest(flow, {
+    method: "GET",
+    path: "/omm/bulk",
+    query: `epoch=${EPOCH_SECONDS}&limit=100&profile=nearest`,
+    headers: { "if-none-match": byteEtag },
+  });
+  assert.equal(notModified.status, 304);
+  assert.equal(notModified.body.length, 0);
 });
 
 // ---------------------------------------------------------------------------

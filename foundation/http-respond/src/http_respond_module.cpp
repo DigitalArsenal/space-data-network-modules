@@ -130,8 +130,9 @@ struct HeaderEntry {
     std::string value;
 };
 
-int push_response(uint16_t status, const std::vector<HeaderEntry>& headers,
-                  const uint8_t* body, size_t body_length) {
+int push_response_with_ref(uint16_t status, const std::vector<HeaderEntry>& headers,
+                           const uint8_t* body, size_t body_length,
+                           uint64_t body_ref_token, uint64_t body_ref_size) {
     ::flatbuffers::FlatBufferBuilder builder(1024);
     std::vector<::flatbuffers::Offset<sdn::http::HttpHeader>> header_offsets;
     header_offsets.reserve(headers.size());
@@ -152,8 +153,8 @@ int push_response(uint16_t status, const std::vector<HeaderEntry>& headers,
         body && body_length > 0
             ? builder.CreateVector<uint8_t>(body, body_length)
             : ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>>(0);
-    const auto response =
-        sdn::http::CreateHttpResponse(builder, status, headers_vector, body_vector);
+    const auto response = sdn::http::CreateHttpResponse(
+        builder, status, headers_vector, body_vector, body_ref_token, body_ref_size);
     sdn::http::FinishHttpResponseBuffer(builder, response);
 
     const int32_t pushed = plugin_push_output_ex(
@@ -162,6 +163,45 @@ int push_response(uint16_t status, const std::vector<HeaderEntry>& headers,
         0, 0,
         builder.GetBufferPointer(), builder.GetSize());
     return pushed < 0 ? 500 : 0;
+}
+
+int push_response(uint16_t status, const std::vector<HeaderEntry>& headers,
+                  const uint8_t* body, size_t body_length) {
+    return push_response_with_ref(status, headers, body, body_length, 0, 0);
+}
+
+// Body-reference descriptor frames (loop C.5c): a body input that is the
+// retrieval path's {"$sdnbodyref":1,"token":..,"size":..,"frames":..,
+// "fnv1a64":".."} JSON descriptor (instead of stream bytes). The $HTR then
+// carries BODY_REF_TOKEN/BODY_REF_SIZE and NO inline body; the host
+// substitutes the byte buffer it registered under the token. An aligned
+// FlatBuffer stream starts with a u32le size prefix, never this JSON.
+constexpr const char* kBodyRefPrefix = "{\"$sdnbodyref\"";
+
+bool is_body_ref_frame(const uint8_t* data, size_t length) {
+    const size_t prefix_len = std::strlen(kBodyRefPrefix);
+    return data != nullptr && length >= prefix_len &&
+           std::memcmp(data, kBodyRefPrefix, prefix_len) == 0;
+}
+
+// Extract "key":<number> values (uint64-safe for the u53-range tokens and
+// sizes the host issues).
+bool json_u64_field(const std::string& json, const std::string& key, uint64_t* out) {
+    const std::string needle = "\"" + key + "\"";
+    const size_t k = json.find(needle);
+    if (k == std::string::npos) return false;
+    const size_t colon = json.find(':', k + needle.size());
+    if (colon == std::string::npos) return false;
+    size_t i = colon + 1;
+    while (i < json.size() && is_json_ws(json[i])) i++;
+    if (i >= json.size() || json[i] < '0' || json[i] > '9') return false;
+    uint64_t value = 0;
+    while (i < json.size() && json[i] >= '0' && json[i] <= '9') {
+        value = value * 10 + static_cast<uint64_t>(json[i] - '0');
+        i++;
+    }
+    *out = value;
+    return true;
 }
 
 int push_json_error(uint16_t status, const std::string& message) {
@@ -231,16 +271,43 @@ int respond(void) {
         return push_response(304, headers, nullptr, 0);
     }
 
-    // 4. 200 with the body frame verbatim.
+    // 4. 200 with the body frame verbatim — either inline bytes or a
+    //    body-reference descriptor forwarded as $HTR BODY_REF fields.
     const plugin_input_frame_t* body_frame = find_input("body");
     const uint8_t* body = body_frame ? body_frame->payload : nullptr;
     const size_t body_length = body ? static_cast<size_t>(body_frame->payload_length) : 0u;
+
+    uint64_t body_ref_token = 0;
+    uint64_t body_ref_size = 0;
+    uint64_t body_ref_frames = 0;
+    bool has_ref_frames = false;
+    const bool body_is_ref = is_body_ref_frame(body, body_length);
+    if (body_is_ref) {
+        const std::string descriptor(reinterpret_cast<const char*>(body), body_length);
+        if (!json_u64_field(descriptor, "token", &body_ref_token) ||
+            !json_u64_field(descriptor, "size", &body_ref_size)) {
+            plugin_set_error("invalid-body-ref",
+                             "body-reference descriptor is missing token/size fields.");
+            return 400;
+        }
+        has_ref_frames = json_u64_field(descriptor, "frames", &body_ref_frames);
+    }
 
     std::vector<HeaderEntry> headers;
     headers.push_back({"content-type", format == "json" ? kContentTypeJson : kContentTypeStream});
     if (format != "json") {
         uint32_t record_count = 0;
-        if (count_stream_frames(body, body_length, &record_count)) {
+        if (body_is_ref) {
+            // The host counted the referenced stream's size-prefixed frames
+            // when it materialized the buffer (same skip-zero-prefix rule as
+            // count_stream_frames).
+            if (has_ref_frames) {
+                char buf[24];
+                std::snprintf(buf, sizeof(buf), "%llu",
+                              static_cast<unsigned long long>(body_ref_frames));
+                headers.push_back({"x-sdn-record-count", buf});
+            }
+        } else if (count_stream_frames(body, body_length, &record_count)) {
             char buf[16];
             std::snprintf(buf, sizeof(buf), "%u", record_count);
             headers.push_back({"x-sdn-record-count", buf});
@@ -248,6 +315,9 @@ int respond(void) {
     }
     if (etag_frame && !etag.empty()) {
         headers.push_back({"etag", etag});
+    }
+    if (body_is_ref) {
+        return push_response_with_ref(200, headers, nullptr, 0, body_ref_token, body_ref_size);
     }
     return push_response(200, headers, body, body_length);
 }

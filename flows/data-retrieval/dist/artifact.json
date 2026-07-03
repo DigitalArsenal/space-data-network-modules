@@ -76,7 +76,7 @@
       "dependencyId": "com.digitalarsenal.foundation.decision-gate",
       "pluginId": "com.digitalarsenal.foundation.decision-gate",
       "version": "0.1.0",
-      "sha256": "03427133318f8e7636701cd4f384479843c69b22d1c35d56c55ee2eef470dec3",
+      "sha256": "75fc910736a3b07a0bb8f40ec5a6195be15a6b5f18b7723d7bd9dddda66ed564",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "dispatch": "sdm_guest_636f6d2e6469676974616c61_dispatch",
@@ -88,7 +88,7 @@
       "dependencyId": "com.digitalarsenal.data-source.retrieval",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "version": "0.1.0",
-      "sha256": "f3a08e5fc9d0562d1ff0a7ce02e194d49b19bb9beb16a01166f755bc8317f17a",
+      "sha256": "56395f977af82f3ab78597dfeda96ec44a7b98bdcc5b59d8a0ca875a58fdbab8",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "omm_bulk": "sdm_guest_636f6d2e6469676974616c61_omm_bulk",
@@ -111,7 +111,7 @@
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.1.0",
-      "sha256": "6e23a22ea1f6b9e93e6a855962e160f918ec839d59a6bf1d301516ced78e7ea9",
+      "sha256": "796c618a5341bc3307f2406298592924ca1d9462fc253239a1b8d24a4e2b5190",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "respond": "sdm_guest_636f6d2e6469676974616c61_respond"

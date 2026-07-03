@@ -2,12 +2,18 @@
   "pluginId": "com.digitalarsenal.foundation.decision-gate",
   "name": "SDN Decision Gate",
   "version": "0.1.0",
-  "description": "Single-purpose flow gate nodes for the routing-decision JSON contract (foundation/http-route). Method \"dispatch\" fans a decision frame out to route-specific output ports: route=omm_bulk -> an SDS $CAQ envelope (CAQRequest.QUERY = decision.query JSON) on \"omm_bulk\" plus the decision passthrough on \"routed\"; route=data_query -> a $CAQ envelope (CAQRequest.QUERY = {\"sql\",\"params\"} JSON) on \"data_query\" plus \"routed\"; anything else -> the decision passthrough on \"not_found\". Method \"branch\" joins the decision with a retrieval stream and fans out per decision.format: the stream passes VERBATIM on \"flatbuffer\" (default) or \"json\" (for JSON encoding downstream), the decision passes through on \"decision\", and a deterministic FNV-1a 64-bit hex entity tag computed over the stream bytes is emitted on \"etag\". Branching therefore stays declarative at the flow level: static edges from route/format-specific output ports. Pure compute — no capabilities.",
+  "description": "Single-purpose flow gate nodes for the routing-decision JSON contract (foundation/http-route). Method \"dispatch\" fans a decision frame out to route-specific output ports: route=omm_bulk -> an SDS $CAQ envelope (CAQRequest.QUERY = decision.query JSON) on \"omm_bulk\" plus the decision passthrough on \"routed\"; route=data_query -> a $CAQ envelope (CAQRequest.QUERY = {\"sql\",\"params\"} JSON) on \"data_query\" plus \"routed\"; anything else -> the decision passthrough on \"not_found\". Method \"branch\" joins the decision with a retrieval stream and fans out per decision.format: the stream passes VERBATIM on \"flatbuffer\" (default) or \"json\" (for JSON encoding downstream), the decision passes through on \"decision\", and a deterministic FNV-1a 64-bit hex entity tag computed over the stream bytes is emitted on \"etag\". Branching therefore stays declarative at the flow level: static edges from route/format-specific output ports. Pure compute \u2014 no capabilities. Body-reference delivery (loop C.5c): dispatch injects \"deliver\":\"ref\" into the retrieval query JSON when decision.format != json (the flatbuffer stream passes to the response body verbatim, so the host may keep the bytes and hand back a reference); branch recognizes {\"$sdnbodyref\":..} descriptor frames and formats their host-computed fnv1a64 field into the same W/\"fnv1a64-<hex>\" entity tag it would compute by hashing the stream bytes.",
   "pluginFamily": "foundation",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "dispatch",
