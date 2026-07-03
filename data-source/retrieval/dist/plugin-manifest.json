@@ -1,0 +1,157 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.retrieval",
+  "name": "SDN Data Retrieval",
+  "version": "0.1.0",
+  "description": "Engine-native FlatSQL retrieval module: bulk per-epoch OMM stream retrieval (storage.flatsql_epoch_stream) and generic FlatSQL query streaming (storage.flatsql_query_stream). Streams pass through verbatim as ALIGNED size-prefixed FlatBuffer frames.",
+  "pluginFamily": "data_source",
+  "capabilities": ["storage_query"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-retrieval",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine-native retrieval ops (storage.flatsql_epoch_stream, storage.flatsql_query_stream, storage.flatsql_cache_key).",
+      "properties": {
+        "hostOps": [
+          "storage.flatsql_epoch_stream",
+          "storage.flatsql_query_stream",
+          "storage.flatsql_cache_key"
+        ]
+      }
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "omm_bulk",
+      "displayName": "Bulk OMM Retrieval",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-caq-epoch-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAQ.fbs",
+                  "fileIdentifier": "$CAQ",
+                  "rootTypeName": "CAQ"
+                }
+              ],
+              "description": "Optional SDS CAQ envelope. CAQRequest.QUERY carries a host-specific JSON override object {schema,source,profile,epoch,limit}; CAQRequest.MAX_COUNT (when > 0) overrides the row limit."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional per-call overrides. Resolution order: request frame > module config (plugin.getConfig profiles) > compiled fallback (profile=nearest, epoch=now, limit=50000)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "stream",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $OMM FlatBuffer stream passed through verbatim from storage.flatsql_epoch_stream."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Verbatim aligned size-prefixed OMM FlatBuffer stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Resolves a per-standard epoch query profile (request frame > config > defaults) and streams the matching OMM records from the host FlatSQL engine."
+    },
+    {
+      "methodId": "data_query",
+      "displayName": "FlatSQL Query",
+      "inputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-caq-sql-query",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAQ.fbs",
+                  "fileIdentifier": "$CAQ",
+                  "rootTypeName": "CAQ"
+                }
+              ],
+              "description": "SDS CAQ envelope. CAQRequest.QUERY carries either a plain SQL string or a JSON object {\"sql\":\"...\",\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "FlatSQL query request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "rows",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatsql-aligned-row-stream",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "ALIGNED size-prefixed FlatBuffer stream (schema depends on the query) passed through verbatim from storage.flatsql_query_stream. SDK manifest rules cannot express a generic aligned-binary type, so the port declares the generic flatbuffer ref; runtime frames carry the aligned-binary wire format in their TAB descriptors."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Verbatim aligned size-prefixed FlatBuffer result stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Executes a FlatSQL query through the host storage.flatsql_query_stream op and streams the raw aligned FlatBuffer result."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "CAQ.fbs",
+      "fileIdentifier": "$CAQ",
+      "rootTypeName": "CAQ"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "data-source-retrieval-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
