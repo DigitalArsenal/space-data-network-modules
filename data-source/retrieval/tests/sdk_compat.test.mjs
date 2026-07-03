@@ -67,7 +67,7 @@ const CANNED_STREAM = buildCannedStream();
 // Host-bridge stub: serves plugin.getConfig / clock.now / the flatsql stream
 // ops and records every outgoing hostcall (operation + decoded params) so
 // tests can assert the module's resolved query payloads.
-function createHostStub({ config = {}, failOps = {} } = {}) {
+function createHostStub({ config = {}, failOps = {}, honorRef = false } = {}) {
   const calls = [];
   const dispatch = (operation, params) => {
     calls.push({ operation, params });
@@ -81,6 +81,17 @@ function createHostStub({ config = {}, failOps = {} } = {}) {
         return FIXED_NOW_MS;
       case "storage.flatsql_epoch_stream":
       case "storage.flatsql_query_stream":
+        if (honorRef && params.deliver === "ref") {
+          // Reference-delivery host (loop C.5c): the stream bytes stay
+          // host-side; the module receives only the reference descriptor
+          // fields.
+          return {
+            rows: 2,
+            columns: 3,
+            frames: 2,
+            ref: { token: 41, size: CANNED_STREAM.length, frames: 2, fnv1a64: "00c0ffee00c0ffee" },
+          };
+        }
         return { rows: 2, columns: 3, stream: CANNED_STREAM };
       default:
         throw new Error(`unexpected hostcall operation: ${operation}`);
@@ -279,6 +290,78 @@ test("data_query accepts a plain SQL string in CAQRequest.QUERY", async (t) => {
   assert.ok(queryCall);
   assert.equal(queryCall.params.sql, "SELECT COUNT(*) FROM omm");
   assert.deepEqual(queryCall.params.params, []);
+});
+
+test("omm_bulk deliver:ref emits the body-reference descriptor instead of stream bytes", async (t) => {
+  const stub = createHostStub({ config: {}, honorRef: true });
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "omm_bulk",
+    inputs: [
+      {
+        portId: "request",
+        typeRef: { schemaName: "CAQ.fbs", fileIdentifier: "$CAQ" },
+        payload: encodeCaqRequest(
+          JSON.stringify({ deliver: "ref", profile: "nearest", epoch: 123.5, limit: 10 }),
+        ),
+      },
+    ],
+  });
+
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1);
+  const [frame] = response.outputs;
+  assert.equal(frame.portId, "stream");
+  const descriptor = JSON.parse(new TextDecoder().decode(new Uint8Array(frame.payload)));
+  assert.equal(descriptor.$sdnbodyref, 1);
+  assert.equal(descriptor.token, 41);
+  assert.equal(descriptor.size, CANNED_STREAM.length);
+  assert.equal(descriptor.frames, 2);
+  assert.equal(descriptor.fnv1a64, "00c0ffee00c0ffee");
+
+  const epochCall = findCall(stub, "storage.flatsql_epoch_stream");
+  assert.equal(epochCall.params.deliver, "ref", "deliver:ref must forward to the host op");
+});
+
+test("omm_bulk deliver:ref falls back to verbatim bytes when the host ignores it", async (t) => {
+  const stub = createHostStub({ config: {}, honorRef: false });
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "omm_bulk",
+    inputs: [
+      {
+        portId: "request",
+        typeRef: { schemaName: "CAQ.fbs", fileIdentifier: "$CAQ" },
+        payload: encodeCaqRequest(JSON.stringify({ deliver: "ref", epoch: 123.5 })),
+      },
+    ],
+  });
+  assertStreamOutput(response, "stream");
+});
+
+test("data_query deliver:ref emits the body-reference descriptor", async (t) => {
+  const stub = createHostStub({ honorRef: true });
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "data_query",
+    inputs: [
+      {
+        portId: "query",
+        typeRef: { schemaName: "CAQ.fbs", fileIdentifier: "$CAQ" },
+        payload: encodeCaqRequest(
+          JSON.stringify({ sql: "SELECT _data FROM omm", params: [], deliver: "ref" }),
+        ),
+      },
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const [frame] = response.outputs;
+  assert.equal(frame.portId, "rows");
+  const descriptor = JSON.parse(new TextDecoder().decode(new Uint8Array(frame.payload)));
+  assert.equal(descriptor.$sdnbodyref, 1);
+  assert.equal(descriptor.token, 41);
+  const queryCall = findCall(stub, "storage.flatsql_query_stream");
+  assert.equal(queryCall.params.deliver, "ref");
 });
 
 test("omm_bulk surfaces host errors as plugin error status with the host message", async (t) => {

@@ -170,6 +170,9 @@ int push_caq(const char* port, const std::string& query) {
 // recomputes it elsewhere — word folding keeps it deterministic and
 // content-sensitive while doing 1/8th the loop iterations of byte-at-a-time
 // FNV, which dominated per-request time on interpreted hosts (loop C.5).
+// The SAME algorithm produces the "fnv1a64" field of body-reference
+// descriptors (computed host-side over the identical stream bytes, loop
+// C.5c), so reference-mode etags are byte-identical to hashed-stream etags.
 std::string fnv1a64_etag(const uint8_t* data, uint32_t length) {
     constexpr uint64_t kPrime = 1099511628211ull;
     uint64_t hash = 1469598103934665603ull;
@@ -190,6 +193,29 @@ std::string fnv1a64_etag(const uint8_t* data, uint32_t length) {
     return std::string(buf);
 }
 
+// Body-reference descriptor frames (loop C.5c): the retrieval node emits a
+// small JSON descriptor {"$sdnbodyref":1,"token":..,"size":..,"frames":..,
+// "fnv1a64":"<16 hex>"} instead of the stream bytes when the host answered a
+// storage query in "deliver":"ref" mode. Detection is by the exact prefix —
+// a real aligned FlatBuffer stream starts with a u32le size prefix, never
+// with this JSON.
+constexpr const char* kBodyRefPrefix = "{\"$sdnbodyref\"";
+
+bool is_body_ref_frame(const uint8_t* data, uint32_t length) {
+    const size_t prefix_len = std::strlen(kBodyRefPrefix);
+    return length >= prefix_len && std::memcmp(data, kBodyRefPrefix, prefix_len) == 0;
+}
+
+// Inject "deliver":"ref" into a JSON object document (possibly empty),
+// preserving all other keys.
+std::string with_deliver_ref(const std::string& query_object) {
+    if (query_object.empty() || query_object == "{}") {
+        return "{\"deliver\":\"ref\"}";
+    }
+    if (query_object[0] != '{') return query_object;
+    return "{\"deliver\":\"ref\"," + query_object.substr(1);
+}
+
 }  // namespace
 
 extern "C" {
@@ -205,10 +231,20 @@ int dispatch(void) {
     std::string route;
     json_string_field(decision, "route", &route);
 
+    // Reference-delivery election (loop C.5c): on the flatbuffer path the
+    // retrieval stream passes through to the response body VERBATIM, so the
+    // host may deliver it as an out-of-band body reference (zero copies
+    // through the flow). The json path needs the actual bytes in-flow for
+    // omm-json field extraction, so it stays on byte delivery.
+    std::string format;
+    json_string_field(decision, "format", &format);
+    const bool deliver_ref = format != "json";
+
     if (route == "omm_bulk") {
         // decision.query is the retrieval override object; absent keys defer
         // to the retrieval module's config/compiled defaults.
-        const std::string query = json_object_slice(decision, "query");
+        std::string query = json_object_slice(decision, "query");
+        if (deliver_ref) query = with_deliver_ref(query);
         if (push_caq("omm_bulk", query) < 0) {
             plugin_set_error("push-failed", "failed to push the omm_bulk $CAQ frame.");
             return 500;
@@ -234,8 +270,9 @@ int dispatch(void) {
         }
         std::string params = json_array_slice(decision, "params");
         if (params.empty()) params = "[]";
-        const std::string query =
+        std::string query =
             std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":" + params + "}";
+        if (deliver_ref) query = with_deliver_ref(query);
         if (push_caq("data_query", query) < 0) {
             plugin_set_error("push-failed", "failed to push the data_query $CAQ frame.");
             return 500;
@@ -288,7 +325,23 @@ int branch(void) {
         plugin_set_error("push-failed", "failed to push the decision passthrough frame.");
         return 500;
     }
-    const std::string etag = fnv1a64_etag(stream, stream_length);
+    // Entity tag: for byte streams, hash the bytes; for body-reference
+    // descriptors (loop C.5c), the host already computed the SAME word-folded
+    // FNV-1a 64 over the referenced stream bytes — format its "fnv1a64" hex
+    // field into the identical validator string.
+    std::string etag;
+    if (is_body_ref_frame(stream, stream_length)) {
+        const std::string descriptor(reinterpret_cast<const char*>(stream), stream_length);
+        std::string hash_hex;
+        if (!json_string_field(descriptor, "fnv1a64", &hash_hex) || hash_hex.empty()) {
+            plugin_set_error("invalid-body-ref",
+                             "body-reference descriptor is missing the fnv1a64 field.");
+            return 502;
+        }
+        etag = "W/\"fnv1a64-" + hash_hex + "\"";
+    } else {
+        etag = fnv1a64_etag(stream, stream_length);
+    }
     if (push_json("etag", etag) < 0) {
         plugin_set_error("push-failed", "failed to push the etag frame.");
         return 500;

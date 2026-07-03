@@ -2,9 +2,11 @@
   "pluginId": "com.digitalarsenal.data-source.retrieval",
   "name": "SDN Data Retrieval",
   "version": "0.1.0",
-  "description": "Engine-native FlatSQL retrieval module: bulk per-epoch OMM stream retrieval (storage.flatsql_epoch_stream) and generic FlatSQL query streaming (storage.flatsql_query_stream). Streams pass through verbatim as ALIGNED size-prefixed FlatBuffer frames.",
+  "description": "Engine-native FlatSQL retrieval module: bulk per-epoch OMM stream retrieval (storage.flatsql_epoch_stream) and generic FlatSQL query streaming (storage.flatsql_query_stream). Streams pass through verbatim as ALIGNED size-prefixed FlatBuffer frames. Body-reference delivery (loop C.5c): when the request carries \"deliver\":\"ref\", it is forwarded to the storage op; a host that answers with result.ref (no stream segment) keeps the bytes host-side and this module emits a small {\"$sdnbodyref\":1,...} JSON descriptor frame on the stream/rows port instead of the bytes. Hosts that ignore \"deliver\" keep byte delivery and the stream passes through verbatim as before.",
   "pluginFamily": "data_source",
-  "capabilities": ["storage_query"],
+  "capabilities": [
+    "storage_query"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "flatsql-retrieval",
@@ -22,8 +24,14 @@
       }
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "omm_bulk",

@@ -109,12 +109,28 @@ test("dispatch omm_bulk: $CAQ with decision.query JSON plus routed passthrough",
   assert.deepEqual([...byPort.keys()].sort(), ["omm_bulk", "routed"]);
   const query = decodeCaqQuery(byPort.get("omm_bulk"));
   assert.deepEqual(JSON.parse(query), {
+    // format=flatbuffer: the stream passes through to the body verbatim, so
+    // the gate elects out-of-band reference delivery (loop C.5c).
+    deliver: "ref",
     schema: "OMM.fbs",
     profile: "nearest",
     epoch: 1751500800,
     limit: 100,
   });
   assert.equal(decoder.decode(byPort.get("routed").payload), decision);
+});
+
+test("dispatch omm_bulk format=json keeps byte delivery (no deliver:ref)", async (t) => {
+  const decision = JSON.stringify({
+    route: "omm_bulk",
+    format: "json",
+    query: { schema: "OMM.fbs", limit: 5 },
+  });
+  const response = await invoke(t, "dispatch", [bytesInput("decision", decision)]);
+  const byPort = framesByPort(response);
+  const query = JSON.parse(decodeCaqQuery(byPort.get("omm_bulk")));
+  assert.equal(query.deliver, undefined, "json path needs the bytes in-flow for omm-json");
+  assert.equal(query.limit, 5);
 });
 
 test("dispatch omm_bulk without a query object emits an empty-QUERY $CAQ", async (t) => {
@@ -136,6 +152,7 @@ test("dispatch data_query: $CAQ QUERY carries {sql,params} JSON", async (t) => {
   const byPort = framesByPort(response);
   assert.deepEqual([...byPort.keys()].sort(), ["data_query", "routed"]);
   assert.deepEqual(JSON.parse(decodeCaqQuery(byPort.get("data_query"))), {
+    deliver: "ref",
     sql: "SELECT * FROM omm WHERE NORAD_CAT_ID = ?",
     params: [{ t: "i64", v: 25544 }],
   });
@@ -181,6 +198,33 @@ test("branch flatbuffer: verbatim stream + decision + deterministic etag", async
     bytesInput("stream", CANNED_STREAM),
   ]);
   assert.equal(decoder.decode(framesByPort(again).get("etag").payload), etag);
+});
+
+test("branch flatbuffer: body-reference descriptor passes through with the host-computed etag", async (t) => {
+  const decision = JSON.stringify({ route: "omm_bulk", format: "flatbuffer" });
+  const descriptor = JSON.stringify({
+    $sdnbodyref: 1,
+    token: 3,
+    size: 8_637_212,
+    frames: 29_000,
+    fnv1a64: "0123456789abcdef",
+  });
+  const response = await invoke(t, "branch", [
+    bytesInput("decision", decision),
+    bytesInput("stream", descriptor),
+  ]);
+  const byPort = framesByPort(response);
+  assert.deepEqual([...byPort.keys()].sort(), ["decision", "etag", "flatbuffer"]);
+  assert.equal(
+    decoder.decode(byPort.get("flatbuffer").payload),
+    descriptor,
+    "reference descriptors pass through verbatim (the stream bytes never enter the flow)",
+  );
+  assert.equal(
+    decoder.decode(byPort.get("etag").payload),
+    'W/"fnv1a64-0123456789abcdef"',
+    "etag formats the host-computed word-folded FNV-1a 64 exactly like hashed-stream etags",
+  );
 });
 
 test("branch json: stream routed to the json port", async (t) => {
