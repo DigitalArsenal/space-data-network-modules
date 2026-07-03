@@ -1,0 +1,81 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+  "name": "SDN Host FlatSQL Query Node",
+  "version": "0.1.0",
+  "description": "Generalized engine query node wrapping the storage.flatsql_query_stream hostcall. Method \"query\": input \"query\" JSON {\"sql\":\"...\",\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]} -> the ALIGNED size-prefixed FlatBuffer result stream passes through VERBATIM on \"stream\". This is the generic engine query node; data-source/retrieval remains the profile-aware variant (epoch profiles, SDS CAQ request envelopes). Host support: server-only today — storage.flatsql_query_stream is served by the Go node (sdn-server modulert/caps/storage.go, capability storage_query); the SDK BrowserHost storage adapter exposes storage.query/write/delete but not the flatsql stream ops. TRANSITIONAL: flatsql is becoming a component DEPENDENCY with direct in-wasm linkage in a later task; this node uses the hostcall bridge until that lands.",
+  "pluginFamily": "infrastructure",
+  "capabilities": ["storage_query"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-query-stream",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
+      "properties": {
+        "hostOps": ["storage.flatsql_query_stream"]
+      }
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "query",
+      "displayName": "FlatSQL Query Stream",
+      "inputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-flatsql-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"sql\":\"...\" (required),\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]}. Tagged params forward verbatim to the host op (decoded by sdn-server decodeTaggedParams)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The FlatSQL query request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "stream",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatsql-aligned-row-stream",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "ALIGNED size-prefixed FlatBuffer stream (schema depends on the query) passed through verbatim from storage.flatsql_query_stream. SDK manifest rules cannot express a generic aligned-binary type, so the port declares the generic flatbuffer ref; runtime frames carry the aligned-binary wire format in their TAB descriptors (requiredAlignment 8), matching data-source/retrieval's rows port."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Verbatim aligned size-prefixed FlatBuffer result stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Executes a FlatSQL query through the transitional storage.flatsql_query_stream hostcall bridge and streams the raw aligned result verbatim."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-flatsql-query-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

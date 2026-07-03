@@ -1,0 +1,81 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.random",
+  "name": "SDN Host Random Node",
+  "version": "0.1.0",
+  "description": "Capability node wrapping the host random.bytes hostcall. Method \"bytes\" takes an optional \"request\" frame of UTF-8 JSON bytes {\"length\":N} (default 32, maximum 65536) and emits one \"bytes\" frame of raw host-generated random bytes, passed through VERBATIM from the hostcall binary segment. Host notes: the Go node (sdn-server modulert) serves random.bytes as an ungated built-in but silently clamps length to 8192; the SDK NodeHost/BrowserHost honor the requested length but are default-deny and require the \"random\" capability grant, which this node declares. Downstream nodes must use the emitted frame's actual byte length, not the requested length.",
+  "pluginFamily": "infrastructure",
+  "capabilities": ["random"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-random",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "random",
+      "resource": "host://random",
+      "description": "Host CSPRNG hostcall (random.bytes). Available on the Go server host (built-in, clamps at 8192 bytes) and SDK NodeHost/BrowserHost (capability-gated).",
+      "properties": {
+        "hostOps": ["random.bytes"]
+      }
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "bytes",
+      "displayName": "Generate Random Bytes",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-random-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Optional UTF-8 JSON bytes (aligned-binary wire format): {\"length\":N}. Default 32 when absent; 1 <= N <= 65536."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional byte-count request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "bytes",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-random-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Raw random bytes (aligned-binary wire format), passed through verbatim from the random.bytes hostcall binary segment."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The generated random bytes."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Requests length random bytes from the host CSPRNG through the sync hostcall bridge and emits them verbatim."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-random-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
