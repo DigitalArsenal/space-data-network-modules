@@ -1,0 +1,121 @@
+{
+  "programId": "com.digitalarsenal.flows.data-retrieval",
+  "name": "SDN Data Retrieval Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "nodes": 8,
+  "edges": 13,
+  "triggers": 1,
+  "capabilities": [
+    "storage_query"
+  ],
+  "dispatch": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "route",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "gate",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "methodId": "dispatch",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "omm",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "methodId": "omm_bulk",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "methodId": "data_query",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "branch",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "methodId": "branch",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "tojson",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "methodId": "encode",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "version": "0.1.0",
+      "sha256": "666b0b6160b341bd3074e751d03252ec4c43fb795cdb8ac39d1fa9c2ce58a55b",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "route": "sdm_guest_636f6d2e6469676974616c61_route"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.decision-gate",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "version": "0.1.0",
+      "sha256": "5c49cee99e5a6037131a416780631cb853c38cb06290847d210e5c7cdbbfe26c",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "dispatch": "sdm_guest_636f6d2e6469676974616c61_dispatch",
+        "branch": "sdm_guest_636f6d2e6469676974616c61_branch"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.retrieval",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "version": "0.1.0",
+      "sha256": "f4e6f09c9a94fa6c1fc947182422ff2233869c6e024bfe573a03f802d25d3d71",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "omm_bulk": "sdm_guest_636f6d2e6469676974616c61_omm_bulk",
+        "data_query": "sdm_guest_636f6d2e6469676974616c61_data_query"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.omm-json",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "version": "0.1.0",
+      "sha256": "f9005b0800ec114797f056dc915d4779cc3e51a2fe6ad003668c104b3c016dee",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "version": "0.1.0",
+      "sha256": "ed0cc28ad9888dece6edfc16160aad3bd25ed8d27c920341aed3d41a6c714f5b",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
+      }
+    }
+  ]
+}

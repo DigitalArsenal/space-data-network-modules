@@ -1,0 +1,267 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.decision-gate",
+  "name": "SDN Decision Gate",
+  "version": "0.1.0",
+  "description": "Single-purpose flow gate nodes for the routing-decision JSON contract (foundation/http-route). Method \"dispatch\" fans a decision frame out to route-specific output ports: route=omm_bulk -> an SDS $CAQ envelope (CAQRequest.QUERY = decision.query JSON) on \"omm_bulk\" plus the decision passthrough on \"routed\"; route=data_query -> a $CAQ envelope (CAQRequest.QUERY = {\"sql\",\"params\"} JSON) on \"data_query\" plus \"routed\"; anything else -> the decision passthrough on \"not_found\". Method \"branch\" joins the decision with a retrieval stream and fans out per decision.format: the stream passes VERBATIM on \"flatbuffer\" (default) or \"json\" (for JSON encoding downstream), the decision passes through on \"decision\", and a deterministic FNV-1a 64-bit hex entity tag computed over the stream bytes is emitted on \"etag\". Branching therefore stays declarative at the flow level: static edges from route/format-specific output ports. Pure compute — no capabilities.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "dispatch",
+      "displayName": "Dispatch Routing Decision",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision UTF-8 JSON bytes from foundation/http-route (aligned-binary wire format): {\"route\",\"format\",\"ifNoneMatch\"?,\"query\"?,\"sql\"?,\"params\"?,\"error\"?}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The routing decision to dispatch."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm_bulk",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-caq-epoch-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAQ.fbs",
+                  "fileIdentifier": "$CAQ",
+                  "rootTypeName": "CAQ"
+                }
+              ],
+              "description": "SDS catalog query envelope for data-source/retrieval omm_bulk: CAQRequest.QUERY carries decision.query as a JSON override object {schema,source,profile,epoch,limit}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted only when decision.route=omm_bulk."
+        },
+        {
+          "portId": "data_query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-caq-sql-query",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAQ.fbs",
+                  "fileIdentifier": "$CAQ",
+                  "rootTypeName": "CAQ"
+                }
+              ],
+              "description": "SDS catalog query envelope for data-source/retrieval data_query: CAQRequest.QUERY carries {\"sql\":\"...\",\"params\":[...]} JSON from the decision."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted only when decision.route=data_query."
+        },
+        {
+          "portId": "routed",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json-routed",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision JSON passthrough, emitted alongside omm_bulk/data_query so the format branch can join it with the retrieval stream."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Decision passthrough for data routes."
+        },
+        {
+          "portId": "not_found",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json-notfound",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision JSON passthrough for unroutable requests, wired straight to http-respond (404)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted only when the decision is not a data route."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts the decision into route-specific typed frames: $CAQ requests for the retrieval methods, decision passthroughs for the join and the 404 path."
+    },
+    {
+      "methodId": "branch",
+      "displayName": "Branch Stream By Decision Format",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision UTF-8 JSON bytes (aligned-binary wire format)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The decision controlling the format branch."
+        },
+        {
+          "portId": "stream",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-retrieval-stream-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Retrieval result bytes passed through verbatim: an ALIGNED size-prefixed FlatBuffer stream ($OMM for omm_bulk, generic aligned rows for data_query)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The retrieval stream to branch."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "flatbuffer",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-branch-flatbuffer-stream",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The stream verbatim when decision.format=flatbuffer (default): wired straight to http-respond body."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted when decision.format != json."
+        },
+        {
+          "portId": "json",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The stream verbatim when decision.format=json, typed as the $OMM aligned stream so it wires into foundation/omm-json encode."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted when decision.format=json."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json-joined",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision JSON passthrough, emitted together with the branched stream so http-respond joins decision+body atomically."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Decision passthrough (always emitted)."
+        },
+        {
+          "portId": "etag",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-etag-string-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Deterministic entity tag over the stream bytes as raw UTF-8 string bytes: W/\"fnv1a64-<16 hex digits>\". Matches http-respond's etag input/If-None-Match comparison."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Entity tag for conditional requests (always emitted)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Joins decision+stream, forwards the stream on the format-specific port, and emits the decision passthrough plus a deterministic FNV-1a etag."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "CAQ.fbs",
+      "fileIdentifier": "$CAQ",
+      "rootTypeName": "CAQ"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-decision-gate-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

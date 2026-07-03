@@ -1,0 +1,7 @@
+{
+  "com.digitalarsenal.foundation.http-route": "../foundation/http-route",
+  "com.digitalarsenal.foundation.decision-gate": "../foundation/decision-gate",
+  "com.digitalarsenal.data-source.retrieval": "../data-source/retrieval",
+  "com.digitalarsenal.foundation.omm-json": "../foundation/omm-json",
+  "com.digitalarsenal.foundation.http-respond": "../foundation/http-respond"
+}

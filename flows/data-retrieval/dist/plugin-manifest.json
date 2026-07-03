@@ -1,0 +1,142 @@
+{
+  "pluginId": "com.digitalarsenal.flows.data-retrieval",
+  "name": "SDN Data Retrieval Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; only the retrieval node's storage.flatsql_* capability hostcalls leave the sandbox.",
+  "capabilities": [
+    "storage_query"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-retrieval",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine-native retrieval ops (storage.flatsql_epoch_stream, storage.flatsql_query_stream, storage.flatsql_cache_key).",
+      "properties": {
+        "hostOps": [
+          "storage.flatsql_epoch_stream",
+          "storage.flatsql_query_stream",
+          "storage.flatsql_cache_key"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "http_request",
+      "displayName": "Flow trigger http-request",
+      "description": "Compiled-flow ingress for trigger \"http-request\" (http-request).",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs): METHOD, PATH (no query string), QUERY (raw, URL-encoded), HEADERS (sorted, lower-cased names), BODY, REMOTE."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One HTTP request envelope as delivered verbatim by the host pipe."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "HttpRequestAbi.fbs",
+      "fileIdentifier": "$HTQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "CAQ.fbs",
+      "fileIdentifier": "$CAQ",
+      "rootTypeName": "CAQ"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "HttpResponseAbi.fbs",
+      "fileIdentifier": "$HTR",
+      "rootTypeName": "HttpResponse"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_data_retrieval-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

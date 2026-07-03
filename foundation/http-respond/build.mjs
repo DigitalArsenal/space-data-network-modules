@@ -44,6 +44,28 @@ const compilation = await compileModuleFromSource({
   outputPath,
 });
 
+// Persist the prefixed guest-link object + metadata for the flow compiler
+// (space-data-module flow compile links these into monolithic linked-direct
+// flow artifacts; see SDK src/flow/flowCompiler.js).
+const guestLinkDir = path.join(distRoot, "guest-link");
+await fs.mkdir(guestLinkDir, { recursive: true });
+await fs.writeFile(path.join(guestLinkDir, "module-link.o"), compilation.guestLink.objectBytes);
+await fs.writeFile(
+  path.join(guestLinkDir, "metadata.json"),
+  `${JSON.stringify(
+    {
+      version: 1,
+      format: compilation.guestLink.format,
+      language: compilation.guestLink.language,
+      threadModel: compilation.guestLink.threadModel,
+      symbolPrefix: compilation.guestLink.symbolPrefix,
+      methodSymbols: compilation.guestLink.methodSymbols,
+    },
+    null,
+    2,
+  )}\n`,
+);
+
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 
 if (!compilation.report?.ok) {
