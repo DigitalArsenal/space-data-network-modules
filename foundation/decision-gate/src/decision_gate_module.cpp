@@ -164,12 +164,25 @@ int push_caq(const char* port, const std::string& query) {
         builder.GetBufferPointer(), builder.GetSize());
 }
 
-// Deterministic FNV-1a 64-bit entity tag over the stream bytes.
+// Deterministic FNV-1a 64-bit entity tag over the stream bytes, folded in
+// 8-byte little-endian words (tail bytes folded individually). The tag is an
+// OPAQUE validator: http-respond compares If-None-Match verbatim, nothing
+// recomputes it elsewhere — word folding keeps it deterministic and
+// content-sensitive while doing 1/8th the loop iterations of byte-at-a-time
+// FNV, which dominated per-request time on interpreted hosts (loop C.5).
 std::string fnv1a64_etag(const uint8_t* data, uint32_t length) {
+    constexpr uint64_t kPrime = 1099511628211ull;
     uint64_t hash = 1469598103934665603ull;
-    for (uint32_t i = 0; i < length; i++) {
+    uint32_t i = 0;
+    for (; i + 8 <= length; i += 8) {
+        uint64_t word;
+        std::memcpy(&word, data + i, 8);
+        hash ^= word;
+        hash *= kPrime;
+    }
+    for (; i < length; i++) {
         hash ^= data[i];
-        hash *= 1099511628211ull;
+        hash *= kPrime;
     }
     char buf[40];
     std::snprintf(buf, sizeof(buf), "W/\"fnv1a64-%016llx\"",
