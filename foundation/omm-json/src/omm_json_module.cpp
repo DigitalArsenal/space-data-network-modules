@@ -107,17 +107,33 @@ int encode(void) {
                              "Size-prefixed $OMM frame overruns the stream payload.");
             return 400;
         }
-        scratch.assign(data + offset, data + offset + frame_size);
+        // Copy [u32le size][frame] together. FlatBuffers built size-prefixed
+        // (the store/engine wire contract: internal alignment counts the
+        // 4-byte prefix, so 8-byte scalars are aligned only WITH it) verify
+        // and decode at scratch+0 via the size-prefixed accessors. Frames
+        // built without a prefix align at offset 0 instead — for those,
+        // re-anchor the frame body at the front and use the plain accessors.
+        scratch.assign(data + offset - 4, data + offset + frame_size);
         offset += frame_size;
 
-        ::flatbuffers::Verifier verifier(scratch.data(), scratch.size());
-        if (frame_size < 8 || !OMMBufferHasIdentifier(scratch.data()) ||
-            !VerifyOMMBuffer(verifier)) {
+        const OMM* omm = nullptr;
+        if (frame_size >= 8) {
+            ::flatbuffers::Verifier prefixed_verifier(scratch.data(), scratch.size());
+            if (VerifySizePrefixedOMMBuffer(prefixed_verifier)) {
+                omm = GetSizePrefixedOMM(scratch.data());
+            } else {
+                scratch.erase(scratch.begin(), scratch.begin() + 4);
+                ::flatbuffers::Verifier plain_verifier(scratch.data(), scratch.size());
+                if (OMMBufferHasIdentifier(scratch.data()) && VerifyOMMBuffer(plain_verifier)) {
+                    omm = GetOMM(scratch.data());
+                }
+            }
+        }
+        if (!omm) {
             plugin_set_error("invalid-omm-frame",
                              "Stream frame is not a valid $OMM FlatBuffer.");
             return 400;
         }
-        const OMM* omm = GetOMM(scratch.data());
 
         if (count > 0) json += ",";
         json += "{\"norad_cat_id\":";
