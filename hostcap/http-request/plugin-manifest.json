@@ -1,0 +1,81 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.http-request",
+  "name": "SDN Host HTTP Request Node",
+  "version": "0.1.0",
+  "description": "Capability node wrapping the host http.request hostcall. Method \"request\": input \"request\" JSON {\"method\":\"GET|POST|...\",\"url\":\"https://...\",\"headers\":{...},\"bodyB64\":\"<base64 request body>\",\"timeoutMs\":N} -> one \"response\" frame of UTF-8 JSON bytes {\"status\":N,\"headers\":{...},\"bodyB64\":\"<base64 response body>\"}. The node decodes bodyB64 and forwards the raw bytes as the hostcall binary segment; the request meta carries both host dialects (timeout_ms/timeoutMs, body_encoding=base64, responseType=binary) so one payload serves every host. Response handling is host-agnostic: the SDK NodeHost/BrowserHost return the body as raw bytes (binary segment; response limited only by host policy), while the Go server host (sdn-server modulert/caps/http.go) returns body as a JSON string with body_encoding utf8|base64 and caps the response body at 4 MiB — the node normalizes both to bodyB64. Capability \"http\" is required on all hosts.",
+  "pluginFamily": "infrastructure",
+  "capabilities": ["http"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": ["http.request"]
+      }
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "request",
+      "displayName": "HTTP Request",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"method\":\"GET\",\"url\":\"https://...\" (required),\"headers\":{\"Name\":\"Value\"},\"bodyB64\":\"<base64>\",\"timeoutMs\":30000}. Only url is required; method defaults to GET."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request description."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"status\":<HTTP status>,\"headers\":{...verbatim from the host...},\"bodyB64\":\"<base64 response body>\"}. bodyB64 is always base64 regardless of which host dialect returned the body."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response as a JSON frame."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Performs one outbound HTTP request through the host http.request hostcall and emits the normalized response."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-http-request-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

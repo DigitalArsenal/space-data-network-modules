@@ -1,0 +1,146 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.file",
+  "name": "SDN Host File Node",
+  "version": "0.1.0",
+  "description": "Capability node wrapping the host filesystem hostcall group (filesystem.readFile / filesystem.writeFile). Method \"read_file\": input \"request\" JSON {\"path\":\"...\"} -> output \"content\" raw file bytes verbatim. Method \"write_file\": input \"content\" raw bytes plus \"request\" JSON {\"path\":\"...\"} -> output \"result\" JSON {\"ok\":true,\"bytesWritten\":N,\"path\":\"...\"}. HOST SUPPORT (verified 2026-07): the SDK NodeHost serves filesystem.* against a sandboxed root; the SDK BrowserHost serves filesystem.* only when constructed with a filesystem adapter (OPFS or in-memory) — absent adapter, calls fail closed. The Go server host (sdn-server modulert) has NO filesystem capability handler today (internal/modulert/caps has no filesystem.go), so server-side invokes fail with operation-not-supported until a filesystem cap handler lands. This gap is documented, not worked around.",
+  "pluginFamily": "infrastructure",
+  "capabilities": ["filesystem"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-filesystem",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "filesystem",
+      "resource": "file://sandbox",
+      "description": "Host sandboxed filesystem hostcalls. Cross-host today: SDK NodeHost (built-in sandbox root) and SDK BrowserHost (requires a configured filesystem adapter). Go server host: not yet implemented.",
+      "properties": {
+        "hostOps": ["filesystem.readFile", "filesystem.writeFile"]
+      }
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "read_file",
+      "displayName": "Read File",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-file-read-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"path\":\"<host-sandbox-relative path>\"}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The file path to read."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "content",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-file-content-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Raw file bytes (aligned-binary wire format), passed through verbatim from the filesystem.readFile hostcall binary segment."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The file content bytes."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Reads a file through filesystem.readFile and emits the bytes verbatim."
+    },
+    {
+      "methodId": "write_file",
+      "displayName": "Write File",
+      "inputPorts": [
+        {
+          "portId": "content",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-file-write-content-bytes",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Raw bytes to write (aligned-binary wire format); forwarded verbatim as the hostcall binary segment."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The content bytes to write."
+        },
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-file-write-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"path\":\"<host-sandbox-relative path>\"}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The destination path."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-file-write-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"ok\":true,\"bytesWritten\":<content byte count>,\"path\":\"<host-resolved path when reported, else the requested path>\"}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The write result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Writes the content bytes through filesystem.writeFile and emits a JSON result frame."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-file-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

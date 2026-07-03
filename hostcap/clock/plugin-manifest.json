@@ -1,0 +1,81 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.clock",
+  "name": "SDN Host Clock Node",
+  "version": "0.1.0",
+  "description": "Capability node wrapping the host clock hostcall group (clock.now + clock.nowIso). Method \"now\" takes no input and emits one \"time\" frame of UTF-8 JSON bytes {\"unixMs\":N,\"iso\":\"...\"} sampled from the host clock at invoke time. PERIODIC emission is a flow TRIGGER concern (timer trigger kind), not this node: wire a timer trigger at the flow level and place this node downstream when a flow needs the sampled time as data. Host gating: the Go node (sdn-server modulert) serves clock.* as ungated built-ins; the SDK NodeHost/BrowserHost are default-deny and require the \"clock\" capability grant, so this node declares it for host-agnostic flows.",
+  "pluginFamily": "infrastructure",
+  "capabilities": ["clock"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "Host clock hostcalls (clock.now unix milliseconds, clock.nowIso RFC3339). Available on the Go server host (built-in) and SDK NodeHost/BrowserHost (capability-gated).",
+      "properties": {
+        "hostOps": ["clock.now", "clock.nowIso"]
+      }
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "now",
+      "displayName": "Sample Host Clock",
+      "inputPorts": [
+        {
+          "portId": "trigger",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-clock-trigger",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Optional trigger frame; the payload is ignored. Any frame (e.g. a timer-trigger emission or an upstream completion signal) causes one clock sample."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional trigger; payload ignored."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "time",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-time-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"unixMs\":<integer unix milliseconds from clock.now>,\"iso\":\"<RFC3339 string from clock.nowIso>\"}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The sampled host time as a JSON frame."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Samples clock.now and clock.nowIso through the sync hostcall bridge and emits both readings in one JSON frame."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-clock-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
