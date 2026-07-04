@@ -55,24 +55,44 @@ const compilation = await compileModuleFromSource({
 // Persist the prefixed guest-link object + metadata for the flow compiler
 // (space-data-module flow compile links these into monolithic linked-direct
 // flow artifacts; see SDK src/flow/flowCompiler.js).
-const guestLinkDir = path.join(distRoot, "guest-link");
-await fs.mkdir(guestLinkDir, { recursive: true });
-await fs.writeFile(path.join(guestLinkDir, "module-link.o"), compilation.guestLink.objectBytes);
-await fs.writeFile(
-  path.join(guestLinkDir, "metadata.json"),
-  `${JSON.stringify(
-    {
-      version: 1,
-      format: compilation.guestLink.format,
-      language: compilation.guestLink.language,
-      threadModel: compilation.guestLink.threadModel,
-      symbolPrefix: compilation.guestLink.symbolPrefix,
-      methodSymbols: compilation.guestLink.methodSymbols,
-    },
-    null,
-    2,
-  )}\n`,
-);
+async function persistGuestLink(dirName, guestLink) {
+  const guestLinkDir = path.join(distRoot, dirName);
+  await fs.mkdir(guestLinkDir, { recursive: true });
+  await fs.writeFile(path.join(guestLinkDir, "module-link.o"), guestLink.objectBytes);
+  await fs.writeFile(
+    path.join(guestLinkDir, "metadata.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        format: guestLink.format,
+        language: guestLink.language,
+        threadModel: guestLink.threadModel,
+        symbolPrefix: guestLink.symbolPrefix,
+        methodSymbols: guestLink.methodSymbols,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+await persistGuestLink("guest-link", compilation.guestLink);
+
+// Engine-linked variant (loop C.7): the same source compiled
+// -DSDN_FLATSQL_LINKED=1 — query submission goes through the flow runtime's
+// direct engine-linkage helpers (resolved at flow link time) instead of the
+// storage.flatsql_* hostcall bridge. Only its guest-link object ships; the
+// standalone module.wasm stays the bridge build (loadable everywhere).
+await fs.mkdir(path.join(distRoot, "linked-build"), { recursive: true });
+const linkedCompilation = await compileModuleFromSource({
+  manifest,
+  sourceCode,
+  language: "c++",
+  outputPath: path.join(distRoot, "linked-build", "module.wasm"),
+  allowUndefinedImports: true,
+  defines: ["SDN_FLATSQL_LINKED=1"],
+});
+await persistGuestLink("guest-link-linked", linkedCompilation.guestLink);
+await fs.rm(path.join(distRoot, "linked-build"), { recursive: true, force: true });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 
