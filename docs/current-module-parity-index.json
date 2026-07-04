@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-07-02T16:19:36.837Z",
-  "moduleCount": 39,
-  "parityScopeModuleCount": 24,
-  "isomorphicWasmCount": 39,
+  "generatedAt": "2026-07-04T17:41:47.769Z",
+  "moduleCount": 53,
+  "parityScopeModuleCount": 28,
+  "isomorphicWasmCount": 53,
   "missingIsomorphicWasm": [],
-  "browserWasmEdgeTargetCount": 25,
+  "browserWasmEdgeTargetCount": 38,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [
     "analysis/sensor-coverage",
@@ -25,9 +25,13 @@
     "analysis/sensor-model",
     "basilisk/runtime",
     "foundation/attitude-math",
+    "foundation/decision-gate",
     "foundation/frames",
+    "foundation/http-respond",
+    "foundation/http-route",
     "foundation/math-bspline",
     "foundation/numerics",
+    "foundation/omm-json",
     "foundation/orbits",
     "foundation/time",
     "propagator/atmosphere",
@@ -598,6 +602,38 @@
       ]
     },
     {
+      "modulePath": "comms/rf-antenna-pattern",
+      "pluginId": "com.orbpro.rf-antenna-pattern",
+      "name": "RF Antenna Pattern Evaluator",
+      "pluginFamily": "comms",
+      "version": "0.1.0",
+      "methodIds": [
+        "evaluate_gain"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "node"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/rf_antenna_pattern_plugin.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures.json",
+        "test/rf-antenna-pattern.test.mjs"
+      ]
+    },
+    {
       "modulePath": "comms/rf-atmospheric-gaseous",
       "pluginId": "com.orbpro.rf-atmospheric-gaseous",
       "name": "RF Atmospheric (Gaseous) Absorption",
@@ -621,13 +657,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/rf_atmospheric_gaseous_plugin.cpp"
       ],
       "testFiles": [
+        "test/rf-atmospheric-gaseous-p676.test.mjs",
         "test/rf-atmospheric-gaseous.test.mjs"
       ]
     },
@@ -930,6 +967,108 @@
       ]
     },
     {
+      "modulePath": "data-source/celestrak-parser",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "name": "CelesTrak Provider Parser Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse_gp",
+        "parse_satcat",
+        "parse_spw"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/celestrak_parser_module.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/celestrak-gp-omm.csv",
+        "tests/fixtures/celestrak-satcat.csv",
+        "tests/fixtures/celestrak-satcat.txt",
+        "tests/fixtures/celestrak-sw-all.csv",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/celestrak-request",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "name": "CelesTrak Request Builder Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "gp",
+        "satcat",
+        "spw"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/celestrak_request_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/retrieval",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "name": "SDN Data Retrieval",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "data_query",
+        "omm_bulk"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/retrieval_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/spacex-starlink-source",
       "pluginId": "com.orbpro.spacex-starlink-source",
       "name": "SpaceX Starlink Data Source",
@@ -993,6 +1132,38 @@
       ]
     },
     {
+      "modulePath": "foundation/decision-gate",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "name": "SDN Decision Gate",
+      "pluginFamily": "foundation",
+      "version": "0.1.0",
+      "methodIds": [
+        "branch",
+        "dispatch"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/decision_gate_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "foundation/frames",
       "pluginId": "com.digitalarsenal.foundation.frames",
       "name": "Foundation Frames",
@@ -1021,6 +1192,68 @@
       ],
       "testFiles": [
         "tests/frame_transform.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "foundation/http-respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "name": "SDN HTTP Respond",
+      "pluginFamily": "foundation",
+      "version": "0.1.0",
+      "methodIds": [
+        "respond"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/http_respond_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "foundation/http-route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "name": "SDN HTTP Route",
+      "pluginFamily": "foundation",
+      "version": "0.1.0",
+      "methodIds": [
+        "route"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/http_route_module.cpp"
+      ],
+      "testFiles": [
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1089,6 +1322,37 @@
       ],
       "testFiles": [
         "tests/numerics.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "foundation/omm-json",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "name": "SDN OMM JSON Encoder",
+      "pluginFamily": "foundation",
+      "version": "0.1.0",
+      "methodIds": [
+        "encode"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/omm_json_module.cpp"
+      ],
+      "testFiles": [
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1184,6 +1448,193 @@
       ]
     },
     {
+      "modulePath": "hostcap/clock",
+      "pluginId": "com.digitalarsenal.hostcap.clock",
+      "name": "SDN Host Clock Node",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "now"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/clock_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/file",
+      "pluginId": "com.digitalarsenal.hostcap.file",
+      "name": "SDN Host File Node",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "read_file",
+        "write_file"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/file_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/flatsql-query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "name": "SDN Host FlatSQL Query Node",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "query"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/flatsql_query_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "name": "SDN Host HTTP Request Node",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/http_request_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/random",
+      "pluginId": "com.digitalarsenal.hostcap.random",
+      "name": "SDN Host Random Node",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "bytes"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/random_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "name": "SDN Host Storage Ingest Node",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "ingest"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/storage_ingest_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "licensing/core",
       "pluginId": "licensing",
       "name": "Licensing",
@@ -1209,7 +1660,7 @@
       ],
       "cxxSourceFileCount": 4,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 5,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1219,6 +1670,7 @@
         "src/cpp/wasm_api.cpp"
       ],
       "testFiles": [
+        "tests/debug-challenge-probe.mjs",
         "tests/lib/sdkBrowserShimHarness.mjs",
         "tests/role-entrypoints.test.mjs",
         "tests/sdk-compat.test.mjs",
@@ -1417,7 +1869,7 @@
       ],
       "cxxSourceFileCount": 25,
       "cSourceFileCount": 0,
-      "testFileCount": 10,
+      "testFileCount": 11,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -1448,6 +1900,7 @@
         "src/hpop_plugin.cpp"
       ],
       "testFiles": [
+        "tests/batch_all_positions.test.mjs",
         "tests/direct-entry.test.mjs",
         "tests/drag_atmosphere.test.mjs",
         "tests/fixtures/hosted-runtime/hpop.single-plugin.flow.json",
