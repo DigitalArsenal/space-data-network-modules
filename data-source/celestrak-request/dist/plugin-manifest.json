@@ -1,0 +1,208 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+  "name": "CelesTrak Request Builder Nodes",
+  "version": "0.1.0",
+  "description": "Request-builder flow nodes for CelesTrak ingest (loop C.8a): a module cron TIMER tick enters on 'tick'; each method emits the hostcap/http-request request JSON plus the parser 'job' JSON (source attribution + archive naming). URLs/timeout/provider default to the in-daemon ingest runner values and are overridable via node CONFIG through the builtin plugin.getConfig hostcall (keys: celestrak_gp_url, celestrak_satcat_url, celestrak_satcat_csv_url, celestrak_space_weather_url, celestrak_http_timeout_ms, celestrak_provider_id) — never via host code. No capabilities: plugin.getConfig is a builtin.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "gp",
+      "displayName": "GP Catalog Fetch Request",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Timer tick frame (content ignored)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"timeoutMs\"}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GP catalog HTTP request."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON job attribution for the parser node."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GP parse job."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds the GP full-catalog fetch request + parse job from a timer tick."
+    },
+    {
+      "methodId": "satcat",
+      "displayName": "SATCAT Fetch Requests",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Timer tick frame (content ignored)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request_txt",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON http request for the legacy fixed-width satcat.txt."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Legacy SATCAT fetch request."
+        },
+        {
+          "portId": "job_txt",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON job attribution (source celestrak-satcat)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Legacy SATCAT parse job."
+        },
+        {
+          "portId": "request_csv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON http request for satcat.csv."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CSV SATCAT fetch request."
+        },
+        {
+          "portId": "job_csv",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON job attribution (source celestrak-satcat-csv)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CSV SATCAT parse job."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds BOTH SATCAT fetch requests (legacy txt + CSV) from a timer tick, matching the runner's per-sync dual-source ingest."
+    },
+    {
+      "methodId": "spw",
+      "displayName": "Space Weather Fetch Request",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Timer tick frame (content ignored)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON http request for SW-All.csv."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Space weather fetch request."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON job attribution (source celestrak-space-weather)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Space weather parse job."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds the space-weather fetch request + parse job from a timer tick."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "celestrak-request-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

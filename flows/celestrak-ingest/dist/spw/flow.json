@@ -1,0 +1,133 @@
+{
+  "programId": "com.digitalarsenal.flows.celestrak-spw-ingest",
+  "name": "CelesTrak Space Weather Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow (loop C.8a), space weather: a module cron TIMER tick enters at celestrak-request:spw, hostcap/http-request fetches SW-All.csv, celestrak-parser:parse_spw normalizes it into an SPW record stream (batch = sha256 of the payload; the runner's 7-day stale-source gate fails the batch in-wasm), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. All decisions live in-wasm.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "spw",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_spw",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_spw",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-spw-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "spw_meta",
+      "toNodeId": "ingest_spw",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-spw-records",
+      "fromNodeId": "parse",
+      "fromPortId": "spw_records",
+      "toNodeId": "ingest_spw",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-spw-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_spw",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-spw-egress",
+      "fromNodeId": "ingest_spw",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-spw",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 10800000,
+      "description": "Space weather sync timer (runner SpaceWeatherInterval floor, 3 h)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-spw",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.celestrak-request",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.celestrak-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

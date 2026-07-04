@@ -1,0 +1,101 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+  "name": "SDN Host Storage Ingest Node",
+  "version": "0.1.0",
+  "description": "Capability node wrapping the host storage.ingest_with_source hostcall (loop C.8a): joins the parser's ingest meta JSON (schema + SourceTags provider/source/batch attribution, reconcile mode, archive naming, provenance) with the size-prefixed FlatBuffer record stream and the optional raw payload, forwards them as hostcall binary segments ({\"$bin\":0} records, {\"$bin\":1} archive raw), and emits the host's result JSON. Host-side behavior is policy-mediated by the dedicated storage_ingest capability grant (disk guardrail, batch store with source tags, source-batch reconcile, raw/provenance archiving).",
+  "pluginFamily": "infrastructure",
+  "capabilities": ["storage_ingest"],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": ["storage.ingest_with_source"]
+      }
+    }
+  ],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "ingest",
+      "displayName": "Ingest With Source",
+      "inputPorts": [
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON storage.ingest_with_source meta authored by the parser node."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Ingest meta (attribution, reconcile, archive naming, provenance)."
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Size-prefixed FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The record batch."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Optional raw source payload; archived by the host when the meta names an archive target."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional raw payload for archiving."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON host result: {\"schema\",\"inserted\",\"batch_id\",\"reconciled_duplicates\"?,\"reconciled_old_batches\"?,\"archived\"?,\"provenance\"?}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Ingest result summary."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Persists one provenance-attributed record batch through the policy-mediated storage.ingest_with_source hostcall."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-storage-ingest-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
