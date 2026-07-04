@@ -149,3 +149,120 @@ test("batch propagate_all_positions honors max_count and empty state", async (t)
 
   ex.free(outPtr);
 });
+
+test("E.6 batch-scale API: ensure/eval split, stagger, retention, ECEF seeding", async (t) => {
+  const plugin = await createHPOPPropagator();
+  t.after(async () => {
+    await plugin.destroy?.();
+  });
+
+  const ex = plugin.exports;
+  for (const name of [
+    "plugin_ensure_coverage",
+    "plugin_eval_positions",
+    "plugin_set_ephemeris_retention",
+    "plugin_set_grid_stagger",
+    "plugin_init_states_ecef",
+  ]) {
+    assert.equal(typeof ex[name], "function", `${name} must be exported`);
+  }
+
+  assert.equal(ex.plugin_init(), 0);
+  ex.plugin_set_grid_stagger(1);
+  ex.plugin_set_ephemeris_retention(0.02);
+
+  const COUNT = 96;
+  const states = buildStates(COUNT);
+  const statesPtr = ex.malloc(states.byteLength);
+  f64View(ex, statesPtr, COUNT * 7).set(states);
+  assert.equal(ex.plugin_init_states(statesPtr, COUNT), COUNT);
+  ex.free(statesPtr);
+
+  const evalPtr = ex.malloc(COUNT * 3 * 8);
+  const batchPtr = ex.malloc(COUNT * 3 * 8);
+
+  // Eval before ANY coverage exists: zero-filled, never integrates.
+  assert.equal(ex.plugin_eval_positions(JD0, evalPtr, COUNT), COUNT);
+  {
+    const out = f64View(ex, evalPtr, COUNT * 3);
+    for (let i = 0; i < COUNT * 3; i++) {
+      assert.equal(out[i], 0, "no-coverage eval must zero-fill");
+    }
+  }
+
+  // Background-style chunked ensure to JD0+45min, then eval == batch exactly
+  // (same instance, same segments, same rotation).
+  const jd = JD0 + 45 / 1440;
+  for (let s = 0; s < COUNT; s += 16) {
+    assert.equal(ex.plugin_ensure_coverage(jd, s, 16), Math.min(16, COUNT - s));
+  }
+  assert.equal(ex.plugin_eval_positions(jd, evalPtr, COUNT), COUNT);
+  assert.equal(ex.plugin_propagate_all_positions(jd, batchPtr, COUNT), COUNT);
+  {
+    const evalOut = f64View(ex, evalPtr, COUNT * 3);
+    const batchOut = f64View(ex, batchPtr, COUNT * 3);
+    for (let i = 0; i < COUNT * 3; i++) {
+      assert.equal(
+        evalOut[i],
+        batchOut[i],
+        `eval/batch parity mismatch at ${i}`,
+      );
+    }
+    for (let i = 0; i < COUNT; i++) {
+      const r = Math.hypot(
+        batchOut[i * 3],
+        batchOut[i * 3 + 1],
+        batchOut[i * 3 + 2],
+      );
+      assert.ok(
+        r > 6.3e6 && r < 2e7,
+        `entity ${i} radius ${r} out of LEO/MEO band`,
+      );
+    }
+  }
+
+  // Eval PAST coverage clamps to the coverage edge instead of integrating:
+  // result equals eval at some earlier (covered) epoch, and stays finite.
+  const farJd = jd + 30; // 30 days past coverage
+  assert.equal(ex.plugin_eval_positions(farJd, evalPtr, COUNT), COUNT);
+  {
+    const out = f64View(ex, evalPtr, COUNT * 3);
+    for (let i = 0; i < COUNT; i++) {
+      const r = Math.hypot(out[i * 3], out[i * 3 + 1], out[i * 3 + 2]);
+      assert.ok(
+        r > 6.3e6 && r < 2e7,
+        `clamped eval radius ${r} out of band for entity ${i}`,
+      );
+    }
+  }
+
+  // ECEF meters seeding round-trip: propagate entity 0 to jd, re-seed from
+  // the resulting ECEF state via plugin_init_states_ecef, and propagate at
+  // the same epoch. Measured residual is ~0.12-0.14 m (stagger-independent):
+  // the native coords ECEF->GCRF ingest transform composed with the
+  // GCRF->ECEF output transform is inverse only to ~2e-8 relative. That is
+  // far below the meter-to-km accuracy of any real seed state
+  // (TLE/OMM-derived), so 0.5 m is the contract here.
+  const statePtr = ex.malloc(7 * 8);
+  assert.equal(ex.plugin_propagate(jd, 0, statePtr), 0);
+  const ecefState = Array.from(f64View(ex, statePtr, 7));
+  const reseedPtr = ex.malloc(7 * 8);
+  const reseed = f64View(ex, reseedPtr, 7);
+  reseed[0] = jd;
+  for (let k = 1; k < 7; k++) {
+    reseed[k] = ecefState[k];
+  }
+  assert.equal(ex.plugin_init_states_ecef(reseedPtr, 1), 1);
+  assert.equal(ex.plugin_propagate(jd, 0, statePtr), 0);
+  const roundTrip = f64View(ex, statePtr, 7);
+  for (let k = 1; k < 4; k++) {
+    assert.ok(
+      Math.abs(roundTrip[k] - ecefState[k]) < 0.5,
+      `ECEF reseed round-trip axis ${k}: ${roundTrip[k]} vs ${ecefState[k]}`,
+    );
+  }
+  ex.free(reseedPtr);
+  ex.free(statePtr);
+  ex.free(evalPtr);
+  ex.free(batchPtr);
+});
