@@ -1,0 +1,292 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+  "name": "CelesTrak Provider Parser Nodes",
+  "version": "0.1.0",
+  "description": "Pure WASM provider-parser flow nodes for CelesTrak ingest (loop C.8a): parse_gp (GP CSV -> OMM + MPE record streams), parse_satcat (SATCAT fixed-width txt or CSV -> CAT record stream), parse_spw (SW-All.csv -> SPW record stream with the 7-day stale-source gate). Each method joins the request-builder 'job' JSON with the hostcap/http-request 'response' JSON, decodes the payload, computes batch_id = sha256(payload), builds records with the spacedatastandards.org GENERATED C++ code mirroring sdn-server internal/ingest parsing rules and internal/sds builder defaults byte-for-byte, and emits per-schema storage.ingest_with_source metas (attribution, reconcile mode, archive naming, wasm-authored provenance JSON) plus size-prefixed record streams and the raw payload for archiving. No capabilities: this node performs no I/O.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "parse_gp",
+      "displayName": "Parse CelesTrak GP CSV",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON: {\"source_url\",\"source_name\",\"provider_id\"?,\"archive_source\"?,\"archive_name\"?,\"reconcile\"?}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request-builder node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON from hostcap/http-request: {\"status\",\"headers\",\"bodyB64\"}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying the GP CSV payload."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the OMM batch (schema/provider/source/batch/reconcile/archive/provenance)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "OMM ingest meta."
+        },
+        {
+          "portId": "omm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Size-prefixed $OMM FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "OMM record stream."
+        },
+        {
+          "portId": "mpe_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the MPE batch."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "MPE ingest meta."
+        },
+        {
+          "portId": "mpe_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Size-prefixed $MPE FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "MPE record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "The decoded source payload bytes (for raw archiving)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Parses a CelesTrak GP CSV payload into OMM + MPE record streams with full provenance metas."
+    },
+    {
+      "methodId": "parse_satcat",
+      "displayName": "Parse CelesTrak SATCAT",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON fetch-job attribution."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request-builder node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON from hostcap/http-request."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying the SATCAT payload (fixed-width txt or CSV, sniffed)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cat_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the CAT batch (reconcile mode 'current' — SATCAT is a snapshot source)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CAT ingest meta."
+        },
+        {
+          "portId": "cat_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Size-prefixed $CAT FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CAT record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "The decoded source payload bytes (for raw archiving)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Parses a CelesTrak SATCAT payload (txt or CSV) into a CAT record stream; duplicate NORAD ids fail the batch."
+    },
+    {
+      "methodId": "parse_spw",
+      "displayName": "Parse CelesTrak Space Weather CSV",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON fetch-job attribution."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request-builder node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON from hostcap/http-request."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying SW-All.csv."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "spw_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the SPW batch."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SPW ingest meta."
+        },
+        {
+          "portId": "spw_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Size-prefixed $SPW FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SPW record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "The decoded source payload bytes (for raw archiving)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Parses CelesTrak SW-All.csv into an SPW record stream; enforces the 7-day stale-source gate against Last-Modified (else now)."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "celestrak-parser-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

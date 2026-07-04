@@ -1,0 +1,124 @@
+{
+  "pluginId": "com.digitalarsenal.flows.celestrak-gp-ingest",
+  "name": "CelesTrak GP Ingest Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "timer_gp",
+      "displayName": "Flow trigger timer-gp",
+      "description": "Compiled-flow ingress for trigger \"timer-gp\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON host result: {\"schema\",\"inserted\",\"batch_id\",\"reconciled_duplicates\"?,\"reconciled_old_batches\"?,\"archived\"?,\"provenance\"?}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Ingest result summary."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_celestrak_gp_ingest-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

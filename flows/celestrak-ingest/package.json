@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-celestrak-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../celestrak-gp-ingest.flow.json --deps ../celestrak-ingest.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../celestrak-satcat-ingest.flow.json --deps ../celestrak-ingest.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../celestrak-spw-ingest.flow.json --deps ../celestrak-ingest.deps.json",
+    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../celestrak-gp-ingest.flow.json --deps ../celestrak-ingest.deps.json --out ./dist/gp && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../celestrak-satcat-ingest.flow.json --deps ../celestrak-ingest.deps.json --out ./dist/satcat && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../celestrak-spw-ingest.flow.json --deps ../celestrak-ingest.deps.json --out ./dist/spw",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}

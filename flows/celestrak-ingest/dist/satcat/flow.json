@@ -1,0 +1,217 @@
+{
+  "programId": "com.digitalarsenal.flows.celestrak-satcat-ingest",
+  "name": "CelesTrak SATCAT Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow (loop C.8a), SATCAT snapshot: a module cron TIMER tick enters at celestrak-request:satcat which emits BOTH source fetches (legacy fixed-width satcat.txt and satcat.csv \u2014 runner dual-source parity); two hostcap/http-request nodes fetch, two celestrak-parser:parse_satcat nodes normalize into CAT record streams (batch = sha256 of each payload, reconcile mode 'current' since only the newest snapshot batch is meaningful), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. All decisions live in-wasm.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "satcat",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_txt",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_csv",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse_txt",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_satcat",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse_csv",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_satcat",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_txt",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_csv",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http-txt",
+      "fromNodeId": "req",
+      "fromPortId": "request_txt",
+      "toNodeId": "http_txt",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "req-http-csv",
+      "fromNodeId": "req",
+      "fromPortId": "request_csv",
+      "toNodeId": "http_csv",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "req-parse-txt-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_txt",
+      "toNodeId": "parse_txt",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "req-parse-csv-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_csv",
+      "toNodeId": "parse_csv",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "http-parse-txt",
+      "fromNodeId": "http_txt",
+      "fromPortId": "response",
+      "toNodeId": "parse_txt",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "http-parse-csv",
+      "fromNodeId": "http_csv",
+      "fromPortId": "response",
+      "toNodeId": "parse_csv",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-txt-meta",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "cat_meta",
+      "toNodeId": "ingest_txt",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-txt-records",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "cat_records",
+      "toNodeId": "ingest_txt",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-txt-raw",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_txt",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-csv-meta",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "cat_meta",
+      "toNodeId": "ingest_csv",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-csv-records",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "cat_records",
+      "toNodeId": "ingest_csv",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-csv-raw",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_csv",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-txt-egress",
+      "fromNodeId": "ingest_txt",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-csv-egress",
+      "fromNodeId": "ingest_csv",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-satcat",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "description": "SATCAT snapshot sync timer (runner SatcatInterval default, 24 h)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-satcat",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.celestrak-request",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.celestrak-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

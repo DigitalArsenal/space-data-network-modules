@@ -1,0 +1,102 @@
+{
+  "programId": "com.digitalarsenal.flows.celestrak-gp-ingest",
+  "name": "CelesTrak GP Ingest Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "nodes": 6,
+  "edges": 10,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "gp",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_gp",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "ingest_omm",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "ingest_mpe",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.celestrak-request",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "version": "0.1.0",
+      "sha256": "1a4ce00c8775afeb3649da711dfef431958630c1edc66598dec7cf3a81aec093",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "gp": "sdm_guest_636f6d2e6469676974616c61_gp",
+        "satcat": "sdm_guest_636f6d2e6469676974616c61_satcat",
+        "spw": "sdm_guest_636f6d2e6469676974616c61_spw"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.1.0",
+      "sha256": "f4077d1660745473b49d0accde178d0573c2bd1b4b69439da5b741ba14667adb",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c61_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.celestrak-parser",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "version": "0.1.0",
+      "sha256": "91549352622a9342d21f984d07dcb2bbabda5e9c37855b103c52951321372a5f",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "parse_gp": "sdm_guest_636f6d2e6469676974616c61_parse_gp",
+        "parse_satcat": "sdm_guest_636f6d2e6469676974616c61_parse_satcat",
+        "parse_spw": "sdm_guest_636f6d2e6469676974616c61_parse_spw"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.1.0",
+      "sha256": "bc808cd24571bf26758f68446eb8b6701cd2550d8e8a867fb430e579c0b61783",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c61_ingest"
+      }
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "programId": "com.digitalarsenal.flows.celestrak-gp-ingest",
+  "name": "CelesTrak GP Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "gp",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_gp",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_omm",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_mpe",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-omm-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "omm_meta",
+      "toNodeId": "ingest_omm",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-omm-records",
+      "fromNodeId": "parse",
+      "fromPortId": "omm_records",
+      "toNodeId": "ingest_omm",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-omm-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_omm",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-mpe-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "mpe_meta",
+      "toNodeId": "ingest_mpe",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-mpe-records",
+      "fromNodeId": "parse",
+      "fromPortId": "mpe_records",
+      "toNodeId": "ingest_mpe",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-omm-egress",
+      "fromNodeId": "ingest_omm",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-mpe-egress",
+      "fromNodeId": "ingest_mpe",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-gp",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 10800000,
+      "description": "GP catalog sync timer (runner minCelestrakFetchInterval, 3 h)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-gp",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.celestrak-request",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.celestrak-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}
