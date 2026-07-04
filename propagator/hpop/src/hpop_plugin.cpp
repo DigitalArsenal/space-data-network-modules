@@ -145,7 +145,11 @@ struct ChebyshevEphemeris {
 
     bool grow(int needed) {
         if (needed <= capacity) return true;
-        int newCap = std::max(needed * 2, 64);
+        // Minimum capacity of 4 (not 64): at catalog scale (~30K entities)
+        // a 64-segment floor is ~48KB/entity = 1.4GB and exhausts the fixed
+        // 256MB heap; steady-state rendering with retention needs only a
+        // handful of segments per entity.
+        int newCap = std::max(needed * 2, 4);
         auto* buf = (ChebyshevSegment*)std::realloc(segments, newCap * sizeof(ChebyshevSegment));
         if (!buf) return false;
         segments = buf;
@@ -238,7 +242,10 @@ struct HPOPArc {
 // Per-Entity Storage
 // =============================================================================
 
-static constexpr int MAX_ENTITIES = 1024;
+// Catalog-scale ceiling (loop E.6): the full public catalog is ~29.5K
+// objects and worker shards must be able to host any slice of it. Static
+// storage cost is ~300 bytes/slot (zero-initialized BSS) — ~20 MB at 65536.
+static constexpr int MAX_ENTITIES = 65536;
 
 struct HPOPEntity {
     StateVector initialState;    // Fixed initial state at epoch (ECI, km, km/s)
@@ -259,6 +266,17 @@ struct HPOPEntity {
 static HPOPEntity g_entities[MAX_ENTITIES];
 static int g_entityCount = 0;
 static uint32_t g_entityCatalogNumbers[MAX_ENTITIES] = {0};
+
+// E.6 batch-scale controls (defaults preserve pre-E.6 behavior exactly):
+// - retention: when finite, segments wholly behind (focusJD - retention) are
+//   dropped after coverage work, bounding per-entity memory for long runs.
+// - grid stagger: offsets each entity's Chebyshev grid origin by a
+//   deterministic golden-ratio fraction of one segment so that segment
+//   boundaries (and therefore segment REBUILD costs) are spread uniformly
+//   across sim time instead of stampeding in a single frame when thousands
+//   of entities share one seed epoch.
+static double g_retentionBehindDays = 1e30;
+static bool g_gridStagger = false;
 static std::unordered_map<uint32_t, PreparedTrajectorySegmentSet> g_segmentSets;
 static uint32_t g_nextSegmentSetHandle = 1u;
 
@@ -474,7 +492,8 @@ static void buildChebyshevCoverage(ChebyshevEphemeris& eph,
                                     const StateVector& seedState,
                                     double targetJD,
                                     double boundMinJD = -1e30,
-                                    double boundMaxJD = 1e30) {
+                                    double boundMaxJD = 1e30,
+                                    double gridAnchorJD = 0.0) {
     // Invalidate on config change
     if (eph.configVer != g_configVersion) {
         eph.clear();
@@ -485,9 +504,18 @@ static void buildChebyshevCoverage(ChebyshevEphemeris& eph,
     if (targetJD < boundMinJD) targetJD = boundMinJD;
     if (targetJD > boundMaxJD) targetJD = boundMaxJD;
 
-    // Seed with initial state
+    // Seed with initial state. The grid origin defaults to the seed epoch;
+    // an explicit anchor (<= seed epoch, within one segment) staggers the
+    // uniform segment grid per entity without touching the seed state itself
+    // (the first forward node simply integrates backward by the sub-segment
+    // offset). lookup() stays valid because the grid remains uniform.
     if (eph.count == 0) {
-        eph.startJD = seedState.epoch;
+        double origin = seedState.epoch;
+        if (gridAnchorJD != 0.0 && gridAnchorJD < origin &&
+            origin - gridAnchorJD < CHEBY_SEG_DAYS) {
+            origin = gridAnchorJD;
+        }
+        eph.startJD = origin;
         eph.firstStartState = seedState;
         eph.lastEndState = seedState;
     }
@@ -610,9 +638,42 @@ static void buildChebyshevCoverage(ChebyshevEphemeris& eph,
     }
 }
 
+/// Deterministic per-entity grid anchor: golden-ratio fraction of one
+/// segment behind the seed epoch. Only used when stagger is enabled.
+static inline double entityGridAnchorJD(const HPOPEntity& entity) {
+    if (!g_gridStagger) return 0.0;
+    const int idx = static_cast<int>(&entity - g_entities);
+    const double phase = std::fmod(idx * 0.6180339887498949, 1.0);
+    return entity.initialState.epoch - phase * CHEBY_SEG_DAYS;
+}
+
+/// Drop whole segments strictly behind keepFromJD (keeps at least one).
+/// The grid stays uniform, so ChebyshevEphemeris::lookup remains valid.
+static void pruneFrontSegments(ChebyshevEphemeris& eph, double keepFromJD) {
+    if (eph.count <= 1) return;
+    int drop = 0;
+    while (drop < eph.count - 1 && eph.segments[drop].endJD < keepFromJD) {
+        drop++;
+    }
+    if (drop <= 0) return;
+    std::memmove(eph.segments, eph.segments + drop,
+                 (eph.count - drop) * sizeof(ChebyshevSegment));
+    eph.count -= drop;
+    eph.startJD = eph.segments[0].startJD;
+    readSegmentState(eph.segments[0].startPos, eph.segments[0].startVel,
+                     eph.segments[0].startJD, eph.firstStartState);
+}
+
+static inline void applyRetention(HPOPEntity& entity, double focusJD) {
+    if (g_retentionBehindDays < 1e29 && entity.arcCount == 0) {
+        pruneFrontSegments(entity.ephemeris, focusJD - g_retentionBehindDays);
+    }
+}
+
 /// Convenience wrapper: ensure entity's Chebyshev ephemeris covers targetJD.
 static inline void ensureChebyshevEphemeris(HPOPEntity& entity, double targetJD) {
-    buildChebyshevCoverage(entity.ephemeris, entity.initialState, targetJD);
+    buildChebyshevCoverage(entity.ephemeris, entity.initialState, targetJD,
+                           -1e30, 1e30, entityGridAnchorJD(entity));
 }
 
 static bool prepareTrajectorySegmentsForEntity(
@@ -937,6 +998,8 @@ int plugin_init() {
 
     g_segmentSets.clear();
     g_nextSegmentSetHandle = 1u;
+    g_retentionBehindDays = 1e30;
+    g_gridStagger = false;
     g_initialized = true;
     g_configVersion++;
 
@@ -1200,9 +1263,138 @@ int plugin_propagate_all_positions(double julianDate, double* positionsOut,
         out[0] = posEcefKm.x * 1000.0;
         out[1] = posEcefKm.y * 1000.0;
         out[2] = posEcefKm.z * 1000.0;
+
+        applyRetention(g_entities[i], julianDate);
     }
 
     return n;
+}
+
+// -----------------------------------------------------------------------------
+// E.6 batch-scale API (feature-detected by hosts; absent on older modules)
+// -----------------------------------------------------------------------------
+
+/// Build Chebyshev coverage up to julianDate for a contiguous entity range
+/// WITHOUT producing positions. This is the background/amortization entry
+/// point: workers call it in small chunks ahead of sim time so that the
+/// per-frame call never integrates on the hot path. Applies the configured
+/// retention window (focus = julianDate). Returns entities processed.
+int plugin_ensure_coverage(double julianDate, int startEntity, int count) {
+    if (!g_initialized || startEntity < 0 || count <= 0) return 0;
+    int end = startEntity + count;
+    if (end > g_entityCount) end = g_entityCount;
+    int processed = 0;
+    for (int i = startEntity; i < end; i++) {
+        HPOPEntity& entity = g_entities[i];
+        if (!entity.valid) continue;
+        if (entity.arcCount > 0) {
+            // Arc-aware entities (burns) keep the full propagateEntity path.
+            propagateEntity(i, julianDate);
+        } else {
+            ensureChebyshevEphemeris(entity, julianDate);
+            applyRetention(entity, julianDate);
+        }
+        processed++;
+    }
+    return processed;
+}
+
+/// Evaluation-only batch: positions for ALL entities at one epoch from the
+/// EXISTING Chebyshev coverage. Never integrates. Entities whose coverage
+/// does not reach julianDate are evaluated at the clamped coverage edge
+/// (motion freezes briefly instead of stalling the caller); entities with
+/// no coverage at all are zero-filled. Same output ABI as
+/// plugin_propagate_all_positions. Returns entities written.
+int plugin_eval_positions(double julianDate, double* positionsOut, int maxCount) {
+    if (!g_initialized || positionsOut == nullptr || maxCount <= 0) return 0;
+
+    int n = g_entityCount;
+    if (n > maxCount) n = maxCount;
+
+    const coords::Matrix3x3 M = coords::getTransformMatrix(
+        coords::Frame::GCRF, coords::Frame::ECEF, julianDate);
+
+    for (int i = 0; i < n; i++) {
+        double* out = positionsOut + i * 3;
+        HPOPEntity& entity = g_entities[i];
+
+        Vec3 posKm;
+        bool have = false;
+
+        if (entity.valid) {
+            if (entity.arcCount > 0) {
+                StateVector sv = propagateEntity(i, julianDate);
+                posKm = sv.position;
+                have = true;
+            } else if (entity.ephemeris.count > 0) {
+                const ChebyshevEphemeris& eph = entity.ephemeris;
+                double jd = julianDate;
+                const double coverageEnd = eph.endJD();
+                if (jd < eph.startJD) jd = eph.startJD;
+                if (jd > coverageEnd) jd = coverageEnd;
+                const int idx = eph.lookup(jd);
+                if (idx >= 0) {
+                    Vec3 vel;
+                    chebyshevEvalState(eph.segments[idx], jd, posKm, vel);
+                    have = true;
+                }
+            }
+        }
+
+        if (!have) {
+            out[0] = 0.0;
+            out[1] = 0.0;
+            out[2] = 0.0;
+            continue;
+        }
+
+        coords::Vec3 p = {posKm.x, posKm.y, posKm.z};
+        coords::Vec3 pe = M.apply(p);
+        out[0] = pe.x * 1000.0;
+        out[1] = pe.y * 1000.0;
+        out[2] = pe.z * 1000.0;
+    }
+
+    return n;
+}
+
+/// Bound per-entity ephemeris memory: segments wholly behind
+/// (focusJD - behindDays) are dropped during coverage work.
+/// Pass <= 0 or non-finite to disable (default: disabled).
+void plugin_set_ephemeris_retention(double behindDays) {
+    g_retentionBehindDays =
+        (behindDays > 0.0 && std::isfinite(behindDays)) ? behindDays : 1e30;
+}
+
+/// Enable/disable per-entity segment-grid stagger (default: disabled).
+/// Must be set before an entity's first coverage build to take effect.
+void plugin_set_grid_stagger(int enabled) {
+    g_gridStagger = enabled != 0;
+}
+
+/// Batch-initialize entities from ECEF state vectors in METERS:
+/// [epochJD, rx_m, ry_m, rz_m, vx_ms, vy_ms, vz_ms] — 7 doubles per entity.
+/// Converts to GCRF km in-place using the same coords::transform applied by
+/// the ingest_state stream path (velocity includes the transport term), then
+/// delegates to plugin_init_states. Returns entity count on success.
+int plugin_init_states_ecef(double* statesPtr, int count) {
+    if (statesPtr == nullptr || count <= 0) return 0;
+    int n = (count > MAX_ENTITIES) ? MAX_ENTITIES : count;
+    for (int i = 0; i < n; i++) {
+        double* s = statesPtr + i * 7;
+        const coords::StateVec ecef(
+            {s[1] / 1000.0, s[2] / 1000.0, s[3] / 1000.0},
+            {s[4] / 1000.0, s[5] / 1000.0, s[6] / 1000.0});
+        const coords::StateVec gcrf = coords::transform(
+            ecef, coords::Frame::ECEF, coords::Frame::GCRF, s[0]);
+        s[1] = gcrf.position.x;
+        s[2] = gcrf.position.y;
+        s[3] = gcrf.position.z;
+        s[4] = gcrf.velocity.x;
+        s[5] = gcrf.velocity.y;
+        s[6] = gcrf.velocity.z;
+    }
+    return plugin_init_states(statesPtr, n);
 }
 
 // -----------------------------------------------------------------------------
@@ -2353,6 +2545,8 @@ void plugin_destroy() {
     g_weather = SpaceWeatherData();
     g_segmentSets.clear();
     g_nextSegmentSetHandle = 1u;
+    g_retentionBehindDays = 1e30;
+    g_gridStagger = false;
     g_initialized = false;
 }
 
