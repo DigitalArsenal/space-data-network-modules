@@ -1162,6 +1162,49 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
     return valid;
 }
 
+/// Propagate ALL initialized entities to one Julian date in a single WASM call.
+/// Output is positions-only: 3 × float64 per entity (ECEF meters), indexed by
+/// entity index — [x0,y0,z0, x1,y1,z1, ...]. Mirrors the SGP4 plugin's
+/// plugin_propagate_all_positions ABI so DataSourceDisplay's bulk
+/// scatter-write pipeline can treat both propagators identically.
+/// Invalid entities are zero-filled. The GCRF→ECEF rotation matrix is
+/// computed once for the shared epoch and reused across all entities.
+/// Returns: number of entities written.
+int plugin_propagate_all_positions(double julianDate, double* positionsOut,
+                                   int maxCount) {
+    if (!g_initialized || positionsOut == nullptr || maxCount <= 0) return 0;
+
+    int n = g_entityCount;
+    if (n > maxCount) n = maxCount;
+
+    // One rotation matrix for the whole batch — every entity shares the epoch.
+    // Identical math to the per-entity path (eciToEcefMeters/transformPosition
+    // both apply getTransformMatrix(GCRF, ECEF, jd) to the position).
+    const coords::Matrix3x3 M = coords::getTransformMatrix(
+        coords::Frame::GCRF, coords::Frame::ECEF, julianDate);
+
+    for (int i = 0; i < n; i++) {
+        double* out = positionsOut + i * 3;
+
+        if (!g_entities[i].valid) {
+            out[0] = 0.0;
+            out[1] = 0.0;
+            out[2] = 0.0;
+            continue;
+        }
+
+        StateVector sv = propagateEntity(i, julianDate);
+        coords::Vec3 posKm = {sv.position.x, sv.position.y, sv.position.z};
+        coords::Vec3 posEcefKm = M.apply(posKm);
+
+        out[0] = posEcefKm.x * 1000.0;
+        out[1] = posEcefKm.y * 1000.0;
+        out[2] = posEcefKm.z * 1000.0;
+    }
+
+    return n;
+}
+
 // -----------------------------------------------------------------------------
 // Configuration (all increment g_configVersion to invalidate entity caches)
 // -----------------------------------------------------------------------------
