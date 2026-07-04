@@ -91,7 +91,7 @@
       "dependencyId": "com.digitalarsenal.data-source.celestrak-parser",
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
       "version": "0.1.0",
-      "sha256": "91549352622a9342d21f984d07dcb2bbabda5e9c37855b103c52951321372a5f",
+      "sha256": "3cc0496872ec3e13cfbcde3ca12469db0624cdf1431ef2117edf2c617932a4e4",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "parse_gp": "sdm_guest_636f6d2e6469676974616c61_parse_gp",

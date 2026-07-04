@@ -1431,7 +1431,11 @@ int parse_spw(void) {
     const std::string provenance = build_provenance_json(
         ctx, "celestrak-space-weather-wasm/v1", normalized_hex, count, counts);
 
-    const std::string spw_meta = build_ingest_meta(ctx, "SPW.fbs", "duplicates",
+    // Runner parity: syncCelestrakSpaceWeather performs NO source-batch
+    // reconcile (SPW rows carry no indexed identity key — the duplicates
+    // reconcile would collapse them; replay idempotence comes from
+    // content-addressed CID dedupe alone).
+    const std::string spw_meta = build_ingest_meta(ctx, "SPW.fbs", "none",
                                                    /*with_archive=*/true, ctx.source_name,
                                                    provenance);
     if (push_json("spw_meta", spw_meta) < 0) return 500;
