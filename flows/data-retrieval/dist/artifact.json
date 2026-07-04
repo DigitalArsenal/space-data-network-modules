@@ -1,14 +1,16 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 8,
   "edges": 13,
   "triggers": 1,
   "capabilities": [
+    "storage_engine_link",
     "storage_query"
   ],
+  "engineLinkage": "flatsql-direct",
   "dispatch": [
     {
       "nodeId": "route",

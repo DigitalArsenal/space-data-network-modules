@@ -1,8 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.1.0",
-  "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; only the retrieval node's storage.flatsql_* capability hostcalls leave the sandbox.",
+  "version": "0.2.0",
+  "engineLinkage": "flatsql",
+  "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; engineLinkage: flatsql (loop C.7) \u2014 the retrieval node submits queries DIRECTLY to the live store engine via wasm imports (modules flatsql/flatsql_link); no storage.flatsql_* hostcalls exist on this path. Flatbuffer-branch bodies stay in engine memory as SDNE body-ref tokens; the json branch copies bytes engine->flow in-wasm.",
   "nodes": [
     {
       "nodeId": "route",

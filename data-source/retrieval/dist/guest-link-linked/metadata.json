@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "single-thread",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+  "methodSymbols": {
+    "omm_bulk": "sdm_guest_636f6d2e6469676974616c61_omm_bulk",
+    "data_query": "sdm_guest_636f6d2e6469676974616c61_data_query"
+  }
+}

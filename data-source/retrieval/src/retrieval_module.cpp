@@ -40,6 +40,10 @@
 #include <string>
 #include <vector>
 
+#ifdef SDN_FLATSQL_LINKED
+#include <sys/time.h>
+#endif
+
 #include "space_data_module_invoke.h"
 
 extern "C" {
@@ -53,6 +57,41 @@ __attribute__((import_module("space_data_module_host"), import_name("read_respon
 int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
 
 }  // extern "C"
+
+#ifdef SDN_FLATSQL_LINKED
+// ---------------------------------------------------------------------------
+// Direct engine linkage (loop C.7). This variant is compiled into the
+// guest-link-linked object the flow compiler uses for engineLinkage:
+// "flatsql" flows: query SUBMISSION becomes a direct in-wasm call into the
+// live store engine through the flow runtime template's linked helpers
+// (SDK src/flow/runtime-src/flow_runtime.cpp) — the storage.flatsql_*
+// hostcall bridge is fully retired for both delivery shapes:
+//   deliver:"ref"  -> the aligned stream STAYS in engine memory; only an
+//                     engine body-ref token descriptor enters this module
+//   byte delivery  -> the stream is copied engine->flow memory in-wasm
+//                     (json branch, field extraction downstream)
+// The struct layout and symbols are the flow runtime's linked ABI.
+// ---------------------------------------------------------------------------
+
+struct SdnFlatsqlLinkedResult {
+    uint64_t generation;
+    uint64_t fnv1a64;
+    uint64_t token;
+    uint32_t engine_ptr;
+    uint32_t size;
+    int32_t rows;
+    int32_t cols;
+    int32_t cache_hit;
+    int32_t frames;
+};
+
+extern "C" int32_t sdn_flatsql_linked_query_raw_stream(
+    const char* sql, uint32_t sql_len, const uint8_t* params_tlv, uint32_t tlv_len,
+    uint32_t param_count, int32_t want_ref, SdnFlatsqlLinkedResult* out);
+extern "C" int32_t sdn_flatsql_linked_read(uint8_t* dst, uint32_t engine_ptr, uint32_t len);
+extern "C" const char* sdn_flatsql_linked_error(void);
+extern "C" uint32_t sdn_flatsql_linked_available(void);
+#endif  // SDN_FLATSQL_LINKED
 
 namespace {
 
@@ -268,8 +307,21 @@ void apply_json_overrides(const std::string& json, EpochQuery* query) {
 // apply the per-standard profile entry for query->schema, if any. Config
 // shape: {"profiles":{"OMM.fbs":{"profile":"nearest","limit":50000,...}}}.
 void apply_config_profile(EpochQuery* query) {
+#ifdef SDN_FLATSQL_LINKED
+    // Module config is static per instance: fetch it ONCE and reuse — with
+    // query submission linked, this removes the remaining per-request
+    // hostcall from the hot path (loop C.7).
+    static bool config_cached = false;
+    static std::string cached_meta;
+    if (!config_cached) {
+        cached_meta = envelope_meta_json(hostcall("plugin.getConfig", "{}"));
+        config_cached = true;
+    }
+    const std::string& meta = cached_meta;
+#else
     const std::vector<uint8_t> env = hostcall("plugin.getConfig", "{}");
     const std::string meta = envelope_meta_json(env);
+#endif
     if (!meta_ok(meta)) return;  // Config absent -> compiled fallbacks apply.
     const std::string result = json_object_slice(meta, "result");
     if (result.empty()) return;
@@ -352,6 +404,205 @@ int push_stream_or_ref(const char* port, const char* schema, const char* file_id
     return pushed < 0 ? 500 : 0;
 }
 
+#ifdef SDN_FLATSQL_LINKED
+// ---------------------------------------------------------------------------
+// Linked-mode query execution (loop C.7).
+// ---------------------------------------------------------------------------
+
+// Engine-native epoch profile SQL over the unified OMM view. MUST stay
+// byte-identical to sdn-server internal/storage/engine_records.go — same
+// engine query-cache identity, same results. Positional params: ?1 source
+// shadow name ('' = all), ?2 epoch unix seconds, ?3 limit (-1 = unlimited).
+constexpr const char* kEpochNearestSQL =
+    "SELECT _data FROM (SELECT _data, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY "
+    "ABS(USER_DEFINED_EPOCH_TIMESTAMP - ?2)) rn FROM OMM WHERE (?1 = '' OR _source = ?1)) WHERE "
+    "rn = 1 LIMIT ?3";
+constexpr const char* kEpochAsOfSQL =
+    "SELECT _data FROM (SELECT _data, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY "
+    "USER_DEFINED_EPOCH_TIMESTAMP DESC) rn FROM OMM WHERE (?1 = '' OR _source = ?1) AND "
+    "USER_DEFINED_EPOCH_TIMESTAMP <= ?2) WHERE rn = 1 LIMIT ?3";
+constexpr const char* kEpochForwardSQL =
+    "SELECT _data FROM (SELECT _data, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY "
+    "USER_DEFINED_EPOCH_TIMESTAMP ASC) rn FROM OMM WHERE (?1 = '' OR _source = ?1) AND "
+    "USER_DEFINED_EPOCH_TIMESTAMP >= ?2) WHERE rn = 1 LIMIT ?3";
+
+const char* epoch_profile_sql(const std::string& profile) {
+    std::string p = profile;
+    if (p.rfind("epoch.", 0) == 0) p = p.substr(6);
+    if (p == "nearest") return kEpochNearestSQL;
+    if (p == "as_of") return kEpochAsOfSQL;
+    if (p == "forward") return kEpochForwardSQL;
+    return nullptr;
+}
+
+// Engine TLV parameter encoding: per param [u8 tag][u32le len][payload]
+// (tags 0=null 1=bool 2=int64 3=float64 4=string 5=bytes — the same blob
+// flatsqlrt EncodeParams / standalone.js encodeQueryParams produce).
+void tlv_append(std::vector<uint8_t>* out, uint8_t tag, const uint8_t* payload, uint32_t len) {
+    out->push_back(tag);
+    uint8_t hdr[4];
+    write_u32le(hdr, len);
+    out->insert(out->end(), hdr, hdr + 4);
+    if (payload != nullptr && len > 0) out->insert(out->end(), payload, payload + len);
+}
+
+void tlv_append_string(std::vector<uint8_t>* out, const std::string& s) {
+    tlv_append(out, 4, reinterpret_cast<const uint8_t*>(s.data()),
+               static_cast<uint32_t>(s.size()));
+}
+
+void tlv_append_i64(std::vector<uint8_t>* out, int64_t v) {
+    uint8_t payload[8];
+    std::memcpy(payload, &v, 8);
+    tlv_append(out, 2, payload, 8);
+}
+
+void tlv_append_f64(std::vector<uint8_t>* out, double v) {
+    uint8_t payload[8];
+    std::memcpy(payload, &v, 8);
+    tlv_append(out, 3, payload, 8);
+}
+
+bool base64_decode(const std::string& in, std::vector<uint8_t>* out) {
+    static const char* alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    int8_t lookup[256];
+    std::memset(lookup, -1, sizeof(lookup));
+    for (int i = 0; i < 64; i++) lookup[static_cast<uint8_t>(alphabet[i])] = static_cast<int8_t>(i);
+    uint32_t buf = 0;
+    int bits = 0;
+    for (char c : in) {
+        if (c == '=') break;
+        const int8_t v = lookup[static_cast<uint8_t>(c)];
+        if (v < 0) continue;
+        buf = (buf << 6) | static_cast<uint32_t>(v);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out->push_back(static_cast<uint8_t>((buf >> bits) & 0xff));
+        }
+    }
+    return true;
+}
+
+// Encode a {t,v} typed-params JSON array ('[{"t":"i64","v":25544}, ...]')
+// into the engine TLV blob. Returns the param count, or -1 on a malformed
+// entry (error text in *err).
+int tlv_from_params_json(const std::string& params_json, std::vector<uint8_t>* out,
+                         std::string* err) {
+    int count = 0;
+    size_t i = 0;
+    while (i < params_json.size()) {
+        const size_t start = params_json.find('{', i);
+        if (start == std::string::npos) break;
+        // Slice the object (string-aware brace matching).
+        int depth = 0;
+        bool in_string = false;
+        size_t end = start;
+        for (; end < params_json.size(); end++) {
+            const char c = params_json[end];
+            if (in_string) {
+                if (c == '\\') end++;
+                else if (c == '"') in_string = false;
+                continue;
+            }
+            if (c == '"') in_string = true;
+            else if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) break;
+            }
+        }
+        if (end >= params_json.size()) break;
+        const std::string entry = params_json.substr(start, end - start + 1);
+        i = end + 1;
+
+        std::string tag;
+        json_string_field(entry, "t", &tag);
+        if (tag == "null") {
+            tlv_append(out, 0, nullptr, 0);
+        } else if (tag == "bool") {
+            const uint8_t v = entry.find("\"v\":true") != std::string::npos ? 1 : 0;
+            tlv_append(out, 1, &v, 1);
+        } else if (tag == "i64") {
+            double d = 0.0;
+            if (!json_number_field(entry, "v", &d)) { *err = "i64 param value missing"; return -1; }
+            tlv_append_i64(out, static_cast<int64_t>(d));
+        } else if (tag == "f64") {
+            double d = 0.0;
+            if (!json_number_field(entry, "v", &d)) { *err = "f64 param value missing"; return -1; }
+            tlv_append_f64(out, d);
+        } else if (tag == "str") {
+            std::string s;
+            if (!json_string_field(entry, "v", &s)) { *err = "str param value missing"; return -1; }
+            tlv_append_string(out, s);
+        } else if (tag == "bytes") {
+            std::string s;
+            if (!json_string_field(entry, "v", &s)) { *err = "bytes param value missing"; return -1; }
+            std::vector<uint8_t> decoded;
+            base64_decode(s, &decoded);
+            tlv_append(out, 5, decoded.data(), static_cast<uint32_t>(decoded.size()));
+        } else {
+            *err = "unknown param tag \"" + tag + "\"";
+            return -1;
+        }
+        count++;
+    }
+    return count;
+}
+
+// Execute a linked engine query and push the result: engine body-ref
+// descriptor (deliver_ref — bytes never enter this module) or verbatim bytes
+// copied engine->flow in-wasm. Mirrors push_stream_or_ref's port shapes.
+int linked_query_and_push(const char* port, const char* schema, const char* file_id,
+                          const char* root_type, const std::string& sql,
+                          const std::vector<uint8_t>& tlv, uint32_t param_count,
+                          bool deliver_ref, const char* fail_code) {
+    SdnFlatsqlLinkedResult result;
+    const int32_t status = sdn_flatsql_linked_query_raw_stream(
+        sql.data(), static_cast<uint32_t>(sql.size()), tlv.data(),
+        static_cast<uint32_t>(tlv.size()), param_count, deliver_ref ? 1 : 0, &result);
+    if (status != 0) {
+        plugin_set_error(fail_code, sdn_flatsql_linked_error());
+        return 502;
+    }
+
+    if (deliver_ref) {
+        char descriptor[192];
+        std::snprintf(descriptor, sizeof(descriptor),
+                      "{\"$sdnbodyref\":1,\"token\":%llu,\"size\":%u,\"frames\":%d,"
+                      "\"fnv1a64\":\"%016llx\"}",
+                      static_cast<unsigned long long>(result.token), result.size, result.frames,
+                      static_cast<unsigned long long>(result.fnv1a64));
+        const int32_t pushed = plugin_push_output_ex(
+            port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
+            reinterpret_cast<const uint8_t*>(descriptor),
+            static_cast<uint32_t>(std::strlen(descriptor)));
+        return pushed < 0 ? 500 : 0;
+    }
+
+    std::vector<uint8_t> bytes(result.size);
+    if (result.size > 0) {
+        sdn_flatsql_linked_read(bytes.data(), result.engine_ptr, result.size);
+    }
+    const int32_t pushed = plugin_push_output_ex(
+        port, schema, file_id, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root_type, 0, 8,
+        bytes.data(), static_cast<uint32_t>(bytes.size()));
+    return pushed < 0 ? 500 : 0;
+}
+
+// Linked mode defaults the epoch through the WASI realtime clock (both hosts
+// provide clock_time_get) instead of the clock.now hostcall: the last
+// per-request hostcall on the hot path goes away.
+bool default_epoch_wasi_clock(EpochQuery* query) {
+    struct timeval tv;
+    if (gettimeofday(&tv, nullptr) != 0) return false;
+    query->epoch = static_cast<double>(tv.tv_sec) + static_cast<double>(tv.tv_usec) / 1e6;
+    query->has_epoch = true;
+    return true;
+}
+#endif  // SDN_FLATSQL_LINKED
+
 }  // namespace
 
 extern "C" {
@@ -410,11 +661,19 @@ int omm_bulk(void) {
     // the field: OMM -> nearest, epoch = now, limit 50000.
     if (query.profile.empty()) query.profile = kDefaultProfile;
     if (query.limit <= 0) query.limit = kDefaultLimit;
+#ifdef SDN_FLATSQL_LINKED
+    if (!query.has_epoch && !default_epoch_wasi_clock(&query)) {
+        plugin_set_error("clock-unavailable",
+                         "WASI clock_time_get failed while defaulting the query epoch.");
+        return 500;
+    }
+#else
     if (!query.has_epoch && !default_epoch_to_now(&query)) {
         plugin_set_error("clock-unavailable",
                          "clock.now hostcall failed while defaulting the query epoch.");
         return 500;
     }
+#endif
 
     // Reference delivery is requested by the caller (the flow's gate injects
     // "deliver":"ref" on the flatbuffer branch); never invented here.
@@ -424,6 +683,27 @@ int omm_bulk(void) {
     }
     const bool deliver_ref = deliver == "ref";
 
+#ifdef SDN_FLATSQL_LINKED
+    // Direct in-wasm query submission (loop C.7): the profile resolves to the
+    // engine-native SQL here — identical text to the server's
+    // QueryEpochRawStream — and executes against the LIVE store engine via
+    // the linked imports. No storage.flatsql_* hostcall exists on this path.
+    const char* sql = epoch_profile_sql(query.profile);
+    if (sql == nullptr) {
+        const std::string message = "unsupported engine epoch profile \"" + query.profile +
+                                    "\" (want nearest, as_of, or forward)";
+        plugin_set_error("unsupported-profile", message.c_str());
+        return 400;
+    }
+    const std::string source_shadow =
+        query.source.empty() ? std::string() : ("OMM@" + query.source);
+    std::vector<uint8_t> tlv;
+    tlv_append_string(&tlv, source_shadow);
+    tlv_append_f64(&tlv, query.epoch);
+    tlv_append_i64(&tlv, query.limit <= 0 ? -1 : static_cast<int64_t>(query.limit));
+    return linked_query_and_push("stream", "OMM.fbs", "$OMM", "OMM", sql, tlv, 3, deliver_ref,
+                                 "flatsql-linked-epoch-failed");
+#else
     char limit_buf[32];
     std::snprintf(limit_buf, sizeof(limit_buf), "%ld", query.limit);
     const std::string payload = std::string("{\"schema\":\"") + json_escape(query.schema) +
@@ -441,6 +721,7 @@ int omm_bulk(void) {
     }
 
     return push_stream_or_ref("stream", "OMM.fbs", "$OMM", "OMM", env, meta, deliver_ref);
+#endif
 }
 
 // data_query: extract {sql, params} from the SDS CAQ request frame and pass
@@ -486,6 +767,21 @@ int data_query(void) {
     }
     const bool deliver_ref = deliver == "ref";
 
+#ifdef SDN_FLATSQL_LINKED
+    std::vector<uint8_t> tlv;
+    int param_count = 0;
+    if (params_json != "[]") {
+        std::string tlv_err;
+        param_count = tlv_from_params_json(params_json, &tlv, &tlv_err);
+        if (param_count < 0) {
+            plugin_set_error("invalid-params", tlv_err.c_str());
+            return 400;
+        }
+    }
+    return linked_query_and_push("rows", nullptr, nullptr, nullptr, sql, tlv,
+                                 static_cast<uint32_t>(param_count), deliver_ref,
+                                 "flatsql-linked-query-failed");
+#else
     const std::string payload =
         std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":" + params_json +
         (deliver_ref ? ",\"deliver\":\"ref\"" : "") + "}";
@@ -497,6 +793,7 @@ int data_query(void) {
     }
 
     return push_stream_or_ref("rows", nullptr, nullptr, nullptr, env, meta, deliver_ref);
+#endif
 }
 
 }  // extern "C"
