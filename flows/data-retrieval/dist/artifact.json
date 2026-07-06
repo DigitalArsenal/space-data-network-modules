@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 8,
   "edges": 13,
@@ -102,7 +102,7 @@
       "dependencyId": "com.digitalarsenal.foundation.omm-json",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
       "version": "0.1.0",
-      "sha256": "4d6c51d3d96a6bf57e99c45597d3bede8bca572c8d7e9fb46f88431fee7fae7f",
+      "sha256": "c9c6bc87ff37724d046b5f66a69782decc37a974a080b62c8a4f5f351623cc84",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
@@ -113,7 +113,7 @@
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.1.0",
-      "sha256": "796c618a5341bc3307f2406298592924ca1d9462fc253239a1b8d24a4e2b5190",
+      "sha256": "3d722c5a58b303aa466e1a3d69f212958b424240da7db9aa9ab3a949a81760ad",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "respond": "sdm_guest_636f6d2e6469676974616c61_respond"

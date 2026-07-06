@@ -5,14 +5,16 @@
  * (concatenated [u32le length][$OMM buffer] frames — the verbatim output of
  * data-source/retrieval omm_bulk), one JSON frame out:
  *
- *   {"records":[{<the ENTIRE OMM record: every scalar/string field of the
- *                 $OMM table in lowercase snake_case; enums as their CCSDS
- *                 names; absent strings as null; covariance only when
- *                 present>}, ...],"count":N}
+ *   [ {<the ENTIRE OMM record: every scalar/string field of the $OMM table
+ *      in lowercase snake_case; enums as their CCSDS names; absent strings
+ *      as null; covariance only when present>}, ... ]
  *
- * The original 7-field projection (norad/name/id/epoch/mm/ecc/inc) shipped a
- * subset and consumers initializing SGP4 from the JSON surface lost
- * BSTAR/MEAN_MOTION_DOT — the full record is the contract now.
+ * A BARE top-level array: the JSON surface is the same record stream as the
+ * flatbuffer format in a different encoding, with metadata (record count,
+ * etag) in HTTP headers — never a body envelope. The original 7-field
+ * projection (norad/name/id/epoch/mm/ecc/inc) shipped a subset and consumers
+ * initializing SGP4 from the JSON surface lost BSTAR/MEAN_MOTION_DOT — the
+ * full record is the contract now.
  *
  * Pure compute — no capabilities, no hostcalls. Each frame is copied into an
  * aligned scratch buffer, identifier- and verifier-checked, then decoded via
@@ -78,7 +80,11 @@ void append_string_or_null(std::string* out, const ::flatbuffers::String* value)
 
 extern "C" {
 
-// encode: size-prefixed $OMM stream -> {"records":[...],"count":N} JSON frame.
+// encode: size-prefixed $OMM stream -> BARE top-level JSON array of records.
+// The JSON surface is the same record stream as the flatbuffer format in a
+// different encoding: metadata (record count, etag) travels in HTTP headers,
+// never in a body envelope. The {"records":[...],"count":N} wrapper was
+// legacy-contract reproduction from C.3d; the legacy handler is dead.
 int encode(void) {
     const int32_t input_index = plugin_find_input_index("stream", 0);
     const plugin_input_frame_t* frame =
@@ -92,7 +98,7 @@ int encode(void) {
     const uint8_t* data = frame->payload;
     const size_t length = data ? static_cast<size_t>(frame->payload_length) : 0u;
 
-    std::string json = "{\"records\":[";
+    std::string json = "[";
     uint32_t count = 0;
     std::vector<uint8_t> scratch;  // Frame copy: guarantees allocator alignment for decode.
     size_t offset = 0;
@@ -218,13 +224,7 @@ int encode(void) {
         count++;
     }
 
-    json += "],\"count\":";
-    {
-        char buf[16];
-        std::snprintf(buf, sizeof(buf), "%u", count);
-        json += buf;
-    }
-    json += "}";
+    json += "]";
 
     const int32_t pushed = plugin_push_output_ex(
         "json", nullptr, nullptr,

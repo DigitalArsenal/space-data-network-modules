@@ -185,11 +185,13 @@ test("foundation/omm-json artifact is standalone WASI with canonical exports", a
 test("encode extracts exact field values from a real $OMM stream", async (t) => {
   const response = await invokeEncode(t, buildOmmStream(RECORDS));
   const payload = decodeJsonOutput(response);
-  assert.equal(payload.count, 2);
-  assert.equal(payload.records.length, 2);
+  // BARE top-level array: metadata (count) travels in HTTP headers, set by
+  // foundation/http-respond from the top-level element count.
+  assert.ok(Array.isArray(payload), "json output must be a bare top-level array");
+  assert.equal(payload.length, 2);
   for (let index = 0; index < RECORDS.length; index += 1) {
     const expected = RECORDS[index];
-    const actual = payload.records[index];
+    const actual = payload[index];
     // Exact equality: %.17g round-trips IEEE-754 doubles through JSON.parse.
     assert.equal(actual.norad_cat_id, expected.norad_cat_id);
     assert.equal(actual.object_name, expected.object_name);
@@ -223,7 +225,7 @@ test("encode extracts exact field values from a real $OMM stream", async (t) => 
 test("encode maps an empty stream to zero records", async (t) => {
   const response = await invokeEncode(t, new Uint8Array(0), "command");
   const payload = decodeJsonOutput(response);
-  assert.deepEqual(payload, { records: [], count: 0 });
+  assert.deepEqual(payload, []);
 });
 
 test("encode skips zero-length padding prefixes between frames", async (t) => {
@@ -235,8 +237,8 @@ test("encode skips zero-length padding prefixes between frames", async (t) => {
   stream.set(frame, 8);
   const response = await invokeEncode(t, stream);
   const payload = decodeJsonOutput(response);
-  assert.equal(payload.count, 1);
-  assert.equal(payload.records[0].norad_cat_id, RECORDS[0].norad_cat_id);
+  assert.equal(payload.length, 1);
+  assert.equal(payload[0].norad_cat_id, RECORDS[0].norad_cat_id);
 });
 
 test("encode rejects a truncated size-prefixed frame", async (t) => {
