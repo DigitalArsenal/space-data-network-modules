@@ -34,7 +34,10 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
-// Build a bare (unprefixed) $EPM buffer with the JS generated code.
+// Build a SIZE-PREFIX-FINISHED $EPM buffer with the JS generated code,
+// including SIGNATURE_TIMESTAMP (int64): 8-byte scalars are only aligned
+// relative to the PREFIXED buffer start, which is why the shape node must
+// verify/decode frames as size-prefixed buffers (regression guard).
 function buildEPM({ dn, legalName, alternateNames = [], addrs = [], signature }) {
   const builder = new flatbuffers.Builder(512);
   const dnOffset = dn ? builder.createString(dn) : 0;
@@ -52,21 +55,29 @@ function buildEPM({ dn, legalName, alternateNames = [], addrs = [], signature })
   if (altOffset) EPM.addAlternateNames(builder, altOffset);
   if (addrsOffset) EPM.addMultiformatAddress(builder, addrsOffset);
   if (sigOffset) EPM.addSignature(builder, sigOffset);
+  EPM.addSignatureTimestamp(builder, BigInt(1751793600));
   EPM.addEntityType(builder, EntityType.Node);
   const root = EPM.endEPM(builder);
-  EPM.finishEPMBuffer(builder, root);
+  EPM.finishSizePrefixedEPMBuffer(builder, root);
   return builder.asUint8Array().slice();
 }
 
-function sizePrefixedStream(frames) {
-  const total = frames.reduce((sum, frame) => sum + 4 + frame.length, 0);
+// Concatenate frames into a stream. EPM fixtures are already
+// size-prefix-finished; raw fixtures (fake PNM bytes) get a prefix added.
+function sizePrefixedStream(frames, { prefixed = false } = {}) {
+  const extra = prefixed ? 0 : 4;
+  const total = frames.reduce((sum, frame) => sum + extra + frame.length, 0);
   const stream = new Uint8Array(total);
   const view = new DataView(stream.buffer);
   let offset = 0;
   for (const frame of frames) {
-    view.setUint32(offset, frame.length, true);
-    stream.set(frame, offset + 4);
-    offset += 4 + frame.length;
+    if (!prefixed) {
+      view.setUint32(offset, frame.length, true);
+      stream.set(frame, offset + 4);
+    } else {
+      stream.set(frame, offset);
+    }
+    offset += extra + frame.length;
   }
   return stream;
 }
@@ -165,7 +176,7 @@ function peersEnvelope() {
         records: { $bin: 0 },
       },
     },
-    [sizePrefixedStream([CELESTRAK_EPM])],
+    [sizePrefixedStream([CELESTRAK_EPM], { prefixed: true })],
   );
 }
 
@@ -229,7 +240,7 @@ test("peers_list flatbuffer: stored EPM verbatim + synthesized EPM, shared etag"
   assert.equal(frames.length, 2, "one $EPM frame per peer");
 
   // Frame 0: celestrak's stored profile VERBATIM.
-  assert.deepEqual(Array.from(frames[0]), Array.from(CELESTRAK_EPM));
+  assert.deepEqual(Array.from(frames[0]), Array.from(CELESTRAK_EPM.subarray(4)), "stored EPM spliced verbatim");
 
   // Frame 1: synthesized minimal EPM for the profile-less peer.
   const synthesized = EPM.getRootAsEPM(new flatbuffers.ByteBuffer(frames[1].slice()));
