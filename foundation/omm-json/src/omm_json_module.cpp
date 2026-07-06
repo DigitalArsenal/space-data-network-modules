@@ -5,9 +5,14 @@
  * (concatenated [u32le length][$OMM buffer] frames — the verbatim output of
  * data-source/retrieval omm_bulk), one JSON frame out:
  *
- *   {"records":[{"norad_cat_id":...,"object_name":...,"object_id":...,
- *                "epoch":...,"mean_motion":...,"eccentricity":...,
- *                "inclination":...}, ...],"count":N}
+ *   {"records":[{<the ENTIRE OMM record: every scalar/string field of the
+ *                 $OMM table in lowercase snake_case; enums as their CCSDS
+ *                 names; absent strings as null; covariance only when
+ *                 present>}, ...],"count":N}
+ *
+ * The original 7-field projection (norad/name/id/epoch/mm/ecc/inc) shipped a
+ * subset and consumers initializing SGP4 from the JSON surface lost
+ * BSTAR/MEAN_MOTION_DOT — the full record is the contract now.
  *
  * Pure compute — no capabilities, no hostcalls. Each frame is copied into an
  * aligned scratch buffer, identifier- and verifier-checked, then decoded via
@@ -151,6 +156,64 @@ int encode(void) {
         json += ",\"mean_motion\":" + format_double(omm->MEAN_MOTION());
         json += ",\"eccentricity\":" + format_double(omm->ECCENTRICITY());
         json += ",\"inclination\":" + format_double(omm->INCLINATION());
+        // Full OMM record from here (the 7 keys above keep their original
+        // positions for existing consumers).
+        json += ",\"ra_of_asc_node\":" + format_double(omm->RA_OF_ASC_NODE());
+        json += ",\"arg_of_pericenter\":" + format_double(omm->ARG_OF_PERICENTER());
+        json += ",\"mean_anomaly\":" + format_double(omm->MEAN_ANOMALY());
+        json += ",\"bstar\":" + format_double(omm->BSTAR());
+        json += ",\"mean_motion_dot\":" + format_double(omm->MEAN_MOTION_DOT());
+        json += ",\"mean_motion_ddot\":" + format_double(omm->MEAN_MOTION_DDOT());
+        {
+            char buf[16];
+            std::snprintf(buf, sizeof(buf), "%u", omm->ELEMENT_SET_NO());
+            json += ",\"element_set_no\":";
+            json += buf;
+        }
+        json += ",\"rev_at_epoch\":" + format_double(omm->REV_AT_EPOCH());
+        json += ",\"classification_type\":";
+        append_string_or_null(&json, omm->CLASSIFICATION_TYPE());
+        json += ",\"ephemeris_type\":\"";
+        json += EnumNameephemerisFormat(omm->EPHEMERIS_TYPE());
+        json += "\"";
+        json += ",\"ccsds_omm_vers\":" + format_double(omm->CCSDS_OMM_VERS());
+        json += ",\"creation_date\":";
+        append_string_or_null(&json, omm->CREATION_DATE());
+        json += ",\"originator\":";
+        append_string_or_null(&json, omm->ORIGINATOR());
+        json += ",\"center_name\":";
+        append_string_or_null(&json, omm->CENTER_NAME());
+        // REFERENCE_FRAME / COV_REFERENCE_FRAME are RFM union tables (no
+        // JSON-trivial form; never populated by the ingest paths) — omitted.
+        json += ",\"reference_frame_epoch\":";
+        append_string_or_null(&json, omm->REFERENCE_FRAME_EPOCH());
+        json += ",\"time_system\":\"";
+        json += EnumNametimingStandard(omm->TIME_SYSTEM());
+        json += "\"";
+        json += ",\"mean_element_theory\":\"";
+        json += EnumNamemeanElementSource(omm->MEAN_ELEMENT_THEORY());
+        json += "\"";
+        json += ",\"comment\":";
+        append_string_or_null(&json, omm->COMMENT());
+        json += ",\"semi_major_axis\":" + format_double(omm->SEMI_MAJOR_AXIS());
+        json += ",\"gm\":" + format_double(omm->GM());
+        json += ",\"mass\":" + format_double(omm->MASS());
+        json += ",\"solar_rad_area\":" + format_double(omm->SOLAR_RAD_AREA());
+        json += ",\"solar_rad_coeff\":" + format_double(omm->SOLAR_RAD_COEFF());
+        json += ",\"drag_area\":" + format_double(omm->DRAG_AREA());
+        json += ",\"drag_coeff\":" + format_double(omm->DRAG_COEFF());
+        if (const auto* cov = omm->COVARIANCE()) {
+            json += ",\"covariance\":[";
+            for (::flatbuffers::uoffset_t i = 0; i < cov->size(); ++i) {
+                if (i > 0) json += ",";
+                json += format_double(cov->Get(i));
+            }
+            json += "]";
+        }
+        json += ",\"user_defined_epoch_timestamp\":" +
+                format_double(omm->USER_DEFINED_EPOCH_TIMESTAMP());
+        json += ",\"user_defined_microseconds\":" +
+                format_double(omm->USER_DEFINED_MICROSECONDS());
         json += "}";
         count++;
     }

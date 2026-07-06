@@ -851,14 +851,52 @@ std::vector<uint8_t> finished_copy(::flatbuffers::FlatBufferBuilder& fbb) {
     return std::vector<uint8_t>(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
 }
 
+// normalizeEphemerisType (internal/ingest/runner.go): TLE numeric code 0-4
+// or CCSDS enum name -> ephemerisFormat. valid=false means "leave the schema
+// default" (Go skips the add; the generated adders omit the 0 default, so an
+// unconditional add of SGP is byte-identical).
+struct EphemerisType {
+    bool valid = false;
+    ephemerisFormat value = ephemerisFormat_SGP;
+};
+
+EphemerisType normalize_ephemeris_type(const std::string& raw) {
+    std::string v = normalize_key(raw);
+    EphemerisType out;
+    if (v == "0" || v == "SGP") {
+        out.valid = true;
+        out.value = ephemerisFormat_SGP;
+    } else if (v == "1" || v == "SGP4") {
+        out.valid = true;
+        out.value = ephemerisFormat_SGP4;
+    } else if (v == "2" || v == "SDP4") {
+        out.valid = true;
+        out.value = ephemerisFormat_SDP4;
+    } else if (v == "3" || v == "SGP8") {
+        out.valid = true;
+        out.value = ephemerisFormat_SGP8;
+    } else if (v == "4" || v == "SDP8") {
+        out.valid = true;
+        out.value = ephemerisFormat_SDP8;
+    }
+    return out;
+}
+
 // internal/sds OMMBuilder.Build() — identical string-creation and add order;
 // records are size-prefixed in the builder and the prefix is stripped for the
 // stream (the store takes unprefixed record bytes; the stream re-prefixes).
+// SGP4 propagation terms + element-set identity follow CLASSIFICATION_TYPE in
+// the Go add order; zero values are slot defaults and are omitted, matching
+// the Go builder's unconditional adds of zero-initialized fields.
 std::vector<uint8_t> build_omm_record(const std::string& object_name, const std::string& object_id,
                                       uint32_t norad, const std::string& epoch_rfc3339,
                                       double mean_motion, double eccentricity, double inclination,
                                       double raan, double argp, double mean_anomaly,
-                                      const std::string& creation_date) {
+                                      const std::string& creation_date,
+                                      const std::string& classification, double bstar,
+                                      double mean_motion_dot, double mean_motion_ddot,
+                                      uint32_t element_set_no, double rev_at_epoch,
+                                      EphemerisType ephemeris_type) {
     ::flatbuffers::FlatBufferBuilder fbb(1024);
     const auto object_name_off = fbb.CreateString(object_name);
     const auto object_id_off = fbb.CreateString(object_id);
@@ -866,7 +904,8 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
     const auto center_name_off = fbb.CreateString("EARTH");
     const auto creation_date_off = fbb.CreateString(creation_date);
     const auto originator_off = fbb.CreateString("SDN-TEST");
-    const auto classification_off = fbb.CreateString("U");
+    // WithClassificationType: empty is normalized to "U" (builder default).
+    const auto classification_off = fbb.CreateString(classification.empty() ? "U" : classification);
 
     OMMBuilder builder(fbb);
     builder.add_OBJECT_NAME(object_name_off);
@@ -883,6 +922,12 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
     builder.add_CREATION_DATE(creation_date_off);
     builder.add_ORIGINATOR(originator_off);
     builder.add_CLASSIFICATION_TYPE(classification_off);
+    builder.add_BSTAR(bstar);
+    builder.add_MEAN_MOTION_DOT(mean_motion_dot);
+    builder.add_MEAN_MOTION_DDOT(mean_motion_ddot);
+    builder.add_ELEMENT_SET_NO(element_set_no);
+    builder.add_REV_AT_EPOCH(rev_at_epoch);
+    if (ephemeris_type.valid) builder.add_EPHEMERIS_TYPE(ephemeris_type.value);
     const auto omm = builder.Finish();
     FinishSizePrefixedOMMBuffer(fbb, omm);
     auto bytes = finished_copy(fbb);
@@ -1247,6 +1292,19 @@ int parse_gp(void) {
         if (parse_float(row_value(row, {"RA_OF_ASC_NODE", "RAAN"}), &v)) raan = v;
         if (parse_float(row_value(row, {"ARG_OF_PERICENTER", "ARGP"}), &v)) argp = v;
         if (parse_float(row_value(row, {"MEAN_ANOMALY", "MA"}), &v)) ma = v;
+        // SGP4 propagation terms + element-set identity (runner parity: field
+        // stays zero-initialized when the cell is absent or unparsable).
+        double bstar = 0, mm_dot = 0, mm_ddot = 0, rev_at_epoch = 0;
+        uint32_t element_set_no = 0;
+        if (parse_float(row_value(row, {"BSTAR", "B_STAR"}), &v)) bstar = v;
+        if (parse_float(row_value(row, {"MEAN_MOTION_DOT", "N_DOT", "NDOT"}), &v)) mm_dot = v;
+        if (parse_float(row_value(row, {"MEAN_MOTION_DDOT", "N_DDOT", "NDDOT"}), &v)) mm_ddot = v;
+        uint32_t u = 0;
+        if (parse_uint32(row_value(row, {"ELEMENT_SET_NO", "ELSET_NO"}), &u)) element_set_no = u;
+        if (parse_float(row_value(row, {"REV_AT_EPOCH", "REV"}), &v)) rev_at_epoch = v;
+        const std::string classification = trim(row_value(row, {"CLASSIFICATION_TYPE", "CLASSIFICATION"}));
+        const EphemerisType ephemeris_type =
+            normalize_ephemeris_type(row_value(row, {"EPHEMERIS_TYPE"}));
 
         // The builder default epoch is time.Now() in Go — the runner ALWAYS
         // overrides it when the row has an epoch (required column). Rows with
@@ -1257,7 +1315,8 @@ int parse_gp(void) {
 
         const std::vector<uint8_t> omm =
             build_omm_record(object_name, object_id, norad, epoch_field, mean_motion, ecc, incl,
-                             raan, argp, ma, creation_date);
+                             raan, argp, ma, creation_date, classification, bstar, mm_dot, mm_ddot,
+                             element_set_no, rev_at_epoch, ephemeris_type);
         append_size_prefixed(&omm_stream, omm);
         normalized_hash_record(&normalized, "OMM.fbs", omm);
         count_omm++;
@@ -1285,7 +1344,7 @@ int parse_gp(void) {
     char counts[96];
     std::snprintf(counts, sizeof(counts), "{\"OMM.fbs\":%d,\"MPE.fbs\":%d}", count_omm, count_mpe);
     const std::string provenance =
-        build_provenance_json(ctx, "celestrak-gp-wasm/v1", normalized_hex, count_omm + count_mpe,
+        build_provenance_json(ctx, "celestrak-gp-wasm/v2", normalized_hex, count_omm + count_mpe,
                               counts);
 
     const std::string omm_meta =

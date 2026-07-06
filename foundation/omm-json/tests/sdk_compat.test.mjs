@@ -37,6 +37,15 @@ const RECORDS = [
     mean_motion: 15.49309239,
     eccentricity: 0.0007976,
     inclination: 51.6416,
+    ra_of_asc_node: 92.1234,
+    arg_of_pericenter: 45.6789,
+    mean_anomaly: 314.1592,
+    bstar: 0.00028312,
+    mean_motion_dot: 0.00016197,
+    mean_motion_ddot: 0.0000000002,
+    element_set_no: 999,
+    rev_at_epoch: 51234,
+    classification_type: "U",
   },
   {
     norad_cat_id: 33591,
@@ -46,15 +55,27 @@ const RECORDS = [
     mean_motion: 14.12501077,
     eccentricity: 0.0013872,
     inclination: 99.1943,
+    ra_of_asc_node: 213.9231,
+    arg_of_pericenter: 149.9926,
+    mean_anomaly: 210.2138,
+    bstar: 0.00016931,
+    mean_motion_dot: 0.00000241,
+    mean_motion_ddot: 0,
+    element_set_no: 998,
+    rev_at_epoch: 89562,
+    classification_type: "U",
   },
 ];
 
-// Real $OMM buffer built with the canonical SDS JS bindings.
+// Real $OMM buffer built with the canonical SDS JS bindings — the FULL field
+// set the ingest pipeline populates (the 7-field skinny encode mirrored the
+// exact truncation bug; the JSON surface must carry the entire record now).
 function encodeOmm(record) {
   const builder = new flatbuffers.Builder(512);
   const objectName = builder.createString(record.object_name);
   const objectId = builder.createString(record.object_id);
   const epoch = builder.createString(record.epoch);
+  const classification = builder.createString(record.classification_type);
   OMM.startOMM(builder);
   OMM.addObjectName(builder, objectName);
   OMM.addObjectId(builder, objectId);
@@ -62,6 +83,15 @@ function encodeOmm(record) {
   OMM.addMeanMotion(builder, record.mean_motion);
   OMM.addEccentricity(builder, record.eccentricity);
   OMM.addInclination(builder, record.inclination);
+  OMM.addRaOfAscNode(builder, record.ra_of_asc_node);
+  OMM.addArgOfPericenter(builder, record.arg_of_pericenter);
+  OMM.addMeanAnomaly(builder, record.mean_anomaly);
+  OMM.addBstar(builder, record.bstar);
+  OMM.addMeanMotionDot(builder, record.mean_motion_dot);
+  OMM.addMeanMotionDdot(builder, record.mean_motion_ddot);
+  OMM.addElementSetNo(builder, record.element_set_no);
+  OMM.addRevAtEpoch(builder, record.rev_at_epoch);
+  OMM.addClassificationType(builder, classification);
   OMM.addNoradCatId(builder, record.norad_cat_id);
   OMM.finishOMMBuffer(builder, OMM.endOMM(builder));
   return builder.asUint8Array();
@@ -168,6 +198,25 @@ test("encode extracts exact field values from a real $OMM stream", async (t) => 
     assert.equal(actual.mean_motion, expected.mean_motion);
     assert.equal(actual.eccentricity, expected.eccentricity);
     assert.equal(actual.inclination, expected.inclination);
+    // Full-record contract: the SGP4 propagation terms and element-set
+    // identity must round-trip exactly (zeroed BSTAR/MEAN_MOTION_DOT in the
+    // JSON surface was the drag-free-feed bug).
+    assert.equal(actual.ra_of_asc_node, expected.ra_of_asc_node);
+    assert.equal(actual.arg_of_pericenter, expected.arg_of_pericenter);
+    assert.equal(actual.mean_anomaly, expected.mean_anomaly);
+    assert.equal(actual.bstar, expected.bstar);
+    assert.equal(actual.mean_motion_dot, expected.mean_motion_dot);
+    assert.equal(actual.mean_motion_ddot, expected.mean_motion_ddot);
+    assert.equal(actual.element_set_no, expected.element_set_no);
+    assert.equal(actual.rev_at_epoch, expected.rev_at_epoch);
+    assert.equal(actual.classification_type, expected.classification_type);
+    // Schema-defaulted fields decode as their slot defaults.
+    assert.equal(actual.ephemeris_type, "SGP4");
+    assert.equal(actual.time_system, "UTC");
+    assert.equal(actual.mean_element_theory, "SGP4");
+    assert.equal(actual.creation_date, null);
+    assert.equal(actual.semi_major_axis, 0);
+    assert.equal(actual.covariance, undefined);
   }
 });
 
