@@ -1,6 +1,6 @@
 {
-  "programId": "com.digitalarsenal.flows.peers-discovery",
-  "name": "SDN Peers Discovery Flow",
+  "programId": "com.digitalarsenal.flows.pnm-history",
+  "name": "SDN PNM Publication History Flow",
   "version": "0.1.0",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 5,
@@ -20,13 +20,13 @@
     {
       "nodeId": "disc",
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
-      "methodId": "peers_snapshot",
+      "methodId": "pnm_history",
       "dispatchModel": "linked-direct"
     },
     {
       "nodeId": "shape",
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "methodId": "shape_peers",
+      "methodId": "shape_pnm",
       "dispatchModel": "linked-direct"
     },
     {

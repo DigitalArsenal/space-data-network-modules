@@ -241,9 +241,46 @@ test("discover routes /standards to standards", async (t) => {
   assert.equal(decision.format, "json");
 });
 
-test("discover degrades deeper per-peer paths and non-GET methods to not_found", async (t) => {
-  const deep = decodeDecision(
+test("discover routes /peers/{peerId}/pnm to pnm_history with a clamped limit (loop G.3)", async (t) => {
+  // Default: limit=1 (newest publication only).
+  const newest = decodeDecision(
     await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "" }),
+  );
+  assert.equal(newest.route, "pnm_history");
+  assert.equal(newest.peerId, "16Uiu2HAmX");
+  assert.equal(newest.limit, 1);
+  assert.equal(newest.format, "flatbuffer");
+
+  // Explicit limit passes through; trailing slash tolerated; format=json.
+  const some = decodeDecision(
+    await invokeDiscover(t, {
+      method: "GET",
+      path: "/api/v1/peers/16Uiu2HAmX/pnm/",
+      query: "limit=25&format=json",
+    }),
+  );
+  assert.equal(some.route, "pnm_history");
+  assert.equal(some.limit, 25);
+  assert.equal(some.format, "json");
+
+  // The clamp is IN-WASM (api-block contract): [1, 100].
+  const over = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "limit=5000" }),
+  );
+  assert.equal(over.limit, 100);
+  const under = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "limit=-3" }),
+  );
+  assert.equal(under.limit, 1);
+  const junk = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "limit=abc" }),
+  );
+  assert.equal(junk.limit, 1);
+});
+
+test("discover degrades unknown deeper per-peer paths and non-GET methods to not_found", async (t) => {
+  const deep = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest", query: "" }),
   );
   assert.equal(deep.route, "not_found");
   assert.ok(deep.error);

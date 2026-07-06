@@ -6,6 +6,7 @@
   "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
   "methodSymbols": {
     "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
-    "shape_standards": "sdm_guest_636f6d2e6469676974616c61_shape_standards"
+    "shape_standards": "sdm_guest_636f6d2e6469676974616c61_shape_standards",
+    "shape_pnm": "sdm_guest_636f6d2e6469676974616c61_shape_pnm"
   }
 }

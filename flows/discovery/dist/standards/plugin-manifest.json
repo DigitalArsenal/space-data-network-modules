@@ -10,18 +10,18 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "minVersion": "0.2.0",
       "maxVersion": "0.2.0"
     },
     {
-      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
-    },
-    {
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
@@ -40,7 +40,8 @@
       "properties": {
         "hostOps": [
           "p2p.peers_snapshot",
-          "p2p.standards_snapshot"
+          "p2p.standards_snapshot",
+          "p2p.pnm_history"
         ]
       }
     }

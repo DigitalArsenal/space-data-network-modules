@@ -30,6 +30,20 @@
  *   - json body: bare array of {"peer_id","standard","schema","file_id",
  *     "file_name","cid","publish_timestamp"} from the snapshot entries.
  *
+ * Method "pnm" (route pnm_history, gateway loop G.3):
+ *   - fb body: the peer's stored signed $PNM publications spliced VERBATIM
+ *     (signatures intact — the client verifies them against the publisher's
+ *     Ed25519 key), newest first in entry order (host pre-sorted/limited).
+ *   - json body: bare array of {"publisher_peer_id","gossip_peer_id",
+ *     "standard","schema","file_id","file_name","cid","publish_timestamp",
+ *     "signature_type","signature","signature_verified","attribution",
+ *     "publisher_key"|null,"publisher_key_source"|null} — attribution
+ *     honesty: the store records the GOSSIP-DELIVERING peer; the host
+ *     attributes to the PUBLISHER by signature verification, and these
+ *     fields expose exactly which claim each entry makes.
+ *   - zero entries rewrite the decision to route=not_found (404: peer
+ *     unknown here or no signed publications stored).
+ *
  * Outputs (both methods): "decision" (forwarded, possibly rewritten to
  * not_found), "body" (absent on not_found), "etag" (weak FNV-1a-64 over the
  * fb-encoded record stream — the SAME tag for both encodings, matching
@@ -564,6 +578,17 @@ int forward_not_found(const DecisionInfo& decision) {
     return push_string("decision", decision.raw);
 }
 
+// Route-ownership guard: the discover router also emits routes served by
+// SIBLING flows (peers / standards / pnm-history are separate mounts); a
+// shape method answers 404 for routes it does not own instead of
+// misinterpreting them.
+int reject_unowned_route(const DecisionInfo& decision) {
+    return push_string("decision",
+                       not_found_decision(decision.format,
+                                          "route " + decision.route +
+                                              " is not served by this mount"));
+}
+
 }  // namespace
 
 extern "C" {
@@ -574,6 +599,9 @@ int shape_peers(void) {
     if (const int status = read_decision(&decision)) return status;
     if (decision.route == "not_found") {
         return forward_not_found(decision);
+    }
+    if (decision.route != "peers_list" && decision.route != "peer_get") {
+        return reject_unowned_route(decision);
     }
 
     const plugin_input_frame_t* snapshot_frame = find_input("snapshot");
@@ -655,6 +683,9 @@ int shape_standards(void) {
     if (decision.route == "not_found") {
         return forward_not_found(decision);
     }
+    if (decision.route != "standards") {
+        return reject_unowned_route(decision);
+    }
 
     const plugin_input_frame_t* snapshot_frame = find_input("snapshot");
     Snapshot snapshot;
@@ -710,6 +741,106 @@ int shape_standards(void) {
         emitted++;
     }
     body += "]";
+
+    const std::string etag =
+        fnv1a64_etag(stream.data(), static_cast<uint32_t>(stream.size()));
+    if (push_string("decision", decision.raw) != 0 ||
+        push_string("etag", etag) != 0) {
+        plugin_set_error("push-failed", "failed to push decision/etag frames.");
+        return 500;
+    }
+    if (decision.format == "json") {
+        if (push_string("body", body) != 0) {
+            plugin_set_error("push-failed", "failed to push the json body frame.");
+            return 500;
+        }
+        return 0;
+    }
+    if (push_bytes("body", stream.data(), static_cast<uint32_t>(stream.size())) != 0) {
+        plugin_set_error("push-failed", "failed to push the stream body frame.");
+        return 500;
+    }
+    return 0;
+}
+
+// pnm: decision + pnm_history envelope -> decision/body/etag (loop G.3).
+int shape_pnm(void) {
+    DecisionInfo decision;
+    if (const int status = read_decision(&decision)) return status;
+    if (decision.route == "not_found") {
+        return forward_not_found(decision);
+    }
+    if (decision.route != "pnm_history") {
+        return reject_unowned_route(decision);
+    }
+
+    const plugin_input_frame_t* snapshot_frame = find_input("snapshot");
+    Snapshot snapshot;
+    std::string error;
+    if (!snapshot_frame ||
+        !parse_snapshot(snapshot_frame->payload, snapshot_frame->payload_length, &snapshot, &error)) {
+        plugin_set_error("invalid-snapshot", error.empty() ? "missing snapshot envelope." : error.c_str());
+        return 502;
+    }
+
+    const std::vector<StreamFrame> frames =
+        index_stream_frames(snapshot.stream, snapshot.stream_length);
+    const std::string entries_slice = json_array_slice(snapshot.result, "entries");
+    const std::vector<std::string> entries = json_array_elements(entries_slice);
+
+    // fb stream: the publisher's signed $PNM frames VERBATIM, newest first
+    // (host order), spliced via each entry's pnm_index. The json body is the
+    // same records as a bare array with the provenance fields exposed.
+    std::vector<uint8_t> stream;
+    std::string body = "[";
+    size_t emitted = 0;
+    for (const std::string& element : entries) {
+        if (element.empty() || element.front() != '{') continue;
+        int64_t pnm_index = -1;
+        json_int_field(element, "pnm_index", &pnm_index);
+        if (pnm_index < 0 || pnm_index >= static_cast<int64_t>(frames.size())) continue;
+        append_frame(&stream, frames[static_cast<size_t>(pnm_index)]);
+
+        if (emitted > 0) body += ",";
+        std::string value;
+        bool flag = false;
+        body += "{";
+        const auto string_field = [&](const char* json_key, const char* out_key, bool leading_comma) {
+            if (leading_comma) body += ",";
+            body += "\"";
+            body += out_key;
+            body += "\":";
+            body += json_string_field(element, json_key, &value)
+                        ? "\"" + json_escape(value) + "\"" : "null";
+        };
+        string_field("publisher_peer_id", "publisher_peer_id", false);
+        string_field("gossip_peer_id", "gossip_peer_id", true);
+        string_field("standard", "standard", true);
+        string_field("schema", "schema", true);
+        string_field("file_id", "file_id", true);
+        string_field("file_name", "file_name", true);
+        string_field("cid", "cid", true);
+        string_field("publish_timestamp", "publish_timestamp", true);
+        string_field("signature_type", "signature_type", true);
+        string_field("signature", "signature", true);
+        body += ",\"signature_verified\":";
+        body += (json_bool_field(element, "signature_verified", &flag) && flag) ? "true" : "false";
+        string_field("attribution", "attribution", true);
+        string_field("publisher_key", "publisher_key", true);
+        string_field("publisher_key_source", "publisher_key_source", true);
+        body += "}";
+        emitted++;
+    }
+    body += "]";
+
+    if (emitted == 0) {
+        // Peer unknown here, no key + no gossip match, or nothing signed
+        // stored: an empty publication history is a 404, not an empty 200.
+        return push_string("decision",
+                           not_found_decision(decision.format,
+                                              "no signed PNM publications recorded for peer " +
+                                                  decision.peer_id));
+    }
 
     const std::string etag =
         fnv1a64_etag(stream.data(), static_cast<uint32_t>(stream.size()));

@@ -25,6 +25,7 @@ const decoder = new TextDecoder();
 
 const PEERS_WASM = new URL("../dist/peers/runtime.wasm", import.meta.url);
 const STANDARDS_WASM = new URL("../dist/standards/runtime.wasm", import.meta.url);
+const PNM_WASM = new URL("../dist/pnm/runtime.wasm", import.meta.url);
 
 const CELESTRAK_PEER = "16Uiu2HAm9oK2jAeVC2RMESFcYfq7BKGp2K2CCDxzoKhB5s9vpbj3";
 const SELF_PEER = "16Uiu2HAm1LbvwjEHW2GDP2ZQZvwHLZrz2jbYoRLQmJEQ3wZ5Fm45";
@@ -166,9 +167,58 @@ function standardsResult() {
   };
 }
 
+const PNM_FRAME_NEW = encoder.encode("signed-pnm-frame-newest_");
+const PNM_FRAME_OLD = encoder.encode("signed-pnm-frame-older__");
+
+function pnmHistoryResult(limit = 1) {
+  const entries = [
+    {
+      publisher_peer_id: CELESTRAK_PEER,
+      gossip_peer_id: SELF_PEER,
+      standard: "OMM",
+      schema: "OMM.fbs",
+      file_id: "celestrak:gp:OMM.fbs:2026-07-06T03:00:00Z",
+      file_name: "dataset.fsql",
+      cid: "bafy-omm-new",
+      publish_timestamp: "2026-07-06T03:00:00Z",
+      signature_type: "Ed25519",
+      signature: "aa".repeat(64),
+      signature_verified: true,
+      attribution: "signature",
+      publisher_key: "bb".repeat(32),
+      publisher_key_source: "epm-directory",
+      pnm_index: 0,
+    },
+    {
+      publisher_peer_id: CELESTRAK_PEER,
+      gossip_peer_id: CELESTRAK_PEER,
+      standard: "CAT",
+      schema: "CAT.fbs",
+      file_id: "celestrak:satcat:CAT.fbs:2026-07-06T02:00:00Z",
+      file_name: "dataset.fsql",
+      cid: "bafy-cat",
+      publish_timestamp: "2026-07-06T02:00:00Z",
+      signature_type: "Ed25519",
+      signature: "cc".repeat(64),
+      signature_verified: true,
+      attribution: "signature",
+      publisher_key: "bb".repeat(32),
+      publisher_key_source: "epm-directory",
+      pnm_index: 1,
+    },
+  ].slice(0, limit);
+  return {
+    peer_id: CELESTRAK_PEER,
+    publisher_key_available: true,
+    gossip_only_excluded: 0,
+    entries,
+    records: { $bin: 0 },
+  };
+}
+
 // Hostcall stub speaking the Go-host dialect: response envelope with the
 // record stream as binary segment 0 ({"$bin":0} in the result).
-function createDiscoveryStub({ peers = peersResult(), standards = standardsResult(), stream } = {}) {
+function createDiscoveryStub({ peers = peersResult(), standards = standardsResult(), pnmHistory, stream } = {}) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
@@ -193,6 +243,14 @@ function createDiscoveryStub({ peers = peersResult(), standards = standardsResul
           response = encodeHostcallEnvelope(
             { ok: true, result: standards },
             [stream ?? sizePrefixedStream([PNM_FRAME])],
+          );
+          return 0;
+        }
+        if (operation === "p2p.pnm_history") {
+          const result = pnmHistory ?? pnmHistoryResult(meta.limit ?? 1);
+          response = encodeHostcallEnvelope(
+            { ok: true, result },
+            [stream ?? sizePrefixedStream([PNM_FRAME_NEW, PNM_FRAME_OLD].slice(0, result.entries.length))],
           );
           return 0;
         }
@@ -375,6 +433,141 @@ test("standards flow: GET /api/v1/standards streams $PNM frames + json presentat
   assert.equal(header(json, "etag"), header(fb, "etag"), "shared tag across encodings");
 });
 
+test("pnm flow: GET /api/v1/peers/{peerId}/pnm serves the newest signed $PNM verbatim (loop G.3)", async () => {
+  const stub = createDiscoveryStub({});
+  const http = await pumpRequest(PNM_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "",
+  });
+  assert.equal(http.status, 200);
+  assert.equal(header(http, "content-type"), "application/vnd.sdn.flatbuffers.stream");
+  assert.equal(header(http, "x-sdn-record-count"), "1");
+  assert.equal(header(http, "etag"), `W/"fnv1a64-${fnv1a64Hex(http.body)}"`);
+
+  const frames = splitStream(http.body);
+  assert.equal(frames.length, 1, "default limit=1 -> newest publication only");
+  assert.deepEqual(Array.from(frames[0]), Array.from(PNM_FRAME_NEW), "signed frame spliced VERBATIM");
+
+  assert.equal(stub.calls.length, 1);
+  assert.equal(stub.calls[0].operation, "p2p.pnm_history");
+  assert.equal(stub.calls[0].meta.peer_id, CELESTRAK_PEER);
+  assert.equal(stub.calls[0].meta.limit, 1, "clamped default limit forwarded to the host");
+});
+
+test("pnm flow: ?limit=N forwards the clamp and format=json exposes provenance fields", async () => {
+  let stub = createDiscoveryStub({});
+  const fb = await pumpRequest(PNM_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "limit=2",
+  });
+  assert.equal(fb.status, 200);
+  assert.equal(header(fb, "x-sdn-record-count"), "2");
+  assert.equal(stub.calls[0].meta.limit, 2);
+  const fbEtag = header(fb, "etag");
+
+  stub = createDiscoveryStub({});
+  const overclamp = await pumpRequest(PNM_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "limit=99999",
+  });
+  assert.equal(overclamp.status, 200);
+  assert.equal(stub.calls[0].meta.limit, 100, "limit clamped in-wasm to the api-block max");
+
+  stub = createDiscoveryStub({});
+  const json = await pumpRequest(PNM_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "limit=2&format=json",
+  });
+  assert.equal(json.status, 200);
+  assert.equal(header(json, "content-type"), "application/json");
+  assert.equal(header(json, "etag"), fbEtag, "shared tag across encodings");
+  const records = JSON.parse(decoder.decode(json.body));
+  assert.ok(Array.isArray(records), "bare top-level array");
+  assert.equal(records.length, 2);
+  assert.equal(records[0].publisher_peer_id, CELESTRAK_PEER);
+  assert.equal(records[0].gossip_peer_id, SELF_PEER, "gossip attribution exposed honestly");
+  assert.equal(records[0].signature_verified, true);
+  assert.equal(records[0].attribution, "signature");
+  assert.equal(records[0].signature, "aa".repeat(64));
+  assert.equal(records[0].publisher_key, "bb".repeat(32));
+  assert.equal(records[0].publisher_key_source, "epm-directory");
+  assert.equal(records[0].cid, "bafy-omm-new");
+  assert.equal(records[1].standard, "CAT");
+});
+
+test("pnm flow: empty history answers 404; If-None-Match answers 304; POST short-circuits", async () => {
+  // No attributable publications -> 404, not an empty 200.
+  let stub = createDiscoveryStub({
+    pnmHistory: {
+      peer_id: "16Uiu2Nobody",
+      publisher_key_available: false,
+      gossip_only_excluded: 0,
+      entries: [],
+      records: { $bin: 0 },
+    },
+    stream: new Uint8Array(0),
+  });
+  const missing = await pumpRequest(PNM_WASM, stub, {
+    method: "GET",
+    path: "/api/v1/peers/16Uiu2Nobody/pnm",
+    query: "",
+  });
+  assert.equal(missing.status, 404);
+
+  // Conditional GET with the stream tag -> 304.
+  stub = createDiscoveryStub({});
+  const first = await pumpRequest(PNM_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "",
+  });
+  const etag = header(first, "etag");
+  const conditional = await pumpRequest(PNM_WASM, createDiscoveryStub({}), {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "",
+    headers: { "if-none-match": etag },
+  });
+  assert.equal(conditional.status, 304);
+  assert.equal(conditional.body?.length ?? 0, 0);
+
+  // POST is not a discovery read; the hostcall is never issued.
+  stub = createDiscoveryStub({});
+  const post = await pumpRequest(PNM_WASM, stub, {
+    method: "POST",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "",
+  });
+  assert.equal(post.status, 404);
+  assert.equal(stub.calls.length, 0);
+});
+
+test("pnm flow: sibling discovery routes are NOT served by this mount", async () => {
+  const stub = createDiscoveryStub({});
+  const peersList = await pumpRequest(PNM_WASM, stub, {
+    method: "GET",
+    path: "/api/v1/peers",
+    query: "",
+  });
+  assert.equal(peersList.status, 404, "route-ownership guard");
+  assert.equal(stub.calls.length, 0, "no hostcall for unowned routes");
+});
+
+test("peers flow: {peerId}/pnm requests are NOT served by the peers mount (G.3 sibling)", async () => {
+  const stub = createDiscoveryStub({});
+  const pnmOnPeers = await pumpRequest(PEERS_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/pnm`,
+    query: "",
+  });
+  assert.equal(pnmOnPeers.status, 404);
+  assert.equal(stub.calls.length, 0, "peers_snapshot hostcall never issued for pnm_history");
+});
+
 test("both bundles carry the api block for the OpenAPI generator", () => {
   const peersFlow = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../dist/peers/flow.json", import.meta.url)), "utf8"));
   assert.equal(peersFlow.api.basePath, "/api/v1/peers");
@@ -388,4 +581,13 @@ test("both bundles carry the api block for the OpenAPI generator", () => {
     standardsFlow.api.routes.map((route) => [route.method, route.path, route.anonymous]),
     [["GET", "", true]],
   );
+  const pnmFlow = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../dist/pnm/flow.json", import.meta.url)), "utf8"));
+  assert.equal(pnmFlow.api.basePath, "/api/v1/peers/{peerId}/pnm");
+  assert.deepEqual(
+    pnmFlow.api.routes.map((route) => [route.method, route.path, route.anonymous]),
+    [["GET", "", true]],
+  );
+  const limitParam = pnmFlow.api.routes[0].params.find((param) => param.name === "limit");
+  assert.equal(limitParam.schema.default, 1);
+  assert.equal(limitParam.schema.maximum, 100);
 });

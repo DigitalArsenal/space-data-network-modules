@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
   "name": "SDN Host P2P Discovery",
-  "version": "0.1.0",
-  "description": "Capability node for the host p2p_read discovery hostcalls (gateway loop G.2). Two methods, one hostcall each: 'peers' forwards the routing-decision JSON as {\"peer_id\"?} to p2p.peers_snapshot (the host's peerstore/DHT/registry view: per-peer addrs, connectedness, agent version, published standards, and stored $EPM profiles as an aligned size-prefixed stream segment); 'standards' forwards to p2p.standards_snapshot (newest signed $PNM per (peer, standard) with per-entry attribution). Each method re-emits the incoming decision frame verbatim on the 'decision' port (linear flow chaining) and pushes the RAW hostcall response envelope ([u32le metaLen][{\"ok\":..,\"result\":..} JSON][u32le segCount][[u32le segLen][bytes]]*) on the 'snapshot' port; segment 0 carries the $EPM/$PNM stream referenced as {\"$bin\":0} in the result. A decision with route=not_found short-circuits: no hostcall, an empty-result envelope is emitted.",
+  "version": "0.2.0",
+  "description": "Capability node for the host p2p_read discovery hostcalls (gateway loops G.2 + G.3). Three methods, one hostcall each: 'peers_snapshot' forwards the routing-decision JSON as {\"peer_id\"?} to p2p.peers_snapshot (the host's peerstore/DHT/registry view: per-peer addrs, connectedness, agent version, published standards, and stored $EPM profiles as an aligned size-prefixed stream segment); 'standards_snapshot' forwards to p2p.standards_snapshot (newest signed $PNM per (peer, standard) with per-entry attribution); 'pnm_history' forwards {\"peer_id\",\"limit\"} to p2p.pnm_history (the peer's stored signed $PNM publications, newest first; the HOST attributes by Ed25519 SIGNATURE against the peer's publication keys because the store's recorded peer id is only the gossip-delivering peer — entries carry signature_verified/attribution/publisher_key so provenance is never overstated; limit arrives pre-clamped by the route node). Each method re-emits the incoming decision frame verbatim on the 'decision' port (linear flow chaining) and pushes the RAW hostcall response envelope ([u32le metaLen][{\"ok\":..,\"result\":..} JSON][u32le segCount][[u32le segLen][bytes]]*) on the 'snapshot' port; segment 0 carries the $EPM/$PNM stream referenced as {\"$bin\":0} in the result. A decision with route=not_found short-circuits: no hostcall, an empty-result envelope is emitted.",
   "pluginFamily": "infrastructure",
   "capabilities": [
     "p2p_read"
@@ -18,7 +18,8 @@
       "properties": {
         "hostOps": [
           "p2p.peers_snapshot",
-          "p2p.standards_snapshot"
+          "p2p.standards_snapshot",
+          "p2p.pnm_history"
         ]
       }
     }
@@ -161,6 +162,71 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Forwards to the p2p.standards_snapshot hostcall and emits the raw response envelope plus the decision passthrough."
+    },
+    {
+      "methodId": "pnm_history",
+      "displayName": "PNM Publication History",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Discovery routing-decision JSON frame (foundation/http-route discover contract, route=pnm_history); \"peerId\" selects the publisher, \"limit\" bounds the newest-first history (clamped [1,100] by the route node)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One routing-decision JSON frame per request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The incoming decision frame re-emitted verbatim (linear chaining; no host round-trip)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Decision passthrough."
+        },
+        {
+          "portId": "snapshot",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcall-envelope",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Verbatim p2p.pnm_history hostcall response envelope: meta JSON {\"ok\",\"result\":{\"peer_id\",\"publisher_key_available\",\"gossip_only_excluded\",\"entries\":[{\"publisher_peer_id\",\"gossip_peer_id\",\"standard\",\"schema\",\"file_id\",\"file_name\",\"cid\",\"publish_timestamp\",\"signature_type\",\"signature\",\"signature_verified\",\"attribution\",\"publisher_key\"?,\"publisher_key_source\"?,\"pnm_index\"}],\"records\":{\"$bin\":0}}} + segment 0 = aligned size-prefixed $PNM stream (the signed publications VERBATIM — signatures intact, newest first, entry order)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One snapshot envelope per request."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Forwards {\"peer_id\",\"limit\"} to the p2p.pnm_history hostcall and emits the raw response envelope plus the decision passthrough. The host returns the peer's stored signed $PNM publications newest first, attributed to the PUBLISHER by Ed25519 signature verification (not by the gossip-delivering peer recorded in the store)."
     }
   ],
   "schemasUsed": [
