@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.pnm-history",
   "name": "SDN PNM Publication History Flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 5,
   "edges": 7,
@@ -72,8 +72,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "version": "0.2.0",
-      "sha256": "a61a16734678e788f9e3b77849dd1250577723c30ed003c5417d2a382416c9be",
+      "version": "0.2.1",
+      "sha256": "2eccb7f74fc4970823bb093ae0498acf87e25aa126f2f16ca34d194345f12fb6",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",

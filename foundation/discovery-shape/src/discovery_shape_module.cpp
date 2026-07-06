@@ -97,12 +97,15 @@ std::string json_escape(const std::string& s) {
 }
 
 bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
+    // Colon-anchored: "key" alone can match a string VALUE (e.g. the pnm
+    // entries carry "attribution":"signature" ahead of the "signature" key
+    // in Go's alphabetical marshal order). All producers on this graph
+    // (Go json.Marshal, JSON.stringify, the C++ nodes) emit no space
+    // between the key quote and the colon.
+    const std::string needle = "\"" + key + "\":";
     const size_t k = json.find(needle);
     if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
+    size_t i = k + needle.size();
     while (i < json.size() && is_json_ws(json[i])) i++;
     if (i >= json.size() || json[i] != '"') return false;
     i++;
@@ -125,12 +128,10 @@ bool json_string_field(const std::string& json, const std::string& key, std::str
 }
 
 bool json_bool_field(const std::string& json, const std::string& key, bool* out) {
-    const std::string needle = "\"" + key + "\"";
+    const std::string needle = "\"" + key + "\":";  // colon-anchored (see json_string_field)
     const size_t k = json.find(needle);
     if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
+    size_t i = k + needle.size();
     while (i < json.size() && is_json_ws(json[i])) i++;
     if (json.compare(i, 4, "true") == 0) { *out = true; return true; }
     if (json.compare(i, 5, "false") == 0) { *out = false; return true; }
@@ -138,12 +139,10 @@ bool json_bool_field(const std::string& json, const std::string& key, bool* out)
 }
 
 bool json_int_field(const std::string& json, const std::string& key, int64_t* out) {
-    const std::string needle = "\"" + key + "\"";
+    const std::string needle = "\"" + key + "\":";  // colon-anchored (see json_string_field)
     const size_t k = json.find(needle);
     if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
+    size_t i = k + needle.size();
     while (i < json.size() && is_json_ws(json[i])) i++;
     bool negative = false;
     if (i < json.size() && json[i] == '-') { negative = true; i++; }
