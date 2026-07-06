@@ -75,20 +75,28 @@ function buildEPM({ dn, alternateNames = [], addrs = [] }) {
   EPM.addDn(builder, dnOffset);
   if (altOffset) EPM.addAlternateNames(builder, altOffset);
   if (addrsOffset) EPM.addMultiformatAddress(builder, addrsOffset);
+  EPM.addSignatureTimestamp(builder, BigInt(1751793600));
   EPM.addEntityType(builder, EntityType.Node);
-  EPM.finishEPMBuffer(builder, EPM.endEPM(builder));
+  EPM.finishSizePrefixedEPMBuffer(builder, EPM.endEPM(builder));
   return builder.asUint8Array().slice();
 }
 
-function sizePrefixedStream(frames) {
-  const total = frames.reduce((sum, frame) => sum + 4 + frame.length, 0);
+// Concatenate frames into a stream. EPM fixtures are already
+// size-prefix-finished; raw fixtures (fake PNM bytes) get a prefix added.
+function sizePrefixedStream(frames, { prefixed = false } = {}) {
+  const extra = prefixed ? 0 : 4;
+  const total = frames.reduce((sum, frame) => sum + extra + frame.length, 0);
   const stream = new Uint8Array(total);
   const view = new DataView(stream.buffer);
   let offset = 0;
   for (const frame of frames) {
-    view.setUint32(offset, frame.length, true);
-    stream.set(frame, offset + 4);
-    offset += 4 + frame.length;
+    if (!prefixed) {
+      view.setUint32(offset, frame.length, true);
+      stream.set(frame, offset + 4);
+    } else {
+      stream.set(frame, offset);
+    }
+    offset += extra + frame.length;
   }
   return stream;
 }
@@ -177,7 +185,7 @@ function createDiscoveryStub({ peers = peersResult(), standards = standardsResul
         if (operation === "p2p.peers_snapshot") {
           response = encodeHostcallEnvelope(
             { ok: true, result: peers },
-            [stream ?? sizePrefixedStream([CELESTRAK_EPM])],
+            [stream ?? sizePrefixedStream([CELESTRAK_EPM], { prefixed: true })],
           );
           return 0;
         }
@@ -255,7 +263,7 @@ test("peers flow: GET /api/v1/peers streams one $EPM frame per peer", async () =
   const frames = splitStream(http.body);
   assert.equal(frames.length, 2);
   // Frame 0 = celestrak's stored EPM verbatim.
-  assert.deepEqual(Array.from(frames[0]), Array.from(CELESTRAK_EPM));
+  assert.deepEqual(Array.from(frames[0]), Array.from(CELESTRAK_EPM.subarray(4)), "stored EPM spliced verbatim");
   // Frame 1 = synthesized minimal EPM (self peer without a stored profile).
   const synthesized = EPM.getRootAsEPM(new flatbuffers.ByteBuffer(frames[1].slice()));
   assert.equal(synthesized.DN(), SELF_PEER);

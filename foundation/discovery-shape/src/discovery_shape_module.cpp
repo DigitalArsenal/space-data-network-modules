@@ -346,32 +346,34 @@ bool parse_snapshot(const uint8_t* payload, uint32_t length, Snapshot* out, std:
 }
 
 struct StreamFrame {
-    const uint8_t* data;   // frame payload (after the u32le prefix)
-    uint32_t length;
+    const uint8_t* data;   // the WHOLE size-prefixed frame ([u32le n][bytes])
+    uint32_t length;       // 4 + n
 };
 
 // Index the size-prefixed frames of a record stream (zero-length prefixes
-// skipped as padding, mirroring http-respond's counting rule).
+// skipped as padding, mirroring http-respond's counting rule). Frames keep
+// their prefix: FlatBuffer alignment (8-byte scalars like the EPM
+// SIGNATURE_TIMESTAMP) is only valid relative to the PREFIXED buffer start,
+// so verification/decoding must use the SizePrefixed accessors.
 std::vector<StreamFrame> index_stream_frames(const uint8_t* data, uint32_t length) {
     std::vector<StreamFrame> frames;
     uint32_t offset = 0;
     while (offset + 4 <= length) {
         const uint32_t frame_size = read_u32le(data + offset);
-        offset += 4;
-        if (frame_size == 0) continue;
-        if (frame_size > length - offset) break;  // malformed tail: stop
-        frames.push_back({data + offset, frame_size});
-        offset += frame_size;
+        if (frame_size == 0) {
+            offset += 4;
+            continue;
+        }
+        if (frame_size > length - offset - 4) break;  // malformed tail: stop
+        frames.push_back({data + offset, frame_size + 4});
+        offset += 4 + frame_size;
     }
     return frames;
 }
 
-void append_size_prefixed(std::vector<uint8_t>* stream, const uint8_t* data, uint32_t length) {
-    stream->push_back(static_cast<uint8_t>(length & 0xff));
-    stream->push_back(static_cast<uint8_t>((length >> 8) & 0xff));
-    stream->push_back(static_cast<uint8_t>((length >> 16) & 0xff));
-    stream->push_back(static_cast<uint8_t>((length >> 24) & 0xff));
-    stream->insert(stream->end(), data, data + length);
+// Append an already-prefixed frame verbatim.
+void append_frame(std::vector<uint8_t>* stream, const StreamFrame& frame) {
+    stream->insert(stream->end(), frame.data, frame.data + frame.length);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +439,9 @@ std::vector<PeerEntry> parse_peer_entries(const std::string& result) {
 
 // Synthesize a minimal unsigned $EPM for a peer without a stored profile:
 // DN = peer id, MULTIFORMAT_ADDRESS = ["/p2p/<peerId>", ...addrs],
-// ENTITY_TYPE = Node. spacedatastandards.org generated code only.
+// ENTITY_TYPE = Node. spacedatastandards.org generated code only. Returned
+// bytes are a SIZE-PREFIX-FINISHED buffer ([u32le n][buffer]) so stream
+// consumers get correct scalar alignment.
 std::vector<uint8_t> synthesize_epm(const PeerEntry& entry) {
     ::flatbuffers::FlatBufferBuilder builder(512);
     const auto dn = builder.CreateString(entry.peer_id);
@@ -453,7 +457,7 @@ std::vector<uint8_t> synthesize_epm(const PeerEntry& entry) {
     epm.add_MULTIFORMAT_ADDRESS(addrs_vector);
     epm.add_ENTITY_TYPE(EntityType_Node);
     const auto root = epm.Finish();
-    FinishEPMBuffer(builder, root);
+    FinishSizePrefixedEPMBuffer(builder, root);
     return std::vector<uint8_t>(builder.GetBufferPointer(),
                                 builder.GetBufferPointer() + builder.GetSize());
 }
@@ -462,10 +466,11 @@ std::vector<uint8_t> synthesize_epm(const PeerEntry& entry) {
 // "null" when the frame does not verify as a $EPM buffer.
 std::string epm_presentation_json(const StreamFrame& frame) {
     ::flatbuffers::Verifier verifier(frame.data, frame.length);
-    if (!EPMBufferHasIdentifier(frame.data) || !VerifyEPMBuffer(verifier)) {
+    if (!SizePrefixedEPMBufferHasIdentifier(frame.data) ||
+        !VerifySizePrefixedEPMBuffer(verifier)) {
         return "null";
     }
-    const EPM* epm = GetEPM(frame.data);
+    const EPM* epm = GetSizePrefixedEPM(frame.data);
     std::string out = "{";
     out += "\"dn\":";
     if (epm->DN()) out += "\"" + json_escape(epm->DN()->str()) + "\"";
@@ -609,12 +614,10 @@ int shape_peers(void) {
     for (const PeerEntry* entry : selected) {
         if (entry->epm_index >= 0 &&
             entry->epm_index < static_cast<int64_t>(frames.size())) {
-            const StreamFrame& frame = frames[static_cast<size_t>(entry->epm_index)];
-            append_size_prefixed(&stream, frame.data, frame.length);
+            append_frame(&stream, frames[static_cast<size_t>(entry->epm_index)]);
         } else {
             const std::vector<uint8_t> synthesized = synthesize_epm(*entry);
-            append_size_prefixed(&stream, synthesized.data(),
-                                 static_cast<uint32_t>(synthesized.size()));
+            stream.insert(stream.end(), synthesized.begin(), synthesized.end());
         }
     }
     const std::string etag =
@@ -677,8 +680,7 @@ int shape_standards(void) {
         int64_t pnm_index = -1;
         json_int_field(element, "pnm_index", &pnm_index);
         if (pnm_index < 0 || pnm_index >= static_cast<int64_t>(frames.size())) continue;
-        const StreamFrame& frame = frames[static_cast<size_t>(pnm_index)];
-        append_size_prefixed(&stream, frame.data, frame.length);
+        append_frame(&stream, frames[static_cast<size_t>(pnm_index)]);
 
         if (emitted > 0) body += ",";
         std::string value;

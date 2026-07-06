@@ -72,7 +72,7 @@
       "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
       "version": "0.1.0",
-      "sha256": "18a0baa2acbde6e6c3221045ba9951206338c73db849579c30d8432ee77a7e38",
+      "sha256": "41280e49dfa4e63c28cf92960124c444c84c76ef52e60b2e382de41d66070575",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
