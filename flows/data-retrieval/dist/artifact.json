@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 8,
   "edges": 13,
