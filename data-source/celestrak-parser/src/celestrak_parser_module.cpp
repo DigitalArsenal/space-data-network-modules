@@ -893,6 +893,7 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
                                       double mean_motion, double eccentricity, double inclination,
                                       double raan, double argp, double mean_anomaly,
                                       const std::string& creation_date,
+                                      const std::string& originator,
                                       const std::string& classification, double bstar,
                                       double mean_motion_dot, double mean_motion_ddot,
                                       uint32_t element_set_no, double rev_at_epoch,
@@ -903,7 +904,9 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
     const auto epoch_off = fbb.CreateString(epoch_rfc3339);
     const auto center_name_off = fbb.CreateString("EARTH");
     const auto creation_date_off = fbb.CreateString(creation_date);
-    const auto originator_off = fbb.CreateString("SDN-TEST");
+    // Honest CCSDS ORIGINATOR (runner parity: gpOriginatorForSource) — the
+    // sds test-builder default "SDN-TEST" must never reach production bytes.
+    const auto originator_off = fbb.CreateString(originator);
     // WithClassificationType: empty is normalized to "U" (builder default).
     const auto classification_off = fbb.CreateString(classification.empty() ? "U" : classification);
 
@@ -1305,6 +1308,9 @@ int parse_gp(void) {
         const std::string classification = trim(row_value(row, {"CLASSIFICATION_TYPE", "CLASSIFICATION"}));
         const EphemerisType ephemeris_type =
             normalize_ephemeris_type(row_value(row, {"EPHEMERIS_TYPE"}));
+        // gpOriginatorForSource("source:celestrak") parity: a row ORIGINATOR
+        // wins; the CelesTrak GP CSV has no such column, so "CELESTRAK".
+        const std::string originator = value_or(row_value(row, {"ORIGINATOR"}), "CELESTRAK");
 
         // The builder default epoch is time.Now() in Go — the runner ALWAYS
         // overrides it when the row has an epoch (required column). Rows with
@@ -1315,8 +1321,8 @@ int parse_gp(void) {
 
         const std::vector<uint8_t> omm =
             build_omm_record(object_name, object_id, norad, epoch_field, mean_motion, ecc, incl,
-                             raan, argp, ma, creation_date, classification, bstar, mm_dot, mm_ddot,
-                             element_set_no, rev_at_epoch, ephemeris_type);
+                             raan, argp, ma, creation_date, originator, classification, bstar,
+                             mm_dot, mm_ddot, element_set_no, rev_at_epoch, ephemeris_type);
         append_size_prefixed(&omm_stream, omm);
         normalized_hash_record(&normalized, "OMM.fbs", omm);
         count_omm++;
