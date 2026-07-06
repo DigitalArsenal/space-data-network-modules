@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.foundation.http-respond",
   "name": "SDN HTTP Respond",
-  "version": "0.1.0",
-  "description": "Single-purpose flow node: assembles one $HTR HttpResponse envelope from a routing-decision JSON frame (foundation/http-route contract) plus optional body / etag / error frames. Behavior: an \"error\" input (JSON {\"error\":msg}) wins over everything -> 502 application/json {\"error\":msg}; decision route=not_found -> 404 application/json {\"error\":decision.error|\"not found\"}; an \"etag\" input equal to decision.ifNoneMatch -> 304 with an etag header and empty body; otherwise 200 with the body frame verbatim (empty body when the frame is absent), content-type from decision.format (flatbuffer -> application/vnd.sdn.flatbuffers.stream, json -> application/json), x-sdn-record-count when derivable (the count of size-prefixed frames when format=flatbuffer and the body framing parses cleanly), and an etag header whenever the etag input is present. All response headers are lower-cased and sorted per the $HTR ABI. Pure compute \u2014 no capabilities. Body-reference delivery (loop C.5c): a body input frame that is a {\"$sdnbodyref\":1,\"token\":..,\"size\":..,\"frames\":..,\"fnv1a64\":\"..\"} JSON descriptor (instead of stream bytes) is forwarded as $HTR BODY_REF_TOKEN/BODY_REF_SIZE with no inline body; the host egress substitutes the buffer it registered under the token. x-sdn-record-count then comes from the descriptor's frames field.",
+  "version": "0.2.0",
+  "description": "Single-purpose flow node: assembles one $HTR HttpResponse envelope from a routing-decision JSON frame (foundation/http-route contract) plus optional body / etag / error frames. Behavior: an \"error\" input (JSON {\"error\":msg}) wins over everything -> 502 application/json {\"error\":msg}; decision route=not_found -> 404 application/json {\"error\":decision.error|\"not found\"}; an \"etag\" input equal to decision.ifNoneMatch -> 304 with an etag header and empty body; otherwise 200 with the body frame verbatim (empty body when the frame is absent), content-type from decision.format (flatbuffer -> application/vnd.sdn.flatbuffers.stream, json -> application/json), x-sdn-record-count when derivable (the count of size-prefixed frames when format=flatbuffer and the body framing parses cleanly), and an etag header whenever the etag input is present. All response headers are lower-cased and sorted per the $HTR ABI. Pure compute — no capabilities. Body-reference delivery (loop C.5c): a body input frame that is a {\"$sdnbodyref\":1,\"token\":..,\"size\":..,\"frames\":..,\"fnv1a64\":\"..\"} JSON descriptor (instead of stream bytes) is forwarded as $HTR BODY_REF_TOKEN/BODY_REF_SIZE with no inline body; the host egress substitutes the buffer it registered under the token. x-sdn-record-count then comes from the descriptor's frames field.",
   "pluginFamily": "foundation",
   "capabilities": [],
   "externalInterfaces": [],
@@ -116,7 +116,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Builds the $HTR response: 502 on upstream error, 404 on not_found, 304 on ETag match, else 200 with negotiated content-type, optional x-sdn-record-count, and optional etag header."
+      "description": "Builds the $HTR response: 502 on upstream error, 404 on not_found, 304 on ETag match, else 200 with negotiated content-type, optional x-sdn-record-count, and optional etag header. G.4 adds the explicit error decision: route=error answers decision.status (clamped 400-599, default 503) application/json {\"error\":msg,\"pnm\":{...}?} — the optional pnm publication pointer object is forwarded verbatim from the decision so unavailability answers stay actionable (no silent proxying)."
     }
   ],
   "schemasUsed": [

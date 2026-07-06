@@ -278,12 +278,40 @@ test("discover routes /peers/{peerId}/pnm to pnm_history with a clamped limit (l
   assert.equal(junk.limit, 1);
 });
 
+test("discover routes /peers/{peerId}/{standard}/latest to latest_dataset (loop G.4)", async (t) => {
+  const latest = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest", query: "" }),
+  );
+  assert.equal(latest.route, "latest_dataset");
+  assert.equal(latest.peerId, "16Uiu2HAmX");
+  assert.equal(latest.standard, "omm");
+  assert.equal(latest.format, "flatbuffer");
+
+  const json = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/cat/latest", query: "format=json" }),
+  );
+  assert.equal(json.route, "latest_dataset");
+  assert.equal(json.standard, "cat");
+  assert.equal(json.format, "json");
+
+  // Trailing slash tolerated (API paths never redirect).
+  const slash = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest/", query: "" }),
+  );
+  assert.equal(slash.route, "latest_dataset");
+});
+
 test("discover degrades unknown deeper per-peer paths and non-GET methods to not_found", async (t) => {
   const deep = decodeDecision(
-    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest", query: "" }),
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/bogus", query: "" }),
   );
   assert.equal(deep.route, "not_found");
   assert.ok(deep.error);
+
+  const deeper = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/omm/latest/extra", query: "" }),
+  );
+  assert.equal(deeper.route, "not_found");
 
   const post = decodeDecision(
     await invokeDiscover(t, { method: "POST", path: "/api/v1/peers", query: "" }),

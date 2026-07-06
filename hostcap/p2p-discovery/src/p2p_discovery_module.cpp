@@ -185,8 +185,15 @@ bool json_int_field(const std::string& json, const std::string& key, long* out) 
 // A decision whose route is not_found — or one this method does not serve
 // (the discover router also emits routes for sibling flows; each flow's
 // shape node 404s them) — short-circuits: NO hostcall, empty envelope.
+//
+// include_standard forwards the decision's "standard" (latest_dataset).
+// ref_unless_json asks the host for body-reference stream delivery
+// (deliver="ref") EXCEPT when the request format is json — the json
+// presentation branch shapes the bytes in wasm, so they must arrive as an
+// inline envelope segment.
 int run_snapshot(const char* op, const char* route_a, const char* route_b,
-                 bool include_limit = false) {
+                 bool include_limit = false, bool include_standard = false,
+                 bool ref_unless_json = false) {
     const int32_t input_index = plugin_find_input_index("request", 0);
     const plugin_input_frame_t* frame =
         input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
@@ -234,6 +241,24 @@ int run_snapshot(const char* op, const char* route_a, const char* route_b,
         if (!first) payload += ",";
         payload += "\"limit\":";
         payload += limit_buf;
+        first = false;
+    }
+    if (include_standard) {
+        std::string standard;
+        if (json_string_field(decision, "standard", &standard) && !standard.empty()) {
+            if (!first) payload += ",";
+            payload += "\"standard\":\"" + json_escape(standard) + "\"";
+            first = false;
+        }
+    }
+    if (ref_unless_json) {
+        std::string format;
+        json_string_field(decision, "format", &format);
+        if (format != "json") {
+            if (!first) payload += ",";
+            payload += "\"deliver\":\"ref\"";
+            first = false;
+        }
     }
     payload += "}";
 
@@ -274,6 +299,18 @@ int standards_snapshot(void) {
 int pnm_history(void) {
     return run_snapshot("p2p.pnm_history", "pnm_history", nullptr,
                         /*include_limit=*/true);
+}
+
+// latest_dataset: decision JSON ({"peerId","standard","format"}) ->
+// p2p.latest_dataset -> raw response envelope (gateway loop G.4: the
+// provider's newest published dataset batch when pinned/self and
+// materialized; otherwise known/pinned flags + the newest PNM pointer for
+// the honest 404/503). Stream delivery is a host body reference except on
+// the json presentation path.
+int latest_dataset(void) {
+    return run_snapshot("p2p.latest_dataset", "latest_dataset", nullptr,
+                        /*include_limit=*/false, /*include_standard=*/true,
+                        /*ref_unless_json=*/true);
 }
 
 }  // extern "C"

@@ -44,11 +44,31 @@
  *   - zero entries rewrite the decision to route=not_found (404: peer
  *     unknown here or no signed publications stored).
  *
- * Outputs (both methods): "decision" (forwarded, possibly rewritten to
- * not_found), "body" (absent on not_found), "etag" (weak FNV-1a-64 over the
- * fb-encoded record stream — the SAME tag for both encodings, matching
+ * Method "shape_latest" (route latest_dataset, gateway loop G.4):
+ *   - inputs: decision + the p2p.latest_dataset hostcall envelope.
+ *   - known=false rewrites the decision to route=not_found (404: the peer
+ *     has no attributable publications for the standard, or the standard is
+ *     unknown to the node).
+ *   - known=true without "serving" (not pinned here / newest batch not yet
+ *     materialized) rewrites the decision to route=error status=503 with
+ *     the newest signed-PNM pointer object carried into the error body —
+ *     the honest unavailability answer; NO silent proxy fetch.
+ *   - serving present: etag = W/"fnv1a64-<serving.etag_fnv1a64>" (the host
+ *     hashed the batch stream with the same word-folded algorithm, so both
+ *     encodings share the tag). fb path: body = the batch stream — either
+ *     the envelope's inline segment verbatim or the host's body-reference
+ *     descriptor ({"$sdnbodyref":1,...}) forwarded for $HTR BODY_REF
+ *     resolution. json path: the raw $OMM stream is emitted on the
+ *     "stream" port for the downstream foundation/omm-json encoder;
+ *     non-OMM standards answer route=error status=406 (no json adapter).
+ *
+ * Outputs (all methods): "decision" (forwarded, possibly rewritten to
+ * not_found/error), "body" (absent on not_found/error and on the
+ * shape_latest json path), "etag" (weak FNV-1a-64 over the fb-encoded
+ * record stream — the SAME tag for both encodings, matching
  * foundation/decision-gate's algorithm so identical logical streams carry
- * identical tags across the whole gateway surface).
+ * identical tags across the whole gateway surface), and shape_latest's
+ * "stream" (json path only).
  *
  * The EPM generated header (spacedatastandards.org lib/cpp/EPM) is prepended
  * by build.mjs; this file contains only the method bodies.
@@ -545,6 +565,23 @@ std::string not_found_decision(const std::string& format, const std::string& mes
            json_escape(message) + "\"}";
 }
 
+// Rewrite a decision to route=error with an explicit status; pnm_slice
+// (optional "{...}" object) rides into the error body so unavailability
+// answers carry the newest publication pointer (gateway loop G.4).
+std::string error_decision(const std::string& format, int status,
+                           const std::string& message, const std::string& pnm_slice) {
+    char status_buf[16];
+    std::snprintf(status_buf, sizeof(status_buf), "%d", status);
+    std::string out = "{\"route\":\"error\",\"format\":\"" + format + "\",\"status\":";
+    out += status_buf;
+    out += ",\"error\":\"" + json_escape(message) + "\"";
+    if (!pnm_slice.empty()) {
+        out += ",\"pnm\":" + pnm_slice;
+    }
+    out += "}";
+    return out;
+}
+
 struct DecisionInfo {
     std::string raw;
     std::string route;
@@ -856,6 +893,133 @@ int shape_pnm(void) {
         return 0;
     }
     if (push_bytes("body", stream.data(), static_cast<uint32_t>(stream.size())) != 0) {
+        plugin_set_error("push-failed", "failed to push the stream body frame.");
+        return 500;
+    }
+    return 0;
+}
+
+// latest: decision + latest_dataset envelope -> decision/body|stream/etag
+// (gateway loop G.4).
+int shape_latest(void) {
+    DecisionInfo decision;
+    if (const int status = read_decision(&decision)) return status;
+    if (decision.route == "not_found") {
+        return forward_not_found(decision);
+    }
+    if (decision.route != "latest_dataset") {
+        return reject_unowned_route(decision);
+    }
+    std::string standard;
+    json_string_field(decision.raw, "standard", &standard);
+
+    const plugin_input_frame_t* snapshot_frame = find_input("snapshot");
+    Snapshot snapshot;
+    std::string error;
+    if (!snapshot_frame ||
+        !parse_snapshot(snapshot_frame->payload, snapshot_frame->payload_length, &snapshot, &error)) {
+        plugin_set_error("invalid-snapshot", error.empty() ? "missing snapshot envelope." : error.c_str());
+        return 502;
+    }
+
+    bool known = false;
+    json_bool_field(snapshot.result, "known", &known);
+    // Top-level "pnm" = the NEWEST publication pointer. Go marshals the
+    // result keys alphabetically, so the top-level "pnm" precedes "serving"
+    // (whose nested pointer names the SERVED batch).
+    const std::string pnm_slice = json_object_slice(snapshot.result, "pnm");
+
+    if (!known) {
+        // No attributable publications / unknown standard: an honest 404.
+        return push_string("decision",
+                           not_found_decision(decision.format,
+                                              "no published dataset for standard " + standard +
+                                                  " from peer " + decision.peer_id));
+    }
+
+    const std::string serving = json_object_slice(snapshot.result, "serving");
+    if (serving.empty()) {
+        // Known via signed PNM but not served here (not pinned, or the
+        // pinned batch is not materialized yet): 503 + the PNM pointer so
+        // the client can fetch the publication itself over p2p. NO silent
+        // proxying (user decision, docs/gateway-api.md §10).
+        std::string reason;
+        json_string_field(snapshot.result, "reason", &reason);
+        std::string message;
+        if (reason == "not-pinned") {
+            message = "dataset " + standard + " from peer " + decision.peer_id +
+                      " is not pinned on this gateway (gateway.pin is opt-in); fetch the publication via the pnm pointer";
+        } else {
+            message = "dataset " + standard + " from peer " + decision.peer_id +
+                      " is not materialized on this gateway yet; fetch the publication via the pnm pointer";
+        }
+        return push_string("decision", error_decision(decision.format, 503, message, pnm_slice));
+    }
+
+    std::string etag_hex;
+    json_string_field(serving, "etag_fnv1a64", &etag_hex);
+    const std::string etag = "W/\"fnv1a64-" + etag_hex + "\"";
+
+    if (decision.format == "json") {
+        std::string schema;
+        json_string_field(snapshot.result, "schema", &schema);
+        if (schema != "OMM.fbs") {
+            // No json presentation adapter for this standard (v1 ships
+            // foundation/omm-json only): answer 406, never a lossy guess.
+            return push_string("decision",
+                               error_decision(decision.format, 406,
+                                              "format=json is not available for " + standard +
+                                                  " on this surface; use the default flatbuffer stream",
+                                              pnm_slice));
+        }
+        if (!snapshot.stream || snapshot.stream_length == 0) {
+            plugin_set_error("missing-stream",
+                             "latest_dataset json path requires the inline stream segment.");
+            return 502;
+        }
+        if (push_string("decision", decision.raw) != 0 ||
+            push_string("etag", etag) != 0 ||
+            push_bytes("stream", snapshot.stream, snapshot.stream_length) != 0) {
+            plugin_set_error("push-failed", "failed to push decision/etag/stream frames.");
+            return 500;
+        }
+        return 0;
+    }
+
+    if (push_string("decision", decision.raw) != 0 ||
+        push_string("etag", etag) != 0) {
+        plugin_set_error("push-failed", "failed to push decision/etag frames.");
+        return 500;
+    }
+    const std::string ref = json_object_slice(serving, "ref");
+    if (!ref.empty()) {
+        // Forward the host's body reference as the $HTR descriptor: the
+        // stream bytes never enter this module's linear memory.
+        int64_t token = 0, size = 0, frames = 0;
+        std::string fnv;
+        if (!json_int_field(ref, "token", &token) || !json_int_field(ref, "size", &size)) {
+            plugin_set_error("invalid-ref", "latest_dataset ref is missing token/size.");
+            return 502;
+        }
+        json_int_field(ref, "frames", &frames);
+        json_string_field(ref, "fnv1a64", &fnv);
+        char buf[160];
+        std::snprintf(buf, sizeof(buf),
+                      "{\"$sdnbodyref\":1,\"token\":%lld,\"size\":%lld,\"frames\":%lld,\"fnv1a64\":\"%s\"}",
+                      static_cast<long long>(token), static_cast<long long>(size),
+                      static_cast<long long>(frames), fnv.c_str());
+        if (push_string("body", buf) != 0) {
+            plugin_set_error("push-failed", "failed to push the body-reference frame.");
+            return 500;
+        }
+        return 0;
+    }
+    if (!snapshot.stream || snapshot.stream_length == 0) {
+        plugin_set_error("missing-stream",
+                         "latest_dataset envelope carries neither a ref nor a stream segment.");
+        return 502;
+    }
+    if (push_bytes("body", snapshot.stream, snapshot.stream_length) != 0) {
         plugin_set_error("push-failed", "failed to push the stream body frame.");
         return 500;
     }

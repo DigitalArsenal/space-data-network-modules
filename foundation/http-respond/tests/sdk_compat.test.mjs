@@ -279,3 +279,52 @@ test("respond fails the invoke when the decision frame is missing", async (t) =>
   assert.equal(response.errorCode, "missing-required-input");
   assert.equal(response.outputs.length, 0);
 });
+
+test("respond error decision: explicit status + pnm pointer body (loop G.4)", async (t) => {
+  const decision = JSON.stringify({
+    route: "error",
+    format: "flatbuffer",
+    status: 503,
+    error: "dataset OMM from peer 16Uiu2HAmX is not pinned on this gateway",
+    pnm: {
+      attribution: "signature",
+      batch_id: "batch-new",
+      cid: "bafy-manifest-new",
+      file_id: "sdn-OMM-full:OMM.fbs:batch-new:part-000001",
+      publish_timestamp: "2026-07-06T06:00:00Z",
+      schema: "OMM.fbs",
+      signature_verified: true,
+      standard: "OMM",
+    },
+  });
+  const response = await invokeRespond(t, [bytesInput("decision", decision)]);
+  const http = decodeResponseOutput(response);
+  assert.equal(http.status, 503);
+  assert.equal(findHttpHeader(http.headers, "content-type"), "application/json");
+  const body = JSON.parse(new TextDecoder().decode(http.body));
+  assert.match(body.error, /not pinned/);
+  assert.equal(body.pnm.cid, "bafy-manifest-new");
+  assert.equal(body.pnm.publish_timestamp, "2026-07-06T06:00:00Z");
+  assert.equal(body.pnm.signature_verified, true);
+});
+
+test("respond error decision: out-of-range or missing status clamps to 503; 406 passes (loop G.4)", async (t) => {
+  const noStatus = decodeResponseOutput(await invokeRespond(t, [
+    bytesInput("decision", JSON.stringify({ route: "error", format: "json", error: "nope" })),
+  ]));
+  assert.equal(noStatus.status, 503);
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(noStatus.body)), { error: "nope" });
+
+  const tooBig = decodeResponseOutput(await invokeRespond(t, [
+    bytesInput("decision", JSON.stringify({ route: "error", format: "json", status: 700, error: "nope" })),
+  ]));
+  assert.equal(tooBig.status, 503);
+
+  const notAcceptable = decodeResponseOutput(await invokeRespond(t, [
+    bytesInput("decision", JSON.stringify({
+      route: "error", format: "json", status: 406,
+      error: "format=json is not available for cat on this surface",
+    })),
+  ]));
+  assert.equal(notAcceptable.status, 406);
+});

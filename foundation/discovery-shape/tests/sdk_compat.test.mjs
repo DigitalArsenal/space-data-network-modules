@@ -399,3 +399,190 @@ test("a failed snapshot envelope is a node error; not_found passes through", asy
   assert.equal(JSON.parse(decoder.decode(ports.get("decision").payload)).route, "not_found");
   assert.equal(ports.has("body"), false);
 });
+
+// ---------------------------------------------------------------------------
+// shape_latest (gateway loop G.4). Fixture meta objects list keys in Go's
+// alphabetical json.Marshal order — the G.3 lesson: test stubs must
+// serialize hostcall fixtures exactly like the host does.
+// ---------------------------------------------------------------------------
+
+const LATEST_STREAM_FRAMES = [encoder.encode("omm-record-one__"), encoder.encode("omm-record-two")];
+
+function latestServing({ ref = null, withStream = true } = {}) {
+  const serving = {
+    batch_id: "batch-new",
+    byte_count: 44,
+    etag_fnv1a64: "00baddecafc0ffee",
+    parts: 1,
+    pnm: {
+      attribution: "signature",
+      batch_id: "batch-new",
+      cid: "bafy-manifest-new",
+      file_id: "sdn-OMM-full:OMM.fbs:batch-new:part-000001",
+      publish_timestamp: "2026-07-06T06:00:00Z",
+      schema: "OMM.fbs",
+      signature_verified: true,
+      standard: "OMM",
+    },
+    provider_id: "space-data-network-02",
+    published_at: "2026-07-06T06:00:00Z",
+    record_count: 2,
+    source_name: "celestrak-gp",
+  };
+  if (ref) {
+    serving.ref = ref;
+  } else if (withStream) {
+    serving.stream = { $bin: 0 };
+  }
+  return serving;
+}
+
+function latestEnvelope({ known = true, pinned = true, self = false, reason, serving, fresh, schema = "OMM.fbs" } = {}) {
+  const result = {};
+  if (fresh !== undefined) result.fresh = fresh;
+  result.known = known;
+  if (known) {
+    result.pinned = pinned;
+    result.pnm = {
+      attribution: "signature",
+      batch_id: "batch-new",
+      cid: "bafy-manifest-new",
+      file_id: "sdn-OMM-full:OMM.fbs:batch-new:part-000001",
+      publish_timestamp: "2026-07-06T06:00:00Z",
+      schema,
+      signature_verified: true,
+      standard: schema.replace(/\.fbs$/, ""),
+    };
+  }
+  if (reason) result.reason = reason;
+  if (known) {
+    result.schema = schema;
+    result.self = self;
+  }
+  if (serving) result.serving = serving;
+  if (known) result.standard = schema.replace(/\.fbs$/, "");
+  const segments = serving && serving.stream ? [sizePrefixedStream(LATEST_STREAM_FRAMES)] : [];
+  return encodeHostcallEnvelope({ ok: true, result }, segments);
+}
+
+const LATEST_DECISION = { route: "latest_dataset", format: "flatbuffer", peerId: CELESTRAK_PEER, standard: "omm" };
+
+test("shape_latest fb: inline stream verbatim + host-derived etag (loop G.4)", async (t) => {
+  const harness = await createHarness(t);
+  const ports = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", LATEST_DECISION),
+      input("snapshot", latestEnvelope({ serving: latestServing(), fresh: true })),
+    ],
+  }));
+  assert.equal(JSON.parse(decoder.decode(ports.get("decision").payload)).route, "latest_dataset");
+  assert.equal(decoder.decode(ports.get("etag").payload), 'W/"fnv1a64-00baddecafc0ffee"');
+  const body = ports.get("body").payload;
+  const expected = sizePrefixedStream(LATEST_STREAM_FRAMES);
+  assert.deepEqual(Array.from(body), Array.from(expected));
+  assert.equal(ports.has("stream"), false);
+});
+
+test("shape_latest fb: body-reference descriptor forwarded (loop G.4)", async (t) => {
+  const harness = await createHarness(t);
+  const ports = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", LATEST_DECISION),
+      input("snapshot", latestEnvelope({
+        serving: latestServing({ ref: { fnv1a64: "00baddecafc0ffee", frames: 2, size: 44, token: 7 } }),
+        fresh: true,
+      })),
+    ],
+  }));
+  const body = JSON.parse(decoder.decode(ports.get("body").payload));
+  assert.equal(body.$sdnbodyref, 1);
+  assert.equal(body.token, 7);
+  assert.equal(body.size, 44);
+  assert.equal(body.frames, 2);
+  assert.equal(body.fnv1a64, "00baddecafc0ffee");
+  assert.equal(decoder.decode(ports.get("etag").payload), 'W/"fnv1a64-00baddecafc0ffee"');
+});
+
+test("shape_latest json: OMM stream goes to the omm-json port; non-OMM answers 406 (loop G.4)", async (t) => {
+  const harness = await createHarness(t);
+  const jsonDecision = { ...LATEST_DECISION, format: "json" };
+  const ports = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", jsonDecision),
+      input("snapshot", latestEnvelope({ serving: latestServing(), fresh: true })),
+    ],
+  }));
+  const expected = sizePrefixedStream(LATEST_STREAM_FRAMES);
+  assert.deepEqual(Array.from(ports.get("stream").payload), Array.from(expected));
+  assert.equal(ports.has("body"), false);
+  assert.equal(decoder.decode(ports.get("etag").payload), 'W/"fnv1a64-00baddecafc0ffee"');
+
+  const catPorts = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", { ...jsonDecision, standard: "cat" }),
+      input("snapshot", latestEnvelope({ serving: latestServing(), fresh: true, schema: "CAT.fbs" })),
+    ],
+  }));
+  const decision = JSON.parse(decoder.decode(catPorts.get("decision").payload));
+  assert.equal(decision.route, "error");
+  assert.equal(decision.status, 406);
+  assert.match(decision.error, /format=json is not available/);
+  assert.equal(decision.pnm.cid, "bafy-manifest-new");
+  assert.equal(catPorts.has("body"), false);
+  assert.equal(catPorts.has("stream"), false);
+});
+
+test("shape_latest honest unavailability: 503 + pnm pointer, 404 when unknown (loop G.4)", async (t) => {
+  const harness = await createHarness(t);
+  // Known via signed PNM but NOT pinned: pinning is opt-in, never default.
+  const unpinned = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", LATEST_DECISION),
+      input("snapshot", latestEnvelope({ pinned: false, reason: "not-pinned" })),
+    ],
+  }));
+  const decision = JSON.parse(decoder.decode(unpinned.get("decision").payload));
+  assert.equal(decision.route, "error");
+  assert.equal(decision.status, 503);
+  assert.match(decision.error, /not pinned/);
+  assert.equal(decision.pnm.cid, "bafy-manifest-new");
+  assert.equal(decision.pnm.publish_timestamp, "2026-07-06T06:00:00Z");
+  assert.equal(unpinned.has("body"), false);
+
+  // Pinned but the batch has not materialized yet: 503 + pointer too.
+  const pending = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", LATEST_DECISION),
+      input("snapshot", latestEnvelope({ reason: "not-materialized" })),
+    ],
+  }));
+  const pendingDecision = JSON.parse(decoder.decode(pending.get("decision").payload));
+  assert.equal(pendingDecision.status, 503);
+  assert.match(pendingDecision.error, /not materialized/);
+
+  // No attributable publications at all: honest 404.
+  const unknown = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", LATEST_DECISION),
+      input("snapshot", latestEnvelope({ known: false })),
+    ],
+  }));
+  assert.equal(JSON.parse(decoder.decode(unknown.get("decision").payload)).route, "not_found");
+
+  // Sibling-route guard: shape_latest 404s routes it does not own.
+  const unowned = outputsByPort(await harness.invoke({
+    methodId: "shape_latest",
+    inputs: [
+      jsonInput("decision", { route: "peers_list", format: "json" }),
+      input("snapshot", encodeHostcallEnvelope({ ok: true, result: {} })),
+    ],
+  }));
+  assert.equal(JSON.parse(decoder.decode(unowned.get("decision").payload)).route, "not_found");
+});

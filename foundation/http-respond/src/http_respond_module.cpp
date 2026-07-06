@@ -10,6 +10,11 @@
  *      -> 502 application/json {"error":msg}. Wins over everything.
  *   2. decision.route == "not_found"
  *      -> 404 application/json {"error": decision.error | "not found"}.
+ *   2b. decision.route == "error" (gateway loop G.4)
+ *      -> decision.status (clamped [400,599], default 503)
+ *         application/json {"error": decision.error, "pnm": {...}?} — the
+ *         optional "pnm" object rides verbatim from the decision so
+ *         unavailability answers carry the newest publication pointer.
  *   3. "etag" input present and equal to decision.ifNoneMatch
  *      -> 304 with an etag header and an empty body.
  *   4. Otherwise 200: body frame verbatim (empty when absent),
@@ -53,14 +58,15 @@ bool is_json_ws(char c) {
 }
 
 // Extract "key":"..." string values (simple escapes), mirroring the other
-// C.3b nodes' control-metadata helpers.
+// C.3b nodes' control-metadata helpers. Colon-anchored: a bare "key" needle
+// can match a string VALUE (the G.3 lesson — {"route":"error"} would make
+// the "error" key lookup land on the route value). All producers on this
+// graph emit no space between the key quote and the colon.
 bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    const std::string needle = "\"" + key + "\"";
+    const std::string needle = "\"" + key + "\":";
     const size_t k = json.find(needle);
     if (k == std::string::npos) return false;
-    const size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
+    size_t i = k + needle.size();
     while (i < json.size() && is_json_ws(json[i])) i++;
     if (i >= json.size() || json[i] != '"') return false;
     i++;
@@ -286,6 +292,52 @@ int push_json_error(uint16_t status, const std::string& message) {
                          reinterpret_cast<const uint8_t*>(body.data()), body.size());
 }
 
+// Slice "key":{...} (brace-depth scan) out of an object — used to forward
+// the decision's "pnm" pointer object verbatim into error bodies (G.4).
+std::string json_object_slice(const std::string& json, const std::string& key) {
+    const std::string needle = "\"" + key + "\":";
+    const size_t k = json.find(needle);
+    if (k == std::string::npos) return std::string();
+    size_t i = k + needle.size();
+    while (i < json.size() && is_json_ws(json[i])) i++;
+    if (i >= json.size() || json[i] != '{') return std::string();
+    const size_t start = i;
+    int depth = 0;
+    bool in_string = false;
+    for (; i < json.size(); i++) {
+        const char c = json[i];
+        if (in_string) {
+            if (c == '\\') i++;
+            else if (c == '"') in_string = false;
+            continue;
+        }
+        if (c == '"') in_string = true;
+        else if (c == '{') depth++;
+        else if (c == '}') {
+            depth--;
+            if (depth == 0) return json.substr(start, i - start + 1);
+        }
+    }
+    return std::string();
+}
+
+// Extract "key":<integer> control values (status codes).
+bool json_int_field(const std::string& json, const std::string& key, long* out) {
+    const std::string needle = "\"" + key + "\":";
+    const size_t k = json.find(needle);
+    if (k == std::string::npos) return false;
+    size_t i = k + needle.size();
+    while (i < json.size() && is_json_ws(json[i])) i++;
+    if (i >= json.size() || json[i] < '0' || json[i] > '9') return false;
+    long value = 0;
+    while (i < json.size() && json[i] >= '0' && json[i] <= '9') {
+        value = value * 10 + (json[i] - '0');
+        i++;
+    }
+    *out = value;
+    return true;
+}
+
 }  // namespace
 
 extern "C" {
@@ -333,6 +385,31 @@ int respond(void) {
             message = "not found";
         }
         return push_json_error(404, message);
+    }
+
+    // 2b. Explicit error decision (gateway loop G.4): status from the
+    //     decision (clamped [400,599], default 503), body carries the error
+    //     message plus the optional "pnm" publication pointer verbatim —
+    //     the honest unavailability answer for unpinned/unmaterialized
+    //     provider datasets.
+    if (route == "error") {
+        long status = 503;
+        json_int_field(decision, "status", &status);
+        if (status < 400 || status > 599) status = 503;
+        std::string message;
+        if (!json_string_field(decision, "error", &message) || message.empty()) {
+            message = "service unavailable";
+        }
+        std::string body = "{\"error\":\"" + json_escape(message) + "\"";
+        const std::string pnm = json_object_slice(decision, "pnm");
+        if (!pnm.empty()) {
+            body += ",\"pnm\":" + pnm;
+        }
+        body += "}";
+        std::vector<HeaderEntry> headers;
+        headers.push_back({"content-type", kContentTypeJson});
+        return push_response(static_cast<uint16_t>(status), headers,
+                             reinterpret_cast<const uint8_t*>(body.data()), body.size());
     }
 
     const plugin_input_frame_t* etag_frame = find_input("etag");
