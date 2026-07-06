@@ -1,0 +1,215 @@
+{
+  "programId": "com.digitalarsenal.flows.pnm-history",
+  "name": "SDN PNM Publication History Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "HTTP PNM-provenance flow (gateway loop G.3): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (pnm_history with peerId + in-wasm clamped limit [1,100] default 1 | not_found), hostcap/p2p-discovery pnm_history issues the policy-mediated p2p.pnm_history hostcall (the peer's stored signed $PNM publications, publisher-attributed by Ed25519 SIGNATURE on the host because the store's recorded peer id is only the gossip-delivering peer; short-circuited on not_found) and re-emits the decision, foundation/discovery-shape shape_pnm splices the signed $PNM frames VERBATIM (signatures intact) newest-first / encodes the bare-array json presentation with the signature_verified/attribution provenance fields and the shared FNV-1a etag / rewrites empty histories to not_found, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "discover",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "disc",
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "methodId": "pnm_history",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "shape",
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "methodId": "shape_pnm",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-decision",
+      "fromNodeId": "route",
+      "fromPortId": "decision",
+      "toNodeId": "disc",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-decision",
+      "fromNodeId": "disc",
+      "fromPortId": "decision",
+      "toNodeId": "shape",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-snapshot",
+      "fromNodeId": "disc",
+      "fromPortId": "snapshot",
+      "toNodeId": "shape",
+      "toPortId": "snapshot",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "shape-decision",
+      "fromNodeId": "shape",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "shape-body",
+      "fromNodeId": "shape",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "shape-etag",
+      "fromNodeId": "shape",
+      "fromPortId": "etag",
+      "toNodeId": "respond",
+      "toPortId": "etag",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.foundation.http-route",
+    "com.digitalarsenal.hostcap.p2p-discovery",
+    "com.digitalarsenal.foundation.discovery-shape",
+    "com.digitalarsenal.foundation.http-respond"
+  ],
+  "api": {
+    "basePath": "/api/v1/peers/{peerId}/pnm",
+    "tag": "discovery",
+    "tagDescription": "Peer and standards discovery served by the G.2/G.3 gateway flows (wasm; routing, format selection, limit clamping and ETag logic run inside the module; materials come from the policy-mediated p2p_read capability).",
+    "routes": [
+      {
+        "path": "",
+        "method": "GET",
+        "operationId": "getPeerPNM",
+        "summary": "The peer's newest signed PNM publications (verifiable provenance)",
+        "description": "The signed Publish Notification Messages this peer PUBLISHED, newest first (default limit=1 = the newest publication). PROVENANCE, VERIFIABLY: the default encoding is the stored $PNM FlatBuffer frames VERBATIM — signatures intact — so a cold client can verify each one end-to-end: PNM.SIGNATURE is a hex Ed25519 signature (SIGNATURE_TYPE=Ed25519) over the payload \"SDN-DPM-PNM\\0\" + FILE_ID + \"\\0\" + CID, verified against the publisher's Ed25519 publication key — the peer-id identity key and/or the key_type=signing/ed25519 entry in the publisher's EPM KEYS (fetch it from GET /api/v1/peers/{peerId}). ATTRIBUTION HONESTY: the node's store records only the GOSSIP-DELIVERING peer id for each PNM, which is not necessarily the publisher; this surface therefore attributes by SIGNATURE — an entry belongs to {peerId} iff its signature verifies under that peer's publication key (attribution=signature, signature_verified=true). Only when the node cannot resolve any key for the peer does it fall back to the stored gossip attribution, honestly marked attribution=gossip, signature_verified=false. format=json: bare array of {publisher_peer_id, gossip_peer_id, standard, schema, file_id, file_name, cid, publish_timestamp, signature_type, signature, signature_verified, attribution, publisher_key|null, publisher_key_source|null} — the same records, presentation only.",
+        "anonymous": true,
+        "params": [
+          {
+            "name": "peerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "libp2p peer ID of the PUBLISHING peer (e.g. 16Uiu2HAm…)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 1
+            },
+            "description": "Number of newest publications to return. Default 1 (the newest). Clamped in-wasm to [1, 100]."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "flatbuffer",
+                "json"
+              ],
+              "default": "flatbuffer"
+            },
+            "description": "Response encoding: flatbuffer = aligned size-prefixed $PNM FlatBuffer stream (default, signature-verifiable verbatim frames), json = bare JSON array of publication records."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed publication stream, newest first. Metadata rides in headers on BOTH encodings: X-SDN-Record-Count and a content-derived ETag shared across encodings.",
+            "recordStream": true,
+            "content": {
+              "application/vnd.sdn.flatbuffers.stream": {
+                "sds": {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM"
+                },
+                "description": "Aligned size-prefixed $PNM FlatBuffer frames, VERBATIM as stored (Ed25519 signatures intact), newest first."
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "description": "Bare top-level JSON array of publication records with provenance fields (format=json)."
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the stream ETag). Empty body, ETag header repeated."
+          },
+          "404": {
+            "description": "Peer unknown to this node, or no signed PNM publications attributable to it are stored here."
+          }
+        }
+      }
+    ]
+  }
+}

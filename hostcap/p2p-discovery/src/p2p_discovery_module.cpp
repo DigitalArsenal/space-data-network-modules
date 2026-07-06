@@ -1,12 +1,17 @@
 /*
- * hostcap/p2p-discovery (gateway loop G.2).
+ * hostcap/p2p-discovery (gateway loops G.2 + G.3).
  *
- * Capability node for the host p2p_read discovery hostcalls. Two methods,
+ * Capability node for the host p2p_read discovery hostcalls. Three methods,
  * one hostcall each:
  *
- *   peers     — "request" decision JSON -> p2p.peers_snapshot
- *               (optional {"peer_id"} narrows to one peer)
- *   standards — "request" decision JSON -> p2p.standards_snapshot
+ *   peers       — "request" decision JSON -> p2p.peers_snapshot
+ *                 (optional {"peer_id"} narrows to one peer)
+ *   standards   — "request" decision JSON -> p2p.standards_snapshot
+ *   pnm_history — "request" decision JSON -> p2p.pnm_history
+ *                 ({"peer_id","limit"}: the peer's stored signed $PNM
+ *                 publications, publisher-attributed by SIGNATURE on the
+ *                 host, newest first, limit already clamped by the route
+ *                 node)
  *
  * Both methods emit:
  *   "decision" — the incoming decision frame re-emitted VERBATIM (linear
@@ -156,7 +161,32 @@ std::vector<uint8_t> empty_envelope() {
     return env;
 }
 
-int run_snapshot(const char* op) {
+bool json_int_field(const std::string& json, const std::string& key, long* out) {
+    const std::string needle = "\"" + key + "\"";
+    const size_t k = json.find(needle);
+    if (k == std::string::npos) return false;
+    const size_t colon = json.find(':', k + needle.size());
+    if (colon == std::string::npos) return false;
+    size_t i = colon + 1;
+    while (i < json.size() && is_json_ws(json[i])) i++;
+    bool negative = false;
+    if (i < json.size() && json[i] == '-') { negative = true; i++; }
+    if (i >= json.size() || json[i] < '0' || json[i] > '9') return false;
+    long value = 0;
+    while (i < json.size() && json[i] >= '0' && json[i] <= '9') {
+        value = value * 10 + (json[i] - '0');
+        i++;
+    }
+    *out = negative ? -value : value;
+    return true;
+}
+
+// run_snapshot dispatches one hostcall for the routes the method OWNS.
+// A decision whose route is not_found — or one this method does not serve
+// (the discover router also emits routes for sibling flows; each flow's
+// shape node 404s them) — short-circuits: NO hostcall, empty envelope.
+int run_snapshot(const char* op, const char* route_a, const char* route_b,
+                 bool include_limit = false) {
     const int32_t input_index = plugin_find_input_index("request", 0);
     const plugin_input_frame_t* frame =
         input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
@@ -176,7 +206,8 @@ int run_snapshot(const char* op) {
 
     std::string route;
     json_string_field(decision, "route", &route);
-    if (route == "not_found") {
+    const bool owned = (route_a && route == route_a) || (route_b && route == route_b);
+    if (route == "not_found" || !owned) {
         const std::vector<uint8_t> env = empty_envelope();
         if (push_bytes("snapshot", env.data(), static_cast<uint32_t>(env.size())) != 0) {
             plugin_set_error("push-failed", "failed to push the empty snapshot envelope.");
@@ -187,8 +218,22 @@ int run_snapshot(const char* op) {
 
     std::string payload = "{";
     std::string peer_id;
+    bool first = true;
     if (json_string_field(decision, "peerId", &peer_id) && !peer_id.empty()) {
         payload += "\"peer_id\":\"" + json_escape(peer_id) + "\"";
+        first = false;
+    }
+    if (include_limit) {
+        // The route node clamps ?limit to [1, 100] (wasm owns the clamp);
+        // forward the clamped value, defaulting to 1 = newest publication.
+        long limit = 1;
+        json_int_field(decision, "limit", &limit);
+        if (limit < 1) limit = 1;
+        char limit_buf[32];
+        std::snprintf(limit_buf, sizeof(limit_buf), "%ld", limit);
+        if (!first) payload += ",";
+        payload += "\"limit\":";
+        payload += limit_buf;
     }
     payload += "}";
 
@@ -215,12 +260,20 @@ extern "C" {
 
 // peers: decision JSON -> p2p.peers_snapshot -> raw response envelope.
 int peers_snapshot(void) {
-    return run_snapshot("p2p.peers_snapshot");
+    return run_snapshot("p2p.peers_snapshot", "peers_list", "peer_get");
 }
 
 // standards: decision JSON -> p2p.standards_snapshot -> raw response envelope.
 int standards_snapshot(void) {
-    return run_snapshot("p2p.standards_snapshot");
+    return run_snapshot("p2p.standards_snapshot", "standards", nullptr);
+}
+
+// pnm_history: decision JSON ({"peerId","limit"}) -> p2p.pnm_history ->
+// raw response envelope (the peer's stored signed $PNM publications,
+// publisher-attributed by signature on the host, newest first).
+int pnm_history(void) {
+    return run_snapshot("p2p.pnm_history", "pnm_history", nullptr,
+                        /*include_limit=*/true);
 }
 
 }  // extern "C"

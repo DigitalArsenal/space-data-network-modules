@@ -417,15 +417,18 @@ int route(void) {
 }
 
 // discover: parse one $HTQ HttpRequest into exactly one discovery routing
-// decision (gateway loop G.2). Routes (suffix-matched, mount-agnostic; one
-// trailing "/" tolerated):
-//   .../peers               -> peers_list
-//   .../peers/<segment>     -> peer_get   (+"peerId": percent-decoded segment)
-//   .../standards           -> standards
-//   anything else           -> not_found
+// decision (gateway loops G.2 + G.3). Routes (suffix-matched,
+// mount-agnostic; one trailing "/" tolerated):
+//   .../peers                 -> peers_list
+//   .../peers/<segment>       -> peer_get     (+"peerId")
+//   .../peers/<segment>/pnm   -> pnm_history  (+"peerId", +"limit": the
+//                                ?limit=N query param clamped IN-WASM to
+//                                [1, 100], default 1 = newest publication)
+//   .../standards             -> standards
+//   anything else             -> not_found
 // Only GET/HEAD are discovery reads; other methods degrade to not_found.
 // Decision JSON contract: {"route","format"} + optional "ifNoneMatch",
-// "peerId", "error" — same envelope family as route().
+// "peerId", "limit", "error" — same envelope family as route().
 int discover(void) {
     const int32_t input_index = plugin_find_input_index("request", 0);
     const plugin_input_frame_t* frame =
@@ -518,8 +521,35 @@ int discover(void) {
             decision += "}";
             return push_decision(decision);
         }
-        if (remainder.find('/') != std::string::npos) {
-            // Deeper per-peer surfaces (pnm, {standard}/latest) are G.3/G.4.
+        const size_t slash = remainder.find('/');
+        if (slash != std::string::npos) {
+            // Per-peer sub-surfaces: <peerId>/pnm (G.3). {standard}/latest
+            // is G.4; anything else stays not_found.
+            const std::string peer_segment = remainder.substr(0, slash);
+            const std::string sub = remainder.substr(slash + 1);
+            if (!peer_segment.empty() && sub == "pnm") {
+                // limit: ?limit=N clamped in-wasm to [1, 100]; default 1 =
+                // the newest publication only (api-block contract).
+                long limit = 1;
+                if (const std::string* limit_param = find_query_param(params, "limit")) {
+                    char* end = nullptr;
+                    const long parsed = strtol(limit_param->c_str(), &end, 10);
+                    if (end != limit_param->c_str() && end && *end == '\0') {
+                        limit = parsed;
+                    }
+                }
+                if (limit < 1) limit = 1;
+                if (limit > 100) limit = 100;
+                char limit_buf[32];
+                std::snprintf(limit_buf, sizeof(limit_buf), "%ld", limit);
+                decision += "\"route\":\"pnm_history\",";
+                append_common_tail(&decision);
+                decision += ",\"peerId\":\"" + json_escape(percent_decode(peer_segment)) + "\"";
+                decision += ",\"limit\":";
+                decision += limit_buf;
+                decision += "}";
+                return push_decision(decision);
+            }
             return not_found("no route for " + path);
         }
         decision += "\"route\":\"peer_get\",";
