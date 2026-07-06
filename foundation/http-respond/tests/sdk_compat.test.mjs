@@ -156,9 +156,15 @@ test("respond rejects a body-reference descriptor without token/size", async (t)
   assert.equal(response.errorCode, "invalid-body-ref");
 });
 
-test("respond 200 json: application/json, no record count, verbatim body", async (t) => {
+test("respond 200 json bare array: application/json, record count from top-level elements, verbatim body", async (t) => {
   const decision = JSON.stringify({ route: "data_query", format: "json", sql: "SELECT 1" });
-  const body = JSON.stringify({ records: [], count: 0 });
+  // Bare top-level array (the json data surface): count of top-level
+  // elements travels in x-sdn-record-count, exactly like the fb stream path.
+  const body = JSON.stringify([
+    { norad_cat_id: 5, object_name: "VANGUARD 1", tags: ["a,b", "c]d"] },
+    { norad_cat_id: 11, object_name: "VANGUARD [2]" },
+    42,
+  ]);
   const response = await invokeRespond(t, [
     bytesInput("decision", decision),
     bytesInput("body", body),
@@ -166,8 +172,32 @@ test("respond 200 json: application/json, no record count, verbatim body", async
   const http = decodeResponseOutput(response);
   assert.equal(http.status, 200);
   assert.equal(findHttpHeader(http.headers, "content-type"), "application/json");
-  assert.equal(findHttpHeader(http.headers, "x-sdn-record-count"), null);
+  assert.equal(findHttpHeader(http.headers, "x-sdn-record-count"), "3");
   assert.equal(findHttpHeader(http.headers, "etag"), null);
+  assert.equal(new TextDecoder().decode(http.body), body);
+});
+
+test("respond 200 json empty array: record count 0", async (t) => {
+  const decision = JSON.stringify({ route: "data_query", format: "json", sql: "SELECT 1" });
+  const response = await invokeRespond(t, [
+    bytesInput("decision", decision),
+    bytesInput("body", "[]"),
+  ]);
+  const http = decodeResponseOutput(response);
+  assert.equal(http.status, 200);
+  assert.equal(findHttpHeader(http.headers, "x-sdn-record-count"), "0");
+});
+
+test("respond 200 json non-array body: no record count, verbatim body", async (t) => {
+  const decision = JSON.stringify({ route: "data_query", format: "json", sql: "SELECT 1" });
+  const body = JSON.stringify({ error: "nope" });
+  const response = await invokeRespond(t, [
+    bytesInput("decision", decision),
+    bytesInput("body", body),
+  ]);
+  const http = decodeResponseOutput(response);
+  assert.equal(http.status, 200);
+  assert.equal(findHttpHeader(http.headers, "x-sdn-record-count"), null);
   assert.equal(new TextDecoder().decode(http.body), body);
 });
 

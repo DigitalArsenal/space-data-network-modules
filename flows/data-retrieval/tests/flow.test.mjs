@@ -405,13 +405,17 @@ test("GET /omm/bulk?format=json field-extracts the in-wasm materialized stream",
 
   assert.equal(http.status, 200);
   assert.equal(findHttpHeader(http.headers, "content-type"), "application/json");
+  // BARE top-level array (same record stream as the fb format, different
+  // encoding); the count travels in x-sdn-record-count like the fb path.
+  assert.equal(findHttpHeader(http.headers, "x-sdn-record-count"), "2");
   const body = JSON.parse(decoder.decode(http.body));
-  assert.equal(body.count, 2);
+  assert.ok(Array.isArray(body), "format=json must return a bare top-level array");
+  assert.equal(body.length, 2);
   assert.deepEqual(
-    body.records.map((record) => [record.norad_cat_id, record.object_name, record.epoch]).sort(),
+    body.map((record) => [record.norad_cat_id, record.object_name, record.epoch]).sort(),
     RECORDS.map((record) => [record.norad_cat_id, record.object_name, record.epoch]).sort(),
   );
-  const iss = body.records.find((record) => record.norad_cat_id === 25544);
+  const iss = body.find((record) => record.norad_cat_id === 25544);
   assert.equal(iss.mean_motion, RECORDS[0].mean_motion, "field extraction is exact");
   assert.deepEqual(flow.stub.calls, ["plugin.getConfig"], "json branch is hostcall-free too");
 });

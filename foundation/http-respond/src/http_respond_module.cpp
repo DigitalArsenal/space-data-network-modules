@@ -15,10 +15,13 @@
  *   4. Otherwise 200: body frame verbatim (empty when absent),
  *      content-type from decision.format (flatbuffer ->
  *      application/vnd.sdn.flatbuffers.stream, json -> application/json),
- *      x-sdn-record-count when derivable (count of size-prefixed frames
- *      when format=flatbuffer and the framing parses cleanly; zero-length
- *      prefixes are skipped as padding), etag header when the etag input
- *      is present.
+ *      x-sdn-record-count when derivable (format=flatbuffer: count of
+ *      size-prefixed frames when the framing parses cleanly, zero-length
+ *      prefixes skipped as padding; format=json: count of top-level
+ *      elements when the body is a bare JSON array — the json surface is
+ *      the same record stream in a different encoding, so the count header
+ *      carries the metadata the body envelope used to), etag header when
+ *      the etag input is present.
  *
  * Response headers are lower-cased here and sorted by the $HTR encoder
  * (HttpHeader.NAME is a FlatBuffers key field). The SDK HTTP ABI C++
@@ -123,6 +126,77 @@ bool count_stream_frames(const uint8_t* data, size_t length, uint32_t* count_out
     }
     *count_out = count;
     return true;
+}
+
+// Count the top-level elements of a bare JSON array (string- and
+// escape-aware bracket-depth scan). Returns false when the body is not a
+// well-formed top-level array (the record-count header is then omitted,
+// never wrong). An empty array counts 0.
+bool count_json_array_elements(const uint8_t* data, size_t length, uint32_t* count_out) {
+    size_t i = 0;
+    while (i < length && (data[i] == ' ' || data[i] == '\t' || data[i] == '\n' || data[i] == '\r')) i++;
+    if (i >= length || data[i] != '[') return false;
+    i++;
+    int depth = 1;  // inside the top-level array
+    bool in_string = false;
+    bool escaped = false;
+    bool saw_element = false;
+    uint32_t count = 0;
+    for (; i < length; i++) {
+        const char c = static_cast<char>(data[i]);
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        switch (c) {
+            case '"':
+                in_string = true;
+                if (depth == 1) saw_element = true;
+                break;
+            case '[':
+            case '{':
+                if (depth == 1) saw_element = true;
+                depth++;
+                break;
+            case ']':
+            case '}':
+                depth--;
+                if (depth == 0) {
+                    // End of the top-level array: everything after must be
+                    // whitespace.
+                    if (saw_element) count++;
+                    for (i++; i < length; i++) {
+                        const char t = static_cast<char>(data[i]);
+                        if (t != ' ' && t != '\t' && t != '\n' && t != '\r') return false;
+                    }
+                    *count_out = count;
+                    return true;
+                }
+                break;
+            case ',':
+                if (depth == 1) {
+                    if (!saw_element) return false;  // leading/double comma
+                    count++;
+                    saw_element = false;
+                }
+                break;
+            case ' ':
+            case '\t':
+            case '\n':
+            case '\r':
+                break;
+            default:
+                if (depth == 1) saw_element = true;  // number / literal element
+                break;
+        }
+    }
+    return false;  // unterminated array
 }
 
 struct HeaderEntry {
@@ -295,7 +369,18 @@ int respond(void) {
 
     std::vector<HeaderEntry> headers;
     headers.push_back({"content-type", format == "json" ? kContentTypeJson : kContentTypeStream});
-    if (format != "json") {
+    if (format == "json") {
+        // Bare top-level array body: the count header carries the record
+        // count the {"records":…,"count":N} envelope used to (json body
+        // references never occur — the json branch materializes in flow
+        // memory).
+        uint32_t record_count = 0;
+        if (!body_is_ref && count_json_array_elements(body, body_length, &record_count)) {
+            char buf[16];
+            std::snprintf(buf, sizeof(buf), "%u", record_count);
+            headers.push_back({"x-sdn-record-count", buf});
+        }
+    } else {
         uint32_t record_count = 0;
         if (body_is_ref) {
             // The host counted the referenced stream's size-prefixed frames
