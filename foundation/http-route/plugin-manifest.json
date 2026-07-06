@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.foundation.http-route",
   "name": "SDN HTTP Route",
-  "version": "0.1.0",
-  "description": "Single-purpose flow node: parses one $HTQ HttpRequest envelope into one routing-decision JSON frame. All HTTP semantics live inside the module (TRUE isomorphism): URL path suffix matching ('/omm/bulk' -> omm_bulk, '/query' -> data_query, else not_found), query-string parsing (epoch as RFC3339 'YYYY-MM-DDTHH:MM:SSZ' or unix-seconds number; mode|profile; limit; source; format defaulting to 'flatbuffer'), case-insensitive If-None-Match header extraction, and POST body passthrough for data_query SQL. Decision frame contract (UTF-8 JSON bytes, aligned-binary wire format): {\"route\":\"omm_bulk\"|\"data_query\"|\"not_found\",\"format\":\"flatbuffer\"|\"json\"} always present; \"ifNoneMatch\":\"<verbatim header>\" only when the request carried If-None-Match; \"query\":{\"schema\":\"OMM.fbs\",\"source\"?,\"profile\"?,\"epoch\"?:<unix-seconds number>,\"limit\"?:<positive integer>} only when route=omm_bulk (absent keys defer to the retrieval module's config/compiled defaults); \"sql\":\"...\",\"params\":[...] only when route=data_query (body is either a JSON object {\"sql\",\"params\"} passed through or raw SQL text; a data_query request without a SQL body degrades to route=not_found); \"error\":\"...\" only when route=not_found. Exactly one decision frame is emitted per request.",
+  "version": "0.2.0",
+  "description": "Single-purpose flow node: parses one $HTQ HttpRequest envelope into one routing-decision JSON frame. All HTTP semantics live inside the module (TRUE isomorphism). Method 'route' (data retrieval): URL path suffix matching ('/omm/bulk' -> omm_bulk, '/query' -> data_query, else not_found), query-string parsing (epoch as RFC3339 'YYYY-MM-DDTHH:MM:SSZ' or unix-seconds number; mode|profile; limit; source; format defaulting to 'flatbuffer'), case-insensitive If-None-Match header extraction, and POST body passthrough for data_query SQL. Decision frame contract (UTF-8 JSON bytes, aligned-binary wire format): {\"route\":\"omm_bulk\"|\"data_query\"|\"not_found\",\"format\":\"flatbuffer\"|\"json\"} always present; \"ifNoneMatch\":\"<verbatim header>\" only when the request carried If-None-Match; \"query\":{\"schema\":\"OMM.fbs\",\"source\"?,\"profile\"?,\"epoch\"?:<unix-seconds number>,\"limit\"?:<positive integer>} only when route=omm_bulk (absent keys defer to the retrieval module's config/compiled defaults); \"sql\":\"...\",\"params\":[...] only when route=data_query (body is either a JSON object {\"sql\",\"params\"} passed through or raw SQL text; a data_query request without a SQL body degrades to route=not_found); \"error\":\"...\" only when route=not_found. Exactly one decision frame is emitted per request. Method 'discover' (gateway discovery, loop G.2): suffix routes '/peers' -> peers_list, '/peers/<segment>' -> peer_get (+\"peerId\": percent-decoded segment), '/standards' -> standards, else not_found; one trailing slash tolerated; non-GET/HEAD methods degrade to not_found; same format/ifNoneMatch handling.",
   "pluginFamily": "foundation",
   "capabilities": [],
   "externalInterfaces": [],
@@ -57,6 +57,55 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Parses the $HTQ request (path suffix routing, query-string parameters, If-None-Match, data_query SQL body passthrough) and emits exactly one routing-decision JSON frame."
+    },
+    {
+      "methodId": "discover",
+      "displayName": "Route Discovery HTTP Request",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One HTTP request envelope as delivered verbatim by the host pipe."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Discovery routing-decision frame: UTF-8 JSON bytes carried with the aligned-binary wire format (alignment 1). Contract: {\"route\":\"peers_list\"|\"peer_get\"|\"standards\"|\"not_found\",\"format\":\"flatbuffer\"|\"json\"} + optional \"ifNoneMatch\", \"peerId\" (peer_get), \"error\" (not_found)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one discovery routing-decision JSON frame per request."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Parses the $HTQ request for the network-discovery surface: /peers -> peers_list, /peers/{peerId} -> peer_get, /standards -> standards, else (or non-GET/HEAD) not_found."
     }
   ],
   "schemasUsed": [

@@ -190,3 +190,67 @@ test("route unknown path emits a not_found decision (single frame)", async (t) =
   assert.match(decision.error, /GET \/api\/v1\/nope/);
   assert.equal(decision.ifNoneMatch, "abc", "If-None-Match lookup must be case-insensitive");
 });
+
+// ---------------------------------------------------------------------------
+// discover: the gateway discovery routing method (loop G.2).
+// ---------------------------------------------------------------------------
+
+async function invokeDiscover(t, request) {
+  const harness = await createHarness(t);
+  return harness.invoke({
+    methodId: "discover",
+    inputs: [
+      {
+        portId: "request",
+        typeRef: HTTP_REQUEST_TYPE_REF,
+        payload: encodeHttpRequest(request),
+      },
+    ],
+  });
+}
+
+test("discover routes /peers (with and without trailing slash) to peers_list", async (t) => {
+  for (const path of ["/api/v1/peers", "/api/v1/peers/"]) {
+    const decision = decodeDecision(await invokeDiscover(t, { method: "GET", path, query: "" }));
+    assert.equal(decision.route, "peers_list", path);
+    assert.equal(decision.format, "flatbuffer");
+    assert.equal(decision.peerId, undefined);
+  }
+});
+
+test("discover routes /peers/{peerId} to peer_get with the percent-decoded segment", async (t) => {
+  const decision = decodeDecision(
+    await invokeDiscover(t, {
+      method: "GET",
+      path: "/api/v1/peers/16Uiu2HAm9oK2jAeVC2RMESFcYfq7BKGp2K2CCDxzoKhB5s9vpbj3/",
+      query: "format=json",
+      headers: { "if-none-match": 'W/"fnv1a64-0011223344556677"' },
+    }),
+  );
+  assert.equal(decision.route, "peer_get");
+  assert.equal(decision.peerId, "16Uiu2HAm9oK2jAeVC2RMESFcYfq7BKGp2K2CCDxzoKhB5s9vpbj3");
+  assert.equal(decision.format, "json");
+  assert.equal(decision.ifNoneMatch, 'W/"fnv1a64-0011223344556677"');
+});
+
+test("discover routes /standards to standards", async (t) => {
+  const decision = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/standards", query: "format=json" }),
+  );
+  assert.equal(decision.route, "standards");
+  assert.equal(decision.format, "json");
+});
+
+test("discover degrades deeper per-peer paths and non-GET methods to not_found", async (t) => {
+  const deep = decodeDecision(
+    await invokeDiscover(t, { method: "GET", path: "/api/v1/peers/16Uiu2HAmX/pnm", query: "" }),
+  );
+  assert.equal(deep.route, "not_found");
+  assert.ok(deep.error);
+
+  const post = decodeDecision(
+    await invokeDiscover(t, { method: "POST", path: "/api/v1/peers", query: "" }),
+  );
+  assert.equal(post.route, "not_found");
+  assert.match(post.error, /GET/);
+});

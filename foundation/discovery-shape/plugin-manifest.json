@@ -1,0 +1,266 @@
+{
+  "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+  "name": "SDN Discovery Response Shaper",
+  "version": "0.1.0",
+  "description": "Single-purpose flow node pair shaping the network-discovery responses (gateway loop G.2). Pure compute \u2014 no capabilities. Both methods take the discovery routing-decision JSON plus the raw p2p.*_snapshot hostcall response envelope and emit decision/body/etag for foundation/http-respond. Method 'peers' (peers_list/peer_get): fb body = one size-prefixed $EPM frame per selected peer (stored profile spliced verbatim via epm_index, else a synthesized minimal unsigned EPM: DN=peer id, MULTIFORMAT_ADDRESS=[/p2p/<peerId>, ...addrs], ENTITY_TYPE=Node); json body = bare array of {peer_id,self,connected,agent_version,addrs,standards,epm|null}; an unknown peer_get id rewrites the decision to route=not_found (404). Method 'standards': fb body = newest signed $PNM per (peer, standard) spliced verbatim in entry order; json body = bare array of {peer_id,standard,schema,file_id,file_name,cid,publish_timestamp}. The etag is the weak word-folded FNV-1a-64 over the fb-encoded record stream for BOTH encodings (identical logical stream => identical tag), byte-compatible with foundation/decision-gate.",
+  "pluginFamily": "foundation",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "shape_peers",
+      "displayName": "Shape Peers Response",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Discovery routing-decision JSON frame (foundation/http-route discover contract)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One routing-decision JSON frame per request."
+        },
+        {
+          "portId": "snapshot",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcall-envelope",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Raw p2p.peers_snapshot hostcall response envelope (hostcap/p2p-discovery 'snapshot' output)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One snapshot envelope per request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision forwarded verbatim, or rewritten to route=not_found for an unknown peer_get id."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Decision for http-respond."
+        },
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-peers-body",
+              "allowedTypes": [
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM"
+                },
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 1
+                },
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Response body: size-prefixed $EPM stream (default) or bare JSON array bytes (format=json). Absent on not_found."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Response body for http-respond (absent on not_found)."
+        },
+        {
+          "portId": "etag",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-etag-string",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Weak FNV-1a-64 entity tag (W/\"fnv1a64-<16 hex>\") over the fb-encoded record stream; identical for both encodings."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Entity tag for http-respond (absent on not_found)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Joins the routing decision with the peers snapshot: selects all peers (peers_list) or one (peer_get, 404 on miss), splices/synthesizes $EPM frames, encodes the json presentation, and computes the shared etag."
+    },
+    {
+      "methodId": "shape_standards",
+      "displayName": "Shape Standards Response",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Discovery routing-decision JSON frame (foundation/http-route discover contract)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One routing-decision JSON frame per request."
+        },
+        {
+          "portId": "snapshot",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcall-envelope",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Raw p2p.standards_snapshot hostcall response envelope (hostcap/p2p-discovery 'snapshot' output)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One snapshot envelope per request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision forwarded verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Decision for http-respond."
+        },
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-standards-body",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM"
+                },
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 1
+                },
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Response body: size-prefixed $PNM stream (default; newest per (peer, standard)) or bare JSON array bytes (format=json). Absent on not_found."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Response body for http-respond (absent on not_found)."
+        },
+        {
+          "portId": "etag",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-etag-string",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Weak FNV-1a-64 entity tag (W/\"fnv1a64-<16 hex>\") over the fb-encoded record stream; identical for both encodings."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Entity tag for http-respond (absent on not_found)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Joins the routing decision with the standards snapshot: splices the newest $PNM per (peer, standard) verbatim, encodes the json presentation, and computes the shared etag."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "EPM.fbs",
+      "fileIdentifier": "$EPM",
+      "rootTypeName": "EPM"
+    },
+    {
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "foundation-discovery-shape-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

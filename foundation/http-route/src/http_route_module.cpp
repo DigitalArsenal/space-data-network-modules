@@ -416,4 +416,119 @@ int route(void) {
     return push_decision(decision);
 }
 
+// discover: parse one $HTQ HttpRequest into exactly one discovery routing
+// decision (gateway loop G.2). Routes (suffix-matched, mount-agnostic; one
+// trailing "/" tolerated):
+//   .../peers               -> peers_list
+//   .../peers/<segment>     -> peer_get   (+"peerId": percent-decoded segment)
+//   .../standards           -> standards
+//   anything else           -> not_found
+// Only GET/HEAD are discovery reads; other methods degrade to not_found.
+// Decision JSON contract: {"route","format"} + optional "ifNoneMatch",
+// "peerId", "error" — same envelope family as route().
+int discover(void) {
+    const int32_t input_index = plugin_find_input_index("request", 0);
+    const plugin_input_frame_t* frame =
+        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
+    if (!frame || !frame->payload || frame->payload_length < 8) {
+        plugin_set_error("missing-request-frame",
+                         "discover requires a $HTQ HttpRequest input frame on port \"request\".");
+        return 400;
+    }
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
+        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
+        plugin_set_error("invalid-request-frame",
+                         "discover input frame is not a valid $HTQ HttpRequest buffer.");
+        return 400;
+    }
+    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
+
+    std::string method;
+    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
+    std::string path;
+    if (request->PATH()) path.assign(request->PATH()->c_str(), request->PATH()->size());
+    std::string raw_query;
+    if (request->QUERY()) raw_query.assign(request->QUERY()->c_str(), request->QUERY()->size());
+
+    std::string if_none_match;
+    bool has_if_none_match = false;
+    if (const auto* headers = request->HEADERS()) {
+        for (::flatbuffers::uoffset_t i = 0; i < headers->size(); i++) {
+            const auto* header = headers->Get(i);
+            if (!header || !header->NAME()) continue;
+            if (iequals(header->NAME()->c_str(), header->NAME()->size(), "if-none-match")) {
+                if (header->VALUE()) {
+                    if_none_match.assign(header->VALUE()->c_str(), header->VALUE()->size());
+                }
+                has_if_none_match = true;
+                break;
+            }
+        }
+    }
+
+    const std::vector<QueryParam> params = parse_query_string(raw_query);
+    std::string format = "flatbuffer";
+    if (const std::string* format_param = find_query_param(params, "format")) {
+        if (*format_param == "json") format = "json";
+    }
+
+    std::string decision = "{";
+    const auto append_common_tail = [&](std::string* out) {
+        *out += "\"format\":\"" + format + "\"";
+        if (has_if_none_match) {
+            *out += ",\"ifNoneMatch\":\"" + json_escape(if_none_match) + "\"";
+        }
+    };
+    const auto not_found = [&](const std::string& message) {
+        std::string out = "{\"route\":\"not_found\",";
+        append_common_tail(&out);
+        out += ",\"error\":\"" + json_escape(message) + "\"}";
+        return push_decision(out);
+    };
+
+    if (method != "GET" && method != "HEAD") {
+        return not_found("no " + method + " route for " + path + " (discovery routes are GET)");
+    }
+
+    // Tolerate exactly one trailing slash on the matchable path.
+    std::string trimmed = path;
+    if (trimmed.size() > 1 && trimmed.back() == '/') trimmed.pop_back();
+
+    if (ends_with(trimmed, "/standards")) {
+        decision += "\"route\":\"standards\",";
+        append_common_tail(&decision);
+        decision += "}";
+        return push_decision(decision);
+    }
+
+    if (ends_with(trimmed, "/peers")) {
+        decision += "\"route\":\"peers_list\",";
+        append_common_tail(&decision);
+        decision += "}";
+        return push_decision(decision);
+    }
+
+    const size_t peers_at = trimmed.rfind("/peers/");
+    if (peers_at != std::string::npos) {
+        const std::string remainder = trimmed.substr(peers_at + std::strlen("/peers/"));
+        if (remainder.empty()) {
+            decision += "\"route\":\"peers_list\",";
+            append_common_tail(&decision);
+            decision += "}";
+            return push_decision(decision);
+        }
+        if (remainder.find('/') != std::string::npos) {
+            // Deeper per-peer surfaces (pnm, {standard}/latest) are G.3/G.4.
+            return not_found("no route for " + path);
+        }
+        decision += "\"route\":\"peer_get\",";
+        append_common_tail(&decision);
+        decision += ",\"peerId\":\"" + json_escape(percent_decode(remainder)) + "\"}";
+        return push_decision(decision);
+    }
+
+    return not_found("no route for " + path);
+}
+
 }  // extern "C"

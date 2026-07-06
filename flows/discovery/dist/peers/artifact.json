@@ -1,0 +1,94 @@
+{
+  "programId": "com.digitalarsenal.flows.peers-discovery",
+  "name": "SDN Peers Discovery Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "nodes": 5,
+  "edges": 7,
+  "triggers": 1,
+  "capabilities": [
+    "p2p_read"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "discover",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "disc",
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "methodId": "peers_snapshot",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "shape",
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "methodId": "shape_peers",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "version": "0.2.0",
+      "sha256": "2b5c8e7a5f1021f14338a28509b7c4a16a882db0438807a9cb7b831261eebb5e",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "route": "sdm_guest_636f6d2e6469676974616c61_route",
+        "discover": "sdm_guest_636f6d2e6469676974616c61_discover"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "version": "0.1.0",
+      "sha256": "24436c41e29f9d0d97d7a98baf455887b81e4ec800542102648b07e99f14b761",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "peers_snapshot": "sdm_guest_636f6d2e6469676974616c61_peers_snapshot",
+        "standards_snapshot": "sdm_guest_636f6d2e6469676974616c61_standards_snapshot"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "version": "0.1.0",
+      "sha256": "18a0baa2acbde6e6c3221045ba9951206338c73db849579c30d8432ee77a7e38",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
+        "shape_standards": "sdm_guest_636f6d2e6469676974616c61_shape_standards"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "version": "0.1.0",
+      "sha256": "3d722c5a58b303aa466e1a3d69f212958b424240da7db9aa9ab3a949a81760ad",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
+      }
+    }
+  ]
+}
