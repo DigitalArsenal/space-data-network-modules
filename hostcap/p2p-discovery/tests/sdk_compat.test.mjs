@@ -172,3 +172,47 @@ test("a missing request frame is a node error, zero hostcalls", async (t) => {
   assert.notEqual(response.statusCode, 0);
   assert.equal(stub.calls.length, 0);
 });
+
+test("latest_dataset forwards peerId/standard, asks for ref delivery except on json (loop G.4)", async (t) => {
+  const stub = createStub({
+    result: {
+      known: true,
+      pinned: true,
+      pnm: { batch_id: "batch-new", cid: "bafy-manifest-new" },
+      schema: "OMM.fbs",
+      self: false,
+      standard: "OMM",
+    },
+  });
+  const harness = await createHarness(t, stub);
+  const decision = { route: "latest_dataset", format: "flatbuffer", peerId: "16Uiu2PROVIDER", standard: "omm" };
+  const response = await harness.invoke({
+    methodId: "latest_dataset",
+    inputs: [jsonInput("request", decision)],
+  });
+  const byPort = outputsByPort(response);
+  assert.equal(stub.calls.length, 1);
+  assert.equal(stub.calls[0].operation, "p2p.latest_dataset");
+  assert.equal(stub.calls[0].params.peer_id, "16Uiu2PROVIDER");
+  assert.equal(stub.calls[0].params.standard, "omm");
+  assert.equal(stub.calls[0].params.deliver, "ref");
+  assert.deepEqual(JSON.parse(decoder.decode(byPort.get("decision").payload)), decision);
+
+  // json format: bytes must arrive inline, so deliver is omitted.
+  const jsonResponse = await harness.invoke({
+    methodId: "latest_dataset",
+    inputs: [jsonInput("request", { ...decision, format: "json" })],
+  });
+  outputsByPort(jsonResponse);
+  assert.equal(stub.calls.length, 2);
+  assert.equal(stub.calls[1].params.deliver, undefined);
+
+  // Sibling routes short-circuit without a hostcall.
+  const sibling = await harness.invoke({
+    methodId: "latest_dataset",
+    inputs: [jsonInput("request", { route: "pnm_history", format: "json", peerId: "x" })],
+  });
+  const envelope = decodeHostcallEnvelope(outputsByPort(sibling).get("snapshot").payload);
+  assert.deepEqual(envelope.meta, { ok: true, result: {} });
+  assert.equal(stub.calls.length, 2);
+});

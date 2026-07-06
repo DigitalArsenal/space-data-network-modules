@@ -417,18 +417,21 @@ int route(void) {
 }
 
 // discover: parse one $HTQ HttpRequest into exactly one discovery routing
-// decision (gateway loops G.2 + G.3). Routes (suffix-matched,
+// decision (gateway loops G.2 + G.3 + G.4). Routes (suffix-matched,
 // mount-agnostic; one trailing "/" tolerated):
-//   .../peers                 -> peers_list
-//   .../peers/<segment>       -> peer_get     (+"peerId")
-//   .../peers/<segment>/pnm   -> pnm_history  (+"peerId", +"limit": the
-//                                ?limit=N query param clamped IN-WASM to
-//                                [1, 100], default 1 = newest publication)
-//   .../standards             -> standards
-//   anything else             -> not_found
+//   .../peers                          -> peers_list
+//   .../peers/<segment>                -> peer_get     (+"peerId")
+//   .../peers/<segment>/pnm            -> pnm_history  (+"peerId", +"limit":
+//                                         the ?limit=N query param clamped
+//                                         IN-WASM to [1, 100], default 1)
+//   .../peers/<segment>/<std>/latest   -> latest_dataset (+"peerId",
+//                                         +"standard" — the provider-scoped
+//                                         newest-dataset surface, G.4)
+//   .../standards                      -> standards
+//   anything else                      -> not_found
 // Only GET/HEAD are discovery reads; other methods degrade to not_found.
 // Decision JSON contract: {"route","format"} + optional "ifNoneMatch",
-// "peerId", "limit", "error" — same envelope family as route().
+// "peerId", "standard", "limit", "error" — same envelope family as route().
 int discover(void) {
     const int32_t input_index = plugin_find_input_index("request", 0);
     const plugin_input_frame_t* frame =
@@ -523,10 +526,24 @@ int discover(void) {
         }
         const size_t slash = remainder.find('/');
         if (slash != std::string::npos) {
-            // Per-peer sub-surfaces: <peerId>/pnm (G.3). {standard}/latest
-            // is G.4; anything else stays not_found.
+            // Per-peer sub-surfaces: <peerId>/pnm (G.3) and
+            // <peerId>/<standard>/latest (G.4); anything else stays
+            // not_found.
             const std::string peer_segment = remainder.substr(0, slash);
             const std::string sub = remainder.substr(slash + 1);
+            const size_t sub_slash = sub.find('/');
+            if (!peer_segment.empty() && sub_slash != std::string::npos) {
+                const std::string standard = sub.substr(0, sub_slash);
+                const std::string tail = sub.substr(sub_slash + 1);
+                if (!standard.empty() && tail == "latest") {
+                    decision += "\"route\":\"latest_dataset\",";
+                    append_common_tail(&decision);
+                    decision += ",\"peerId\":\"" + json_escape(percent_decode(peer_segment)) + "\"";
+                    decision += ",\"standard\":\"" + json_escape(percent_decode(standard)) + "\"}";
+                    return push_decision(decision);
+                }
+                return not_found("no route for " + path);
+            }
             if (!peer_segment.empty() && sub == "pnm") {
                 // limit: ?limit=N clamped in-wasm to [1, 100]; default 1 =
                 // the newest publication only (api-block contract).

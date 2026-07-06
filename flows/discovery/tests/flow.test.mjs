@@ -19,6 +19,7 @@ import { decodeHttpResponse, encodeHttpRequest, fnv1a64Hex } from "space-data-mo
 
 import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
 import { EPM, EntityType } from "../../../../spacedatastandards.org/lib/js/EPM/main.js";
+import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/main.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -26,6 +27,7 @@ const decoder = new TextDecoder();
 const PEERS_WASM = new URL("../dist/peers/runtime.wasm", import.meta.url);
 const STANDARDS_WASM = new URL("../dist/standards/runtime.wasm", import.meta.url);
 const PNM_WASM = new URL("../dist/pnm/runtime.wasm", import.meta.url);
+const LATEST_WASM = new URL("../dist/latest/runtime.wasm", import.meta.url);
 
 const CELESTRAK_PEER = "16Uiu2HAm9oK2jAeVC2RMESFcYfq7BKGp2K2CCDxzoKhB5s9vpbj3";
 const SELF_PEER = "16Uiu2HAm1LbvwjEHW2GDP2ZQZvwHLZrz2jbYoRLQmJEQ3wZ5Fm45";
@@ -220,9 +222,23 @@ function pnmHistoryResult(limit = 1) {
   });
 }
 
+// Go json.Marshal emits map keys ALPHABETICALLY at every level — fixtures
+// must mirror that byte layout (the G.3 key-vs-value collision lesson).
+function deepSortKeys(value) {
+  if (Array.isArray(value)) return value.map(deepSortKeys);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([k, v]) => [k, deepSortKeys(v)]),
+    );
+  }
+  return value;
+}
+
 // Hostcall stub speaking the Go-host dialect: response envelope with the
 // record stream as binary segment 0 ({"$bin":0} in the result).
-function createDiscoveryStub({ peers = peersResult(), standards = standardsResult(), pnmHistory, stream } = {}) {
+function createDiscoveryStub({ peers = peersResult(), standards = standardsResult(), pnmHistory, stream, latest } = {}) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
@@ -256,6 +272,11 @@ function createDiscoveryStub({ peers = peersResult(), standards = standardsResul
             { ok: true, result },
             [stream ?? sizePrefixedStream([PNM_FRAME_NEW, PNM_FRAME_OLD].slice(0, result.entries.length))],
           );
+          return 0;
+        }
+        if (operation === "p2p.latest_dataset" && latest) {
+          const { result, segments = [] } = typeof latest === "function" ? latest(meta) : latest;
+          response = encodeHostcallEnvelope({ ok: true, result: deepSortKeys(result) }, segments);
           return 0;
         }
         response = encodeHostcallEnvelope({ ok: false, error: { message: `unexpected op ${operation}` } });
@@ -594,4 +615,208 @@ test("both bundles carry the api block for the OpenAPI generator", () => {
   const limitParam = pnmFlow.api.routes[0].params.find((param) => param.name === "limit");
   assert.equal(limitParam.schema.default, 1);
   assert.equal(limitParam.schema.maximum, 100);
+});
+
+// ---------------------------------------------------------------------------
+// latest-dataset flow (gateway loop G.4).
+// ---------------------------------------------------------------------------
+
+function encodeLatestOmm(record) {
+  const builder = new flatbuffers.Builder(512);
+  const objectName = builder.createString(record.object_name);
+  OMM.startOMM(builder);
+  OMM.addObjectName(builder, objectName);
+  OMM.addMeanMotion(builder, record.mean_motion);
+  OMM.addNoradCatId(builder, record.norad_cat_id);
+  OMM.addUserDefinedEpochTimestamp(builder, record.epoch_ts);
+  OMM.finishOMMBuffer(builder, OMM.endOMM(builder));
+  return builder.asUint8Array();
+}
+
+const LATEST_OMM_STREAM = sizePrefixedStream([
+  encodeLatestOmm({ object_name: "ISS (ZARYA)", norad_cat_id: 25544, mean_motion: 15.49, epoch_ts: 1783300000 }),
+  encodeLatestOmm({ object_name: "NOAA 19", norad_cat_id: 33591, mean_motion: 14.12, epoch_ts: 1783300100 }),
+]);
+
+function latestPNMPointer(batch) {
+  return {
+    attribution: "signature",
+    batch_id: batch,
+    cid: `bafy-manifest-${batch}`,
+    file_id: `sdn-OMM-full:OMM.fbs:${batch}:part-000001`,
+    publish_timestamp: "2026-07-06T06:00:00Z",
+    schema: "OMM.fbs",
+    signature_verified: true,
+    standard: "OMM",
+  };
+}
+
+function latestServingResult({ ref = null, schema = "OMM.fbs", etag = fnv1a64Hex(LATEST_OMM_STREAM) } = {}) {
+  const serving = {
+    batch_id: "batch-new",
+    byte_count: LATEST_OMM_STREAM.length,
+    etag_fnv1a64: etag,
+    parts: 1,
+    pnm: latestPNMPointer("batch-new"),
+    provider_id: "space-data-network-02",
+    published_at: "2026-07-06T06:00:00Z",
+    record_count: 2,
+    source_name: "celestrak-gp",
+  };
+  if (ref) serving.ref = ref;
+  else serving.stream = { $bin: 0 };
+  return {
+    fresh: true,
+    known: true,
+    pinned: true,
+    pnm: latestPNMPointer("batch-new"),
+    schema,
+    self: false,
+    serving,
+    standard: schema.replace(/\.fbs$/, ""),
+  };
+}
+
+test("latest flow: pinned dataset serves the published batch stream verbatim (loop G.4)", async () => {
+  const stub = createDiscoveryStub({
+    latest: { result: latestServingResult(), segments: [LATEST_OMM_STREAM] },
+  });
+  const http = await pumpRequest(LATEST_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/omm/latest`,
+    query: "",
+  });
+  assert.equal(http.status, 200);
+  assert.equal(header(http, "content-type"), "application/vnd.sdn.flatbuffers.stream");
+  assert.equal(header(http, "x-sdn-record-count"), "2");
+  assert.equal(header(http, "etag"), `W/"fnv1a64-${fnv1a64Hex(LATEST_OMM_STREAM)}"`);
+  assert.deepEqual(Array.from(http.body), Array.from(LATEST_OMM_STREAM), "batch stream spliced verbatim");
+
+  assert.equal(stub.calls.length, 1);
+  assert.equal(stub.calls[0].operation, "p2p.latest_dataset");
+  assert.equal(stub.calls[0].meta.peer_id, CELESTRAK_PEER);
+  assert.equal(stub.calls[0].meta.standard, "omm");
+  assert.equal(stub.calls[0].meta.deliver, "ref");
+});
+
+test("latest flow: host body reference rides the $HTR BODY_REF fields (loop G.4)", async () => {
+  const etag = fnv1a64Hex(LATEST_OMM_STREAM);
+  const stub = createDiscoveryStub({
+    latest: {
+      result: latestServingResult({ ref: { fnv1a64: etag, frames: 2, size: LATEST_OMM_STREAM.length, token: 9 } }),
+      segments: [],
+    },
+  });
+  const http = await pumpRequest(LATEST_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/omm/latest`,
+    query: "",
+  });
+  assert.equal(http.status, 200);
+  assert.equal(Number(http.bodyRefToken), 9);
+  assert.equal(Number(http.bodyRefSize), LATEST_OMM_STREAM.length);
+  assert.equal(header(http, "x-sdn-record-count"), "2");
+  assert.equal(header(http, "etag"), `W/"fnv1a64-${etag}"`);
+  assert.equal(http.body?.length ?? 0, 0, "no inline body with a BODY_REF");
+});
+
+test("latest flow: format=json is the bare-array OMM presentation with the shared etag (loop G.4)", async () => {
+  const stub = createDiscoveryStub({
+    latest: (meta) => {
+      assert.equal(meta.deliver, undefined, "json path must request inline bytes");
+      return { result: latestServingResult(), segments: [LATEST_OMM_STREAM] };
+    },
+  });
+  const http = await pumpRequest(LATEST_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/omm/latest`,
+    query: "format=json",
+  });
+  assert.equal(http.status, 200);
+  assert.equal(header(http, "content-type"), "application/json");
+  assert.equal(header(http, "x-sdn-record-count"), "2");
+  assert.equal(header(http, "etag"), `W/"fnv1a64-${fnv1a64Hex(LATEST_OMM_STREAM)}"`);
+  const records = JSON.parse(decoder.decode(http.body));
+  assert.ok(Array.isArray(records), "bare top-level array");
+  assert.equal(records.length, 2);
+  assert.equal(records[0].object_name, "ISS (ZARYA)");
+  assert.equal(records[0].norad_cat_id, 25544);
+});
+
+test("latest flow: format=json for a non-OMM standard answers 406 with the pnm pointer (loop G.4)", async () => {
+  const result = latestServingResult({ schema: "CAT.fbs" });
+  result.pnm = { ...latestPNMPointer("batch-new"), schema: "CAT.fbs", standard: "CAT" };
+  const stub = createDiscoveryStub({ latest: { result, segments: [LATEST_OMM_STREAM] } });
+  const http = await pumpRequest(LATEST_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/cat/latest`,
+    query: "format=json",
+  });
+  assert.equal(http.status, 406);
+  const body = JSON.parse(decoder.decode(http.body));
+  assert.match(body.error, /format=json is not available/);
+  assert.equal(body.pnm.cid, "bafy-manifest-batch-new");
+});
+
+test("latest flow: unpinned answers an honest 503 carrying the newest PNM pointer (loop G.4)", async () => {
+  const stub = createDiscoveryStub({
+    latest: {
+      result: {
+        known: true,
+        pinned: false,
+        pnm: latestPNMPointer("batch-new"),
+        reason: "not-pinned",
+        schema: "OMM.fbs",
+        self: false,
+        standard: "OMM",
+      },
+      segments: [],
+    },
+  });
+  const http = await pumpRequest(LATEST_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/omm/latest`,
+    query: "",
+  });
+  assert.equal(http.status, 503);
+  assert.equal(header(http, "content-type"), "application/json");
+  const body = JSON.parse(decoder.decode(http.body));
+  assert.match(body.error, /not pinned/);
+  assert.equal(body.pnm.cid, "bafy-manifest-batch-new");
+  assert.equal(body.pnm.publish_timestamp, "2026-07-06T06:00:00Z");
+  assert.equal(body.pnm.signature_verified, true);
+});
+
+test("latest flow: unknown provider/standard answers 404; If-None-Match answers 304 (loop G.4)", async () => {
+  const stub = createDiscoveryStub({
+    latest: { result: { known: false, reason: "no-publications" }, segments: [] },
+  });
+  const http = await pumpRequest(LATEST_WASM, stub, {
+    method: "GET",
+    path: `/api/v1/peers/16Uiu2HAmNobody/omm/latest`,
+    query: "",
+  });
+  assert.equal(http.status, 404);
+
+  const etag = fnv1a64Hex(LATEST_OMM_STREAM);
+  const cachedStub = createDiscoveryStub({
+    latest: { result: latestServingResult(), segments: [LATEST_OMM_STREAM] },
+  });
+  const cached = await pumpRequest(LATEST_WASM, cachedStub, {
+    method: "GET",
+    path: `/api/v1/peers/${CELESTRAK_PEER}/omm/latest`,
+    query: "",
+    headers: [{ name: "if-none-match", value: `W/"fnv1a64-${etag}"` }],
+  });
+  assert.equal(cached.status, 304);
+  assert.equal(header(cached, "etag"), `W/"fnv1a64-${etag}"`);
+  assert.equal(cached.body?.length ?? 0, 0);
+});
+
+test("latest bundle carries the api block for the OpenAPI generator (loop G.4)", () => {
+  const flow = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../dist/latest/flow.json", import.meta.url)), "utf8"));
+  assert.equal(flow.api.basePath, "/api/v1/peers/{peerId}/{standard}/latest");
+  assert.equal(flow.api.routes.length, 1);
+  assert.equal(flow.api.routes[0].anonymous, true);
+  assert.ok(flow.api.routes[0].responses["503"]);
 });

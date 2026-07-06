@@ -1,0 +1,115 @@
+{
+  "programId": "com.digitalarsenal.flows.latest-dataset",
+  "name": "SDN Provider Latest Dataset Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "nodes": 6,
+  "edges": 9,
+  "triggers": 1,
+  "capabilities": [
+    "p2p_read"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "discover",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "disc",
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "methodId": "latest_dataset",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "shape",
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "methodId": "shape_latest",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "tojson",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "methodId": "encode",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "version": "0.4.0",
+      "sha256": "6f373a3681b9a741bf76ebaffa44682315036bdeabd6064adb3d15ccfb345d33",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "route": "sdm_guest_636f6d2e6469676974616c61_route",
+        "discover": "sdm_guest_636f6d2e6469676974616c61_discover"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "version": "0.3.0",
+      "sha256": "82dc7583e059c472ba3d47e2ddbad3a31834c612305b1de9c650573d9131260e",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "peers_snapshot": "sdm_guest_636f6d2e6469676974616c61_peers_snapshot",
+        "standards_snapshot": "sdm_guest_636f6d2e6469676974616c61_standards_snapshot",
+        "pnm_history": "sdm_guest_636f6d2e6469676974616c61_pnm_history",
+        "latest_dataset": "sdm_guest_636f6d2e6469676974616c61_latest_dataset"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "version": "0.3.0",
+      "sha256": "79341c6d987c60cb205b8140d2b93213b659a692d1fe4bf072be5f325f23b865",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
+        "shape_standards": "sdm_guest_636f6d2e6469676974616c61_shape_standards",
+        "shape_pnm": "sdm_guest_636f6d2e6469676974616c61_shape_pnm",
+        "shape_latest": "sdm_guest_636f6d2e6469676974616c61_shape_latest"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.omm-json",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "version": "0.1.0",
+      "sha256": "c9c6bc87ff37724d046b5f66a69782decc37a974a080b62c8a4f5f351623cc84",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "version": "0.2.0",
+      "sha256": "3aa0fcb8841ccbd67b9b0939c1d440c2ba7c092634fade31c26955420fd235a9",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
+      }
+    }
+  ]
+}
