@@ -207,13 +207,17 @@ function pnmHistoryResult(limit = 1) {
       pnm_index: 1,
     },
   ].slice(0, limit);
-  return {
+  // Go json.Marshal emits map keys ALPHABETICALLY — mirror that byte layout
+  // (an insertion-ordered stub masked a real key-vs-value collision bug:
+  // "attribution":"signature" precedes the "signature" key on the wire).
+  const sortKeys = (obj) => Object.fromEntries(Object.entries(obj).sort(([a], [b]) => (a < b ? -1 : 1)));
+  return sortKeys({
     peer_id: CELESTRAK_PEER,
     publisher_key_available: true,
     gossip_only_excluded: 0,
-    entries,
+    entries: entries.map(sortKeys),
     records: { $bin: 0 },
-  };
+  });
 }
 
 // Hostcall stub speaking the Go-host dialect: response envelope with the

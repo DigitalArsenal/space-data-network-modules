@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.flows.pnm-history",
   "name": "SDN PNM Publication History Flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "pluginFamily": "flow",
   "description": "HTTP PNM-provenance flow (gateway loop G.3): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (pnm_history with peerId + in-wasm clamped limit [1,100] default 1 | not_found), hostcap/p2p-discovery pnm_history issues the policy-mediated p2p.pnm_history hostcall (the peer's stored signed $PNM publications, publisher-attributed by Ed25519 SIGNATURE on the host because the store's recorded peer id is only the gossip-delivering peer; short-circuited on not_found) and re-emits the decision, foundation/discovery-shape shape_pnm splices the signed $PNM frames VERBATIM (signatures intact) newest-first / encodes the bare-array json presentation with the signature_verified/attribution provenance fields and the shared FNV-1a etag / rewrites empty histories to not_found, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
   "capabilities": [
@@ -20,8 +20,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
+      "minVersion": "0.2.1",
+      "maxVersion": "0.2.1"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
