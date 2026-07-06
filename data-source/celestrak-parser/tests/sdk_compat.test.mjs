@@ -160,7 +160,7 @@ test("parse_gp produces OMM + MPE streams with full attribution", async (t) => {
   assert.equal(ommMeta.provenance.source, "celestrak-gp");
   const provenance = JSON.parse(Buffer.from(ommMeta.provenance.json, "base64").toString("utf8"));
   assert.equal(provenance.source_sha256, sha256Hex(GP_CSV));
-  assert.equal(provenance.parser_version, "celestrak-gp-wasm/v1");
+  assert.equal(provenance.parser_version, "celestrak-gp-wasm/v2");
   assert.equal(provenance.schema_counts["OMM.fbs"], 2);
   assert.equal(provenance.schema_counts["MPE.fbs"], 2);
 

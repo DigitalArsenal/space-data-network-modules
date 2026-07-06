@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 8,
   "edges": 13,
@@ -102,7 +102,7 @@
       "dependencyId": "com.digitalarsenal.foundation.omm-json",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
       "version": "0.1.0",
-      "sha256": "85371f55eadc0cba1c850fcdab22dba1ff1a811f917a216bb7255d3c5c0ae6df",
+      "sha256": "4d6c51d3d96a6bf57e99c45597d3bede8bca572c8d7e9fb46f88431fee7fae7f",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
