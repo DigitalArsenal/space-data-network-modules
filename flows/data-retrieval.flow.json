@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "engineLinkage": "flatsql",
   "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; engineLinkage: flatsql (loop C.7) \u2014 the retrieval node submits queries DIRECTLY to the live store engine via wasm imports (modules flatsql/flatsql_link); no storage.flatsql_* hostcalls exist on this path. Flatbuffer-branch bodies stay in engine memory as SDNE body-ref tokens; the json branch copies bytes engine->flow in-wasm.",
   "nodes": [
@@ -204,5 +204,129 @@
     "com.digitalarsenal.data-source.retrieval",
     "com.digitalarsenal.foundation.omm-json",
     "com.digitalarsenal.foundation.http-respond"
-  ]
+  ],
+  "api": {
+    "basePath": "/api/v1/data",
+    "tag": "data",
+    "tagDescription": "Record retrieval served by the data-retrieval flow (wasm; all routing, param parsing, format selection and ETag logic run inside the module).",
+    "routes": [
+      {
+        "path": "omm/bulk",
+        "method": "GET",
+        "operationId": "getOmmBulk",
+        "summary": "Per-object OMM catalog stream (epoch profile query)",
+        "description": "Returns one OMM record per object (NORAD_CAT_ID) selected by the requested epoch profile (default: nearest to now), as an aligned size-prefixed $OMM FlatBuffer stream (default) or a bare JSON array (format=json). Conditional GET is supported via ETag / If-None-Match. SCHEDULED FOR DELETION in loop G.6: superseded by the provider-scoped route /api/v1/peers/{peerId}/{standard}/latest.",
+        "anonymous": true,
+        "deprecated": true,
+        "params": [
+          {
+            "name": "epoch",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Target epoch: RFC3339 (YYYY-MM-DDTHH:MM:SSZ) or unix seconds. Default: now."
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["nearest", "as_of", "forward"] },
+            "description": "Epoch selection profile (alias: mode; profile wins when both are present). Default: the retrieval module's configured per-standard profile (OMM: nearest)."
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["nearest", "as_of", "forward"] },
+            "description": "Alias for profile."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1 },
+            "description": "Maximum number of records returned. Default: unbounded (catalog-sized)."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Restrict to one registered provider source (e.g. celestrak-gp). Default: all sources, provider-latest batch."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["flatbuffer", "json"], "default": "flatbuffer" },
+            "description": "Response encoding: flatbuffer = aligned size-prefixed FlatBuffer stream (default), json = bare JSON array of records."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record stream. Metadata rides in headers on BOTH encodings: X-SDN-Record-Count and a content-derived ETag.",
+            "recordStream": true,
+            "content": {
+              "application/vnd.sdn.flatbuffers.stream": {
+                "sds": { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
+                "description": "Aligned size-prefixed $OMM FlatBuffer frames ([u32le length][bytes], 8-byte aligned)."
+              },
+              "application/json": {
+                "schema": { "type": "array", "items": { "type": "object" } },
+                "description": "Bare top-level JSON array of OMM records (format=json). No envelope; record count and ETag are response headers."
+              }
+            }
+          },
+          "304": { "description": "Not modified (If-None-Match matched the stream ETag). Empty body, ETag header repeated." },
+          "404": { "description": "No route matched under the mount.", "content": { "application/json": { "schema": { "type": "object" }, "description": "{\"error\": \"...\"}" } } }
+        }
+      },
+      {
+        "path": "query",
+        "method": "POST",
+        "operationId": "postDataQuery",
+        "summary": "FlatSQL query over the record store (flow route)",
+        "description": "Executes a FlatSQL query and streams the result verbatim as aligned FlatBuffer frames (or a bare JSON array with format=json). Body: JSON {\"sql\": \"...\", \"params\": [...]} or raw SQL text. NOTE: on current hosts the exact path /api/v1/data/query is shadowed by a native auth-gated route (Go mux exact-match precedence); this flow route answers any other path ending in /query under the mount. Superseded by the sandboxed public /api/v1/query (loop G.5).",
+        "anonymous": false,
+        "params": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["flatbuffer", "json"], "default": "flatbuffer" },
+            "description": "Response encoding, as for omm/bulk."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sql"],
+                "properties": {
+                  "sql": { "type": "string" },
+                  "params": { "type": "array" }
+                }
+              },
+              "description": "SQL with optional positional params."
+            },
+            "text/plain": { "schema": { "type": "string" }, "description": "Raw SQL text body." }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Query result stream; X-SDN-Record-Count and ETag headers on both encodings.",
+            "recordStream": true,
+            "content": {
+              "application/vnd.sdn.flatbuffers.stream": { "description": "Aligned size-prefixed FlatBuffer frames (all selected cells must be BLOB columns)." },
+              "application/json": { "schema": { "type": "array", "items": { "type": "object" } }, "description": "Bare JSON array (format=json)." }
+            }
+          },
+          "304": { "description": "Not modified (If-None-Match matched)." },
+          "404": { "description": "Missing/empty SQL body or no route matched." }
+        }
+      }
+    ]
+  }
 }
