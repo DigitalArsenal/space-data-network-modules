@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-discovery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../peers-discovery.flow.json --deps ../discovery.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../standards-discovery.flow.json --deps ../discovery.deps.json",
+    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../peers-discovery.flow.json --deps ../discovery.deps.json --out ./dist/peers && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../standards-discovery.flow.json --deps ../discovery.deps.json --out ./dist/standards",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}

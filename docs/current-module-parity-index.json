@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-07-04T17:41:47.769Z",
-  "moduleCount": 53,
-  "parityScopeModuleCount": 28,
-  "isomorphicWasmCount": 53,
+  "generatedAt": "2026-07-06T20:11:57.447Z",
+  "moduleCount": 55,
+  "parityScopeModuleCount": 29,
+  "isomorphicWasmCount": 55,
   "missingIsomorphicWasm": [],
-  "browserWasmEdgeTargetCount": 38,
+  "browserWasmEdgeTargetCount": 40,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [
     "analysis/sensor-coverage",
@@ -26,6 +26,7 @@
     "basilisk/runtime",
     "foundation/attitude-math",
     "foundation/decision-gate",
+    "foundation/discovery-shape",
     "foundation/frames",
     "foundation/http-respond",
     "foundation/http-route",
@@ -1164,6 +1165,38 @@
       ]
     },
     {
+      "modulePath": "foundation/discovery-shape",
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "name": "SDN Discovery Response Shaper",
+      "pluginFamily": "foundation",
+      "version": "0.1.0",
+      "methodIds": [
+        "shape_peers",
+        "shape_standards"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/discovery_shape_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "foundation/frames",
       "pluginId": "com.digitalarsenal.foundation.frames",
       "name": "Foundation Frames",
@@ -1231,8 +1264,9 @@
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "name": "SDN HTTP Route",
       "pluginFamily": "foundation",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
+        "discover",
         "route"
       ],
       "runtimeTargets": [
@@ -1567,6 +1601,38 @@
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/http_request_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/p2p-discovery",
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "name": "SDN Host P2P Discovery",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "peers_snapshot",
+        "standards_snapshot"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/p2p_discovery_module.cpp"
       ],
       "testFiles": [
         "tests/sdk_compat.test.mjs"

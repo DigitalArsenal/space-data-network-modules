@@ -1,0 +1,258 @@
+{
+  "programId": "com.digitalarsenal.flows.peers-discovery",
+  "name": "SDN Peers Discovery Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "HTTP network-discovery flow (gateway loop G.2): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (peers_list | peer_get | not_found), hostcap/p2p-discovery peers issues the policy-mediated p2p.peers_snapshot hostcall (the host's peerstore/DHT/registry view + stored $EPM profiles; short-circuited on not_found) and re-emits the decision, foundation/discovery-shape peers splices stored $EPM frames verbatim / synthesizes minimal unsigned EPMs / encodes the bare-array json presentation and the shared FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "discover",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "disc",
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "methodId": "peers_snapshot",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "shape",
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "methodId": "shape_peers",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-decision",
+      "fromNodeId": "route",
+      "fromPortId": "decision",
+      "toNodeId": "disc",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-decision",
+      "fromNodeId": "disc",
+      "fromPortId": "decision",
+      "toNodeId": "shape",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "disc-snapshot",
+      "fromNodeId": "disc",
+      "fromPortId": "snapshot",
+      "toNodeId": "shape",
+      "toPortId": "snapshot",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "shape-decision",
+      "fromNodeId": "shape",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "shape-body",
+      "fromNodeId": "shape",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "shape-etag",
+      "fromNodeId": "shape",
+      "fromPortId": "etag",
+      "toNodeId": "respond",
+      "toPortId": "etag",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.foundation.http-route",
+    "com.digitalarsenal.hostcap.p2p-discovery",
+    "com.digitalarsenal.foundation.discovery-shape",
+    "com.digitalarsenal.foundation.http-respond"
+  ],
+  "api": {
+    "basePath": "/api/v1/peers",
+    "tag": "discovery",
+    "tagDescription": "Peer and standards discovery served by the G.2 gateway flows (wasm; routing, format selection and ETag logic run inside the module; snapshots come from the policy-mediated p2p_read capability).",
+    "routes": [
+      {
+        "path": "",
+        "method": "GET",
+        "operationId": "listPeers",
+        "summary": "Known peers with EPM profiles and published standards",
+        "description": "The host's network view \u2014 connected peers, peerstore/DHT entries, registry profiles, and PNM publishers \u2014 as one record per peer. Default encoding: aligned size-prefixed $EPM frames (stored profiles verbatim and signature-verifiable; peers without a stored profile get a synthesized minimal unsigned EPM whose DN is the peer id and whose MULTIFORMAT_ADDRESS carries /p2p/<peerId>). format=json: bare array of {peer_id, self, connected, agent_version, addrs, standards, epm|null} \u2014 standards are derived from stored signed PNMs per publishing peer.",
+        "anonymous": true,
+        "params": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "flatbuffer",
+                "json"
+              ],
+              "default": "flatbuffer"
+            },
+            "description": "Response encoding: flatbuffer = aligned size-prefixed $EPM FlatBuffer stream (default), json = bare JSON array of peer records."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Peer record stream. Metadata rides in headers on BOTH encodings: X-SDN-Record-Count and a content-derived ETag.",
+            "recordStream": true,
+            "content": {
+              "application/vnd.sdn.flatbuffers.stream": {
+                "sds": {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM"
+                },
+                "description": "Aligned size-prefixed $EPM FlatBuffer frames, one per known peer."
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "description": "Bare top-level JSON array of peer records (format=json)."
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the stream ETag). Empty body, ETag header repeated."
+          },
+          "404": {
+            "description": "No route matched under the mount."
+          }
+        }
+      },
+      {
+        "path": "{peerId}",
+        "method": "GET",
+        "operationId": "getPeer",
+        "summary": "One peer's EPM profile and published standards",
+        "description": "The same record shape as the peers list, narrowed to one libp2p peer id. Unknown peers answer 404.",
+        "anonymous": true,
+        "params": [
+          {
+            "name": "peerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "libp2p peer ID of the provider node (e.g. 16Uiu2HAm\u2026)."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "flatbuffer",
+                "json"
+              ],
+              "default": "flatbuffer"
+            },
+            "description": "Response encoding, as for the peers list."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Single-peer record stream (one $EPM frame / one-element bare array); X-SDN-Record-Count and ETag headers on both encodings.",
+            "recordStream": true,
+            "content": {
+              "application/vnd.sdn.flatbuffers.stream": {
+                "sds": {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM"
+                },
+                "description": "One aligned size-prefixed $EPM FlatBuffer frame."
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "description": "One-element bare JSON array (format=json)."
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the stream ETag)."
+          },
+          "404": {
+            "description": "Peer unknown to this node."
+          }
+        }
+      }
+    ]
+  }
+}

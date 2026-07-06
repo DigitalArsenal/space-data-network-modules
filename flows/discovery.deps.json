@@ -1,0 +1,6 @@
+{
+  "com.digitalarsenal.foundation.http-route": "../foundation/http-route",
+  "com.digitalarsenal.hostcap.p2p-discovery": "../hostcap/p2p-discovery",
+  "com.digitalarsenal.foundation.discovery-shape": "../foundation/discovery-shape",
+  "com.digitalarsenal.foundation.http-respond": "../foundation/http-respond"
+}

@@ -1,0 +1,136 @@
+{
+  "pluginId": "com.digitalarsenal.flows.standards-discovery",
+  "name": "SDN Standards Discovery Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "HTTP standards-discovery flow (gateway loop G.2): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (standards | not_found), hostcap/p2p-discovery standards issues the policy-mediated p2p.standards_snapshot hostcall (newest stored signed $PNM per (peer, standard), attribution from the record store's provenance) and re-emits the decision, foundation/discovery-shape standards splices the $PNM frames verbatim / encodes the bare-array json presentation and the shared FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
+  "capabilities": [
+    "p2p_read"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.discovery-shape",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "sdn-host-p2p-discovery",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "p2p_read",
+      "resource": "sdn://p2p/discovery",
+      "description": "Policy-mediated read-only host discovery snapshots (peerstore + DHT + EPM registry + stored PNMs).",
+      "properties": {
+        "hostOps": [
+          "p2p.peers_snapshot",
+          "p2p.standards_snapshot"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "http_request",
+      "displayName": "Flow trigger http-request",
+      "description": "Compiled-flow ingress for trigger \"http-request\" (http-request).",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP request envelope ($HTQ, module-sdk schemas/HttpRequestAbi.fbs)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One HTTP request envelope as delivered verbatim by the host pipe."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "HttpRequestAbi.fbs",
+      "fileIdentifier": "$HTQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "EPM.fbs",
+      "fileIdentifier": "$EPM",
+      "rootTypeName": "EPM"
+    },
+    {
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
+    },
+    {
+      "schemaName": "HttpResponseAbi.fbs",
+      "fileIdentifier": "$HTR",
+      "rootTypeName": "HttpResponse"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_standards_discovery-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
