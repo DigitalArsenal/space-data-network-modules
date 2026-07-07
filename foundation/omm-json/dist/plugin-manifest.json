@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.foundation.omm-json",
   "name": "SDN OMM JSON Encoder",
-  "version": "0.1.0",
-  "description": "Single-purpose flow node: decodes an ALIGNED size-prefixed $OMM FlatBuffer stream (concatenated [u32le length][$OMM buffer] frames, as produced by the data-source/retrieval omm_bulk 'stream' port) into one JSON frame {\"records\":[{\"norad_cat_id\",\"object_name\",\"object_id\",\"epoch\",\"mean_motion\",\"eccentricity\",\"inclination\"}],\"count\":N}. Absent OMM string fields serialize as JSON null; doubles use round-trip (%.17g) formatting. Pure compute — no capabilities.",
+  "version": "0.1.1",
+  "description": "Single-purpose flow node: decodes an ALIGNED size-prefixed $OMM FlatBuffer stream (concatenated [u32le length][$OMM buffer] frames, as produced by the data-source/retrieval omm_bulk 'stream' port) into one JSON frame — a BARE top-level array with the ENTIRE OMM record per element. Property names match the spacedatastandards.org schema/OMM/main.fbs field names EXACTLY (NORAD_CAT_ID, OBJECT_NAME, OBJECT_ID, EPOCH, MEAN_MOTION, ECCENTRICITY, INCLINATION, BSTAR, …; hard rule 2026-07-06: SDS-record JSON keys are never lowercased — keys are derived from the generated accessors so they cannot drift from the schema). Absent OMM string fields serialize as JSON null; enums as their CCSDS names; doubles use round-trip (%.17g) formatting. Pure compute — no capabilities.",
   "pluginFamily": "foundation",
   "capabilities": [],
   "externalInterfaces": [],
@@ -52,7 +52,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON bytes {\"records\":[...],\"count\":N} carried with the aligned-binary wire format (alignment 1). SDK manifest rules cannot express a JSON-bytes type, so the port declares the generic flatbuffer ref; runtime frames carry aligned-binary TAB descriptors."
+              "description": "UTF-8 JSON bytes — a bare top-level array of full OMM records with schema-exact (IDL-capitalized) property names — carried with the aligned-binary wire format (alignment 1). SDK manifest rules cannot express a JSON-bytes type, so the port declares the generic flatbuffer ref; runtime frames carry aligned-binary TAB descriptors."
             }
           ],
           "minStreams": 1,
@@ -63,7 +63,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Decodes every size-prefixed $OMM frame (identifier + verifier checked per frame) and emits one JSON frame with the seven summary fields per record."
+      "description": "Decodes every size-prefixed $OMM frame (identifier + verifier checked per frame) and emits one JSON frame: a bare array with the full OMM record per element, property names schema-exact (IDL capitalization)."
     }
   ],
   "schemasUsed": [

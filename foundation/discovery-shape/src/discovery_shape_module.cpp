@@ -19,25 +19,29 @@
  *     built with spacedatastandards.org generated code.
  *   - json body (format=json): bare array, one object per peer:
  *     {"peer_id","self","connected","agent_version","addrs","standards",
- *      "epm":{...}|null} — "epm" decodes the stored profile's dn/legal_name/
- *     alternate_names/multiformat_address/entity_type/signed.
+ *      "epm":{...}|null} — "epm" decodes the stored profile's DN/LEGAL_NAME/
+ *     ALTERNATE_NAMES/MULTIFORMAT_ADDRESS/ENTITY_TYPE (schema-exact EPM
+ *     field names — hard rule json-schema-capitalization-rule) plus the
+ *     synthesized lowercase "signed".
  *   - peer_get with an unknown peer id rewrites the decision to
  *     route=not_found (http-respond answers 404).
  *
  * Method "standards" (route standards):
  *   - fb body: the newest signed $PNM per (peer, standard), spliced verbatim
  *     from the snapshot stream in entry order.
- *   - json body: bare array of {"peer_id","standard","schema","file_id",
- *     "file_name","cid","publish_timestamp"} from the snapshot entries.
+ *   - json body: bare array of {"peer_id","standard","schema","FILE_ID",
+ *     "FILE_NAME","CID","PUBLISH_TIMESTAMP"} from the snapshot entries
+ *     (PNM schema fields schema-exact; synthesized fields lowercase).
  *
  * Method "pnm" (route pnm_history, gateway loop G.3):
  *   - fb body: the peer's stored signed $PNM publications spliced VERBATIM
  *     (signatures intact — the client verifies them against the publisher's
  *     Ed25519 key), newest first in entry order (host pre-sorted/limited).
  *   - json body: bare array of {"publisher_peer_id","gossip_peer_id",
- *     "standard","schema","file_id","file_name","cid","publish_timestamp",
- *     "signature_type","signature","signature_verified","attribution",
- *     "publisher_key"|null,"publisher_key_source"|null} — attribution
+ *     "standard","schema","FILE_ID","FILE_NAME","CID","PUBLISH_TIMESTAMP",
+ *     "SIGNATURE_TYPE","SIGNATURE","signature_verified","attribution",
+ *     "publisher_key"|null,"publisher_key_source"|null} — PNM schema fields
+ *     schema-exact, synthesized provenance/API fields lowercase. Attribution
  *     honesty: the store records the GOSSIP-DELIVERING peer; the host
  *     attributes to the PUBLISHER by signature verification, and these
  *     fields expose exactly which claim each entry makes.
@@ -497,6 +501,14 @@ std::vector<uint8_t> synthesize_epm(const PeerEntry& entry) {
 
 // Decode a stored $EPM frame into the JSON presentation object; returns
 // "null" when the frame does not verify as a $EPM buffer.
+//
+// HARD RULE (user 2026-07-06, json-schema-capitalization-rule): properties
+// that render EPM schema fields carry the schema/EPM/main.fbs names EXACTLY
+// (DN, LEGAL_NAME, ALTERNATE_NAMES, MULTIFORMAT_ADDRESS, ENTITY_TYPE) —
+// derived from the generated accessor names via the preprocessor so they
+// cannot drift. API-synthesized properties ("signed": presence of a
+// SIGNATURE) stay lowercase snake_case: the case distinction separates
+// schema data from API metadata.
 std::string epm_presentation_json(const StreamFrame& frame) {
     ::flatbuffers::Verifier verifier(frame.data, frame.length);
     if (!SizePrefixedEPMBufferHasIdentifier(frame.data) ||
@@ -505,31 +517,37 @@ std::string epm_presentation_json(const StreamFrame& frame) {
     }
     const EPM* epm = GetSizePrefixedEPM(frame.data);
     std::string out = "{";
-    out += "\"dn\":";
-    if (epm->DN()) out += "\"" + json_escape(epm->DN()->str()) + "\"";
-    else out += "null";
-    out += ",\"legal_name\":";
-    if (epm->LEGAL_NAME()) out += "\"" + json_escape(epm->LEGAL_NAME()->str()) + "\"";
-    else out += "null";
-    out += ",\"alternate_names\":[";
-    if (const auto* names = epm->ALTERNATE_NAMES()) {
-        for (::flatbuffers::uoffset_t i = 0; i < names->size(); i++) {
-            if (i > 0) out += ",";
-            out += "\"" + json_escape(names->Get(i)->str()) + "\"";
-        }
-    }
-    out += "],\"multiformat_address\":[";
-    if (const auto* addrs = epm->MULTIFORMAT_ADDRESS()) {
-        for (::flatbuffers::uoffset_t i = 0; i < addrs->size(); i++) {
-            if (i > 0) out += ",";
-            out += "\"" + json_escape(addrs->Get(i)->str()) + "\"";
-        }
-    }
-    out += "],\"entity_type\":\"";
+#define EPM_JSON_STRING_FIELD(FIELD)                                        \
+    do {                                                                    \
+        out += "\"" #FIELD "\":";                                           \
+        if (epm->FIELD()) out += "\"" + json_escape(epm->FIELD()->str()) + "\""; \
+        else out += "null";                                                 \
+    } while (0)
+#define EPM_JSON_STRING_VECTOR_FIELD(FIELD)                                 \
+    do {                                                                    \
+        out += "\"" #FIELD "\":[";                                          \
+        if (const auto* vec = epm->FIELD()) {                               \
+            for (::flatbuffers::uoffset_t i = 0; i < vec->size(); i++) {    \
+                if (i > 0) out += ",";                                      \
+                out += "\"" + json_escape(vec->Get(i)->str()) + "\"";       \
+            }                                                               \
+        }                                                                   \
+        out += "]";                                                         \
+    } while (0)
+    EPM_JSON_STRING_FIELD(DN);
+    out += ",";
+    EPM_JSON_STRING_FIELD(LEGAL_NAME);
+    out += ",";
+    EPM_JSON_STRING_VECTOR_FIELD(ALTERNATE_NAMES);
+    out += ",";
+    EPM_JSON_STRING_VECTOR_FIELD(MULTIFORMAT_ADDRESS);
+    out += ",\"ENTITY_TYPE\":\"";
     out += (epm->ENTITY_TYPE() == EntityType_Node) ? "Node" : "User";
     out += "\",\"signed\":";
     out += (epm->SIGNATURE() && epm->SIGNATURE()->size() > 0) ? "true" : "false";
     out += "}";
+#undef EPM_JSON_STRING_FIELD
+#undef EPM_JSON_STRING_VECTOR_FIELD
     return out;
 }
 
@@ -752,27 +770,28 @@ int shape_standards(void) {
         if (emitted > 0) body += ",";
         std::string value;
         body += "{";
-        body += "\"peer_id\":";
-        body += json_string_field(element, "peer_id", &value)
-                    ? "\"" + json_escape(value) + "\"" : "null";
-        body += ",\"standard\":";
-        body += json_string_field(element, "standard", &value)
-                    ? "\"" + json_escape(value) + "\"" : "null";
-        body += ",\"schema\":";
-        body += json_string_field(element, "schema", &value)
-                    ? "\"" + json_escape(value) + "\"" : "null";
-        body += ",\"file_id\":";
-        body += json_string_field(element, "file_id", &value)
-                    ? "\"" + json_escape(value) + "\"" : "null";
-        body += ",\"file_name\":";
-        body += json_string_field(element, "file_name", &value)
-                    ? "\"" + json_escape(value) + "\"" : "null";
-        body += ",\"cid\":";
-        body += json_string_field(element, "cid", &value)
-                    ? "\"" + json_escape(value) + "\"" : "null";
-        body += ",\"publish_timestamp\":";
-        body += json_string_field(element, "publish_timestamp", &value)
-                    ? "\"" + json_escape(value) + "\"" : "null";
+        // Output-key case (hard rule, json-schema-capitalization-rule):
+        // properties rendering PNM schema fields carry the
+        // schema/PNM/main.fbs names EXACTLY (FILE_ID, FILE_NAME, CID,
+        // PUBLISH_TIMESTAMP); host-synthesized provenance/API fields
+        // (peer_id, standard, schema) stay lowercase snake_case. The INPUT
+        // keys are the host envelope's Go-marshalled lowercase names — an
+        // internal wire contract, not a public rendering.
+        const auto string_field = [&](const char* host_key, const char* out_key, bool leading_comma) {
+            if (leading_comma) body += ",";
+            body += "\"";
+            body += out_key;
+            body += "\":";
+            body += json_string_field(element, host_key, &value)
+                        ? "\"" + json_escape(value) + "\"" : "null";
+        };
+        string_field("peer_id", "peer_id", false);
+        string_field("standard", "standard", true);
+        string_field("schema", "schema", true);
+        string_field("file_id", "FILE_ID", true);
+        string_field("file_name", "FILE_NAME", true);
+        string_field("cid", "CID", true);
+        string_field("publish_timestamp", "PUBLISH_TIMESTAMP", true);
         body += "}";
         emitted++;
     }
@@ -841,24 +860,32 @@ int shape_pnm(void) {
         std::string value;
         bool flag = false;
         body += "{";
-        const auto string_field = [&](const char* json_key, const char* out_key, bool leading_comma) {
+        // Output-key case (hard rule, json-schema-capitalization-rule):
+        // properties rendering PNM schema fields carry the
+        // schema/PNM/main.fbs names EXACTLY (FILE_ID, FILE_NAME, CID,
+        // PUBLISH_TIMESTAMP, SIGNATURE_TYPE, SIGNATURE); host-synthesized
+        // provenance/API fields (publisher_peer_id, gossip_peer_id,
+        // standard, schema, signature_verified, attribution, publisher_key,
+        // publisher_key_source) stay lowercase snake_case. INPUT keys are
+        // the host envelope's internal lowercase names.
+        const auto string_field = [&](const char* host_key, const char* out_key, bool leading_comma) {
             if (leading_comma) body += ",";
             body += "\"";
             body += out_key;
             body += "\":";
-            body += json_string_field(element, json_key, &value)
+            body += json_string_field(element, host_key, &value)
                         ? "\"" + json_escape(value) + "\"" : "null";
         };
         string_field("publisher_peer_id", "publisher_peer_id", false);
         string_field("gossip_peer_id", "gossip_peer_id", true);
         string_field("standard", "standard", true);
         string_field("schema", "schema", true);
-        string_field("file_id", "file_id", true);
-        string_field("file_name", "file_name", true);
-        string_field("cid", "cid", true);
-        string_field("publish_timestamp", "publish_timestamp", true);
-        string_field("signature_type", "signature_type", true);
-        string_field("signature", "signature", true);
+        string_field("file_id", "FILE_ID", true);
+        string_field("file_name", "FILE_NAME", true);
+        string_field("cid", "CID", true);
+        string_field("publish_timestamp", "PUBLISH_TIMESTAMP", true);
+        string_field("signature_type", "SIGNATURE_TYPE", true);
+        string_field("signature", "SIGNATURE", true);
         body += ",\"signature_verified\":";
         body += (json_bool_field(element, "signature_verified", &flag) && flag) ? "true" : "false";
         string_field("attribution", "attribution", true);

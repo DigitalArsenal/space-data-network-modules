@@ -293,11 +293,16 @@ test("peers_list json: bare array presentation; etag matches the fb encoding", a
   assert.equal(celestrak.self, false);
   assert.equal(celestrak.agent_version, "spacedatanetwork/1.0.4");
   assert.deepEqual(celestrak.standards, ["CAT", "OMM", "SPW"]);
-  assert.equal(celestrak.epm.dn, "celestrak");
-  assert.equal(celestrak.epm.legal_name, "CelesTrak");
-  assert.deepEqual(celestrak.epm.alternate_names, ["celestrak.eth"]);
-  assert.equal(celestrak.epm.entity_type, "Node");
+  // EPM schema fields carry SCHEMA-EXACT names (hard rule
+  // json-schema-capitalization-rule); the synthesized "signed" flag stays
+  // lowercase — the case distinction separates schema data from API metadata.
+  assert.equal(celestrak.epm.DN, "celestrak");
+  assert.equal(celestrak.epm.LEGAL_NAME, "CelesTrak");
+  assert.deepEqual(celestrak.epm.ALTERNATE_NAMES, ["celestrak.eth"]);
+  assert.deepEqual(celestrak.epm.MULTIFORMAT_ADDRESS, [`/p2p/${CELESTRAK_PEER}`]);
+  assert.equal(celestrak.epm.ENTITY_TYPE, "Node");
   assert.equal(celestrak.epm.signed, true);
+  assert.equal("dn" in celestrak.epm, false, "lowercase EPM keys are dead");
 
   const other = records[1];
   assert.equal(other.peer_id, OTHER_PEER);
@@ -364,17 +369,19 @@ test("standards: $PNM frames verbatim in entry order + json presentation", async
   );
   const records = JSON.parse(decoder.decode(jsonPorts.get("body").payload));
   assert.equal(records.length, 2);
+  // PNM schema fields carry SCHEMA-EXACT names (hard rule
+  // json-schema-capitalization-rule); synthesized fields stay lowercase.
   assert.deepEqual(records[0], {
     peer_id: CELESTRAK_PEER,
     standard: "OMM",
     schema: "OMM.fbs",
-    file_id: "celestrak:gp:OMM.fbs:2026-07-06T03:00:00Z",
-    file_name: "gp.fbs",
-    cid: "bafy-omm",
-    publish_timestamp: "2026-07-06T03:00:00Z",
+    FILE_ID: "celestrak:gp:OMM.fbs:2026-07-06T03:00:00Z",
+    FILE_NAME: "gp.fbs",
+    CID: "bafy-omm",
+    PUBLISH_TIMESTAMP: "2026-07-06T03:00:00Z",
   });
   assert.equal(records[1].standard, "CAT");
-  assert.equal(records[1].file_name, null, "absent snapshot fields present as null");
+  assert.equal(records[1].FILE_NAME, null, "absent snapshot fields present as null");
 });
 
 test("a failed snapshot envelope is a node error; not_found passes through", async (t) => {
@@ -427,12 +434,15 @@ function latestServing({ ref = null, withStream = true } = {}) {
     byte_count: 44,
     etag_fnv1a64: "00baddecafc0ffee",
     parts: 1,
+    // PNM pointer keys mirror the host's Go marshal: schema-exact PNM field
+    // names (CID/FILE_ID/PUBLISH_TIMESTAMP — byte-sorted BEFORE the
+    // lowercase synthesized keys in Go's alphabetical order).
     pnm: {
+      CID: "bafy-manifest-new",
+      FILE_ID: "sdn-OMM-full:OMM.fbs:batch-new:part-000001",
+      PUBLISH_TIMESTAMP: "2026-07-06T06:00:00Z",
       attribution: "signature",
       batch_id: "batch-new",
-      cid: "bafy-manifest-new",
-      file_id: "sdn-OMM-full:OMM.fbs:batch-new:part-000001",
-      publish_timestamp: "2026-07-06T06:00:00Z",
       schema: "OMM.fbs",
       signature_verified: true,
       standard: "OMM",
@@ -457,11 +467,11 @@ function latestEnvelope({ known = true, pinned = true, self = false, reason, ser
   if (known) {
     result.pinned = pinned;
     result.pnm = {
+      CID: "bafy-manifest-new",
+      FILE_ID: "sdn-OMM-full:OMM.fbs:batch-new:part-000001",
+      PUBLISH_TIMESTAMP: "2026-07-06T06:00:00Z",
       attribution: "signature",
       batch_id: "batch-new",
-      cid: "bafy-manifest-new",
-      file_id: "sdn-OMM-full:OMM.fbs:batch-new:part-000001",
-      publish_timestamp: "2026-07-06T06:00:00Z",
       schema,
       signature_verified: true,
       standard: schema.replace(/\.fbs$/, ""),
@@ -545,7 +555,7 @@ test("shape_latest json: OMM stream goes to the omm-json port; non-OMM answers 4
   assert.equal(decision.route, "error");
   assert.equal(decision.status, 406);
   assert.match(decision.error, /format=json is not available/);
-  assert.equal(decision.pnm.cid, "bafy-manifest-new");
+  assert.equal(decision.pnm.CID, "bafy-manifest-new");
   assert.equal(catPorts.has("body"), false);
   assert.equal(catPorts.has("stream"), false);
 });
@@ -564,8 +574,8 @@ test("shape_latest honest unavailability: 503 + pnm pointer, 404 when unknown (l
   assert.equal(decision.route, "error");
   assert.equal(decision.status, 503);
   assert.match(decision.error, /not pinned/);
-  assert.equal(decision.pnm.cid, "bafy-manifest-new");
-  assert.equal(decision.pnm.publish_timestamp, "2026-07-06T06:00:00Z");
+  assert.equal(decision.pnm.CID, "bafy-manifest-new");
+  assert.equal(decision.pnm.PUBLISH_TIMESTAMP, "2026-07-06T06:00:00Z");
   assert.equal(unpinned.has("body"), false);
 
   // Pinned but the batch has not materialized yet: 503 + pointer too.
@@ -599,4 +609,131 @@ test("shape_latest honest unavailability: 503 + pnm pointer, 404 when unknown (l
     ],
   }));
   assert.equal(JSON.parse(decoder.decode(unowned.get("decision").payload)).route, "not_found");
+});
+
+// ---------------------------------------------------------------------------
+// HARD-RULE drift guard (user 2026-07-06, json-schema-capitalization-rule):
+// every UPPERCASE property this module emits must be EXACTLY a field name of
+// the corresponding spacedatastandards.org IDL table (case-exact), and the
+// schema-derived key sets must be complete. Synthesized provenance/API keys
+// must stay lowercase snake_case. A rename in schema/EPM/main.fbs or
+// schema/PNM/main.fbs — or a hand-typed key in the module — fails here
+// instead of drifting silently.
+// ---------------------------------------------------------------------------
+
+function idlFieldNames(schemaRelPath, tableName) {
+  const idl = fs.readFileSync(
+    `${STANDARDS_ROOT}schema/${schemaRelPath}`,
+    "utf8",
+  );
+  const tableMatch = idl.match(new RegExp(`table\\s+${tableName}\\s*\\{([\\s\\S]*?)\\n\\}`));
+  assert.ok(tableMatch, `${schemaRelPath} must contain table ${tableName}`);
+  return new Set(
+    [...tableMatch[1].matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map((m) => m[1]),
+  );
+}
+
+function assertSchemaExactKeys(record, idlFields, expectedSchemaKeys, label) {
+  const upper = Object.keys(record).filter((key) => key === key.toUpperCase() && /[A-Z]/.test(key));
+  for (const key of upper) {
+    assert.ok(idlFields.has(key),
+      `${label}: emitted key ${JSON.stringify(key)} is not an IDL field name (case-exact)`);
+  }
+  assert.deepEqual(upper.sort(), [...expectedSchemaKeys].sort(),
+    `${label}: schema-derived key set mismatch`);
+  for (const key of Object.keys(record)) {
+    if (upper.includes(key)) continue;
+    assert.equal(key, key.toLowerCase(),
+      `${label}: synthesized key ${JSON.stringify(key)} must be lowercase snake_case`);
+  }
+}
+
+function pnmHistoryEnvelope() {
+  return encodeHostcallEnvelope(
+    {
+      ok: true,
+      result: {
+        entries: [
+          {
+            attribution: "signature",
+            cid: "bafy-omm-000",
+            file_id: "celestrak:gp:OMM.fbs:2026-07-06T03:00:00Z",
+            file_name: "gp.fbs",
+            gossip_peer_id: OTHER_PEER,
+            pnm_index: 0,
+            publish_timestamp: "2026-07-06T03:00:00Z",
+            publisher_key: "aa".repeat(32),
+            publisher_key_source: "identity",
+            publisher_peer_id: CELESTRAK_PEER,
+            schema: "OMM.fbs",
+            signature: "bb".repeat(64),
+            signature_type: "Ed25519",
+            signature_verified: true,
+            standard: "OMM",
+          },
+        ],
+        records: { $bin: 0 },
+      },
+    },
+    [sizePrefixedStream([PNM_FRAME_A])],
+  );
+}
+
+test("json properties cross-check exactly against the EPM/PNM IDL field names", async (t) => {
+  const epmFields = idlFieldNames("EPM/main.fbs", "EPM");
+  const pnmFields = idlFieldNames("PNM/main.fbs", "PNM");
+  const harness = await createHarness(t);
+
+  // peers json: the "epm" object renders EPM schema fields.
+  const peers = outputsByPort(await harness.invoke({
+    methodId: "shape_peers",
+    inputs: [
+      jsonInput("decision", { route: "peers_list", format: "json" }),
+      input("snapshot", peersEnvelope()),
+    ],
+  }));
+  const peerRecords = JSON.parse(decoder.decode(peers.get("body").payload));
+  assertSchemaExactKeys(
+    peerRecords[0].epm,
+    epmFields,
+    ["DN", "LEGAL_NAME", "ALTERNATE_NAMES", "MULTIFORMAT_ADDRESS", "ENTITY_TYPE"],
+    "peers epm",
+  );
+  assertSchemaExactKeys(peerRecords[0], new Set(), [], "peer entry (all synthesized)");
+
+  // standards json: PNM projections.
+  const standards = outputsByPort(await harness.invoke({
+    methodId: "shape_standards",
+    inputs: [
+      jsonInput("decision", { route: "standards", format: "json" }),
+      input("snapshot", standardsEnvelope()),
+    ],
+  }));
+  const standardsRecords = JSON.parse(decoder.decode(standards.get("body").payload));
+  assertSchemaExactKeys(
+    standardsRecords[0],
+    pnmFields,
+    ["FILE_ID", "FILE_NAME", "CID", "PUBLISH_TIMESTAMP"],
+    "standards entry",
+  );
+
+  // pnm history json: PNM projections + signature fields.
+  const pnm = outputsByPort(await harness.invoke({
+    methodId: "shape_pnm",
+    inputs: [
+      jsonInput("decision", { route: "pnm_history", format: "json", peerId: CELESTRAK_PEER }),
+      input("snapshot", pnmHistoryEnvelope()),
+    ],
+  }));
+  const pnmRecords = JSON.parse(decoder.decode(pnm.get("body").payload));
+  assert.equal(pnmRecords.length, 1);
+  assertSchemaExactKeys(
+    pnmRecords[0],
+    pnmFields,
+    ["FILE_ID", "FILE_NAME", "CID", "PUBLISH_TIMESTAMP", "SIGNATURE_TYPE", "SIGNATURE"],
+    "pnm history entry",
+  );
+  assert.equal(pnmRecords[0].SIGNATURE, "bb".repeat(64));
+  assert.equal(pnmRecords[0].publisher_peer_id, CELESTRAK_PEER);
+  assert.equal(pnmRecords[0].signature_verified, true);
 });

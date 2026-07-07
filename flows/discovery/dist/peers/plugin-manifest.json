@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.flows.peers-discovery",
   "name": "SDN Peers Discovery Flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "pluginFamily": "flow",
   "description": "HTTP network-discovery flow (gateway loop G.2): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (peers_list | peer_get | not_found), hostcap/p2p-discovery peers issues the policy-mediated p2p.peers_snapshot hostcall (the host's peerstore/DHT/registry view + stored $EPM profiles; short-circuited on not_found) and re-emits the decision, foundation/discovery-shape peers splices stored $EPM frames verbatim / synthesizes minimal unsigned EPMs / encodes the bare-array json presentation and the shared FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
   "capabilities": [
@@ -10,23 +10,23 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
+      "minVersion": "0.4.0",
+      "maxVersion": "0.4.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "minVersion": "0.3.0",
       "maxVersion": "0.3.0"
     },
     {
-      "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
-    },
-    {
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
+      "minVersion": "0.3.2",
+      "maxVersion": "0.3.2"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     }
   ],
   "externalInterfaces": [
@@ -41,7 +41,8 @@
         "hostOps": [
           "p2p.peers_snapshot",
           "p2p.standards_snapshot",
-          "p2p.pnm_history"
+          "p2p.pnm_history",
+          "p2p.latest_dataset"
         ]
       }
     }

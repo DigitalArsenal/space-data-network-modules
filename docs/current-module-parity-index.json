@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-06T20:11:57.447Z",
+  "generatedAt": "2026-07-07T02:17:11.325Z",
   "moduleCount": 55,
   "parityScopeModuleCount": 29,
   "isomorphicWasmCount": 55,
@@ -1169,9 +1169,11 @@
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
       "name": "SDN Discovery Response Shaper",
       "pluginFamily": "foundation",
-      "version": "0.1.0",
+      "version": "0.3.2",
       "methodIds": [
+        "shape_latest",
         "shape_peers",
+        "shape_pnm",
         "shape_standards"
       ],
       "runtimeTargets": [
@@ -1233,7 +1235,7 @@
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "name": "SDN HTTP Respond",
       "pluginFamily": "foundation",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "respond"
       ],
@@ -1264,7 +1266,7 @@
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "name": "SDN HTTP Route",
       "pluginFamily": "foundation",
-      "version": "0.2.0",
+      "version": "0.4.0",
       "methodIds": [
         "discover",
         "route"
@@ -1364,7 +1366,7 @@
       "pluginId": "com.digitalarsenal.foundation.omm-json",
       "name": "SDN OMM JSON Encoder",
       "pluginFamily": "foundation",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "encode"
       ],
@@ -1611,9 +1613,11 @@
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "name": "SDN Host P2P Discovery",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "methodIds": [
+        "latest_dataset",
         "peers_snapshot",
+        "pnm_history",
         "standards_snapshot"
       ],
       "runtimeTargets": [

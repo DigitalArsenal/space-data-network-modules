@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.peers-discovery",
   "name": "SDN Peers Discovery Flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engineLinkage": "bridge",
   "description": "HTTP network-discovery flow (gateway loop G.2): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (peers_list | peer_get | not_found), hostcap/p2p-discovery peers issues the policy-mediated p2p.peers_snapshot hostcall (the host's peerstore/DHT/registry view + stored $EPM profiles; short-circuited on not_found) and re-emits the decision, foundation/discovery-shape peers splices stored $EPM frames verbatim / synthesizes minimal unsigned EPMs / encodes the bare-array json presentation and the shared FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
   "nodes": [
@@ -139,7 +139,7 @@
         "method": "GET",
         "operationId": "listPeers",
         "summary": "Known peers with EPM profiles and published standards",
-        "description": "The host's network view \u2014 connected peers, peerstore/DHT entries, registry profiles, and PNM publishers \u2014 as one record per peer. Default encoding: aligned size-prefixed $EPM frames (stored profiles verbatim and signature-verifiable; peers without a stored profile get a synthesized minimal unsigned EPM whose DN is the peer id and whose MULTIFORMAT_ADDRESS carries /p2p/<peerId>). format=json: bare array of {peer_id, self, connected, agent_version, addrs, standards, epm|null} \u2014 standards are derived from stored signed PNMs per publishing peer.",
+        "description": "The host's network view \u2014 connected peers, peerstore/DHT entries, registry profiles, and PNM publishers \u2014 as one record per peer. Default encoding: aligned size-prefixed $EPM frames (stored profiles verbatim and signature-verifiable; peers without a stored profile get a synthesized minimal unsigned EPM whose DN is the peer id and whose MULTIFORMAT_ADDRESS carries /p2p/<peerId>). format=json: bare array of {peer_id, self, connected, agent_version, addrs, standards, epm|null} \u2014 standards are derived from stored signed PNMs per publishing peer; epm renders the EPM schema fields with SCHEMA-EXACT names {DN, LEGAL_NAME, ALTERNATE_NAMES, MULTIFORMAT_ADDRESS, ENTITY_TYPE} plus the synthesized lowercase signed (hard rule json-schema-capitalization-rule: SDS-record properties keep the IDL capitalization; API-synthesized fields stay lowercase snake_case).",
         "anonymous": true,
         "params": [
           {

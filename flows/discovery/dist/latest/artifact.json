@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.latest-dataset",
   "name": "SDN Provider Latest Dataset Flow",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 6,
   "edges": 9,
@@ -79,8 +79,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "version": "0.3.1",
-      "sha256": "b714a80d39a9016d8b659f15db295ca355519a6d66fa229f051ccb5183635a11",
+      "version": "0.3.2",
+      "sha256": "9a8ab7ff501c589fc49098e55d0db7adddd55a30518d1964e515bdf4eda10d24",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
@@ -93,8 +93,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.omm-json",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "version": "0.1.0",
-      "sha256": "c9c6bc87ff37724d046b5f66a69782decc37a974a080b62c8a4f5f351623cc84",
+      "version": "0.1.1",
+      "sha256": "4a34dcff2384464324b6f041551c8138804e15e300b0d44caab0628e05de7e56",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "encode": "sdm_guest_636f6d2e6469676974616c61_encode"

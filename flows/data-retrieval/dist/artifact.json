@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 8,
   "edges": 13,
@@ -66,11 +66,12 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "version": "0.1.0",
-      "sha256": "98bf53b1ca160953d05e192eb8f082b96b101f531602694d7fb8a3df1fd1a584",
+      "version": "0.4.0",
+      "sha256": "6f373a3681b9a741bf76ebaffa44682315036bdeabd6064adb3d15ccfb345d33",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
-        "route": "sdm_guest_636f6d2e6469676974616c61_route"
+        "route": "sdm_guest_636f6d2e6469676974616c61_route",
+        "discover": "sdm_guest_636f6d2e6469676974616c61_discover"
       }
     },
     {
@@ -101,8 +102,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.omm-json",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
-      "version": "0.1.0",
-      "sha256": "c9c6bc87ff37724d046b5f66a69782decc37a974a080b62c8a4f5f351623cc84",
+      "version": "0.1.1",
+      "sha256": "4a34dcff2384464324b6f041551c8138804e15e300b0d44caab0628e05de7e56",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
@@ -112,8 +113,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "version": "0.1.0",
-      "sha256": "3d722c5a58b303aa466e1a3d69f212958b424240da7db9aa9ab3a949a81760ad",
+      "version": "0.2.0",
+      "sha256": "3aa0fcb8841ccbd67b9b0939c1d440c2ba7c092634fade31c26955420fd235a9",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "respond": "sdm_guest_636f6d2e6469676974616c61_respond"

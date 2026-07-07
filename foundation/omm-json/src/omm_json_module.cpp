@@ -6,8 +6,19 @@
  * data-source/retrieval omm_bulk), one JSON frame out:
  *
  *   [ {<the ENTIRE OMM record: every scalar/string field of the $OMM table
- *      in lowercase snake_case; enums as their CCSDS names; absent strings
- *      as null; covariance only when present>}, ... ]
+ *      with property names EXACTLY matching the spacedatastandards.org IDL
+ *      capitalization (NORAD_CAT_ID, MEAN_MOTION, BSTAR, …); enums as their
+ *      CCSDS names; absent strings as null; COVARIANCE only when present>},
+ *     ... ]
+ *
+ * HARD RULE (user 2026-07-06, memory json-schema-capitalization-rule):
+ * SDS-record JSON property names match the schema/OMM/main.fbs field names
+ * EXACTLY — never lowercased. To make drift impossible, every key below is
+ * derived from the generated accessor name via the preprocessor (#FIELD):
+ * the accessor names ARE the IDL field names, so a hand-typed key cannot
+ * diverge from the schema. The sdk_compat suite additionally cross-checks
+ * the emitted keys against schema/OMM/main.fbs, so a schema rename fails
+ * the build instead of drifting silently.
  *
  * A BARE top-level array: the JSON surface is the same record stream as the
  * flatbuffer format in a different encoding, with metadata (record count,
@@ -147,79 +158,97 @@ int encode(void) {
         }
 
         if (count > 0) json += ",";
-        json += "{\"norad_cat_id\":";
-        {
-            char buf[16];
-            std::snprintf(buf, sizeof(buf), "%u", omm->NORAD_CAT_ID());
-            json += buf;
-        }
-        json += ",\"object_name\":";
-        append_string_or_null(&json, omm->OBJECT_NAME());
-        json += ",\"object_id\":";
-        append_string_or_null(&json, omm->OBJECT_ID());
-        json += ",\"epoch\":";
-        append_string_or_null(&json, omm->EPOCH());
-        json += ",\"mean_motion\":" + format_double(omm->MEAN_MOTION());
-        json += ",\"eccentricity\":" + format_double(omm->ECCENTRICITY());
-        json += ",\"inclination\":" + format_double(omm->INCLINATION());
+        json += "{";
+        // SCHEMA-EXACT keys, derived from the generated accessor names via
+        // the preprocessor (see the file header): #FIELD stringizes the same
+        // identifier the accessor call compiles against, so the JSON key and
+        // the schema field name cannot diverge.
+        bool first_field = true;
+        const auto field_key = [&](const char* name) {
+            if (!first_field) json += ",";
+            first_field = false;
+            json += "\"";
+            json += name;
+            json += "\":";
+        };
+#define OMM_JSON_STRING(FIELD)                       \
+    do {                                             \
+        field_key(#FIELD);                           \
+        append_string_or_null(&json, omm->FIELD()); \
+    } while (0)
+#define OMM_JSON_DOUBLE(FIELD)              \
+    do {                                    \
+        field_key(#FIELD);                  \
+        json += format_double(omm->FIELD()); \
+    } while (0)
+#define OMM_JSON_UINT(FIELD)                                    \
+    do {                                                        \
+        field_key(#FIELD);                                      \
+        char uint_buf[16];                                      \
+        std::snprintf(uint_buf, sizeof(uint_buf), "%u", omm->FIELD()); \
+        json += uint_buf;                                       \
+    } while (0)
+#define OMM_JSON_ENUM(FIELD, ENUM_NAME_FN)   \
+    do {                                     \
+        field_key(#FIELD);                   \
+        json += "\"";                        \
+        json += ENUM_NAME_FN(omm->FIELD()); \
+        json += "\"";                        \
+    } while (0)
+        OMM_JSON_UINT(NORAD_CAT_ID);
+        OMM_JSON_STRING(OBJECT_NAME);
+        OMM_JSON_STRING(OBJECT_ID);
+        OMM_JSON_STRING(EPOCH);
+        OMM_JSON_DOUBLE(MEAN_MOTION);
+        OMM_JSON_DOUBLE(ECCENTRICITY);
+        OMM_JSON_DOUBLE(INCLINATION);
         // Full OMM record from here (the 7 keys above keep their original
         // positions for existing consumers).
-        json += ",\"ra_of_asc_node\":" + format_double(omm->RA_OF_ASC_NODE());
-        json += ",\"arg_of_pericenter\":" + format_double(omm->ARG_OF_PERICENTER());
-        json += ",\"mean_anomaly\":" + format_double(omm->MEAN_ANOMALY());
-        json += ",\"bstar\":" + format_double(omm->BSTAR());
-        json += ",\"mean_motion_dot\":" + format_double(omm->MEAN_MOTION_DOT());
-        json += ",\"mean_motion_ddot\":" + format_double(omm->MEAN_MOTION_DDOT());
-        {
-            char buf[16];
-            std::snprintf(buf, sizeof(buf), "%u", omm->ELEMENT_SET_NO());
-            json += ",\"element_set_no\":";
-            json += buf;
-        }
-        json += ",\"rev_at_epoch\":" + format_double(omm->REV_AT_EPOCH());
-        json += ",\"classification_type\":";
-        append_string_or_null(&json, omm->CLASSIFICATION_TYPE());
-        json += ",\"ephemeris_type\":\"";
-        json += EnumNameephemerisFormat(omm->EPHEMERIS_TYPE());
-        json += "\"";
-        json += ",\"ccsds_omm_vers\":" + format_double(omm->CCSDS_OMM_VERS());
-        json += ",\"creation_date\":";
-        append_string_or_null(&json, omm->CREATION_DATE());
-        json += ",\"originator\":";
-        append_string_or_null(&json, omm->ORIGINATOR());
-        json += ",\"center_name\":";
-        append_string_or_null(&json, omm->CENTER_NAME());
+        OMM_JSON_DOUBLE(RA_OF_ASC_NODE);
+        OMM_JSON_DOUBLE(ARG_OF_PERICENTER);
+        OMM_JSON_DOUBLE(MEAN_ANOMALY);
+        OMM_JSON_DOUBLE(BSTAR);
+        OMM_JSON_DOUBLE(MEAN_MOTION_DOT);
+        OMM_JSON_DOUBLE(MEAN_MOTION_DDOT);
+        OMM_JSON_UINT(ELEMENT_SET_NO);
+        OMM_JSON_DOUBLE(REV_AT_EPOCH);
+        OMM_JSON_STRING(CLASSIFICATION_TYPE);
+        OMM_JSON_ENUM(EPHEMERIS_TYPE, EnumNameephemerisFormat);
+        OMM_JSON_DOUBLE(CCSDS_OMM_VERS);
+        OMM_JSON_STRING(CREATION_DATE);
+        OMM_JSON_STRING(ORIGINATOR);
+        OMM_JSON_STRING(CENTER_NAME);
         // REFERENCE_FRAME / COV_REFERENCE_FRAME are RFM union tables (no
         // JSON-trivial form; never populated by the ingest paths) — omitted.
-        json += ",\"reference_frame_epoch\":";
-        append_string_or_null(&json, omm->REFERENCE_FRAME_EPOCH());
-        json += ",\"time_system\":\"";
-        json += EnumNametimingStandard(omm->TIME_SYSTEM());
-        json += "\"";
-        json += ",\"mean_element_theory\":\"";
-        json += EnumNamemeanElementSource(omm->MEAN_ELEMENT_THEORY());
-        json += "\"";
-        json += ",\"comment\":";
-        append_string_or_null(&json, omm->COMMENT());
-        json += ",\"semi_major_axis\":" + format_double(omm->SEMI_MAJOR_AXIS());
-        json += ",\"gm\":" + format_double(omm->GM());
-        json += ",\"mass\":" + format_double(omm->MASS());
-        json += ",\"solar_rad_area\":" + format_double(omm->SOLAR_RAD_AREA());
-        json += ",\"solar_rad_coeff\":" + format_double(omm->SOLAR_RAD_COEFF());
-        json += ",\"drag_area\":" + format_double(omm->DRAG_AREA());
-        json += ",\"drag_coeff\":" + format_double(omm->DRAG_COEFF());
+        OMM_JSON_STRING(REFERENCE_FRAME_EPOCH);
+        OMM_JSON_ENUM(TIME_SYSTEM, EnumNametimingStandard);
+        OMM_JSON_ENUM(MEAN_ELEMENT_THEORY, EnumNamemeanElementSource);
+        OMM_JSON_STRING(COMMENT);
+        OMM_JSON_DOUBLE(SEMI_MAJOR_AXIS);
+        OMM_JSON_DOUBLE(GM);
+        OMM_JSON_DOUBLE(MASS);
+        OMM_JSON_DOUBLE(SOLAR_RAD_AREA);
+        OMM_JSON_DOUBLE(SOLAR_RAD_COEFF);
+        OMM_JSON_DOUBLE(DRAG_AREA);
+        OMM_JSON_DOUBLE(DRAG_COEFF);
         if (const auto* cov = omm->COVARIANCE()) {
-            json += ",\"covariance\":[";
+            field_key("COVARIANCE");
+            json += "[";
             for (::flatbuffers::uoffset_t i = 0; i < cov->size(); ++i) {
                 if (i > 0) json += ",";
                 json += format_double(cov->Get(i));
             }
             json += "]";
         }
-        json += ",\"user_defined_epoch_timestamp\":" +
-                format_double(omm->USER_DEFINED_EPOCH_TIMESTAMP());
-        json += ",\"user_defined_microseconds\":" +
-                format_double(omm->USER_DEFINED_MICROSECONDS());
+        OMM_JSON_UINT(USER_DEFINED_BIP_0044_TYPE);
+        OMM_JSON_STRING(USER_DEFINED_OBJECT_DESIGNATOR);
+        OMM_JSON_STRING(USER_DEFINED_EARTH_MODEL);
+        OMM_JSON_DOUBLE(USER_DEFINED_EPOCH_TIMESTAMP);
+        OMM_JSON_DOUBLE(USER_DEFINED_MICROSECONDS);
+#undef OMM_JSON_STRING
+#undef OMM_JSON_DOUBLE
+#undef OMM_JSON_UINT
+#undef OMM_JSON_ENUM
         json += "}";
         count++;
     }

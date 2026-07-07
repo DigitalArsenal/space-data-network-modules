@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -192,33 +193,76 @@ test("encode extracts exact field values from a real $OMM stream", async (t) => 
   for (let index = 0; index < RECORDS.length; index += 1) {
     const expected = RECORDS[index];
     const actual = payload[index];
+    // SCHEMA-EXACT property names (hard rule 2026-07-06,
+    // json-schema-capitalization-rule): keys match schema/OMM/main.fbs
+    // capitalization exactly — never lowercased.
     // Exact equality: %.17g round-trips IEEE-754 doubles through JSON.parse.
-    assert.equal(actual.norad_cat_id, expected.norad_cat_id);
-    assert.equal(actual.object_name, expected.object_name);
-    assert.equal(actual.object_id, expected.object_id);
-    assert.equal(actual.epoch, expected.epoch);
-    assert.equal(actual.mean_motion, expected.mean_motion);
-    assert.equal(actual.eccentricity, expected.eccentricity);
-    assert.equal(actual.inclination, expected.inclination);
+    assert.equal(actual.NORAD_CAT_ID, expected.norad_cat_id);
+    assert.equal(actual.OBJECT_NAME, expected.object_name);
+    assert.equal(actual.OBJECT_ID, expected.object_id);
+    assert.equal(actual.EPOCH, expected.epoch);
+    assert.equal(actual.MEAN_MOTION, expected.mean_motion);
+    assert.equal(actual.ECCENTRICITY, expected.eccentricity);
+    assert.equal(actual.INCLINATION, expected.inclination);
     // Full-record contract: the SGP4 propagation terms and element-set
     // identity must round-trip exactly (zeroed BSTAR/MEAN_MOTION_DOT in the
     // JSON surface was the drag-free-feed bug).
-    assert.equal(actual.ra_of_asc_node, expected.ra_of_asc_node);
-    assert.equal(actual.arg_of_pericenter, expected.arg_of_pericenter);
-    assert.equal(actual.mean_anomaly, expected.mean_anomaly);
-    assert.equal(actual.bstar, expected.bstar);
-    assert.equal(actual.mean_motion_dot, expected.mean_motion_dot);
-    assert.equal(actual.mean_motion_ddot, expected.mean_motion_ddot);
-    assert.equal(actual.element_set_no, expected.element_set_no);
-    assert.equal(actual.rev_at_epoch, expected.rev_at_epoch);
-    assert.equal(actual.classification_type, expected.classification_type);
+    assert.equal(actual.RA_OF_ASC_NODE, expected.ra_of_asc_node);
+    assert.equal(actual.ARG_OF_PERICENTER, expected.arg_of_pericenter);
+    assert.equal(actual.MEAN_ANOMALY, expected.mean_anomaly);
+    assert.equal(actual.BSTAR, expected.bstar);
+    assert.equal(actual.MEAN_MOTION_DOT, expected.mean_motion_dot);
+    assert.equal(actual.MEAN_MOTION_DDOT, expected.mean_motion_ddot);
+    assert.equal(actual.ELEMENT_SET_NO, expected.element_set_no);
+    assert.equal(actual.REV_AT_EPOCH, expected.rev_at_epoch);
+    assert.equal(actual.CLASSIFICATION_TYPE, expected.classification_type);
     // Schema-defaulted fields decode as their slot defaults.
-    assert.equal(actual.ephemeris_type, "SGP4");
-    assert.equal(actual.time_system, "UTC");
-    assert.equal(actual.mean_element_theory, "SGP4");
-    assert.equal(actual.creation_date, null);
-    assert.equal(actual.semi_major_axis, 0);
-    assert.equal(actual.covariance, undefined);
+    assert.equal(actual.EPHEMERIS_TYPE, "SGP4");
+    assert.equal(actual.TIME_SYSTEM, "UTC");
+    assert.equal(actual.MEAN_ELEMENT_THEORY, "SGP4");
+    assert.equal(actual.CREATION_DATE, null);
+    assert.equal(actual.SEMI_MAJOR_AXIS, 0);
+    assert.equal(actual.COVARIANCE, undefined);
+    // The lowercase keys are DEAD — the emitted surface must not carry them.
+    assert.equal("norad_cat_id" in actual, false, "lowercase norad_cat_id must not be emitted");
+    assert.equal("mean_motion" in actual, false, "lowercase mean_motion must not be emitted");
+  }
+});
+
+// Drift guard for the HARD RULE (user 2026-07-06,
+// json-schema-capitalization-rule): every JSON property the module emits
+// must be EXACTLY a schema/OMM/main.fbs field name (case-exact), and every
+// JSON-representable schema field must be emitted. The module derives its
+// keys from the generated C++ accessors via the preprocessor; this test
+// closes the loop against the IDL itself, so a schema rename OR a hand-typed
+// key fails the build instead of drifting silently.
+test("emitted JSON keys cross-check exactly against schema/OMM/main.fbs", async (t) => {
+  const idl = fs.readFileSync(path.join(STANDARDS_ROOT, "schema", "OMM", "main.fbs"), "utf8");
+  const tableMatch = idl.match(/table\s+OMM\s*\{([\s\S]*?)\n\}/);
+  assert.ok(tableMatch, "schema/OMM/main.fbs must contain the OMM table");
+  const schemaFields = new Set(
+    [...tableMatch[1].matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map((m) => m[1]),
+  );
+  assert.ok(schemaFields.has("NORAD_CAT_ID") && schemaFields.has("MEAN_MOTION"),
+    "IDL field extraction failed to find canonical OMM fields");
+
+  const response = await invokeEncode(t, buildOmmStream(RECORDS));
+  const payload = decodeJsonOutput(response);
+  assert.ok(payload.length > 0);
+
+  // Fields with no JSON-trivial form: the RFM union tables. COVARIANCE is
+  // emitted only when populated (these fixtures do not populate it).
+  const omitted = new Set(["REFERENCE_FRAME", "COV_REFERENCE_FRAME", "COVARIANCE"]);
+  for (const record of payload) {
+    for (const key of Object.keys(record)) {
+      assert.ok(schemaFields.has(key),
+        `emitted key ${JSON.stringify(key)} is not a schema/OMM/main.fbs field name (case-exact)`);
+    }
+    for (const field of schemaFields) {
+      if (omitted.has(field)) continue;
+      assert.ok(Object.prototype.hasOwnProperty.call(record, field),
+        `schema field ${field} missing from the emitted JSON record`);
+    }
   }
 });
 
@@ -238,7 +282,7 @@ test("encode skips zero-length padding prefixes between frames", async (t) => {
   const response = await invokeEncode(t, stream);
   const payload = decodeJsonOutput(response);
   assert.equal(payload.length, 1);
-  assert.equal(payload[0].norad_cat_id, RECORDS[0].norad_cat_id);
+  assert.equal(payload[0].NORAD_CAT_ID, RECORDS[0].norad_cat_id);
 });
 
 test("encode rejects a truncated size-prefixed frame", async (t) => {
