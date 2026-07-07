@@ -1,0 +1,132 @@
+{
+  "pluginId": "com.digitalarsenal.flows.public-query",
+  "name": "SDN Public Query Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Sandboxed public query flow (gateway loop G.5, mount /api/v1/query). A $HTQ HttpRequest enters on the http-request trigger, foundation/http-route route_public_query parses it (POST = raw SELECT body {sql,params,format,limit,sort,profile,epoch,source} or bare SQL text; GET/HEAD = the queryable-surface listing), hostcap/flatsql-query sandbox_query composes the effective SQL IN-WASM (validated sort/limit wrapping, or a named epoch profile nearest|as_of|forward over the unified OMM view with default epoch=now) and issues the policy-mediated READ-ONLY storage.query_sandboxed hostcall. The ENGINE enforces the sandbox in-wasm: a SQLite authorizer restricted to the record tables / per-source shadow tables / unified views (control tables and sqlite_* are invisible), single-statement SELECT-only validation, a statement timeout, and row/byte caps that REJECT oversized results (host config gateway.query; defaults 5 s / 200K rows / 128 MiB). flatbuffer path: all-BLOB projections (e.g. SELECT _data ...) stream as aligned size-prefixed frames via a host body reference; projections answer 406. json path: full-record streams ride through foundation/omm-json (bare-array, schema-exact keys per hard rule json-schema-capitalization-rule); tabular projections are engine-assembled bare-array JSON whose keys are the SQL column names verbatim. Sandbox rejections map to honest statuses: validation 400, projection-as-flatbuffer 406, timeout/row-cap/byte-cap 422 (+machine-readable code in the body). foundation/http-respond assembles the final $HTR envelope (200/304/4xx/5xx) delivered to the host-model egress sink. Bridge linkage: the only host crossings are the declared storage_query hostcalls (and clock.now for default profile epochs).",
+  "capabilities": [
+    "storage_query"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "minVersion": "0.5.0",
+      "maxVersion": "0.5.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "minVersion": "0.1.1",
+      "maxVersion": "0.1.1"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "minVersion": "0.2.1",
+      "maxVersion": "0.2.1"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-query-stream",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
+      "properties": {
+        "hostOps": [
+          "storage.flatsql_query_stream",
+          "storage.query_sandboxed",
+          "storage.query_surface"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "http_request",
+      "displayName": "Flow trigger http-request",
+      "description": "Compiled-flow ingress for trigger \"http-request\" (http-request).",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "One $HTQ HttpRequest envelope."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request to route."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "HttpRequestAbi.fbs",
+      "fileIdentifier": "$HTQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "HttpResponseAbi.fbs",
+      "fileIdentifier": "$HTR",
+      "rootTypeName": "HttpResponse"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_public_query-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

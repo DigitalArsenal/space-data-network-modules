@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-07T02:17:11.325Z",
+  "generatedAt": "2026-07-07T02:49:25.694Z",
   "moduleCount": 55,
   "parityScopeModuleCount": 29,
   "isomorphicWasmCount": 55,
@@ -1235,7 +1235,7 @@
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "name": "SDN HTTP Respond",
       "pluginFamily": "foundation",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "respond"
       ],
@@ -1266,10 +1266,11 @@
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "name": "SDN HTTP Route",
       "pluginFamily": "foundation",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "methodIds": [
         "discover",
-        "route"
+        "route",
+        "route_public_query"
       ],
       "runtimeTargets": [
         "browser",
@@ -1551,9 +1552,10 @@
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
       "name": "SDN Host FlatSQL Query Node",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
-        "query"
+        "query",
+        "sandbox_query"
       ],
       "runtimeTargets": [
         "browser",

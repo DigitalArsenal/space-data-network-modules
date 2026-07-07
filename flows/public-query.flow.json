@@ -1,0 +1,279 @@
+{
+  "programId": "com.digitalarsenal.flows.public-query",
+  "name": "SDN Public Query Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Sandboxed public query flow (gateway loop G.5, mount /api/v1/query). A $HTQ HttpRequest enters on the http-request trigger, foundation/http-route route_public_query parses it (POST = raw SELECT body {sql,params,format,limit,sort,profile,epoch,source} or bare SQL text; GET/HEAD = the queryable-surface listing), hostcap/flatsql-query sandbox_query composes the effective SQL IN-WASM (validated sort/limit wrapping, or a named epoch profile nearest|as_of|forward over the unified OMM view with default epoch=now) and issues the policy-mediated READ-ONLY storage.query_sandboxed hostcall. The ENGINE enforces the sandbox in-wasm: a SQLite authorizer restricted to the record tables / per-source shadow tables / unified views (control tables and sqlite_* are invisible), single-statement SELECT-only validation, a statement timeout, and row/byte caps that REJECT oversized results (host config gateway.query; defaults 5 s / 200K rows / 128 MiB). flatbuffer path: all-BLOB projections (e.g. SELECT _data ...) stream as aligned size-prefixed frames via a host body reference; projections answer 406. json path: full-record streams ride through foundation/omm-json (bare-array, schema-exact keys per hard rule json-schema-capitalization-rule); tabular projections are engine-assembled bare-array JSON whose keys are the SQL column names verbatim. Sandbox rejections map to honest statuses: validation 400, projection-as-flatbuffer 406, timeout/row-cap/byte-cap 422 (+machine-readable code in the body). foundation/http-respond assembles the final $HTR envelope (200/304/4xx/5xx) delivered to the host-model egress sink. Bridge linkage: the only host crossings are the declared storage_query hostcalls (and clock.now for default profile epochs).",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "route_public_query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "q",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "sandbox_query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tojson",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "methodId": "encode",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-decision",
+      "fromNodeId": "route",
+      "fromPortId": "decision",
+      "toNodeId": "q",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "q-decision",
+      "fromNodeId": "q",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "q-body",
+      "fromNodeId": "q",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "q-etag",
+      "fromNodeId": "q",
+      "fromPortId": "etag",
+      "toNodeId": "respond",
+      "toPortId": "etag",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "q-stream",
+      "fromNodeId": "q",
+      "fromPortId": "stream",
+      "toNodeId": "tojson",
+      "toPortId": "stream",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tojson-body",
+      "fromNodeId": "tojson",
+      "fromPortId": "json",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "api": {
+    "basePath": "/api/v1/query",
+    "tag": "query",
+    "tagDescription": "Sandboxed public raw SELECT over this node's FlatSQL engine (gateway loop G.5). Anonymous by design: abuse control is the in-engine sandbox (read-only authorizer, single-statement SELECT, statement timeout, row/byte caps), not authentication. The queryable surface is the engine hot window (recent records per standard x source), discoverable via GET.",
+    "routes": [
+      {
+        "path": "",
+        "method": "GET",
+        "operationId": "getQuerySurface",
+        "summary": "Queryable-surface listing",
+        "description": "The public query surface, enumerated live from the engine (never hand-maintained): every readable relation (unified views like OMM with their _source column, per-source shadow tables like \"OMM@celestrak-gp\") with its columns (schema-exact names plus the _data record-BLOB column) and current hot-window record count, plus the effective sandbox caps (timeout_ms, max_rows, max_bytes). Everything OUTSIDE this listing is denied by the in-engine authorizer.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "Surface listing object: {\"tables\": [{name, kind, source?, columns, records}], \"caps\": {timeout_ms, max_rows, max_bytes}}. Content-derived ETag; If-None-Match honored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "The queryable surface + effective caps."
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched)."
+          }
+        }
+      },
+      {
+        "path": "",
+        "method": "POST",
+        "operationId": "postPublicQuery",
+        "summary": "Sandboxed raw SELECT",
+        "description": "Execute ONE read-only SELECT against this node's FlatSQL engine. Body: a JSON object {\"sql\": \"SELECT ...\", \"params\": [{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}], \"format\": \"flatbuffer\"|\"json\", \"limit\": N, \"sort\": \"COLUMN [ASC|DESC]\", \"profile\": \"nearest\"|\"as_of\"|\"forward\", \"epoch\": <unix seconds | RFC3339>, \"source\": \"celestrak-gp\"} or raw SQL text. sort/limit wrap the SQL (SELECT * FROM (sql) ORDER BY ... LIMIT ...); profile replaces sql with the engine's per-object epoch-profile query over the unified OMM view (default epoch = now, default limit 50000). SANDBOX (enforced in-wasm by the engine, defense-in-depth): reads restricted to the listed surface (GET this route) \u2014 control tables/sqlite_* denied; writes structurally impossible; single statement only; no PRAGMA/ATTACH/temp writes/transactions; statement timeout + row/byte caps REJECT oversized work (422). ENCODINGS: default flatbuffer requires an all-BLOB projection (typically SELECT _data ... \u2014 the frames are self-identifying size-prefixed record buffers); projections answer 406 \u2014 request format=json instead. format=json serves full-record results as the bare-array record presentation (schema-exact keys, OMM adapter) and tabular projections as an engine-assembled bare array keyed by the SQL column names verbatim. No rate limiting beyond the caps lives in the node \u2014 an operator fronts the gateway with a CDN/WAF for volumetric abuse (user decision, docs/gateway-api.md).",
+        "anonymous": true,
+        "params": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "flatbuffer",
+                "json"
+              ],
+              "default": "flatbuffer"
+            },
+            "description": "Response encoding; wins over the body format field."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sql": {
+                    "type": "string",
+                    "description": "One SELECT statement."
+                  },
+                  "params": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    },
+                    "description": "Tagged bind parameters [{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]."
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "flatbuffer",
+                      "json"
+                    ]
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "sort": {
+                    "type": "string",
+                    "description": "COLUMN [ASC|DESC]"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "enum": [
+                      "nearest",
+                      "as_of",
+                      "forward"
+                    ],
+                    "description": "Named per-object epoch profile over the unified OMM view (instead of sql)."
+                  },
+                  "epoch": {
+                    "description": "Profile epoch: unix seconds number or RFC3339 string. Default now."
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "Profile source partition filter (shadow-table source name)."
+                  }
+                }
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Raw SQL text (one SELECT)."
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Query result. Metadata rides in headers on BOTH encodings: X-SDN-Record-Count and a content-derived ETag (shared across encodings for the same logical stream).",
+            "recordStream": true,
+            "content": {
+              "application/vnd.sdn.flatbuffers.stream": {
+                "description": "Aligned size-prefixed FlatBuffer frames \u2014 the BLOB cells of the projection in row order (self-identifying record buffers, e.g. $OMM for SELECT _data FROM OMM ...)."
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "description": "Bare top-level array: full-record results use the record presentation (schema-exact keys: NORAD_CAT_ID, MEAN_MOTION, ...); tabular projections use the SQL column names verbatim (BLOB cells base64)."
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the result ETag)."
+          },
+          "400": {
+            "description": "Rejected by the sandbox or invalid request: non-SELECT / multi-statement / PRAGMA / ATTACH / write attempt / read outside the public surface / bad SQL / bad params / invalid sort or profile. Body: {\"error\", \"code\"}."
+          },
+          "406": {
+            "description": "format=flatbuffer requested for a projection with non-BLOB cells \u2014 the raw stream is only defined for record-BLOB projections; request format=json. Body: {\"error\", \"code\": \"not-a-record-stream\"}."
+          },
+          "422": {
+            "description": "Query exceeds this node's resource caps: statement timeout, row cap, or byte cap (bounded time is the contract \u2014 runaway/cartesian queries land here). Body: {\"error\", \"code\": \"timeout\"|\"row-cap\"|\"byte-cap\"}."
+          }
+        }
+      }
+    ]
+  },
+  "requiredPlugins": [
+    "com.digitalarsenal.foundation.http-route",
+    "com.digitalarsenal.hostcap.flatsql-query",
+    "com.digitalarsenal.foundation.omm-json",
+    "com.digitalarsenal.foundation.http-respond"
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ]
+}

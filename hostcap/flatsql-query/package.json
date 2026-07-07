@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-hostcap-flatsql-query",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",

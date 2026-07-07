@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.foundation.http-route",
   "name": "SDN HTTP Route",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Single-purpose flow node: parses one $HTQ HttpRequest envelope into one routing-decision JSON frame. All HTTP semantics live inside the module (TRUE isomorphism). Method 'route' (data retrieval): URL path suffix matching ('/omm/bulk' -> omm_bulk, '/query' -> data_query, else not_found), query-string parsing (epoch as RFC3339 'YYYY-MM-DDTHH:MM:SSZ' or unix-seconds number; mode|profile; limit; source; format defaulting to 'flatbuffer'), case-insensitive If-None-Match header extraction, and POST body passthrough for data_query SQL. Decision frame contract (UTF-8 JSON bytes, aligned-binary wire format): {\"route\":\"omm_bulk\"|\"data_query\"|\"not_found\",\"format\":\"flatbuffer\"|\"json\"} always present; \"ifNoneMatch\":\"<verbatim header>\" only when the request carried If-None-Match; \"query\":{\"schema\":\"OMM.fbs\",\"source\"?,\"profile\"?,\"epoch\"?:<unix-seconds number>,\"limit\"?:<positive integer>} only when route=omm_bulk (absent keys defer to the retrieval module's config/compiled defaults); \"sql\":\"...\",\"params\":[...] only when route=data_query (body is either a JSON object {\"sql\",\"params\"} passed through or raw SQL text; a data_query request without a SQL body degrades to route=not_found); \"error\":\"...\" only when route=not_found. Exactly one decision frame is emitted per request. Method 'discover' (gateway discovery, loops G.2+G.3+G.4): suffix routes '/peers' -> peers_list, '/peers/<segment>' -> peer_get (+\"peerId\": percent-decoded segment), '/peers/<segment>/pnm' -> pnm_history (+\"peerId\", +\"limit\": ?limit=N clamped in-wasm to [1,100], default 1 = newest publication), '/peers/<segment>/<standard>/latest' -> latest_dataset (+\"peerId\", +\"standard\"), '/standards' -> standards, else not_found; one trailing slash tolerated; non-GET/HEAD methods degrade to not_found; same format/ifNoneMatch handling.",
   "pluginFamily": "foundation",
   "capabilities": [],
@@ -112,6 +112,55 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Parses the $HTQ request for the network-discovery surface: /peers -> peers_list, /peers/{peerId} -> peer_get, /peers/{peerId}/pnm -> pnm_history (peerId + limit; ?limit=N clamped in-wasm to [1,100], default 1 = newest publication), /standards -> standards, else (or non-GET/HEAD) not_found. G.4 adds the provider-scoped dataset route: .../peers/<peerId>/<standard>/latest -> latest_dataset with \"peerId\" + \"standard\" (the SDS standard segment, e.g. \"omm\") in the decision."
+    },
+    {
+      "methodId": "route_public_query",
+      "displayName": "Route Public Query Request",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "One $HTQ HttpRequest envelope."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request to route."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-public-query-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision JSON: route=public_query (POST body {sql,params,format,limit,sort,profile,epoch,source} or raw SQL text) | query_surface (GET/HEAD; the queryable-surface listing) | error (400 missing sql) | not_found. Plus format/ifNoneMatch."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one routing decision per request (gateway loop G.5)."
+        }
+      ],
+      "description": "Parse a public /api/v1/query request (gateway loop G.5): POST = sandboxed raw SELECT (body JSON object or raw SQL text; ?format wins over the body format field), GET/HEAD = queryable-surface listing, others = not_found. Pure parsing \u2014 sort/limit/profile compose in hostcap/flatsql-query sandbox_query, and ALL enforcement is in the engine sandbox.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "schemasUsed": [

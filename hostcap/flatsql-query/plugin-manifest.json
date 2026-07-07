@@ -1,10 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
   "name": "SDN Host FlatSQL Query Node",
-  "version": "0.1.0",
-  "description": "Generalized engine query node wrapping the storage.flatsql_query_stream hostcall. Method \"query\": input \"query\" JSON {\"sql\":\"...\",\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]} -> the ALIGNED size-prefixed FlatBuffer result stream passes through VERBATIM on \"stream\". This is the generic engine query node; data-source/retrieval remains the profile-aware variant (epoch profiles, SDS CAQ request envelopes). Host support: server-only today — storage.flatsql_query_stream is served by the Go node (sdn-server modulert/caps/storage.go, capability storage_query); the SDK BrowserHost storage adapter exposes storage.query/write/delete but not the flatsql stream ops. TRANSITIONAL: flatsql is becoming a component DEPENDENCY with direct in-wasm linkage in a later task; this node uses the hostcall bridge until that lands.",
+  "version": "0.2.0",
+  "description": "Generalized engine query node wrapping the storage.flatsql_query_stream hostcall. Method \"query\": input \"query\" JSON {\"sql\":\"...\",\"params\":[{\"t\":\"i64|f64|str|bool|null|bytes\",\"v\":...}]} -> the ALIGNED size-prefixed FlatBuffer result stream passes through VERBATIM on \"stream\". This is the generic engine query node; data-source/retrieval remains the profile-aware variant (epoch profiles, SDS CAQ request envelopes). Host support: server-only today \u2014 storage.flatsql_query_stream is served by the Go node (sdn-server modulert/caps/storage.go, capability storage_query); the SDK BrowserHost storage adapter exposes storage.query/write/delete but not the flatsql stream ops. TRANSITIONAL: flatsql is becoming a component DEPENDENCY with direct in-wasm linkage in a later task; this node uses the hostcall bridge until that lands. v0.2.0 adds sandbox_query (gateway loop G.5): the PUBLIC /api/v1/query surface over the policy-mediated READ-ONLY storage.query_sandboxed hostcall \u2014 the engine enforces the sandbox IN-WASM (authorizer over record tables/shadow tables/unified views, single-statement SELECT-only, statement timeout, row/byte caps; host config gateway.query). sort/limit/profile request params compose the effective SQL in this node; storage.query_surface serves the discoverable queryable-surface listing (tables/views/columns + effective caps) for GET.",
   "pluginFamily": "infrastructure",
-  "capabilities": ["storage_query"],
+  "capabilities": [
+    "storage_query"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "flatsql-query-stream",
@@ -14,12 +16,22 @@
       "resource": "storage://flatsql",
       "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
       "properties": {
-        "hostOps": ["storage.flatsql_query_stream"]
+        "hostOps": [
+          "storage.flatsql_query_stream",
+          "storage.query_sandboxed",
+          "storage.query_surface"
+        ]
       }
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "query",
@@ -67,6 +79,119 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Executes a FlatSQL query through the transitional storage.flatsql_query_stream hostcall bridge and streams the raw aligned result verbatim."
+    },
+    {
+      "methodId": "sandbox_query",
+      "displayName": "Sandboxed Public Query",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-public-query-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision JSON from foundation/http-route route_public_query (route=public_query|query_surface|error|not_found)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One routing decision per request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-public-query-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision forwarded verbatim on success, or rewritten to route=error with status (400 validation / 406 projection-as-flatbuffer / 422 timeout|row-cap|byte-cap / 502 host failure), error message and machine-readable code."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Decision for foundation/http-respond."
+        },
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-public-query-body",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Response body: aligned size-prefixed record frames verbatim / host body-reference descriptor (fb path), engine-assembled bare-array JSON with schema-exact column keys (projection results), or the queryable-surface JSON object (GET). Absent on error decisions and on the full-record json path (which rides the stream port)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Body frame for http-respond (absent when the stream port carries the result or on errors)."
+        },
+        {
+          "portId": "etag",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-etag-string",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Weak FNV-1a-64 entity tag (W/\"fnv1a64-<16 hex>\") over the raw result stream (shared by both encodings) or over the JSON payload for rows/surface results."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Entity tag for conditional GET."
+        },
+        {
+          "portId": "stream",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-public-query-omm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                },
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Full-record result stream on the json path, fed to foundation/omm-json for the bare-array presentation."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "json path only: the raw record stream for the JSON presentation adapter."
+        }
+      ],
+      "description": "Execute one sandboxed public query (gateway loop G.5). route=public_query: compose the effective SQL (raw sql wrapped with validated sort/limit, or a named epoch profile nearest|as_of|forward over the unified OMM view with default epoch=now) and call the READ-ONLY storage.query_sandboxed host op (want=stream + body-ref for flatbuffer, want=auto for json). route=query_surface: storage.query_surface listing. Sandbox rejections map to 400/406/422; the engine enforces read-only/single-statement/timeout/caps IN-WASM.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "buildArtifacts": [

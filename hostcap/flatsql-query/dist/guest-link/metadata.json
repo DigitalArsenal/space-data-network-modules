@@ -5,6 +5,7 @@
   "threadModel": "single-thread",
   "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
   "methodSymbols": {
-    "query": "sdm_guest_636f6d2e6469676974616c61_query"
+    "query": "sdm_guest_636f6d2e6469676974616c61_query",
+    "sandbox_query": "sdm_guest_636f6d2e6469676974616c61_sandbox_query"
   }
 }
