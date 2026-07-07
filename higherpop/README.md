@@ -172,12 +172,19 @@ include/higherpop/   constants, vec3, atmosphere, forces, kepler, integrator,
                      ks, dromo, formulations, higherpop (umbrella)
 include/higherpop/rpo/   roe, stm (KGD J2), mean_j2, lvlh (CW/TH),
                      maneuvers (Γ + min-energy reconfig), lambert; rpo.hpp umbrella
+include/higherpop/    frames (IAU-2006/2000A GCRF↔ITRF, ERFA-backed),
+                     target (differential corrector), lighting (eclipse/Sun/Moon),
+                     stationkeeping (GEO E-W / LEO reboost), interplanetary
+                     (patched-conic, gravity assist, B-plane)
+third_party/erfa/    vendored ERFA (BSD-3, IAU-SOFA-derived) frame/ephemeris series
 test/validate.cpp        correctness harness (no deps)
 test/dromo_test.cpp      DROMO self-test (no deps)
 test/match_accel.cpp     accel-level match vs hpop
 test/crosscheck_hpop.cpp trajectory-level match vs hpop (< 0.01 m)
 test/crosscheck_nodal.cpp J2 nodal-regression ground-truth check
 test/rpo/*_validate.cpp  RPO suite validation (stm, lvlh, maneuver, lambert)
+test/frames/, test/target/, test/lighting/, test/stationkeeping/,
+test/interplanetary/     flight-dynamics suite validation (vs ERFA / closed form)
 bench/bench.cpp          work-precision survey → CSV
 ```
 
@@ -191,6 +198,24 @@ through ~15 revs in all regimes), Clohessy–Wiltshire and Tschauner–Hempel
 Cartesian STMs (first-order exact), a Gauss control-input matrix with a
 minimum-energy multi-impulse reconfiguration solver, and a universal-variable
 Lambert solver for intercept/rendezvous. `#include "higherpop/rpo.hpp"`.
+
+## Flight-dynamics suite (STK / FreeFlyer parity)
+
+A dependency-ordered set of operational analyses layered on the propagator and
+RPO cores. Each is header-only and validated against an independent oracle
+(ERFA for anything astronomical, closed-form theory otherwise).
+
+| Module | Header | Capability | Validation |
+|---|---|---|---|
+| **Frames** | `frames.hpp` | Full IAU-2006/2000A GCRF↔ITRF chain (precession-nutation-bias via ERFA XY06/s06, ERA, polar motion), WGS84 geodetic | GCRF→ITRF matrix **bit-exact vs ERFA** at 4 epochs; ~7 mm (per-component) vs Vallado Ex. 3-15 |
+| **Targeter** | `target.hpp` | Generic differential corrector (Newton / Levenberg-Marquardt, FD Jacobian) driving controls→goals; square/over/under-determined | apogee-raise burn matches exact Hohmann to 1.2e-9 mm/s; reproduces closed-form Lambert v1 to 1e-11 m/s |
+| **Lighting** | `lighting.hpp` | Sun/Moon ephemeris (ERFA epv00/moon98), conical umbra/penumbra shadow fraction, beta angle | Sun/Moon vs ERFA to ~4e-7 km; LEO i=51.6° eclipse 36.4% of period |
+| **Station-keeping** | `stationkeeping.hpp` | GEO East-West longitude keeping, LEO altitude/ground-track reboost, tangential SMA-control primitive | a_geo 42164 km; SMA control vs vis-viva; E-W & reboost ΔV budgets in operational band |
+| **Interplanetary** | `interplanetary.hpp` | Planetary ephemeris (ERFA plan94), patched-conic Lambert transfer, C3 / v∞ / injection ΔV, gravity-assist turn angle, B-plane | Earth→Mars 2020 window C3=14.39 km²/s², arrival v∞=2.56 km/s, injection 3.84 km/s; flyby + B-plane exact vs closed form |
+
+The frame chain, lighting and interplanetary ephemeris link the vendored ERFA
+static library (`third_party/erfa/`, BSD-3, derived from IAU SOFA); the targeter
+and station-keeping layers are dependency-free.
 
 ## Roadmap
 
