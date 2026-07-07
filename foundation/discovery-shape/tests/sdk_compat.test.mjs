@@ -407,6 +407,19 @@ test("a failed snapshot envelope is a node error; not_found passes through", asy
 // ---------------------------------------------------------------------------
 
 const LATEST_STREAM_FRAMES = [encoder.encode("omm-record-one__"), encoder.encode("omm-record-two")];
+// STORED record form: size-prefixed FlatBuffers ([u32 inner][buffer]).
+const LATEST_STORED_RECORDS = LATEST_STREAM_FRAMES.map((f) => sizePrefixedStream([f]));
+// PUBLISHED shard form: stored records wrapped in outer stream frames
+// ([u32 outer][u32 inner][buffer]) — double-prefixed, as on the live hosts.
+const LATEST_SHARD_STREAM = sizePrefixedStream(LATEST_STORED_RECORDS, { prefixed: false });
+// The json path unwraps the redundant outer layer: what omm-json receives.
+const LATEST_NORMALIZED_STREAM = (() => {
+  const total = LATEST_STORED_RECORDS.reduce((sum, r) => sum + r.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const r of LATEST_STORED_RECORDS) { out.set(r, off); off += r.length; }
+  return out;
+})();
 
 function latestServing({ ref = null, withStream = true } = {}) {
   const serving = {
@@ -461,7 +474,7 @@ function latestEnvelope({ known = true, pinned = true, self = false, reason, ser
   }
   if (serving) result.serving = serving;
   if (known) result.standard = schema.replace(/\.fbs$/, "");
-  const segments = serving && serving.stream ? [sizePrefixedStream(LATEST_STREAM_FRAMES)] : [];
+  const segments = serving && serving.stream ? [LATEST_SHARD_STREAM] : [];
   return encodeHostcallEnvelope({ ok: true, result }, segments);
 }
 
@@ -479,8 +492,8 @@ test("shape_latest fb: inline stream verbatim + host-derived etag (loop G.4)", a
   assert.equal(JSON.parse(decoder.decode(ports.get("decision").payload)).route, "latest_dataset");
   assert.equal(decoder.decode(ports.get("etag").payload), 'W/"fnv1a64-00baddecafc0ffee"');
   const body = ports.get("body").payload;
-  const expected = sizePrefixedStream(LATEST_STREAM_FRAMES);
-  assert.deepEqual(Array.from(body), Array.from(expected));
+  // fb path: the published (double-prefixed) shard bytes VERBATIM.
+  assert.deepEqual(Array.from(body), Array.from(LATEST_SHARD_STREAM));
   assert.equal(ports.has("stream"), false);
 });
 
@@ -515,8 +528,9 @@ test("shape_latest json: OMM stream goes to the omm-json port; non-OMM answers 4
       input("snapshot", latestEnvelope({ serving: latestServing(), fresh: true })),
     ],
   }));
-  const expected = sizePrefixedStream(LATEST_STREAM_FRAMES);
-  assert.deepEqual(Array.from(ports.get("stream").payload), Array.from(expected));
+  // json path: the redundant outer prefix is unwrapped — omm-json gets the
+  // stored (single-prefixed) record stream.
+  assert.deepEqual(Array.from(ports.get("stream").payload), Array.from(LATEST_NORMALIZED_STREAM));
   assert.equal(ports.has("body"), false);
   assert.equal(decoder.decode(ports.get("etag").payload), 'W/"fnv1a64-00baddecafc0ffee"');
 

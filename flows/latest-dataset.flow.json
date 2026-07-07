@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.latest-dataset",
   "name": "SDN Provider Latest Dataset Flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engineLinkage": "bridge",
   "description": "HTTP provider-scoped latest-dataset flow (gateway loop G.4): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (latest_dataset with peerId + standard | not_found), hostcap/p2p-discovery latest_dataset issues the policy-mediated p2p.latest_dataset hostcall (the provider's newest signature-attributed publication batch when the host's OPT-IN gateway.pin covers the pair — or the peer is the node itself — AND the batch's shard content is fully materialized locally; stream delivery is a host body reference except on the json path), foundation/discovery-shape shape_latest turns the materials into the response decision (200 batch stream verbatim / body-reference descriptor; format=json routes the raw $OMM stream through foundation/omm-json for the bare-array presentation, non-OMM standards answer 406; unknown provider/standard answers an honest 404; known-but-unpinned or not-yet-materialized answers 503 with the newest signed-PNM pointer in the body — NO silent proxy fetch), and foundation/http-respond assembles the final $HTR envelope (200/304/404/406/503) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
   "nodes": [

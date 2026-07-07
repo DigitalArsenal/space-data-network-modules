@@ -977,9 +977,43 @@ int shape_latest(void) {
                              "latest_dataset json path requires the inline stream segment.");
             return 502;
         }
+        // Published shard streams wrap the STORED record bytes in outer
+        // stream frames, and stored records are themselves size-prefixed
+        // FlatBuffers (the ingest wire form) — so shard frames arrive
+        // DOUBLE-prefixed: [u32 outer][u32 inner][buffer], outer == inner+4.
+        // The fb path serves those bytes verbatim (that IS the published
+        // dataset), but foundation/omm-json speaks single-prefixed aligned
+        // streams: unwrap exactly one redundant layer per frame before
+        // handing the stream over. Frames that are not double-prefixed pass
+        // through unchanged.
+        std::vector<uint8_t> normalized;
+        normalized.reserve(snapshot.stream_length);
+        {
+            const uint8_t* p = snapshot.stream;
+            const uint32_t len = snapshot.stream_length;
+            uint32_t off = 0;
+            while (off + 4 <= len) {
+                const uint32_t outer = read_u32le(p + off);
+                if (outer == 0) {
+                    off += 4;
+                    continue;  // alignment padding
+                }
+                if (outer > len - off - 4) break;  // malformed tail: stop
+                const uint8_t* content = p + off + 4;
+                if (outer >= 8 && read_u32le(content) + 4 == outer) {
+                    // content = [u32 inner][buffer] — already a size-prefixed
+                    // frame; splice it without the redundant outer prefix.
+                    normalized.insert(normalized.end(), content, content + outer);
+                } else {
+                    normalized.insert(normalized.end(), p + off, p + off + 4 + outer);
+                }
+                off += 4 + outer;
+            }
+        }
         if (push_string("decision", decision.raw) != 0 ||
             push_string("etag", etag) != 0 ||
-            push_bytes("stream", snapshot.stream, snapshot.stream_length) != 0) {
+            push_bytes("stream", normalized.data(),
+                       static_cast<uint32_t>(normalized.size())) != 0) {
             plugin_set_error("push-failed", "failed to push decision/etag/stream frames.");
             return 500;
         }
