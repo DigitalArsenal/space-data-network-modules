@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(higherpop LANGUAGES CXX)
+project(higherpop LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -42,6 +42,44 @@ foreach(rpo_test stm lvlh maneuver lambert)
   target_link_libraries(hp_rpo_${rpo_test} PRIVATE higherpop)
   add_test(NAME rpo_${rpo_test} COMMAND hp_rpo_${rpo_test})
 endforeach()
+
+# --------------------------------------------------------------------------
+# Differential-correction / targeting solver (hp::target). Header-only, no deps.
+add_executable(hp_target test/target/target_validate.cpp)
+target_link_libraries(hp_target PRIVATE higherpop)
+add_test(NAME target COMMAND hp_target)
+
+# --------------------------------------------------------------------------
+# IAU-2006/2000A frame chain (hp::frames). Wraps the vendored ERFA core, so
+# the frames test links the compiled ERFA objects (third_party/erfa/*.c).
+# The rest of higherpop stays dependency-free — only frames.hpp needs ERFA.
+file(GLOB ERFA_SRC "${CMAKE_CURRENT_SOURCE_DIR}/third_party/erfa/*.c")
+# erfaversion.c needs build-time -D defines we don't set; drop it (unused).
+list(FILTER ERFA_SRC EXCLUDE REGEX "erfaversion\\.c$")
+add_library(higherpop_erfa STATIC ${ERFA_SRC})
+target_include_directories(higherpop_erfa PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/erfa>)
+set_target_properties(higherpop_erfa PROPERTIES C_STANDARD 99)
+
+add_executable(hp_frames test/frames/frames_validate.cpp)
+target_include_directories(hp_frames PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test/frames)
+target_link_libraries(hp_frames PRIVATE higherpop higherpop_erfa)
+add_test(NAME frames COMMAND hp_frames)
+
+# Eclipse / lighting (hp::lighting) also links ERFA (Sun/Moon ephemeris).
+add_executable(hp_lighting test/lighting/lighting_validate.cpp)
+target_link_libraries(hp_lighting PRIVATE higherpop higherpop_erfa)
+add_test(NAME lighting COMMAND hp_lighting)
+
+# Station-keeping (hp::stationkeeping) — header-only, no deps.
+add_executable(hp_stationkeeping test/stationkeeping/sk_validate.cpp)
+target_link_libraries(hp_stationkeeping PRIVATE higherpop)
+add_test(NAME stationkeeping COMMAND hp_stationkeeping)
+
+# Interplanetary patched-conic (hp::interplanetary) — links ERFA (plan94).
+add_executable(hp_interplanetary test/interplanetary/ip_validate.cpp)
+target_link_libraries(hp_interplanetary PRIVATE higherpop higherpop_erfa)
+add_test(NAME interplanetary COMMAND hp_interplanetary)
 
 # --------------------------------------------------------------------------
 # Cross-validation against the sibling hpop plugin (optional).
