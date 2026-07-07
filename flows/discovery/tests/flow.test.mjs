@@ -372,7 +372,9 @@ test("peers flow: format=json is a bare array carrying peerID + standards (cold-
   const celestrak = records.find((record) => record.peer_id === CELESTRAK_PEER);
   assert.ok(celestrak, "celestrak peer discoverable");
   assert.deepEqual(celestrak.standards, ["CAT", "OMM", "SPW"]);
-  assert.deepEqual(celestrak.epm.alternate_names, ["celestrak.eth"]);
+  // EPM schema fields carry SCHEMA-EXACT names (hard rule json-schema-capitalization-rule).
+  assert.deepEqual(celestrak.epm.ALTERNATE_NAMES, ["celestrak.eth"]);
+  assert.equal(celestrak.epm.DN, "celestrak");
 });
 
 test("peers flow: /peers/{peerId} narrows to one record; 404 on unknown; If-None-Match answers 304", async () => {
@@ -454,7 +456,7 @@ test("standards flow: GET /api/v1/standards streams $PNM frames + json presentat
   assert.equal(records.length, 1);
   assert.equal(records[0].peer_id, CELESTRAK_PEER);
   assert.equal(records[0].standard, "OMM");
-  assert.equal(records[0].file_id, "celestrak:gp:OMM.fbs:2026-07-06T03:00:00Z");
+  assert.equal(records[0].FILE_ID, "celestrak:gp:OMM.fbs:2026-07-06T03:00:00Z");
   assert.equal(header(json, "etag"), header(fb, "etag"), "shared tag across encodings");
 });
 
@@ -517,10 +519,10 @@ test("pnm flow: ?limit=N forwards the clamp and format=json exposes provenance f
   assert.equal(records[0].gossip_peer_id, SELF_PEER, "gossip attribution exposed honestly");
   assert.equal(records[0].signature_verified, true);
   assert.equal(records[0].attribution, "signature");
-  assert.equal(records[0].signature, "aa".repeat(64));
+  assert.equal(records[0].SIGNATURE, "aa".repeat(64));
   assert.equal(records[0].publisher_key, "bb".repeat(32));
   assert.equal(records[0].publisher_key_source, "epm-directory");
-  assert.equal(records[0].cid, "bafy-omm-new");
+  assert.equal(records[0].CID, "bafy-omm-new");
   assert.equal(records[1].standard, "CAT");
 });
 
@@ -644,12 +646,15 @@ const LATEST_STORED_RECORDS = [
 const LATEST_OMM_STREAM = sizePrefixedStream(LATEST_STORED_RECORDS, { prefixed: false });
 
 function latestPNMPointer(batch) {
+  // Mirrors the LIVE host marshal: PNM schema fields carry SCHEMA-EXACT
+  // names (CID/FILE_ID/PUBLISH_TIMESTAMP — Go byte-sorts them before the
+  // lowercase synthesized keys); synthesized fields stay lowercase.
   return {
+    CID: `bafy-manifest-${batch}`,
+    FILE_ID: `sdn-OMM-full:OMM.fbs:${batch}:part-000001`,
+    PUBLISH_TIMESTAMP: "2026-07-06T06:00:00Z",
     attribution: "signature",
     batch_id: batch,
-    cid: `bafy-manifest-${batch}`,
-    file_id: `sdn-OMM-full:OMM.fbs:${batch}:part-000001`,
-    publish_timestamp: "2026-07-06T06:00:00Z",
     schema: "OMM.fbs",
     signature_verified: true,
     standard: "OMM",
@@ -744,8 +749,8 @@ test("latest flow: format=json is the bare-array OMM presentation with the share
   const records = JSON.parse(decoder.decode(http.body));
   assert.ok(Array.isArray(records), "bare top-level array");
   assert.equal(records.length, 2);
-  assert.equal(records[0].object_name, "ISS (ZARYA)");
-  assert.equal(records[0].norad_cat_id, 25544);
+  assert.equal(records[0].OBJECT_NAME, "ISS (ZARYA)");
+  assert.equal(records[0].NORAD_CAT_ID, 25544);
 });
 
 test("latest flow: format=json for a non-OMM standard answers 406 with the pnm pointer (loop G.4)", async () => {
@@ -760,7 +765,7 @@ test("latest flow: format=json for a non-OMM standard answers 406 with the pnm p
   assert.equal(http.status, 406);
   const body = JSON.parse(decoder.decode(http.body));
   assert.match(body.error, /format=json is not available/);
-  assert.equal(body.pnm.cid, "bafy-manifest-batch-new");
+  assert.equal(body.pnm.CID, "bafy-manifest-batch-new");
 });
 
 test("latest flow: unpinned answers an honest 503 carrying the newest PNM pointer (loop G.4)", async () => {
@@ -787,8 +792,8 @@ test("latest flow: unpinned answers an honest 503 carrying the newest PNM pointe
   assert.equal(header(http, "content-type"), "application/json");
   const body = JSON.parse(decoder.decode(http.body));
   assert.match(body.error, /not pinned/);
-  assert.equal(body.pnm.cid, "bafy-manifest-batch-new");
-  assert.equal(body.pnm.publish_timestamp, "2026-07-06T06:00:00Z");
+  assert.equal(body.pnm.CID, "bafy-manifest-batch-new");
+  assert.equal(body.pnm.PUBLISH_TIMESTAMP, "2026-07-06T06:00:00Z");
   assert.equal(body.pnm.signature_verified, true);
 });
 

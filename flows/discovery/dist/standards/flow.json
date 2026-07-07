@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.standards-discovery",
   "name": "SDN Standards Discovery Flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engineLinkage": "bridge",
   "description": "HTTP standards-discovery flow (gateway loop G.2): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route discover emits the routing decision (standards | not_found), hostcap/p2p-discovery standards issues the policy-mediated p2p.standards_snapshot hostcall (newest stored signed $PNM per (peer, standard), attribution from the record store's provenance) and re-emits the decision, foundation/discovery-shape standards splices the $PNM frames verbatim / encodes the bare-array json presentation and the shared FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. Bridge linkage: the only host crossing is the declared p2p_read hostcall.",
   "nodes": [
@@ -139,7 +139,7 @@
         "method": "GET",
         "operationId": "listStandards",
         "summary": "Standards published across known peers, with publishers",
-        "description": "One record per (publishing peer, standard) pair \u2014 the newest stored signed PNM for that pair, derived from the record store's PNM provenance (FILE_ID names the standard, e.g. celestrak:gp:OMM.fbs:\u2026). Default encoding: aligned size-prefixed $PNM frames (signed, verifiable). format=json: bare array of {peer_id, standard, schema, file_id, file_name, cid, publish_timestamp}.",
+        "description": "One record per (publishing peer, standard) pair \u2014 the newest stored signed PNM for that pair, derived from the record store's PNM provenance (FILE_ID names the standard, e.g. celestrak:gp:OMM.fbs:\u2026). Default encoding: aligned size-prefixed $PNM frames (signed, verifiable). format=json: bare array of {peer_id, standard, schema, FILE_ID, FILE_NAME, CID, PUBLISH_TIMESTAMP} \u2014 PNM schema fields carry SCHEMA-EXACT IDL names, synthesized fields stay lowercase (hard rule json-schema-capitalization-rule).",
         "anonymous": true,
         "params": [
           {

@@ -411,12 +411,15 @@ test("GET /omm/bulk?format=json field-extracts the in-wasm materialized stream",
   const body = JSON.parse(decoder.decode(http.body));
   assert.ok(Array.isArray(body), "format=json must return a bare top-level array");
   assert.equal(body.length, 2);
+  // Response properties are SCHEMA-EXACT (hard rule
+  // json-schema-capitalization-rule); the fixture keys stay lowercase JS.
   assert.deepEqual(
-    body.map((record) => [record.norad_cat_id, record.object_name, record.epoch]).sort(),
+    body.map((record) => [record.NORAD_CAT_ID, record.OBJECT_NAME, record.EPOCH]).sort(),
     RECORDS.map((record) => [record.norad_cat_id, record.object_name, record.epoch]).sort(),
   );
-  const iss = body.find((record) => record.norad_cat_id === 25544);
-  assert.equal(iss.mean_motion, RECORDS[0].mean_motion, "field extraction is exact");
+  const iss = body.find((record) => record.NORAD_CAT_ID === 25544);
+  assert.equal(iss.MEAN_MOTION, RECORDS[0].mean_motion, "field extraction is exact");
+  assert.equal("norad_cat_id" in iss, false, "lowercase OMM keys are dead");
   assert.deepEqual(flow.stub.calls, ["plugin.getConfig"], "json branch is hostcall-free too");
 });
 
