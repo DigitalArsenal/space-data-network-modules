@@ -401,6 +401,12 @@ int respond(void) {
             message = "service unavailable";
         }
         std::string body = "{\"error\":\"" + json_escape(message) + "\"";
+        // Optional machine-readable rejection code (gateway loop G.5 —
+        // sandbox violation codes like "row-cap"/"timeout").
+        std::string code;
+        if (json_string_field(decision, "code", &code) && !code.empty()) {
+            body += ",\"code\":\"" + json_escape(code) + "\"";
+        }
         const std::string pnm = json_object_slice(decision, "pnm");
         if (!pnm.empty()) {
             body += ",\"pnm\":" + pnm;

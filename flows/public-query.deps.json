@@ -1,0 +1,6 @@
+{
+  "com.digitalarsenal.foundation.http-route": "../foundation/http-route",
+  "com.digitalarsenal.hostcap.flatsql-query": "../hostcap/flatsql-query",
+  "com.digitalarsenal.foundation.omm-json": "../foundation/omm-json",
+  "com.digitalarsenal.foundation.http-respond": "../foundation/http-respond"
+}

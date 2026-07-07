@@ -242,6 +242,24 @@ bool json_string_field(const std::string& json, const std::string& key, std::str
     return true;
 }
 
+bool json_number_field(const std::string& json, const std::string& key, double* out) {
+    const std::string needle = "\"" + key + "\"";
+    const size_t k = json.find(needle);
+    if (k == std::string::npos) return false;
+    const size_t colon = json.find(':', k + needle.size());
+    if (colon == std::string::npos) return false;
+    size_t i = colon + 1;
+    while (i < json.size() && is_json_ws(json[i])) i++;
+    if (i >= json.size()) return false;
+    const char c = json[i];
+    if (c != '-' && (c < '0' || c > '9')) return false;
+    char* end = nullptr;
+    const double value = strtod(json.c_str() + i, &end);
+    if (end == json.c_str() + i) return false;
+    *out = value;
+    return true;
+}
+
 std::string json_array_slice(const std::string& json, const std::string& key) {
     const std::string needle = "\"" + key + "\"";
     const size_t k = json.find(needle);
@@ -576,6 +594,179 @@ int discover(void) {
     }
 
     return not_found("no route for " + path);
+}
+
+// route_public_query: parse one $HTQ HttpRequest for the SANDBOXED public
+// query surface (gateway loop G.5, mount /api/v1/query) into exactly one
+// routing decision:
+//
+//   GET/HEAD <mount>   -> query_surface (the discoverable queryable-surface
+//                         listing: tables/views/columns + effective caps;
+//                         always JSON)
+//   POST <mount>       -> public_query — body is a JSON object
+//                         {"sql","params",[tagged],"format","limit","sort",
+//                          "profile","epoch","source"} or raw SQL text.
+//                         format: ?format query param wins over the body
+//                         field (consistent with the other gateway routes);
+//                         default flatbuffer.
+//   anything else      -> not_found
+//
+// Numeric body fields are re-emitted from validated parses only (never
+// spliced raw); sort/limit/profile execute in the QUERY NODE
+// (hostcap/flatsql-query sandbox_query) — this method only parses.
+// A POST without SQL and without a profile answers a 400 error decision.
+int route_public_query(void) {
+    const int32_t input_index = plugin_find_input_index("request", 0);
+    const plugin_input_frame_t* frame =
+        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
+    if (!frame || !frame->payload || frame->payload_length < 8) {
+        plugin_set_error("missing-request-frame",
+                         "route_public_query requires a $HTQ HttpRequest input frame on port \"request\".");
+        return 400;
+    }
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
+        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
+        plugin_set_error("invalid-request-frame",
+                         "route_public_query input frame is not a valid $HTQ HttpRequest buffer.");
+        return 400;
+    }
+    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
+
+    std::string method;
+    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
+    std::string path;
+    if (request->PATH()) path.assign(request->PATH()->c_str(), request->PATH()->size());
+    std::string raw_query;
+    if (request->QUERY()) raw_query.assign(request->QUERY()->c_str(), request->QUERY()->size());
+
+    std::string if_none_match;
+    bool has_if_none_match = false;
+    if (const auto* headers = request->HEADERS()) {
+        for (::flatbuffers::uoffset_t i = 0; i < headers->size(); i++) {
+            const auto* header = headers->Get(i);
+            if (!header || !header->NAME()) continue;
+            if (iequals(header->NAME()->c_str(), header->NAME()->size(), "if-none-match")) {
+                if (header->VALUE()) {
+                    if_none_match.assign(header->VALUE()->c_str(), header->VALUE()->size());
+                }
+                has_if_none_match = true;
+                break;
+            }
+        }
+    }
+
+    std::string body;
+    if (const auto* body_bytes = request->BODY()) {
+        body.assign(reinterpret_cast<const char*>(body_bytes->data()), body_bytes->size());
+    }
+
+    const std::vector<QueryParam> query_params = parse_query_string(raw_query);
+
+    // format: ?format wins, then the body field, default flatbuffer.
+    std::string format = "flatbuffer";
+    std::string body_format;
+    const bool body_is_object = [&]() {
+        size_t first = 0;
+        while (first < body.size() && is_json_ws(body[first])) first++;
+        return first < body.size() && body[first] == '{';
+    }();
+    if (body_is_object) json_string_field(body, "format", &body_format);
+    if (body_format == "json") format = "json";
+    if (const std::string* format_param = find_query_param(query_params, "format")) {
+        if (*format_param == "json") format = "json";
+        else if (!format_param->empty()) format = "flatbuffer";
+    }
+
+    const auto common_tail = [&](std::string* out) {
+        *out += "\"format\":\"" + format + "\"";
+        if (has_if_none_match) {
+            *out += ",\"ifNoneMatch\":\"" + json_escape(if_none_match) + "\"";
+        }
+    };
+
+    if (method == "GET" || method == "HEAD") {
+        // The queryable-surface listing is JSON by nature.
+        std::string decision = "{\"route\":\"query_surface\",\"format\":\"json\"";
+        if (has_if_none_match) {
+            decision += ",\"ifNoneMatch\":\"" + json_escape(if_none_match) + "\"";
+        }
+        decision += "}";
+        return push_decision(decision);
+    }
+
+    if (method != "POST") {
+        std::string decision = "{\"route\":\"not_found\",";
+        common_tail(&decision);
+        decision += ",\"error\":\"no " + json_escape(method) +
+                    " route for the public query surface (POST a query; GET the surface listing)\"}";
+        return push_decision(decision);
+    }
+
+    // POST: extract the query request.
+    std::string sql;
+    std::string params_json = "[]";
+    std::string sort;
+    std::string profile;
+    std::string source;
+    bool has_limit = false;
+    long limit = 0;
+    bool has_epoch = false;
+    double epoch = 0.0;
+
+    if (body_is_object) {
+        std::string sql_field;
+        if (json_string_field(body, "sql", &sql_field) && !sql_field.empty()) {
+            sql = sql_field;
+        }
+        const std::string body_params = json_array_slice(body, "params");
+        if (!body_params.empty()) params_json = body_params;
+        json_string_field(body, "sort", &sort);
+        json_string_field(body, "profile", &profile);
+        json_string_field(body, "source", &source);
+        double limit_num = 0.0;
+        if (json_number_field(body, "limit", &limit_num) && limit_num > 0) {
+            has_limit = true;
+            limit = static_cast<long>(limit_num);
+        }
+        std::string epoch_str;
+        double epoch_num = 0.0;
+        if (json_string_field(body, "epoch", &epoch_str)) {
+            if (parse_epoch(epoch_str, &epoch)) has_epoch = true;
+        } else if (json_number_field(body, "epoch", &epoch_num)) {
+            epoch = epoch_num;
+            has_epoch = true;
+        }
+    } else {
+        size_t first = 0;
+        while (first < body.size() && is_json_ws(body[first])) first++;
+        if (first < body.size()) sql = body.substr(first);
+    }
+
+    if (sql.empty() && profile.empty()) {
+        std::string decision = "{\"route\":\"error\",\"status\":400,";
+        common_tail(&decision);
+        decision += ",\"error\":\"public query requires a SQL body ({\\\"sql\\\":\\\"SELECT ...\\\"} or raw SQL text) or a profile\",";
+        decision += "\"code\":\"missing-sql\"}";
+        return push_decision(decision);
+    }
+
+    std::string decision = "{\"route\":\"public_query\",";
+    common_tail(&decision);
+    if (!sql.empty()) decision += ",\"sql\":\"" + json_escape(sql) + "\"";
+    decision += ",\"params\":" + params_json;
+    if (!sort.empty()) decision += ",\"sort\":\"" + json_escape(sort) + "\"";
+    if (!profile.empty()) decision += ",\"profile\":\"" + json_escape(profile) + "\"";
+    if (!source.empty()) decision += ",\"source\":\"" + json_escape(source) + "\"";
+    if (has_limit) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%ld", limit);
+        decision += ",\"limit\":";
+        decision += buf;
+    }
+    if (has_epoch) decision += ",\"epoch\":" + format_number(epoch);
+    decision += "}";
+    return push_decision(decision);
 }
 
 }  // extern "C"
