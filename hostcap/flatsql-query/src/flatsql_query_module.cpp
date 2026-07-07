@@ -555,7 +555,11 @@ int sandbox_query(void) {
         char epoch_buf[64];
         std::snprintf(epoch_buf, sizeof(epoch_buf), "%.6f", epoch);
         effective_sql = profile_sql;
-        effective_params = std::string("[{\"t\":\"str\",\"v\":\"") + json_escape(source) +
+        // ?1 is the source SHADOW-TABLE name — the unified view's _source
+        // column carries "OMM@<source>", not the bare source string
+        // (mirrors data-source/retrieval).
+        const std::string source_shadow = source.empty() ? std::string() : ("OMM@" + source);
+        effective_params = std::string("[{\"t\":\"str\",\"v\":\"") + json_escape(source_shadow) +
                            "\"},{\"t\":\"f64\",\"v\":" + epoch_buf +
                            "},{\"t\":\"i64\",\"v\":" + limit_buf + "}]";
     } else {

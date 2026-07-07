@@ -61,7 +61,7 @@
       "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
       "version": "0.2.0",
-      "sha256": "5a90188eff4f42ec9c3de786258f9007cc91e09e9083a585edd42ced18f3ad6a",
+      "sha256": "508b9cca5be9d446ce0413959c4e658a13144aed2fb94382a9c37920ee7ab86e",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "query": "sdm_guest_636f6d2e6469676974616c61_query",

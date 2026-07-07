@@ -341,7 +341,7 @@ test("public query: profile composes the engine epoch SQL with default epoch=now
     sandboxed: (meta) => {
       assert.match(meta.sql, /ROW_NUMBER\(\) OVER \(PARTITION BY NORAD_CAT_ID ORDER BY ABS/);
       assert.equal(meta.params.length, 3);
-      assert.deepEqual(meta.params[0], { t: "str", v: "celestrak-gp" });
+      assert.deepEqual(meta.params[0], { t: "str", v: "OMM@celestrak-gp" }, "source param is the SHADOW-TABLE name");
       assert.equal(meta.params[1].t, "f64");
       assert.ok(Math.abs(meta.params[1].v - 1783300000) < 1, "epoch defaulted from clock.now");
       assert.deepEqual(meta.params[2], { t: "i64", v: 50000 });
