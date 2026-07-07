@@ -621,6 +621,7 @@ test("both bundles carry the api block for the OpenAPI generator", () => {
 // latest-dataset flow (gateway loop G.4).
 // ---------------------------------------------------------------------------
 
+// STORED record form: SIZE-PREFIXED $OMM FlatBuffers (the ingest wire form).
 function encodeLatestOmm(record) {
   const builder = new flatbuffers.Builder(512);
   const objectName = builder.createString(record.object_name);
@@ -629,14 +630,18 @@ function encodeLatestOmm(record) {
   OMM.addMeanMotion(builder, record.mean_motion);
   OMM.addNoradCatId(builder, record.norad_cat_id);
   OMM.addUserDefinedEpochTimestamp(builder, record.epoch_ts);
-  OMM.finishOMMBuffer(builder, OMM.endOMM(builder));
-  return builder.asUint8Array();
+  OMM.finishSizePrefixedOMMBuffer(builder, OMM.endOMM(builder));
+  return builder.asUint8Array().slice();
 }
 
-const LATEST_OMM_STREAM = sizePrefixedStream([
+const LATEST_STORED_RECORDS = [
   encodeLatestOmm({ object_name: "ISS (ZARYA)", norad_cat_id: 25544, mean_motion: 15.49, epoch_ts: 1783300000 }),
   encodeLatestOmm({ object_name: "NOAA 19", norad_cat_id: 33591, mean_motion: 14.12, epoch_ts: 1783300100 }),
-]);
+];
+// PUBLISHED shard form (live-host shape): stored records wrapped in OUTER
+// stream frames — double-prefixed. The fb path serves these bytes verbatim;
+// the json path unwraps the redundant outer layer before omm-json.
+const LATEST_OMM_STREAM = sizePrefixedStream(LATEST_STORED_RECORDS, { prefixed: false });
 
 function latestPNMPointer(batch) {
   return {

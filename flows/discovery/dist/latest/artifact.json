@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.latest-dataset",
   "name": "SDN Provider Latest Dataset Flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
   "nodes": 6,
   "edges": 9,
@@ -79,8 +79,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
-      "version": "0.3.0",
-      "sha256": "79341c6d987c60cb205b8140d2b93213b659a692d1fe4bf072be5f325f23b865",
+      "version": "0.3.1",
+      "sha256": "b714a80d39a9016d8b659f15db295ca355519a6d66fa229f051ccb5183635a11",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
