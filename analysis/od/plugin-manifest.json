@@ -24,6 +24,18 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "json-options",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
         }
       ],
       "outputPorts": [

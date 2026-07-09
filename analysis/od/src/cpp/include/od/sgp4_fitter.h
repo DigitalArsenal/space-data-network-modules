@@ -53,13 +53,16 @@ struct SGP4Elements {
     // Fit quality
     double rms_km = 0.0;       // RMS of fit (km)
     int iterations = 0;
+    int max_iterations = 0;
     bool converged = false;
     std::string data_source;   // "SpaceX-E", etc.
 };
 
 /// Fitting configuration
 struct FitterConfig {
-    int max_iterations = 50;
+    // 0 means use each solver phase's production default. Positive values cap
+    // every iterative phase for interactive/UI-bounded fits.
+    int max_iterations = 0;
     double convergence_tol = 0.0002; // Relative sigma change threshold (Vallado)
 
     // Fit window (seconds from epoch)

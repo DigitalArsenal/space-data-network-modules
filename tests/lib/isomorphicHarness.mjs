@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -25,6 +26,11 @@ export function isMissingWasmEdgeError(error) {
   return /spawn wasmedge ENOENT|command not found|Failed to launch/i.test(
     String(error),
   );
+}
+
+export function isWasmEdgeAvailable() {
+  const result = spawnSync("wasmedge", ["--version"], { stdio: "ignore" });
+  return result.status === 0;
 }
 
 export async function createStandaloneHarness(runtimeKind, wasmPath, options = {}) {
@@ -70,6 +76,11 @@ export async function createStandaloneHarnessOrSkip(
   t,
   options = {},
 ) {
+  if (runtimeKind === "wasmedge" && !isWasmEdgeAvailable()) {
+    t.skip("Install wasmedge to verify the server-path harness.");
+    return null;
+  }
+
   try {
     return await createStandaloneHarness(runtimeKind, wasmPath, options);
   } catch (error) {

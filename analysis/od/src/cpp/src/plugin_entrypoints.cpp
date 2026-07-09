@@ -14,11 +14,11 @@
 
 namespace {
 
-const plugin_input_frame_t* find_meme_frame() {
+const plugin_input_frame_t* find_input_frame(const char* port_id) {
     const auto count = plugin_get_input_count();
     for (uint32_t index = 0; index < count; ++index) {
         const auto* frame = plugin_get_input_frame(index);
-        if (frame && frame->port_id && std::string(frame->port_id) == "meme") {
+        if (frame && frame->port_id && std::string(frame->port_id) == port_id) {
             return frame;
         }
     }
@@ -43,16 +43,24 @@ EMSCRIPTEN_KEEPALIVE
 int fit(void) {
     plugin_reset_output_state();
 
-    const auto* frame = find_meme_frame();
+    const auto* frame = find_input_frame("meme");
     if (!frame || !frame->payload) {
         plugin_set_error("missing-meme-input", "Input port \"meme\" is required.");
         return 1;
     }
+    const auto* options_frame = find_input_frame("options");
+    const std::string_view options_json =
+        options_frame && options_frame->payload
+            ? std::string_view(
+                  reinterpret_cast<const char*>(options_frame->payload),
+                  options_frame->payload_length)
+            : std::string_view{};
 
     const auto result = od::fit_meme_payload(
         std::string_view(
             reinterpret_cast<const char*>(frame->payload),
-            frame->payload_length));
+            frame->payload_length),
+        options_json);
 
     if (!result.ok) {
         plugin_set_error(result.error_code.c_str(), result.error_message.c_str());

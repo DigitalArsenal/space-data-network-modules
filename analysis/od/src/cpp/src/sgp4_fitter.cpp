@@ -60,6 +60,13 @@ static constexpr int IDX_QE = 5;
 static constexpr int IDX_BSTAR = 6;
 static constexpr int IDX_NDOT = 7;  // mean motion derivative (rev/day²)
 
+static int bounded_iteration_count(int default_count, const FitterConfig& config) {
+    if (config.max_iterations <= 0) {
+        return default_count;
+    }
+    return std::max(1, std::min(default_count, config.max_iterations));
+}
+
 // ── Angle normalization ──
 
 static double normalize_angle(double a) {
@@ -687,7 +694,8 @@ static FitResult lm_fit_equinoctial(
     int iter;
     bool converged = false;
 
-    for (iter = 0; iter < config.max_iterations; iter++) {
+    const int max_iterations = config.max_iterations > 0 ? config.max_iterations : 50;
+    for (iter = 0; iter < max_iterations; iter++) {
         // Build Jacobian (M × NPARAMS) via CENTRAL finite differences
         // (Tudat insight: O(h²) accuracy vs O(h) for forward differences)
         Eigen::MatrixXd J(M, NPARAMS);
@@ -1045,28 +1053,36 @@ static FitResult fit_single_epoch(
 
     // Phase 3: LM with equinoctial elements (B* in Jacobian from the start)
     FitterConfig lm_config = config;
-    lm_config.max_iterations = 50;
+    lm_config.max_iterations = bounded_iteration_count(50, config);
     auto result = lm_fit_equinoctial(el, fit_points, lm_config);
 
     // Phase 4: Second LM pass with tighter convergence from best result
     FitterConfig lm2_config = config;
-    lm2_config.max_iterations = 30;
+    lm2_config.max_iterations = bounded_iteration_count(30, config);
     lm2_config.convergence_tol = 1e-4;
     auto result2 = lm_fit_equinoctial(result.elements, fit_points, lm2_config);
     if (result2.rms_km < result.rms_km) result = result2;
 
     // Phase 5: NM polish if RMS > 0.3 km
     if (result.rms_km > 0.3) {
-        auto nm_result = nelder_mead_polish(result.elements, fit_points, 300);
+        auto nm_result = nelder_mead_polish(
+            result.elements,
+            fit_points,
+            bounded_iteration_count(300, config));
         if (nm_result.rms_km < result.rms_km) {
             result.elements = nm_result.elements;
             result.rms_km = nm_result.rms_km;
+            result.iterations = nm_result.iterations;
         }
     }
 
     // Phase 6: DE + LM if RMS > 0.5 km
     if (result.rms_km > 0.5) {
-        auto de_result = differential_evolution(result.elements, fit_points, 40, 60);
+        auto de_result = differential_evolution(
+            result.elements,
+            fit_points,
+            40,
+            bounded_iteration_count(60, config));
         if (de_result.rms_km < result.rms_km) {
             auto de_lm = lm_fit_equinoctial(de_result.elements, fit_points, lm_config);
             if (de_lm.rms_km < result.rms_km) {
@@ -1074,6 +1090,7 @@ static FitResult fit_single_epoch(
             } else if (de_result.rms_km < result.rms_km) {
                 result.elements = de_result.elements;
                 result.rms_km = de_result.rms_km;
+                result.iterations = de_result.iterations;
             }
         }
     }
@@ -1083,6 +1100,7 @@ static FitResult fit_single_epoch(
     result.elements.rms_km = result.rms_km;
     result.elements.converged = result.converged;
     result.elements.iterations = result.iterations;
+    result.elements.max_iterations = config.max_iterations;
 
     return result;
 }
@@ -1104,8 +1122,13 @@ FitResult fit_sgp4(
     if (best_result.rms_km > 0.28 && points.size() > 100) {
         size_t points_per_hour = 3600 / 60;  // MEME = 60s cadence
 
-        // Try 1h through 12h offsets
-        for (int h = 1; h <= 12; h++) {
+        // Try 1h through 12h offsets. A positive interactive iteration cap
+        // also limits multi-start attempts so a bad edit cannot multiply work.
+        const int max_offset_hours =
+            config.max_iterations > 0
+                ? std::max(0, std::min(12, config.max_iterations - 1))
+                : 12;
+        for (int h = 1; h <= max_offset_hours; h++) {
             size_t offset = points_per_hour * h;
             if (offset >= points.size()) break;
             auto trial = fit_single_epoch(points, offset, config);
@@ -1179,6 +1202,9 @@ std::string elements_to_json(const SGP4Elements& el) {
        << "\"MEAN_MOTION_DOT\":" << el.mean_motion_dot << ","
        << "\"MEAN_MOTION_DDOT\":" << el.mean_motion_ddot << ","
        << "\"RMS\":\"" << std::fixed << std::setprecision(3) << el.rms_km << "\","
+       << "\"ITERATIONS\":" << el.iterations << ","
+       << "\"MAX_ITERATIONS\":" << el.max_iterations << ","
+       << "\"CONVERGED\":" << (el.converged ? "true" : "false") << ","
        << "\"DATA_SOURCE\":\"" << el.data_source << "\""
        << "}";
     return ss.str();
