@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -76,6 +77,11 @@ function assertSuccessfulResponse(response) {
   assert.equal(typeof payload.RMS, "string");
 }
 
+function isWasmEdgeAvailable() {
+  const result = spawnSync("wasmedge", ["--version"], { stdio: "ignore" });
+  return result.status === 0;
+}
+
 test("build publishes canonical browser and isomorphic artifact paths", () => {
   assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
   assert.equal(fs.existsSync(fileURLToPath(BROWSER_MODULE_PATH)), true);
@@ -134,6 +140,11 @@ test("built artifact loads through the SDK browser harness", async (t) => {
 });
 
 test("built artifact loads through the WasmEdge server path", async (t) => {
+  if (!isWasmEdgeAvailable()) {
+    t.skip("Install wasmedge to verify the server-path harness.");
+    return;
+  }
+
   let harness;
   try {
     harness = await loadModule({

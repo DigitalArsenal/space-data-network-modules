@@ -26,8 +26,8 @@ const DEFAULT_CELESTRAK_CSV = path.join(
   "celestrak_starlink_supgp.csv",
 );
 
-function createFitRequest(payload) {
-  return {
+function createFitRequest(payload, options = null) {
+  const request = {
     methodId: "fit",
     inputs: [
       {
@@ -36,10 +36,17 @@ function createFitRequest(payload) {
       },
     ],
   };
+  if (options) {
+    request.inputs.push({
+      portId: "options",
+      payload: new TextEncoder().encode(JSON.stringify(options)),
+    });
+  }
+  return request;
 }
 
-async function invokeFitJson(harness, payload) {
-  const response = await harness.invoke(createFitRequest(payload));
+async function invokeFitJson(harness, payload, options = null) {
+  const response = await harness.invoke(createFitRequest(payload, options));
   const bytes = assertSuccessfulResponse(response, { outputPortId: "result" });
   return JSON.parse(new TextDecoder().decode(bytes));
 }
@@ -153,6 +160,28 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(Math.abs(result.ECCENTRICITY - 0.0001602) < 1e-7);
     assert.ok(Math.abs(result.INCLINATION - 53.2223) < 1e-4);
     assert.ok(Number.parseFloat(result.RMS) <= 0.001);
+  });
+
+  test(`OD fit honors maxIterations option on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeFitJson(
+      harness,
+      fs.readFileSync(fileURLToPath(FIXTURE_MEME_PATH)),
+      { maxIterations: 2 },
+    );
+
+    assert.equal(result.MAX_ITERATIONS, 2);
+    assert.ok(
+      Number.isInteger(result.ITERATIONS) && result.ITERATIONS <= 2,
+      `Expected solver iterations <= 2, got ${result.ITERATIONS}`,
+    );
   });
 
   test(`OD fit rejects malformed MEME payloads on ${runtimeKind}`, async (t) => {

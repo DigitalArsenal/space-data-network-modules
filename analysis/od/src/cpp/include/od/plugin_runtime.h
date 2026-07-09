@@ -13,7 +13,9 @@ struct PluginFitResult {
     std::string error_message;
 };
 
-PluginFitResult fit_meme_payload(std::string_view meme_content);
+PluginFitResult fit_meme_payload(
+    std::string_view meme_content,
+    std::string_view options_json = {});
 
 }  // namespace od
 

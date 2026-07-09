@@ -123,8 +123,12 @@ struct AllocationRecord {
 static const AcceptedTypeRef kMethod_fit_input_port_0_accepted_types[] = {
   { true, "", "", 0u, false, "" },
 };
+static const AcceptedTypeRef kMethod_fit_input_port_1_accepted_types[] = {
+  { true, "", "", 0u, false, "" },
+};
 static const PortRequirement kMethod_fit_input_ports[] = {
   { "meme", true, kMethod_fit_input_port_0_accepted_types, 1u },
+  { "options", false, kMethod_fit_input_port_1_accepted_types, 1u },
 };
 static const char *kMethod_fit_output_ports[] = {
   "result",
@@ -135,7 +139,7 @@ static const MethodDescriptor kMethodTable[] = {
     "fit",
     &fit,
     kMethod_fit_input_ports,
-    1u,
+    2u,
     kMethod_fit_output_ports,
     1u,
     true,
