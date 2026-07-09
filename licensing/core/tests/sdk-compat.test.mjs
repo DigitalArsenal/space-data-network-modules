@@ -123,13 +123,30 @@ function createServerHostDispatch(contentStore, keySlots = new Map(), wallet = n
     if (operation === "random.bytes") {
       return randomBytes(params?.length ?? 32);
     }
-    if (operation === "keyslot.get") {
+    if (operation === "keyslot.sign") {
+      // Host-side crypto oracle mock, matching
+      // sdn-server/internal/modulert/caps/keyslot.go (handleKeyslotSign):
+      // the slot's raw key material never leaves this dispatch function —
+      // only the resulting signature, base64-encoded, crosses back to the
+      // wasm guest as a plain JSON string field.
       const slotId = String(params?.slotId ?? "");
       const keyBytes = keySlots.get(slotId);
       if (!keyBytes) {
-        throw new Error(`keyslot.get missing slot: ${slotId}`);
+        throw new Error(`keyslot.sign missing slot: ${slotId}`);
       }
-      return new Uint8Array(keyBytes);
+      const algorithm = params?.algorithm || "ed25519";
+      if (algorithm !== "ed25519") {
+        throw new Error(`Unsupported keyslot.sign algorithm: ${algorithm}`);
+      }
+      const payload =
+        params?.payload instanceof Uint8Array
+          ? params.payload
+          : new Uint8Array();
+      const signature = wallet.curves.ed25519.sign(payload, keyBytes);
+      return {
+        signature: Buffer.from(signature).toString("base64"),
+        algorithm: "ed25519",
+      };
     }
     if (operation === "ipfs.add") {
       // Copy: hostcall segments are views into wasm guest memory.

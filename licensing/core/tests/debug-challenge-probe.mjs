@@ -57,10 +57,24 @@ function dispatch(operation, params) {
   }
   if (operation === "clock.now") return Date.now();
   if (operation === "random.bytes") return randomBytes(params?.length ?? 32);
-  if (operation === "keyslot.get") {
-    const keyBytes = keySlots.get(String(params?.slotId ?? ""));
-    if (!keyBytes) throw new Error(`keyslot.get missing slot ${params?.slotId}`);
-    return new Uint8Array(keyBytes);
+  if (operation === "keyslot.sign") {
+    // keyslot.get was removed as a raw-key-export host op; the host now
+    // signs on the guest's behalf and returns only the signature (base64),
+    // matching sdn-server/internal/modulert/caps/keyslot.go.
+    const slotId = String(params?.slotId ?? "");
+    const keyBytes = keySlots.get(slotId);
+    if (!keyBytes) throw new Error(`keyslot.sign missing slot ${slotId}`);
+    const algorithm = params?.algorithm || "ed25519";
+    if (algorithm !== "ed25519") {
+      throw new Error(`Unsupported keyslot.sign algorithm: ${algorithm}`);
+    }
+    const payload =
+      params?.payload instanceof Uint8Array ? params.payload : new Uint8Array();
+    const signature = wallet.curves.ed25519.sign(payload, keyBytes);
+    return {
+      signature: Buffer.from(signature).toString("base64"),
+      algorithm: "ed25519",
+    };
   }
   if (operation === "ipfs.add") {
     const raw = Buffer.from(params.content);
