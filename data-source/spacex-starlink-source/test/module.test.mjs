@@ -19,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = path.join(__dirname, "..", "dist", "spacex-starlink-source.wasm");
 const KEYPAIR_PATH =
   process.env.SDN_MODULE_SIGNING_KEYPAIR ||
-  path.resolve(__dirname, "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json");
+  path.resolve(__dirname, "../../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json");
 
 const REQUIRED_EXPORTS = [
   "plugin_invoke_stream",

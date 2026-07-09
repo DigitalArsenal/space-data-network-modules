@@ -23,11 +23,20 @@
 #include <string>
 #include <vector>
 
+// sdm_hostcall_wire.hpp must precede keyslotClient.hpp (the SDK header
+// asserts SDM_HOSTCALL_WIRE_HPP is already defined). Resolved via -I flags
+// build.mjs adds for common/ (SDN_COMMON_DIR) and the space-data-module-sdk
+// host/cpp dir (SDM_HOST_CPP_DIR, via the node_modules symlink).
+#include "sdm_hostcall_wire.hpp"
+#include "keyslotClient.hpp"
+
 // SpaceX Starlink public ephemeris listing (discover endpoint): MANIFEST.txt
 // lists one ephemeris filename per line (the bare directory URL 404s).
 static const char* kStarlinkDiscoverURL =
     "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
-// Node signing key slot (wallet_sign / keyslot.get) used to sign published PNMs.
+// Node signing key slot (wallet_sign -> keyslot.sign) used to sign published
+// PNMs. The slot's private key material is host-side only; it never enters
+// guest memory (see sdm_keyslot::keyslot_sign below).
 static const char* kSigningKeySlot = "node-signing";
 // PubSub topic the module publishes PNM pointers on.
 static const char* kPublishTopic = "sdn/data-source/spacex-starlink";
@@ -171,40 +180,6 @@ std::string base64_encode(const uint8_t* data, size_t len) {
     return out;
 }
 
-// Parse the binary segments trailing a hostcall envelope (after the JSON meta).
-std::vector<std::vector<uint8_t>> envelope_segments(const std::vector<uint8_t>& env) {
-    std::vector<std::vector<uint8_t>> segs;
-    if (env.size() < 4) return segs;
-    auto rd32 = [&](size_t off) -> uint32_t {
-        return static_cast<uint32_t>(env[off]) | (static_cast<uint32_t>(env[off + 1]) << 8) |
-               (static_cast<uint32_t>(env[off + 2]) << 16) | (static_cast<uint32_t>(env[off + 3]) << 24);
-    };
-    uint32_t meta_len = rd32(0);
-    size_t off = 4 + meta_len;
-    if (off + 4 > env.size()) return segs;
-    uint32_t seg_count = rd32(off);
-    off += 4;
-    for (uint32_t i = 0; i < seg_count && off + 4 <= env.size(); i++) {
-        uint32_t seg_len = rd32(off);
-        off += 4;
-        if (off + seg_len > env.size()) break;
-        segs.emplace_back(env.begin() + off, env.begin() + off + seg_len);
-        off += seg_len;
-    }
-    return segs;
-}
-
-// Extract raw result bytes from a cap response: a base64 "base64" field in the
-// meta result ({"__type":"bytes","base64":"..."}) or the first binary segment.
-std::vector<uint8_t> cap_result_bytes(const std::vector<uint8_t>& env) {
-    std::string meta = envelope_meta_json(env);
-    std::string b64;
-    if (json_string_field(meta, "base64", &b64)) return base64_decode(b64);
-    auto segs = envelope_segments(env);
-    if (!segs.empty()) return segs[0];
-    return {};
-}
-
 bool cap_ok(const std::vector<uint8_t>& env) {
     return envelope_meta_json(env).find("\"ok\":true") != std::string::npos;
 }
@@ -240,23 +215,16 @@ bool storage_write(const std::string& schema, const uint8_t* data, size_t len) {
     return cap_ok(hostcall("storage.write", payload));
 }
 
-// WALLET_SIGN (keyslot.get): fetch the node's signing key material by slot id.
-std::vector<uint8_t> keyslot_get(const std::string& slot_id) {
-    std::string payload = "{\"slotId\":\"" + json_escape(slot_id) + "\"}";
-    return cap_result_bytes(hostcall("keyslot.get", payload));
-}
-
-// CRYPTO_SIGN: sign data with the given key/algorithm; returns the signature.
-std::vector<uint8_t> crypto_sign(const std::string& algorithm, const std::vector<uint8_t>& key,
-                                 const uint8_t* data, size_t len) {
-    std::string payload = "{\"algorithm\":\"" + json_escape(algorithm) + "\",\"key\":\"" +
-                          base64_encode(key.data(), key.size()) + "\",\"data\":\"" +
-                          base64_encode(data, len) + "\"}";
-    std::vector<uint8_t> env = hostcall("crypto.sign", payload);
-    std::string meta = envelope_meta_json(env);
-    std::string sig_b64;
-    if (json_string_field(meta, "signature", &sig_b64)) return base64_decode(sig_b64);
-    return {};
+// WALLET_SIGN: sign data with the node's identity key via the host-side
+// keyslot.sign crypto oracle (sdn-server/internal/modulert/caps/keyslot.go).
+// The slot's private key material never crosses into guest memory — only
+// the resulting signature does. Returns an empty vector on failure.
+std::vector<uint8_t> keyslot_sign(const std::string& slot_id, const uint8_t* data, size_t len) {
+    std::vector<uint8_t> signature;
+    if (!sdm_keyslot::keyslot_sign(slot_id, data, len, &signature)) {
+        return {};
+    }
+    return signature;
 }
 
 // PUBSUB: publish a message (utf8) to a topic.
@@ -293,12 +261,10 @@ std::string run_pull() {
                       "\",\"discovered\":" + std::to_string(discovered) +
                       ",\"bytes\":" + std::to_string(listing.size()) + "}";
 
-    // Sign the PNM with the node identity (WALLET_SIGN -> keyslot.get, CRYPTO_SIGN).
-    std::vector<uint8_t> key = keyslot_get(kSigningKeySlot);
-    std::vector<uint8_t> signature;
-    if (!key.empty()) {
-        signature = crypto_sign("ed25519", key, reinterpret_cast<const uint8_t*>(pnm.data()), pnm.size());
-    }
+    // Sign the PNM with the node identity via the keyslot.sign host-side
+    // crypto oracle (WALLET_SIGN). The signing key never enters guest memory.
+    std::vector<uint8_t> signature =
+        keyslot_sign(kSigningKeySlot, reinterpret_cast<const uint8_t*>(pnm.data()), pnm.size());
 
     // Publish the signed PNM (PUBSUB).
     std::string message = "{\"pnm\":" + pnm + ",\"signature\":\"" +

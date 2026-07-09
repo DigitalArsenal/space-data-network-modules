@@ -28,6 +28,17 @@ const DIST_DIR = path.join(__dirname, "dist");
 const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
 const SRC_DIR = path.join(__dirname, "src");
 const CORE_SDS_GENERATED_DIR = path.resolve(__dirname, "../../licensing/core/src/cpp/generated/sds");
+// sdm_hostcall_wire.hpp (shared module-side hostcall wire format) and the SDK's
+// keyslotClient.hpp (sdm_keyslot::keyslot_sign — the keyslot.sign host-side
+// crypto oracle client; raw key export via keyslot.get was removed host-side).
+// Mirrors licensing/core/src/cpp/CMakeLists.txt's SDN_COMMON_DIR/SDM_HOST_CPP_DIR
+// include paths, adapted for this module's direct em++ build (no CMake here).
+// The SDK dir is resolved through the node_modules symlink at the
+// space-data-network-modules workspace root (this package has no local
+// node_modules — Node's resolver already walks up to find it there for the JS
+// imports above; the C++ header lives under the same package).
+const SDN_COMMON_DIR = path.resolve(__dirname, "../../common");
+const SDM_HOST_CPP_DIR = path.resolve(__dirname, "../../node_modules/space-data-module-sdk/src/host/cpp");
 const MODULE_SIGNING_KEYPAIR_PATH =
   process.env.SDN_MODULE_SIGNING_KEYPAIR ||
   path.resolve(__dirname, "../../../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json");
@@ -138,7 +149,16 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
   const outWasm = path.join(DIST_DIR, "spacex-starlink-source.wasm");
   const emxx = path.join(EMSDK_DIR, "upstream", "emscripten", "em++");
 
-  const includes = [`-I${shellQuote(flatbuffersInclude)}`];
+  if (!fs.existsSync(path.join(SDN_COMMON_DIR, "sdm_hostcall_wire.hpp"))) {
+    throw new Error(`sdm_hostcall_wire.hpp not found under ${SDN_COMMON_DIR}`);
+  }
+  if (!fs.existsSync(path.join(SDM_HOST_CPP_DIR, "keyslotClient.hpp"))) {
+    throw new Error(
+      `keyslotClient.hpp not found under ${SDM_HOST_CPP_DIR} (expected the space-data-module-sdk node_modules symlink at the workspace root)`,
+    );
+  }
+
+  const includes = [`-I${shellQuote(flatbuffersInclude)}`, `-I${shellQuote(SDN_COMMON_DIR)}`, `-I${shellQuote(SDM_HOST_CPP_DIR)}`];
   if (fs.existsSync(CORE_SDS_GENERATED_DIR)) includes.push(`-I${shellQuote(CORE_SDS_GENERATED_DIR)}`);
 
   run(
