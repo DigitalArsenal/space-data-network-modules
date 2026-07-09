@@ -79,6 +79,7 @@ target_compile_definitions(
 )
 
 get_filename_component(SDN_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../common" ABSOLUTE)
+get_filename_component(SDM_HOST_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../node_modules/space-data-module-sdk/src/host/cpp" ABSOLUTE)
 
 add_library(
     licensing_core STATIC
@@ -103,6 +104,7 @@ target_include_directories(
     generated/keybroker
     "${SDN_COMMON_DIR}"
     "${SDN_COMMON_DIR}/epm"
+    "${SDM_HOST_CPP_DIR}"
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${DA_FLATBUFFERS_ROOT}/include"
 )

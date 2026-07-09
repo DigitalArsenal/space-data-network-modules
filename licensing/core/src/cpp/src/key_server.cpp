@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "../../../../../common/sdm_hostcall_wire.hpp"
+#include "keyslotClient.hpp"
 
 namespace {
 
@@ -133,7 +134,11 @@ int64_t g_max_skew_ms = kDefaultMaxSkewMs;
 int64_t g_challenge_ttl_ms = kDefaultChallengeTtlMs;
 uint32_t g_active_key_version = 1;
 std::string g_provider_peer_id = "provider.orbpro.test";
-std::array<uint8_t, 32> g_provider_signing_seed{};
+// NOTE: there is deliberately no g_provider_signing_seed. The provider's
+// ed25519 seed lives host-side in the keyslot named by
+// g_provider_signing_slot_id; it never enters guest memory. Grant/challenge
+// signing goes through sdm_keyslot::keyslot_sign (a keyslot.sign hostcall)
+// instead of a local ed25519 sign over a cached seed.
 std::array<uint8_t, 32> g_provider_signing_public{};
 std::string g_provider_signing_slot_id{};
 std::string g_provider_wrapping_slot_id{};
@@ -444,21 +449,6 @@ std::string escape_json_string(std::string_view value) {
     }
   }
   return escaped;
-}
-
-bool keyslot_get_bytes(
-    std::string_view slot_id,
-    std::vector<uint8_t>* bytes_out) {
-  if (!bytes_out || slot_id.empty()) {
-    return false;
-  }
-  const std::string meta =
-      "{\"slotId\":\"" + escape_json_string(slot_id) + "\"}";
-  sdm_hostcall::Response response;
-  if (!sdm_hostcall::call("keyslot.get", meta, {}, &response)) {
-    return false;
-  }
-  return sdm_hostcall::get_result_bytes(response, bytes_out);
 }
 
 bool ipfs_add_bytes(
@@ -917,36 +907,6 @@ bool ed25519_public_key_from_seed(
   return true;
 }
 
-bool ed25519_sign_detached(
-    const uint8_t* message,
-    size_t message_len,
-    const uint8_t* seed,
-    size_t seed_len,
-    const uint8_t* public_key,
-    size_t public_key_len,
-    std::array<uint8_t, 64>* signature_out) {
-  if (!message || !seed || !public_key || !signature_out ||
-      seed_len != 32 || public_key_len != 32) {
-    return false;
-  }
-  std::vector<uint8_t> signature_bytes;
-  sdm_hostcall::Response response;
-  if (!sdm_hostcall::call(
-          "crypto.ed25519.sign",
-          "{\"message\":{\"$bin\":0},\"seed\":{\"$bin\":1}}",
-          {{message, message_len}, {seed, seed_len}},
-          &response) ||
-      !sdm_hostcall::get_result_bytes(response, &signature_bytes) ||
-      signature_bytes.size() != signature_out->size()) {
-    return false;
-  }
-  std::memcpy(
-      signature_out->data(),
-      signature_bytes.data(),
-      signature_out->size());
-  return true;
-}
-
 bool ed25519_verify_detached(
     const uint8_t* message,
     size_t message_len,
@@ -1102,7 +1062,6 @@ std::vector<uint8_t> build_lch_bytes(
 bool parse_runtime_config_lcf(
     const uint8_t* config_bytes,
     uint32_t config_len,
-    std::array<uint8_t, 32>* provider_signing_seed_out,
     std::array<uint8_t, 32>* provider_signing_public_out,
     std::string* provider_signing_slot_id_out,
     std::string* provider_wrapping_slot_id_out,
@@ -1113,7 +1072,7 @@ bool parse_runtime_config_lcf(
     int64_t* challenge_ttl_ms_out,
     uint32_t* key_version_out) {
   if (!config_bytes || config_len == 0 ||
-      !provider_signing_seed_out || !provider_signing_public_out ||
+      !provider_signing_public_out ||
       !provider_signing_slot_id_out || !provider_wrapping_slot_id_out ||
       !provider_peer_id_out || !capability_token_out ||
       !expires_at_ms_out || !max_skew_ms_out ||
@@ -1141,40 +1100,21 @@ bool parse_runtime_config_lcf(
     return false;
   }
 
-  std::vector<uint8_t> signing_seed_bytes;
-  if (!keyslot_get_bytes(signing_slot_id, &signing_seed_bytes) ||
-      signing_seed_bytes.size() != provider_signing_seed_out->size()) {
-    secure_zero(signing_seed_bytes.data(), signing_seed_bytes.size());
-    return false;
-  }
-  std::memcpy(
-      provider_signing_seed_out->data(),
-      signing_seed_bytes.data(),
-      provider_signing_seed_out->size());
-  secure_zero(signing_seed_bytes.data(), signing_seed_bytes.size());
-
-  if (!ed25519_public_key_from_seed(
-          provider_signing_seed_out->data(),
-          provider_signing_seed_out->size(),
-          provider_signing_public_out)) {
-    secure_zero(
-        provider_signing_seed_out->data(),
-        provider_signing_seed_out->size());
-    return false;
-  }
+  // The provider's ed25519 seed lives host-side in this slot; grant and
+  // challenge signing goes through a keyslot.sign hostcall at the point of
+  // use (see sdm_keyslot::keyslot_sign), never through a locally-held seed.
+  // The public key can therefore only be learned here when the host
+  // includes it inline in PROVIDER_SIGNING_KEY.PUBLIC_KEY — leave it
+  // zeroed when absent rather than failing configuration, since
+  // keyslot.sign itself does not depend on the guest knowing the public
+  // key.
+  provider_signing_public_out->fill(0);
   if (signing_key->PUBLIC_KEY() &&
-      signing_key->PUBLIC_KEY()->size() == provider_signing_public_out->size() &&
-      std::memcmp(
-          signing_key->PUBLIC_KEY()->data(),
-          provider_signing_public_out->data(),
-          provider_signing_public_out->size()) != 0) {
-    secure_zero(
-        provider_signing_seed_out->data(),
-        provider_signing_seed_out->size());
-    secure_zero(
+      signing_key->PUBLIC_KEY()->size() == provider_signing_public_out->size()) {
+    std::memcpy(
         provider_signing_public_out->data(),
+        signing_key->PUBLIC_KEY()->data(),
         provider_signing_public_out->size());
-    return false;
   }
 
   *provider_signing_slot_id_out = signing_slot_id;
@@ -1964,7 +1904,6 @@ int32_t key_server_configure_runtime(
   int64_t next_challenge_ttl_ms = kDefaultChallengeTtlMs;
   int64_t next_expires_at_ms = 0;
   uint32_t next_key_version = 1;
-  std::array<uint8_t, 32> next_provider_signing_seed{};
   std::array<uint8_t, 32> next_provider_signing_public{};
   std::string next_provider_signing_slot_id{};
   std::string next_provider_wrapping_slot_id{};
@@ -1974,7 +1913,6 @@ int32_t key_server_configure_runtime(
   if (!parse_runtime_config_lcf(
           config_bytes,
           config_len,
-          &next_provider_signing_seed,
           &next_provider_signing_public,
           &next_provider_signing_slot_id,
           &next_provider_wrapping_slot_id,
@@ -1984,9 +1922,6 @@ int32_t key_server_configure_runtime(
           &next_max_skew_ms,
           &next_challenge_ttl_ms,
           &next_key_version)) {
-    secure_zero(
-        next_provider_signing_seed.data(),
-        next_provider_signing_seed.size());
     secure_zero(
         next_provider_signing_public.data(),
         next_provider_signing_public.size());
@@ -2007,9 +1942,7 @@ int32_t key_server_configure_runtime(
   g_provider_peer_id = next_provider_peer_id;
   g_provider_signing_slot_id = next_provider_signing_slot_id;
   g_provider_wrapping_slot_id = next_provider_wrapping_slot_id;
-  secure_zero(g_provider_signing_seed.data(), g_provider_signing_seed.size());
   secure_zero(g_provider_signing_public.data(), g_provider_signing_public.size());
-  g_provider_signing_seed = next_provider_signing_seed;
   g_provider_signing_public = next_provider_signing_public;
   g_capability_token = std::move(next_capability_token);
   g_initialized = true;
@@ -2650,16 +2583,18 @@ int32_t key_server_handle_message(
       g_provider_signing_public,
       zero_provider_signature.data(),
       zero_provider_signature.size());
-  std::array<uint8_t, kProviderSignatureBytes> provider_signature{};
-  if (!ed25519_sign_detached(
+  // The provider's ed25519 seed never enters guest memory: the host signs
+  // the grant on the module's behalf (keyslot.sign) and returns only the
+  // resulting signature.
+  std::vector<uint8_t> provider_signature;
+  if (!sdm_keyslot::keyslot_sign(
+          g_provider_signing_slot_id,
           grant_response_bytes.data(),
           grant_response_bytes.size(),
-          g_provider_signing_seed.data(),
-          g_provider_signing_seed.size(),
-          g_provider_signing_public.data(),
-          g_provider_signing_public.size(),
-          &provider_signature)) {
+          &provider_signature) ||
+      provider_signature.size() != kProviderSignatureBytes) {
     secure_zero_publication(&publication);
+    secure_zero(provider_signature.data(), provider_signature.size());
     return kServerCryptoError;
   }
   if (!replace_lgr_provider_signature(

@@ -13,9 +13,146 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+struct DataQualityMetrics;
+struct DataQualityMetricsBuilder;
+struct DataQualityMetricsT;
+
 struct REV;
 struct REVBuilder;
 struct REVT;
+
+/// Review lifecycle status.
+enum class reviewLifecycleStatus : int8_t {
+  Published = 0,
+  Pending = 1,
+  Flagged = 2,
+  Hidden = 3,
+  Removed = 4,
+  MIN = Published,
+  MAX = Removed
+};
+
+inline const reviewLifecycleStatus (&EnumValuesreviewLifecycleStatus())[5] {
+  static const reviewLifecycleStatus values[] = {
+    reviewLifecycleStatus::Published,
+    reviewLifecycleStatus::Pending,
+    reviewLifecycleStatus::Flagged,
+    reviewLifecycleStatus::Hidden,
+    reviewLifecycleStatus::Removed
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesreviewLifecycleStatus() {
+  static const char * const names[6] = {
+    "Published",
+    "Pending",
+    "Flagged",
+    "Hidden",
+    "Removed",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamereviewLifecycleStatus(reviewLifecycleStatus e) {
+  if (::flatbuffers::IsOutRange(e, reviewLifecycleStatus::Published, reviewLifecycleStatus::Removed)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesreviewLifecycleStatus()[index];
+}
+
+struct DataQualityMetricsT : public ::flatbuffers::NativeTable {
+  typedef DataQualityMetrics TableType;
+  uint8_t SCHEMA_COMPLIANCE = 0;
+  uint8_t DATA_FRESHNESS = 0;
+  uint8_t COVERAGE_ACCURACY = 0;
+  uint8_t DELIVERY_RELIABILITY = 0;
+};
+
+/// Data quality metrics attached to a review.
+struct DataQualityMetrics FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef DataQualityMetricsT NativeTableType;
+  typedef DataQualityMetricsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SCHEMA_COMPLIANCE = 4,
+    VT_DATA_FRESHNESS = 6,
+    VT_COVERAGE_ACCURACY = 8,
+    VT_DELIVERY_RELIABILITY = 10
+  };
+  uint8_t SCHEMA_COMPLIANCE() const {
+    return GetField<uint8_t>(VT_SCHEMA_COMPLIANCE, 0);
+  }
+  uint8_t DATA_FRESHNESS() const {
+    return GetField<uint8_t>(VT_DATA_FRESHNESS, 0);
+  }
+  uint8_t COVERAGE_ACCURACY() const {
+    return GetField<uint8_t>(VT_COVERAGE_ACCURACY, 0);
+  }
+  uint8_t DELIVERY_RELIABILITY() const {
+    return GetField<uint8_t>(VT_DELIVERY_RELIABILITY, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_SCHEMA_COMPLIANCE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_DATA_FRESHNESS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_COVERAGE_ACCURACY, 1) &&
+           VerifyField<uint8_t>(verifier, VT_DELIVERY_RELIABILITY, 1) &&
+           verifier.EndTable();
+  }
+  DataQualityMetricsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(DataQualityMetricsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<DataQualityMetrics> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const DataQualityMetricsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct DataQualityMetricsBuilder {
+  typedef DataQualityMetrics Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SCHEMA_COMPLIANCE(uint8_t SCHEMA_COMPLIANCE) {
+    fbb_.AddElement<uint8_t>(DataQualityMetrics::VT_SCHEMA_COMPLIANCE, SCHEMA_COMPLIANCE, 0);
+  }
+  void add_DATA_FRESHNESS(uint8_t DATA_FRESHNESS) {
+    fbb_.AddElement<uint8_t>(DataQualityMetrics::VT_DATA_FRESHNESS, DATA_FRESHNESS, 0);
+  }
+  void add_COVERAGE_ACCURACY(uint8_t COVERAGE_ACCURACY) {
+    fbb_.AddElement<uint8_t>(DataQualityMetrics::VT_COVERAGE_ACCURACY, COVERAGE_ACCURACY, 0);
+  }
+  void add_DELIVERY_RELIABILITY(uint8_t DELIVERY_RELIABILITY) {
+    fbb_.AddElement<uint8_t>(DataQualityMetrics::VT_DELIVERY_RELIABILITY, DELIVERY_RELIABILITY, 0);
+  }
+  explicit DataQualityMetricsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<DataQualityMetrics> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<DataQualityMetrics>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<DataQualityMetrics> CreateDataQualityMetrics(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t SCHEMA_COMPLIANCE = 0,
+    uint8_t DATA_FRESHNESS = 0,
+    uint8_t COVERAGE_ACCURACY = 0,
+    uint8_t DELIVERY_RELIABILITY = 0) {
+  DataQualityMetricsBuilder builder_(_fbb);
+  builder_.add_DELIVERY_RELIABILITY(DELIVERY_RELIABILITY);
+  builder_.add_COVERAGE_ACCURACY(COVERAGE_ACCURACY);
+  builder_.add_DATA_FRESHNESS(DATA_FRESHNESS);
+  builder_.add_SCHEMA_COMPLIANCE(SCHEMA_COMPLIANCE);
+  return builder_.Finish();
+}
+
+struct DataQualityMetrics::Traits {
+  using type = DataQualityMetrics;
+  static auto constexpr Create = CreateDataQualityMetrics;
+};
+
+::flatbuffers::Offset<DataQualityMetrics> CreateDataQualityMetrics(::flatbuffers::FlatBufferBuilder &_fbb, const DataQualityMetricsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct REVT : public ::flatbuffers::NativeTable {
   typedef REV TableType;
@@ -28,6 +165,20 @@ struct REVT : public ::flatbuffers::NativeTable {
   std::string ACL_GRANT_ID{};
   uint64_t TIMESTAMP = 0;
   std::vector<uint8_t> REVIEWER_SIGNATURE{};
+  std::unique_ptr<DataQualityMetricsT> QUALITY_METRICS{};
+  bool VERIFIED_PURCHASE = false;
+  uint64_t UPDATED_AT = 0;
+  reviewLifecycleStatus STATUS = reviewLifecycleStatus::Published;
+  uint32_t HELPFUL_COUNT = 0;
+  uint32_t NOT_HELPFUL_COUNT = 0;
+  std::string PROVIDER_RESPONSE{};
+  uint64_t PROVIDER_RESPONSE_AT = 0;
+  uint32_t FLAGGED_COUNT = 0;
+  std::string MODERATION_NOTES{};
+  REVT() = default;
+  REVT(const REVT &o);
+  REVT(REVT&&) FLATBUFFERS_NOEXCEPT = default;
+  REVT &operator=(REVT o) FLATBUFFERS_NOEXCEPT;
 };
 
 /// Review - User review of a storefront listing
@@ -44,7 +195,17 @@ struct REV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CONTENT = 14,
     VT_ACL_GRANT_ID = 16,
     VT_TIMESTAMP = 18,
-    VT_REVIEWER_SIGNATURE = 20
+    VT_REVIEWER_SIGNATURE = 20,
+    VT_QUALITY_METRICS = 22,
+    VT_VERIFIED_PURCHASE = 24,
+    VT_UPDATED_AT = 26,
+    VT_STATUS = 28,
+    VT_HELPFUL_COUNT = 30,
+    VT_NOT_HELPFUL_COUNT = 32,
+    VT_PROVIDER_RESPONSE = 34,
+    VT_PROVIDER_RESPONSE_AT = 36,
+    VT_FLAGGED_COUNT = 38,
+    VT_MODERATION_NOTES = 40
   };
   /// Unique identifier for this review
   const ::flatbuffers::String *REVIEW_ID() const {
@@ -82,6 +243,46 @@ struct REV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<uint8_t> *REVIEWER_SIGNATURE() const {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_REVIEWER_SIGNATURE);
   }
+  /// Data quality metrics supplied by reviewer
+  const DataQualityMetrics *QUALITY_METRICS() const {
+    return GetPointer<const DataQualityMetrics *>(VT_QUALITY_METRICS);
+  }
+  /// Whether the review is tied to a verified purchase
+  bool VERIFIED_PURCHASE() const {
+    return GetField<uint8_t>(VT_VERIFIED_PURCHASE, 0) != 0;
+  }
+  /// Unix timestamp when the review was last updated
+  uint64_t UPDATED_AT() const {
+    return GetField<uint64_t>(VT_UPDATED_AT, 0);
+  }
+  /// Review lifecycle status
+  reviewLifecycleStatus STATUS() const {
+    return static_cast<reviewLifecycleStatus>(GetField<int8_t>(VT_STATUS, 0));
+  }
+  /// Helpful vote count
+  uint32_t HELPFUL_COUNT() const {
+    return GetField<uint32_t>(VT_HELPFUL_COUNT, 0);
+  }
+  /// Not-helpful vote count
+  uint32_t NOT_HELPFUL_COUNT() const {
+    return GetField<uint32_t>(VT_NOT_HELPFUL_COUNT, 0);
+  }
+  /// Provider response body
+  const ::flatbuffers::String *PROVIDER_RESPONSE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROVIDER_RESPONSE);
+  }
+  /// Unix timestamp when provider responded
+  uint64_t PROVIDER_RESPONSE_AT() const {
+    return GetField<uint64_t>(VT_PROVIDER_RESPONSE_AT, 0);
+  }
+  /// Number of moderation flags
+  uint32_t FLAGGED_COUNT() const {
+    return GetField<uint32_t>(VT_FLAGGED_COUNT, 0);
+  }
+  /// Moderation notes
+  const ::flatbuffers::String *MODERATION_NOTES() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODERATION_NOTES);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -101,6 +302,19 @@ struct REV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint64_t>(verifier, VT_TIMESTAMP, 8) &&
            VerifyOffset(verifier, VT_REVIEWER_SIGNATURE) &&
            verifier.VerifyVector(REVIEWER_SIGNATURE()) &&
+           VerifyOffset(verifier, VT_QUALITY_METRICS) &&
+           verifier.VerifyTable(QUALITY_METRICS()) &&
+           VerifyField<uint8_t>(verifier, VT_VERIFIED_PURCHASE, 1) &&
+           VerifyField<uint64_t>(verifier, VT_UPDATED_AT, 8) &&
+           VerifyField<int8_t>(verifier, VT_STATUS, 1) &&
+           VerifyField<uint32_t>(verifier, VT_HELPFUL_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_NOT_HELPFUL_COUNT, 4) &&
+           VerifyOffset(verifier, VT_PROVIDER_RESPONSE) &&
+           verifier.VerifyString(PROVIDER_RESPONSE()) &&
+           VerifyField<uint64_t>(verifier, VT_PROVIDER_RESPONSE_AT, 8) &&
+           VerifyField<uint32_t>(verifier, VT_FLAGGED_COUNT, 4) &&
+           VerifyOffset(verifier, VT_MODERATION_NOTES) &&
+           verifier.VerifyString(MODERATION_NOTES()) &&
            verifier.EndTable();
   }
   REVT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -139,6 +353,36 @@ struct REVBuilder {
   void add_REVIEWER_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> REVIEWER_SIGNATURE) {
     fbb_.AddOffset(REV::VT_REVIEWER_SIGNATURE, REVIEWER_SIGNATURE);
   }
+  void add_QUALITY_METRICS(::flatbuffers::Offset<DataQualityMetrics> QUALITY_METRICS) {
+    fbb_.AddOffset(REV::VT_QUALITY_METRICS, QUALITY_METRICS);
+  }
+  void add_VERIFIED_PURCHASE(bool VERIFIED_PURCHASE) {
+    fbb_.AddElement<uint8_t>(REV::VT_VERIFIED_PURCHASE, static_cast<uint8_t>(VERIFIED_PURCHASE), 0);
+  }
+  void add_UPDATED_AT(uint64_t UPDATED_AT) {
+    fbb_.AddElement<uint64_t>(REV::VT_UPDATED_AT, UPDATED_AT, 0);
+  }
+  void add_STATUS(reviewLifecycleStatus STATUS) {
+    fbb_.AddElement<int8_t>(REV::VT_STATUS, static_cast<int8_t>(STATUS), 0);
+  }
+  void add_HELPFUL_COUNT(uint32_t HELPFUL_COUNT) {
+    fbb_.AddElement<uint32_t>(REV::VT_HELPFUL_COUNT, HELPFUL_COUNT, 0);
+  }
+  void add_NOT_HELPFUL_COUNT(uint32_t NOT_HELPFUL_COUNT) {
+    fbb_.AddElement<uint32_t>(REV::VT_NOT_HELPFUL_COUNT, NOT_HELPFUL_COUNT, 0);
+  }
+  void add_PROVIDER_RESPONSE(::flatbuffers::Offset<::flatbuffers::String> PROVIDER_RESPONSE) {
+    fbb_.AddOffset(REV::VT_PROVIDER_RESPONSE, PROVIDER_RESPONSE);
+  }
+  void add_PROVIDER_RESPONSE_AT(uint64_t PROVIDER_RESPONSE_AT) {
+    fbb_.AddElement<uint64_t>(REV::VT_PROVIDER_RESPONSE_AT, PROVIDER_RESPONSE_AT, 0);
+  }
+  void add_FLAGGED_COUNT(uint32_t FLAGGED_COUNT) {
+    fbb_.AddElement<uint32_t>(REV::VT_FLAGGED_COUNT, FLAGGED_COUNT, 0);
+  }
+  void add_MODERATION_NOTES(::flatbuffers::Offset<::flatbuffers::String> MODERATION_NOTES) {
+    fbb_.AddOffset(REV::VT_MODERATION_NOTES, MODERATION_NOTES);
+  }
   explicit REVBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -163,9 +407,27 @@ inline ::flatbuffers::Offset<REV> CreateREV(
     ::flatbuffers::Offset<::flatbuffers::String> CONTENT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ACL_GRANT_ID = 0,
     uint64_t TIMESTAMP = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> REVIEWER_SIGNATURE = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> REVIEWER_SIGNATURE = 0,
+    ::flatbuffers::Offset<DataQualityMetrics> QUALITY_METRICS = 0,
+    bool VERIFIED_PURCHASE = false,
+    uint64_t UPDATED_AT = 0,
+    reviewLifecycleStatus STATUS = reviewLifecycleStatus::Published,
+    uint32_t HELPFUL_COUNT = 0,
+    uint32_t NOT_HELPFUL_COUNT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROVIDER_RESPONSE = 0,
+    uint64_t PROVIDER_RESPONSE_AT = 0,
+    uint32_t FLAGGED_COUNT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODERATION_NOTES = 0) {
   REVBuilder builder_(_fbb);
+  builder_.add_PROVIDER_RESPONSE_AT(PROVIDER_RESPONSE_AT);
+  builder_.add_UPDATED_AT(UPDATED_AT);
   builder_.add_TIMESTAMP(TIMESTAMP);
+  builder_.add_MODERATION_NOTES(MODERATION_NOTES);
+  builder_.add_FLAGGED_COUNT(FLAGGED_COUNT);
+  builder_.add_PROVIDER_RESPONSE(PROVIDER_RESPONSE);
+  builder_.add_NOT_HELPFUL_COUNT(NOT_HELPFUL_COUNT);
+  builder_.add_HELPFUL_COUNT(HELPFUL_COUNT);
+  builder_.add_QUALITY_METRICS(QUALITY_METRICS);
   builder_.add_REVIEWER_SIGNATURE(REVIEWER_SIGNATURE);
   builder_.add_ACL_GRANT_ID(ACL_GRANT_ID);
   builder_.add_CONTENT(CONTENT);
@@ -173,6 +435,8 @@ inline ::flatbuffers::Offset<REV> CreateREV(
   builder_.add_REVIEWER_PEER_ID(REVIEWER_PEER_ID);
   builder_.add_LISTING_ID(LISTING_ID);
   builder_.add_REVIEW_ID(REVIEW_ID);
+  builder_.add_STATUS(STATUS);
+  builder_.add_VERIFIED_PURCHASE(VERIFIED_PURCHASE);
   builder_.add_RATING(RATING);
   return builder_.Finish();
 }
@@ -192,7 +456,17 @@ inline ::flatbuffers::Offset<REV> CreateREVDirect(
     const char *CONTENT = nullptr,
     const char *ACL_GRANT_ID = nullptr,
     uint64_t TIMESTAMP = 0,
-    const std::vector<uint8_t> *REVIEWER_SIGNATURE = nullptr) {
+    const std::vector<uint8_t> *REVIEWER_SIGNATURE = nullptr,
+    ::flatbuffers::Offset<DataQualityMetrics> QUALITY_METRICS = 0,
+    bool VERIFIED_PURCHASE = false,
+    uint64_t UPDATED_AT = 0,
+    reviewLifecycleStatus STATUS = reviewLifecycleStatus::Published,
+    uint32_t HELPFUL_COUNT = 0,
+    uint32_t NOT_HELPFUL_COUNT = 0,
+    const char *PROVIDER_RESPONSE = nullptr,
+    uint64_t PROVIDER_RESPONSE_AT = 0,
+    uint32_t FLAGGED_COUNT = 0,
+    const char *MODERATION_NOTES = nullptr) {
   auto REVIEW_ID__ = REVIEW_ID ? _fbb.CreateString(REVIEW_ID) : 0;
   auto LISTING_ID__ = LISTING_ID ? _fbb.CreateString(LISTING_ID) : 0;
   auto REVIEWER_PEER_ID__ = REVIEWER_PEER_ID ? _fbb.CreateString(REVIEWER_PEER_ID) : 0;
@@ -200,6 +474,8 @@ inline ::flatbuffers::Offset<REV> CreateREVDirect(
   auto CONTENT__ = CONTENT ? _fbb.CreateString(CONTENT) : 0;
   auto ACL_GRANT_ID__ = ACL_GRANT_ID ? _fbb.CreateString(ACL_GRANT_ID) : 0;
   auto REVIEWER_SIGNATURE__ = REVIEWER_SIGNATURE ? _fbb.CreateVector<uint8_t>(*REVIEWER_SIGNATURE) : 0;
+  auto PROVIDER_RESPONSE__ = PROVIDER_RESPONSE ? _fbb.CreateString(PROVIDER_RESPONSE) : 0;
+  auto MODERATION_NOTES__ = MODERATION_NOTES ? _fbb.CreateString(MODERATION_NOTES) : 0;
   return CreateREV(
       _fbb,
       REVIEW_ID__,
@@ -210,10 +486,100 @@ inline ::flatbuffers::Offset<REV> CreateREVDirect(
       CONTENT__,
       ACL_GRANT_ID__,
       TIMESTAMP,
-      REVIEWER_SIGNATURE__);
+      REVIEWER_SIGNATURE__,
+      QUALITY_METRICS,
+      VERIFIED_PURCHASE,
+      UPDATED_AT,
+      STATUS,
+      HELPFUL_COUNT,
+      NOT_HELPFUL_COUNT,
+      PROVIDER_RESPONSE__,
+      PROVIDER_RESPONSE_AT,
+      FLAGGED_COUNT,
+      MODERATION_NOTES__);
 }
 
 ::flatbuffers::Offset<REV> CreateREV(::flatbuffers::FlatBufferBuilder &_fbb, const REVT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline DataQualityMetricsT *DataQualityMetrics::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<DataQualityMetricsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void DataQualityMetrics::UnPackTo(DataQualityMetricsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SCHEMA_COMPLIANCE(); _o->SCHEMA_COMPLIANCE = _e; }
+  { auto _e = DATA_FRESHNESS(); _o->DATA_FRESHNESS = _e; }
+  { auto _e = COVERAGE_ACCURACY(); _o->COVERAGE_ACCURACY = _e; }
+  { auto _e = DELIVERY_RELIABILITY(); _o->DELIVERY_RELIABILITY = _e; }
+}
+
+inline ::flatbuffers::Offset<DataQualityMetrics> CreateDataQualityMetrics(::flatbuffers::FlatBufferBuilder &_fbb, const DataQualityMetricsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return DataQualityMetrics::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<DataQualityMetrics> DataQualityMetrics::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const DataQualityMetricsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const DataQualityMetricsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SCHEMA_COMPLIANCE = _o->SCHEMA_COMPLIANCE;
+  auto _DATA_FRESHNESS = _o->DATA_FRESHNESS;
+  auto _COVERAGE_ACCURACY = _o->COVERAGE_ACCURACY;
+  auto _DELIVERY_RELIABILITY = _o->DELIVERY_RELIABILITY;
+  return CreateDataQualityMetrics(
+      _fbb,
+      _SCHEMA_COMPLIANCE,
+      _DATA_FRESHNESS,
+      _COVERAGE_ACCURACY,
+      _DELIVERY_RELIABILITY);
+}
+
+inline REVT::REVT(const REVT &o)
+      : REVIEW_ID(o.REVIEW_ID),
+        LISTING_ID(o.LISTING_ID),
+        REVIEWER_PEER_ID(o.REVIEWER_PEER_ID),
+        RATING(o.RATING),
+        TITLE(o.TITLE),
+        CONTENT(o.CONTENT),
+        ACL_GRANT_ID(o.ACL_GRANT_ID),
+        TIMESTAMP(o.TIMESTAMP),
+        REVIEWER_SIGNATURE(o.REVIEWER_SIGNATURE),
+        QUALITY_METRICS((o.QUALITY_METRICS) ? new DataQualityMetricsT(*o.QUALITY_METRICS) : nullptr),
+        VERIFIED_PURCHASE(o.VERIFIED_PURCHASE),
+        UPDATED_AT(o.UPDATED_AT),
+        STATUS(o.STATUS),
+        HELPFUL_COUNT(o.HELPFUL_COUNT),
+        NOT_HELPFUL_COUNT(o.NOT_HELPFUL_COUNT),
+        PROVIDER_RESPONSE(o.PROVIDER_RESPONSE),
+        PROVIDER_RESPONSE_AT(o.PROVIDER_RESPONSE_AT),
+        FLAGGED_COUNT(o.FLAGGED_COUNT),
+        MODERATION_NOTES(o.MODERATION_NOTES) {
+}
+
+inline REVT &REVT::operator=(REVT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(REVIEW_ID, o.REVIEW_ID);
+  std::swap(LISTING_ID, o.LISTING_ID);
+  std::swap(REVIEWER_PEER_ID, o.REVIEWER_PEER_ID);
+  std::swap(RATING, o.RATING);
+  std::swap(TITLE, o.TITLE);
+  std::swap(CONTENT, o.CONTENT);
+  std::swap(ACL_GRANT_ID, o.ACL_GRANT_ID);
+  std::swap(TIMESTAMP, o.TIMESTAMP);
+  std::swap(REVIEWER_SIGNATURE, o.REVIEWER_SIGNATURE);
+  std::swap(QUALITY_METRICS, o.QUALITY_METRICS);
+  std::swap(VERIFIED_PURCHASE, o.VERIFIED_PURCHASE);
+  std::swap(UPDATED_AT, o.UPDATED_AT);
+  std::swap(STATUS, o.STATUS);
+  std::swap(HELPFUL_COUNT, o.HELPFUL_COUNT);
+  std::swap(NOT_HELPFUL_COUNT, o.NOT_HELPFUL_COUNT);
+  std::swap(PROVIDER_RESPONSE, o.PROVIDER_RESPONSE);
+  std::swap(PROVIDER_RESPONSE_AT, o.PROVIDER_RESPONSE_AT);
+  std::swap(FLAGGED_COUNT, o.FLAGGED_COUNT);
+  std::swap(MODERATION_NOTES, o.MODERATION_NOTES);
+  return *this;
+}
 
 inline REVT *REV::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<REVT>();
@@ -233,6 +599,16 @@ inline void REV::UnPackTo(REVT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = ACL_GRANT_ID(); if (_e) _o->ACL_GRANT_ID = _e->str(); }
   { auto _e = TIMESTAMP(); _o->TIMESTAMP = _e; }
   { auto _e = REVIEWER_SIGNATURE(); if (_e) { _o->REVIEWER_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->REVIEWER_SIGNATURE.begin()); } }
+  { auto _e = QUALITY_METRICS(); if (_e) { if(_o->QUALITY_METRICS) { _e->UnPackTo(_o->QUALITY_METRICS.get(), _resolver); } else { _o->QUALITY_METRICS = std::unique_ptr<DataQualityMetricsT>(_e->UnPack(_resolver)); } } else if (_o->QUALITY_METRICS) { _o->QUALITY_METRICS.reset(); } }
+  { auto _e = VERIFIED_PURCHASE(); _o->VERIFIED_PURCHASE = _e; }
+  { auto _e = UPDATED_AT(); _o->UPDATED_AT = _e; }
+  { auto _e = STATUS(); _o->STATUS = _e; }
+  { auto _e = HELPFUL_COUNT(); _o->HELPFUL_COUNT = _e; }
+  { auto _e = NOT_HELPFUL_COUNT(); _o->NOT_HELPFUL_COUNT = _e; }
+  { auto _e = PROVIDER_RESPONSE(); if (_e) _o->PROVIDER_RESPONSE = _e->str(); }
+  { auto _e = PROVIDER_RESPONSE_AT(); _o->PROVIDER_RESPONSE_AT = _e; }
+  { auto _e = FLAGGED_COUNT(); _o->FLAGGED_COUNT = _e; }
+  { auto _e = MODERATION_NOTES(); if (_e) _o->MODERATION_NOTES = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<REV> CreateREV(::flatbuffers::FlatBufferBuilder &_fbb, const REVT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -252,6 +628,16 @@ inline ::flatbuffers::Offset<REV> REV::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _ACL_GRANT_ID = _o->ACL_GRANT_ID.empty() ? 0 : _fbb.CreateString(_o->ACL_GRANT_ID);
   auto _TIMESTAMP = _o->TIMESTAMP;
   auto _REVIEWER_SIGNATURE = _o->REVIEWER_SIGNATURE.size() ? _fbb.CreateVector(_o->REVIEWER_SIGNATURE) : 0;
+  auto _QUALITY_METRICS = _o->QUALITY_METRICS ? CreateDataQualityMetrics(_fbb, _o->QUALITY_METRICS.get(), _rehasher) : 0;
+  auto _VERIFIED_PURCHASE = _o->VERIFIED_PURCHASE;
+  auto _UPDATED_AT = _o->UPDATED_AT;
+  auto _STATUS = _o->STATUS;
+  auto _HELPFUL_COUNT = _o->HELPFUL_COUNT;
+  auto _NOT_HELPFUL_COUNT = _o->NOT_HELPFUL_COUNT;
+  auto _PROVIDER_RESPONSE = _o->PROVIDER_RESPONSE.empty() ? 0 : _fbb.CreateString(_o->PROVIDER_RESPONSE);
+  auto _PROVIDER_RESPONSE_AT = _o->PROVIDER_RESPONSE_AT;
+  auto _FLAGGED_COUNT = _o->FLAGGED_COUNT;
+  auto _MODERATION_NOTES = _o->MODERATION_NOTES.empty() ? 0 : _fbb.CreateString(_o->MODERATION_NOTES);
   return CreateREV(
       _fbb,
       _REVIEW_ID,
@@ -262,7 +648,17 @@ inline ::flatbuffers::Offset<REV> REV::Pack(::flatbuffers::FlatBufferBuilder &_f
       _CONTENT,
       _ACL_GRANT_ID,
       _TIMESTAMP,
-      _REVIEWER_SIGNATURE);
+      _REVIEWER_SIGNATURE,
+      _QUALITY_METRICS,
+      _VERIFIED_PURCHASE,
+      _UPDATED_AT,
+      _STATUS,
+      _HELPFUL_COUNT,
+      _NOT_HELPFUL_COUNT,
+      _PROVIDER_RESPONSE,
+      _PROVIDER_RESPONSE_AT,
+      _FLAGGED_COUNT,
+      _MODERATION_NOTES);
 }
 
 inline const REV *GetREV(const void *buf) {
