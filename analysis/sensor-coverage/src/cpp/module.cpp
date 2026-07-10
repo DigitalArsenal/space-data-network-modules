@@ -11,6 +11,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <utility>
 
 using namespace sdn_hypersonics;
 
@@ -21,6 +22,8 @@ namespace {
 #if 0
 #include "sensor_shape_model.h"
 #include "sensor_shape_model.cpp.inc"
+#include "sensor_coverage_core.h"
+#include "sensor_coverage_core.cpp.inc"
 #endif
 
 constexpr double kEarthRadiusM = 6378137.0;
@@ -69,10 +72,7 @@ struct Quaternion {
   double w = 1.0;
 };
 
-struct Vertex {
-  double latitudeDeg = 0.0;
-  double longitudeDeg = 0.0;
-};
+using Vertex = sdn::coverage::LonLat;
 
 struct Cartographic {
   double longitudeRad = 0.0;
@@ -95,6 +95,8 @@ struct ResolvedVisibilityState {
 struct SensorConfig {
   int sensorId = 0;
   SensorShapeContract shapeContract;
+  std::vector<SensorVec3> localBoundaryDirections;
+  double maxBoundaryAngleRad = 0.0;
 };
 
 struct SensorTrack {
@@ -109,6 +111,7 @@ struct FootprintSample {
   Vertex left;
   Vertex right;
   std::vector<Vertex> vertices;
+  bool boundaryComplete = false;
 };
 
 struct SwathSegment {
@@ -482,6 +485,28 @@ GridConfig grid_from_scv_request(const SCVCoverageRequest* request) {
   return config;
 }
 
+void initialize_sensor_boundary_directions(SensorConfig& sensor) {
+  SensorShapeContract boundary_contract = sensor.shapeContract;
+  boundary_contract.boundarySamples = std::max(
+    8,
+    boundary_contract.boundarySamples);
+  sensor.localBoundaryDirections =
+    generate_sensor_boundary_directions(boundary_contract);
+  sensor.maxBoundaryAngleRad = 0.0;
+  for (const SensorVec3& direction : sensor.localBoundaryDirections) {
+    const double direction_length = std::sqrt(
+      direction.x * direction.x +
+      direction.y * direction.y +
+      direction.z * direction.z);
+    if (!(direction_length > 0.0) || !std::isfinite(direction_length)) {
+      continue;
+    }
+    sensor.maxBoundaryAngleRad = std::max(
+      sensor.maxBoundaryAngleRad,
+      std::acos(clamp(direction.z / direction_length, -1.0, 1.0)));
+  }
+}
+
 SensorConfig sensor_from_scv(const SCVSensor* sensor, int fallback_sensor_id) {
   SensorConfig config{};
   if (!sensor) {
@@ -498,6 +523,7 @@ SensorConfig sensor_from_scv(const SCVSensor* sensor, int fallback_sensor_id) {
       config.shapeContract.unsupportedReason = "unsupported sensor shape in SHAPE_CONTRACT()";
     }
   }
+  initialize_sensor_boundary_directions(config);
   return config;
 }
 
@@ -797,9 +823,8 @@ double sensor_max_range_m(const SensorConfig& sensor) {
 
 std::vector<Vec3> sensor_directions(const SensorConfig& sensor, Vec3 boresight, Vec3 x_axis, Vec3 y_axis) {
   std::vector<Vec3> directions;
-  SensorShapeContract boundary_contract = sensor.shapeContract;
-  boundary_contract.boundarySamples = std::max(8, boundary_contract.boundarySamples);
-  for (const SensorVec3& local : generate_sensor_boundary_directions(boundary_contract)) {
+  directions.reserve(sensor.localBoundaryDirections.size());
+  for (const SensorVec3& local : sensor.localBoundaryDirections) {
     directions.push_back(normalize(add(
       add(scale(x_axis, local.x), scale(y_axis, local.y)),
       scale(boresight, local.z))));
@@ -821,7 +846,9 @@ FootprintSample compute_footprint(const State& state, const SensorConfig& sensor
 
   double left_metric = -1.0e100;
   double right_metric = 1.0e100;
-  for (const Vec3& direction : sensor_directions(sensor, frame.boresight, frame.xAxis, frame.yAxis)) {
+  const std::vector<Vec3> directions =
+    sensor_directions(sensor, frame.boresight, frame.xAxis, frame.yAxis);
+  for (const Vec3& direction : directions) {
     Vec3 hit;
     if (!intersect_earth(state.position, direction, max_range_m, hit)) {
       continue;
@@ -845,6 +872,8 @@ FootprintSample compute_footprint(const State& state, const SensorConfig& sensor
   if (sample.vertices.size() > 1 && right_metric > 1.0e90) {
     sample.right = sample.vertices.back();
   }
+  sample.boundaryComplete =
+    !directions.empty() && sample.vertices.size() == directions.size();
   return sample;
 }
 
@@ -1101,62 +1130,131 @@ void add_cell_interval(Cell& cell, const VisibilityInterval& interval, int senso
   cell.intervals.push_back({interval.start, interval.stop, {sensor_id}});
 }
 
-void accumulate_grid_coverage_products(
+sdn::coverage::GridDefinition coverage_grid_definition(const GridConfig& grid) {
+  return {
+    grid.minLat,
+    grid.maxLat,
+    grid.minLon,
+    grid.maxLon,
+    grid.latStep,
+    grid.lonStep,
+    grid.rows,
+    grid.columns,
+  };
+}
+
+sdn::coverage::LonLat horizon_cap_center(const State& state) {
+  const Vertex center = to_cartographic(geodetic_surface_point(state.position));
+  return {center.latitudeDeg, center.longitudeDeg};
+}
+
+uint32_t next_candidate_generation(
+    uint32_t generation,
+    std::vector<uint32_t>& marks) {
+  if (generation == std::numeric_limits<uint32_t>::max()) {
+    std::fill(marks.begin(), marks.end(), 0u);
+    return 1u;
+  }
+  return generation + 1u;
+}
+
+void append_sensor_cap_candidates(
+    const ResolvedVisibilityState& resolved,
+    const SensorConfig& sensor,
+    const sdn::coverage::GridDefinition& grid,
+    std::vector<uint32_t>& candidate_marks,
+    uint32_t generation,
+    std::vector<uint32_t>& candidate_cell_indices) {
+  const Vec3 nadir = normalize(
+    scale(resolved.state.position, -1.0),
+    {0.0, 0.0, -1.0});
+  const double boresight_off_nadir_rad = std::acos(clamp(
+    dot(resolved.frame.boresight, nadir),
+    -1.0,
+    1.0));
+  const double angular_radius_deg =
+    sdn::coverage::conservativeGroundCapRadiusDeg(
+      magnitude(resolved.state.position),
+      kWgs84B,
+      (boresight_off_nadir_rad + sensor.maxBoundaryAngleRad) *
+        kRadiansToDegrees);
+  sdn::coverage::appendSphericalCapCandidates(
+    grid,
+    horizon_cap_center(resolved.state),
+    angular_radius_deg,
+    candidate_marks,
+    generation,
+    candidate_cell_indices);
+}
+
+void accumulate_grid_coverage_products_impl(
     std::vector<Cell>& cells,
     const std::vector<SensorTrack>& tracks,
-    const std::vector<SwathSegment>& swaths,
     const GridConfig& grid) {
-  const std::map<int, std::vector<const SwathSegment*>> swaths_by_sensor =
-    index_swaths_by_sensor(swaths);
+  const sdn::coverage::GridDefinition candidate_grid =
+    coverage_grid_definition(grid);
+  std::vector<uint32_t> candidate_marks(cells.size(), 0u);
+  std::vector<uint32_t> candidate_cell_indices;
+  candidate_cell_indices.reserve(std::min<size_t>(cells.size(), 256u));
+  uint32_t candidate_generation = 0u;
+
   for (const auto& track : tracks) {
     if (track.states.size() < 2) {
       continue;
     }
-    const auto swath_group = swaths_by_sensor.find(track.sensor.sensorId);
-    if (swath_group == swaths_by_sensor.end()) {
-      continue;
-    }
-    const std::vector<const SwathSegment*>& track_swaths = swath_group->second;
     const std::vector<ResolvedVisibilityState> resolved_states =
       resolve_visibility_states(track.states);
-    size_t swath_index = 0;
     for (size_t state_index = 0; state_index + 1 < track.states.size(); ++state_index) {
-      const State& start = track.states[state_index];
-      const State& stop = track.states[state_index + 1];
       const ResolvedVisibilityState& start_resolved = resolved_states[state_index];
       const ResolvedVisibilityState& stop_resolved = resolved_states[state_index + 1];
-      while (
-        swath_index < track_swaths.size() &&
-        track_swaths[swath_index]->stop <= start.elapsedSeconds + 1.0e-9
-      ) {
-        ++swath_index;
-      }
-      if (swath_index >= track_swaths.size()) {
-        break;
-      }
-      const SwathSegment& swath = *track_swaths[swath_index];
-      if (
-        std::fabs(swath.start - start.elapsedSeconds) >= 1.0e-9 ||
-        std::fabs(swath.stop - stop.elapsedSeconds) >= 1.0e-9
-      ) {
-        continue;
-      }
+      const double midpoint_seconds = 0.5 * (
+        start_resolved.state.elapsedSeconds +
+        stop_resolved.state.elapsedSeconds);
+      const State midpoint_state = interpolate_state(
+        start_resolved.state,
+        stop_resolved.state,
+        midpoint_seconds);
+      const ResolvedVisibilityState midpoint_resolved =
+        resolve_visibility_state(midpoint_state);
 
-      for (int row = 0; row < grid.rows; ++row) {
-        for (int column = 0; column < grid.columns; ++column) {
-          const size_t cell_index = static_cast<size_t>(row * grid.columns + column);
-          if (cell_index >= cells.size()) {
-            continue;
-          }
-          Cell& cell = cells[cell_index];
-          ensure_cell_geometry(cell, grid);
-          const VisibilityInterval interval = refined_visibility_interval(
-            cell.geometry,
-            track.sensor,
-            start_resolved,
-            stop_resolved);
-          add_cell_interval(cell, interval, track.sensor.sensorId);
+      candidate_generation = next_candidate_generation(
+        candidate_generation,
+        candidate_marks);
+      candidate_cell_indices.clear();
+      append_sensor_cap_candidates(
+        start_resolved,
+        track.sensor,
+        candidate_grid,
+        candidate_marks,
+        candidate_generation,
+        candidate_cell_indices);
+      append_sensor_cap_candidates(
+        midpoint_resolved,
+        track.sensor,
+        candidate_grid,
+        candidate_marks,
+        candidate_generation,
+        candidate_cell_indices);
+      append_sensor_cap_candidates(
+        stop_resolved,
+        track.sensor,
+        candidate_grid,
+        candidate_marks,
+        candidate_generation,
+        candidate_cell_indices);
+
+      for (const uint32_t cell_index : candidate_cell_indices) {
+        if (cell_index >= cells.size()) {
+          continue;
         }
+        Cell& cell = cells[cell_index];
+        ensure_cell_geometry(cell, grid);
+        const VisibilityInterval interval = refined_visibility_interval(
+          cell.geometry,
+          track.sensor,
+          start_resolved,
+          stop_resolved);
+        add_cell_interval(cell, interval, track.sensor.sensorId);
       }
     }
   }
@@ -1165,34 +1263,17 @@ void accumulate_grid_coverage_products(
 void accumulate_grid_coverage_products(
     std::vector<Cell>& cells,
     const std::vector<SensorTrack>& tracks,
+    const std::vector<SwathSegment>& swaths,
     const GridConfig& grid) {
-  for (const auto& track : tracks) {
-    if (track.states.size() < 2) {
-      continue;
-    }
-    const std::vector<ResolvedVisibilityState> resolved_states =
-      resolve_visibility_states(track.states);
-    for (size_t state_index = 0; state_index + 1 < track.states.size(); ++state_index) {
-      const ResolvedVisibilityState& start_resolved = resolved_states[state_index];
-      const ResolvedVisibilityState& stop_resolved = resolved_states[state_index + 1];
-      for (int row = 0; row < grid.rows; ++row) {
-        for (int column = 0; column < grid.columns; ++column) {
-          const size_t cell_index = static_cast<size_t>(row * grid.columns + column);
-          if (cell_index >= cells.size()) {
-            continue;
-          }
-          Cell& cell = cells[cell_index];
-          ensure_cell_geometry(cell, grid);
-          const VisibilityInterval interval = refined_visibility_interval(
-            cell.geometry,
-            track.sensor,
-            start_resolved,
-            stop_resolved);
-          add_cell_interval(cell, interval, track.sensor.sensorId);
-        }
-      }
-    }
-  }
+  static_cast<void>(swaths);
+  accumulate_grid_coverage_products_impl(cells, tracks, grid);
+}
+
+void accumulate_grid_coverage_products(
+    std::vector<Cell>& cells,
+    const std::vector<SensorTrack>& tracks,
+    const GridConfig& grid) {
+  accumulate_grid_coverage_products_impl(cells, tracks, grid);
 }
 
 void merge_intervals(Cell& cell, double scenario_start, double scenario_stop) {
@@ -1430,6 +1511,8 @@ struct ModuleOutputAllocation {
   uint32_t size = 0;
 };
 
+std::vector<ModuleOutputAllocation> g_retained_output_allocations;
+
 template <typename T>
 bool append_shared_memory_region(
     flatbuffers::FlatBufferBuilder& builder,
@@ -1496,6 +1579,11 @@ void free_module_output_allocations(
       plugin_free(allocation.ptr, allocation.size);
     }
   }
+}
+
+void release_retained_output_allocations() {
+  free_module_output_allocations(g_retained_output_allocations);
+  g_retained_output_allocations.clear();
 }
 
 std::vector<uint8_t> build_scv_result(
@@ -2208,6 +2296,7 @@ std::vector<uint8_t> build_scv_result(
   FinishSCVBuffer(builder, envelope);
 
   const uint8_t* begin = builder.GetBufferPointer();
+  g_retained_output_allocations = std::move(output_allocations);
   return std::vector<uint8_t>(begin, begin + builder.GetSize());
 }
 
@@ -2270,6 +2359,7 @@ int emit_scv_progress_frame(
 }  // namespace
 
 extern "C" int compute_sensor_coverage(void) {
+  release_retained_output_allocations();
   plugin_reset_output_state();
 
   const std::string request_payload = payload_for_port("coverage");

@@ -191,16 +191,46 @@ async function readLocalSharedCppSources() {
   return sources.join("\n\n");
 }
 
+async function resolveSharedCppSources(compileConfig = {}) {
+  const configuredSources = Array.isArray(compileConfig.sharedCppSources)
+    ? compileConfig.sharedCppSources
+    : [];
+  const sources = [];
+  for (const configuredSource of configuredSources) {
+    const relativePath = String(configuredSource ?? "").trim();
+    if (!relativePath || path.isAbsolute(relativePath)) {
+      throw new Error(`Invalid shared C++ source path: ${relativePath}`);
+    }
+    const sourcePath = path.resolve(repoRoot, relativePath);
+    const relativeToRoot = path.relative(repoRoot, sourcePath);
+    if (
+      relativeToRoot.startsWith(`..${path.sep}`) ||
+      relativeToRoot === ".." ||
+      path.isAbsolute(relativeToRoot)
+    ) {
+      throw new Error(`Shared C++ source escapes the modules repository: ${relativePath}`);
+    }
+    if (!(await fileExists(sourcePath))) {
+      throw new Error(`Shared C++ source does not exist: ${relativePath}`);
+    }
+    sources.push(await readFile(sourcePath, "utf8"));
+  }
+  return sources.join("\n\n");
+}
+
 const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const commonSource = await readFile(commonPath, "utf8");
 const localSharedSource = await readLocalSharedCppSources();
+const configuredSharedSource = await resolveSharedCppSources(
+  packageJson.sdnModuleCompile,
+);
 const moduleSource = await readFile(sourcePath, "utf8");
 const sdsCppHeaders = await readSdsCppHeaders(manifest);
 const bundledSdsCppHeaders = sdsCppHeaders
   ? `#define SDN_BUNDLED_SDS_CPP_HEADERS 1\n${sdsCppHeaders}`
   : "";
-const sourceCode = `${bundledSdsCppHeaders}\n${commonSource}\n${localSharedSource}\n${moduleSource}`;
+const sourceCode = `${bundledSdsCppHeaders}\n${commonSource}\n${localSharedSource}\n${configuredSharedSource}\n${moduleSource}`;
 
 await mkdir(outputDir, { recursive: true });
 

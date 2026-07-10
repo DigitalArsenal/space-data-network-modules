@@ -5,7 +5,7 @@
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node ../../scripts/build-sdk-compiled-module.mjs",
-    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/benchmark_harness.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/benchmark_harness.test.mjs tests/grid_candidates.test.mjs",
     "benchmark:coverage": "node benchmarks/sensor-coverage-benchmark.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
@@ -13,7 +13,11 @@
     "importedMemory": true,
     "sharedMemory": true,
     "initialMemoryBytes": 67108864,
-    "maximumMemoryBytes": 2147483648
+    "maximumMemoryBytes": 2147483648,
+    "sharedCppSources": [
+      "common/sensor_coverage_core.h",
+      "common/sensor_coverage_core.cpp.inc"
+    ]
   },
   "devDependencies": {
     "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"

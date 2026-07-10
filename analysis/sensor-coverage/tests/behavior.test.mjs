@@ -160,7 +160,7 @@ test("sensor coverage FOM products use a grid-first exact visibility kernel", ()
   assert.doesNotMatch(kernelSource, /point_in_polygon/);
 });
 
-test("sensor coverage grid coverage products indexes generated swaths without quadratic lookup", () => {
+test("sensor coverage grid products bypass rendered swaths and broad-phase state windows", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
@@ -171,12 +171,11 @@ test("sensor coverage grid coverage products indexes generated swaths without qu
   assert.notEqual(kernelStop, -1);
   const kernelSource = source.slice(kernelStart, kernelStop);
 
-  assert.doesNotMatch(source, /find_swath_segment/);
-  assert.match(source, /index_swaths_by_sensor/);
-  assert.match(source, /std::map<int, std::vector<const SwathSegment\*>>/);
-  assert.match(kernelSource, /size_t swath_index = 0;/);
-  assert.match(kernelSource, /const std::vector<const SwathSegment\*>& track_swaths/);
-  assert.match(kernelSource, /track_swaths\[swath_index\]/);
+  assert.doesNotMatch(kernelSource, /find_swath_segment/);
+  assert.doesNotMatch(kernelSource, /index_swaths_by_sensor/);
+  assert.match(kernelSource, /static_cast<void>\(swaths\);/);
+  assert.match(kernelSource, /append_sensor_cap_candidates\(/);
+  assert.match(kernelSource, /refined_visibility_interval\(/);
 });
 
 test("sensor coverage metric-product path goes directly to exact visibility without local footprint candidates", () => {
@@ -242,29 +241,24 @@ test("sensor coverage module source does not serialize latitude-band object vect
   assert.doesNotMatch(source, /&latitude_bands/);
 });
 
-test("sensor coverage exact kernels do not pre-cull cells with coverage-local sensor geometry", () => {
+test("sensor coverage uses conservative candidates before the exact visibility kernel", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
   );
   const directKernelStart = source.indexOf(
-    "void accumulate_grid_coverage_products(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+    "void accumulate_grid_coverage_products_impl",
   );
   const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
   assert.notEqual(directKernelStart, -1);
   assert.notEqual(directKernelStop, -1);
   const directKernelSource = source.slice(directKernelStart, directKernelStop);
 
-  assert.doesNotMatch(source, /\bSwathBounds\b/);
-  assert.doesNotMatch(source, /\bCellRange\b/);
-  assert.doesNotMatch(source, /\bNadirConicCandidateFilter\b/);
-  assert.doesNotMatch(source, /\bNadirConicCandidateWindow\b/);
-  assert.doesNotMatch(source, /\bnadir_conic_/);
-  assert.doesNotMatch(source, /\bcandidate_cell_range\b/);
-  assert.doesNotMatch(source, /\bswath_bounds\b/);
-  assert.doesNotMatch(source, /\bcell_matches_nadir_conic_candidate_filter\b/);
-  assert.match(directKernelSource, /for \(int row = 0; row < grid\.rows; \+\+row\)/);
-  assert.match(directKernelSource, /for \(int column = 0; column < grid\.columns; \+\+column\)/);
+  assert.match(source, /conservativeGroundCapRadiusDeg\(/);
+  assert.match(directKernelSource, /append_sensor_cap_candidates\(/);
+  assert.match(directKernelSource, /for \(const uint32_t cell_index : candidate_cell_indices\)/);
+  assert.doesNotMatch(directKernelSource, /for \(int row = 0; row < grid\.rows; \+\+row\)/);
+  assert.doesNotMatch(directKernelSource, /for \(int column = 0; column < grid\.columns; \+\+column\)/);
   assert.ok(
     directKernelSource.indexOf("ensure_cell_geometry(cell, grid)") <
       directKernelSource.indexOf("refined_visibility_interval"),
@@ -297,7 +291,7 @@ test("sensor coverage grid cells carry cached tile and surface-unit metadata", (
   assert.doesNotMatch(source, /cell_matches_nadir_conic_candidate_filter/);
 });
 
-test("sensor coverage exact grid geometry is built lazily for all grid cells", () => {
+test("sensor coverage exact grid geometry is built lazily for candidate cells", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
@@ -305,7 +299,7 @@ test("sensor coverage exact grid geometry is built lazily for all grid cells", (
   const createStart = source.indexOf("std::vector<Cell> create_cells");
   const createStop = source.indexOf("void ensure_cell_geometry", createStart);
   const kernelStart = source.indexOf(
-    "void accumulate_grid_coverage_products(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+    "void accumulate_grid_coverage_products_impl",
   );
   const kernelStop = source.indexOf("void merge_intervals", kernelStart);
   assert.notEqual(createStart, -1);
@@ -320,7 +314,8 @@ test("sensor coverage exact grid geometry is built lazily for all grid cells", (
   assert.match(source, /void ensure_cell_geometry\(Cell& cell, const GridConfig& grid\)/);
   assert.doesNotMatch(source, /Vec3 cell_surface_unit\(Cell& cell\)/);
   assert.doesNotMatch(createSource, /grid_cell_geometry/);
-  assert.doesNotMatch(kernelSource, /candidate_cell_range/);
+  assert.match(kernelSource, /candidate_cell_indices/);
+  assert.match(kernelSource, /for \(const uint32_t cell_index : candidate_cell_indices\)/);
   assert.match(kernelSource, /ensure_cell_geometry\(cell, grid\)/);
   assert.ok(
     kernelSource.indexOf("ensure_cell_geometry(cell, grid)") <
@@ -349,6 +344,21 @@ test("sensor coverage caches immutable grid cells across analysis windows", () =
   assert.doesNotMatch(computeSource, /create_cells\(grid\)/);
 });
 
+test("sensor coverage retains at most one generation of module output regions", () => {
+  const source = fs.readFileSync(
+    new URL("../src/cpp/module.cpp", import.meta.url),
+    "utf8",
+  );
+  const computeStart = source.indexOf("extern \"C\" int compute_sensor_coverage");
+  assert.notEqual(computeStart, -1);
+  const computeSource = source.slice(computeStart);
+
+  assert.match(source, /g_retained_output_allocations/);
+  assert.match(source, /void release_retained_output_allocations\(\)/);
+  assert.match(computeSource, /release_retained_output_allocations\(\);/);
+  assert.match(source, /g_retained_output_allocations = std::move\(output_allocations\);/);
+});
+
 test("sensor coverage exact visibility resolves endpoint frames once per state window", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
@@ -357,7 +367,7 @@ test("sensor coverage exact visibility resolves endpoint frames once per state w
   const intervalStart = source.indexOf("VisibilityInterval refined_visibility_interval");
   const intervalStop = source.indexOf("std::map<int, std::vector<const SwathSegment*>>", intervalStart);
   const directKernelStart = source.indexOf(
-    "void accumulate_grid_coverage_products(\n    std::vector<Cell>& cells,\n    const std::vector<SensorTrack>& tracks,\n    const GridConfig& grid)",
+    "void accumulate_grid_coverage_products_impl",
   );
   const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
   assert.notEqual(intervalStart, -1);
@@ -369,7 +379,9 @@ test("sensor coverage exact visibility resolves endpoint frames once per state w
   const resolvedIndex = directKernelSource.indexOf(
     "const std::vector<ResolvedVisibilityState> resolved_states =",
   );
-  const candidateLoopIndex = directKernelSource.indexOf("for (int row = 0; row < grid.rows");
+  const candidateLoopIndex = directKernelSource.indexOf(
+    "for (const uint32_t cell_index : candidate_cell_indices)",
+  );
 
   assert.match(source, /struct ResolvedVisibilityState/);
   assert.match(source, /ResolvedVisibilityState resolve_visibility_state\(const State& state\)/);
@@ -1405,6 +1417,14 @@ function createScvCoverageRequestPayload({
 function createScvMetricProductCoverageRequestPayload({
   windowCount = 2,
   requestedProducts = [scvMetricSeriesKind.PERCENT_COVERED],
+  grid = {
+    minLatitudeDeg: -8,
+    maxLatitudeDeg: 8,
+    minLongitudeDeg: -12,
+    maxLongitudeDeg: 12,
+    latitudeStepDeg: 4,
+    longitudeStepDeg: 4,
+  },
 } = {}) {
   const earthRadius = 6378137.0;
   const orbitRadius = earthRadius + 500000.0;
@@ -1431,6 +1451,12 @@ function createScvMetricProductCoverageRequestPayload({
     const fraction = windowCount > 0 ? index / windowCount : 0;
     stateSamples.push(makeState(-0.04 + 0.08 * fraction, index * stepSeconds));
   }
+  const rows = Math.ceil(
+    (grid.maxLatitudeDeg - grid.minLatitudeDeg) / grid.latitudeStepDeg,
+  );
+  const columns = Math.ceil(
+    (grid.maxLongitudeDeg - grid.minLongitudeDeg) / grid.longitudeStepDeg,
+  );
   const request = new SCVCoverageRequestT(
     "scv-metric-product-test",
     BigInt("43"),
@@ -1448,15 +1474,15 @@ function createScvMetricProductCoverageRequestPayload({
       "regional-grid",
       scvGeometryDomain.SURFACE,
       scvCoordinateFrame.BODY_FIXED,
-      -8,
-      8,
-      -12,
-      12,
-      4,
-      4,
+      grid.minLatitudeDeg,
+      grid.maxLatitudeDeg,
+      grid.minLongitudeDeg,
+      grid.maxLongitudeDeg,
+      grid.latitudeStepDeg,
+      grid.longitudeStepDeg,
       0,
-      24,
-      4,
+      rows * columns,
+      rows,
     ),
     [
       new SCVSensorT(
@@ -1874,6 +1900,65 @@ for (const runtimeKind of SENSOR_COVERAGE_RUNTIME_KINDS) {
       scvMetricSeriesKind.PERCENT_COVERED,
     );
     assert.equal(result.GEOMETRY(), null);
+  });
+
+  test(`sensor coverage module bounds output-region memory across invokes on ${runtimeKind}`, async (t) => {
+    const harness = await createSensorCoverageHarness(runtimeKind, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const payload = createScvMetricProductCoverageRequestPayload({
+      requestedProducts: [
+        scvMetricSeriesKind.PERCENT_COVERED,
+        scvMetricSeriesKind.ACCESS_COUNT,
+        scvMetricSeriesKind.CONTACT_DURATION_SECONDS,
+        scvMetricSeriesKind.REVISIT_SECONDS,
+        scvMetricSeriesKind.GAP_SECONDS,
+        scvMetricSeriesKind.REDUNDANCY,
+      ],
+      grid: {
+        minLatitudeDeg: -90,
+        maxLatitudeDeg: 90,
+        minLongitudeDeg: -180,
+        maxLongitudeDeg: 180,
+        latitudeStepDeg: 5,
+        longitudeStepDeg: 5,
+      },
+    });
+    const firstResponse = await invokeSensorCoverageScv(harness, payload);
+    assert.equal(firstResponse.statusCode, 0, firstResponse.errorMessage);
+    const firstResult = findScvEnvelope(
+      firstResponse,
+      scvEnvelopeKind.RESULT,
+    ).envelope.RESULT();
+    const firstPercentCoverage = Array.from(scvRasterBandValues(
+      firstResult,
+      scvRasterProductKind.PERCENT_COVERAGE,
+      harness.memory.buffer,
+    ));
+    const warmMemoryBytes = harness.memory.buffer.byteLength;
+
+    let lastResponse = firstResponse;
+    for (let invokeIndex = 0; invokeIndex < 320; invokeIndex += 1) {
+      lastResponse = await invokeSensorCoverageScv(harness, payload);
+      assert.equal(lastResponse.statusCode, 0, lastResponse.errorMessage);
+    }
+    const lastResult = findScvEnvelope(
+      lastResponse,
+      scvEnvelopeKind.RESULT,
+    ).envelope.RESULT();
+    const lastPercentCoverage = Array.from(scvRasterBandValues(
+      lastResult,
+      scvRasterProductKind.PERCENT_COVERAGE,
+      harness.memory.buffer,
+    ));
+
+    assert.equal(harness.memory.buffer.byteLength, warmMemoryBytes);
+    assert.deepEqual(lastPercentCoverage, firstPercentCoverage);
   });
 
   test(`sensor coverage module keeps metric-product time windows global across sensors on ${runtimeKind}`, async (t) => {
