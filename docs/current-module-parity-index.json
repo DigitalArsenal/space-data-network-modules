@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-07-07T02:49:25.694Z",
-  "moduleCount": 55,
+  "generatedAt": "2026-07-11T15:46:09.895Z",
+  "moduleCount": 56,
   "parityScopeModuleCount": 29,
-  "isomorphicWasmCount": 55,
+  "isomorphicWasmCount": 56,
   "missingIsomorphicWasm": [],
-  "browserWasmEdgeTargetCount": 40,
+  "browserWasmEdgeTargetCount": 41,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [
     "analysis/sensor-coverage",
@@ -523,7 +523,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 4,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -532,6 +532,7 @@
       "testFiles": [
         "tests/behavior.test.mjs",
         "tests/benchmark_harness.test.mjs",
+        "tests/grid_candidates.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1266,10 +1267,11 @@
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "name": "SDN HTTP Route",
       "pluginFamily": "foundation",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "methodIds": [
         "discover",
         "route",
+        "route_node_status",
         "route_public_query"
       ],
       "runtimeTargets": [
@@ -1605,6 +1607,37 @@
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/http_request_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "hostcap/node-status",
+      "pluginId": "com.digitalarsenal.hostcap.node-status",
+      "name": "SDN Host Node Status",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "status"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node_status_module.cpp"
       ],
       "testFiles": [
         "tests/sdk_compat.test.mjs"

@@ -1,0 +1,77 @@
+{
+  "programId": "com.digitalarsenal.flows.node-status",
+  "name": "SDN Node Status Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "nodes": 4,
+  "edges": 4,
+  "triggers": 1,
+  "capabilities": [
+    "node_status_read"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "route_node_status",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "status",
+      "pluginId": "com.digitalarsenal.hostcap.node-status",
+      "methodId": "status",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "version": "0.6.0",
+      "sha256": "9b55369910514b1e7012b2f9174982bb379a37c584182d5ad8629b34968f3964",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "route": "sdm_guest_636f6d2e6469676974616c61_route",
+        "discover": "sdm_guest_636f6d2e6469676974616c61_discover",
+        "route_public_query": "sdm_guest_636f6d2e6469676974616c61_route_public_query",
+        "route_node_status": "sdm_guest_636f6d2e6469676974616c61_route_node_status"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.node-status",
+      "pluginId": "com.digitalarsenal.hostcap.node-status",
+      "version": "0.1.0",
+      "sha256": "c33e8ee007d61d8b4b797f21b9b1db93a48567993e33a3fa614201abb3f79e59",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "status": "sdm_guest_636f6d2e6469676974616c61_status"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "version": "0.2.1",
+      "sha256": "b365bb14f3b108a05ba339fcb8e433a43c07f57f5a4a9f9ca6f7cd05804d1773",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
+      }
+    }
+  ]
+}

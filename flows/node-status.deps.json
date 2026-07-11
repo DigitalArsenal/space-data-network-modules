@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.foundation.http-route": "../foundation/http-route",
+  "com.digitalarsenal.hostcap.node-status": "../hostcap/node-status",
+  "com.digitalarsenal.foundation.http-respond": "../foundation/http-respond"
+}

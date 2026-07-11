@@ -319,3 +319,47 @@ test("discover degrades unknown deeper per-peer paths and non-GET methods to not
   assert.equal(post.route, "not_found");
   assert.match(post.error, /GET/);
 });
+
+// ---------------------------------------------------------------------------
+// route_node_status: the M1 node-status flow routing method.
+// ---------------------------------------------------------------------------
+
+async function invokeNodeStatus(t, request) {
+  const harness = await createHarness(t);
+  return harness.invoke({
+    methodId: "route_node_status",
+    inputs: [
+      {
+        portId: "request",
+        typeRef: HTTP_REQUEST_TYPE_REF,
+        payload: encodeHttpRequest(request),
+      },
+    ],
+  });
+}
+
+test("route_node_status: GET/HEAD emit route=status, format=json, no path inspection", async (t) => {
+  for (const method of ["GET", "HEAD"]) {
+    const decision = decodeDecision(
+      await invokeNodeStatus(t, { method, path: "/api/v1/node/status", query: "" }),
+    );
+    assert.deepEqual(decision, { route: "status", format: "json" }, method);
+  }
+  // PATH is not inspected — the mount carries exactly one resource.
+  const anyPath = decodeDecision(
+    await invokeNodeStatus(t, { method: "GET", path: "/anything/at/all", query: "" }),
+  );
+  assert.equal(anyPath.route, "status");
+});
+
+test("route_node_status: non-GET/HEAD methods answer route=error status=405", async (t) => {
+  for (const method of ["POST", "PUT", "DELETE"]) {
+    const decision = decodeDecision(
+      await invokeNodeStatus(t, { method, path: "/api/v1/node/status", query: "" }),
+    );
+    assert.equal(decision.route, "error", method);
+    assert.equal(decision.status, 405, method);
+    assert.equal(decision.format, "json");
+    assert.match(decision.error, new RegExp(method));
+  }
+});

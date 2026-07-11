@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-node-status",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../node-status.flow.json --deps ../node-status.deps.json",
+    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../node-status.flow.json --deps ../node-status.deps.json --out ./dist/status",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}
