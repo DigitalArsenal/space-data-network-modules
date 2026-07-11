@@ -8,6 +8,7 @@
     "route": "sdm_guest_636f6d2e6469676974616c61_route",
     "discover": "sdm_guest_636f6d2e6469676974616c61_discover",
     "route_public_query": "sdm_guest_636f6d2e6469676974616c61_route_public_query",
-    "route_node_status": "sdm_guest_636f6d2e6469676974616c61_route_node_status"
+    "route_node_status": "sdm_guest_636f6d2e6469676974616c61_route_node_status",
+    "route_node_activity": "sdm_guest_636f6d2e6469676974616c61_route_node_activity"
   }
 }

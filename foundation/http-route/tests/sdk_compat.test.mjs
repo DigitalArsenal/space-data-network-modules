@@ -363,3 +363,95 @@ test("route_node_status: non-GET/HEAD methods answer route=error status=405", as
     assert.match(decision.error, new RegExp(method));
   }
 });
+
+// ---------------------------------------------------------------------------
+// route_node_activity: the M2 node-activity flow routing method.
+// ---------------------------------------------------------------------------
+
+async function invokeNodeActivity(t, request) {
+  const harness = await createHarness(t);
+  return harness.invoke({
+    methodId: "route_node_activity",
+    inputs: [
+      {
+        portId: "request",
+        typeRef: HTTP_REQUEST_TYPE_REF,
+        payload: encodeHttpRequest(request),
+      },
+    ],
+  });
+}
+
+test("route_node_activity: GET/HEAD emit route=activity, format=json, default limit=50, no path inspection", async (t) => {
+  for (const method of ["GET", "HEAD"]) {
+    const decision = decodeDecision(
+      await invokeNodeActivity(t, { method, path: "/api/v1/node/activity", query: "" }),
+    );
+    assert.deepEqual(decision, { route: "activity", format: "json", limit: 50 }, method);
+  }
+  // PATH is not inspected — the mount carries exactly one resource.
+  const anyPath = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/anything/at/all", query: "" }),
+  );
+  assert.equal(anyPath.route, "activity");
+  assert.equal(anyPath.limit, 50);
+});
+
+test("route_node_activity: an explicit ?limit passes through unclamped within range", async (t) => {
+  const decision = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=5" }),
+  );
+  assert.equal(decision.route, "activity");
+  assert.equal(decision.limit, 5);
+});
+
+test("route_node_activity: ?limit is clamped in-wasm to [1, 256]", async (t) => {
+  const over = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=5000" }),
+  );
+  assert.equal(over.limit, 256);
+
+  const zero = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=0" }),
+  );
+  assert.equal(zero.limit, 1);
+
+  const negative = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=-3" }),
+  );
+  assert.equal(negative.limit, 1);
+});
+
+test("route_node_activity: a missing, empty, or garbage ?limit defaults to 50", async (t) => {
+  const missing = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "" }),
+  );
+  assert.equal(missing.limit, 50);
+
+  const empty = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=" }),
+  );
+  assert.equal(empty.limit, 50);
+
+  const junk = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=abc" }),
+  );
+  assert.equal(junk.limit, 50);
+
+  const partial = decodeDecision(
+    await invokeNodeActivity(t, { method: "GET", path: "/api/v1/node/activity", query: "limit=25abc" }),
+  );
+  assert.equal(partial.limit, 50, "a partially-numeric value must not be partially parsed");
+});
+
+test("route_node_activity: non-GET/HEAD methods answer route=error status=405", async (t) => {
+  for (const method of ["POST", "PUT", "DELETE"]) {
+    const decision = decodeDecision(
+      await invokeNodeActivity(t, { method, path: "/api/v1/node/activity", query: "" }),
+    );
+    assert.equal(decision.route, "error", method);
+    assert.equal(decision.status, 405, method);
+    assert.equal(decision.format, "json");
+    assert.match(decision.error, new RegExp(method));
+  }
+});
