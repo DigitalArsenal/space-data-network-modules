@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-node-activity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../node-activity.flow.json --deps ../node-activity.deps.json",
+    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../node-activity.flow.json --deps ../node-activity.deps.json --out ./dist/activity",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}

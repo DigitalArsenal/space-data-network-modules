@@ -1,6 +1,6 @@
 {
-  "name": "@digitalarsenal/sdn-module-foundation-http-route",
-  "version": "0.7.0",
+  "name": "@digitalarsenal/sdn-module-hostcap-node-activity",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",

@@ -1,0 +1,120 @@
+{
+  "pluginId": "com.digitalarsenal.flows.node-activity",
+  "name": "SDN Node Activity Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "M2 node-activity flow (mount GET /api/v1/node/activity): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route route_node_activity classifies it (GET/HEAD -> route=activity, limit=<the ?limit query param clamped in-wasm to [1, 256], default 50>; anything else -> route=error status=405 — PATH is not inspected, the mount carries exactly one resource), hostcap/node-activity activity forwards {\"limit\":N} (the decision's clamped limit, defensively re-clamped to [1, 256] with the same default of 50) to the policy-mediated READ-ONLY node_activity_read.activity hostcall (capability node_activity_read; the host's capPrefixFromName has no mapping for it, so the capability name itself is the op prefix) and emits the raw hostcall result OBJECT verbatim on \"body\" (a live activity-log snapshot — recent peer connect/disconnect, PNM publication, record-stored, and grant-issued events, newest first, bounded by limit — NOT an SDS record collection, so the bare-array json convention used by the other gateway flows does not apply), and foundation/http-respond assembles the final $HTR envelope (200/405/503) delivered to the host-model egress sink. JSON-ONLY for v1: there is no SDS schema for node activity events (checked spacedatastandards.org/schema — no matching record type), so a flatbuffer presentation is blocked on a future SDS schema addition rather than a hand-written table (generated-types-only rule; fb blocked-on-schema). No ETag/conditional-GET: the activity log changes on every call, so a conditional-GET contract would be pointless. Anonymity: the $HTQ envelope (module-sdk schemas/HttpRequestAbi.fbs — METHOD/PATH/QUERY/HEADERS/BODY/REMOTE) carries no caller-trust field a flow can read, so the route is declared anonymous:false (operator-gated at the host's auth wall, mirroring flows/node-status's precedent) until the envelope carries trust information a shape node could read to serve a reduced anonymous subset.",
+  "capabilities": [
+    "node_activity_read"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.node-activity",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "minVersion": "0.2.1",
+      "maxVersion": "0.2.1"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "sdn-host-node-activity",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "node_activity_read",
+      "resource": "sdn://node/activity",
+      "description": "Policy-mediated read-only host node-activity snapshot (recent peer connect/disconnect, PNM publication, record-stored, and grant-issued events, newest first, bounded by limit).",
+      "properties": {
+        "hostOps": [
+          "node_activity_read.activity"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "http_request",
+      "displayName": "Flow trigger http-request",
+      "description": "Compiled-flow ingress for trigger \"http-request\" (http-request).",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "One $HTQ HttpRequest envelope."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request to route."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "HttpRequestAbi.fbs",
+      "fileIdentifier": "$HTQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "HttpResponseAbi.fbs",
+      "fileIdentifier": "$HTR",
+      "rootTypeName": "HttpResponse"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_node_activity-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

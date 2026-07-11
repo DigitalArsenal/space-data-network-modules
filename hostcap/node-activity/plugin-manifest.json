@@ -1,0 +1,109 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.node-activity",
+  "name": "SDN Host Node Activity",
+  "version": "0.1.0",
+  "description": "Capability node for the host read-only node_activity_read hostcall (M2 node-activity flow, GET /api/v1/node/activity). One method, one hostcall: 'activity' takes the routing-decision JSON from foundation/http-route route_node_activity on port \"decision\" and, when route==\"activity\", forwards {\"limit\":N} (N is the decision's \"limit\" integer field, already parsed and clamped to [1, 256] by the route node with a default of 50; this node defensively re-clamps to [1, 256] with the same default of 50 rather than trusting the route's clamp blindly — mirrors hostcap/p2p-discovery's pnm_history limit-forwarding precedent) to the node_activity_read.activity hostcall (capability name IS the op prefix — no capPrefixFromName mapping exists for node_activity_read, same as node_status_read) and emits the hostcall's \"result\" object VERBATIM as UTF-8 JSON bytes on \"body\"; the incoming decision is re-emitted unchanged on \"decision\" (linear flow chaining into foundation/http-respond). Result shape: {count,events:[{ts,kind,peer_id?,detail}]} where kind is one of peer_connected|peer_disconnected|pnm_publication|record_stored|grant_issued, ts is RFC3339, peer_id is omitted when empty, and events are ordered newest first — an OBJECT (a live activity-log snapshot), not an SDS record collection, so the bare-array JSON convention used by the other gateway flows does not apply here. A decision this method does not own (already rewritten to route=error by the route node, e.g. 405 for non-GET) short-circuits: NO hostcall, the decision passes through untouched and no body frame is pushed — foundation/http-respond owns that response. A node_activity_read.activity hostcall FAILURE (or a missing/non-object result field) rewrites the decision to route=error status=503 with the host's error message (or an honest fallback) — never a silent empty body. FlatBuffers: there is no SDS schema for node activity events (checked spacedatastandards.org/schema — no matching record type exists); a hand-written FlatBuffers table would violate the generated-types-only rule, so v1 ships JSON-ONLY (fb blocked-on-schema). Anonymity: the $HTQ envelope (module-sdk schemas/HttpRequestAbi.fbs) carries no caller-trust field the flow can read, so this node cannot shape an anonymous subset — the mounted route is declared anonymous:false (operator-gated at the host's auth wall) until the envelope carries trust information.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "node_activity_read"
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "sdn-host-node-activity",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "node_activity_read",
+      "resource": "sdn://node/activity",
+      "description": "Policy-mediated read-only host node-activity snapshot (recent peer connect/disconnect, PNM publication, record-stored, and grant-issued events, newest first, bounded by limit).",
+      "properties": {
+        "hostOps": [
+          "node_activity_read.activity"
+        ]
+      }
+    }
+  ],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "activity",
+      "displayName": "Node Activity",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-node-activity-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision JSON frame from foundation/http-route route_node_activity: {\"route\":\"activity\",\"format\":\"json\",\"limit\":N} or {\"route\":\"error\",\"status\":405,...} for a non-GET request."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One routing-decision JSON frame per request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-node-activity-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision forwarded verbatim on success or on routes this method does not own, or rewritten to route=error status=503 when the node_activity_read.activity hostcall fails or returns no result object."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Decision for foundation/http-respond."
+        },
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-node-activity-body-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON OBJECT bytes: the node_activity_read.activity hostcall's \"result\" object verbatim ({count,events}). NOT a bare array — a single activity-log snapshot, not an SDS record collection. Absent on error / not-owned-route decisions."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Response body for foundation/http-respond (absent on error decisions)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Forwards {\"limit\":N} (from the decision's clamped limit, default 50, re-clamped here to [1, 256]) to the node_activity_read.activity hostcall when route==\"activity\" and emits the raw result object verbatim on \"body\" plus the decision passthrough on \"decision\"; routes this method does not own pass through with no hostcall; hostcall failure or a missing result object rewrites the decision to an honest route=error status=503."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-node-activity-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

@@ -1,0 +1,78 @@
+{
+  "programId": "com.digitalarsenal.flows.node-activity",
+  "name": "SDN Node Activity Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "nodes": 4,
+  "edges": 4,
+  "triggers": 1,
+  "capabilities": [
+    "node_activity_read"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "route_node_activity",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "activity",
+      "pluginId": "com.digitalarsenal.hostcap.node-activity",
+      "methodId": "activity",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "version": "0.7.0",
+      "sha256": "aa2dce71508d7a6174381251fe38061f7fa53b99d9a5c5668895bd0767b83c6c",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "route": "sdm_guest_636f6d2e6469676974616c61_route",
+        "discover": "sdm_guest_636f6d2e6469676974616c61_discover",
+        "route_public_query": "sdm_guest_636f6d2e6469676974616c61_route_public_query",
+        "route_node_status": "sdm_guest_636f6d2e6469676974616c61_route_node_status",
+        "route_node_activity": "sdm_guest_636f6d2e6469676974616c61_route_node_activity"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.node-activity",
+      "pluginId": "com.digitalarsenal.hostcap.node-activity",
+      "version": "0.1.0",
+      "sha256": "63356f13594dae55ca3847033b68ccefca2d04fcf3493d59f68dd9a14231a584",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "activity": "sdm_guest_636f6d2e6469676974616c61_activity"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.foundation.http-respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "version": "0.2.1",
+      "sha256": "b365bb14f3b108a05ba339fcb8e433a43c07f57f5a4a9f9ca6f7cd05804d1773",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
+      }
+    }
+  ]
+}
