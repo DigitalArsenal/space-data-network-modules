@@ -769,4 +769,51 @@ int route_public_query(void) {
     return push_decision(decision);
 }
 
+// route_node_status: parse one $HTQ HttpRequest for the read-only node
+// status surface (M1 node-status flow, mount /api/v1/node/status) into
+// exactly one routing decision:
+//
+//   GET/HEAD <mount>  -> status  (hostcap/node-status forwards to the
+//                        node_status_read.status hostcall; always
+//                        format=json — the response is a live status
+//                        OBJECT, not an SDS record collection, so there is
+//                        no flatbuffer presentation to negotiate)
+//   anything else     -> error status=405 — the mount carries exactly one
+//                        resource; PATH is not inspected (mount-exact,
+//                        mirrors route_public_query).
+//
+// No If-None-Match / etag handling: the status snapshot (uptime, bandwidth
+// counters) changes on every call, so a conditional-GET contract would be
+// pointless — every successful request answers a fresh 200.
+int route_node_status(void) {
+    const int32_t input_index = plugin_find_input_index("request", 0);
+    const plugin_input_frame_t* frame =
+        input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;
+    if (!frame || !frame->payload || frame->payload_length < 8) {
+        plugin_set_error("missing-request-frame",
+                         "route_node_status requires a $HTQ HttpRequest input frame on port \"request\".");
+        return 400;
+    }
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!sdn::http::HttpRequestBufferHasIdentifier(frame->payload) ||
+        !sdn::http::VerifyHttpRequestBuffer(verifier)) {
+        plugin_set_error("invalid-request-frame",
+                         "route_node_status input frame is not a valid $HTQ HttpRequest buffer.");
+        return 400;
+    }
+    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
+
+    std::string method;
+    if (request->METHOD()) method.assign(request->METHOD()->c_str(), request->METHOD()->size());
+
+    if (method == "GET" || method == "HEAD") {
+        return push_decision("{\"route\":\"status\",\"format\":\"json\"}");
+    }
+
+    std::string decision = "{\"route\":\"error\",\"status\":405,\"format\":\"json\",\"error\":\"no " +
+                           json_escape(method) +
+                           " route for node status (GET only)\"}";
+    return push_decision(decision);
+}
+
 }  // extern "C"

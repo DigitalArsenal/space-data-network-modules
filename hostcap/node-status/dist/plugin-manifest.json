@@ -1,0 +1,109 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.node-status",
+  "name": "SDN Host Node Status",
+  "version": "0.1.0",
+  "description": "Capability node for the host read-only node_status_read hostcall (M1 node-status flow, GET /api/v1/node/status). One method, one hostcall: 'status' takes the routing-decision JSON from foundation/http-route route_node_status on port \"decision\" and, when route==\"status\", forwards an EMPTY payload ({}) to the node_status_read.status hostcall (capability name IS the op prefix — no capPrefixFromName mapping exists for node_status_read) and emits the hostcall's \"result\" object VERBATIM as UTF-8 JSON bytes on \"body\"; the incoming decision is re-emitted unchanged on \"decision\" (linear flow chaining into foundation/http-respond). Result shape: {uptime_seconds,started_at,store:{total_bytes,total_records,storage_path},disk:{capacity_bytes,free_bytes,available_bytes}|null,service:{state,mode,autostart_known},bandwidth:{total_in_bytes,total_out_bytes,rate_in_bps,rate_out_bps,history:[...]}|null} — an OBJECT (a live status snapshot), not an SDS record collection, so the bare-array JSON convention used by the other gateway flows does not apply here. A decision this method does not own (already rewritten to route=error by the route node, e.g. 405 for non-GET) short-circuits: NO hostcall, the decision passes through untouched and no body frame is pushed — foundation/http-respond owns that response. A node_status_read.status hostcall FAILURE (or a missing/non-object result field) rewrites the decision to route=error status=503 with the host's error message (or an honest fallback) — never a silent empty body. FlatBuffers: there is no SDS schema for node status (checked spacedatastandards.org/schema — no STA/HLT/NOD/SVC-style match exists); a hand-written FlatBuffers table would violate the generated-types-only rule, so v1 ships JSON-ONLY. Anonymity: the $HTQ envelope (module-sdk schemas/HttpRequestAbi.fbs) carries no caller-trust field the flow can read, so this node cannot shape an anonymous subset — the mounted route is declared anonymous:false (operator-gated at the host's auth wall) until the envelope carries trust information.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "node_status_read"
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "sdn-host-node-status",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "node_status_read",
+      "resource": "sdn://node/status",
+      "description": "Policy-mediated read-only host node-status snapshot (uptime, storage totals, disk, service state, bandwidth counters/history).",
+      "properties": {
+        "hostOps": [
+          "node_status_read.status"
+        ]
+      }
+    }
+  ],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "status",
+      "displayName": "Node Status",
+      "inputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-node-status-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision JSON frame from foundation/http-route route_node_status: {\"route\":\"status\",\"format\":\"json\"} or {\"route\":\"error\",\"status\":405,...} for a non-GET request."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One routing-decision JSON frame per request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-node-status-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decision forwarded verbatim on success or on routes this method does not own, or rewritten to route=error status=503 when the node_status_read.status hostcall fails or returns no result object."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Decision for foundation/http-respond."
+        },
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-node-status-body-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON OBJECT bytes: the node_status_read.status hostcall's \"result\" object verbatim ({uptime_seconds,started_at,store,disk,service,bandwidth}). NOT a bare array — a single live-status object, not an SDS record collection. Absent on error / not-owned-route decisions."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Response body for foundation/http-respond (absent on error decisions)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Forwards {} to the node_status_read.status hostcall when route==\"status\" and emits the raw result object verbatim on \"body\" plus the decision passthrough on \"decision\"; routes this method does not own pass through with no hostcall; hostcall failure or a missing result object rewrites the decision to an honest route=error status=503."
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-node-status-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
