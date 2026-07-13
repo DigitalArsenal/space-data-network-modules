@@ -998,6 +998,56 @@ static FitResult differential_evolution(
 
 // ── Single-epoch fit pipeline ──
 
+// ── Position-only initial-guess velocity seed ────────────────────────────────
+//
+// Position-only ephemerides (SP3/CPF/ECF) have no sample velocities, yet the
+// initial Keplerian guess (cartesian_to_keplerian) needs a velocity. We estimate
+// it by differentiating a quadratic (3-point Lagrange) fit of position vs time at
+// the epoch index — a documented, standard finite-difference initializer. It is
+// ONLY the LM seed: the fit minimizes POSITION residuals and the reported orbit's
+// velocity is the SGP4 dynamics' velocity, never this difference. Using the 3
+// points nearest the epoch index makes it valid at the series boundary (idx 0)
+// too. Second-order accurate; for MEO/GEO arcs the seed error is well within the
+// LM's basin of convergence (empirically the fit lands on the same orbit as a
+// Gibbs seed).
+static void estimate_velocity_from_positions(
+    const std::vector<EphemerisPoint>& pts, size_t idx,
+    double& vx, double& vy, double& vz) {
+    vx = vy = vz = 0.0;
+    const size_t n = pts.size();
+    if (n < 2) return;
+    if (n == 2) {
+        double dt = (pts[1].epoch_jd - pts[0].epoch_jd) * SEC_PER_DAY;
+        if (std::abs(dt) < 1e-9) return;
+        vx = (pts[1].x - pts[0].x) / dt;
+        vy = (pts[1].y - pts[0].y) / dt;
+        vz = (pts[1].z - pts[0].z) / dt;
+        return;
+    }
+    // Pick a 3-point window whose span brackets (or is nearest to) idx.
+    size_t i0;
+    if (idx == 0) i0 = 0;
+    else if (idx >= n - 1) i0 = n - 3;
+    else i0 = idx - 1;
+    const EphemerisPoint& p0 = pts[i0];
+    const EphemerisPoint& p1 = pts[i0 + 1];
+    const EphemerisPoint& p2 = pts[i0 + 2];
+    // Times relative to p0 (seconds).
+    double t0 = 0.0;
+    double t1 = (p1.epoch_jd - p0.epoch_jd) * SEC_PER_DAY;
+    double t2 = (p2.epoch_jd - p0.epoch_jd) * SEC_PER_DAY;
+    double te = (pts[idx].epoch_jd - p0.epoch_jd) * SEC_PER_DAY;
+    double d01 = t0 - t1, d02 = t0 - t2, d12 = t1 - t2;
+    if (std::abs(d01) < 1e-12 || std::abs(d02) < 1e-12 || std::abs(d12) < 1e-12) return;
+    // d/dt of the quadratic Lagrange interpolant at te.
+    double L0 = (2.0 * te - t1 - t2) / (d01 * d02);
+    double L1 = (2.0 * te - t0 - t2) / ((t1 - t0) * d12);
+    double L2 = (2.0 * te - t0 - t1) / ((t2 - t0) * (t2 - t1));
+    vx = p0.x * L0 + p1.x * L1 + p2.x * L2;
+    vy = p0.y * L0 + p1.y * L1 + p2.y * L2;
+    vz = p0.z * L0 + p1.z * L1 + p2.z * L2;
+}
+
 static FitResult fit_single_epoch(
     const std::vector<EphemerisPoint>& all_points,
     size_t epoch_idx,
@@ -1029,9 +1079,16 @@ static FitResult fit_single_epoch(
         return {{}, {}, 1e6, 0, false};
     }
 
-    // Phase 1: Initial guess via iterative Brouwer conversion
+    // Phase 1: Initial guess via iterative Brouwer conversion. Full-state sources
+    // use the sample velocity verbatim (byte-identical to the pre-A2.4 path);
+    // position-only sources seed the velocity from the positions (see
+    // estimate_velocity_from_positions).
     const auto& ep = all_points[epoch_idx];
-    auto kepler = cartesian_to_keplerian(ep.x, ep.y, ep.z, ep.vx, ep.vy, ep.vz);
+    double gvx = ep.vx, gvy = ep.vy, gvz = ep.vz;
+    if (config.position_only) {
+        estimate_velocity_from_positions(all_points, epoch_idx, gvx, gvy, gvz);
+    }
+    auto kepler = cartesian_to_keplerian(ep.x, ep.y, ep.z, gvx, gvy, gvz);
     SGP4Elements el = keplerian_to_mean(kepler, epoch_jd);
 
     // Assign temporary catalog identifiers (overwritten when real NORAD ID is known)
@@ -1146,7 +1203,14 @@ FitResult fit_sgp4_series(
     const StateSeries& series,
     const FitterConfig& config) {
 
-    auto result = fit_sgp4(series.samples, config);
+    // Position-only sources (SP3/CPF/ECF) carry no velocities; tell the fitter to
+    // seed the initial-guess velocity from positions. A caller that already set
+    // config.position_only keeps it. Full-state series leave it false → the
+    // existing MEME/OEM path is byte-for-byte unchanged.
+    FitterConfig cfg = config;
+    if (series.meta.position_only) cfg.position_only = true;
+
+    auto result = fit_sgp4(series.samples, cfg);
 
     // Labeling flows from the parsed ephemeris + caller/manifest — never
     // hardcoded to an operator. Empty/zero metadata leaves the fit placeholder

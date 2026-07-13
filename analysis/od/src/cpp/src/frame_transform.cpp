@@ -10,9 +10,31 @@
 
 #include "od/frame_transform.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <string>
 
 namespace od {
+
+FrameKind classify_frame(const std::string& token) {
+    std::string u;
+    u.reserve(token.size());
+    for (char c : token) {
+        if (c == ' ' || c == '_' || c == '-' || c == '(' || c == ')') continue;
+        u.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+    }
+    if (u.empty()) return FrameKind::Unsupported;
+    if (u == "TEME" || u == "TRUEEQUATORMEANEQUINOX") return FrameKind::Teme;
+    if (u == "EME2000" || u == "J2000" || u == "GCRF" || u == "ICRF")
+        return FrameKind::EciJ2000;
+    // Earth-fixed: generic tokens + any ITRF/IGS realization (ITRF2020, IGS20, …).
+    if (u == "ECEF" || u == "ECF" || u == "ITRF" || u == "TRF" || u == "EARTHFIXED")
+        return FrameKind::Ecef;
+    if (u.rfind("ITRF", 0) == 0 || u.rfind("IGS", 0) == 0 || u.rfind("IGB", 0) == 0)
+        return FrameKind::Ecef;
+    return FrameKind::Unsupported;
+}
 
 namespace {
 
@@ -164,6 +186,63 @@ void eci_j2000_to_teme(double jd_utc,
     for (int i = 0; i < 3; ++i) {
         r_out[i] = r[i][0] * r_in[0] + r[i][1] * r_in[1] + r[i][2] * r_in[2];
         v_out[i] = r[i][0] * v_in[0] + r[i][1] * v_in[1] + r[i][2] * v_in[2];
+    }
+}
+
+// ── ECEF (Earth-fixed) -> TEME ───────────────────────────────────────────────
+// See frame_transform.h for the GMST-not-GAST rationale and the explicit
+// polar-motion/DUT1 neglect policy with error bounds.
+
+// omega_earth (rad/s): the WGS-72 Earth rotation rate the Vallado SGP4 propagator
+// uses (SGP4.cpp: 7.29211514668855e-5), reused verbatim so the transport term is
+// consistent with the propagation frame.
+constexpr double kOmegaEarth = 7.29211514668855e-5;
+
+double gmst_1982(double jd_ut1) {
+    const double t = (jd_ut1 - 2451545.0) / 36525.0;
+    // GMST in seconds of time (IAU-1982; Vallado "Fundamentals" Eq. 3-47).
+    // 876600 h = 876600*3600 s is folded into the T coefficient.
+    double gmst_sec = 67310.54841 +
+                      (876600.0 * 3600.0 + 8640184.812866) * t +
+                      0.093104 * t * t -
+                      6.2e-6 * t * t * t;
+    // Reduce seconds of time modulo one sidereal-day worth of seconds, then
+    // convert seconds-of-time -> degrees (/240) -> radians.
+    double sec = std::fmod(gmst_sec, 86400.0);
+    if (sec < 0.0) sec += 86400.0;
+    double rad = sec * (M_PI / 180.0) / 240.0;
+    return norm_rad(rad);
+}
+
+Mat3 ecef_to_teme_matrix(double jd_utc) {
+    // r_PEF = R3(GMST)·r_TEME  =>  r_TEME = R3(-GMST)·r_PEF; polar motion (PEF vs
+    // ITRF) neglected, so r_ECEF ≈ r_PEF. rot_z is the passive rotation, so the
+    // passive rotation by -GMST maps ECEF components into TEME.
+    return rot_z(-gmst_1982(jd_utc));
+}
+
+void ecef_to_teme(double jd_utc,
+                  const double r_in[3], const double v_in[3],
+                  double r_out[3], double v_out[3]) {
+    const Mat3 r = ecef_to_teme_matrix(jd_utc);
+    for (int i = 0; i < 3; ++i) {
+        r_out[i] = r[i][0] * r_in[0] + r[i][1] * r_in[1] + r[i][2] * r_in[2];
+    }
+    // Rotate the Earth-fixed velocity into TEME, then add the transport term
+    // omega x r_TEME (omega = +z*omega_earth in TEME): v_TEME = R·v_ECEF + w x r.
+    double v_rot[3];
+    for (int i = 0; i < 3; ++i) {
+        v_rot[i] = r[i][0] * v_in[0] + r[i][1] * v_in[1] + r[i][2] * v_in[2];
+    }
+    v_out[0] = v_rot[0] - kOmegaEarth * r_out[1];
+    v_out[1] = v_rot[1] + kOmegaEarth * r_out[0];
+    v_out[2] = v_rot[2];
+}
+
+void ecef_to_teme_pos(double jd_utc, const double r_in[3], double r_out[3]) {
+    const Mat3 r = ecef_to_teme_matrix(jd_utc);
+    for (int i = 0; i < 3; ++i) {
+        r_out[i] = r[i][0] * r_in[0] + r[i][1] * r_in[1] + r[i][2] * r_in[2];
     }
 }
 

@@ -37,6 +37,7 @@
 #include "od/sgp4_fitter.h"          // od::fit_sgp4_series, elements_to_json, FitterConfig
 #include "od/state_series.h"
 #include "oem_record_series.hpp"     // odpipe:: OEM-record -> StateSeries + JSON slicing
+#include "id_registry.hpp"           // odpipe:: object-ID cross-reference seam (A2.4-prereq)
 
 namespace ps = provider_source;
 
@@ -70,6 +71,9 @@ struct PipelineConfig {
     std::string query_schema = "OEM";
     long query_limit = 500;
     std::vector<ProviderFit> providers;
+    // Owner-supplied OBJECT_NAME -> {NORAD, COSPAR} registry (EMPTY by default).
+    // Used to resolve IDs for position-only feeds that identify by slot/name/PRN.
+    std::vector<odpipe::IdRegistryEntry> id_registry;
 };
 
 // Compiled fallback: the two public Tier-1 adapters (A2.2c). Overridden whenever
@@ -135,6 +139,9 @@ void apply_config_json(const std::string& json, PipelineConfig* cfg) {
             }
         }
     }
+    // idRegistry, when present, REPLACES the ID cross-reference set (owner data).
+    std::string registry = odpipe::block_slice(json, "idRegistry", '{', '}');
+    if (!registry.empty()) cfg->id_registry = odpipe::parse_id_registry(registry);
 }
 
 // Config resolution: request payload > plugin.getConfig module config > fallback.
@@ -206,7 +213,8 @@ bool storage_query_oem(const std::string& schema, long limit,
 
 std::string build_omm_record(const od::FitResult& fit,
                              const ProviderFit& prov,
-                             const StoredRecord& src) {
+                             const StoredRecord& src,
+                             const std::string& id_status) {
     // od::elements_to_json emits the schema-exact GP/OMM keys (NORAD_CAT_ID,
     // MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER,
     // MEAN_ANOMALY, BSTAR, EPOCH, DATA_SOURCE, RMS, CONVERGED, ...). We augment it
@@ -231,7 +239,11 @@ std::string build_omm_record(const od::FitResult& fit,
     // Machine-readable lineage (USER_DEFINED_* is the SDS user-extension convention).
     omm += "\"USER_DEFINED_SDN_SOURCE_CID\":\"" + ps::json_escape(src.cid) + "\",";
     omm += "\"USER_DEFINED_SDN_SOURCE_SHA256\":\"" + ps::json_escape(src.record_sha256) + "\",";
-    omm += "\"USER_DEFINED_SDN_SOURCE_NAME\":\"" + ps::json_escape(prov.source_name) + "\"";
+    omm += "\"USER_DEFINED_SDN_SOURCE_NAME\":\"" + ps::json_escape(prov.source_name) + "\",";
+    // ID provenance: "source" (real NORAD came with the ephemeris),
+    // "registry-mapped" (owner registry resolved it), or "unmapped-object-id"
+    // (no NORAD/COSPAR — honest empty IDs, fitted anyway, never fabricated).
+    omm += "\"USER_DEFINED_SDN_ID_STATUS\":\"" + ps::json_escape(id_status) + "\"";
     omm += "}";
     return omm;
 }
@@ -273,6 +285,7 @@ const ProviderFit* select_provider(const PipelineConfig& cfg, const std::string&
 
 struct ProviderStats {
     long candidates = 0, fitted = 0, published = 0, signed_ = 0, stored = 0;
+    long id_mapped = 0, id_unmapped = 0;  // registry hits vs honest-empty IDs
     std::vector<std::string> skips;  // "<norad>:<reason>"
 };
 
@@ -302,6 +315,25 @@ std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
             continue;
         }
 
+        // ID cross-reference: the source's NORAD wins; otherwise consult the
+        // owner registry by OBJECT_NAME (slot/name/PRN). No match -> honest-empty
+        // IDs, fitted and tagged "unmapped-object-id". IDs are NEVER fabricated.
+        std::string id_status;
+        if (series.meta.norad_cat_id > 0) {
+            id_status = "source";
+        } else {
+            odpipe::IdRegistryEntry e;
+            if (odpipe::id_registry_lookup(cfg.id_registry, series.meta.object_name, &e)) {
+                series.meta.norad_cat_id = e.norad;
+                if (!e.object_id.empty()) series.meta.object_id = e.object_id;
+                id_status = "registry-mapped";
+                st.id_mapped++;
+            } else {
+                id_status = "unmapped-object-id";
+                st.id_unmapped++;
+            }
+        }
+
         od::FitterConfig fc;
         if (prov->max_iterations > 0) fc.max_iterations = prov->max_iterations;
         fc.fit_window_sec = prov->fit_window_sec;
@@ -309,6 +341,13 @@ std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
         fc.convergence_tol = prov->convergence_tol;
 
         od::FitResult fit = od::fit_sgp4_series(series, fc);
+        // Unmapped objects publish TRULY honest-empty IDs: clear the fitter's
+        // internal "unknown" placeholder (99999) so the record carries NORAD 0 /
+        // OBJECT_ID "" alongside the unmapped-object-id tag. Never a fabricated ID.
+        if (id_status == "unmapped-object-id") {
+            fit.elements.norad_cat_id = 0;
+            fit.elements.object_id = "";
+        }
         if (prov->require_converged && !fit.converged) {
             char b[64];
             snprintf(b, sizeof(b), "%d:fit-not-converged:rms=%.3f", series.meta.norad_cat_id, fit.rms_km);
@@ -318,7 +357,7 @@ std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
         }
         st.fitted++;
 
-        std::string omm = build_omm_record(fit, *prov, rec);
+        std::string omm = build_omm_record(fit, *prov, rec, id_status);
 
         ps::ProviderConfig pcfg;
         pcfg.signing_slot = prov->signing_slot;
@@ -358,6 +397,8 @@ std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
         out += "\"data_source\":\"" + ps::json_escape(p.data_source) + "\",";
         out += "\"candidates\":" + std::to_string(st.candidates) + ",";
         out += "\"fitted\":" + std::to_string(st.fitted) + ",";
+        out += "\"id_mapped\":" + std::to_string(st.id_mapped) + ",";
+        out += "\"id_unmapped\":" + std::to_string(st.id_unmapped) + ",";
         out += "\"stored\":" + std::to_string(st.stored) + ",";
         out += "\"signed\":" + std::to_string(st.signed_) + ",";
         out += "\"published\":" + std::to_string(st.published) + ",";

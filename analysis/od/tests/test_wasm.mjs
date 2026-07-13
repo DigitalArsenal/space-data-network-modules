@@ -462,21 +462,89 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
     const content = fs.readFileSync(ISS_OEM_FIXTURE, "utf8");
 
-    const taiContent = content.replace("TIME_SYSTEM          = UTC", "TIME_SYSTEM          = TAI");
-    const taiResponse = await harness.invoke(
-      createFitRequest(Buffer.from(taiContent, "utf8"), { inputFormat: "oem" }),
+    // A2.4-prereq ADDED support for TIME_SYSTEM GPS/TAI and ITRF/IGS20/ECEF
+    // frames, so the fail-closed guard is exercised here with values that REMAIN
+    // unsupported: a barycentric-dynamical time scale (TDB) and a local-orbit
+    // frame (RSW). (GPS-time + ECEF happy paths are covered by the native
+    // test_frame_time_fit and the fit-pipeline module test.)
+    const tdbContent = content.replace("TIME_SYSTEM          = UTC", "TIME_SYSTEM          = TDB");
+    const tdbResponse = await harness.invoke(
+      createFitRequest(Buffer.from(tdbContent, "utf8"), { inputFormat: "oem" }),
     );
-    assert.equal(taiResponse.statusCode, 1);
-    assert.equal(taiResponse.errorCode, "unsupported-time-system");
-    assert.match(taiResponse.errorMessage, /TIME_SYSTEM/i);
+    assert.equal(tdbResponse.statusCode, 1);
+    assert.equal(tdbResponse.errorCode, "unsupported-time-system");
+    assert.match(tdbResponse.errorMessage, /TIME_SYSTEM/i);
 
-    const itrfContent = content.replace("REF_FRAME            = EME2000", "REF_FRAME            = ITRF2000");
-    const itrfResponse = await harness.invoke(
-      createFitRequest(Buffer.from(itrfContent, "utf8"), { inputFormat: "oem" }),
+    const rswContent = content.replace("REF_FRAME            = EME2000", "REF_FRAME            = RSW");
+    const rswResponse = await harness.invoke(
+      createFitRequest(Buffer.from(rswContent, "utf8"), { inputFormat: "oem" }),
     );
-    assert.equal(itrfResponse.statusCode, 1);
-    assert.equal(itrfResponse.errorCode, "unsupported-frame");
-    assert.match(itrfResponse.errorMessage, /REF_FRAME/i);
+    assert.equal(rswResponse.statusCode, 1);
+    assert.equal(rswResponse.errorCode, "unsupported-frame");
+    assert.match(rswResponse.errorMessage, /REF_FRAME/i);
+  });
+
+  test(`OD OEM fits a position-only IGS20/GPS (GLONASS) KVN ephemeris on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    // Real IAC GLONASS SP3 R03 arc (ECEF/IGS20, GPS time, position-only, km) —
+    // the same 3 epochs the native test uses, provenance:
+    // analysis/od/tests/data/glonass/iac_glonass.sp3.glo (R03). A position-only
+    // KVN OEM (4-token state lines) exercises the OD module's ECEF->TEME (GMST) +
+    // GPS->UTC + position-only-seed path through the real WASM ABI.
+    const glonassKvn = [
+      "CCSDS_OEM_VERS = 2.0",
+      "CREATION_DATE = 2026-07-11T00:00:00.000",
+      "ORIGINATOR = IAC",
+      "META_START",
+      "OBJECT_NAME = R03",
+      "OBJECT_ID = ",
+      "CENTER_NAME = EARTH",
+      "REF_FRAME = IGS20",
+      "TIME_SYSTEM = GPS",
+      "START_TIME = 2026-07-11T00:00:00.000",
+      "STOP_TIME = 2026-07-11T00:30:00.000",
+      "META_STOP",
+      "2026-07-11T00:00:00.000 -12150.969681 -3659.828919 22181.510368",
+      "2026-07-11T00:15:00.000 -9957.122270 -5356.366623 22914.410060",
+      "2026-07-11T00:30:00.000 -7849.784068 -7255.011907 23204.602173",
+      "",
+    ].join("\n");
+
+    const fit = await invokeFitJson(harness, Buffer.from(glonassKvn, "utf8"), {
+      inputFormat: "oem",
+      dataSource: "GLONASS-RE",
+    });
+
+    // Honest IDs (SP3 carries no NORAD/COSPAR; the registry seam lives in the fit
+    // pipeline, not the parser). Unmapped => the fitter's documented "unknown"
+    // placeholder (99999) or 0, NEVER a fabricated real GLONASS catalog number.
+    assert.equal(fit.OBJECT_NAME, "R03");
+    assert.ok(
+      fit.NORAD_CAT_ID === 0 || fit.NORAD_CAT_ID === 99999,
+      `NORAD_CAT_ID=${fit.NORAD_CAT_ID} must be the honest unknown placeholder, not a real ID`,
+    );
+    assert.equal(fit.DATA_SOURCE, "GLONASS-RE");
+    // Credible GLONASS elements: n~2.13 rev/day, i~64.8 deg, near-circular.
+    assert.ok(
+      fit.MEAN_MOTION > 2.0 && fit.MEAN_MOTION < 2.3,
+      `MEAN_MOTION=${fit.MEAN_MOTION} not GLONASS-like (~2.13 rev/day).`,
+    );
+    assert.ok(
+      fit.INCLINATION > 63.0 && fit.INCLINATION < 67.0,
+      `INCLINATION=${fit.INCLINATION} not GLONASS-like (~64.8 deg).`,
+    );
+    assert.ok(fit.ECCENTRICITY < 0.02, `ECCENTRICITY=${fit.ECCENTRICITY} too high for GLONASS.`);
+    assert.ok(
+      Number.parseFloat(fit.RMS) < 5.0,
+      `RMS=${fit.RMS} too high for the position-only ECEF->TEME fit.`,
+    );
   });
 
   // ── Provider-manifest reference gates (Starlink beats-CelesTrak, ISS range) ─

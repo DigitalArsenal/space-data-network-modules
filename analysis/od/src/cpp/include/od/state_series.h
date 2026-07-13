@@ -37,9 +37,14 @@ struct StateSeriesMeta {
     std::string data_source;   // provider/source token, e.g. "SpaceX-E", "ISS-E"
     std::string center_name;   // normalized center, e.g. "EARTH"
     std::string ref_frame;     // frame samples are expressed in (always "TEME" here)
-    std::string source_frame;  // original input frame token (e.g. "EME2000", "UVW")
-    std::string time_system;   // e.g. "UTC"
+    std::string source_frame;  // original input frame token (e.g. "EME2000", "UVW", "IGS20")
+    std::string time_system;   // as-declared source time system (e.g. "UTC", "GPS"); epoch_jd is always UTC
     int segment_count = 1;     // number of OEM META/data segments (MEME = 1)
+    // True when the source carries positions only (no velocities) — e.g. SP3/CPF/
+    // ECF (STATE_VECTOR_SIZE 3). The fitter then seeds the initial-guess velocity
+    // from the positions (documented finite-difference initializer) instead of
+    // reading sample velocities; the fit itself is position-residual only.
+    bool position_only = false;
 };
 
 /// A time-ordered series of state vectors in TEME + provenance metadata.

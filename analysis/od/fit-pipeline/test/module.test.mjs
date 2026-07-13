@@ -182,9 +182,86 @@ function onewebShellOem() {
   });
 }
 
-// A GLONASS-style PZ-90 ECEF record: valid states but an unsupported (non-TEME,
-// non-EME2000) frame → fail-closed skip.
-function ecefOem() {
+// ── GLONASS-style IGS20 (ECEF) + GPS-time + position-only fixture ─────────────
+// A2.4-prereq: the OD side now transforms ECEF->TEME (GMST) and GPS->UTC and fits
+// position-only. To make an END-TO-END fixture that actually fits, we build a
+// self-consistent Keplerian GLONASS-like orbit in TEME and rotate it to ECEF with
+// the SAME GMST formula the C++ uses (od::gmst_1982), then label epochs in GPS
+// time. The pipeline round-trips GPS->UTC + ECEF->TEME and recovers the orbit.
+// This is synthetic test scaffolding (a self-consistent orbit), NOT fabricated
+// provider data. The real IAC GLONASS SP3 arc drives the native OD fit test.
+const MU_KM = 398600.8;
+function gmst1982Rad(jdUt1) {
+  const t = (jdUt1 - 2451545.0) / 36525.0;
+  let sec = 67310.54841 + (876600.0 * 3600.0 + 8640184.812866) * t + 0.093104 * t * t - 6.2e-6 * t * t * t;
+  sec = sec % 86400.0;
+  if (sec < 0) sec += 86400.0;
+  let rad = ((sec * (Math.PI / 180.0)) / 240.0) % (2 * Math.PI);
+  if (rad < 0) rad += 2 * Math.PI;
+  return rad;
+}
+// TEME -> ECEF is rot_z(+gmst) (inverse of the OD ecef_to_teme = rot_z(-gmst)).
+function temeToEcef(gmst, r) {
+  const c = Math.cos(gmst), s = Math.sin(gmst);
+  return [c * r[0] + s * r[1], -s * r[0] + c * r[1], r[2]];
+}
+// JD at 0h UTC of a Gregorian date (matches od::jd_from_ymd).
+function jdFromYmd(y, m, d) {
+  const a = Math.floor((14 - m) / 12);
+  const yy = y + 4800 - a;
+  const mm = m + 12 * a - 3;
+  const jdn = d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
+  return jdn - 0.5;
+}
+function glonassPositionOnlyOem({ objectName = "R03", norad = 0, count = 16 } = {}) {
+  const a = 25510.0;          // km (GLONASS semi-major axis)
+  const inc = 64.8 * Math.PI / 180.0;
+  const n = Math.sqrt(MU_KM / (a * a * a));   // rad/s
+  const jdUtc0 = jdFromYmd(2026, 7, 11);      // 2026-07-11 00:00 UTC
+  const gpsOffsetDays = 18.0 / 86400.0;       // UTC = GPS - 18 s in 2026
+  const lines = [];
+  for (let i = 0; i < count; i++) {
+    const dt = i * 900.0;                      // s
+    const jdUtc = jdUtc0 + dt / 86400.0;
+    const theta = n * dt;                      // argument of latitude (RAAN=0, circular)
+    const rTeme = [
+      a * Math.cos(theta),
+      a * Math.sin(theta) * Math.cos(inc),
+      a * Math.sin(theta) * Math.sin(inc),
+    ];
+    const rEcef = temeToEcef(gmst1982Rad(jdUtc), rTeme);
+    // Label the epoch in GPS time (UTC + 18 s); the pipeline converts back.
+    const jdGps = jdUtc + gpsOffsetDays;
+    const iso = jdGpsToIso(jdGps);
+    lines.push({ EPOCH: iso, X: rEcef[0], Y: rEcef[1], Z: rEcef[2] });
+  }
+  return JSON.stringify({
+    CCSDS_OEM_VERS: 2.0,
+    ORIGINATOR: "IAC",
+    EPHEMERIS_DATA_BLOCK: [
+      {
+        OBJECT_NAME: objectName,
+        OBJECT_ID: "",
+        NORAD_CAT_ID: norad,
+        CENTER_NAME: "EARTH",
+        REFERENCE_FRAME: "IGS20",
+        TIME_SYSTEM: "GPS",
+        STEP_SIZE: 0,
+        STATE_VECTOR_SIZE: 3,
+        EPHEMERIS_DATA_LINES: lines,
+      },
+    ],
+  });
+}
+// Render a JD (UTC-labeled numeric) to an ISO string the OD iso_to_jd accepts.
+function jdGpsToIso(jd) {
+  const ms = (jd - 2440587.5) * 86400000.0;
+  return new Date(Math.round(ms)).toISOString().replace("Z", "");
+}
+
+// A still-unsupported frame (local-orbit RSW) → fail-closed skip, keeping the
+// unsupported-frame taxonomy tested now that ITRF/IGS20/ECEF are supported.
+function unsupportedFrameOem() {
   const lines = [];
   for (let i = 0; i < 12; i++) {
     lines.push({
@@ -197,11 +274,11 @@ function ecefOem() {
     ORIGINATOR: "IAC",
     EPHEMERIS_DATA_BLOCK: [
       {
-        OBJECT_NAME: "COSMOS",
+        OBJECT_NAME: "COSMOS-RSW",
         OBJECT_ID: "",
-        NORAD_CAT_ID: 40001,
+        NORAD_CAT_ID: 0,
         CENTER_NAME: "EARTH",
-        REFERENCE_FRAME: "ITRF2000",
+        REFERENCE_FRAME: "RSW",
         TIME_SYSTEM: "UTC",
         STEP_SIZE: 0,
         STATE_VECTOR_SIZE: 6,
@@ -242,9 +319,12 @@ function buildFixtureConstellation() {
   const iss = issToVerboseOem(ISS_OEM_PATH);
   records.push(record("cid-iss-25544", "iss", iss.json));
 
-  // Honest-skip fixtures (belong to configured providers, cannot be fitted yet).
+  // Honest-skip fixture: undecodable shell (unsupported UNKNOWN frame / empty).
   records.push(record("cid-oneweb-shell", "oneweb", onewebShellOem()));
-  records.push(record("cid-glonass-ecef", "glonass", ecefOem()));
+  // GLONASS: a fittable IGS20 (ECEF) + GPS-time + position-only orbit (A2.4-prereq
+  // capability), plus a still-unsupported RSW frame that must fail-closed.
+  records.push(record("cid-glonass-igs20", "glonass", glonassPositionOnlyOem()));
+  records.push(record("cid-glonass-rsw", "glonass", unsupportedFrameOem()));
   // Unconfigured provider (no matching provider config).
   records.push(record("cid-planet-x", "planet", onewebShellOem()));
 
@@ -378,7 +458,10 @@ const PIPELINE_CONFIG = {
     },
     { sourceName: "iss", dataSource: "ISS-E", outputTopic: "sdn/supgp/iss", fit: { maxIterations: 60 } },
     { sourceName: "oneweb", dataSource: "OneWeb-E", outputTopic: "sdn/supgp/oneweb" },
-    { sourceName: "glonass", dataSource: "GLONASS-RE", outputTopic: "sdn/supgp/glonass" },
+    // GLONASS is a short synthetic arc of a pure-Keplerian orbit (not perfectly
+    // SGP4-representable), so the fit is credible but need not trip the strict
+    // convergence flag — this exercises the ECEF/GPS/position-only PATH.
+    { sourceName: "glonass", dataSource: "GLONASS-RE", outputTopic: "sdn/supgp/glonass", requireConverged: false },
   ],
 };
 
@@ -451,17 +534,24 @@ test("pipeline: storage.query → per-object fit → schema-exact OMM + signed P
   assert.equal(iss.fitted, 1, "ISS verbose OEM fits");
   assert.equal(iss.published, 1);
 
-  // Honest skip taxonomy: undecodable shell + unsupported ECEF frame.
+  // Honest skip taxonomy: undecodable shell (UNKNOWN frame / empty).
   const ow = byProvider["oneweb"];
   assert.equal(ow.fitted, 0);
   assert.ok(ow.skipped.some((s) => s.includes("unsupported-frame:UNKNOWN") || s.includes("empty-ephemeris")), `oneweb skip reason: ${JSON.stringify(ow.skipped)}`);
-  const gl = byProvider["glonass"];
-  assert.equal(gl.fitted, 0);
-  assert.ok(gl.skipped.some((s) => s.includes("unsupported-frame:ITRF2000")), `glonass skip reason: ${JSON.stringify(gl.skipped)}`);
 
-  // Total published OMM records = fittable objects (Starlink + ISS).
+  // GLONASS: the IGS20 (ECEF) + GPS-time + position-only orbit now FITS; the RSW
+  // (local-orbit) record still fails closed. No registry -> unmapped-object-id.
+  const gl = byProvider["glonass"];
+  assert.equal(gl.candidates, 2, "glonass has the IGS20 orbit + the RSW skip record");
+  assert.equal(gl.fitted, 1, "the position-only IGS20/GPS orbit fits");
+  assert.equal(gl.published, 1);
+  assert.equal(gl.id_unmapped, 1, "no registry configured -> honest unmapped-object-id");
+  assert.equal(gl.id_mapped, 0);
+  assert.ok(gl.skipped.some((s) => s.includes("unsupported-frame:RSW")), `glonass skip reasons: ${JSON.stringify(gl.skipped)}`);
+
+  // Total published OMM records = fittable objects (Starlink + ISS + GLONASS).
   const totalPublished = summary.providers.reduce((a, p) => a + p.published, 0);
-  assert.equal(totalPublished, starlinkCount + 1);
+  assert.equal(totalPublished, starlinkCount + 2);
   assert.equal(storage.length, totalPublished, "one stored OMM per published fit");
   assert.equal(publishes.length, totalPublished);
 
@@ -472,11 +562,18 @@ test("pipeline: storage.query → per-object fit → schema-exact OMM + signed P
     for (const k of ["NORAD_CAT_ID", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "BSTAR", "EPOCH", "DATA_SOURCE"]) {
       assert.ok(k in omm, `stored OMM missing schema key ${k}`);
     }
-    assert.ok(["SpaceX-E", "ISS-E"].includes(omm.DATA_SOURCE), `unexpected DATA_SOURCE ${omm.DATA_SOURCE}`);
+    assert.ok(["SpaceX-E", "ISS-E", "GLONASS-RE"].includes(omm.DATA_SOURCE), `unexpected DATA_SOURCE ${omm.DATA_SOURCE}`);
     assert.ok(Array.isArray(omm.COMMENT) && omm.COMMENT.length > 0, "OMM carries COMMENT provenance");
     assert.ok(typeof omm.USER_DEFINED_SDN_SOURCE_CID === "string" && omm.USER_DEFINED_SDN_SOURCE_CID.length > 0, "OMM carries source CID lineage");
     assert.ok(/^[0-9a-f]{64}$/.test(omm.USER_DEFINED_SDN_SOURCE_SHA256), "OMM carries source SHA-256 lineage");
-    assert.equal(omm.CONVERGED, true, "published OMM fits are converged");
+    assert.ok(["source", "registry-mapped", "unmapped-object-id"].includes(omm.USER_DEFINED_SDN_ID_STATUS), `OMM carries an ID-status tag (got ${omm.USER_DEFINED_SDN_ID_STATUS})`);
+    // GLONASS is unmapped here -> honest-empty NORAD; the others carry their IDs.
+    if (omm.DATA_SOURCE === "GLONASS-RE") {
+      assert.equal(omm.USER_DEFINED_SDN_ID_STATUS, "unmapped-object-id");
+      assert.equal(omm.NORAD_CAT_ID, 0, "unmapped GLONASS OMM keeps NORAD honest-empty");
+    } else {
+      assert.equal(omm.CONVERGED, true, "published Starlink/ISS OMM fits are converged");
+    }
   }
 
   // Every publish is a schema-exact PNM on the provider's OMM topic + provenance sidecar.
@@ -506,6 +603,48 @@ test("pipeline: ISS OMM is physically plausible (EME2000→TEME fit sanity)", as
   assert.ok(issOmm.MEAN_MOTION > 15.3 && issOmm.MEAN_MOTION < 15.7, `MEAN_MOTION=${issOmm.MEAN_MOTION} not ISS-like`);
   assert.ok(issOmm.INCLINATION > 51.0 && issOmm.INCLINATION < 52.2, `INCLINATION=${issOmm.INCLINATION} not ISS-like`);
   assert.ok(issOmm.ECCENTRICITY < 0.01, `ECCENTRICITY=${issOmm.ECCENTRICITY} too high`);
+});
+
+test("pipeline: ID registry seam maps a GLONASS slot -> NORAD (owner data), else honest-empty", async () => {
+  // With an owner-supplied idRegistry mapping the record's OBJECT_NAME ("R03")
+  // to a NORAD/COSPAR, the fitted GLONASS OMM carries those IDs and is tagged
+  // "registry-mapped". Without a match, IDs stay honest-empty + "unmapped-object-id".
+  const { records } = buildFixtureConstellation();
+  const configWithRegistry = {
+    ...PIPELINE_CONFIG,
+    idRegistry: {
+      "R03": { NORAD_CAT_ID: 32275, OBJECT_ID: "2007-052A" },
+      // A decoy entry for a different key proves lookup is exact-match, not fuzzy.
+      "R99": { NORAD_CAT_ID: 99998, OBJECT_ID: "1999-099Z" },
+    },
+  };
+  const { summary, storage } = await runPipeline(configWithRegistry, records);
+  const gl = Object.fromEntries(summary.providers.map((p) => [p.source_name, p]))["glonass"];
+  assert.equal(gl.fitted, 1, "the IGS20 orbit still fits with a registry configured");
+  assert.equal(gl.id_mapped, 1, "R03 resolved via the registry");
+  assert.equal(gl.id_unmapped, 0);
+
+  const glonassOmm = storage
+    .map((w) => JSON.parse(w.data.toString("utf8")))
+    .find((o) => o.DATA_SOURCE === "GLONASS-RE");
+  assert.ok(glonassOmm, "GLONASS OMM produced");
+  assert.equal(glonassOmm.NORAD_CAT_ID, 32275, "registry NORAD applied (never fabricated in-parser)");
+  assert.equal(glonassOmm.OBJECT_ID, "2007-052A", "registry COSPAR applied");
+  assert.equal(glonassOmm.USER_DEFINED_SDN_ID_STATUS, "registry-mapped");
+  // The ECEF->TEME + GPS->UTC + position-only fit recovers credible GLONASS
+  // elements: n ~2.13 rev/day (period ~11.26 h), i ~64.8 deg, near-circular.
+  assert.ok(glonassOmm.MEAN_MOTION > 2.0 && glonassOmm.MEAN_MOTION < 2.3, `GLONASS MEAN_MOTION=${glonassOmm.MEAN_MOTION}`);
+  assert.ok(glonassOmm.INCLINATION > 63.0 && glonassOmm.INCLINATION < 67.0, `GLONASS INCLINATION=${glonassOmm.INCLINATION}`);
+  assert.ok(glonassOmm.ECCENTRICITY < 0.02, `GLONASS ECCENTRICITY=${glonassOmm.ECCENTRICITY}`);
+
+  // Control: the SAME records with NO registry stay honest-empty + unmapped.
+  const { summary: s2, storage: st2 } = await runPipeline(PIPELINE_CONFIG, records);
+  const gl2 = Object.fromEntries(s2.providers.map((p) => [p.source_name, p]))["glonass"];
+  assert.equal(gl2.id_mapped, 0);
+  assert.equal(gl2.id_unmapped, 1);
+  const glonassOmm2 = st2.map((w) => JSON.parse(w.data.toString("utf8"))).find((o) => o.DATA_SOURCE === "GLONASS-RE");
+  assert.equal(glonassOmm2.NORAD_CAT_ID, 0, "no registry -> honest-empty NORAD");
+  assert.equal(glonassOmm2.USER_DEFINED_SDN_ID_STATUS, "unmapped-object-id");
 });
 
 test("pipeline: cron nil input falls back to compiled provider defaults (no crash)", async () => {
