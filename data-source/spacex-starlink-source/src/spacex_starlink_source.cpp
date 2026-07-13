@@ -307,10 +307,11 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
             "\"EPHEMERIS_SOURCE\":\"" + ps::json_escape(m.ephemeris_source) + "\"," +
             "\"STATE_COUNT\":" + std::to_string(states.size() / 6) + "}";
 
-        ps::PublishResult r = ps::publish_record(
+        ps::PublishResult r = ps::publish_record_with_source(
             pcfg,
             reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-            filename, file_id, m.created_iso, provenance);
+            filename, file_id, m.created_iso, provenance,
+            url, source_sha256);
         if (r.stored) stored++;
         if (r.signed_) signed_++;
         if (r.published) published++;

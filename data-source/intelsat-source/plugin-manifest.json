@@ -6,7 +6,7 @@
   "pluginFamily": "data_source",
   "capabilities": [
     "http",
-    "storage_write",
+    "storage_ingest",
     "wallet_sign",
     "crypto_sign",
     "pubsub"

@@ -437,10 +437,11 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
             size_t slash = url.find_last_of('/');
             std::string file_name = (slash == std::string::npos) ? url : url.substr(slash + 1);
 
-            ps::PublishResult r = ps::publish_record(
+            ps::PublishResult r = ps::publish_record_with_source(
                 pcfg,
                 reinterpret_cast<const uint8_t*>(omm.data()), omm.size(),
-                file_name, file_id, epoch_iso, provenance);
+                file_name, file_id, epoch_iso, provenance,
+                cfg.source_url, source_sha256);
             if (r.stored) stored++;
             if (r.signed_) signed_++;
             if (r.published) published++;
