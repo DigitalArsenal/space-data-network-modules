@@ -47,6 +47,7 @@
 #include <vector>
 
 #include "provider_source.hpp"
+#include "gps_time.hpp"  // ps::gps_seconds_to_iso (promoted to common/ in A2.2c-2)
 
 namespace ps = provider_source;
 
@@ -66,10 +67,10 @@ static const char* kPublishTopic = "sdn/data-source/oneweb";
 // fleet in ~15 pulls (~3.75 days at the 6h timer) without a churn spike.
 static const long kDefaultObjectCap = 40;
 
-// GPS-epoch (1980-01-06T00:00:00 UTC) expressed as Unix seconds. The LTEF stores
-// continuous GPS-epoch seconds with NO leap-second correction; adding this
-// offset reproduces the feed's own timestamp.txt wall-clock (validated).
-static const long kGpsUnixOffsetSec = 315964800;
+// GPS-epoch seconds -> ISO conversion is provided by the shared common/gps_time.hpp
+// (ps::gps_seconds_to_iso). The LTEF stores continuous GPS-epoch seconds with NO
+// leap-second correction; the shared helper reproduces the feed's own
+// timestamp.txt wall-clock (validated in A2.2c-1). Promoted to common/ in A2.2c-2.
 
 extern "C" {
 __attribute__((visibility("default")))
@@ -80,46 +81,7 @@ void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
 
 namespace {
 
-// ── GPS-seconds → UTC ISO 8601 ───────────────────────────────────────────────
-
-// Howard Hinnant's civil_from_days: days since 1970-01-01 -> (y, m, d).
-void civil_from_days(long z, long* y, unsigned* m, unsigned* d) {
-    z += 719468;
-    long era = (z >= 0 ? z : z - 146096) / 146097;
-    unsigned doe = static_cast<unsigned>(z - era * 146097);          // [0, 146096]
-    unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;  // [0, 399]
-    long yy = static_cast<long>(yoe) + era * 400;
-    unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);          // [0, 365]
-    unsigned mp = (5 * doy + 2) / 153;                               // [0, 11]
-    *d = doy - (153 * mp + 2) / 5 + 1;                               // [1, 31]
-    *m = mp < 10 ? mp + 3 : mp - 9;                                  // [1, 12]
-    *y = yy + (*m <= 2 ? 1 : 0);
-}
-
-void pad2(std::string* s, long v) {
-    if (v < 10) s->push_back('0');
-    *s += std::to_string(v);
-}
-
-// Convert LTEF GPS-epoch seconds to a UTC ISO 8601 string (YYYY-MM-DDThh:mm:ssZ),
-// no leap-second correction (matches OneWeb's own timestamp.txt convention).
-std::string gps_seconds_to_iso(long gps_seconds) {
-    long unix = gps_seconds + kGpsUnixOffsetSec;
-    long days = unix / 86400;
-    long sod = unix - days * 86400;
-    if (sod < 0) { sod += 86400; days -= 1; }
-    long y; unsigned mo, da;
-    civil_from_days(days, &y, &mo, &da);
-    long hh = sod / 3600, mm = (sod % 3600) / 60, ss = sod % 60;
-    std::string s = std::to_string(y);
-    s.push_back('-'); pad2(&s, static_cast<long>(mo));
-    s.push_back('-'); pad2(&s, static_cast<long>(da));
-    s.push_back('T'); pad2(&s, hh);
-    s.push_back(':'); pad2(&s, mm);
-    s.push_back(':'); pad2(&s, ss);
-    s.push_back('Z');
-    return s;
-}
+// GPS-seconds -> ISO 8601: ps::gps_seconds_to_iso (common/gps_time.hpp).
 
 // ── LTEF CSV parsing ─────────────────────────────────────────────────────────
 
@@ -247,8 +209,8 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
         if (rows >= cfg.object_cap) break;   // per-pull record cap (churn bound)
         rows++;
 
-        std::string epoch_iso = gps_seconds_to_iso(r.epoch_gps);
-        std::string ref_iso = gps_seconds_to_iso(r.ref_epoch_gps);
+        std::string epoch_iso = ps::gps_seconds_to_iso(r.epoch_gps);
+        std::string ref_iso = ps::gps_seconds_to_iso(r.ref_epoch_gps);
         std::string object_name = "ONEWEB-" + std::to_string(r.slot);
 
         std::string oem = build_oem_record(r, epoch_iso, object_name);
