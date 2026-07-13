@@ -1,0 +1,34 @@
+{
+  "_draft": "A2.4 seed for GLONASS. celestrak.org was UNREACHABLE (connection timed out) from the build env — same as A2.1's ECONNREFUSED — so the CelesTrak GLONASS-RE SupGP pair is NOT captured. See README.md. Unlike GPS, the IAC SP3 IS a real state-vector ephemeris, so the hard-RMS gate IS achievable — but only after the OD-side prerequisites below are met (frame + time system).",
+  "name": "GLONASS (IAC precise SP3) — CelesTrak parity",
+  "source": "GLONASS-RE",
+  "format": "oem-sp3",
+  "gate": "beatsCelestrak",
+  "gatePrerequisites": [
+    "OD frame transform IGS20/ITRF2020 (ECEF) -> TEME. A2.2a implemented EME2000/J2000/GCRF -> TEME (inertial precession+nutation) only; IAC SP3 is an EARTH-FIXED (ITRF) frame, whose transform to TEME needs Earth-rotation-angle + polar motion + UT1, NOT yet in the OD module. Until added, A2.2a fail-closes on this frame.",
+    "OD time system GPS -> UTC. A2.2a is UTC-only (fail-closed otherwise); IAC SP3 declares TIME_SYSTEM=GPS, so a GPS->UTC (leap-second) step is required before the OD fit.",
+    "Position-only OD fit. IAC SP3 has no velocity records (STATE_VECTOR_SIZE=3); confirm the OD SGP4 fit accepts a position-only state series."
+  ],
+  "inputFiles": ["../iac_glonass.sp3.glo"],
+  "objectName": "GLONASS Rnn",
+  "objectId": "",
+  "noradCatId": 0,
+  "declaredReferenceFrame": "IGS20",
+  "declaredTimeSystem": "GPS",
+  "missionAssumptionCorrection": "Packet said PZ-90.11 ECEF; the real IAC precise SP3 declares IGS20 (ITRF2020 realization) / GPS time. PZ-90.11 is the GLONASS BROADCAST-nav frame, a different product.",
+  "celestrakQuery": "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=GLONASS-RE&FORMAT=JSON",
+  "celestrakKvn": "TODO-A2.4-capture-same-epoch-supgp",
+  "slotToNoradCrossReference": "TODO-A2.4-obtain-authoritative-GLONASS-slot-to-NORAD mapping (SP3 carries only the Rnn slot id)",
+  "tolerances": {
+    "rmsMustBeatCelestrak": true,
+    "note": "Achievable once gatePrerequisites are met (frame + time + position-only OD).",
+    "elementSpace": {
+      "note": "Epoch-aligned OMM element tolerances vs CelesTrak GLONASS-RE OMM — set by A2.4 once the SupGP pair lands.",
+      "inclinationDeg": null,
+      "raanDeg": null,
+      "argpDeg": null,
+      "meanMotionRevPerDay": null,
+      "eccentricity": null
+    }
+  }
+}
