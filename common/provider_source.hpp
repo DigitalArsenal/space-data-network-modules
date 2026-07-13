@@ -93,12 +93,17 @@ inline std::vector<uint8_t> base64_decode(const std::string& in) {
 }
 
 // ─────────────────────────── SHA-256 ───────────────────────────
-// Self-contained SHA-256 → lowercase hex. Used to bind the raw upstream source
-// bytes into signed provenance (DPM convention: SOURCE_SHA256 = "SHA-256 hash
-// of raw source bytes"). Kept in-guest so provenance is deterministic and does
-// not require an extra host capability.
+// Self-contained SHA-256. Used both to bind raw upstream source bytes into
+// signed provenance (DPM convention: SOURCE_SHA256 = "SHA-256 hash of raw
+// source bytes") and — via cid_v1_raw_sha256 below — to compute the CIDv1 the
+// host's storage layer assigns to each stored record. Kept in-guest so both are
+// deterministic and require no extra host capability.
+//
+// sha256_raw fills a 32-byte digest; sha256_hex is the lowercase-hex form
+// (byte-for-byte identical to the pre-refactor helper — sha256_hex now delegates
+// to sha256_raw).
 
-inline std::string sha256_hex(const uint8_t* data, size_t len) {
+inline void sha256_raw(const uint8_t* data, size_t len, uint8_t out[32]) {
     static const uint32_t K[64] = {
         0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
         0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
@@ -141,13 +146,71 @@ inline std::string sha256_hex(const uint8_t* data, size_t len) {
         }
         h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;
     }
+    for (int i = 0; i < 8; ++i) {
+        out[i * 4]     = static_cast<uint8_t>((h[i] >> 24) & 0xff);
+        out[i * 4 + 1] = static_cast<uint8_t>((h[i] >> 16) & 0xff);
+        out[i * 4 + 2] = static_cast<uint8_t>((h[i] >> 8) & 0xff);
+        out[i * 4 + 3] = static_cast<uint8_t>(h[i] & 0xff);
+    }
+}
+
+inline std::string sha256_hex(const uint8_t* data, size_t len) {
+    uint8_t d[32];
+    sha256_raw(data, len, d);
     static const char* hex = "0123456789abcdef";
     std::string out;
     out.reserve(64);
-    for (int i = 0; i < 8; ++i)
-        for (int s = 28; s >= 0; s -= 4)
-            out.push_back(hex[(h[i] >> s) & 0xf]);
+    for (int i = 0; i < 32; ++i) {
+        out.push_back(hex[(d[i] >> 4) & 0xf]);
+        out.push_back(hex[d[i] & 0xf]);
+    }
     return out;
+}
+
+// ─────────────────────────── CIDv1 (in-guest) ───────────────────────────
+// storage.ingest_with_source is a BATCH op that returns only an inserted count,
+// not a per-record content id — but a published PNM must still carry the
+// resolvable CID of the stored record. So the adapter computes it in-guest and
+// the value byte-matches what the host assigns
+// (storage.computeCID → cidV1RawSHA256 → cid.NewCidV1(cid.Raw, mh.Sum(data,
+// SHA2_256)).String()): a CIDv1, raw codec (0x55), sha2-256 multihash (0x12 0x20
+// + 32 digest bytes), rendered in the CIDv1 default multibase — base32 lower,
+// RFC-4648 alphabet, no padding, multibase prefix 'b'. Proven byte-identical to
+// go-cid over known vectors in the adapter test suites.
+
+// RFC-4648 base32 (lowercase, no padding). Alphabet: a-z 2-7.
+inline std::string base32_lower_nopad(const uint8_t* data, size_t len) {
+    static const char* alpha = "abcdefghijklmnopqrstuvwxyz234567";
+    std::string out;
+    out.reserve((len * 8 + 4) / 5);
+    int buffer = 0;   // holds at most 12 meaningful low bits between flushes
+    int bits = 0;
+    for (size_t i = 0; i < len; ++i) {
+        buffer = (buffer << 8) | data[i];
+        bits += 8;
+        while (bits >= 5) {
+            bits -= 5;
+            out.push_back(alpha[(buffer >> bits) & 0x1f]);
+        }
+        buffer &= (1 << bits) - 1;  // keep only the leftover low bits
+    }
+    if (bits > 0) out.push_back(alpha[(buffer << (5 - bits)) & 0x1f]);
+    return out;
+}
+
+// CIDv1(raw, sha2-256) of `data`, multibase-'b' base32 — the exact string the
+// host stores for these bytes. Frame: 0x01 (CIDv1) 0x55 (raw) 0x12 (sha2-256)
+// 0x20 (32) + 32 digest bytes → base32-lower-nopad, prefixed 'b' (e.g. bafk…).
+inline std::string cid_v1_raw_sha256(const uint8_t* data, size_t len) {
+    uint8_t digest[32];
+    sha256_raw(data, len, digest);
+    uint8_t frame[36];
+    frame[0] = 0x01;  // CIDv1 version
+    frame[1] = 0x55;  // multicodec: raw
+    frame[2] = 0x12;  // multihash: sha2-256
+    frame[3] = 0x20;  // digest length: 32
+    for (int i = 0; i < 32; ++i) frame[4 + i] = digest[i];
+    return std::string("b") + base32_lower_nopad(frame, sizeof(frame));
 }
 
 // ─────────────────────────── JSON helpers ───────────────────────────
@@ -278,6 +341,66 @@ inline std::string storage_write(const std::string& schema, const uint8_t* data,
     return cid;
 }
 
+// SourceTags — provenance attribution the host binds to each ingested record
+// (storage.SourceTags on the Go side). The host requires provider_id,
+// source_name and batch_id to be non-empty. `source_name` is the fit-pipeline
+// grouping key (select_provider matches on SourceTags.SourceName), so it MUST be
+// the provider registry token (== PNM topic suffix): spacex-starlink, iss,
+// oneweb, gps, glonass, intelsat, cpf.
+struct SourceTags {
+    std::string provider_id;    // required; adapters reuse source_name (no in-guest node identity)
+    std::string source_name;    // required; fit-pipeline grouping key (registry token)
+    std::string source_url;     // per-record upstream URL (optional to host)
+    std::string batch_id;       // required; source_sha256 (raw upstream bytes hash, CelesTrak convention)
+    std::string content_key_id; // "public"
+};
+
+// STORAGE_INGEST_WITH_SOURCE: store one record with SourceTags provenance via the
+// storage.ingest_with_source host op (requires the storage_ingest grant). Records
+// travel as a size-prefixed stream [u32le len][bytes], base64 into "records".
+//
+// reconcile is pinned to "none": the host's indexed-duplicates reconcile
+// partitions on (norad, entity, type, ops_status, epoch) and would DELETE
+// distinct sibling objects that share NORAD=0 + epoch from multi-object
+// providers (GLONASS/GPS). Logical dedup is A2.6's scope, not the adapter's.
+//
+// Returns the host-reported inserted count (0 when the record's CID already
+// exists — still successfully stored), or -1 when the op failed / was ungranted.
+inline long storage_ingest_with_source(const std::string& schema,
+                                       const uint8_t* data, size_t len,
+                                       const SourceTags& tags,
+                                       long* inserted_out) {
+    // Single-record size-prefixed stream: [u32le len][record bytes].
+    std::vector<uint8_t> stream;
+    stream.reserve(4 + len);
+    uint32_t n = static_cast<uint32_t>(len);
+    stream.push_back(static_cast<uint8_t>(n & 0xff));
+    stream.push_back(static_cast<uint8_t>((n >> 8) & 0xff));
+    stream.push_back(static_cast<uint8_t>((n >> 16) & 0xff));
+    stream.push_back(static_cast<uint8_t>((n >> 24) & 0xff));
+    stream.insert(stream.end(), data, data + len);
+    std::string records_b64 = base64_encode(stream.data(), stream.size());
+
+    std::string payload = "{";
+    payload += "\"schema\":\"" + json_escape(schema) + "\",";
+    payload += "\"provider_id\":\"" + json_escape(tags.provider_id) + "\",";
+    payload += "\"source_name\":\"" + json_escape(tags.source_name) + "\",";
+    payload += "\"source_url\":\"" + json_escape(tags.source_url) + "\",";
+    payload += "\"batch_id\":\"" + json_escape(tags.batch_id) + "\",";
+    payload += "\"content_key_id\":\"" + json_escape(tags.content_key_id) + "\",";
+    payload += "\"reconcile\":\"none\",";
+    payload += "\"records\":\"" + records_b64 + "\"}";
+
+    std::vector<uint8_t> env = hostcall("storage.ingest_with_source", payload);
+    if (!cap_ok(env)) {
+        if (inserted_out) *inserted_out = 0;
+        return -1;
+    }
+    long inserted = json_number_field(envelope_meta_json(env), "inserted", 0);
+    if (inserted_out) *inserted_out = inserted;
+    return inserted;
+}
+
 // PUBSUB publish (utf8) to a topic.
 inline bool pubsub_publish(const std::string& topic, const std::string& data) {
     std::string payload = "{\"topic\":\"" + json_escape(topic) + "\",\"data\":\"" +
@@ -377,6 +500,63 @@ inline PublishResult publish_record(
     PublishResult res;
     res.cid = storage_write(cfg.record_schema, record_bytes, record_len);
     res.stored = !res.cid.empty();
+
+    // Sign the record's content id (CID) — the stable commitment consumers verify.
+    std::vector<uint8_t> sig =
+        keyslot_sign(cfg.signing_slot, reinterpret_cast<const uint8_t*>(res.cid.data()), res.cid.size());
+    res.signed_ = !sig.empty();
+
+    Pnm pnm;
+    pnm.file_name = file_name;
+    pnm.file_id = file_id;
+    pnm.cid = res.cid;
+    pnm.multiformat_address = res.cid.empty() ? std::string() : ("/ipfs/" + res.cid);
+    pnm.publish_timestamp = publish_timestamp;
+    pnm.signature_b64 = base64_encode(sig.data(), sig.size());
+    pnm.signature_type = cfg.signature_type;
+
+    std::string message = "{\"PNM\":" + pnm_to_json(pnm) + ",\"provenance\":" + provenance_json + "}";
+    res.published = pubsub_publish(cfg.publish_topic, message);
+    return res;
+}
+
+// publish_record_with_source — publish_record's SourceTags-carrying twin
+// (A2.2c-3). Same signed-PNM + provenance-sidecar shape, but the record is
+// stored via storage.ingest_with_source so it carries provenance attribution
+// the fit-pipeline groups on. Because ingest is a batch op that returns only a
+// count (no per-record CID), the CID is computed IN-GUEST — byte-identical to
+// the CID the host assigns for the same record bytes (cid_v1_raw_sha256).
+//
+// Tag mapping (host requires provider_id/source_name/batch_id non-empty; there
+// is deliberately NO parser_version tag — parser version stays in the provenance
+// sidecar): provider_id = source_name (adapters have no separate node identity),
+// source_name = the registry token (grouping key), source_url per record,
+// batch_id = source_sha256 (raw upstream bytes hash), content_key_id = "public".
+inline PublishResult publish_record_with_source(
+    const ProviderConfig& cfg,
+    const uint8_t* record_bytes, size_t record_len,
+    const std::string& file_name,
+    const std::string& file_id,
+    const std::string& publish_timestamp,
+    const std::string& provenance_json,
+    const std::string& source_url,
+    const std::string& batch_id) {
+    PublishResult res;
+
+    // CID computed in-guest — the ingest op returns only an inserted count, but
+    // this value byte-matches the host's stored CID for the same bytes.
+    res.cid = cid_v1_raw_sha256(record_bytes, record_len);
+
+    SourceTags tags;
+    tags.provider_id = cfg.source_name;
+    tags.source_name = cfg.source_name;
+    tags.source_url = source_url;
+    tags.batch_id = batch_id;
+    tags.content_key_id = "public";
+
+    long inserted = 0;
+    long ingest = storage_ingest_with_source(cfg.record_schema, record_bytes, record_len, tags, &inserted);
+    res.stored = ingest >= 0;  // ingest hostcall ok ⇒ record is in the store (inserted may be 0 on re-ingest)
 
     // Sign the record's content id (CID) — the stable commitment consumers verify.
     std::vector<uint8_t> sig =
