@@ -16,8 +16,8 @@
     {
       "timerId": "starlink-pull",
       "methodId": "pull",
-      "defaultIntervalMs": 3600000,
-      "description": "Periodic Starlink ephemeris pull (default hourly)."
+      "defaultIntervalMs": 21600000,
+      "description": "Periodic Starlink ephemeris pull (default every 6h, matching SpaceX's few-times-daily MEME regeneration; per-pull object cap bounds burst load)."
     }
   ],
   "invokeSurfaces": ["command"],

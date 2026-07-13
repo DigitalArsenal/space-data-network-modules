@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,4 +115,206 @@ test("built WASM embeds + returns the real manifest", async () => {
   const mem = new Uint8Array(ex.memory.buffer, ptr, size);
   const fromWasm = decodePluginManifest(new Uint8Array(mem));
   assert.equal(fromWasm.pluginId, "com.orbpro.spacex-starlink-source");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fixture-driven end-to-end pull (A2.2b). Instantiates the real built WASM with
+// a mock `space_data_module_host` bridge that serves the checked-in MANIFEST +
+// MEME fixtures over http.request, captures storage.write + pubsub.publish, and
+// returns a signature for keyslot.sign. This exercises the actual C++ manifest
+// parse → capped per-object fetch → MEME→canonical-OEM record → signed PNM
+// publish flow against the rebuilt artifact (no live network).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FIXTURES_DIR = path.join(__dirname, "fixtures");
+const MANIFEST_URL = "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
+const BASE_URL = "https://api.starlink.com/public-files/ephemerides/";
+
+function u32le(bytes, off) {
+  return (bytes[off] | (bytes[off + 1] << 8) | (bytes[off + 2] << 16) | (bytes[off + 3] << 24)) >>> 0;
+}
+
+// Build a hostcall response envelope: [u32 metaLen][metaJSON][u32 0 segments].
+function buildEnvelope(metaObj) {
+  const meta = new TextEncoder().encode(JSON.stringify(metaObj));
+  const out = new Uint8Array(4 + meta.length + 4);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, meta.length, true);
+  out.set(meta, 4);
+  dv.setUint32(4 + meta.length, 0, true); // segment_count = 0
+  return out;
+}
+
+// Serve the http.request capability from the checked-in fixtures.
+function serveHttp(url) {
+  if (url.endsWith("MANIFEST.txt")) {
+    return { status: 200, body: fs.readFileSync(path.join(FIXTURES_DIR, "MANIFEST.sample.txt"), "utf8") };
+  }
+  const name = url.slice(BASE_URL.length);
+  const p = path.join(FIXTURES_DIR, "meme", name);
+  if (fs.existsSync(p)) return { status: 200, body: fs.readFileSync(p, "utf8") };
+  return { status: 404, body: "" }; // unknown object → module skips it
+}
+
+// Drive plugin_invoke_stream with an optional JSON config, collecting the
+// storage.write records and pubsub.publish messages the module emits.
+async function runPull(config) {
+  const { stripWasmCustomSections } = await import("space-data-module-sdk/bundle");
+  const loadable = stripWasmCustomSections(loadWasm());
+
+  const captured = { storage: [], publishes: [] };
+  let responseBuf = new Uint8Array(0);
+  let instance = null;
+  const mem = () => new Uint8Array(instance.exports.memory.buffer);
+  const readBytes = (ptr, len) => mem().slice(ptr, ptr + len);
+  const readStr = (ptr, len) => new TextDecoder().decode(readBytes(ptr, len));
+  // A hostcall request payload is [u32 metaLen][metaJSON][u32 segCount][...].
+  const readReqMeta = (ptr, len) => {
+    const bytes = readBytes(ptr, len);
+    const metaLen = u32le(bytes, 0);
+    return JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + metaLen)));
+  };
+
+  const host = {
+    call(opPtr, opLen, payloadPtr, payloadLen) {
+      const op = readStr(opPtr, opLen);
+      const req = readReqMeta(payloadPtr, payloadLen);
+      let meta;
+      if (op === "http.request") {
+        const r = serveHttp(req.url);
+        meta = { ok: true, result: { status: r.status, body_encoding: "utf8", body: r.body } };
+      } else if (op === "storage.write") {
+        const data = Buffer.from(req.data, "base64");
+        captured.storage.push({ schema: req.schema, data });
+        meta = { ok: true, result: { cid: "cid-" + crypto.createHash("sha256").update(data).digest("hex") } };
+      } else if (op === "keyslot.sign") {
+        // Deterministic non-empty signature (64 bytes); the module only needs
+        // a non-empty signature to mark the PNM signed.
+        const sig = Buffer.alloc(64, 0x2b);
+        meta = { ok: true, result: { signature: sig.toString("base64"), algorithm: "ed25519" } };
+      } else if (op === "pubsub.publish") {
+        captured.publishes.push({ topic: req.topic, message: JSON.parse(req.data) });
+        meta = { ok: true, result: {} };
+      } else {
+        meta = { ok: false, error: { message: "unhandled op " + op } };
+      }
+      responseBuf = buildEnvelope(meta);
+      return 0;
+    },
+    response_len() { return responseBuf.length; },
+    read_response(dstPtr, dstLen) {
+      const n = Math.min(dstLen, responseBuf.length);
+      mem().set(responseBuf.subarray(0, n), dstPtr);
+      return n;
+    },
+    clear_response() { responseBuf = new Uint8Array(0); return 0; },
+    last_status_code() { return 0; },
+  };
+
+  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host });
+  instance = wasm.instance;
+  const ex = instance.exports;
+
+  // Write the optional JSON config into guest memory.
+  const cfgBytes = config ? new TextEncoder().encode(JSON.stringify(config)) : new Uint8Array(0);
+  let cfgPtr = 0;
+  if (cfgBytes.length) {
+    cfgPtr = ex.plugin_alloc(cfgBytes.length);
+    mem().set(cfgBytes, cfgPtr);
+  }
+  const outLenPtr = ex.plugin_alloc(4);
+  const resultPtr = ex.plugin_invoke_stream(cfgPtr, cfgBytes.length, outLenPtr);
+  const outLen = u32le(mem(), outLenPtr);
+  const summary = JSON.parse(new TextDecoder().decode(readBytes(resultPtr, outLen)));
+  return { summary, ...captured };
+}
+
+test("pull: manifest parse → capped per-object fetch → OEM records + signed PNMs", async () => {
+  const { summary, storage, publishes } = await runPull({ objectCap: 2, fetchIntervalMs: 0 });
+
+  // Manifest parsed (3 MEME lines) and fetch plan capped to 2.
+  assert.equal(summary.ok, true);
+  assert.equal(summary.discover_status, 200);
+  assert.equal(summary.manifest_entries, 3);
+  assert.equal(summary.object_cap, 2);
+  assert.equal(summary.record_schema, "OEM");
+  assert.equal(summary.fetched, 2, "capped to 2 objects");
+  assert.equal(summary.stored, 2);
+  assert.equal(summary.signed, 2);
+  assert.equal(summary.published, 2);
+
+  // Exactly two OEM records stored, honest schema (NOT a raw-listing "OEM" blob).
+  assert.equal(storage.length, 2);
+  for (const w of storage) assert.equal(w.schema, "OEM");
+
+  // Canonical record bytes carry schema-exact keys (NORAD_CAT_ID, not norad_cat_id).
+  const rec0 = JSON.parse(storage[0].data.toString("utf8"));
+  assert.equal(rec0.CCSDS_OEM_VERS, 2.0);
+  assert.equal(rec0.ORIGINATOR, "SpaceX");
+  const blk0 = rec0.EPHEMERIS_DATA_BLOCK[0];
+  assert.equal(blk0.NORAD_CAT_ID, 67850);
+  assert.equal(blk0.OBJECT_NAME, "STARLINK-36840");
+  assert.equal(blk0.OBJECT_ID, ""); // MEME COSPAR field is SpaceX-internal, not an intl designator
+  assert.equal(blk0.CENTER_NAME, "EARTH");
+  assert.equal(blk0.REFERENCE_FRAME, "TEME");
+  assert.equal(blk0.TIME_SYSTEM, "UTC");
+  assert.equal(blk0.START_TIME, "2026-05-14T01:42:42Z");
+  assert.equal(blk0.STOP_TIME, "2026-05-17T01:42:42Z");
+  assert.equal(blk0.STEP_SIZE, 60);
+  assert.equal(blk0.STATE_VECTOR_SIZE, 6);
+  // 12 trimmed states × 6 components.
+  assert.equal(blk0.EPHEMERIS_DATA.length, 72);
+  // First MEME state row, preserved to full double precision.
+  assert.ok(Math.abs(blk0.EPHEMERIS_DATA[0] - -2877.5130811997) < 1e-9);
+  assert.ok(Math.abs(blk0.EPHEMERIS_DATA[5] - -3.1147385352) < 1e-9);
+
+  // Signed PNM structure per published object.
+  assert.equal(publishes.length, 2);
+  const memeName = "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt";
+  const pub0 = publishes.find((p) => p.message.PNM.FILE_NAME === memeName);
+  assert.ok(pub0, "published PNM for the first object");
+  assert.equal(pub0.topic, "sdn/data-source/spacex-starlink");
+  const pnm = pub0.message.PNM;
+  // Schema-exact PNM keys.
+  for (const k of ["MULTIFORMAT_ADDRESS", "PUBLISH_TIMESTAMP", "CID", "FILE_NAME", "FILE_ID", "SIGNATURE", "SIGNATURE_TYPE"]) {
+    assert.ok(k in pnm, `PNM missing ${k}`);
+  }
+  assert.equal(pnm.SIGNATURE_TYPE, "ed25519");
+  assert.ok(pnm.CID.startsWith("cid-"), "PNM.CID is the stored record content id");
+  assert.equal(pnm.MULTIFORMAT_ADDRESS, "/ipfs/" + pnm.CID);
+  assert.equal(pnm.FILE_ID, "spacex-starlink:OEM:67850:2026-05-14T01:42:42Z");
+  assert.equal(pnm.PUBLISH_TIMESTAMP, "2026-05-14T02:02:54Z");
+  // SIGNATURE is base64 of a non-empty signature.
+  assert.ok(Buffer.from(pnm.SIGNATURE, "base64").length > 0);
+
+  // Provenance sidecar binds the raw MEME source by SHA-256 (DPM convention),
+  // matching an independent hash of the fixture bytes.
+  const prov = pub0.message.provenance;
+  const expectedSha = crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(path.join(FIXTURES_DIR, "meme", memeName)))
+    .digest("hex");
+  assert.equal(prov.SOURCE_SHA256, expectedSha);
+  assert.equal(prov.SOURCE_NAME, "spacex-starlink");
+  assert.equal(prov.DATA_SOURCE, "SpaceX-E");
+  assert.equal(prov.RECORD_SCHEMA, "OEM");
+  assert.equal(prov.NORAD_CAT_ID, 67850);
+  assert.equal(prov.STATE_COUNT, 12);
+  assert.equal(prov.SOURCE_URL, BASE_URL + memeName);
+});
+
+test("pull: raising the cap fetches more and skips unknown objects (404-safe)", async () => {
+  // cap 3 → plans all 3 manifest entries; the 3rd has no fixture (404) → skipped.
+  const { summary, storage } = await runPull({ objectCap: 3 });
+  assert.equal(summary.manifest_entries, 3);
+  assert.equal(summary.fetched, 2, "third object 404s and is skipped");
+  assert.equal(summary.stored, 2);
+  assert.equal(storage.length, 2);
+});
+
+test("pull: no config uses the default object cap", async () => {
+  const { summary } = await runPull(null);
+  assert.equal(summary.object_cap, 25, "default per-pull object cap");
+  // Only 2 fixtures resolve, so fetched is bounded by available objects.
+  assert.equal(summary.fetched, 2);
 });

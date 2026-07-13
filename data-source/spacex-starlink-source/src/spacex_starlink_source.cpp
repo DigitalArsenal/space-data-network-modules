@@ -1,21 +1,25 @@
 /*
- * SpaceX Starlink data-source module (WS5).
+ * SpaceX Starlink data-source module (WS5, finished A2.2b).
  *
- * The `pull` method fetches SpaceX/Starlink ephemeris over HTTP (WS5.2 here),
- * then — WS5.3/5.4 — parses + validates, stores the records, signs a PNM, and
- * publishes it. All I/O goes through the `space_data_module_host` JSON hostcall
- * bridge (this is the first module to call host capabilities).
+ * The `pull` method (TIMERS-driven, provider-agnostic scheduler) fetches the
+ * SpaceX/Starlink public ephemeris MANIFEST, plans a capped + polite per-object
+ * fetch, then for each object:
+ *   1. GETs the raw MEME ephemeris file (SpaceX's internal operator-ephemeris
+ *      text format),
+ *   2. parses it into a canonical CCSDS OEM record (compact row-major format,
+ *      schema-exact keys) — the honest SDS type for operator state-vector
+ *      ephemeris; the RAW MEME text is NOT stored under a mislabeled schema
+ *      (the A2.1-flagged placeholder), it is bound into signed provenance by
+ *      SHA-256 (DPM `SOURCE_SHA256` convention),
+ *   3. stores the OEM record (storage.write), signs its content id via the
+ *      keyslot.sign host-side crypto oracle, and publishes a schema-exact
+ *      Publish Notification Message (PNM) pointer on the pubsub topic.
  *
- * Hostcall ABI (space_data_module_host):
- *   call(op_ptr, op_len, payload_ptr, payload_len) -> i32 status
- *   response_len() -> i32
- *   read_response(dst_ptr, dst_len) -> i32 (bytes copied)
- *   clear_response() -> i32
- *   last_status_code() -> i32
- * The response is a hostcall envelope:
- *   [u32 LE metaLen][metaLen JSON meta][u32 LE segCount]([u32 LE segLen][seg]...)
- * meta = {"ok":true,"result":{...}}. HTTP result = {"status","headers","body",
- * "body_encoding":"utf8|base64"}.
+ * The fetch/hash/store/sign/publish skeleton lives in provider_source.hpp so
+ * the A2.2c Tier-1 adapters (OneWeb LTEF, ISS OEM, ...) reuse it; only the
+ * MEME-specific parse + OEM mapping stays here.
+ *
+ * Hostcall ABI (space_data_module_host): see common/sdm_hostcall_wire.hpp.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -23,270 +27,316 @@
 #include <string>
 #include <vector>
 
-// sdm_hostcall_wire.hpp must precede keyslotClient.hpp (the SDK header
-// asserts SDM_HOSTCALL_WIRE_HPP is already defined). Resolved via -I flags
-// build.mjs adds for common/ (SDN_COMMON_DIR) and the space-data-module-sdk
-// host/cpp dir (SDM_HOST_CPP_DIR, via the node_modules symlink).
-#include "sdm_hostcall_wire.hpp"
-#include "keyslotClient.hpp"
+#include "provider_source.hpp"
+
+namespace ps = provider_source;
+
+// ── Provider constants ──────────────────────────────────────────────────────
 
 // SpaceX Starlink public ephemeris listing (discover endpoint): MANIFEST.txt
-// lists one ephemeris filename per line (the bare directory URL 404s).
-static const char* kStarlinkDiscoverURL =
+// lists one MEME ephemeris filename per line (the bare directory URL 404s).
+static const char* kBaseURL = "https://api.starlink.com/public-files/ephemerides/";
+static const char* kDefaultManifestURL =
     "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
-// Node signing key slot (wallet_sign -> keyslot.sign) used to sign published
-// PNMs. The slot's private key material is host-side only; it never enters
-// guest memory (see sdm_keyslot::keyslot_sign below).
+
+// Node signing key slot (host-side only) used to sign published PNMs.
 static const char* kSigningKeySlot = "node-signing";
-// PubSub topic the module publishes PNM pointers on.
+// PubSub topic the module publishes PNM pointers on (unchanged publisher topic).
 static const char* kPublishTopic = "sdn/data-source/spacex-starlink";
 
-extern "C" {
+// Fetch politeness (see README "Fetch politeness"): a small per-pull object cap
+// bounds burst load, and the manifest MEME cadence (regenerated a few times
+// daily) plus the module TIMERS cadence bound pulls/day. Both are configurable
+// via the invoke request payload; the guest is synchronous with no clock, so
+// intra-pull pacing (`fetchIntervalMs`) is an advisory the host scheduler can
+// honor — it is echoed in the summary but never busy-waits.
+static const long kDefaultObjectCap = 25;
+static const long kDefaultFetchIntervalMs = 2000;
 
+extern "C" {
 // Guest allocator used by the host to pass request/response buffers.
 __attribute__((visibility("default")))
 uint8_t* plugin_alloc(uint32_t size) { return static_cast<uint8_t*>(malloc(size)); }
-
 __attribute__((visibility("default")))
 void plugin_free(uint8_t* ptr, uint32_t /*size*/) { free(ptr); }
-
-// space_data_module_host hostcall imports.
-__attribute__((import_module("space_data_module_host"), import_name("call")))
-int32_t host_call(const uint8_t* op_ptr, int32_t op_len, const uint8_t* payload_ptr, int32_t payload_len);
-__attribute__((import_module("space_data_module_host"), import_name("response_len")))
-int32_t host_response_len();
-__attribute__((import_module("space_data_module_host"), import_name("read_response")))
-int32_t host_read_response(uint8_t* dst_ptr, int32_t dst_len);
-
 }  // extern "C"
 
 namespace {
 
-// Invoke a host capability op with a JSON payload; returns the raw envelope bytes.
-// The request payload must use the same hostcall envelope framing as responses
-// ([meta_len u32 LE][meta JSON][segment_count u32 LE]) — both the SDK host and
-// the Go node bridge decode it with decodeHostcallEnvelope.
-std::vector<uint8_t> hostcall(const std::string& op, const std::string& payload_json) {
-    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
-    uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
-    req[0] = static_cast<uint8_t>(meta_len & 0xff);
-    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
-    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
-    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
-    std::copy(payload_json.begin(), payload_json.end(), req.begin() + 4);
-    // Trailing 4 zero bytes = segment_count 0.
-    host_call(reinterpret_cast<const uint8_t*>(op.data()), static_cast<int32_t>(op.size()),
-              req.data(), static_cast<int32_t>(req.size()));
-    int32_t len = host_response_len();
-    std::vector<uint8_t> buf(len > 0 ? static_cast<size_t>(len) : 0);
-    if (len > 0) {
-        host_read_response(buf.data(), len);
-    }
-    return buf;
+// ── MEME parsing (SpaceX-specific) ───────────────────────────────────────────
+
+struct MemeMeta {
+    long norad_cat_id = 0;
+    std::string object_name;   // STARLINK-#####
+    std::string status;        // Operational
+    std::string created_iso;   // from `created:` header
+    std::string start_iso;     // from `ephemeris_start:` header
+    std::string stop_iso;      // from `ephemeris_stop:` header
+    std::string ephemeris_source;  // blend
+    long step_size = 0;
+};
+
+// Normalize a MEME header UTC stamp ("2026-05-14 02:02:54 UTC") to ISO 8601
+// ("2026-05-14T02:02:54Z"). Idempotent for already-ISO strings.
+std::string normalize_utc(const std::string& in) {
+    std::string s;
+    // trim
+    size_t a = in.find_first_not_of(" \t\r\n");
+    size_t b = in.find_last_not_of(" \t\r\n");
+    if (a == std::string::npos) return s;
+    s = in.substr(a, b - a + 1);
+    // strip trailing " UTC"
+    if (s.size() >= 4 && s.compare(s.size() - 4, 4, " UTC") == 0) s = s.substr(0, s.size() - 4);
+    // date/time separator space -> 'T'
+    size_t sp = s.find(' ');
+    if (sp != std::string::npos) s[sp] = 'T';
+    // ensure trailing Z
+    if (!s.empty() && s.back() != 'Z') s.push_back('Z');
+    return s;
 }
 
-// Extract the JSON meta object from a hostcall envelope.
-std::string envelope_meta_json(const std::vector<uint8_t>& env) {
-    if (env.size() < 4) return std::string();
-    uint32_t meta_len = static_cast<uint32_t>(env[0]) | (static_cast<uint32_t>(env[1]) << 8) |
-                        (static_cast<uint32_t>(env[2]) << 16) | (static_cast<uint32_t>(env[3]) << 24);
-    if (env.size() < 4 + meta_len) return std::string();
-    return std::string(reinterpret_cast<const char*>(env.data() + 4), meta_len);
-}
-
-// Minimal JSON string-field extractor for "key":"...". Handles simple escapes.
-bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
-    std::string needle = "\"" + key + "\"";
-    size_t k = json.find(needle);
-    if (k == std::string::npos) return false;
-    size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return false;
-    size_t i = colon + 1;
-    while (i < json.size() && (json[i] == ' ' || json[i] == '\t' || json[i] == '\n')) i++;
-    if (i >= json.size() || json[i] != '"') return false;
-    i++;
-    std::string value;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            char n = json[i + 1];
-            if (n == 'n') value.push_back('\n');
-            else if (n == 't') value.push_back('\t');
-            else if (n == 'r') value.push_back('\r');
-            else value.push_back(n);
-            i += 2;
-        } else {
-            value.push_back(json[i]);
-            i++;
-        }
-    }
-    *out = value;
-    return true;
-}
-
-long json_number_field(const std::string& json, const std::string& key, long fallback) {
-    std::string needle = "\"" + key + "\"";
-    size_t k = json.find(needle);
-    if (k == std::string::npos) return fallback;
-    size_t colon = json.find(':', k + needle.size());
-    if (colon == std::string::npos) return fallback;
-    return strtol(json.c_str() + colon + 1, nullptr, 10);
-}
-
-std::vector<uint8_t> base64_decode(const std::string& in) {
-    static const int8_t T[256] = {/*init below*/};
-    int8_t tbl[256];
-    for (int i = 0; i < 256; i++) tbl[i] = -1;
-    const char* alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for (int i = 0; i < 64; i++) tbl[static_cast<uint8_t>(alpha[i])] = static_cast<int8_t>(i);
-    (void)T;
-    std::vector<uint8_t> out;
-    int val = 0, bits = -8;
-    for (unsigned char c : in) {
-        if (c == '=' || tbl[c] == -1) {
-            if (c == '=') break;
-            continue;  // skip whitespace/newlines
-        }
-        val = (val << 6) | tbl[c];
-        bits += 6;
-        if (bits >= 0) {
-            out.push_back(static_cast<uint8_t>((val >> bits) & 0xFF));
-            bits -= 8;
-        }
-    }
-    return out;
-}
-
-std::string base64_encode(const uint8_t* data, size_t len) {
-    static const char* alpha =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
+std::vector<std::string> split_ws(const std::string& line) {
+    std::vector<std::string> toks;
     size_t i = 0;
-    for (; i + 3 <= len; i += 3) {
-        uint32_t n = (static_cast<uint32_t>(data[i]) << 16) |
-                     (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
-        out.push_back(alpha[(n >> 18) & 63]);
-        out.push_back(alpha[(n >> 12) & 63]);
-        out.push_back(alpha[(n >> 6) & 63]);
-        out.push_back(alpha[n & 63]);
+    while (i < line.size()) {
+        while (i < line.size() && (line[i] == ' ' || line[i] == '\t' || line[i] == '\r')) i++;
+        size_t j = i;
+        while (j < line.size() && line[j] != ' ' && line[j] != '\t' && line[j] != '\r') j++;
+        if (j > i) toks.push_back(line.substr(i, j - i));
+        i = j;
     }
-    if (i < len) {
-        uint32_t n = static_cast<uint32_t>(data[i]) << 16;
-        if (i + 1 < len) n |= static_cast<uint32_t>(data[i + 1]) << 8;
-        out.push_back(alpha[(n >> 18) & 63]);
-        out.push_back(alpha[(n >> 12) & 63]);
-        out.push_back(i + 1 < len ? alpha[(n >> 6) & 63] : '=');
-        out.push_back('=');
+    return toks;
+}
+
+// A MEME state line's first token is a YYYYDDDHHMMSS.sss stamp (>=13 leading
+// digits, no exponent) — distinct from the scientific-notation covariance rows.
+bool is_state_epoch_token(const std::string& t) {
+    size_t digits = 0;
+    for (char c : t) {
+        if (c == '.') break;
+        if (c < '0' || c > '9') return false;
+        digits++;
     }
-    return out;
+    return digits >= 13;
 }
 
-bool cap_ok(const std::vector<uint8_t>& env) {
-    return envelope_meta_json(env).find("\"ok\":true") != std::string::npos;
-}
-
-// JSON-escape a string for embedding in a request payload.
-std::string json_escape(const std::string& s) {
-    std::string out;
-    for (char c : s) {
-        if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
-        else if (c == '\n') out += "\\n";
-        else out.push_back(c);
+// Parse the MEME filename metadata.
+// MEME_{NORAD}_{NAME}_{COSPAR-internal}_{Status}_{UnixTS}_UNCLASSIFIED.txt
+// The 4th field is a SpaceX-internal id, NOT an international designator, so
+// OBJECT_ID is intentionally left unset (per A2.2a labeling rules).
+void parse_meme_filename(const std::string& filename, MemeMeta* m) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    while (start <= filename.size()) {
+        size_t us = filename.find('_', start);
+        parts.push_back(filename.substr(start, (us == std::string::npos ? filename.size() : us) - start));
+        if (us == std::string::npos) break;
+        start = us + 1;
     }
-    return out;
-}
-
-// HTTP GET via the http capability; returns the decoded body, sets *status.
-std::vector<uint8_t> http_get(const std::string& url, long* status) {
-    std::string payload = "{\"method\":\"GET\",\"url\":\"" + json_escape(url) + "\"}";
-    std::vector<uint8_t> env = hostcall("http.request", payload);
-    std::string meta = envelope_meta_json(env);
-    if (status) *status = json_number_field(meta, "status", 0);
-    std::string encoding, body;
-    json_string_field(meta, "body_encoding", &encoding);
-    if (!json_string_field(meta, "body", &body)) return {};
-    if (encoding == "base64") return base64_decode(body);
-    return std::vector<uint8_t>(body.begin(), body.end());
-}
-
-// STORAGE_WRITE: store raw FlatBuffer record bytes under a schema.
-bool storage_write(const std::string& schema, const uint8_t* data, size_t len) {
-    std::string payload = "{\"schema\":\"" + json_escape(schema) + "\",\"data\":\"" +
-                          base64_encode(data, len) + "\"}";
-    return cap_ok(hostcall("storage.write", payload));
-}
-
-// WALLET_SIGN: sign data with the node's identity key via the host-side
-// keyslot.sign crypto oracle (sdn-server/internal/modulert/caps/keyslot.go).
-// The slot's private key material never crosses into guest memory — only
-// the resulting signature does. Returns an empty vector on failure.
-std::vector<uint8_t> keyslot_sign(const std::string& slot_id, const uint8_t* data, size_t len) {
-    std::vector<uint8_t> signature;
-    if (!sdm_keyslot::keyslot_sign(slot_id, data, len, &signature)) {
-        return {};
+    if (parts.size() >= 6 && parts[0] == "MEME") {
+        m->norad_cat_id = strtol(parts[1].c_str(), nullptr, 10);
+        m->object_name = parts[2];
+        m->status = parts[4];
     }
-    return signature;
 }
 
-// PUBSUB: publish a message (utf8) to a topic.
-bool pubsub_publish(const std::string& topic, const std::string& data) {
-    std::string payload = "{\"topic\":\"" + json_escape(topic) + "\",\"data\":\"" +
-                          json_escape(data) + "\"}";
-    return cap_ok(hostcall("pubsub.publish", payload));
+// Parse a raw MEME file: fills header meta and the flat row-major state array
+// [x0,y0,z0,vx0,vy0,vz0, x1,...] (km, km/s). Covariance rows are skipped for
+// the compact OEM (see README residuals).
+void parse_meme(const std::string& content, MemeMeta* m, std::vector<double>* states) {
+    size_t pos = 0;
+    auto next_line = [&](std::string* out) -> bool {
+        if (pos > content.size()) return false;
+        size_t nl = content.find('\n', pos);
+        *out = content.substr(pos, (nl == std::string::npos ? content.size() : nl) - pos);
+        pos = (nl == std::string::npos) ? content.size() + 1 : nl + 1;
+        return true;
+    };
+    std::string line;
+    // Header lines (created / ephemeris_start+stop+step / ephemeris_source / frame).
+    if (next_line(&line)) {
+        size_t k = line.find("created:");
+        if (k != std::string::npos) m->created_iso = normalize_utc(line.substr(k + 8));
+    }
+    if (next_line(&line)) {
+        size_t s = line.find("ephemeris_start:");
+        size_t e = line.find("ephemeris_stop:");
+        size_t z = line.find("step_size:");
+        if (s != std::string::npos && e != std::string::npos)
+            m->start_iso = normalize_utc(line.substr(s + 16, e - s - 16));
+        if (e != std::string::npos) {
+            size_t end = (z != std::string::npos) ? z : line.size();
+            m->stop_iso = normalize_utc(line.substr(e + 15, end - e - 15));
+        }
+        if (z != std::string::npos) m->step_size = strtol(line.c_str() + z + 10, nullptr, 10);
+    }
+    if (next_line(&line)) {
+        size_t k = line.find("ephemeris_source:");
+        if (k != std::string::npos) {
+            std::string v = line.substr(k + 17);
+            size_t a = v.find_first_not_of(" \t\r");
+            size_t b = v.find_last_not_of(" \t\r");
+            if (a != std::string::npos) m->ephemeris_source = v.substr(a, b - a + 1);
+        }
+    }
+    next_line(&line);  // covariance frame label (UVW) — not the state-vector frame
+
+    // Data blocks: each state line is followed by 3 scientific-notation
+    // covariance rows. A covariance row's first token never satisfies
+    // is_state_epoch_token (its integer part has < 13 digits), so selecting
+    // state lines directly transparently drops the covariance rows and is
+    // robust to covariance-absent (truncated) files.
+    while (next_line(&line)) {
+        std::vector<std::string> toks = split_ws(line);
+        if (toks.size() < 7 || !is_state_epoch_token(toks[0])) continue;
+        for (int c = 1; c <= 6; ++c) states->push_back(strtod(toks[c].c_str(), nullptr));
+    }
 }
 
-// Count candidate ephemeris resources in a listing (href/name occurrences of the
-// Starlink MEME ephemeris file prefix). Refined against the real listing format
-// in later passes.
-size_t count_discovered_resources(const std::vector<uint8_t>& listing) {
-    std::string s(listing.begin(), listing.end());
-    size_t count = 0, pos = 0;
-    const std::string marker = "MEME";
-    while ((pos = s.find(marker, pos)) != std::string::npos) { count++; pos += marker.size(); }
-    return count;
+// Build the canonical CCSDS OEM record (compact row-major format) as a
+// schema-exact JSON document. Keys mirror the SDS OEM schema
+// (OEM.EPHEMERIS_DATA_BLOCK[].{ CENTER_NAME, REFERENCE_FRAME, TIME_SYSTEM,
+// START_TIME, STOP_TIME, STEP_SIZE, STATE_VECTOR_SIZE, EPHEMERIS_DATA } plus
+// OBJECT identity). MEME state vectors are effectively TEME (validated by the
+// OD module's <1 m fit RMS); the "UVW" label is the covariance frame only.
+std::string build_oem_record(const MemeMeta& m, const std::vector<double>& states) {
+    std::string s;
+    s.reserve(states.size() * 20 + 512);
+    s += "{";
+    s += "\"CCSDS_OEM_VERS\":2.0,";
+    s += "\"CREATION_DATE\":\"" + ps::json_escape(m.created_iso) + "\",";
+    s += "\"ORIGINATOR\":\"SpaceX\",";
+    s += "\"CLASSIFICATION\":\"UNCLASSIFIED\",";
+    s += "\"EPHEMERIS_DATA_BLOCK\":[{";
+    s += "\"OBJECT_NAME\":\"" + ps::json_escape(m.object_name) + "\",";
+    s += "\"OBJECT_ID\":\"\",";  // MEME COSPAR field is SpaceX-internal; not an intl designator
+    s += "\"NORAD_CAT_ID\":" + std::to_string(m.norad_cat_id) + ",";
+    s += "\"CENTER_NAME\":\"EARTH\",";
+    s += "\"REFERENCE_FRAME\":\"TEME\",";
+    s += "\"TIME_SYSTEM\":\"UTC\",";
+    s += "\"START_TIME\":\"" + ps::json_escape(m.start_iso) + "\",";
+    s += "\"STOP_TIME\":\"" + ps::json_escape(m.stop_iso) + "\",";
+    s += "\"STEP_SIZE\":" + std::to_string(m.step_size > 0 ? m.step_size : 60) + ",";
+    s += "\"STATE_VECTOR_SIZE\":6,";
+    s += "\"EPHEMERIS_DATA\":[";
+    for (size_t i = 0; i < states.size(); ++i) {
+        if (i) s += ",";
+        s += ps::double_to_json(states[i]);
+    }
+    s += "]}]}";
+    return s;
 }
 
-// The `pull` method: WS5.2 discover + fetch. WS5.3/5.4 add store + sign-PNM +
-// publish. Returns a small UTF-8 summary for now (PIV/PNM framing lands in 5.3).
-std::string run_pull() {
-    long status = 0;
-    std::vector<uint8_t> listing = http_get(kStarlinkDiscoverURL, &status);
-    size_t discovered = count_discovered_resources(listing);
+// ── Config (optional, from the invoke request payload) ───────────────────────
 
-    // Store the fetched records (STORAGE_WRITE). Real per-file parse/validate +
-    // per-record OEM storage is refined against the live listing format.
-    bool stored = !listing.empty() && storage_write("OEM", listing.data(), listing.size());
+struct PullConfig {
+    long object_cap = kDefaultObjectCap;
+    long fetch_interval_ms = kDefaultFetchIntervalMs;
+    std::string manifest_url = kDefaultManifestURL;
+};
 
-    // Build a PNM provenance payload for this pull batch.
-    std::string pnm = "{\"source\":\"spacex-starlink\",\"url\":\"" + json_escape(kStarlinkDiscoverURL) +
-                      "\",\"discovered\":" + std::to_string(discovered) +
-                      ",\"bytes\":" + std::to_string(listing.size()) + "}";
+PullConfig parse_config(const uint8_t* req, uint32_t len) {
+    PullConfig c;
+    if (req == nullptr || len == 0) return c;
+    // Only interpret a JSON object; a binary PIV request leaves defaults intact.
+    size_t i = 0;
+    while (i < len && (req[i] == ' ' || req[i] == '\n' || req[i] == '\t' || req[i] == '\r')) i++;
+    if (i >= len || req[i] != '{') return c;
+    std::string json(reinterpret_cast<const char*>(req), len);
+    long cap = ps::json_number_field(json, "objectCap", -1);
+    if (cap > 0) c.object_cap = cap;
+    long iv = ps::json_number_field(json, "fetchIntervalMs", -1);
+    if (iv >= 0) c.fetch_interval_ms = iv;
+    std::string url;
+    if (ps::json_string_field(json, "manifestUrl", &url) && !url.empty()) c.manifest_url = url;
+    return c;
+}
 
-    // Sign the PNM with the node identity via the keyslot.sign host-side
-    // crypto oracle (WALLET_SIGN). The signing key never enters guest memory.
-    std::vector<uint8_t> signature =
-        keyslot_sign(kSigningKeySlot, reinterpret_cast<const uint8_t*>(pnm.data()), pnm.size());
+// ── The pull method ──────────────────────────────────────────────────────────
 
-    // Publish the signed PNM (PUBSUB).
-    std::string message = "{\"pnm\":" + pnm + ",\"signature\":\"" +
-                          base64_encode(signature.data(), signature.size()) + "\"}";
-    bool published = pubsub_publish(kPublishTopic, message);
+std::string run_pull(const uint8_t* req, uint32_t req_len) {
+    PullConfig cfg = parse_config(req, req_len);
 
-    return "{\"ok\":true,\"discover_status\":" + std::to_string(status) +
-           ",\"discovered\":" + std::to_string(discovered) +
-           ",\"stored\":" + (stored ? "true" : "false") +
-           ",\"signed\":" + (signature.empty() ? "false" : "true") +
-           ",\"published\":" + (published ? "true" : "false") + "}";
+    ps::ProviderConfig pcfg;
+    pcfg.signing_slot = kSigningKeySlot;
+    pcfg.publish_topic = kPublishTopic;
+    pcfg.signature_type = "ed25519";     // must match the node-signing slot's key
+    pcfg.source_name = "spacex-starlink";
+    pcfg.data_source = "SpaceX-E";        // CelesTrak-comparable SOURCE token (A2.1)
+    pcfg.record_schema = "OEM";           // honest canonical SDS type for operator ephemeris
+
+    ps::HttpResult manifest = ps::http_get(cfg.manifest_url);
+    std::vector<std::string> entries = ps::listing_lines(manifest.body, "MEME_");
+
+    long fetched = 0, stored = 0, signed_ = 0, published = 0;
+    long plan = static_cast<long>(entries.size());
+    if (plan > cfg.object_cap) plan = cfg.object_cap;  // per-pull politeness cap
+
+    for (long i = 0; i < plan; ++i) {
+        const std::string& filename = entries[static_cast<size_t>(i)];
+        std::string url = std::string(kBaseURL) + filename;
+        ps::HttpResult obj = ps::http_get(url);
+        if (obj.status != 200 || obj.body.empty()) continue;  // skip; halt-friendly per object
+        fetched++;
+
+        MemeMeta m;
+        parse_meme_filename(filename, &m);
+        std::vector<double> states;
+        std::string content(obj.body.begin(), obj.body.end());
+        parse_meme(content, &m, &states);
+        if (states.empty()) continue;  // nothing canonical to publish
+
+        // Raw source artifact is bound into signed provenance by SHA-256, not
+        // stored under a data schema (no honest raw-blob SDS type exists; the
+        // OEM-mislabel of the raw bytes was the A2.1-flagged placeholder bug).
+        std::string source_sha256 = ps::sha256_hex(obj.body.data(), obj.body.size());
+
+        std::string oem = build_oem_record(m, states);
+
+        std::string file_id = pcfg.source_name + ":" + pcfg.record_schema + ":" +
+                              std::to_string(m.norad_cat_id) + ":" + m.start_iso;
+        std::string provenance =
+            std::string("{\"SOURCE_NAME\":\"") + ps::json_escape(pcfg.source_name) + "\"," +
+            "\"SOURCE_URL\":\"" + ps::json_escape(url) + "\"," +
+            "\"SOURCE_SHA256\":\"" + source_sha256 + "\"," +
+            "\"DATA_SOURCE\":\"" + ps::json_escape(pcfg.data_source) + "\"," +
+            "\"RECORD_SCHEMA\":\"" + ps::json_escape(pcfg.record_schema) + "\"," +
+            "\"NORAD_CAT_ID\":" + std::to_string(m.norad_cat_id) + "," +
+            "\"OBJECT_NAME\":\"" + ps::json_escape(m.object_name) + "\"," +
+            "\"OBJECT_STATUS\":\"" + ps::json_escape(m.status) + "\"," +
+            "\"EPHEMERIS_SOURCE\":\"" + ps::json_escape(m.ephemeris_source) + "\"," +
+            "\"STATE_COUNT\":" + std::to_string(states.size() / 6) + "}";
+
+        ps::PublishResult r = ps::publish_record(
+            pcfg,
+            reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
+            filename, file_id, m.created_iso, provenance);
+        if (r.stored) stored++;
+        if (r.signed_) signed_++;
+        if (r.published) published++;
+    }
+
+    return std::string("{\"ok\":true,\"source\":\"") + pcfg.source_name + "\"," +
+           "\"discover_status\":" + std::to_string(manifest.status) + "," +
+           "\"manifest_entries\":" + std::to_string(entries.size()) + "," +
+           "\"object_cap\":" + std::to_string(cfg.object_cap) + "," +
+           "\"fetch_interval_ms\":" + std::to_string(cfg.fetch_interval_ms) + "," +
+           "\"record_schema\":\"" + pcfg.record_schema + "\"," +
+           "\"fetched\":" + std::to_string(fetched) + "," +
+           "\"stored\":" + std::to_string(stored) + "," +
+           "\"signed\":" + std::to_string(signed_) + "," +
+           "\"published\":" + std::to_string(published) + "}";
 }
 
 }  // namespace
 
 extern "C" {
 
-// Canonical streaming invoke entrypoint. Any request (the manifest TIMERS entry
-// re-invokes `pull`) triggers a discover+fetch; returns the summary bytes.
+// Canonical streaming invoke entrypoint. The TIMERS `pull` entry (and any manual
+// invoke) triggers a capped, polite discover+fetch+store+sign+publish cycle.
 __attribute__((visibility("default")))
-uint8_t* plugin_invoke_stream(const uint8_t* /*req_ptr*/, uint32_t /*req_len*/, uint32_t* out_len_ptr) {
-    std::string result = run_pull();
+uint8_t* plugin_invoke_stream(const uint8_t* req_ptr, uint32_t req_len, uint32_t* out_len_ptr) {
+    std::string result = run_pull(req_ptr, req_len);
     uint8_t* out = static_cast<uint8_t*>(malloc(result.size()));
     if (out != nullptr) {
         for (size_t i = 0; i < result.size(); i++) out[i] = static_cast<uint8_t>(result[i]);
