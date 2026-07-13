@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 /**
- * Batch-download SOCRATES GP data via Tor with circuit rotation.
- * Rotates Tor circuit on HTTP 429 / 500 / timeout.
+ * Batch-download SOCRATES GP data via Tor.
  *
- * Usage: node fetch-socrates-gp-tor.mjs [--top N] [--rate MS] [--start OFFSET]
+ * PURPOSE OF TOR HERE: firewall/erroneous-block RECOVERY only — this project
+ * has been the victim of upstream blocks unrelated to our request behavior.
+ * It is NOT a rate-limit evasion mechanism. ALL rules in
+ * CELESTRAK_FETCH_POLICY.md apply exactly as if fetching directly:
+ *   - serial, >= 2.5s between requests (--rate is floor-enforced)
+ *   - NEVER request the same data more than once in a 3-hour period
+ *   - 60s backoff + at most one retry on 429/503
+ *   - abort after 30 consecutive failures
+ *
+ * Usage: node fetch-socrates-gp-tor.mjs [--top N] [--rate MS>=2500] [--start OFFSET]
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
@@ -11,6 +19,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import net from 'net';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import { FetchPolicy, sleep } from './lib/celestrakFetchPolicy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'tests', 'data', 'socrates_gp');
@@ -18,12 +27,13 @@ const DATA_DIR = join(__dirname, '..', 'tests', 'data', 'socrates_gp');
 const args = process.argv.slice(2);
 const getArg = (name, def) => { const i = args.indexOf(name); return i >= 0 && args[i+1] ? args[i+1] : def; };
 const TOP = parseInt(getArg('--top', '50000'));
-const RATE_MS = parseInt(getArg('--rate', '80'));
+const RATE_MS = FetchPolicy.clampInterval(getArg('--rate', '2500'));
 const START = parseInt(getArg('--start', '0'));
 
 mkdirSync(DATA_DIR, { recursive: true });
+const policy = new FetchPolicy(join(__dirname, '..', 'tests', 'data', '.celestrak-fetch-ledger'));
 
-// Rotate Tor circuit via control port
+// Rotate Tor circuit via control port (reachability recovery only)
 async function rotateTorCircuit() {
   return new Promise((resolve, reject) => {
     const client = net.connect(9051, '127.0.0.1', () => {
@@ -69,77 +79,76 @@ for (let i = 1; i < lines.length && pairs.length < TOP; i++) {
 }
 
 console.log(`Total pairs: ${pairs.length}, starting at offset ${START}`);
+console.log(`Policy: serial ${RATE_MS}ms/request, 3h same-key ledger, halt after 30 consecutive failures.`);
 
-let downloaded = 0, cached = 0, errors = 0, rotations = 0;
-let consecutiveErrors = 0;
+let downloaded = 0, cached = 0, errors = 0, rotations = 0, ledgerSkipped = 0;
 
 const agent = new SocksProxyAgent('socks5h://127.0.0.1:9050');
 
 for (let i = START; i < pairs.length; i++) {
   const { id1, id2 } = pairs[i];
+  const url = `https://celestrak.org/SOCRATES/data.php?CATNR=${id1},${id2}&FORMAT=json`;
+  const key = url;
   const outFile = join(DATA_DIR, `gp_${id1},${id2}.json`);
 
   if (existsSync(outFile)) { cached++; continue; }
+  if (!policy.allowed(key)) { ledgerSkipped++; continue; }
+  let retried = false;
+  for (;;) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
-  const url = `https://celestrak.org/SOCRATES/data.php?CATNR=${id1},${id2}&FORMAT=json`;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    
-    const res = await fetch(url, { 
-      agent,
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' }
-    });
-    clearTimeout(timeout);
+      const res = await fetch(url, {
+        agent,
+        signal: controller.signal,
+        headers: { 'User-Agent': 'OrbPro-SOCRATES-Validation/1.0' }
+      });
+      clearTimeout(timeout);
 
-    if (res.status === 429 || res.status === 503) {
-      // Rate limited — rotate circuit and retry
-      rotations++;
-      console.log(`  ⟳ Rate limited at ${i}, rotating circuit... (${rotations})`);
-      await rotateTorCircuit();
-      await new Promise(r => setTimeout(r, 5000)); // Wait for new circuit
-      i--; // Retry this one
-      continue;
-    }
-
-    if (!res.ok) {
-      errors++;
-      consecutiveErrors++;
-      if (consecutiveErrors > 10) {
-        console.log(`  ⟳ ${consecutiveErrors} consecutive errors, rotating...`);
+      if ((res.status === 429 || res.status === 503) && !retried) {
+        // Slow down first; one retry only — never rotate-and-hammer.
+        rotations++;
+        retried = true;
+        console.log(`  ⟳ ${res.status} on ${key} — 60s backoff, then rotate + single retry (${rotations})`);
+        policy.noteFailure(`${res.status} on ${key}`);
+        await sleep(60_000);
         await rotateTorCircuit();
-        await new Promise(r => setTimeout(r, 3000));
-        consecutiveErrors = 0;
+        continue;
       }
-      continue;
-    }
 
-    const text = await res.text();
-    const data = JSON.parse(text);
-    if (!data || data.length < 2) { errors++; continue; }
-    writeFileSync(outFile, text);
-    downloaded++;
-    consecutiveErrors = 0;
-  } catch (e) {
-    errors++;
-    consecutiveErrors++;
-    if (consecutiveErrors > 5) {
-      rotations++;
-      console.log(`  ⟳ Error streak at ${i}: ${e.message}, rotating... (${rotations})`);
-      await rotateTorCircuit();
-      await new Promise(r => setTimeout(r, 3000));
-      consecutiveErrors = 0;
+      if (!res.ok) {
+        errors++;
+        policy.noteFailure(`HTTP ${res.status} on ${key}`);
+        break;
+      }
+
+      const text = await res.text();
+      const data = JSON.parse(text);
+      if (!data || data.length < 2) {
+        errors++;
+        policy.noteFailure(`short payload on ${key}`);
+        break;
+      }
+      writeFileSync(outFile, text);
+      policy.record(key);
+      policy.noteSuccess();
+      downloaded++;
+      break;
+    } catch (e) {
+      errors++;
+      policy.noteFailure(`${e.message} on ${key}`);
+      break;
     }
   }
 
   const total = downloaded + errors;
-  if (total % 500 === 0 || i === pairs.length - 1) {
-    console.log(`  [${i+1}/${pairs.length}] ${downloaded} new, ${cached} cached, ${errors} err, ${rotations} rotations`);
+  if (total % 100 === 0 || i === pairs.length - 1) {
+    console.log(`  [${i+1}/${pairs.length}] ${downloaded} new, ${cached} cached, ${ledgerSkipped} ledger-skipped, ${errors} err, ${rotations} backoffs`);
   }
 
-  await new Promise(r => setTimeout(r, RATE_MS));
+  await sleep(RATE_MS);
 }
 
-console.log(`\nDone: ${downloaded} downloaded, ${cached} cached, ${errors} errors, ${rotations} rotations`);
+console.log(`\nDone: ${downloaded} downloaded, ${cached} cached, ${ledgerSkipped} ledger-skipped, ${errors} errors, ${rotations} backoff/rotations`);
 console.log(`Total GP files: ${downloaded + cached}`);
