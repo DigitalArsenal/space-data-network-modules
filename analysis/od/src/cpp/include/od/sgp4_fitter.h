@@ -75,6 +75,16 @@ struct FitterConfig {
     // B* bounds
     double bstar_max = 1.0;
     double bstar_min = -1.0;
+
+    // Position-only sources (SP3/CPF/ECF, STATE_VECTOR_SIZE 3) carry no
+    // velocities. When true, the initial-guess velocity is estimated from the
+    // input positions (a documented quadratic finite-difference initializer, see
+    // estimate_velocity_from_positions in sgp4_fitter.cpp) instead of reading the
+    // sample velocities; the fit itself remains position-residual only, so the
+    // fitted velocity comes from the SGP4 dynamics, not from differencing the
+    // input. DEFAULT false keeps every full-state path (MEME/OEM w/ velocities)
+    // byte-for-byte unchanged. fit_sgp4_series sets this from series.meta.
+    bool position_only = false;
 };
 
 /// Fit result

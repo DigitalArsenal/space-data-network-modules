@@ -13,17 +13,21 @@
  *      [{EPOCH,X,Y,Z,X_DOT,Y_DOT,Z_DOT}, ...] with STEP_SIZE = 0. (ISS adapter.)
  *
  * This converter is the JSON-record analogue of od::parse_oem (which consumes
- * CCSDS OEM **KVN text**). It reuses the exact A2.2a frame/time machinery — it
- * does NOT re-implement it:
- *   - od::iso_to_jd            (ISO 8601 -> UTC Julian Date)
- *   - od::eci_j2000_to_teme    (EME2000/J2000/GCRF -> TEME, IAU-76/FK5)
+ * CCSDS OEM **KVN text**). It reuses the exact frame/time machinery — it does NOT
+ * re-implement it:
+ *   - od::iso_to_jd            (ISO 8601 -> Julian Date in the declared scale)
+ *   - od::time_system_to_utc   (UTC passthrough; GPS/TAI -> UTC via leap table)
+ *   - od::classify_frame       (TEME / EME2000 / ITRF-IGS20-ECEF classification)
+ *   - od::eci_j2000_to_teme    (EME2000/J2000/GCRF -> TEME, IAU-76/FK5, A2.2a)
+ *   - od::ecef_to_teme[_pos]   (ITRF/IGS20/ECEF -> TEME, GMST, A2.4-prereq)
  *   - od::EphemerisPoint / od::StateSeries (the fitter's input types)
  *
- * FAIL-CLOSED (A2.2a policy): TEME native; EME2000/J2000/GCRF rotated to TEME;
- * UTC only; EARTH only. Anything else (PZ-90/ITRF ECEF, TAI/GPS time, non-Earth
- * center, UNKNOWN/undecodable shells, too few samples) is NOT fitted — the
- * converter returns false with a stable skip token so the pipeline records an
- * honest skip reason instead of emitting a wrong fit.
+ * FAIL-CLOSED: EARTH center only; TIME_SYSTEM UTC/GPS/TAI (else skip; past the
+ * leap-second horizon also skips); REFERENCE_FRAME TEME / EME2000-J2000-GCRF /
+ * ITRF-IGS20-ECEF (else skip). Position-only sources (STATE_VECTOR_SIZE 3, or
+ * verbose lines with no *_DOT) are fitted position-only (velocity seeded from the
+ * positions, not fabricated). Undecodable shells / too few samples still skip
+ * with a stable token so the pipeline records an honest reason, never a wrong fit.
  */
 #ifndef ODPIPE_OEM_RECORD_SERIES_HPP
 #define ODPIPE_OEM_RECORD_SERIES_HPP
@@ -35,6 +39,7 @@
 #include "od/frame_transform.h"
 #include "od/meme_parser.h"     // od::iso_to_jd, od::EphemerisPoint
 #include "od/state_series.h"
+#include "od/time_systems.h"    // od::time_system_to_utc (UTC/GPS/TAI -> UTC JD)
 
 namespace odpipe {
 
@@ -182,8 +187,50 @@ struct OemSeriesMeta {
     int norad_cat_id = 0;
     std::string object_name;
     std::string object_id;
-    std::string source_frame;   // as declared in the record (TEME / EME2000 / ...)
+    std::string source_frame;   // as declared in the record (TEME / EME2000 / IGS20 / ...)
 };
+
+// Transform one raw sample into a TEME od::EphemerisPoint. `time_u` is the
+// upper-cased TIME_SYSTEM. Returns: 0 = ok, 1 = skip this line (bad epoch),
+// 2 = fail the whole record (past-horizon time; *fail_reason set).
+inline int sample_to_teme(od::FrameKind fk, const std::string& time_u,
+                          const std::string& epoch_iso,
+                          double x, double y, double z,
+                          bool has_vel, double vx, double vy, double vz,
+                          od::EphemerisPoint* p, std::string* fail_reason) {
+    double jd_decl = od::iso_to_jd(epoch_iso);
+    if (jd_decl == 0.0) return 1;
+    od::TimeConv tc = od::time_system_to_utc(time_u, jd_decl);
+    if (!tc.ok) { *fail_reason = tc.error_code; return 2; }
+    const double jd = tc.jd_utc;
+    p->epoch_jd = jd;
+    p->timestamp_str = epoch_iso;
+    p->has_covariance = false;
+    double r_in[3] = {x, y, z}, v_in[3] = {vx, vy, vz}, r_o[3], v_o[3];
+    switch (fk) {
+        case od::FrameKind::Teme:
+            p->x = x; p->y = y; p->z = z; p->vx = vx; p->vy = vy; p->vz = vz;
+            break;
+        case od::FrameKind::EciJ2000:
+            od::eci_j2000_to_teme(jd, r_in, v_in, r_o, v_o);
+            p->x = r_o[0]; p->y = r_o[1]; p->z = r_o[2];
+            p->vx = v_o[0]; p->vy = v_o[1]; p->vz = v_o[2];
+            break;
+        case od::FrameKind::Ecef:
+            if (has_vel) {
+                od::ecef_to_teme(jd, r_in, v_in, r_o, v_o);
+                p->vx = v_o[0]; p->vy = v_o[1]; p->vz = v_o[2];
+            } else {
+                od::ecef_to_teme_pos(jd, r_in, r_o);
+                p->vx = 0.0; p->vy = 0.0; p->vz = 0.0;
+            }
+            p->x = r_o[0]; p->y = r_o[1]; p->z = r_o[2];
+            break;
+        case od::FrameKind::Unsupported:
+            return 1;  // unreachable (frame validated before the loop)
+    }
+    return 0;
+}
 
 // Convert a canonical stored SDS OEM JSON record into a TEME od::StateSeries.
 // Returns true with `out` populated on success; false with `*skip_reason` set to
@@ -204,78 +251,95 @@ inline bool oem_record_to_series(const std::string& record_json,
     str_field(block, "START_TIME", &start_time);
     str_field(block, "OBJECT_NAME", &object_name);
     str_field(block, "OBJECT_ID", &object_id);
-    double norad_d = 0.0, step_d = 0.0;
+    double norad_d = 0.0, step_d = 0.0, svs_d = 0.0;
     num_field(block, "NORAD_CAT_ID", &norad_d);
     num_field(block, "STEP_SIZE", &step_d);
+    num_field(block, "STATE_VECTOR_SIZE", &svs_d);
+    const int state_vector_size = static_cast<int>(svs_d);  // 0 = unspecified
 
     const std::string center_u = upper(center);
-    const std::string frame_u = upper(frame);
     const std::string time_u = upper(timesys);
 
-    // Fail-closed gates (A2.2a policy) — honest skip, never a wrong fit.
+    // Fail-closed gates — honest skip, never a wrong fit.
     if (!center.empty() && center_u != "EARTH") { *skip_reason = "unsupported-center:" + center; return false; }
-    if (!timesys.empty() && time_u != "UTC") { *skip_reason = "unsupported-time-system:" + timesys; return false; }
-    bool frame_teme = (frame_u == "TEME");
-    bool frame_j2000 = (frame_u == "EME2000" || frame_u == "J2000" || frame_u == "GCRF");
+    if (!timesys.empty() && time_u != "UTC" && time_u != "GPS" && time_u != "TAI") {
+        *skip_reason = "unsupported-time-system:" + timesys; return false;
+    }
     if (frame.empty()) { *skip_reason = "missing-frame"; return false; }
-    if (!frame_teme && !frame_j2000) { *skip_reason = "unsupported-frame:" + frame; return false; }
+    const od::FrameKind fk = od::classify_frame(frame);
+    if (fk == od::FrameKind::Unsupported) { *skip_reason = "unsupported-frame:" + frame; return false; }
 
     std::vector<od::EphemerisPoint> pts;
+    bool any_velocity = false;
 
     // VERBOSE: explicit-epoch lines take precedence when present.
     std::string lines = block_slice(block, "EPHEMERIS_DATA_LINES", '[', ']');
     if (!lines.empty() && lines.size() > 2) {
         for (const std::string& obj : split_array_objects(lines)) {
             std::string epoch;
-            double x, y, z, vx, vy, vz;
+            double x, y, z, vx = 0.0, vy = 0.0, vz = 0.0;
             if (!str_field(obj, "EPOCH", &epoch)) continue;
-            if (!num_field(obj, "X", &x) || !num_field(obj, "Y", &y) || !num_field(obj, "Z", &z) ||
-                !num_field(obj, "X_DOT", &vx) || !num_field(obj, "Y_DOT", &vy) || !num_field(obj, "Z_DOT", &vz))
-                continue;
-            double jd = od::iso_to_jd(epoch);
-            if (jd == 0.0) continue;
+            if (!num_field(obj, "X", &x) || !num_field(obj, "Y", &y) || !num_field(obj, "Z", &z)) continue;
+            // Velocity is optional (position-only sources omit *_DOT). A declared
+            // STATE_VECTOR_SIZE of 3 forces position-only even if dots are present.
+            bool has_vel = state_vector_size != 3 &&
+                           num_field(obj, "X_DOT", &vx) && num_field(obj, "Y_DOT", &vy) &&
+                           num_field(obj, "Z_DOT", &vz);
             od::EphemerisPoint p;
-            p.epoch_jd = jd;
-            p.timestamp_str = epoch;
-            if (frame_j2000) {
-                double r_in[3] = {x, y, z}, v_in[3] = {vx, vy, vz}, r_o[3], v_o[3];
-                od::eci_j2000_to_teme(jd, r_in, v_in, r_o, v_o);
-                p.x = r_o[0]; p.y = r_o[1]; p.z = r_o[2];
-                p.vx = v_o[0]; p.vy = v_o[1]; p.vz = v_o[2];
-            } else {
-                p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz;
-            }
+            std::string fail_reason;
+            int rc = sample_to_teme(fk, time_u, epoch, x, y, z, has_vel, vx, vy, vz, &p, &fail_reason);
+            if (rc == 2) { *skip_reason = fail_reason; return false; }
+            if (rc == 1) continue;
+            if (has_vel) any_velocity = true;
             pts.push_back(p);
         }
     } else {
-        // COMPACT: flat row-major array + START_TIME + STEP_SIZE (uniform).
+        // COMPACT: flat row-major array + START_TIME + STEP_SIZE (uniform). Stride
+        // is 3 (position-only) when STATE_VECTOR_SIZE=3, else 6.
         std::string data = block_slice(block, "EPHEMERIS_DATA", '[', ']');
         std::vector<double> flat = parse_double_array(data);
         if (flat.empty()) { *skip_reason = "empty-ephemeris"; return false; }
-        if (flat.size() % 6 != 0) { *skip_reason = "ragged-ephemeris"; return false; }
-        double jd0 = start_time.empty() ? 0.0 : od::iso_to_jd(start_time);
-        if (jd0 == 0.0) { *skip_reason = "unparseable-start-time"; return false; }
+        const int stride = (state_vector_size == 3) ? 3 : 6;
+        if (flat.size() % static_cast<size_t>(stride) != 0) { *skip_reason = "ragged-ephemeris"; return false; }
+        if (start_time.empty()) { *skip_reason = "unparseable-start-time"; return false; }
+        // Convert the compact START_TIME to UTC once; add elapsed step seconds
+        // (no leap second occurs within an ephemeris span, so this is exact).
+        od::TimeConv tc0 = od::time_system_to_utc(time_u, od::iso_to_jd(start_time));
+        if (od::iso_to_jd(start_time) == 0.0) { *skip_reason = "unparseable-start-time"; return false; }
+        if (!tc0.ok) { *skip_reason = tc0.error_code; return false; }
         if (step_d <= 0.0) { *skip_reason = "compact-without-step"; return false; }
-        const size_t n = flat.size() / 6;
+        const double jd0 = tc0.jd_utc;
+        const bool has_vel = (stride == 6);
+        if (has_vel) any_velocity = true;
+        const size_t n = flat.size() / static_cast<size_t>(stride);
         for (size_t i = 0; i < n; ++i) {
             double jd = jd0 + static_cast<double>(i) * step_d / 86400.0;
-            double x = flat[6 * i], y = flat[6 * i + 1], z = flat[6 * i + 2];
-            double vx = flat[6 * i + 3], vy = flat[6 * i + 4], vz = flat[6 * i + 5];
+            double x = flat[stride * i], y = flat[stride * i + 1], z = flat[stride * i + 2];
+            double vx = has_vel ? flat[stride * i + 3] : 0.0;
+            double vy = has_vel ? flat[stride * i + 4] : 0.0;
+            double vz = has_vel ? flat[stride * i + 5] : 0.0;
             od::EphemerisPoint p;
             p.epoch_jd = jd;
-            if (frame_j2000) {
-                double r_in[3] = {x, y, z}, v_in[3] = {vx, vy, vz}, r_o[3], v_o[3];
-                od::eci_j2000_to_teme(jd, r_in, v_in, r_o, v_o);
-                p.x = r_o[0]; p.y = r_o[1]; p.z = r_o[2];
-                p.vx = v_o[0]; p.vy = v_o[1]; p.vz = v_o[2];
-            } else {
-                p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz;
+            p.has_covariance = false;
+            double r_in[3] = {x, y, z}, v_in[3] = {vx, vy, vz}, r_o[3], v_o[3];
+            switch (fk) {
+                case od::FrameKind::Teme:
+                    p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; break;
+                case od::FrameKind::EciJ2000:
+                    od::eci_j2000_to_teme(jd, r_in, v_in, r_o, v_o);
+                    p.x = r_o[0]; p.y = r_o[1]; p.z = r_o[2]; p.vx = v_o[0]; p.vy = v_o[1]; p.vz = v_o[2]; break;
+                case od::FrameKind::Ecef:
+                    if (has_vel) { od::ecef_to_teme(jd, r_in, v_in, r_o, v_o); p.vx = v_o[0]; p.vy = v_o[1]; p.vz = v_o[2]; }
+                    else { od::ecef_to_teme_pos(jd, r_in, r_o); p.vx = 0.0; p.vy = 0.0; p.vz = 0.0; }
+                    p.x = r_o[0]; p.y = r_o[1]; p.z = r_o[2]; break;
+                case od::FrameKind::Unsupported: break;
             }
             pts.push_back(p);
         }
     }
 
     if (pts.size() < 8) { *skip_reason = "too-few-samples:" + std::to_string(pts.size()); return false; }
+    const bool position_only = !any_velocity;
 
     out->samples = std::move(pts);
     out->meta.norad_cat_id = static_cast<int>(norad_d);
@@ -285,7 +349,8 @@ inline bool oem_record_to_series(const std::string& record_json,
     out->meta.center_name = "EARTH";
     out->meta.ref_frame = "TEME";
     out->meta.source_frame = frame;
-    out->meta.time_system = "UTC";
+    out->meta.time_system = time_u.empty() ? "UTC" : time_u;  // as-declared; epoch_jd is UTC
+    out->meta.position_only = position_only;
     out->meta.segment_count = 1;
 
     if (meta_out) {

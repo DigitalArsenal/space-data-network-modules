@@ -84,6 +84,9 @@ if(NOT EMSCRIPTEN)
     add_executable(test_supgp tests/test_supgp.cpp)
     target_link_libraries(test_supgp od_lib)
 
+    add_executable(test_frame_time_fit tests/test_frame_time_fit.cpp)
+    target_link_libraries(test_frame_time_fit od_lib)
+
     add_executable(bench_supgp tests/bench_supgp.cpp)
     target_link_libraries(bench_supgp od_lib)
 

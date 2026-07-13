@@ -10,6 +10,7 @@
 
 #include "od/frame_transform.h"
 #include "od/meme_parser.h"  // iso_to_jd
+#include "od/time_systems.h" // time_system_to_utc (UTC/GPS/TAI -> UTC JD)
 
 #include <algorithm>
 #include <cctype>
@@ -72,6 +73,11 @@ OEMParseResult parse_oem(const std::string& content) {
     int segment_count = 0;
     bool have_identity = false;
     SegmentMeta seg{};
+    // Frame/time captured from the first segment and reused for data lines.
+    FrameKind frame_kind = FrameKind::Unsupported;
+    std::string time_upper;         // "UTC" / "GPS" / "TAI"
+    long full_state_lines = 0;      // 7-token samples (with velocity)
+    long pos_only_lines = 0;        // 4-token samples (position only)
 
     while (std::getline(stream, line)) {
         std::string t = trim(line);
@@ -98,10 +104,10 @@ OEMParseResult parse_oem(const std::string& content) {
                 return fail("parse-failed",
                             "OEM segment is missing TIME_SYSTEM.");
             }
-            if (time_sys != "UTC") {
+            if (time_sys != "UTC" && time_sys != "GPS" && time_sys != "TAI") {
                 return fail("unsupported-time-system",
                             "OEM TIME_SYSTEM=" + seg.time_system +
-                                " is not supported (UTC only).");
+                                " is not supported (UTC, GPS, TAI only).");
             }
             if (center.empty()) {
                 return fail("parse-failed", "OEM segment is missing CENTER_NAME.");
@@ -114,13 +120,12 @@ OEMParseResult parse_oem(const std::string& content) {
             if (frame.empty()) {
                 return fail("parse-failed", "OEM segment is missing REF_FRAME.");
             }
-            const bool is_teme = (frame == "TEME");
-            const bool is_j2000 =
-                (frame == "EME2000" || frame == "J2000" || frame == "GCRF");
-            if (!is_teme && !is_j2000) {
+            const FrameKind fk = classify_frame(frame);
+            if (fk == FrameKind::Unsupported) {
                 return fail("unsupported-frame",
                             "OEM REF_FRAME=" + seg.ref_frame +
-                                " is not supported (TEME or EME2000/J2000/GCRF only).");
+                                " is not supported (TEME, EME2000/J2000/GCRF, or "
+                                "ITRF/IGS20/ECEF only).");
             }
 
             // Identity comes from the first segment; later segments must agree
@@ -132,12 +137,18 @@ OEMParseResult parse_oem(const std::string& content) {
                 series.meta.ref_frame = "TEME";
                 series.meta.source_frame = frame;
                 series.meta.time_system = time_sys;
+                frame_kind = fk;
+                time_upper = time_sys;
                 have_identity = true;
             } else if (!seg.object_id.empty() && !series.meta.object_id.empty() &&
                        seg.object_id != series.meta.object_id) {
                 return fail("inconsistent-segments",
                             "OEM segments mix OBJECT_ID " + series.meta.object_id +
                                 " and " + seg.object_id + " in one file.");
+            } else if (fk != frame_kind || time_sys != time_upper) {
+                return fail("inconsistent-segments",
+                            "OEM segments mix reference frames or time systems in "
+                            "one file.");
             }
             continue;
         }
@@ -160,30 +171,60 @@ OEMParseResult parse_oem(const std::string& content) {
             // line; state lines start with an ISO epoch token.
             if (t.find('=') != std::string::npos) continue;
 
+            // Accept either a full state line (epoch + r + v = 7 tokens) or a
+            // position-only line (epoch + r = 4 tokens; SP3/CPF/ECF sources).
             std::istringstream ls(t);
             std::string epoch_tok;
-            double x, y, z, vx, vy, vz;
-            if (!(ls >> epoch_tok >> x >> y >> z >> vx >> vy >> vz)) {
+            double x, y, z, vx = 0.0, vy = 0.0, vz = 0.0;
+            if (!(ls >> epoch_tok >> x >> y >> z)) {
                 continue;  // malformed / short line
             }
-            const double jd = iso_to_jd(epoch_tok);
-            if (jd == 0.0) continue;  // unparseable epoch
+            bool has_vel = static_cast<bool>(ls >> vx >> vy >> vz);
+
+            const double jd_decl = iso_to_jd(epoch_tok);
+            if (jd_decl == 0.0) continue;  // unparseable epoch
+            // Map the declared time system to UTC (UTC passthrough; GPS/TAI via the
+            // leap table). Fail closed for an epoch past the leap-second horizon —
+            // never fit against a silently-wrong epoch.
+            TimeConv tc = time_system_to_utc(time_upper, jd_decl);
+            if (!tc.ok) return fail(tc.error_code.c_str(), tc.error_message);
+            const double jd = tc.jd_utc;
+
+            if (has_vel) full_state_lines++; else pos_only_lines++;
 
             EphemerisPoint pt{};
             pt.epoch_jd = jd;
             pt.timestamp_str = epoch_tok;
             pt.has_covariance = false;
 
-            if (to_upper(series.meta.source_frame) == "TEME") {
-                pt.x = x; pt.y = y; pt.z = z;
-                pt.vx = vx; pt.vy = vy; pt.vz = vz;
-            } else {
-                const double r_in[3] = {x, y, z};
-                const double v_in[3] = {vx, vy, vz};
-                double r_out[3], v_out[3];
-                eci_j2000_to_teme(jd, r_in, v_in, r_out, v_out);
-                pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
-                pt.vx = v_out[0]; pt.vy = v_out[1]; pt.vz = v_out[2];
+            const double r_in[3] = {x, y, z};
+            const double v_in[3] = {vx, vy, vz};
+            double r_out[3], v_out[3];
+            switch (frame_kind) {
+                case FrameKind::Teme:
+                    pt.x = x; pt.y = y; pt.z = z;
+                    pt.vx = vx; pt.vy = vy; pt.vz = vz;
+                    break;
+                case FrameKind::EciJ2000:
+                    eci_j2000_to_teme(jd, r_in, v_in, r_out, v_out);
+                    pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
+                    pt.vx = v_out[0]; pt.vy = v_out[1]; pt.vz = v_out[2];
+                    break;
+                case FrameKind::Ecef:
+                    if (has_vel) {
+                        ecef_to_teme(jd, r_in, v_in, r_out, v_out);
+                        pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
+                        pt.vx = v_out[0]; pt.vy = v_out[1]; pt.vz = v_out[2];
+                    } else {
+                        // Position-only: rotate position; leave velocity 0 (the
+                        // fitter seeds it from positions when position_only).
+                        ecef_to_teme_pos(jd, r_in, r_out);
+                        pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
+                        pt.vx = 0.0; pt.vy = 0.0; pt.vz = 0.0;
+                    }
+                    break;
+                case FrameKind::Unsupported:
+                    continue;  // unreachable (validated at META_STOP)
             }
             series.samples.push_back(pt);
             continue;
@@ -202,6 +243,10 @@ OEMParseResult parse_oem(const std::string& content) {
         return fail("empty-ephemeris", "OEM contained no parseable state vectors.");
     }
 
+    // Position-only when the source carried no velocities at all (SP3/CPF/ECF).
+    // A file that mixes 4- and 7-token lines keeps its velocities (treated as
+    // full-state); position_only is set only when every sample was position-only.
+    series.meta.position_only = (full_state_lines == 0 && pos_only_lines > 0);
     series.meta.segment_count = segment_count;
     result.ok = true;
     return result;
