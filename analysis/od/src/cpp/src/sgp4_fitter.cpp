@@ -1142,17 +1142,50 @@ FitResult fit_sgp4(
     return best_result;
 }
 
-FitResult fit_sgp4_meme(
-    const MEMEFile& meme,
+FitResult fit_sgp4_series(
+    const StateSeries& series,
     const FitterConfig& config) {
 
-    auto result = fit_sgp4(meme.points, config);
+    auto result = fit_sgp4(series.samples, config);
 
-    result.elements.norad_cat_id = meme.header.norad_cat_id;
-    result.elements.object_name = meme.header.object_name;
-    result.elements.data_source = "SpaceX-E";
+    // Labeling flows from the parsed ephemeris + caller/manifest — never
+    // hardcoded to an operator. Empty/zero metadata leaves the fit placeholder
+    // in place (e.g. the "99999A" object id assigned during the fit).
+    if (series.meta.norad_cat_id > 0) {
+        result.elements.norad_cat_id = series.meta.norad_cat_id;
+    }
+    if (!series.meta.object_name.empty()) {
+        result.elements.object_name = series.meta.object_name;
+    }
+    if (!series.meta.object_id.empty()) {
+        result.elements.object_id = series.meta.object_id;
+    }
+    result.elements.data_source = series.meta.data_source;
 
     return result;
+}
+
+FitResult fit_sgp4_meme(
+    const MEMEFile& meme,
+    const FitterConfig& config,
+    const std::string& data_source) {
+
+    StateSeries series;
+    series.samples = meme.points;
+    series.meta.norad_cat_id = meme.header.norad_cat_id;
+    series.meta.object_name = meme.header.object_name;
+    // MEME state vectors are already effectively TEME (confirmed by the <1 m
+    // fit RMS on the checked-in Starlink suite); no rotation is applied.
+    series.meta.ref_frame = "TEME";
+    series.meta.source_frame =
+        meme.header.reference_frame.empty() ? "TEME" : meme.header.reference_frame;
+    series.meta.time_system = "UTC";
+    series.meta.data_source = data_source;
+    series.meta.segment_count = 1;
+    // MEME's filename COSPAR field is a SpaceX-internal id, not an international
+    // designator, so OBJECT_ID is intentionally not derived from it.
+
+    return fit_sgp4_series(series, config);
 }
 
 // ── Output Formatters ──

@@ -66,6 +66,8 @@ target_include_directories(sgp4_lib PUBLIC "${VALLADO_SGP4_DIR}")
 set(OD_SOURCES
     src/orbit_determination.cpp
     src/meme_parser.cpp
+    src/frame_transform.cpp
+    src/oem_parser.cpp
     src/sgp4_fitter.cpp
     src/plugin_runtime.cpp
 )

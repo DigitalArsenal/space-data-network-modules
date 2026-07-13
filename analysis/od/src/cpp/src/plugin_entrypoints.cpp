@@ -43,6 +43,10 @@ EMSCRIPTEN_KEEPALIVE
 int fit(void) {
     plugin_reset_output_state();
 
+    // The "meme" port carries the ephemeris payload for any supported format
+    // (MEME or CCSDS OEM); the format is selected data-level via the "options"
+    // frame's inputFormat field, or auto-detected. The port id is kept for ABI
+    // stability.
     const auto* frame = find_input_frame("meme");
     if (!frame || !frame->payload) {
         plugin_set_error("missing-meme-input", "Input port \"meme\" is required.");
@@ -56,7 +60,7 @@ int fit(void) {
                   options_frame->payload_length)
             : std::string_view{};
 
-    const auto result = od::fit_meme_payload(
+    const auto result = od::fit_ephemeris_payload(
         std::string_view(
             reinterpret_cast<const char*>(frame->payload),
             frame->payload_length),

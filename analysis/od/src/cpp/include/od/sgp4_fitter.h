@@ -19,6 +19,7 @@
  */
 
 #include "meme_parser.h"
+#include "state_series.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -90,10 +91,21 @@ FitResult fit_sgp4(
     const std::vector<EphemerisPoint>& points,
     const FitterConfig& config = {});
 
-/// Fit SGP4 elements from a MEME file
+/// Fit SGP4 elements to a common state-vector series and label the result from
+/// the series metadata (data_source flows from the caller/manifest;
+/// OBJECT_NAME/OBJECT_ID/NORAD flow from the parsed ephemeris when present).
+/// This is the format-neutral entry point both the MEME and OEM paths use.
+FitResult fit_sgp4_series(
+    const StateSeries& series,
+    const FitterConfig& config = {});
+
+/// Fit SGP4 elements from a MEME file. `data_source` is the provider/source
+/// token supplied by the caller/manifest (empty = unlabeled); it is NOT
+/// hardcoded to any operator.
 FitResult fit_sgp4_meme(
     const MEMEFile& meme,
-    const FitterConfig& config = {});
+    const FitterConfig& config = {},
+    const std::string& data_source = std::string());
 
 /// Convert Cartesian state → Keplerian elements (initial guess)
 /// Returns [a(km), e, i(rad), Ω(rad), ω(rad), M(rad)]
