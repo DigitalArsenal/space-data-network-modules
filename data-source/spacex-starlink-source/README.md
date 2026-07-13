@@ -72,17 +72,20 @@ leaves defaults intact.
 
 ## Template shape (for A2.2c)
 
-`src/provider_source.hpp` factors the reusable scaffold — base64, in-guest
+`common/provider_source.hpp` factors the reusable scaffold — base64, in-guest
 SHA-256, JSON helpers, the hostcall transport, the `http`/`storage.write`/
 `pubsub.publish` cap wrappers, `keyslot_sign`, `listing_lines`, the PNM builder,
 and the generic `publish_record` (store → sign CID → build PNM → publish) flow.
 Only MEME-specific parsing + the OEM mapping live in the `.cpp`.
 
-**Extraction note (A2.2c):** when the second Tier-1 adapter lands (OneWeb LTEF,
-ISS OEM, …), promote `provider_source.hpp` to
-`space-data-network-modules/common/provider_source.hpp` (mirroring
-`common/sdm_hostcall_wire.hpp`) and have each adapter include it. It lives in
-this module's `src/` for now to respect the A2.2b locked scope.
+**Promotion note (A2.2c, done 2026-07-13):** the scaffold was promoted verbatim
+from this module's `src/provider_source.hpp` to the repo-root
+`common/provider_source.hpp` (alongside `common/sdm_hostcall_wire.hpp`) when the
+first sibling adapters landed (`data-source/oneweb-source`,
+`data-source/iss-source`). Each adapter's `build.mjs` already puts `common/` on
+its `-I` path (`SDN_COMMON_DIR`), so all three include it by bare name
+(`#include "provider_source.hpp"`). No behavior change to this module — same
+bytes, same 8 tests.
 
 ## Manifest (`plugin-manifest.json`)
 

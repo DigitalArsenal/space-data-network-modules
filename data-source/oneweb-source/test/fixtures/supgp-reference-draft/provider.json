@@ -1,0 +1,22 @@
+{
+  "_draft": "A2.4 seed. TWO blockers: (1) CelesTrak ECONNREFUSED from build env — capture the same-epoch SupGP pair via the reader proxy; (2) the OneWeb LTEF physical decode is unresolved (no public column spec), so no raw state vectors can be fit for the hard RMS gate until OneWeb's LTEF spec is obtained (OWNER-ASSIST). See README.md.",
+  "name": "OneWeb (Eutelsat LTEF) — CelesTrak parity",
+  "source": "OneWeb-E",
+  "format": "ltef",
+  "gate": "beatsCelestrak",
+  "inputDecode": "blocked-ltef-spec",
+  "objectNamePattern": "ONEWEB-<slot>",
+  "celestrakQuery": "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=OneWeb-E&FORMAT=JSON",
+  "celestrakKvn": "TODO-A2.4-capture-same-epoch-supgp",
+  "tolerances": {
+    "rmsMustBeatCelestrak": true,
+    "_note": "Hard RMS gate blocked on the LTEF decode. Any interim element-space check vs CelesTrak OneWeb-E OMM MUST be labeled non-independent (not parity) — CelesTrak SupGP derives from the same LTEF.",
+    "elementSpace": {
+      "inclinationDeg": null,
+      "raanDeg": null,
+      "argpDeg": null,
+      "meanMotionRevPerDay": null,
+      "eccentricity": null
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "pluginId": "com.orbpro.iss-source",
+  "name": "ISS (NASA public OEM) Data Source",
+  "version": "1.0.0",
+  "description": "Executable data-source: pulls the NASA public ISS CCSDS OEM ephemeris over HTTP on a timer, re-emits it as a schema-exact SDS OEM record, and signs + publishes a PNM pointer.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "storage_write",
+    "wallet_sign",
+    "crypto_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "iss-pull",
+      "methodId": "pull",
+      "defaultIntervalMs": 43200000,
+      "description": "Periodic ISS OEM pull (default every 12h; NASA refreshes the continuous 15-day EME2000 ephemeris a few times a week — one small file, no per-object fan-out)."
+    }
+  ],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "pull",
+      "displayName": "Pull ISS Ephemeris",
+      "description": "Fetches the NASA public ISS CCSDS OEM ephemeris over HTTP, re-emits it as a schema-exact SDS OEM record, signs a PNM, and publishes it.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published PNMs",
+          "description": "Signed PNM pointer published for each pulled + stored ISS ephemeris.",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "data-source.iss.pnm",
+              "description": "Signed PNM pointer for each published pull.",
+              "allowedTypes": [
+                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
