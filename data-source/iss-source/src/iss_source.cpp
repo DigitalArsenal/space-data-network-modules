@@ -296,10 +296,11 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
 
             // FILE_NAME = source artifact basename.
             std::string file_name = "ISS.OEM_J2K_EPH.txt";
-            ps::PublishResult r = ps::publish_record(
+            ps::PublishResult r = ps::publish_record_with_source(
                 pcfg,
                 reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-                file_name, file_id, m.creation_date, provenance);
+                file_name, file_id, m.creation_date, provenance,
+                cfg.source_url, source_sha256);
             if (r.stored) stored++;
             if (r.signed_) signed_++;
             if (r.published) published++;

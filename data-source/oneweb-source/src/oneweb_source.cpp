@@ -235,10 +235,11 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
             "\"LTEF_RAW\":\"" + ps::json_escape(r.raw) + "\"," +
             "\"DECODE_STATUS\":\"unresolved-ltef-encoding\"}";
 
-        ps::PublishResult pr = ps::publish_record(
+        ps::PublishResult pr = ps::publish_record_with_source(
             pcfg,
             reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-            "ltef.csv", file_id, epoch_iso, provenance);
+            "ltef.csv", file_id, epoch_iso, provenance,
+            cfg.ltef_url, source_sha256);
         if (pr.stored) stored++;
         if (pr.signed_) signed_++;
         if (pr.published) published++;

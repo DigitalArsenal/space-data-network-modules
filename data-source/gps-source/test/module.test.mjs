@@ -60,9 +60,13 @@ test("manifest declares the executable data-source contract", async () => {
   const methodIds = (manifest.methods || []).map((m) => m.methodId);
   assert.ok(methodIds.includes("pull"), `missing pull method (have: ${methodIds.join(", ")})`);
   const caps = (manifest.hostCapabilities || []).map((c) => c.capability);
-  for (const cap of ["http", "storage_write", "wallet_sign", "crypto_sign", "pubsub"]) {
+  for (const cap of ["http", "storage_ingest", "wallet_sign", "crypto_sign", "pubsub"]) {
     assert.ok(caps.includes(cap), `missing host capability: ${cap} (have: ${caps.join(", ")})`);
   }
+  // A2.2c-3: storage_ingest (NOT storage_write); a missing STORAGE_INGEST enum
+  // would clamp the decode to CLOCK — assert neither leaks through.
+  assert.ok(!caps.includes("storage_write"), "storage_write must be gone (migrated to storage_ingest)");
+  assert.ok(!caps.includes("clock"), "storage_ingest must not decode as a CLOCK fallback");
   const timers = manifest.timers || [];
   const pullTimer = timers.find((t) => t.timerId === "gps-pull");
   assert.ok(pullTimer, `missing gps-pull timer (have: ${timers.map((t) => t.timerId).join(", ")})`);
@@ -100,6 +104,38 @@ const SEM_FIXTURE = "current_sem.al3";
 function u32le(bytes, off) {
   return (bytes[off] | (bytes[off + 1] << 8) | (bytes[off + 2] << 16) | (bytes[off + 3] << 24)) >>> 0;
 }
+// Parse a [u32le len][bytes]... size-prefixed record stream (the shape the guest
+// sends to storage.ingest_with_source and the host's splitSizePrefixedStream reads).
+function splitSizePrefixed(bytes) {
+  const records = [];
+  let off = 0;
+  while (off < bytes.length) {
+    const n = u32le(bytes, off);
+    off += 4;
+    records.push(Buffer.from(bytes.subarray(off, off + n)));
+    off += n;
+  }
+  return records;
+}
+
+// Reference CIDv1(raw, sha2-256) in the CIDv1 default multibase (base32 lower,
+// no pad, 'b' prefix) — the exact string the SDN host assigns for these bytes
+// (storage.computeCID / go-cid). The module computes this in-guest for the PNM.
+function cidV1RawSha256(bytes) {
+  const digest = crypto.createHash("sha256").update(bytes).digest();
+  const frame = Buffer.concat([Buffer.from([0x01, 0x55, 0x12, 0x20]), digest]);
+  const alpha = "abcdefghijklmnopqrstuvwxyz234567";
+  let out = "", buffer = 0, bits = 0;
+  for (const byte of frame) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) { bits -= 5; out += alpha[(buffer >>> bits) & 31]; }
+    buffer &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += alpha[(buffer << (5 - bits)) & 31];
+  return "b" + out;
+}
+
 function buildEnvelope(metaObj) {
   const meta = new TextEncoder().encode(JSON.stringify(metaObj));
   const out = new Uint8Array(4 + meta.length + 4);
@@ -146,10 +182,25 @@ async function runPull(config, httpOverride) {
       if (op === "http.request") {
         const r = serveHttp(req.url);
         meta = { ok: true, result: { status: r.status, body_encoding: "utf8", body: r.body } };
-      } else if (op === "storage.write") {
-        const data = Buffer.from(req.data, "base64");
-        captured.storage.push({ schema: req.schema, data });
-        meta = { ok: true, result: { cid: "cid-" + crypto.createHash("sha256").update(data).digest("hex") } };
+      } else if (op === "storage.ingest_with_source") {
+        // A2.2c-3: records arrive as a base64 size-prefixed stream + SourceTags.
+        const stream = Buffer.from(req.records, "base64");
+        const records = splitSizePrefixed(stream);
+        for (const data of records) {
+          captured.storage.push({
+            schema: req.schema,
+            data,
+            reconcile: req.reconcile,
+            tags: {
+              provider_id: req.provider_id,
+              source_name: req.source_name,
+              source_url: req.source_url,
+              batch_id: req.batch_id,
+              content_key_id: req.content_key_id,
+            },
+          });
+        }
+        meta = { ok: true, result: { schema: req.schema, inserted: records.length, batch_id: req.batch_id } };
       } else if (op === "keyslot.sign") {
         const sig = Buffer.alloc(64, 0x2b);
         meta = { ok: true, result: { signature: sig.toString("base64"), algorithm: "ed25519" } };
@@ -241,13 +292,27 @@ test("pull: YUMA almanac → schema-exact OMM mean-element records + signed PNM"
   const pub = publishes[0];
   assert.equal(pub.topic, "sdn/data-source/gps");
   const pnm = pub.message.PNM;
+  // A2.2c-3: every ingested record carries SourceTags (reconcile "none") and its
+  // published PNM CID is the real in-guest CIDv1 that byte-matches the host store.
+  assert.equal(publishes.length, storage.length, "one PNM published per ingested record");
+  for (let i = 0; i < storage.length; i++) {
+    assert.equal(storage[i].reconcile, "none", "reconcile none protects NORAD=0 siblings");
+    assert.equal(storage[i].tags.source_name, "gps", "SourceName is the fit-pipeline grouping key");
+    assert.equal(storage[i].tags.provider_id, "gps", "provider_id reuses source_name in-guest");
+    assert.equal(storage[i].tags.content_key_id, "public");
+    assert.match(storage[i].tags.batch_id, /^[0-9a-f]{64}$/, "batch_id = source_sha256");
+    assert.ok(storage[i].tags.source_url.length > 0, "source_url present");
+    assert.equal(publishes[i].message.PNM.CID, cidV1RawSha256(storage[i].data), "PNM.CID == host CID of stored record");
+    assert.ok(publishes[i].message.PNM.CID.startsWith("bafkrei"), "PNM.CID is a CIDv1 raw block");
+  }
+
   for (const k of ["MULTIFORMAT_ADDRESS", "PUBLISH_TIMESTAMP", "CID", "FILE_NAME", "FILE_ID", "SIGNATURE", "SIGNATURE_TYPE"]) {
     assert.ok(k in pnm, `PNM missing ${k}`);
   }
   assert.equal(pnm.SIGNATURE_TYPE, "ed25519");
   assert.equal(pnm.FILE_NAME, "current_yuma.alm");
   assert.equal(pnm.FILE_ID, "gps:OMM:1:2026-07-15T16:44:48Z");
-  assert.ok(pnm.CID.startsWith("cid-"));
+  assert.ok(pnm.CID.startsWith("bafkrei"));
   assert.equal(pnm.MULTIFORMAT_ADDRESS, "/ipfs/" + pnm.CID);
   assert.ok(Buffer.from(pnm.SIGNATURE, "base64").length > 0);
 

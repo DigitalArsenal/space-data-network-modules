@@ -78,9 +78,13 @@ test("manifest declares the executable data-source contract", async () => {
   assert.ok(methodIds.includes("pull"), `missing pull method (have: ${methodIds.join(", ")})`);
 
   const caps = (manifest.hostCapabilities || []).map((c) => c.capability);
-  for (const cap of ["http", "storage_write", "wallet_sign", "crypto_sign", "pubsub"]) {
+  for (const cap of ["http", "storage_ingest", "wallet_sign", "crypto_sign", "pubsub"]) {
     assert.ok(caps.includes(cap), `missing host capability: ${cap} (have: ${caps.join(", ")})`);
   }
+  // A2.2c-3: the source-tag migration requires storage_ingest (NOT storage_write);
+  // if the SDS PLG enum lacked STORAGE_INGEST the decoder would clamp it to CLOCK.
+  assert.ok(!caps.includes("storage_write"), "storage_write must be gone (migrated to storage_ingest)");
+  assert.ok(!caps.includes("clock"), "storage_ingest must not decode as a CLOCK fallback");
 
   const timers = manifest.timers || [];
   const pullTimer = timers.find((t) => t.timerId === "starlink-pull");
@@ -134,6 +138,38 @@ function u32le(bytes, off) {
   return (bytes[off] | (bytes[off + 1] << 8) | (bytes[off + 2] << 16) | (bytes[off + 3] << 24)) >>> 0;
 }
 
+// Parse a [u32le len][bytes]... size-prefixed record stream (the shape the guest
+// sends to storage.ingest_with_source and the host's splitSizePrefixedStream reads).
+function splitSizePrefixed(bytes) {
+  const records = [];
+  let off = 0;
+  while (off < bytes.length) {
+    const n = u32le(bytes, off);
+    off += 4;
+    records.push(Buffer.from(bytes.subarray(off, off + n)));
+    off += n;
+  }
+  return records;
+}
+
+// Reference CIDv1(raw, sha2-256) in the CIDv1 default multibase (base32 lower,
+// no pad, 'b' prefix) — the exact string the SDN host assigns for these bytes
+// (storage.computeCID / go-cid). The module computes this in-guest for the PNM.
+function cidV1RawSha256(bytes) {
+  const digest = crypto.createHash("sha256").update(bytes).digest();
+  const frame = Buffer.concat([Buffer.from([0x01, 0x55, 0x12, 0x20]), digest]);
+  const alpha = "abcdefghijklmnopqrstuvwxyz234567";
+  let out = "", buffer = 0, bits = 0;
+  for (const byte of frame) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) { bits -= 5; out += alpha[(buffer >>> bits) & 31]; }
+    buffer &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += alpha[(buffer << (5 - bits)) & 31];
+  return "b" + out;
+}
+
 // Build a hostcall response envelope: [u32 metaLen][metaJSON][u32 0 segments].
 function buildEnvelope(metaObj) {
   const meta = new TextEncoder().encode(JSON.stringify(metaObj));
@@ -183,10 +219,25 @@ async function runPull(config) {
       if (op === "http.request") {
         const r = serveHttp(req.url);
         meta = { ok: true, result: { status: r.status, body_encoding: "utf8", body: r.body } };
-      } else if (op === "storage.write") {
-        const data = Buffer.from(req.data, "base64");
-        captured.storage.push({ schema: req.schema, data });
-        meta = { ok: true, result: { cid: "cid-" + crypto.createHash("sha256").update(data).digest("hex") } };
+      } else if (op === "storage.ingest_with_source") {
+        // A2.2c-3: records arrive as a base64 size-prefixed stream + SourceTags.
+        const stream = Buffer.from(req.records, "base64");
+        const records = splitSizePrefixed(stream);
+        for (const data of records) {
+          captured.storage.push({
+            schema: req.schema,
+            data,
+            reconcile: req.reconcile,
+            tags: {
+              provider_id: req.provider_id,
+              source_name: req.source_name,
+              source_url: req.source_url,
+              batch_id: req.batch_id,
+              content_key_id: req.content_key_id,
+            },
+          });
+        }
+        meta = { ok: true, result: { schema: req.schema, inserted: records.length, batch_id: req.batch_id } };
       } else if (op === "keyslot.sign") {
         // Deterministic non-empty signature (64 bytes); the module only needs
         // a non-empty signature to mark the PNM signed.
@@ -247,6 +298,23 @@ test("pull: manifest parse → capped per-object fetch → OEM records + signed 
   assert.equal(storage.length, 2);
   for (const w of storage) assert.equal(w.schema, "OEM");
 
+  // A2.2c-3: each record is ingested with SourceTags provenance and reconcile:"none".
+  for (const w of storage) {
+    assert.equal(w.reconcile, "none", "reconcile must be none (protects NORAD=0 siblings)");
+    assert.equal(w.tags.source_name, "spacex-starlink", "SourceName is the fit-pipeline grouping key");
+    assert.equal(w.tags.provider_id, "spacex-starlink", "provider_id reuses source_name in-guest");
+    assert.equal(w.tags.content_key_id, "public");
+    assert.match(w.tags.batch_id, /^[0-9a-f]{64}$/, "batch_id = source_sha256 (raw upstream bytes hash)");
+    assert.ok(w.tags.source_url.startsWith(BASE_URL), "source_url is the per-object MEME URL");
+  }
+  // batch_id (source_sha256) matches an independent hash of the raw MEME bytes.
+  {
+    const memeName0 = "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt";
+    const rawSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(FIXTURES_DIR, "meme", memeName0))).digest("hex");
+    assert.equal(storage[0].tags.batch_id, rawSha);
+    assert.equal(storage[0].tags.source_url, BASE_URL + memeName0);
+  }
+
   // Canonical record bytes carry schema-exact keys (NORAD_CAT_ID, not norad_cat_id).
   const rec0 = JSON.parse(storage[0].data.toString("utf8"));
   assert.equal(rec0.CCSDS_OEM_VERS, 2.0);
@@ -280,7 +348,10 @@ test("pull: manifest parse → capped per-object fetch → OEM records + signed 
     assert.ok(k in pnm, `PNM missing ${k}`);
   }
   assert.equal(pnm.SIGNATURE_TYPE, "ed25519");
-  assert.ok(pnm.CID.startsWith("cid-"), "PNM.CID is the stored record content id");
+  // A2.2c-3: PNM.CID is now the real in-guest CIDv1 (raw/sha2-256/base32), which
+  // byte-matches the CID the host assigns for the stored record bytes.
+  assert.ok(pnm.CID.startsWith("bafkrei"), `PNM.CID is a CIDv1 raw block (got ${pnm.CID})`);
+  assert.equal(pnm.CID, cidV1RawSha256(storage[0].data), "PNM.CID == host CID of the stored OEM record");
   assert.equal(pnm.MULTIFORMAT_ADDRESS, "/ipfs/" + pnm.CID);
   assert.equal(pnm.FILE_ID, "spacex-starlink:OEM:67850:2026-05-14T01:42:42Z");
   assert.equal(pnm.PUBLISH_TIMESTAMP, "2026-05-14T02:02:54Z");
