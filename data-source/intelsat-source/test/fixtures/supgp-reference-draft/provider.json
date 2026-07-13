@@ -1,0 +1,27 @@
+{
+  "_draft": "A2.4 seed — mirrors the A2.2a manifest shape. Fill celestrakKvn once the same-epoch Intelsat-11P SupGP pair is captured; CelesTrak was UNREACHABLE (connection timeout) from the build env (see README.md). NOTE: the operator ECF ephemeris carries NO NORAD; a name->NORAD mapping (IS-21 = 38098 / 2012-043A) must be supplied by A2.4 to key the CelesTrak comparison.",
+  "name": "Intelsat (public ECF ephemeris) — CelesTrak parity",
+  "source": "Intelsat-11P",
+  "format": "oem",
+  "gate": "beatsCelestrak",
+  "inputFiles": ["../i_aor_e_302.00_is-21_20260710_235300.sample.txt"],
+  "objectName": "IS-21",
+  "objectIdInSource": "",
+  "noradCatIdInSource": 0,
+  "noradCatIdExternal": "TODO-A2.4-name-to-norad-registry (IS-21 public catalog: NORAD 38098, COSPAR 2012-043A — NOT present in the ECF source, must be supplied externally, not fabricated in-adapter)",
+  "referenceFrame": "ECEF",
+  "frameNote": "Intelsat 'ECF' = Earth-Centered-Fixed (ECEF). OD owns the ECEF->TEME transform (A2.2a currently fail-closes on ECEF/ITRF — the Earth-rotation transform is an A2.4/OD residual). Position-only, metres->km.",
+  "celestrakQuery": "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=Intelsat-11P&FORMAT=JSON",
+  "celestrakKvn": "TODO-A2.4-capture-same-epoch-supgp",
+  "tolerances": {
+    "rmsMustBeatCelestrak": true,
+    "_note": "GEO satellite (near-zero inclination/eccentricity) — element-space tolerances (esp. RAAN/argp) are ill-conditioned; A2.4 should compare in equinoctial or position space. CelesTrak's Intelsat-11P SupGP is fit from the SAME public feed (ECF and/or 11-parameter), so element-space agreement is not fully independent.",
+    "elementSpace": {
+      "inclinationDeg": null,
+      "raanDeg": null,
+      "argpDeg": null,
+      "meanMotionRevPerDay": null,
+      "eccentricity": null
+    }
+  }
+}

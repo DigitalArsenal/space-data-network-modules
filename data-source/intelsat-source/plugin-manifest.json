@@ -1,0 +1,50 @@
+{
+  "pluginId": "com.orbpro.intelsat-source",
+  "name": "Intelsat (public ephemeris) Data Source",
+  "version": "1.0.0",
+  "description": "Executable data-source: pulls Intelsat's public operator ephemeris over HTTP on a timer, re-emits each satellite as a schema-exact SDS OEM record, and signs + publishes a PNM pointer.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "storage_write",
+    "wallet_sign",
+    "crypto_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "intelsat-pull",
+      "methodId": "pull",
+      "defaultIntervalMs": 86400000,
+      "description": "Periodic Intelsat public-ephemeris pull (default every 24h; Intelsat refreshes the ECF/center-of-box ephemeris files weekly — a daily poll catches every refresh with margin)."
+    }
+  ],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "pull",
+      "displayName": "Pull Intelsat Ephemeris",
+      "description": "Fetches Intelsat's public operator ephemeris over HTTP, re-emits each satellite as a schema-exact SDS OEM record, signs a PNM, and publishes it.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published PNMs",
+          "description": "Signed PNM pointer published for each pulled + stored Intelsat ephemeris.",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "data-source.intelsat.pnm",
+              "description": "Signed PNM pointer for each published pull.",
+              "allowedTypes": [
+                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
