@@ -15,10 +15,10 @@ const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const FIXTURE_MEME_PATH = new URL("./fixtures/request.fit.meme", import.meta.url);
 const MEME_DATA_DIR = path.join(__dirname, "data", "meme");
 const REFERENCE_SUITE_DIR = path.join(__dirname, "data", "supgp-reference");
-const REFERENCE_MEME_DATA_DIR = path.join(REFERENCE_SUITE_DIR, "meme");
-const REFERENCE_CELESTRAK_CSV = path.join(
+const ISS_OEM_FIXTURE = path.join(
   REFERENCE_SUITE_DIR,
-  "celestrak_supgp_2026-034.csv",
+  "iss",
+  "ISS.OEM_J2K_EPH.trimmed.txt",
 );
 const DEFAULT_CELESTRAK_CSV = path.join(
   __dirname,
@@ -61,14 +61,49 @@ function listRegressionFiles() {
     .map((entry) => path.join(MEME_DATA_DIR, entry));
 }
 
-function listReferenceSuiteFiles() {
-  if (!fs.existsSync(REFERENCE_MEME_DATA_DIR)) {
+// ── Provider-manifest driven reference suite ───────────────────────────────
+// Each provider is a directory under supgp-reference/<provider>/ with a
+// provider.json describing source token, input format (meme|oem), input files,
+// gate type and tolerances. Adding a provider (A2.4) is a data change, not code.
+
+function listProviders() {
+  if (!fs.existsSync(REFERENCE_SUITE_DIR)) {
     return [];
   }
-  return fs.readdirSync(REFERENCE_MEME_DATA_DIR)
-    .filter((entry) => entry.startsWith("MEME_") && entry.endsWith(".txt"))
+  return fs.readdirSync(REFERENCE_SUITE_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(REFERENCE_SUITE_DIR, entry.name))
+    .filter((dir) => fs.existsSync(path.join(dir, "provider.json")))
+    .map((dir) => ({
+      dir,
+      manifest: JSON.parse(fs.readFileSync(path.join(dir, "provider.json"), "utf8")),
+    }))
+    .sort((a, b) => a.manifest.name.localeCompare(b.manifest.name));
+}
+
+function providerInputFiles(dir, manifest) {
+  if (Array.isArray(manifest.inputFiles)) {
+    return manifest.inputFiles.map((file) => path.join(dir, file));
+  }
+  const inputDir = path.join(dir, manifest.inputDir ?? ".");
+  if (!fs.existsSync(inputDir)) {
+    return [];
+  }
+  const prefix = manifest.inputPrefix ?? "";
+  const suffix = manifest.inputSuffix ?? "";
+  return fs.readdirSync(inputDir)
+    .filter((name) => name.startsWith(prefix) && name.endsWith(suffix))
     .sort()
-    .map((entry) => path.join(REFERENCE_MEME_DATA_DIR, entry));
+    .map((name) => path.join(inputDir, name));
+}
+
+function fitOptionsForProvider(manifest) {
+  const options = { inputFormat: manifest.format };
+  if (manifest.source) options.dataSource = manifest.source;
+  if (manifest.objectName) options.objectName = manifest.objectName;
+  if (manifest.objectId) options.objectId = manifest.objectId;
+  if (Number.isFinite(manifest.noradCatId)) options.noradCatId = manifest.noradCatId;
+  return options;
 }
 
 function parseCelestrakCsv(csvPath) {
@@ -138,6 +173,115 @@ function assertBeatsCelestrak(result) {
   );
 }
 
+async function runBeatsCelestrakGate(t, harness, dir, manifest) {
+  const files = providerInputFiles(dir, manifest);
+  assert.ok(
+    files.length > 0,
+    `Provider ${manifest.name} declares no input files.`,
+  );
+  const celestrak = parseCelestrakCsv(path.join(dir, manifest.celestrakCsv));
+  assert.ok(
+    celestrak.size > 0,
+    `Provider ${manifest.name} is missing its CelesTrak SupGP CSV (${manifest.celestrakCsv}).`,
+  );
+
+  const options = fitOptionsForProvider(manifest);
+  const results = [];
+  for (const filePath of files) {
+    const noradId = manifest.noradFromFilename
+      ? noradIdFromMemePath(filePath)
+      : Number.NaN;
+    const reference = celestrak.get(noradId);
+    assert.ok(
+      reference,
+      `Missing CelesTrak SupGP reference RMS for NORAD ${noradId} (${manifest.name}).`,
+    );
+    const fit = await invokeFitJson(harness, fs.readFileSync(filePath), options);
+    const rms = Number.parseFloat(fit.RMS);
+    assert.ok(
+      Number.isFinite(rms),
+      `Fit RMS must be finite for ${path.basename(filePath)}.`,
+    );
+    results.push({ filePath, noradId, rms, referenceRms: reference.rms });
+  }
+  for (const result of results) {
+    assertBeatsCelestrak(result);
+  }
+}
+
+async function runElementRangeGate(t, harness, dir, manifest) {
+  const files = providerInputFiles(dir, manifest);
+  assert.ok(files.length > 0, `Provider ${manifest.name} declares no input files.`);
+  const options = fitOptionsForProvider(manifest);
+  const expect = manifest.expect ?? {};
+
+  for (const filePath of files) {
+    const fit = await invokeFitJson(harness, fs.readFileSync(filePath), options);
+    const label = `${manifest.name}:${path.basename(filePath)}`;
+
+    if (expect.converged) {
+      assert.equal(fit.CONVERGED, true, `${label} must converge.`);
+    }
+    if (Array.isArray(expect.meanMotion)) {
+      assert.ok(
+        fit.MEAN_MOTION >= expect.meanMotion[0] && fit.MEAN_MOTION <= expect.meanMotion[1],
+        `${label} MEAN_MOTION=${fit.MEAN_MOTION} out of ${JSON.stringify(expect.meanMotion)}.`,
+      );
+    }
+    if (Array.isArray(expect.inclination)) {
+      assert.ok(
+        fit.INCLINATION >= expect.inclination[0] && fit.INCLINATION <= expect.inclination[1],
+        `${label} INCLINATION=${fit.INCLINATION} out of ${JSON.stringify(expect.inclination)}.`,
+      );
+    }
+    if (Number.isFinite(expect.eccentricityMax)) {
+      assert.ok(
+        fit.ECCENTRICITY <= expect.eccentricityMax,
+        `${label} ECCENTRICITY=${fit.ECCENTRICITY} exceeds ${expect.eccentricityMax}.`,
+      );
+    }
+    if (Number.isFinite(expect.rmsMaxKm)) {
+      const rms = Number.parseFloat(fit.RMS);
+      assert.ok(
+        Number.isFinite(rms) && rms <= expect.rmsMaxKm,
+        `${label} RMS=${fit.RMS} exceeds ${expect.rmsMaxKm} km.`,
+      );
+    }
+    if (manifest.source) {
+      assert.equal(fit.DATA_SOURCE, manifest.source, `${label} DATA_SOURCE mismatch.`);
+    }
+    if (manifest.objectName) {
+      assert.equal(fit.OBJECT_NAME, manifest.objectName, `${label} OBJECT_NAME mismatch.`);
+    }
+    if (manifest.objectId) {
+      assert.equal(fit.OBJECT_ID.trim(), manifest.objectId, `${label} OBJECT_ID mismatch.`);
+    }
+  }
+}
+
+// Split a single-segment OEM into two META/data segments carrying the same
+// object, to exercise multi-segment concatenation.
+function splitOemIntoTwoSegments(content) {
+  const lines = content.split(/\r?\n/);
+  const metaStart = lines.findIndex((l) => l.trim() === "META_START");
+  const metaStop = lines.findIndex((l) => l.trim() === "META_STOP");
+  const header = lines.slice(0, metaStart);
+  const metaBlock = lines.slice(metaStart, metaStop + 1);
+  const rest = lines.slice(metaStop + 1);
+  const dataLines = rest.filter((l) => /^\s*\d{4}-\d{2}-\d{2}T/.test(l));
+  const half = Math.floor(dataLines.length / 2);
+  return [
+    ...header,
+    "",
+    ...metaBlock,
+    ...dataLines.slice(0, half),
+    "",
+    ...metaBlock,
+    ...dataLines.slice(half),
+    "",
+  ].join("\n");
+}
+
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`OD fixture fit produces a stable GP estimate on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
@@ -148,9 +292,13 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
+    // DATA_SOURCE now flows from the caller/manifest instead of being hardcoded
+    // to "SpaceX-E" in the fitter (that hardcode was the bug de-Starlinked in
+    // A2.2a); the caller supplies the source token via the options frame.
     const result = await invokeFitJson(
       harness,
       fs.readFileSync(fileURLToPath(FIXTURE_MEME_PATH)),
+      { dataSource: "SpaceX-E" },
     );
 
     assert.equal(result.DATA_SOURCE, "SpaceX-E");
@@ -160,6 +308,38 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(Math.abs(result.ECCENTRICITY - 0.0001602) < 1e-7);
     assert.ok(Math.abs(result.INCLINATION - 53.2223) < 1e-4);
     assert.ok(Number.parseFloat(result.RMS) <= 0.001);
+  });
+
+  test(`OD fit labels MEME output from caller/manifest fields on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    // With no data_source supplied the output is unlabeled (no operator default).
+    const bare = await invokeFitJson(
+      harness,
+      fs.readFileSync(fileURLToPath(FIXTURE_MEME_PATH)),
+    );
+    assert.equal(bare.DATA_SOURCE, "");
+
+    // Caller/manifest fields populate DATA_SOURCE / OBJECT_NAME / NORAD_CAT_ID.
+    const labeled = await invokeFitJson(
+      harness,
+      fs.readFileSync(fileURLToPath(FIXTURE_MEME_PATH)),
+      {
+        inputFormat: "meme",
+        dataSource: "SpaceX-E",
+        objectName: "STARLINK-36348",
+        noradCatId: 67851,
+      },
+    );
+    assert.equal(labeled.DATA_SOURCE, "SpaceX-E");
+    assert.equal(labeled.OBJECT_NAME, "STARLINK-36348");
+    assert.equal(labeled.NORAD_CAT_ID, 67851);
   });
 
   test(`OD fit honors maxIterations option on ${runtimeKind}`, async (t) => {
@@ -201,19 +381,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.match(response.errorMessage, /did not contain any ephemeris points/i);
   });
 
-  test(`OD SupGP reference suite beats CelesTrak RMS for every case on ${runtimeKind}`, async (t) => {
-    const referenceFiles = listReferenceSuiteFiles();
-    assert.ok(
-      referenceFiles.length > 0,
-      "Expected checked-in SpaceX Starlink reference ephemerides under tests/data/supgp-reference/meme.",
-    );
+  // ── CCSDS OEM input path (ISS NASA public OEM fixture) ───────────────────
 
-    const celestrak = parseCelestrakCsv(REFERENCE_CELESTRAK_CSV);
-    assert.ok(
-      celestrak.size > 0,
-      "Expected checked-in matching CelesTrak SupGP CSV records for the reference suite.",
-    );
-
+  test(`OD OEM ISS fixture parses META + fits plausible ISS elements on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
       return;
@@ -222,33 +392,114 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    const results = [];
-    for (const filePath of referenceFiles) {
-      const noradId = noradIdFromMemePath(filePath);
-      const reference = celestrak.get(noradId);
-      assert.ok(
-        reference,
-        `Missing CelesTrak SupGP reference RMS for NORAD ${noradId}.`,
-      );
+    const content = fs.readFileSync(ISS_OEM_FIXTURE);
+    // Explicit format and auto-detection must agree.
+    const explicit = await invokeFitJson(harness, content, {
+      inputFormat: "oem",
+      dataSource: "ISS-E",
+    });
+    const auto = await invokeFitJson(harness, content, { dataSource: "ISS-E" });
 
-      const fit = await invokeFitJson(harness, fs.readFileSync(filePath));
-      const rms = Number.parseFloat(fit.RMS);
+    for (const fit of [explicit, auto]) {
+      assert.equal(fit.CONVERGED, true, "ISS OEM fit must converge.");
+      // Identity flows from the OEM META block.
+      assert.equal(fit.OBJECT_NAME, "ISS");
+      assert.equal(fit.OBJECT_ID.trim(), "1998-067-A");
+      assert.equal(fit.DATA_SOURCE, "ISS-E");
+      // Plausible ISS elements (ranges, not exact values). Mean motion ~15.5
+      // rev/day, inclination ~51.6 deg in TEME.
       assert.ok(
-        Number.isFinite(rms),
-        `Fit RMS must be finite for ${path.basename(filePath)}.`,
+        fit.MEAN_MOTION > 15.3 && fit.MEAN_MOTION < 15.7,
+        `MEAN_MOTION=${fit.MEAN_MOTION} not ISS-like.`,
       );
-      results.push({
-        filePath,
-        noradId,
-        rms,
-        referenceRms: reference.rms,
-      });
-    }
-
-    for (const result of results) {
-      assertBeatsCelestrak(result);
+      assert.ok(
+        fit.INCLINATION > 51.0 && fit.INCLINATION < 52.2,
+        `INCLINATION=${fit.INCLINATION} not ISS-like.`,
+      );
+      assert.ok(fit.ECCENTRICITY < 0.01, `ECCENTRICITY=${fit.ECCENTRICITY} too high.`);
+      assert.ok(
+        Number.parseFloat(fit.RMS) < 5.0,
+        `RMS=${fit.RMS} too high for an EME2000->TEME converted fit.`,
+      );
     }
   });
+
+  test(`OD OEM handles multiple META/data segments on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const single = fs.readFileSync(ISS_OEM_FIXTURE, "utf8");
+    const twoSegment = splitOemIntoTwoSegments(single);
+    assert.equal((twoSegment.match(/META_START/g) ?? []).length, 2);
+
+    const options = { inputFormat: "oem", dataSource: "ISS-E" };
+    const singleFit = await invokeFitJson(harness, Buffer.from(single, "utf8"), options);
+    const splitFit = await invokeFitJson(harness, Buffer.from(twoSegment, "utf8"), options);
+
+    // Concatenating the two segments must reproduce the single-segment fit
+    // (same samples), and identity still comes from the (first) META block.
+    assert.equal(splitFit.CONVERGED, true);
+    assert.equal(splitFit.OBJECT_ID.trim(), "1998-067-A");
+    assert.ok(
+      Math.abs(splitFit.MEAN_MOTION - singleFit.MEAN_MOTION) < 1e-6,
+      `Split-segment fit diverged: ${splitFit.MEAN_MOTION} vs ${singleFit.MEAN_MOTION}.`,
+    );
+  });
+
+  test(`OD OEM fails closed on unsupported TIME_SYSTEM / REF_FRAME on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const content = fs.readFileSync(ISS_OEM_FIXTURE, "utf8");
+
+    const taiContent = content.replace("TIME_SYSTEM          = UTC", "TIME_SYSTEM          = TAI");
+    const taiResponse = await harness.invoke(
+      createFitRequest(Buffer.from(taiContent, "utf8"), { inputFormat: "oem" }),
+    );
+    assert.equal(taiResponse.statusCode, 1);
+    assert.equal(taiResponse.errorCode, "unsupported-time-system");
+    assert.match(taiResponse.errorMessage, /TIME_SYSTEM/i);
+
+    const itrfContent = content.replace("REF_FRAME            = EME2000", "REF_FRAME            = ITRF2000");
+    const itrfResponse = await harness.invoke(
+      createFitRequest(Buffer.from(itrfContent, "utf8"), { inputFormat: "oem" }),
+    );
+    assert.equal(itrfResponse.statusCode, 1);
+    assert.equal(itrfResponse.errorCode, "unsupported-frame");
+    assert.match(itrfResponse.errorMessage, /REF_FRAME/i);
+  });
+
+  // ── Provider-manifest reference gates (Starlink beats-CelesTrak, ISS range) ─
+
+  for (const { dir, manifest } of listProviders()) {
+    test(`OD provider reference gate [${manifest.name}] on ${runtimeKind}`, async (t) => {
+      const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+      if (!harness) {
+        return;
+      }
+      t.after(async () => {
+        await harness.destroy();
+      });
+
+      if (manifest.gate === "beatsCelestrak") {
+        await runBeatsCelestrakGate(t, harness, dir, manifest);
+      } else if (manifest.gate === "elementRange") {
+        await runElementRangeGate(t, harness, dir, manifest);
+      } else {
+        throw new Error(`Unknown provider gate: ${manifest.gate}`);
+      }
+    });
+  }
 
   test(`OD source-adapter corpus regression stays within fit-quality thresholds on ${runtimeKind}`, async (t) => {
     const regressionFiles = listRegressionFiles();
@@ -275,7 +526,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     const results = [];
 
     for (const filePath of files) {
-      const fit = await invokeFitJson(harness, fs.readFileSync(filePath));
+      const fit = await invokeFitJson(harness, fs.readFileSync(filePath), {
+        dataSource: "SpaceX-E",
+      });
       const noradId = noradIdFromMemePath(filePath);
       const rms = Number.parseFloat(fit.RMS);
       results.push({

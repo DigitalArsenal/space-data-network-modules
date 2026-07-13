@@ -69,7 +69,7 @@ const char* wasm_fit(int handle) {
 
 EMSCRIPTEN_KEEPALIVE
 const char* wasm_parse_and_fit(const char* meme_content, int len) {
-    const auto result = od::fit_meme_payload(std::string_view(meme_content, len));
+    const auto result = od::fit_ephemeris_payload(std::string_view(meme_content, len));
     last_result = result.json;
     return last_result.c_str();
 }

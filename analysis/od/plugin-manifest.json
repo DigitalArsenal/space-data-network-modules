@@ -2,7 +2,7 @@
   "pluginId": "orbit-determination",
   "name": "Orbit Determination Plugin",
   "version": "0.1.0",
-  "description": "Fits near-term SGP4 SupGP/OMM mean elements to OEM-compatible operator ephemeris samples and returns JSON fit results with RMS.",
+  "description": "Fits near-term SGP4 SupGP/OMM mean elements to operator ephemeris samples (SpaceX MEME text or CCSDS OEM KVN, selected via the options inputFormat field) and returns JSON fit results with RMS.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -11,7 +11,7 @@
   "methods": [
     {
       "methodId": "fit",
-      "displayName": "Fit SupGP from OEM ephemeris",
+      "displayName": "Fit SupGP from operator ephemeris (MEME or CCSDS OEM)",
       "inputPorts": [
         {
           "portId": "meme",

@@ -1,0 +1,19 @@
+{
+  "name": "ISS (NASA public OEM)",
+  "source": "ISS-E",
+  "format": "oem",
+  "gate": "elementRange",
+  "inputFiles": ["ISS.OEM_J2K_EPH.trimmed.txt"],
+  "objectName": "ISS",
+  "objectId": "1998-067-A",
+  "expect": {
+    "converged": true,
+    "meanMotion": [15.3, 15.7],
+    "inclination": [51.0, 52.2],
+    "eccentricityMax": 0.01,
+    "rmsMaxKm": 5.0
+  },
+  "tolerances": {
+    "note": "No public raw-vs-CelesTrak comparison wired for ISS yet; this is a fail-closed element-range gate proving OEM (EME2000->TEME) ingest end-to-end. A2.4 adds the CelesTrak element-space parity check."
+  }
+}

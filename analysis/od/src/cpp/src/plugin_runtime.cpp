@@ -1,7 +1,9 @@
 #include "od/plugin_runtime.h"
 
 #include "od/meme_parser.h"
+#include "od/oem_parser.h"
 #include "od/sgp4_fitter.h"
+#include "od/state_series.h"
 
 #include <algorithm>
 #include <cctype>
@@ -77,6 +79,57 @@ int parse_positive_int_option(std::string_view json, std::string_view key) {
     return saw_digit ? value : 0;
 }
 
+// Extract a JSON string value for `key` from a flat options object. Mirrors the
+// colon-anchored needle convention used by parse_positive_int_option. Returns
+// empty when the key is absent or is not a string.
+std::string parse_string_option(std::string_view json, std::string_view key) {
+    if (json.empty()) {
+        return std::string();
+    }
+    const std::string quoted_key = std::string("\"") + std::string(key) + "\"";
+    const auto key_pos = json.find(quoted_key);
+    if (key_pos == std::string_view::npos) {
+        return std::string();
+    }
+    const auto colon_pos = json.find(':', key_pos + quoted_key.size());
+    if (colon_pos == std::string_view::npos) {
+        return std::string();
+    }
+    size_t cursor = colon_pos + 1;
+    while (cursor < json.size() &&
+           std::isspace(static_cast<unsigned char>(json[cursor]))) {
+        cursor += 1;
+    }
+    if (cursor >= json.size() || json[cursor] != '"') {
+        return std::string();  // not a string value
+    }
+    cursor += 1;
+    std::string value;
+    while (cursor < json.size()) {
+        const char ch = json[cursor];
+        if (ch == '\\' && cursor + 1 < json.size()) {
+            const char next = json[cursor + 1];
+            switch (next) {
+                case '"': value.push_back('"'); break;
+                case '\\': value.push_back('\\'); break;
+                case '/': value.push_back('/'); break;
+                case 'n': value.push_back('\n'); break;
+                case 't': value.push_back('\t'); break;
+                case 'r': value.push_back('\r'); break;
+                default: value.push_back(next); break;
+            }
+            cursor += 2;
+            continue;
+        }
+        if (ch == '"') {
+            break;
+        }
+        value.push_back(ch);
+        cursor += 1;
+    }
+    return value;
+}
+
 FitterConfig parse_fit_options(std::string_view options_json) {
     FitterConfig config;
     const int camel_case_limit =
@@ -91,23 +144,92 @@ FitterConfig parse_fit_options(std::string_view options_json) {
     return config;
 }
 
-PluginFitResult fit_meme_payload(
-    std::string_view meme_content,
+namespace {
+
+std::string lower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+
+// Build a common StateSeries from a MEME payload (already-TEME state vectors).
+bool build_meme_series(std::string_view content, StateSeries* out,
+                       std::string* error_code, std::string* error_message) {
+    MEMEFile meme = parse_meme(std::string(content));
+    if (meme.points.empty()) {
+        *error_code = "parse-failed";
+        *error_message = "MEME payload did not contain any ephemeris points.";
+        return false;
+    }
+    out->samples = meme.points;
+    out->meta.norad_cat_id = meme.header.norad_cat_id;
+    out->meta.object_name = meme.header.object_name;
+    out->meta.ref_frame = "TEME";
+    out->meta.source_frame =
+        meme.header.reference_frame.empty() ? "TEME" : meme.header.reference_frame;
+    out->meta.time_system = "UTC";
+    out->meta.segment_count = 1;
+    return true;
+}
+
+}  // namespace
+
+PluginFitResult fit_ephemeris_payload(
+    std::string_view ephemeris_content,
     std::string_view options_json) {
     PluginFitResult result{};
 
     try {
-        MEMEFile meme = parse_meme(std::string(meme_content));
-        if (meme.points.empty()) {
-            result.error_code = "parse-failed";
-            result.error_message = "MEME payload did not contain any ephemeris points.";
+        // Format selection is data-level (keeps the module ABI unchanged): an
+        // explicit `inputFormat` option wins, otherwise sniff the content.
+        std::string format = lower(parse_string_option(options_json, "inputFormat"));
+        if (format.empty()) {
+            format = looks_like_oem(std::string(ephemeris_content)) ? "oem" : "meme";
+        }
+
+        StateSeries series;
+        if (format == "oem") {
+            OEMParseResult parsed = parse_oem(std::string(ephemeris_content));
+            if (!parsed.ok) {
+                result.error_code = parsed.error_code;
+                result.error_message = parsed.error_message;
+                result.json = std::string("{\"error\":\"") +
+                              json_escape(result.error_message) + "\"}";
+                return result;
+            }
+            series = std::move(parsed.series);
+        } else if (format == "meme") {
+            if (!build_meme_series(ephemeris_content, &series, &result.error_code,
+                                   &result.error_message)) {
+                result.json = std::string("{\"error\":\"") +
+                              json_escape(result.error_message) + "\"}";
+                return result;
+            }
         } else {
-            FitterConfig config = parse_fit_options(options_json);
-            auto fit = fit_sgp4_meme(meme, config);
-            result.ok = true;
-            result.json = elements_to_json(fit.elements);
+            result.error_code = "unsupported-input-format";
+            result.error_message =
+                "Unsupported inputFormat '" + format + "' (expected 'meme' or 'oem').";
+            result.json = std::string("{\"error\":\"") +
+                          json_escape(result.error_message) + "\"}";
             return result;
         }
+
+        // Caller/manifest labeling overrides. data_source is never hardcoded;
+        // OBJECT_NAME/OBJECT_ID may be supplied when the payload omits them.
+        const std::string data_source = parse_string_option(options_json, "dataSource");
+        if (!data_source.empty()) series.meta.data_source = data_source;
+        const std::string object_name = parse_string_option(options_json, "objectName");
+        if (!object_name.empty()) series.meta.object_name = object_name;
+        const std::string object_id = parse_string_option(options_json, "objectId");
+        if (!object_id.empty()) series.meta.object_id = object_id;
+        const int norad = parse_positive_int_option(options_json, "noradCatId");
+        if (norad > 0) series.meta.norad_cat_id = norad;
+
+        FitterConfig config = parse_fit_options(options_json);
+        auto fit = fit_sgp4_series(series, config);
+        result.ok = true;
+        result.json = elements_to_json(fit.elements);
+        return result;
     } catch (const std::exception& ex) {
         result.error_code = "fit-failed";
         result.error_message = ex.what();
