@@ -1,0 +1,11 @@
+{
+  "name": "GPS almanac (NAVCEN SEM/YUMA)",
+  "source": "GPS-A",
+  "format": "omm-almanac",
+  "gate": "skip",
+  "skipReason": "A2.4 GPS: gate BLOCKED AT SOURCE. A GPS almanac is a set of GPS-LNAV mean Keplerian ELEMENTS, not a state-vector ephemeris, so there is nothing to fit for the beatsCelestrak RMS gate (A2.2c-2 forbids fabricating an ephemeris by propagating the almanac). An element-space check vs CelesTrak's GPS-A OMM is also NOT independent parity: it needs (a) a GPS-BROADCAST->SGP4-inertial frame/theory reconciliation and (b) a PRN->NORAD cross-reference the almanac does not carry (OWNER-ASSIST). UNBLOCK LEAD: the doc page now lists GPS-E (GPS Ephemeris), a state-vector product that (with IGS precise ephemeris + PRN->NORAD) could enable a real hard gate. The captured CelesTrak GPS-A SupGP (2026-07-13, 31 objects) is checked in as a reference pair for that future work.",
+  "celestrakCsv": "celestrak_supgp_gps-a_2026-07-13.csv",
+  "tolerances": {
+    "note": "No running gate. See skipReason. Captured GPS-A SupGP: MEAN_MOTION ~2.0056, INCLINATION 54.8-55.1deg, ECCENTRICITY 0.012-0.017, RMS 0.30-0.45 km, EPOCH 2026-07-15 (almanac predicted-ahead epoch)."
+  }
+}

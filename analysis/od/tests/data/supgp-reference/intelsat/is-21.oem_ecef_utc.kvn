@@ -1,0 +1,40 @@
+CCSDS_OEM_VERS = 2.0
+COMMENT ============================================================
+COMMENT DERIVED FIXTURE for the A2.4 Intelsat-11P provider parity gate.
+COMMENT Source: Intelsat public ECF ephemeris for IS-21 @ 302.00E,
+COMMENT   data-source/intelsat-source/test/fixtures/
+COMMENT   i_aor_e_302.00_is-21_20260710_235300.sample.txt (ECEF, UTC, metres).
+COMMENT Values verbatim; metres->km only. 12-point / 5.5 h sample arc (adapter's
+COMMENT   checked-in sample) — CONVERGED false is a short-arc artifact; GEO is
+COMMENT   ill-conditioned (near-zero incl/ecc) so only MEAN_MOTION is compared.
+COMMENT OBJECT_ID left EMPTY: the ECF source carries NO NORAD/COSPAR. External
+COMMENT   registry (owner-assist) maps IS-21 -> NORAD 38749 / COSPAR 2012-045A;
+COMMENT   that key lives in provider.json (celestrakParity), not fabricated here.
+COMMENT   [Correction: the A2.2c DRAFT's 38098/2012-043A was WRONG — CelesTrak's
+COMMENT   own SupGP shows 38098=IS-22, 2012-043A=IS-20, IS-21=38749/2012-045A.]
+COMMENT NON-INDEPENDENT: CelesTrak's Intelsat-11P SupGP derives from the same
+COMMENT   public Intelsat feed, so this is not independent parity.
+COMMENT ============================================================
+CREATION_DATE = 2026-07-10T23:53:00.000
+ORIGINATOR = Intelsat
+META_START
+OBJECT_NAME = IS-21
+OBJECT_ID = 
+CENTER_NAME = EARTH
+REF_FRAME = ECEF
+TIME_SYSTEM = UTC
+START_TIME = 2026-07-10T23:53:00.000
+STOP_TIME = 2026-07-11T05:23:00.000
+META_STOP
+2026-07-10T23:53:00.000 22351.147800 -35753.346900 -8.311659
+2026-07-11T00:23:00.000 22351.462600 -35754.105200 -10.193191
+2026-07-11T00:53:00.000 22351.607900 -35754.977400 -11.916167
+2026-07-11T01:23:00.000 22351.571100 -35755.957200 -13.451472
+2026-07-11T01:53:00.000 22351.347500 -35757.034100 -14.773350
+2026-07-11T02:23:00.000 22350.930800 -35758.194700 -15.858109
+2026-07-11T02:53:00.000 22350.318600 -35759.422300 -16.687966
+2026-07-11T03:23:00.000 22349.511500 -35760.697300 -17.247895
+2026-07-11T03:53:00.000 22348.514200 -35761.996600 -17.527605
+2026-07-11T04:23:00.000 22347.335500 -35763.293800 -17.521361
+2026-07-11T04:53:00.000 22345.989200 -35764.562600 -17.228846
+2026-07-11T05:23:00.000 22344.494300 -35765.773300 -16.651362

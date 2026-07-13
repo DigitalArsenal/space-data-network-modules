@@ -1,0 +1,18 @@
+{
+  "name": "GLONASS (IAC precise SP3)",
+  "source": "GLONASS-RE",
+  "format": "oem",
+  "gate": "elementRange",
+  "inputFiles": ["R03.oem_igs20_gps.kvn"],
+  "objectName": "R03",
+  "expect": {
+    "meanMotion": [2.0, 2.3],
+    "inclination": [63.0, 67.0],
+    "eccentricityMax": 0.02,
+    "rmsMaxKm": 5.0
+  },
+  "celestrakCsv": "celestrak_supgp_glonass-re_2026-07-13.csv",
+  "tolerances": {
+    "note": "A2.4 GLONASS: HARD fail-closed elementRange gate proving the full A2.4-prereq chain (IGS20/ECEF -> TEME via GMST, GPS -> UTC leap step, position-only SGP4 fit) recovers GLONASS-credible elements from the real IAC SP3 R03 arc. Fit: MEAN_MOTION 2.1287, INCLINATION 65.28deg, ECCENTRICITY 0.0013 (CONVERGED flag false = 3-epoch/30-min short-arc fixture artifact, so 'converged' is NOT gated). beatsCelestrak RMS gate is BLOCKED, two reasons: (1) no authoritative GLONASS slot(Rnn)->NORAD registry (OWNER-ASSIST) to key R03 against a per-object CelesTrak RMS; (2) 3-epoch arc RMS (2.06 km) is not parity-strength (a full 96-epoch/24h IAC arc is). The captured GLONASS-RE SupGP (2026-07-13, 25 objects) is checked in as a DISTRIBUTIONAL reference: real GLONASS-RE MEAN_MOTION 2.13100-2.13106, INCLINATION 63.62-65.59deg, eccMax 0.0025 — our short-arc MEAN_MOTION 2.1287 sits ~0.1% below the full-arc SupGP value (documented short-arc bias), INCLINATION 65.28 is inside range. No per-object celestrakParity wired (slot->NORAD unmapped)."
+  }
+}

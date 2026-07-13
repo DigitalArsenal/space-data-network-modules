@@ -6,6 +6,7 @@
   "inputFiles": ["ISS.OEM_J2K_EPH.trimmed.txt"],
   "objectName": "ISS",
   "objectId": "1998-067-A",
+  "noradCatId": 25544,
   "expect": {
     "converged": true,
     "meanMotion": [15.3, 15.7],
@@ -13,7 +14,19 @@
     "eccentricityMax": 0.01,
     "rmsMaxKm": 5.0
   },
+  "celestrakCsv": "celestrak_supgp_iss-e_2026-07-13.csv",
+  "celestrakParity": {
+    "noradCatId": 25544,
+    "label": "independent raw-vs-fit element-space parity (same NASA ISS OEM, same epoch)",
+    "tolerances": {
+      "meanMotion": 0.0002,
+      "eccentricity": 0.00005,
+      "inclinationDeg": 0.01,
+      "raanDeg": 0.02,
+      "argLatDeg": 0.05
+    }
+  },
   "tolerances": {
-    "note": "No public raw-vs-CelesTrak comparison wired for ISS yet; this is a fail-closed element-range gate proving OEM (EME2000->TEME) ingest end-to-end. A2.4 adds the CelesTrak element-space parity check."
+    "note": "A2.4: element-space parity vs the SAME-EPOCH CelesTrak ISS-E SupGP OMM (captured 2026-07-13, NORAD 25544, [Segment 01] EPOCH 2026-07-13T12:00:00 == our fit epoch, Δepoch 0s). This is INDEPENDENT raw-vs-fit parity: both we and CelesTrak fit the same NASA public ISS OEM. Observed deltas (our fit vs CelesTrak Segment 01): meanMotion 2.6e-5, eccentricity 4e-7, inclination 0.0008deg, RAAN 0.0005deg, arg-lat(argp+MA) 0.0005deg — tolerances set ~8-100x above observed. RMS: ours 0.080 km vs CelesTrak 0.067 km — we do NOT beat CelesTrak's per-6h-segment RMS (our EME2000->TEME uses truncated 10-term nutation, ~13 m position error, A2.2a residual), so the hard beatsCelestrak RMS gate is NOT claimed for ISS; the element-space parity above is the honest gate. argp/MA compared as arg-lat (near-circular)."
   }
 }
