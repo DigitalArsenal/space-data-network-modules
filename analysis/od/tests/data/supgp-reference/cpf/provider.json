@@ -1,0 +1,29 @@
+{
+  "name": "CPF (ILRS predictions, LAGEOS-1)",
+  "source": "CPF",
+  "format": "oem",
+  "gate": "elementRange",
+  "inputFiles": ["lageos1.oem_itrf_utc.kvn"],
+  "objectName": "LAGEOS1",
+  "expect": {
+    "meanMotion": [6.2, 6.6],
+    "inclination": [109.0, 110.5],
+    "eccentricityMax": 0.01,
+    "rmsMaxKm": 5.0
+  },
+  "celestrakCsv": "celestrak_supgp_cpf_2026-07-13.csv",
+  "celestrakParity": {
+    "noradCatId": 8820,
+    "label": "PREDICTION-vs-PREDICTION (both from ILRS CPF predictions) — NOT independent raw-vs-fit parity",
+    "tolerances": {
+      "meanMotion": 0.0002,
+      "eccentricity": 0.00005,
+      "inclinationDeg": 0.01,
+      "raanDeg": 0.02,
+      "argLatDeg": 0.05
+    }
+  },
+  "tolerances": {
+    "note": "A2.4 CPF: elementRange plausibility (LAGEOS-1 credible elements via ITRF/ECEF->TEME + position-only fit) PLUS element-space check vs the SAME-EPOCH CelesTrak CPF SupGP OMM (captured 2026-07-13, NORAD 8820 LAGEOS1 [DGF], EPOCH 2026-07-13T00:00:00 == our fit epoch, Δepoch 0s). LABELED PREDICTION-vs-PREDICTION: our OEM derives from an ILRS CPF prediction and CelesTrak's CPF SupGP also derives from ILRS CPF predictions — this is NOT independent raw-vs-fit parity. Observed deltas (our fit vs CelesTrak LAGEOS1 [DGF]): meanMotion 3.3e-5, eccentricity 1e-7, inclination 0.0005deg, RAAN 0.0003deg, arg-lat(argp+MA) 0.0001deg. CONVERGED flag false = 12-point/11-min short sample-arc artifact (the adapter's checked-in sample); RMS near 0 (short arc), not parity-strength. A longer CPF arc (A2.6 operator pull) upgrades this."
+  }
+}

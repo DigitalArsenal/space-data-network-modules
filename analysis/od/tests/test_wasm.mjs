@@ -135,6 +135,129 @@ function noradIdFromMemePath(filePath) {
   return Number.isFinite(id) ? id : Number.NaN;
 }
 
+// ── CelesTrak SupGP element-space parity (A2.4) ──────────────────────────────
+// A richer CSV reader than parseCelestrakCsv: keeps every OMM element column,
+// keyed by NORAD_CAT_ID -> [row, ...] (a source may carry many rows for one
+// object: ISS 6 h segments, CPF prediction-centre variants, weekly Intelsat
+// snapshots). Column lookup is by HEADER NAME (order-independent). Blank/`#`
+// lines are skipped so a provenance banner could be prepended without breaking
+// the parse; the checked-in captures are byte-exact CelesTrak CSV (no banner).
+function parseCelestrakSupGpRows(csvPath) {
+  if (!csvPath || !fs.existsSync(csvPath)) {
+    return new Map();
+  }
+  const lines = fs.readFileSync(csvPath, "utf8")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !line.startsWith("#"));
+  if (lines.length < 2) {
+    return new Map();
+  }
+  const header = lines[0].split(",");
+  const col = (name) => header.indexOf(name);
+  const cNorad = col("NORAD_CAT_ID");
+  const byNorad = new Map();
+  for (const line of lines.slice(1)) {
+    const f = line.split(",");
+    const norad = Number.parseInt(f[cNorad], 10);
+    if (!Number.isFinite(norad)) {
+      continue;
+    }
+    const num = (name) => Number.parseFloat(f[col(name)]);
+    const row = {
+      objectName: f[col("OBJECT_NAME")],
+      epoch: f[col("EPOCH")],
+      meanMotion: num("MEAN_MOTION"),
+      eccentricity: num("ECCENTRICITY"),
+      inclination: num("INCLINATION"),
+      raan: num("RA_OF_ASC_NODE"),
+      argp: num("ARG_OF_PERICENTER"),
+      meanAnomaly: num("MEAN_ANOMALY"),
+      rms: num("RMS"),
+    };
+    if (!byNorad.has(norad)) {
+      byNorad.set(norad, []);
+    }
+    byNorad.get(norad).push(row);
+  }
+  return byNorad;
+}
+
+function epochMs(iso) {
+  // Accept "2026-07-13T12:00:00.000000" or "...Z"; normalise fractional secs.
+  const normalized = iso.replace(/(\.\d{3})\d*/, "$1").replace(/Z?$/, "Z");
+  return Date.parse(normalized);
+}
+
+function pickClosestEpochRow(rows, fitEpochIso) {
+  const target = epochMs(fitEpochIso);
+  let best = null;
+  for (const row of rows) {
+    const delta = Math.abs(epochMs(row.epoch) - target);
+    if (!best || delta < best.deltaMs) {
+      best = { row, deltaMs: delta };
+    }
+  }
+  return best;
+}
+
+// Smallest absolute angular separation in degrees (handles 0/360 wrap).
+function angDiffDeg(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+// Compare our fitted OMM against the same-epoch CelesTrak SupGP OMM within the
+// documented per-provider element-space tolerances. Fail-closed: a missing
+// reference row or an out-of-tolerance element throws. `parity.label` records
+// the honesty class (independent raw-vs-fit / prediction-vs-prediction /
+// non-independent) — it is reported, never used to weaken the assertion.
+function assertElementSpaceParity(fit, parity, celestrakByNorad, label) {
+  const rows = celestrakByNorad.get(parity.noradCatId);
+  assert.ok(
+    rows && rows.length > 0,
+    `${label}: no CelesTrak SupGP row for NORAD ${parity.noradCatId}.`,
+  );
+  const { row: ref, deltaMs } = pickClosestEpochRow(rows, fit.EPOCH);
+  const deltaSec = deltaMs / 1000;
+  const tol = parity.tolerances ?? {};
+  const checks = [];
+  if (Number.isFinite(tol.meanMotion)) {
+    checks.push([
+      "MEAN_MOTION", Math.abs(fit.MEAN_MOTION - ref.meanMotion), tol.meanMotion,
+    ]);
+  }
+  if (Number.isFinite(tol.eccentricity)) {
+    checks.push([
+      "ECCENTRICITY", Math.abs(fit.ECCENTRICITY - ref.eccentricity), tol.eccentricity,
+    ]);
+  }
+  if (Number.isFinite(tol.inclinationDeg)) {
+    checks.push([
+      "INCLINATION", angDiffDeg(fit.INCLINATION, ref.inclination), tol.inclinationDeg,
+    ]);
+  }
+  if (Number.isFinite(tol.raanDeg)) {
+    checks.push([
+      "RA_OF_ASC_NODE", angDiffDeg(fit.RA_OF_ASC_NODE, ref.raan), tol.raanDeg,
+    ]);
+  }
+  if (Number.isFinite(tol.argLatDeg)) {
+    // Argument of latitude (argp + mean anomaly) is the well-conditioned
+    // combination for near-circular orbits where argp/MA individually rotate.
+    const fitArgLat = (fit.ARG_OF_PERICENTER + fit.MEAN_ANOMALY) % 360;
+    const refArgLat = (ref.argp + ref.meanAnomaly) % 360;
+    checks.push(["ARG_LAT(argp+MA)", angDiffDeg(fitArgLat, refArgLat), tol.argLatDeg]);
+  }
+  for (const [name, delta, limit] of checks) {
+    assert.ok(
+      delta <= limit,
+      `${label}: ${name} parity vs CelesTrak SupGP NORAD ${parity.noradCatId} `
+        + `(${parity.label ?? "element-space"}, Δepoch=${deltaSec.toFixed(0)}s) `
+        + `Δ=${delta} exceeds tolerance ${limit}.`,
+    );
+  }
+}
+
 function summarizeRegression(results, celestrak) {
   const successful = results
     .filter((entry) => entry.ok)
@@ -214,6 +337,17 @@ async function runElementRangeGate(t, harness, dir, manifest) {
   assert.ok(files.length > 0, `Provider ${manifest.name} declares no input files.`);
   const options = fitOptionsForProvider(manifest);
   const expect = manifest.expect ?? {};
+  // Optional same-epoch CelesTrak SupGP element-space parity (A2.4).
+  const celestrakByNorad = manifest.celestrakParity
+    ? parseCelestrakSupGpRows(path.join(dir, manifest.celestrakCsv))
+    : null;
+  if (manifest.celestrakParity) {
+    assert.ok(
+      celestrakByNorad && celestrakByNorad.size > 0,
+      `Provider ${manifest.name} declares celestrakParity but its CelesTrak CSV `
+        + `(${manifest.celestrakCsv}) is missing or empty.`,
+    );
+  }
 
   for (const filePath of files) {
     const fit = await invokeFitJson(harness, fs.readFileSync(filePath), options);
@@ -255,6 +389,9 @@ async function runElementRangeGate(t, harness, dir, manifest) {
     }
     if (manifest.objectId) {
       assert.equal(fit.OBJECT_ID.trim(), manifest.objectId, `${label} OBJECT_ID mismatch.`);
+    }
+    if (manifest.celestrakParity) {
+      assertElementSpaceParity(fit, manifest.celestrakParity, celestrakByNorad, label);
     }
   }
 }
@@ -551,6 +688,16 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
   for (const { dir, manifest } of listProviders()) {
     test(`OD provider reference gate [${manifest.name}] on ${runtimeKind}`, async (t) => {
+      // Fail-closed, visible skip for providers whose gate is blocked at the
+      // source (GPS almanac ≠ state ephemeris; OneWeb LTEF undecodable). The
+      // captured CelesTrak SupGP reference pair is still checked in so the gate
+      // wires the moment the block clears — this is a documented skip-with-
+      // reason, never a silent absence.
+      if (manifest.gate === "skip") {
+        t.skip(manifest.skipReason ?? `Provider ${manifest.name} gate is blocked.`);
+        return;
+      }
+
       const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
       if (!harness) {
         return;
