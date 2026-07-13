@@ -1,0 +1,24 @@
+{
+  "name": "space-data-network-module-oneweb-source",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "index.js",
+    "manifest.js"
+  ],
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "^0.8.4"
+  }
+}

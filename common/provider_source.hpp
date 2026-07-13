@@ -10,10 +10,15 @@
  *   2. how to parse one upstream artifact into a canonical SDS record,
  *   3. the record schema + provenance labels.
  *
- * EXTRACTION NOTE (A2.2c): when the second adapter lands, promote this header
- * to space-data-network-modules/common/provider_source.hpp and have each
- * adapter include it (mirroring how common/sdm_hostcall_wire.hpp is shared).
- * It lives in this module's src/ for now to respect the A2.2b locked scope.
+ * PROMOTED (A2.2c, 2026-07-13): this header now lives at
+ * space-data-network-modules/common/provider_source.hpp (alongside
+ * common/sdm_hostcall_wire.hpp) and is shared by every operator-ephemeris
+ * data-source adapter — spacex-starlink-source (WS5), oneweb-source, and
+ * iss-source (A2.2c). Each adapter's build.mjs already puts common/ on its
+ * -I path (SDN_COMMON_DIR), so adapters include it by bare name:
+ *   #include "provider_source.hpp"
+ * (the same convention as sdm_hostcall_wire.hpp). It was extracted verbatim
+ * from spacex-starlink-source/src/ — no behavior change on promotion.
  *
  * Transport: the http / storage.write / pubsub.publish helpers use the same
  * hand-framed hostcall envelope the module has always used against the Go node

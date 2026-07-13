@@ -1,0 +1,24 @@
+{
+  "_draft": "A2.4 seed — mirrors analysis/od/tests/data/supgp-reference/iss/provider.json (A2.2a). Fill celestrakKvn once the same-epoch SupGP pair is captured; CelesTrak was ECONNREFUSED from the build env (see README.md).",
+  "name": "ISS (NASA public OEM) — CelesTrak parity",
+  "source": "ISS-E",
+  "format": "oem",
+  "gate": "beatsCelestrak",
+  "inputFiles": ["../ISS.OEM_J2K_EPH.sample.txt"],
+  "objectName": "ISS",
+  "objectId": "1998-067-A",
+  "noradCatId": 25544,
+  "celestrakQuery": "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=ISS-E&FORMAT=JSON",
+  "celestrakKvn": "TODO-A2.4-capture-same-epoch-supgp",
+  "tolerances": {
+    "rmsMustBeatCelestrak": true,
+    "elementSpace": {
+      "note": "Epoch-aligned OMM element tolerances vs CelesTrak ISS-E OMM — set by A2.4 once the SupGP pair lands.",
+      "inclinationDeg": null,
+      "raanDeg": null,
+      "argpDeg": null,
+      "meanMotionRevPerDay": null,
+      "eccentricity": null
+    }
+  }
+}
