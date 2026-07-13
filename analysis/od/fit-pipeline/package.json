@@ -1,0 +1,19 @@
+{
+  "name": "space-data-network-module-od-fit-pipeline",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "files": [
+    "dist/",
+    "src/",
+    "manifest.js",
+    "plugin-manifest.json"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}
