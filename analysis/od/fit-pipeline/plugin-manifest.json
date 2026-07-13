@@ -1,0 +1,50 @@
+{
+  "pluginId": "com.orbpro.od-fit-pipeline",
+  "name": "OD Fit Pipeline",
+  "version": "0.1.0",
+  "description": "Executable pipeline (App 2, A2.3): on a timer, reads stored operator-ephemeris OEM records (storage_query), fits SGP4 SupGP/OMM mean elements per object with the existing OD fit (od::fit_sgp4_series), and stores + signs + publishes schema-exact fitted OMM records with source provenance. Provider set and per-provider fit config are data-driven (request payload > plugin.getConfig > compiled fallback). Records that cannot be fitted (unsupported frame/time/center, undecodable shells, too few samples, non-converged) are skipped with an honest reason.",
+  "pluginFamily": "analysis",
+  "capabilities": [
+    "storage_query",
+    "storage_write",
+    "wallet_sign",
+    "crypto_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "od-fit-pull",
+      "methodId": "fit_pipeline",
+      "defaultIntervalMs": 7200000,
+      "description": "Periodic OD fit pass over stored OEM records (default every 2h, matching CelesTrak's 2h SupGP regeneration cadence — no value in re-fitting more often than the source ephemerides refresh)."
+    }
+  ],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "fit_pipeline",
+      "displayName": "Fit SupGP/OMM from stored operator ephemeris",
+      "description": "Reads stored OEM records (storage_query), fits SGP4 mean elements per object with od::fit_sgp4_series, and stores + signs + publishes schema-exact fitted OMM records. Optional JSON config payload overrides the provider set + per-provider fit config.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published fitted-OMM PNMs",
+          "description": "Signed PNM pointer for each fitted OMM published, plus a per-provider fit/skip summary.",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "od-fit-pipeline.pnm",
+              "description": "Signed PNM pointer for each published fitted-OMM record.",
+              "allowedTypes": [
+                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
