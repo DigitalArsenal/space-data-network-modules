@@ -19,6 +19,11 @@
  *
  * GP data for each pair:
  *   https://celestrak.org/SOCRATES/data.php?CATNR={id1},{id2}
+ *
+ * FETCH POLICY (CELESTRAK_FETCH_POLICY.md): serial, >= 2.5s between network
+ * requests; NEVER request the same data more than once in a 3-hour period
+ * (persistent ledger — --force-refresh does NOT bypass it); abort after 30
+ * consecutive failures. Cache hits make no network request.
  */
 
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
@@ -27,7 +32,9 @@ import { fileURLToPath } from 'url';
 import {
   defaultCelestrakCacheDir,
   fetchCachedText,
+  readCachedText,
 } from './lib/celestrakFetchCache.mjs';
+import { FetchPolicy, sleep, MIN_INTERVAL_MS } from './lib/celestrakFetchPolicy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'tests', 'data');
@@ -46,6 +53,32 @@ const SORT = getArg('--sort', 'maxProb');
 const FETCH_GP = getArg('--fetch-gp', null);
 const CACHE_DIR = getArg('--cache-dir', defaultCelestrakCacheDir());
 const FORCE_REFRESH = args.includes('--force-refresh');
+
+const policy = new FetchPolicy(join(DATA_DIR, '.celestrak-fetch-ledger'));
+
+/**
+ * Policy-gated fetch: cache hits are free; network attempts honor the
+ * 3-hour ledger + serial pacing. Returns null when the ledger blocks.
+ */
+async function policyFetchCachedText(url, opts) {
+  if (!FORCE_REFRESH) {
+    try {
+      return { text: await readCachedText(url, opts), cacheHit: true };
+    } catch { /* cache miss — fall through to network */ }
+  }
+  if (!policy.allowed(url)) return null;
+  try {
+    const result = await fetchCachedText(url, { ...opts, forceRefresh: FORCE_REFRESH });
+    policy.record(url);
+    policy.noteSuccess();
+    await sleep(MIN_INTERVAL_MS);
+    return { ...result, cacheHit: false };
+  } catch (e) {
+    policy.noteFailure(url); // throws + aborts at the halt threshold
+    await sleep(MIN_INTERVAL_MS);
+    throw e;
+  }
+}
 
 function parseCSV(text) {
   const lines = text.trim().split('\n');
@@ -74,15 +107,18 @@ async function fetchCSV() {
   const url = `${BASE_URL}/${csvFile}`;
 
   console.log(`Fetching ${url} with cache ${CACHE_DIR}...`);
-  const { text, cacheHit } = await fetchCachedText(url, {
+  const result = await policyFetchCachedText(url, {
     cacheDir: CACHE_DIR,
     extension: 'csv',
-    forceRefresh: FORCE_REFRESH,
     headers: {
       'user-agent': 'OrbPro-SOCRATES-Validation/1.0',
       accept: 'text/csv, text/plain;q=0.9, */*;q=0.1',
     },
   });
+  if (!result) {
+    throw new Error(`3-hour rule: ${url} was fetched within the last 3h — re-run later or use the existing CSV via --fetch-gp.`);
+  }
+  const { text, cacheHit } = result;
 
   mkdirSync(DATA_DIR, { recursive: true });
   const outPath = join(DATA_DIR, `socrates_${SORT}.csv`);
@@ -117,20 +153,22 @@ async function fetchGPData(conjunctions) {
 
       const gpUrl = `${BASE_URL}/data.php?CATNR=${id1},${id2}${fmt.param}`;
       try {
-        const { text: gpText } = await fetchCachedText(gpUrl, {
+        const result = await policyFetchCachedText(gpUrl, {
           cacheDir: CACHE_DIR,
           extension: fmt.ext,
-          forceRefresh: FORCE_REFRESH,
           headers: {
             'user-agent': 'OrbPro-SOCRATES-Validation/1.0',
             accept: fmt.ext === 'json' ? 'application/json, */*;q=0.1' : '*/*',
           },
         });
-        writeFileSync(gpPath, gpText);
+        if (!result) {
+          console.log(`  [${i + 1}] ${id1},${id2}.${fmt.ext} — skipped (3-hour rule)`);
+          continue;
+        }
+        writeFileSync(gpPath, result.text);
       } catch (e) {
         console.error(`  [${i + 1}] ${id1},${id2}.${fmt.ext} — ✗ ${e.message}`);
       }
-      await new Promise(r => setTimeout(r, 300));
     }
 
     console.log(`  [${i + 1}/${conjunctions.length}] ${id1},${id2} — ✓ (txt+json+csv)`);
