@@ -1,0 +1,50 @@
+{
+  "pluginId": "com.orbpro.cpf-source",
+  "name": "CPF (ILRS predictions) Data Source",
+  "version": "1.0.0",
+  "description": "Executable data-source: pulls ILRS CPF v2 prediction files over HTTP on a timer, re-emits them as schema-exact SDS OEM records with the CPF frame preserved as declared, and signs + publishes a PNM pointer.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "storage_write",
+    "wallet_sign",
+    "crypto_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "cpf-pull",
+      "methodId": "pull",
+      "defaultIntervalMs": 43200000,
+      "description": "Periodic CPF prediction pull (default every 12h; ILRS analysis centers regenerate CPF predictions daily — a 12h poll catches the daily regeneration promptly, one small file per target)."
+    }
+  ],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "pull",
+      "displayName": "Pull CPF Prediction",
+      "description": "Fetches an ILRS CPF v2 prediction file over HTTP, re-emits it as a schema-exact SDS OEM record (frame preserved as declared), signs a PNM, and publishes it.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published PNMs",
+          "description": "Signed PNM pointer published for each pulled + stored CPF prediction.",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "data-source.cpf.pnm",
+              "description": "Signed PNM pointer for each published pull.",
+              "allowedTypes": [
+                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
