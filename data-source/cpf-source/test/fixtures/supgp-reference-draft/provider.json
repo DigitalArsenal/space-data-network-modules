@@ -1,0 +1,26 @@
+{
+  "_draft": "A2.4 seed — mirrors the A2.2a manifest shape. Fill celestrakKvn once the same-epoch CPF SupGP pair is captured; CelesTrak was UNREACHABLE (connection timeout) from the build env (see README.md). CAVEAT (A2.1): this parity compares TWO PREDICTION products (our CPF-derived OEM vs CelesTrak's CPF SupGP), NOT raw-vs-fit.",
+  "name": "CPF (ILRS predictions) — CelesTrak parity",
+  "source": "CPF",
+  "format": "oem",
+  "gate": "beatsCelestrak",
+  "inputFiles": ["../lageos1_cpf_260713_19402.sample.dgf"],
+  "objectName": "lageos1",
+  "objectId": "1976-039A",
+  "noradCatId": 8820,
+  "referenceFrame": "ITRF",
+  "frameNote": "CPF frame code 0 = geocentric Earth-fixed (ITRF/ECEF). OD owns the ITRF->TEME transform (A2.2a currently fail-closes on ITRF — the Earth-rotation transform is an A2.4/OD residual). Positions position-only, metres->km.",
+  "celestrakQuery": "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=CPF&FORMAT=JSON",
+  "celestrakKvn": "TODO-A2.4-capture-same-epoch-supgp",
+  "tolerances": {
+    "rmsMustBeatCelestrak": true,
+    "_note": "PREDICTION-vs-PREDICTION comparison (both are predictions, not raw-vs-fit). Any element-space check vs CelesTrak's CPF OMM must be labeled prediction-vs-prediction, not independent raw-vs-fit parity.",
+    "elementSpace": {
+      "inclinationDeg": null,
+      "raanDeg": null,
+      "argpDeg": null,
+      "meanMotionRevPerDay": null,
+      "eccentricity": null
+    }
+  }
+}
