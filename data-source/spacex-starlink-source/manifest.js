@@ -26,8 +26,13 @@ export const STARLINK_SOURCE_PLUGIN_DESCRIPTION =
   "Executable data-source: pulls SpaceX/Starlink ephemeris over HTTP on a timer, " +
   "parses + validates, stores records, and signs + publishes a PNM pointer.";
 
-// Default pull cadence: hourly.
-export const STARLINK_SOURCE_PULL_INTERVAL_MS = 3_600_000;
+// Default pull cadence: every 6h (4×/day). SpaceX regenerates the public MEME
+// ephemerides a few times daily (the manifest's per-file `created:` stamps
+// track that cadence), so 6h captures fresh ephemerides promptly without
+// hammering api.starlink.com. Per-pull load is separately bounded by the
+// adapter's object cap (default 25). The old hourly timer over-polled a feed
+// that does not change that often.
+export const STARLINK_SOURCE_PULL_INTERVAL_MS = 21_600_000;
 
 // Dependency identities (declared on the PLG publish record, not the embedded
 // manifest — see WS4.1 / WS5.4).
