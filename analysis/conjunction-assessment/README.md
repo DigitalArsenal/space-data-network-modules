@@ -206,6 +206,33 @@ npm run test:aerospace
 `CONJUNCTION_AEROSPACE_IVV_EXTRACTED_ROOT` are both supported, but the
 package-local `tests/data/aerospace-ivv/` location is the default.
 
+## CA parity gates (A2.8b)
+
+Two `node --test` suites screen reference conjunction windows through the
+module's `screen_catalog` and **FAIL on any tolerance violation**. Both are
+pure-node (raw `dist/isomorphic-singlethread/module.wasm`, no WasmEdge) and run
+offline in CI:
+
+```bash
+npm run test:ca-parity
+```
+
+- `tests/socratesScreenCatalogParity.test.mjs` — replays the checked-in
+  CelesTrak SOCRATES window (`tests/fixtures/socrates/`, real GP elements) and
+  gates event-set recall/precision + rel-vel-stratified TCA + miss distance; Pc
+  is same-family advisory (recorded, not gated).
+- `tests/aerospaceScreenCatalogParity.test.mjs` — screens an Aerospace-IVV-shaped
+  OCM track catalog. SYNTHETIC by default (checked-in
+  `tests/fixtures/aerospace-synthetic/`, an analytic closed-form answer key —
+  **not** real CSieve data), auto-switching to REAL mode when the genuine
+  ~21.74 GB dataset is present (`docs/aerospace-ivv-acquisition.md`, OWNER-ASSIST).
+
+All per-metric tolerances live in one place —
+`tests/lib/caParityTolerances.mjs` — with each gate labeled
+independent-parity / regression-guard / same-family-advisory. Ground truth:
+`docs/a2.8a-ca-parity-ground-truth.md`. Regenerate the synthetic fixture with
+`node scripts/generate-aerospace-synthetic-fixture.mjs`.
+
 ## hosted-runtime example
 
 A minimal single-plugin flow example lives at:
