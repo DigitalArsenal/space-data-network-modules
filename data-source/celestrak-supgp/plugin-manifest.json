@@ -1,0 +1,50 @@
+{
+  "pluginId": "com.orbpro.celestrak-supgp",
+  "name": "CelesTrak SupGP (multi-provider supplemental OMM) Data Source",
+  "version": "1.0.0",
+  "description": "Executable data-source: on a timer, ingests CelesTrak's PUBLISHED Supplemental GP (SupGP) OMM sets for providers whose raw operator ephemeris is NOT public (SES, Planet, Iridium, Telesat, Kuiper, AST, CSS). One token-parameterized adapter over a data-driven SOURCE-token registry; each object is re-emitted as a schema-exact SDS OMM record HONESTLY labeled non-independent (data_source=CelesTrak SupGP) with a distinct SourceName per provider, then signed + published as a PNM pointer. These are CelesTrak-fitted OMMs, NOT our OD.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "storage_ingest",
+    "wallet_sign",
+    "crypto_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "celestrak-supgp-pull",
+      "methodId": "pull",
+      "defaultIntervalMs": 7200000,
+      "description": "Periodic multi-provider SupGP pull (default every 2h; SupGP regenerates every 2h — 'no need to check more often'). Each cycle issues at most ONE query per registry SOURCE token; halts the cycle on any non-200 (CelesTrak M2M rule)."
+    }
+  ],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "pull",
+      "displayName": "Pull CelesTrak SupGP (multi-provider)",
+      "description": "Iterates the SupGP SOURCE-token registry (overridable at invoke); for each token fetches sup-gp.php?SOURCE=<token>&FORMAT=JSON (CSV fallback), parses the CCSDS OMM set, and re-emits each object as a schema-exact SDS OMM record with non-independent CelesTrak-SupGP provenance, a signed PNM, and a pubsub publish. One query per token per cycle; halts on non-200.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published PNMs",
+          "description": "Signed PNM pointer published for each ingested SupGP OMM record.",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "data-source.celestrak-supgp.pnm",
+              "description": "Signed PNM pointer for each published SupGP OMM record.",
+              "allowedTypes": [
+                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
