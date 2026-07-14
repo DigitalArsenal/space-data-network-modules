@@ -247,7 +247,8 @@ function buildConstellation() {
   records.push(jsonRecord("cid-fit-67851", "", fittedOmmJson({ el: el67851, epoch: "2026-05-14T02:00:00.000000", provider: "spacex-starlink", dataSource: "SpaceX-E" })));
   records.push(fbRecord("cid-st-67851", "spacetrack-gp", spacetrackOmmFlatbuffer({ el: el67851, epoch: el67851.EPOCH })));
 
-  // (c3) 25544 — interim ISS fit is FRESHER than ST, but interim NEVER outranks -> ST wins.
+  // (c3) 25544 — A2.4d: ISS is now hard-pass (same-ephemeris RMS beat), and its
+  // fit is FRESHER than ST -> ours wins (was: interim ISS loses despite fresher).
   records.push(jsonRecord("cid-fit-25544", "", fittedOmmJson({ el: elIss, epoch: "2026-07-13T20:00:00.000000", provider: "iss", dataSource: "ISS-E" })));
   records.push(fbRecord("cid-st-25544", "spacetrack-gp", spacetrackOmmFlatbuffer({ el: elIss, epoch: elIss.EPOCH, objectName: "ISS (ZARYA)", objectId: "1998-067A" })));
 
@@ -274,7 +275,7 @@ function buildConstellation() {
     expectedWinners: {
       67850: { kind: "ours-fit", ruleIncludes: "ours-hardpass-fresher" },
       67851: { kind: "spacetrack-gp", ruleIncludes: "spacetrack-ours-not-fresher" },
-      25544: { kind: "spacetrack-gp", ruleIncludes: "spacetrack-ours-gate-interim" },
+      25544: { kind: "ours-fit", ruleIncludes: "ours-hardpass-fresher" },
       32393: { kind: "ours-fit", ruleIncludes: "ours-sole-source" },
       5: { kind: "spacetrack-gp", ruleIncludes: "spacetrack-sole-source" },
       11: { kind: "spacetrack-gp", ruleIncludes: "spacetrack-sole-source" },
@@ -498,15 +499,18 @@ test("(c) precedence: hard-pass-fresher wins; interim never wins; staler never w
       `NORAD ${norad} precedence "${entry.omm.USER_DEFINED_SDN_CATALOG_PRECEDENCE}" !~ "${want.ruleIncludes}"`,
     );
   }
-  // The interim ISS fit was FRESHER than ST yet still lost — the load-bearing case.
-  assert.equal(catalog.get(25544).omm.USER_DEFINED_SDN_CATALOG_SOURCE_KIND, "spacetrack-gp");
-  assert.equal(catalog.get(25544).omm.USER_DEFINED_SDN_CATALOG_GATE_STATUS, "n/a");
+  // A2.4d: the ISS fit is now hard-pass AND fresher than ST, so it WINS — the
+  // load-bearing flip (was: interim ISS lost despite being fresher). The
+  // "interim-fresher-still-loses" rule stays covered by the config-override test
+  // below, which demotes starlink to interim and watches its fresher fit lose.
+  assert.equal(catalog.get(25544).omm.USER_DEFINED_SDN_CATALOG_SOURCE_KIND, "ours-fit");
+  assert.equal(catalog.get(25544).omm.USER_DEFINED_SDN_CATALOG_GATE_STATUS, "hard-pass");
   // Starlink hard-pass fresher fit won.
   assert.equal(catalog.get(67850).omm.USER_DEFINED_SDN_CATALOG_SOURCE_KIND, "ours-fit");
   assert.equal(catalog.get(67850).omm.USER_DEFINED_SDN_CATALOG_GATE_STATUS, "hard-pass");
 
-  assert.equal(summary.ours_won, 2, "67850 + 32393");
-  assert.equal(summary.spacetrack_won, 5, "67851 + 25544 + 5 + 11 + 12");
+  assert.equal(summary.ours_won, 3, "67850 + 32393 + 25544 (ISS now hard-pass, fresher)");
+  assert.equal(summary.spacetrack_won, 4, "67851 + 5 + 11 + 12");
 });
 
 test("(d) quarantine: an unmapped fit is quarantined, never keyed as NORAD 0", async () => {
@@ -609,13 +613,18 @@ test("classification: tag-first with USER_DEFINED fallback (both discriminate ou
 });
 
 test("config override: gateStatus can promote/demote a provider at runtime", async () => {
-  // Demote spacex-starlink to interim via a runtime override: the 67850 fit that
-  // won under the compiled hard-pass default now loses to Space-Track GP.
+  // Demote spacex-starlink AND iss to interim via a runtime override: the 67850
+  // and (A2.4d) 25544 fits that won under the compiled hard-pass defaults now
+  // both lose to Space-Track GP. Demoting an interim provider proves the
+  // "interim fit never outranks Space-Track even when fresher" invariant — the
+  // coverage previously carried by the un-flipped ISS case.
   const { records } = buildConstellation();
-  const cfg = { gateStatus: { providers: { "spacex-starlink": "interim" } } };
+  const cfg = { gateStatus: { providers: { "spacex-starlink": "interim", "iss": "interim" } } };
   const { summary, ingests } = await runSynthesis(cfg, records);
   const catalog = catalogByNorad(ingests);
   assert.equal(catalog.get(67850).omm.USER_DEFINED_SDN_CATALOG_SOURCE_KIND, "spacetrack-gp",
     "starlink demoted to interim -> its fit no longer outranks Space-Track");
+  assert.equal(catalog.get(25544).omm.USER_DEFINED_SDN_CATALOG_SOURCE_KIND, "spacetrack-gp",
+    "iss demoted to interim -> its fresher fit no longer outranks Space-Track");
   assert.equal(summary.ours_won, 1, "only the sole-source GLONASS fit remains ours");
 });

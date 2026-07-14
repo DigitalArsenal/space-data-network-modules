@@ -88,8 +88,10 @@ Per-NORAD decision (`decide()` in `src/catalog_synthesis.cpp`):
   `gateStatus` override (request payload > `plugin.getConfig`) can promote/demote a
   provider without a rebuild. Keys are the provider registry tokens (== adapter
   `SourceName` == fitted `USER_DEFINED_SDN_SOURCE_NAME`). Current truth
-  (2026-07-13): `spacex-starlink=hard-pass`, `iss/glonass/cpf/intelsat=interim`,
-  `gps/oneweb=blocked`. **Only `hard-pass` providers' fits outrank Space-Track.**
+  (2026-07-13): `spacex-starlink=hard-pass`, `iss=hard-pass` (A2.4d
+  same-ephemeris beat, ours 0.071 ≤ CelesTrak 0.111 km),
+  `glonass/cpf/intelsat=interim`, `gps/oneweb=blocked`. **Only `hard-pass`
+  providers' fits outrank Space-Track.**
 
 ### Dedup within a source
 
@@ -198,9 +200,11 @@ asserts the packet acceptance items:
 
 - **(a) union completeness** — every NORAD in either input is in the catalog; NORAD 0 never keyed.
 - **(b) determinism** — two runs hash identically.
-- **(c) precedence** — hard-pass fresher fit wins (Starlink 67850); an *interim*
-  fit that is *fresher* still loses (ISS 25544); a *staler* hard-pass fit loses
-  (Starlink 67851); a sole-source fit is kept (GLONASS 32393).
+- **(c) precedence** — hard-pass fresher fit wins (Starlink 67850 and, since
+  A2.4d, ISS 25544); a *staler* hard-pass fit loses (Starlink 67851); a
+  sole-source fit is kept (GLONASS 32393). The *interim*-fresher-still-loses
+  invariant is proven by the runtime-override test (demote to `interim` → the
+  fresher fit loses to Space-Track).
 - **(d) quarantine** — the unmapped fit is quarantined, never a catalog record.
 - **(e) element-space diff** — every overlap winner is within A2.4 tolerances of
   its epoch-aligned CelesTrak reference row (exercises both the JSON passthrough
