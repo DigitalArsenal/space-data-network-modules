@@ -870,15 +870,25 @@ if (isMainThread) {
             signal: AbortSignal.timeout(timeoutMs * (attempt + 1)),
           });
           if (!res.ok) {
-            const text = (await res.text().catch(() => "")).slice(0, 120);
-            if (res.status >= 400 && res.status < 500) {
-              // Whole-batch client error (schema forbidden, quota, auth):
-              // permanent — retrying identical bytes cannot succeed.
+            const text = (await res.text().catch(() => "")).slice(0, 160);
+            // Only statuses that CANNOT recover by retrying identical bytes are
+            // permanent (schema/auth/size). 408/429 and every 5xx are transient.
+            // A 400 "truncated record data"/"failed to read record length" is
+            // TRANSIENT: it means the server's read of a slow concurrent upload
+            // hit its deadline mid-stream — records before the cut are stored,
+            // and a dedup-safe retry re-sends the rest (measured: solo batches
+            // are clean; 4-way concurrency serializes on the store lock until
+            // body reads stall past the server read deadline).
+            const truncatedUpload = res.status === 400 && /truncated record data|failed to read record length/i.test(text);
+            const permanent = !truncatedUpload && [400, 401, 403, 404, 413].includes(res.status);
+            if (permanent) {
               state.rejected += remaining.length;
               pushErr(`batch ${res.status}: ${text}`);
+              console.error(`[publish] PERMANENT batch rejection ${res.status} (${remaining.length} frames): ${text}`);
               return;
             }
             pushErr(`batch ${res.status} (retrying): ${text}`);
+            console.error(`[publish] transient batch ${res.status}, retrying: ${text}`);
             continue;
           }
           const json = await res.json().catch(() => null);
@@ -889,6 +899,7 @@ if (isMainThread) {
             const r = rows[i];
             if (r && r.cid) { state.acked += 1; state.cids.add(r.cid); return; }
             if (r && r.error && /validation failed/i.test(String(r.error))) {
+              if (state.rejected === 0) console.error(`[publish] record validation rejection: ${String(r.error).slice(0, 160)}`);
               state.rejected += 1;
               pushErr(`record: ${String(r.error).slice(0, 120)}`);
               return;
