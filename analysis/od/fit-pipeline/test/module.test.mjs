@@ -336,6 +336,19 @@ function buildFixtureConstellation() {
 function u32le(bytes, off) {
   return (bytes[off] | (bytes[off + 1] << 8) | (bytes[off + 2] << 16) | (bytes[off + 3] << 24)) >>> 0;
 }
+// storage.ingest_with_source ships records as a size-prefixed stream
+// ([u32le len][bytes]...), matching the host's splitSizePrefixedStream reader.
+function splitSizePrefixed(bytes) {
+  const records = [];
+  let off = 0;
+  while (off < bytes.length) {
+    const n = u32le(bytes, off);
+    off += 4;
+    records.push(Buffer.from(bytes.subarray(off, off + n)));
+    off += n;
+  }
+  return records;
+}
 function buildEnvelope(metaObj) {
   const meta = new TextEncoder().encode(JSON.stringify(metaObj));
   const out = new Uint8Array(4 + meta.length + 4);
@@ -378,10 +391,25 @@ async function runPipeline(config, fixtureRecords) {
         captured.queries++;
         assert.equal(req.schema, "OEM", "pipeline queries the OEM schema");
         meta = { ok: true, result: fixtureRecords };
-      } else if (op === "storage.write") {
-        const data = Buffer.from(req.data, "base64");
-        captured.storage.push({ schema: req.schema, data });
-        meta = { ok: true, result: { cid: "cid-omm-" + crypto.createHash("sha256").update(data).digest("hex").slice(0, 16) } };
+      } else if (op === "storage.ingest_with_source") {
+        // A2.2c-3/A2.6: fitted OMMs arrive as a size-prefixed stream + SourceTags.
+        const stream = Buffer.from(req.records, "base64");
+        const recs = splitSizePrefixed(stream);
+        for (const data of recs) {
+          captured.storage.push({
+            schema: req.schema,
+            data,
+            reconcile: req.reconcile,
+            tags: {
+              provider_id: req.provider_id,
+              source_name: req.source_name,
+              source_url: req.source_url,
+              batch_id: req.batch_id,
+              content_key_id: req.content_key_id,
+            },
+          });
+        }
+        meta = { ok: true, result: { schema: req.schema, inserted: recs.length, batch_id: req.batch_id } };
       } else if (op === "keyslot.sign") {
         meta = { ok: true, result: { signature: Buffer.alloc(64, 0x2b).toString("base64"), algorithm: "ed25519" } };
       } else if (op === "pubsub.publish") {
@@ -496,9 +524,13 @@ test("manifest declares the storage_query read lane + timers + fit_pipeline meth
   assert.ok(methodIds.includes("fit_pipeline"), `missing fit_pipeline method (have: ${methodIds.join(", ")})`);
 
   const caps = (manifest.hostCapabilities || []).map((c) => c.capability);
-  for (const cap of ["storage_query", "storage_write", "wallet_sign", "crypto_sign", "pubsub"]) {
+  // A2.2c-3/A2.6: the output write lane is storage_ingest (SourceTags), NOT the
+  // untagged storage_write — a missing STORAGE_INGEST enum would silently decode
+  // as CLOCK, so this asserts the real grant is present and storage_write is gone.
+  for (const cap of ["storage_query", "storage_ingest", "wallet_sign", "crypto_sign", "pubsub"]) {
     assert.ok(caps.includes(cap), `missing host capability: ${cap} (have: ${caps.join(", ")})`);
   }
+  assert.ok(!caps.includes("storage_write"), "storage_write must be gone (migrated to storage_ingest)");
 
   const timers = manifest.timers || [];
   const t = timers.find((x) => x.timerId === "od-fit-pull");
@@ -555,14 +587,33 @@ test("pipeline: storage.query → per-object fit → schema-exact OMM + signed P
   assert.equal(storage.length, totalPublished, "one stored OMM per published fit");
   assert.equal(publishes.length, totalPublished);
 
-  // Every stored record is an OMM with schema-exact GP keys + provenance lineage.
+  // A2.2c-3/A2.6: every fitted OMM is INGESTED with SourceTags. SourceName is the
+  // PRODUCER identity ("od-fit-pipeline"), one deterministic batch_id groups the
+  // whole pass, reconcile "none" protects NORAD=0 GLONASS siblings, and the
+  // UPSTREAM provider stays recorded in the record JSON (USER_DEFINED_SDN_SOURCE_NAME)
+  // — A2.7 synthesis consumes both.
+  const UPSTREAM = { "SpaceX-E": "spacex-starlink", "ISS-E": "iss", "GLONASS-RE": "glonass" };
+  const batchIds = new Set();
   for (const w of storage) {
     assert.equal(w.schema, "OMM");
+    assert.equal(w.reconcile, "none", "reconcile none protects NORAD=0 siblings");
+    assert.equal(w.tags.source_name, "od-fit-pipeline", "SourceName is the fit-pipeline producer identity");
+    assert.equal(w.tags.provider_id, "od-fit-pipeline", "provider_id reuses the producer source_name in-guest");
+    assert.equal(w.tags.content_key_id, "public");
+    assert.match(w.tags.batch_id, /^[0-9a-f]{64}$/, "batch_id = deterministic hash of the input record set");
+    assert.ok(w.tags.source_url.length > 0, "source_url carries the input OEM record CID (lineage)");
+    batchIds.add(w.tags.batch_id);
     const omm = JSON.parse(w.data.toString("utf8"));
     for (const k of ["NORAD_CAT_ID", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "BSTAR", "EPOCH", "DATA_SOURCE"]) {
       assert.ok(k in omm, `stored OMM missing schema key ${k}`);
     }
     assert.ok(["SpaceX-E", "ISS-E", "GLONASS-RE"].includes(omm.DATA_SOURCE), `unexpected DATA_SOURCE ${omm.DATA_SOURCE}`);
+    // The producer tag and the upstream provenance field are DISTINCT: the tag
+    // says "od-fit-pipeline", the record JSON keeps the true upstream provider.
+    assert.equal(omm.USER_DEFINED_SDN_SOURCE_NAME, UPSTREAM[omm.DATA_SOURCE],
+      `USER_DEFINED_SDN_SOURCE_NAME must stay the upstream provider (got ${omm.USER_DEFINED_SDN_SOURCE_NAME})`);
+    assert.notEqual(omm.USER_DEFINED_SDN_SOURCE_NAME, w.tags.source_name,
+      "the in-record upstream provider must differ from the producer SourceTag");
     assert.ok(Array.isArray(omm.COMMENT) && omm.COMMENT.length > 0, "OMM carries COMMENT provenance");
     assert.ok(typeof omm.USER_DEFINED_SDN_SOURCE_CID === "string" && omm.USER_DEFINED_SDN_SOURCE_CID.length > 0, "OMM carries source CID lineage");
     assert.ok(/^[0-9a-f]{64}$/.test(omm.USER_DEFINED_SDN_SOURCE_SHA256), "OMM carries source SHA-256 lineage");
@@ -575,6 +626,8 @@ test("pipeline: storage.query → per-object fit → schema-exact OMM + signed P
       assert.equal(omm.CONVERGED, true, "published Starlink/ISS OMM fits are converged");
     }
   }
+  // One fitting pass => exactly one batch_id across every provider's OMMs.
+  assert.equal(batchIds.size, 1, `all OMMs from one pass share one batch_id (got ${batchIds.size})`);
 
   // Every publish is a schema-exact PNM on the provider's OMM topic + provenance sidecar.
   for (const p of publishes) {
@@ -590,6 +643,25 @@ test("pipeline: storage.query → per-object fit → schema-exact OMM + signed P
     assert.equal(prov.SOURCE_RECORD_SCHEMA, "OEM");
     assert.ok(/^[0-9a-f]{64}$/.test(prov.SOURCE_SHA256), "provenance carries source SHA-256");
   }
+});
+
+test("pipeline: batch_id is a deterministic fingerprint of the input record set", async () => {
+  // Two passes over the SAME input set must derive the IDENTICAL batch_id
+  // (idempotent: re-fitting an unchanged store re-attributes to the same batch).
+  const a = await runPipeline(PIPELINE_CONFIG, buildFixtureConstellation().records);
+  const b = await runPipeline(PIPELINE_CONFIG, buildFixtureConstellation().records);
+  const batchA = a.storage[0].tags.batch_id;
+  const batchB = b.storage[0].tags.batch_id;
+  assert.match(batchA, /^[0-9a-f]{64}$/);
+  assert.equal(batchA, batchB, "same input record set => same batch_id across passes");
+
+  // A DIFFERENT input set (a new record appears in the store) must yield a
+  // DIFFERENT batch_id. The extra record need not fit — batch_id fingerprints the
+  // whole input CID set — so a distinct new CID is enough to change it.
+  const grown = buildFixtureConstellation().records;
+  grown.push(record("cid-extra-new-epoch", "spacex-starlink", onewebShellOem()));
+  const c = await runPipeline(PIPELINE_CONFIG, grown);
+  assert.notEqual(c.storage[0].tags.batch_id, batchA, "a changed input set must change the batch_id");
 });
 
 test("pipeline: ISS OMM is physically plausible (EME2000→TEME fit sanity)", async () => {
