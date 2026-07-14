@@ -5,17 +5,26 @@
 // Runs the CA module's FlatBuffer screen_catalog over an Aerospace-IVV-shaped
 // OCM track catalog and FAILS on any tolerance violation. Two modes:
 //
-//   SYNTHETIC (default, always available in CI): the checked-in
-//     tests/fixtures/aerospace-synthetic/ fixture — straight-line OCM tracks
-//     with an INDEPENDENT analytic closed-form answer key (NOT real CSieve
-//     data). Validates the screening/TCA/miss-distance machinery end-to-end,
-//     offline, no WasmEdge. [independent-parity vs analytic + regression-guard]
+//   SYNTHETIC (default, always available in CI) = the FAST SMOKE TIER since
+//     A2.8c: the checked-in tests/fixtures/aerospace-synthetic/ fixture —
+//     straight-line OCM tracks with an INDEPENDENT analytic closed-form answer
+//     key (NOT real CSieve data). Validates the screening/TCA/miss-distance
+//     machinery end-to-end, offline, no WasmEdge. [independent-parity vs
+//     analytic + regression-guard]
 //
 //   REAL (when the genuine dataset is present locally): the same harness against
 //     AerospaceIVVDataset_20251009a + its CSieve spherical answer key. The real
 //     dataset is CC0 but ~21.74 GB and Google-account/OSC-gated — OWNER-ASSIST,
 //     see docs/aerospace-ivv-acquisition.md for the one-command acquisition.
 //     Trimmed to a representative window (AEROSPACE_PARITY_LIMIT rows).
+//
+//   NOTE (A2.8c, measured): this REAL loader embeds every sampled object's FULL
+//   7-day OCM ephemeris (~19k nodes / ~3 MB each) into ONE all-vs-all request —
+//   it does NOT scale past a few hundred rows. A2.8c ran the real replay via
+//   per-pair windowing (see docs/aerospace-ivv-acquisition.md §A2.8c) and checked
+//   in a small real reference window that runs UNCONDITIONALLY in CI:
+//   tests/aerospaceRealWindowParity.test.mjs. Real CSieve parity is therefore no
+//   longer gated behind the 21.74 GB download.
 //
 // Pc is NOT gated in either mode (User's Guide + AMOS 2025 exclude Pc from CS
 // validation; CSieve uses a different Alfano variant). Tolerances: single source
