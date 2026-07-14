@@ -44,6 +44,7 @@ import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
+import { loadOcmBindings, buildOcmFrame } from "./lib/ocm-record.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -682,6 +683,8 @@ if (isMainThread) {
   const publishConcurrency = Number.parseInt(args["publish-concurrency"] ?? "4", 10);
   const publishTimeoutMs = Number.parseInt(args["publish-timeout-ms"] ?? "30000", 10);
   const publishMaxAttempts = Number.parseInt(args["publish-max-attempts"] ?? "10", 10);
+  // OCM lane is opt-in so existing OMM-only runs are byte-for-byte unchanged.
+  const emitOcm = args["emit-ocm"] === "true" || args["emit-ocm"] === "" || args["emit-ocm"] === true;
 
   const startedAt = new Date().toISOString();
   const registryKey = provider.registryKey ?? providerName;
@@ -723,6 +726,7 @@ if (isMainThread) {
   // --- resolve the generated $OMM FlatBuffer builder (only if publishing) ----
   let OMM = null;
   let flatbuffers = null;
+  let ocmBindings = null;
   if (doPublish || provider.kind === "republish") {
     const anchors = [
       path.join(__dirname, "../../../propagator/sgp4/package.json"),
@@ -742,6 +746,8 @@ if (isMainThread) {
     if (!fbPath || !ommPath) throw new Error("cannot resolve flatbuffers + spacedatastandards.org for --publish");
     flatbuffers = await import(pathToFileURL(fbPath));
     ({ OMM } = await import(pathToFileURL(ommPath)));
+    // OCM bindings share the same require anchors (same node_modules copy).
+    if (doPublish && emitOcm) ocmBindings = await loadOcmBindings(anchors);
   }
 
   const epochUnixSeconds = (iso) => {
@@ -903,7 +909,7 @@ if (isMainThread) {
   // this batch_id must account for every DISTINCT acked cid (distinct-cid set
   // is the dedup-exact expectation — identical frames collapse to one record).
   // Polls with patience: the daemon's aggregates lag under load.
-  const completenessGate = async ({ batchIdWanted, expectedDistinct, polls = 24, intervalMs = 5000 }) => {
+  const completenessGate = async ({ batchIdWanted, expectedDistinct, schemaName = "OMM.fbs", polls = 24, intervalMs = 5000 }) => {
     // Nothing acked -> nothing to verify server-side (unacked/rejected counts
     // fail the run separately). Also avoids polling a server that never acked.
     if (expectedDistinct === 0) return { ok: true, serverCount: 0, expectedDistinct };
@@ -916,7 +922,7 @@ if (isMainThread) {
           unreachable = 0;
           const j = await res.json();
           const row = (j.sources ?? []).find(
-            (s) => s.batch_id === batchIdWanted && (s.schema === "OMM.fbs" || s.schema === "OMM"),
+            (s) => s.batch_id === batchIdWanted && (s.schema === schemaName || s.schema === schemaName.replace(".fbs", "")),
           );
           serverCount = row ? Number(row.count) : 0;
           if (serverCount >= expectedDistinct) return { ok: true, serverCount, expectedDistinct };
@@ -1306,18 +1312,36 @@ if (isMainThread) {
     timeoutMs: publishTimeoutMs,
     maxAttempts: publishMaxAttempts,
   });
+  // OCM lane (1:1 with OMM when --emit-ocm): its own acked publisher — same
+  // tags/batch id, OCM.fbs schema segment, same never-done-until-acked rules.
+  const ocmPub = createAckedPublisher({
+    url: `${publishUrl}/api/v1/data/publish/batch/OCM.fbs${publishQuery}`,
+    timeoutMs: publishTimeoutMs,
+    maxAttempts: publishMaxAttempts,
+  });
   let framesBuilt = 0;
   let buildErrors = 0;
+  let ocmFramesBuilt = 0;
+  let ocmBuildErrors = 0;
+  // Drain-until-acked sweep shared by both lanes: re-post unacked frames in
+  // rounds until acked or the rounds are exhausted (the gate then decides on
+  // server evidence). This is the fix for "runner exits with publish backlog".
+  const drainUnacked = async (pub, rounds = 3) => {
+    for (let round = 0; round < rounds && pub.state.unacked.length; round += 1) {
+      const retry = pub.state.unacked.splice(0);
+      for (let i = 0; i < retry.length; i += publishBatch) await pub.postAcked(retry.slice(i, i + publishBatch));
+    }
+  };
   const runPublish = (async () => {
     if (!doPublish) { publishChannel.close(); return; }
     async function publisher() {
       let frames = [];
+      let ocmFrames = [];
       const flush = async () => {
-        const f = frames;
-        frames = [];
-        if (!f.length) return;
+        if (!frames.length && !ocmFrames.length) return;
         if (!publishFirstAt) publishFirstAt = performance.now();
-        await fitPub.postAcked(f);
+        if (frames.length) { const f = frames; frames = []; await fitPub.postAcked(f); }
+        if (ocmFrames.length) { const f = ocmFrames; ocmFrames = []; await ocmPub.postAcked(f); }
         publishLastAt = performance.now();
       };
       for (;;) {
@@ -1331,17 +1355,26 @@ if (isMainThread) {
           if (fitPub.state.errors.length < 12) fitPub.state.errors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`);
           continue;
         }
+        // OCM is 1:1 with OMM. An OCM build failure is isolated (recorded, OMM
+        // still ships) so it can never regress the OMM lane or its gate.
+        if (emitOcm) {
+          try {
+            ocmFrames.push(buildOcmFrame({ fit: item.fit, meta: item.meta, batchId, creationDate, sourceUrl, bindings: ocmBindings }));
+            ocmFramesBuilt += 1;
+          } catch (e) {
+            ocmBuildErrors += 1;
+            if (ocmPub.state.errors.length < 12) ocmPub.state.errors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`);
+          }
+        }
         if (frames.length >= publishBatch) await flush();
       }
       await flush();
     }
     await Promise.all(Array.from({ length: publishConcurrency }, publisher));
-    // Final sweep: one more full retry cycle over anything still unacked.
-    if (fitPub.state.unacked.length) {
-      const retry = fitPub.state.unacked.splice(0);
-      for (let i = 0; i < retry.length; i += publishBatch) await fitPub.postAcked(retry.slice(i, i + publishBatch));
-      publishLastAt = performance.now();
-    }
+    // The run is NOT allowed to exit with a publish backlog: drain both lanes.
+    await drainUnacked(fitPub);
+    if (emitOcm) await drainUnacked(ocmPub);
+    if (publishFirstAt) publishLastAt = performance.now();
   })();
 
   // --------------------------- progress heartbeat --------------------------
@@ -1355,12 +1388,21 @@ if (isMainThread) {
       const res = await fetch(`${publishUrl}/api/v1/stats`, { signal: AbortSignal.timeout(4000) });
       if (!res.ok) return null;
       const j = await res.json();
-      const schemaRow = (j.schemas || []).find((s) => (s.schema_name || s.schemaName) === "OMM.fbs");
-      const totalOmm = schemaRow ? schemaRow.count : (j.total_records ?? null);
-      const srcRow = (j.sources || []).find(
-        (s) => s.batch_id === batchId && (s.schema === "OMM.fbs" || s.schema === "OMM"),
-      );
-      return { totalOmm, batchCount: srcRow ? srcRow.count : 0 };
+      const schemaCount = (name) => {
+        const row = (j.schemas || []).find((s) => (s.schema || s.schema_name || s.schemaName) === name);
+        return row ? row.count : null;
+      };
+      const batchCount = (name) => {
+        const row = (j.sources || []).find(
+          (s) => s.batch_id === batchId && (s.schema === name || s.schema === name.replace(".fbs", "")),
+        );
+        return row ? row.count : 0;
+      };
+      return {
+        totalOmm: schemaCount("OMM.fbs") ?? (j.total_records ?? null),
+        batchCount: batchCount("OMM.fbs"),
+        batchOcm: batchCount("OCM.fbs"),
+      };
     } catch { return null; }
   };
   const heartbeat = setInterval(async () => {
@@ -1371,15 +1413,18 @@ if (isMainThread) {
     const stats = doPublish ? await pollNodeStats() : null;
     const done = ((now - pipelineStart) / 1000).toFixed(0);
     const nodeStr = stats
-      ? ` | node OMM ${stats.totalOmm} | stats.sources[batch] ${stats.batchCount}`
+      ? ` | node OMM ${stats.totalOmm} src[batch] OMM ${stats.batchCount}${emitOcm ? ` OCM ${stats.batchOcm}` : ""}`
       : "";
     // Publish-backlog depth makes daemon contention VISIBLE during the run:
     // pubQ (frames not yet built/posted) + unacked (posted, no cid ack yet).
+    const backlog = publishChannel.size + (framesBuilt - fitPub.state.acked - fitPub.state.rejected)
+      + (emitOcm ? (ocmFramesBuilt - ocmPub.state.acked - ocmPub.state.rejected) : 0);
     console.log(
       `[+${done}s] dl ${mbps.toFixed(1)} MB/s (rolling) | got ${downloaded} reuse ${reused} fail ${failed.length} ` +
       `| fitQ ${fitChannel.size} fitted ${results.length} skip ${skips.length} ` +
-      `| pubQ ${publishChannel.size} acked ${fitPub.state.acked} unacked ${fitPub.state.unacked.length} ` +
-      `rejected ${fitPub.state.rejected} backlog ${publishChannel.size + (framesBuilt - fitPub.state.acked - fitPub.state.rejected)}${nodeStr}`,
+      `| pubQ ${publishChannel.size} acked OMM ${fitPub.state.acked}${emitOcm ? ` OCM ${ocmPub.state.acked}` : ""} ` +
+      `unacked ${fitPub.state.unacked.length + (emitOcm ? ocmPub.state.unacked.length : 0)} ` +
+      `rejected ${fitPub.state.rejected + (emitOcm ? ocmPub.state.rejected : 0)} backlog ${backlog}${nodeStr}`,
     );
   }, 5000);
 
@@ -1395,38 +1440,47 @@ if (isMainThread) {
   // (distinct-cid set = the dedup-exact expectation). Shortfall => retry
   // already happened inside the publisher; if still short, EXIT NONZERO with
   // the exact missing count.
-  let publishGate = null;
-  if (doPublish) {
-    // Server-evidence expectation: every DISTINCT frame submitted (minus
-    // permanent validation rejections) must be counted in the batch's
-    // sources[] row — the dedup-exact "count == fitted" of the directive.
-    // Acks drive retries; the server count is the completeness authority
-    // (acks can be lost to client timeouts while the records landed).
-    const expectedDistinct = Math.max(
-      fitPub.state.cids.size,
-      fitPub.state.distinctSubmitted.size - fitPub.state.rejected,
-    );
-    publishGate = await completenessGate({ batchIdWanted: batchId, expectedDistinct });
-    const unacked = fitPub.state.unacked.length;
-    const rejected = fitPub.state.rejected;
-    const serverShort = Math.max(0, publishGate.expectedDistinct - publishGate.serverCount);
-    publishGate.unacked = unacked;
-    publishGate.rejected = rejected;
-    publishGate.framesBuilt = framesBuilt;
-    publishGate.buildErrors = buildErrors;
-    publishGate.complete = rejected === 0 && buildErrors === 0 && publishGate.ok;
-    if (!publishGate.complete) {
+  // Server-evidence expectation: every DISTINCT frame submitted (minus
+  // permanent validation rejections) must be counted in the batch's sources[]
+  // row — the dedup-exact "count == fitted" of the directive. Acks drive
+  // retries; the server count is the completeness authority (acks can be lost
+  // to client timeouts while the records landed). On shortfall the gap is
+  // RETRIED (re-post unacked, re-poll) before failing the run.
+  const gateLane = async ({ pub, schemaName, built, buildErrs, label }) => {
+    let gate = null;
+    for (let round = 0; round < 3; round += 1) {
+      if (round && pub.state.unacked.length) await drainUnacked(pub, 1);
+      const expectedDistinct = Math.max(pub.state.cids.size, pub.state.distinctSubmitted.size - pub.state.rejected);
+      gate = await completenessGate({ batchIdWanted: batchId, expectedDistinct, schemaName, polls: round === 0 ? 24 : 12 });
+      if (gate.ok) break;
+      if (!pub.state.unacked.length) break; // nothing left to retry — server verdict stands
+    }
+    const unacked = pub.state.unacked.length;
+    const rejected = pub.state.rejected;
+    const serverShort = Math.max(0, gate.expectedDistinct - gate.serverCount);
+    Object.assign(gate, { unacked, rejected, framesBuilt: built, buildErrors: buildErrs });
+    gate.complete = rejected === 0 && buildErrs === 0 && gate.ok;
+    if (!gate.complete) {
       console.error(
-        `PUBLISH INCOMPLETE: fitted=${results.length} framesBuilt=${framesBuilt} buildErrors=${buildErrors} ` +
-        `acked=${fitPub.state.acked} MISSING: unacked=${unacked} rejected=${rejected} serverShort=${serverShort} ` +
-        `(server has ${publishGate.serverCount}/${publishGate.expectedDistinct} distinct records for batch ${batchId})`,
+        `PUBLISH INCOMPLETE [${label}]: fitted=${results.length} framesBuilt=${built} buildErrors=${buildErrs} ` +
+        `acked=${pub.state.acked} MISSING: unacked=${unacked} rejected=${rejected} serverShort=${serverShort} ` +
+        `(server has ${gate.serverCount}/${gate.expectedDistinct} distinct records for batch ${batchId})`,
       );
       process.exitCode = 1;
     } else {
       console.log(
-        `[publish gate] COMPLETE: ${fitPub.state.acked} acked, server ${publishGate.serverCount}/${publishGate.expectedDistinct} distinct records for batch ${batchId.slice(0, 12)}…` +
+        `[publish gate ${label}] COMPLETE: ${pub.state.acked} acked, server ${gate.serverCount}/${gate.expectedDistinct} distinct records for batch ${batchId.slice(0, 12)}…` +
         (unacked ? ` (${unacked} acks lost to client timeouts — server evidence confirms the records landed)` : ""),
       );
+    }
+    return gate;
+  };
+  let publishGate = null;
+  let publishGateOcm = null;
+  if (doPublish) {
+    publishGate = await gateLane({ pub: fitPub, schemaName: "OMM.fbs", built: framesBuilt, buildErrs: buildErrors, label: "OMM" });
+    if (emitOcm) {
+      publishGateOcm = await gateLane({ pub: ocmPub, schemaName: "OCM.fbs", built: ocmFramesBuilt, buildErrs: ocmBuildErrors, label: "OCM" });
     }
   }
 
@@ -1457,6 +1511,17 @@ if (isMainThread) {
       gate: publishGate,
       errors: fitPub.state.errors.slice(0, 10), publishUrl,
     };
+    if (emitOcm) {
+      metrics.stages.publishOcm = {
+        schema: "OCM.fbs",
+        wallClockSeconds: +publishWall.toFixed(2),
+        published: ocmPub.state.acked, posts: ocmPub.state.posts,
+        unacked: ocmPub.state.unacked.length, rejected: ocmPub.state.rejected, buildErrors: ocmBuildErrors,
+        batchSize: publishBatch, concurrency: publishConcurrency,
+        gate: publishGateOcm,
+        errors: ocmPub.state.errors.slice(0, 10), publishUrl,
+      };
+    }
   }
   metrics.stages.total = { wallClockSeconds: +totalWall.toFixed(2), overlapped: true };
   for (const [name, s] of Object.entries(metrics.stages)) {
@@ -1528,7 +1593,10 @@ if (isMainThread) {
   metrics.totals = {
     manifestFiles: manifest.length, fitted: results.length, skipped: skips.length,
     published: doPublish ? fitPub.state.acked : null,
-    publishComplete: doPublish ? (publishGate?.complete ?? false) : null,
+    publishedOcm: doPublish && emitOcm ? ocmPub.state.acked : null,
+    publishComplete: doPublish
+      ? ((publishGate?.complete ?? false) && (!emitOcm || (publishGateOcm?.complete ?? false)))
+      : null,
     beatCelestrak: `${beat}/${comparedCt}`,
   };
   const rmsSorted = perSat.map((s) => s.ourRms).filter(Number.isFinite).sort((a, b) => a - b);
