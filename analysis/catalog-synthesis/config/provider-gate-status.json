@@ -46,7 +46,14 @@
     "cpf": "interim",
     "intelsat": "interim",
     "gps": "blocked",
-    "oneweb": "blocked"
+    "oneweb": "blocked",
+    "ses": "non-independent",
+    "planet": "non-independent",
+    "iridium": "non-independent",
+    "telesat": "non-independent",
+    "kuiper": "non-independent",
+    "ast-spacemobile": "non-independent",
+    "css": "non-independent"
   },
   "spacetrackSourceNames": ["spacetrack-gp", "celestrak-gp"]
 }
