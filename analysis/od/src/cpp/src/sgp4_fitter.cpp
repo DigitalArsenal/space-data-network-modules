@@ -1120,6 +1120,12 @@ static FitResult fit_single_epoch(
     auto result2 = lm_fit_equinoctial(result.elements, fit_points, lm2_config);
     if (result2.rms_km < result.rms_km) result = result2;
 
+    // Track whether a derivative-free rescue (NM/DE) produced the current best.
+    // Those methods land NEAR a minimum but not AT it; a final LM (Gauss-Newton)
+    // polish from their result descends the residual surface to the true local
+    // minimum (Phase 7). See the note there.
+    bool used_derivative_free = false;
+
     // Phase 5: NM polish if RMS > 0.3 km
     if (result.rms_km > 0.3) {
         auto nm_result = nelder_mead_polish(
@@ -1130,6 +1136,7 @@ static FitResult fit_single_epoch(
             result.elements = nm_result.elements;
             result.rms_km = nm_result.rms_km;
             result.iterations = nm_result.iterations;
+            used_derivative_free = true;
         }
     }
 
@@ -1148,7 +1155,34 @@ static FitResult fit_single_epoch(
                 result.elements = de_result.elements;
                 result.rms_km = de_result.rms_km;
                 result.iterations = de_result.iterations;
+                used_derivative_free = true;
             }
+        }
+    }
+
+    // Phase 7: final differential-correction (Gauss-Newton/LM) polish. The
+    // Nelder-Mead and Differential-Evolution rescues (Phases 5-6) are
+    // derivative-free: on sparse arcs (few points / long cadence — e.g. the
+    // 4-min ISS OEM, where the primary LM plateaus far from the minimum and NM
+    // rescues it) they land NEAR the position-residual minimum but stop short of
+    // it. Re-running the LM from that point walks the residual surface the rest
+    // of the way to the true local minimum. Only runs when a derivative-free
+    // phase produced the current best, so fits that already reached their LM
+    // minimum (dense MEME arcs, sub-metre fixture fits — Phases 5-6 never fired)
+    // are left byte-for-byte unchanged. Monotone: the result is replaced only on
+    // a STRICT improvement and `converged` is never downgraded, so no
+    // currently-passing gate margin can regress. Provider-agnostic: the trigger
+    // is the solver path taken, never the data source.
+    if (used_derivative_free) {
+        FitterConfig polish_config = config;
+        polish_config.max_iterations = bounded_iteration_count(60, config);
+        polish_config.convergence_tol = 1e-6;
+        auto polished = lm_fit_equinoctial(result.elements, fit_points, polish_config);
+        if (polished.rms_km < result.rms_km) {
+            result.elements = polished.elements;
+            result.rms_km = polished.rms_km;
+            result.iterations = polished.iterations;
+            if (polished.converged) result.converged = true;  // never downgrade
         }
     }
 
