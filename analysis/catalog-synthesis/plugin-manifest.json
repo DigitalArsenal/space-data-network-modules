@@ -1,0 +1,49 @@
+{
+  "pluginId": "com.orbpro.catalog-synthesis",
+  "name": "Supplemental Catalog Synthesis",
+  "version": "0.1.0",
+  "description": "Executable pipeline (App 2, A2.7 — owner goal 3): on a timer, reads stored OMM records (storage_query) — our OD-fitted supplemental OMMs (JSON, USER_DEFINED_SDN_SOURCE_* provenance) and Space-Track GP OMM records ($OMM FlatBuffer, SourceName=spacetrack-gp) — and merges them into ONE canonical CelesTrak-replacement OMM catalog under the synthesis provider identity. Deterministic per-NORAD precedence: a provider's fitted OMM wins over Space-Track GP only when the provider is at A2.4 gate level hard-pass AND the fit is strictly fresher (epoch); otherwise Space-Track GP. An object present in either input is never dropped; objects with no NORAD are quarantined, never keyed as NORAD 0. Every catalog record carries full provenance (winning source, source CID, fit metadata, precedence rule applied). Output records are published via publish_record_with_source (SourceName=catalog-synthesis, topic sdn/data-source/catalog-synthesis, batch_id = deterministic hash of the input set) plus a synthesis summary. Gate status is data-driven (config/provider-gate-status.json compiled default > plugin.getConfig > request payload). Deterministic: two runs over the same stored inputs produce byte-identical outputs.",
+  "pluginFamily": "analysis",
+  "capabilities": [
+    "storage_query",
+    "storage_ingest",
+    "wallet_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "catalog-synthesis-pull",
+      "methodId": "synthesize_catalog",
+      "defaultIntervalMs": 21600000,
+      "description": "Periodic catalog synthesis pass over stored OMM records (default every 6h, matching the Space-Track current-gp poll cadence — no value re-synthesizing faster than the newest inputs refresh)."
+    }
+  ],
+  "invokeSurfaces": ["command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "synthesize_catalog",
+      "displayName": "Synthesize the CelesTrak-replacement OMM catalog",
+      "description": "Reads stored OMM records (storage_query), merges our OD-fitted OMMs with Space-Track GP records under deterministic per-NORAD precedence, and stores + signs + publishes schema-exact canonical OMM catalog records with full provenance, plus a synthesis summary. Optional JSON config payload overrides the Space-Track source names, provider gate status, output identity, and query limit.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published catalog OMM PNMs + synthesis summary",
+          "description": "A signed PNM pointer for each canonical catalog OMM record published, plus a synthesis summary message (total, ours-won, spacetrack-won, quarantined, per-provider counts).",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "catalog-synthesis.pnm",
+              "description": "Signed PNM pointer for each published catalog OMM record.",
+              "allowedTypes": [
+                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
