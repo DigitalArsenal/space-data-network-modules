@@ -9,8 +9,17 @@
  *      -> odpipe::oem_record_to_series      [reuse od frame/time machinery]
  *      -> od::fit_sgp4_series               [REUSE the existing OD fit — no fork]
  *      -> schema-exact OMM JSON + provenance COMMENT/lineage
- *      -> storage.write(OMM) -> keyslot.sign(CID) -> schema-exact PNM
- *      -> pubsub.publish(<provider OMM topic>)          [provider_source.hpp]
+ *      -> storage.ingest_with_source(OMM, SourceTags) -> keyslot.sign(CID)
+ *      -> schema-exact PNM -> pubsub.publish(<provider OMM topic>)  [provider_source.hpp]
+ *
+ * OUTPUT SOURCE-TAG PROVENANCE (A2.2c-3/A2.6 residual): fitted OMMs are stored
+ * via storage.ingest_with_source so each carries SourceTags. SourceName is the
+ * PRODUCER identity "od-fit-pipeline" (distinguishing our fits from raw provider
+ * OEM on a multi-provider store), while the UPSTREAM provider stays recorded in
+ * the record JSON's USER_DEFINED_SDN_SOURCE_NAME — the A2.7 synthesis module
+ * consumes BOTH. batch_id is a deterministic fingerprint of the input record set
+ * for the pass (idempotent across re-runs on an unchanged store; changes when new
+ * source ephemeris arrives), so all OMMs from one fitting pass group together.
  *
  * Provider-agnostic: the provider set + per-provider fit config (max iterations —
  * reusing the OD max-iteration cap — fit window, subsample, convergence) are
@@ -30,6 +39,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -296,6 +306,26 @@ std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
     std::string query_err;
     bool query_ok = storage_query_oem(cfg.query_schema, cfg.query_limit, &records, &query_err);
 
+    // batch_id: a deterministic fingerprint of the INPUT record set for this pass.
+    // Every fitted OMM stored below carries this same batch_id, so one fitting
+    // pass groups together (and re-running over an unchanged store re-derives the
+    // identical id — idempotent; a new-epoch OEM in the store yields a new id).
+    // Order-independent: hash the SORTED input CIDs (a set fingerprint, not a
+    // sequence one). Empty on an empty/failed read (no records to attribute).
+    std::string batch_id;
+    {
+        std::vector<std::string> cids;
+        cids.reserve(records.size());
+        for (const StoredRecord& r : records) cids.push_back(r.cid);
+        std::sort(cids.begin(), cids.end());
+        std::string joined;
+        for (const std::string& c : cids) { joined += c; joined.push_back('\n'); }
+        if (!joined.empty()) {
+            batch_id = ps::sha256_hex(
+                reinterpret_cast<const uint8_t*>(joined.data()), joined.size());
+        }
+    }
+
     // Per-provider tallies, indexed to cfg.providers order.
     std::vector<ProviderStats> stats(cfg.providers.size());
     long unconfigured = 0, skipped_total = 0;
@@ -363,7 +393,11 @@ std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
         pcfg.signing_slot = prov->signing_slot;
         pcfg.publish_topic = prov->output_topic;
         pcfg.signature_type = prov->signature_type;
-        pcfg.source_name = prov->source_name;
+        // SourceTags.SourceName/ProviderID are the PRODUCER ("od-fit-pipeline"),
+        // NOT the upstream provider — that stays in the record JSON's
+        // USER_DEFINED_SDN_SOURCE_NAME (via prov.source_name in build_omm_record).
+        // A2.7 synthesis consumes both to distinguish our fits from raw OEM.
+        pcfg.source_name = "od-fit-pipeline";
         pcfg.data_source = prov->data_source;
         pcfg.record_schema = "OMM";
 
@@ -373,9 +407,12 @@ std::string run_pipeline(const uint8_t* req, uint32_t req_len) {
                                 fit.elements.epoch_iso + ".omm.json";
         std::string prov_json = provenance_json(fit, *prov, rec);
 
-        ps::PublishResult r = ps::publish_record(
+        // source_url carries per-record lineage (the input OEM record's CID); the
+        // pass-level batch_id groups every OMM fitted in this run.
+        ps::PublishResult r = ps::publish_record_with_source(
             pcfg, reinterpret_cast<const uint8_t*>(omm.data()), omm.size(),
-            file_name, file_id, fit.elements.epoch_iso, prov_json);
+            file_name, file_id, fit.elements.epoch_iso, prov_json,
+            rec.cid, batch_id);
         if (r.stored) st.stored++;
         if (r.signed_) st.signed_++;
         if (r.published) st.published++;

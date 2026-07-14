@@ -4,7 +4,7 @@
  * The canonical manifest is `plugin-manifest.json`. The build embeds it into the
  * WASM via the SDK's `encodePlgManifest(legacyManifestToPlg(...))` — the same
  * $PLG encoder every compiled module uses and the format the Go node's PLG parser
- * reads to grant host capabilities (storage_query / storage_write / wallet_sign /
+ * reads to grant host capabilities (storage_query / storage_ingest / wallet_sign /
  * crypto_sign / pubsub) and schedule the `od-fit-pull` timer.
  */
 import fs from "node:fs";
