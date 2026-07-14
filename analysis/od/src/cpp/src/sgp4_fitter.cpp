@@ -1193,6 +1193,19 @@ static FitResult fit_single_epoch(
     result.elements.iterations = result.iterations;
     result.elements.max_iterations = config.max_iterations;
 
+    // A2.4d same-ephemeris reference scoring (OWNER RULING 2026-07-13). Propagate
+    // the caller-supplied reference GP elements (a captured CelesTrak SupGP OMM)
+    // via the SAME SGP4 over the SAME fit_points this fit used, and record their
+    // RMS. Multi-start keeps the winning window's result, so the reference RMS
+    // that survives is scored against the exact states our winning fit used — an
+    // apples-to-apples same-ephemeris comparison. Only runs when a reference is
+    // supplied, so all non-reference fits are byte-for-byte unchanged.
+    if (config.has_reference) {
+        result.elements.reference_rms_km =
+            compute_rms_position(config.reference_elements, fit_points);
+        result.elements.has_reference_rms = true;
+    }
+
     return result;
 }
 
@@ -1332,8 +1345,16 @@ std::string elements_to_json(const SGP4Elements& el) {
        << "\"BSTAR\":" << std::scientific << std::setprecision(5) << el.bstar << ","
        << "\"MEAN_MOTION_DOT\":" << el.mean_motion_dot << ","
        << "\"MEAN_MOTION_DDOT\":" << el.mean_motion_ddot << ","
-       << "\"RMS\":\"" << std::fixed << std::setprecision(3) << el.rms_km << "\","
-       << "\"ITERATIONS\":" << el.iterations << ","
+       << "\"RMS\":\"" << std::fixed << std::setprecision(3) << el.rms_km << "\",";
+    // A2.4d: same-ephemeris reference RMS (CelesTrak SupGP elements scored via the
+    // SAME SGP4 over the SAME fit points). Emitted only when scored, so every
+    // non-reference fit's JSON is byte-for-byte identical. Same 3-decimal km form
+    // as RMS (the sticky stream manipulators above already apply).
+    if (el.has_reference_rms) {
+        ss << "\"REFERENCE_RMS\":\"" << std::fixed << std::setprecision(3)
+           << el.reference_rms_km << "\",";
+    }
+    ss << "\"ITERATIONS\":" << el.iterations << ","
        << "\"MAX_ITERATIONS\":" << el.max_iterations << ","
        << "\"CONVERGED\":" << (el.converged ? "true" : "false") << ","
        << "\"DATA_SOURCE\":\"" << el.data_source << "\""
