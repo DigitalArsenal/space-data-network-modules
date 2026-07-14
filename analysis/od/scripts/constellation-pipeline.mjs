@@ -1,22 +1,38 @@
-// Constellation pipeline (loop packet P1.1): download a provider's FULL
-// public ephemeris set, fit every object with the OD module in a parallel
-// worker pool, compare each fitted OMM against (a) the same-day CelesTrak
-// SupGP RMS and (b) Space-Track GP elements, and emit a per-stage timed
-// report. Standards-honest: fits come from the real module .wasm via the
-// same isomorphic harness the SDN nodes use; skips use the A2.3 taxonomy.
+// Constellation pipeline (loop packet P1.1 / owner directive 2026-07-14):
+// download a provider's FULL public ephemeris set, fit every object with the OD
+// module in a parallel worker pool, OPTIONALLY publish each fitted $OMM to a
+// serving SDN node as it lands, compare each fitted OMM against (a) the same-day
+// CelesTrak SupGP RMS and (b) Space-Track GP elements, and emit a per-stage
+// timed report.
 //
-// Network scope: ONLY the provider's public ephemeris service is fetched
-// here (bounded concurrency, resumable). CelesTrak + Space-Track inputs are
-// pre-captured CSV paths (their fetch policies live with the capture step).
+// Efficiency model (owner: "create an entire new set from all sources in less
+// than 1 hour"): download and fit OVERLAP — files feed the fit pool as they
+// land (reused-from-disk files feed immediately), and fitted OMMs feed the
+// publish pool as they complete. Download uses the built-in global `fetch`
+// (undici) at high concurrency; measured plateau ~280 MB/s at ~256-way on this
+// link (a raw node:https Agent is NOT used — it does not follow the api.starlink
+// CDN redirect and is far slower). Rolling MB/s is logged every 5s.
+//
+// Network scope: ONLY the provider's public ephemeris service is fetched here
+// (bounded concurrency, resumable). CelesTrak + Space-Track inputs are
+// pre-captured CSV paths. Publishing targets a node the operator points us at
+// (--publish-url), typically an SSH tunnel to the serving node's API port.
 //
 //   node scripts/constellation-pipeline.mjs \
 //     --provider starlink --workdir <dir> \
 //     --celestrak-csv <sup-gp.csv> [--spacetrack-csv <gp.csv>] \
-//     [--download-concurrency 16] [--fit-workers 20] [--limit N]
+//     [--download-concurrency 96] [--fit-workers 20] [--limit N] \
+//     [--publish] [--publish-url http://127.0.0.1:15001] \
+//     [--publish-batch 100] [--publish-concurrency 4]
+//
+// Must be run with cwd = analysis/od (the isomorphic harness resolves the
+// space-data-module-sdk from process.cwd()).
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,16 +41,38 @@ const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
 const PROVIDERS = {
   starlink: {
-    source: "SpaceX-E",
+    registryKey: "spacex-starlink", // SDN provider registry key -> SourceTags.SourceName/ProviderID
+    source: "SpaceX-E", // ORIGINATOR / provenance name
+    dataSource: "SpaceX-E", // OD-module fit option
+    kind: "manifest",
     manifestUrl: "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt",
     fileUrl: (name) => `https://api.starlink.com/public-files/ephemerides/${name}`,
     inputFormat: "meme",
     noradFromFilename: (name) => Number.parseInt(name.split("_")[1], 10),
     objectFromFilename: (name) => name.split("_")[2] ?? "",
+    objectNameFromFilename: (name) => name.split("_")[2] ?? "",
+    objectIdFromFilename: () => "", // SpaceX filenames carry no COSPAR — honest empty
+  },
+  // ISS: a single public CCSDS OEM (NASA). Fit the whole file -> one $OMM.
+  iss: {
+    registryKey: "iss",
+    source: "NASA-ISS",
+    dataSource: "ISS-E",
+    kind: "single",
+    fileName: "ISS.OEM_J2K_EPH.txt",
+    fileUrl: () => "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt",
+    inputFormat: "oem",
+    norad: 25544,
+    objectName: "ISS (ZARYA)",
+    objectId: "1998-067A",
+    noradFromFilename: () => 25544,
+    objectFromFilename: () => "ISS (ZARYA)",
+    objectNameFromFilename: () => "ISS (ZARYA)",
+    objectIdFromFilename: () => "1998-067A",
   },
 };
 
-// ---------------------------------------------------------------- worker
+// ---------------------------------------------------------------- fit worker
 if (!isMainThread) {
   const { assertSuccessfulResponse, createStandaloneHarnessOrSkip } = await import(
     "../../../tests/lib/isomorphicHarness.mjs"
@@ -45,6 +83,7 @@ if (!isMainThread) {
     process.exit(1);
   }
   const { inputFormat, dataSource } = workerData;
+  const optionBytes = new TextEncoder().encode(JSON.stringify({ inputFormat, dataSource }));
   parentPort.on("message", async (msg) => {
     if (msg.kind === "close") {
       await harness.close?.();
@@ -57,31 +96,12 @@ if (!isMainThread) {
         methodId: "fit",
         inputs: [
           { portId: "meme", payload },
-          {
-            portId: "options",
-            payload: new TextEncoder().encode(JSON.stringify({ inputFormat, dataSource })),
-          },
+          { portId: "options", payload: optionBytes },
         ],
       });
       const bytes = assertSuccessfulResponse(response, { outputPortId: "result" });
       const fit = JSON.parse(new TextDecoder().decode(bytes));
-      parentPort.postMessage({
-        kind: "fit",
-        file: msg.file,
-        ms: performance.now() - started,
-        fit: {
-          RMS: fit.RMS,
-          EPOCH: fit.EPOCH,
-          MEAN_MOTION: fit.MEAN_MOTION,
-          ECCENTRICITY: fit.ECCENTRICITY,
-          INCLINATION: fit.INCLINATION,
-          RA_OF_ASC_NODE: fit.RA_OF_ASC_NODE,
-          ARG_OF_PERICENTER: fit.ARG_OF_PERICENTER,
-          MEAN_ANOMALY: fit.MEAN_ANOMALY,
-          BSTAR: fit.BSTAR,
-          CONVERGED: fit.CONVERGED ?? fit.USER_DEFINED_CONVERGED,
-        },
-      });
+      parentPort.postMessage({ kind: "fit", file: msg.file, ms: performance.now() - started, fit });
     } catch (error) {
       parentPort.postMessage({
         kind: "skip",
@@ -94,43 +114,221 @@ if (!isMainThread) {
   parentPort.postMessage({ kind: "ready" });
 }
 
-// ------------------------------------------------------------------ main
+// ---------------------------------------------------------------- main
 if (isMainThread) {
   const args = Object.fromEntries(
-    process.argv.slice(2).map((a, i, all) => (a.startsWith("--") ? [a.slice(2), all[i + 1]] : null)).filter(Boolean),
+    process.argv.slice(2).map((a, i, all) => {
+      if (!a.startsWith("--")) return null;
+      const key = a.slice(2);
+      const next = all[i + 1];
+      // boolean flags (no value or followed by another --flag)
+      if (next === undefined || next.startsWith("--")) return [key, "true"];
+      return [key, next];
+    }).filter(Boolean),
   );
-  const provider = PROVIDERS[args.provider ?? "starlink"];
-  if (!provider) throw new Error(`unknown provider ${args.provider}`);
+  const providerName = args.provider ?? "starlink";
+  const provider = PROVIDERS[providerName];
+  if (!provider) throw new Error(`unknown provider ${providerName}`);
   const workdir = path.resolve(args.workdir ?? path.join(os.tmpdir(), "constellation-pipeline"));
-  const filesDir = path.join(workdir, args.provider ?? "starlink", "files");
+  const filesDir = path.join(workdir, providerName, "files");
   fs.mkdirSync(filesDir, { recursive: true });
-  const downloadConcurrency = Number.parseInt(args["download-concurrency"] ?? "16", 10);
+  const downloadConcurrency = Number.parseInt(args["download-concurrency"] ?? "256", 10);
   const fitWorkers = Number.parseInt(args["fit-workers"] ?? "20", 10);
   const limit = args.limit ? Number.parseInt(args.limit, 10) : Infinity;
+  const doPublish = args.publish === "true" || args.publish === "" || args.publish === true;
+  const publishUrl = (args["publish-url"] ?? "http://127.0.0.1:15001").replace(/\/$/, "");
+  const publishBatch = Number.parseInt(args["publish-batch"] ?? "100", 10);
+  const publishConcurrency = Number.parseInt(args["publish-concurrency"] ?? "4", 10);
+  const publishTimeoutMs = Number.parseInt(args["publish-timeout-ms"] ?? "30000", 10);
 
-  const metrics = { provider: args.provider ?? "starlink", startedAt: new Date().toISOString(), stages: {} };
-  const stageStart = () => performance.now();
-  const stageEnd = (name, t0, extra) => {
-    metrics.stages[name] = { wallClockSeconds: +((performance.now() - t0) / 1000).toFixed(2), ...extra };
-    console.log(`[stage ${name}] ${metrics.stages[name].wallClockSeconds}s ${JSON.stringify(extra)}`);
+  const startedAt = new Date().toISOString();
+  const registryKey = provider.registryKey ?? providerName;
+  // Run/batch id = sha256(provider + startedAt). "provider" is the canonical
+  // SDN provider registry key (spacex-starlink / iss), matching the SourceName
+  // the App 2 board groups lanes by. Groups every OMM fitted in this pass.
+  const batchId = crypto.createHash("sha256").update(`${registryKey}${startedAt}`).digest("hex");
+  const creationDate = startedAt.replace(/\.\d+Z$/, "Z");
+
+  // Provenance the publish endpoint SHOULD persist as SourceTags so the
+  // records show up in GET /api/v1/stats sources[] (App 2 board). See the
+  // gap note in the module README: today POST /publish stores records via
+  // Store(...,nil) and does NOT write these; we forward them as query params
+  // (schema-path parsing ignores the query string) so the surface is correct
+  // the moment the handler routes source_name/provider_id/batch_id to
+  // StoreWithSourceTags. Never a validation bypass — same validate + quota path.
+  // source_url = the provider's upstream (manifest for multi-file, the OEM URL
+  // for single-file). SDN persists these query params as SourceTags (publish
+  // patch 6180f39f) so the App 2 board's /api/v1/stats sources[] counts rise.
+  const sourceUrl = provider.kind === "single" ? provider.fileUrl() : provider.manifestUrl;
+  const publishQuery =
+    `?source_name=${encodeURIComponent(registryKey)}` +
+    `&provider_id=${encodeURIComponent(registryKey)}` +
+    `&batch_id=${encodeURIComponent(batchId)}` +
+    `&source_url=${encodeURIComponent(sourceUrl)}`;
+
+  const metrics = { provider: providerName, registryKey, startedAt, batchId, stages: {} };
+  const pipelineStart = performance.now();
+
+  // --- resolve the generated $OMM FlatBuffer builder (only if publishing) ----
+  let OMM = null;
+  let flatbuffers = null;
+  if (doPublish) {
+    const anchors = [
+      path.join(__dirname, "../../../propagator/sgp4/package.json"),
+      path.join(__dirname, "../../../propagator/hpop/package.json"),
+      path.join(__dirname, "../node_modules/space-data-module-sdk/package.json"),
+    ];
+    let fbPath;
+    let ommPath;
+    for (const a of anchors) {
+      try {
+        const r = createRequire(a);
+        fbPath = r.resolve("flatbuffers");
+        ommPath = r.resolve("spacedatastandards.org/lib/js/OMM/OMM.js");
+        break;
+      } catch { /* next anchor */ }
+    }
+    if (!fbPath || !ommPath) throw new Error("cannot resolve flatbuffers + spacedatastandards.org for --publish");
+    flatbuffers = await import(pathToFileURL(fbPath));
+    ({ OMM } = await import(pathToFileURL(ommPath)));
+  }
+
+  const epochUnixSeconds = (iso) => {
+    const t = Date.parse(iso.endsWith("Z") ? iso : `${iso}Z`);
+    return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
   };
 
-  // -- Stage 1: MANIFEST + DOWNLOAD (resumable, bounded concurrency).
-  let t0 = stageStart();
-  const manifestRes = await fetch(provider.manifestUrl);
-  if (!manifestRes.ok) throw new Error(`manifest fetch ${manifestRes.status}`);
-  const manifest = (await manifestRes.text()).split(/\r?\n/).filter((l) => l.trim());
-  stageEnd("manifest", t0, { files: manifest.length });
+  // Build a size-prefixed $OMM FlatBuffer from a fit result + provider meta.
+  // The module returns placeholder identity (NORAD 99999) — the REAL NORAD /
+  // object name come from the provider (SpaceX filename / ISS constant), never
+  // fabricated. Provenance (source, batch id, fit RMS, convergence) rides in
+  // the CCSDS COMMENT + ORIGINATOR, mirroring the fit-pipeline module.
+  const buildOmmFrame = (fit, meta) => {
+    const b = new flatbuffers.Builder(512);
+    const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : Number.parseFloat(v));
+    const rms = Number.parseFloat(fit.RMS);
+    const comment =
+      `SDN OD-fitted supplemental GP (App 2). ` +
+      `SOURCE_NAME=${meta.source} DATA_SOURCE=${fit.DATA_SOURCE ?? meta.source} ` +
+      `BATCH_ID=${batchId} FIT_RMS_KM=${Number.isFinite(rms) ? rms.toFixed(6) : "NA"} ` +
+      `ITERATIONS=${fit.ITERATIONS ?? ""} CONVERGED=${fit.CONVERGED ?? ""}`;
+    const nameOff = b.createString(meta.objectName || "");
+    const objIdOff = meta.objectId ? b.createString(meta.objectId) : 0;
+    const centerOff = b.createString("EARTH");
+    const originatorOff = b.createString(meta.source);
+    const creationOff = b.createString(creationDate);
+    const commentOff = b.createString(comment);
+    const epochOff = b.createString(fit.EPOCH ?? "");
+    const classOff = fit.CLASSIFICATION_TYPE ? b.createString(String(fit.CLASSIFICATION_TYPE)) : 0;
+    const designatorOff = meta.objectName ? b.createString(meta.objectName) : 0;
+    OMM.startOMM(b);
+    OMM.addCreationDate(b, creationOff);
+    OMM.addOriginator(b, originatorOff);
+    if (nameOff) OMM.addObjectName(b, nameOff);
+    if (objIdOff) OMM.addObjectId(b, objIdOff);
+    OMM.addCenterName(b, centerOff);
+    OMM.addComment(b, commentOff);
+    OMM.addEpoch(b, epochOff);
+    OMM.addMeanMotion(b, num(fit.MEAN_MOTION));
+    OMM.addEccentricity(b, num(fit.ECCENTRICITY));
+    OMM.addInclination(b, num(fit.INCLINATION));
+    OMM.addRaOfAscNode(b, num(fit.RA_OF_ASC_NODE));
+    OMM.addArgOfPericenter(b, num(fit.ARG_OF_PERICENTER));
+    OMM.addMeanAnomaly(b, num(fit.MEAN_ANOMALY));
+    if (Number.isFinite(num(fit.MEAN_MOTION_DOT))) OMM.addMeanMotionDot(b, num(fit.MEAN_MOTION_DOT));
+    if (Number.isFinite(num(fit.MEAN_MOTION_DDOT))) OMM.addMeanMotionDdot(b, num(fit.MEAN_MOTION_DDOT));
+    if (Number.isFinite(num(fit.BSTAR))) OMM.addBstar(b, num(fit.BSTAR));
+    if (Number.isFinite(num(fit.EPHEMERIS_TYPE))) OMM.addEphemerisType(b, num(fit.EPHEMERIS_TYPE));
+    if (classOff) OMM.addClassificationType(b, classOff);
+    OMM.addNoradCatId(b, meta.norad >>> 0);
+    if (Number.isFinite(num(fit.ELEMENT_SET_NO))) OMM.addElementSetNo(b, num(fit.ELEMENT_SET_NO) >>> 0);
+    if (Number.isFinite(num(fit.REV_AT_EPOCH))) OMM.addRevAtEpoch(b, num(fit.REV_AT_EPOCH));
+    OMM.addUserDefinedEpochTimestamp(b, epochUnixSeconds(fit.EPOCH ?? ""));
+    if (designatorOff) OMM.addUserDefinedObjectDesignator(b, designatorOff);
+    const off = OMM.endOMM(b);
+    OMM.finishSizePrefixedOMMBuffer(b, off);
+    return b.asUint8Array().slice();
+  };
 
+  // ---- async channel: producer/consumer with backpressure-free handoff -----
+  class Channel {
+    constructor() { this.items = []; this.waiters = []; this.closed = false; }
+    push(x) {
+      if (this.closed) return;
+      const w = this.waiters.shift();
+      if (w) w(x); else this.items.push(x);
+    }
+    close() { this.closed = true; let w; while ((w = this.waiters.shift())) w(null); }
+    pull() {
+      if (this.items.length) return Promise.resolve(this.items.shift());
+      if (this.closed) return Promise.resolve(null);
+      return new Promise((res) => this.waiters.push(res));
+    }
+    get size() { return this.items.length; }
+  }
+  const fitChannel = new Channel();
+  const publishChannel = new Channel();
+
+  // ------------------------------- targets ---------------------------------
+  // Manifest fetch-ledger (owner caching ruling 2026-07-14): don't refetch the
+  // provider MANIFEST if the last completed fetch is <3h old — reuse the cached
+  // copy. Per-file bytes are already cached by the skip-if-exists resume below.
+  const MANIFEST_TTL_MS = Number.parseInt(args["manifest-ttl-ms"] ?? String(3 * 3600 * 1000), 10);
+  const ledgerPath = path.join(workdir, providerName, "manifest-ledger.json");
+  const manifestCachePath = path.join(workdir, providerName, "manifest.txt");
+  let manifest;
+  let manifestCached = false;
+  {
+    const t0 = performance.now();
+    if (provider.kind === "single") {
+      manifest = [provider.fileName];
+    } else {
+      try {
+        const led = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
+        const age = Date.now() - Date.parse(led.fetchedAt);
+        if (led.fetchedAt && Number.isFinite(age) && age < MANIFEST_TTL_MS && fs.existsSync(manifestCachePath)) {
+          manifest = fs.readFileSync(manifestCachePath, "utf8").split(/\r?\n/).filter((l) => l.trim());
+          manifestCached = true;
+        }
+      } catch { /* no/invalid ledger -> fetch */ }
+      if (!manifestCached) {
+        const res = await fetch(provider.manifestUrl);
+        if (!res.ok) throw new Error(`manifest fetch ${res.status}`);
+        const text = await res.text();
+        manifest = text.split(/\r?\n/).filter((l) => l.trim());
+        fs.writeFileSync(manifestCachePath, text);
+        fs.writeFileSync(ledgerPath, JSON.stringify({ fetchedAt: new Date().toISOString(), files: manifest.length }));
+      }
+    }
+    metrics.stages.manifest = {
+      wallClockSeconds: +((performance.now() - t0) / 1000).toFixed(2),
+      files: manifest.length, cached: manifestCached,
+    };
+    console.log(`[stage manifest] ${metrics.stages.manifest.wallClockSeconds}s files=${manifest.length} cached=${manifestCached}`);
+  }
   const targets = manifest.slice(0, limit);
-  t0 = stageStart();
+
+  // -------------------------- shared counters ------------------------------
   let downloaded = 0;
   let reused = 0;
   let downloadBytes = 0;
-  let failed = [];
-  {
+  const failed = [];
+  const results = [];
+  const skips = [];
+  let fitFirstAt = 0;
+  let fitLastAt = 0;
+  let published = 0;
+  let publishPosts = 0;
+  let publishFirstAt = 0;
+  let publishLastAt = 0;
+  const publishErrors = [];
+
+  // ------------------------------ DOWNLOAD ---------------------------------
+  const downloadStart = performance.now();
+  let downloadWall = 0;
+  const runDownload = (async () => {
     const queue = [...targets];
-    async function downloadWorker() {
+    async function worker() {
       for (;;) {
         const name = queue.shift();
         if (!name) return;
@@ -139,6 +337,7 @@ if (isMainThread) {
           const stat = fs.statSync(dest, { throwIfNoEntry: false });
           if (stat && stat.size > 0) {
             reused += 1;
+            fitChannel.push(name); // reused files feed the fitters immediately
             continue;
           }
           const res = await fetch(provider.fileUrl(name));
@@ -147,86 +346,231 @@ if (isMainThread) {
           fs.writeFileSync(dest, buf);
           downloadBytes += buf.length;
           downloaded += 1;
+          fitChannel.push(name);
         } catch (error) {
           failed.push({ name, reason: String(error?.message ?? error).slice(0, 200) });
         }
       }
     }
-    await Promise.all(Array.from({ length: downloadConcurrency }, downloadWorker));
-  }
-  stageEnd("download", t0, {
-    downloaded,
-    reusedFromDisk: reused,
-    failed: failed.length,
-    megabytes: +(downloadBytes / 1e6).toFixed(1),
-    mbPerSecond: +((downloadBytes / 1e6) / Math.max(0.001, (performance.now() - t0) / 1000)).toFixed(1),
-    concurrency: downloadConcurrency,
-  });
+    await Promise.all(Array.from({ length: downloadConcurrency }, worker));
+    downloadWall = (performance.now() - downloadStart) / 1000;
+    fitChannel.close(); // no more files will arrive
+  })();
 
-  // -- Stage 2: FIT (worker pool, one wasm harness per worker).
-  t0 = stageStart();
-  const files = fs.readdirSync(filesDir).filter((f) => targets.includes(f));
-  const results = [];
-  const skips = [];
-  await new Promise((resolve, reject) => {
-    const queue = [...files];
-    let inFlight = 0;
-    let readyWorkers = 0;
+  // -------------------------------- FIT ------------------------------------
+  const meta = (file) => ({
+    norad: provider.noradFromFilename(file),
+    objectName: provider.objectNameFromFilename(file),
+    objectId: provider.objectIdFromFilename(file),
+    source: provider.source,
+  });
+  const runFit = (async () => {
     const workers = Array.from({ length: fitWorkers }, () =>
-      new Worker(__filename, {
-        workerData: { inputFormat: provider.inputFormat, dataSource: provider.source },
-      }));
-    const feed = (worker) => {
-      const file = queue.shift();
-      if (file) {
-        inFlight += 1;
-        worker.postMessage({ file, filePath: path.join(filesDir, file) });
-      } else if (inFlight === 0 && readyWorkers === workers.length) {
-        for (const w of workers) w.postMessage({ kind: "close" });
-        resolve();
+      new Worker(__filename, { workerData: { inputFormat: provider.inputFormat, dataSource: provider.dataSource } }));
+    const state = new Map(); // worker -> { ready:Promise, readyResolve, pending:resolver|null }
+    for (const w of workers) {
+      const st = { pending: null };
+      st.ready = new Promise((res) => { st.readyResolve = res; });
+      state.set(w, st);
+      w.on("message", (msg) => {
+        const s = state.get(w);
+        if (msg.kind === "ready") { s.readyResolve(); return; }
+        if (msg.kind === "fatal") { console.error("fit worker fatal:", msg.error); s.readyResolve(); return; }
+        const p = s.pending; s.pending = null; if (p) p(msg);
+      });
+      w.on("error", (e) => console.error("fit worker error:", e));
+    }
+    const dispatch = (w, file, filePath) => new Promise((res) => {
+      state.get(w).pending = res;
+      if (!fitFirstAt) fitFirstAt = performance.now();
+      w.postMessage({ file, filePath });
+    });
+    const drive = async (w) => {
+      await state.get(w).ready;
+      for (;;) {
+        const file = await fitChannel.pull();
+        if (file === null) { w.postMessage({ kind: "close" }); return; }
+        const msg = await dispatch(w, file, path.join(filesDir, file));
+        fitLastAt = performance.now();
+        if (msg.kind === "fit") {
+          results.push(msg);
+          if (doPublish) publishChannel.push({ fit: msg.fit, meta: meta(msg.file) });
+        } else {
+          skips.push(msg);
+        }
       }
     };
-    for (const worker of workers) {
-      worker.on("message", (msg) => {
-        if (msg.kind === "ready") {
-          readyWorkers += 1;
-          feed(worker);
-          return;
-        }
-        if (msg.kind === "fatal") {
-          reject(new Error(msg.error));
-          return;
-        }
-        inFlight -= 1;
-        if (msg.kind === "fit") results.push(msg);
-        else skips.push(msg);
-        if ((results.length + skips.length) % 1000 === 0) {
-          console.log(`  fit progress: ${results.length + skips.length}/${files.length}`);
-        }
-        feed(worker);
-      });
-      worker.on("error", reject);
-    }
-  });
-  const fitSeconds = (performance.now() - t0) / 1000;
-  stageEnd("fit", t0, {
-    fitted: results.length,
-    skipped: skips.length,
-    workers: fitWorkers,
-    satsPerSecond: +(results.length / Math.max(0.001, fitSeconds)).toFixed(1),
-    meanFitMs: +(results.reduce((s, r) => s + r.ms, 0) / Math.max(1, results.length)).toFixed(1),
-  });
+    await Promise.all(workers.map(drive));
+    publishChannel.close();
+  })();
 
-  // -- Stage 3: COMPARE vs CelesTrak SupGP RMS + Space-Track GP elements.
-  t0 = stageStart();
+  // ------------------------------ PUBLISH ----------------------------------
+  const runPublish = (async () => {
+    if (!doPublish) { publishChannel.close(); return; }
+    // postBatch NEVER throws: a hung/failed POST is bounded by a request
+    // timeout and retried once (a fresh connection recovers a keep-alive
+    // socket the server dropped under load), then recorded as an error so one
+    // bad batch can't stall the whole publish stage.
+    const postBatch = async (frames) => {
+      const total = frames.reduce((s, f) => s + f.length, 0);
+      const body = Buffer.allocUnsafe(total);
+      let off = 0;
+      for (const f of frames) { body.set(f, off); off += f.length; }
+      // Schema segment MUST be the full schema name "OMM.fbs" — the server
+      // validator rejects the short "OMM" ("unknown schema: OMM").
+      const url = `${publishUrl}/api/v1/data/publish/batch/OMM.fbs${publishQuery}`;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-flatbuffers",
+              // Forward provenance as headers too (belt + suspenders for a
+              // tag-aware handler that reads headers rather than query params).
+              "x-sdn-source-name": registryKey,
+              "x-sdn-provider-id": registryKey,
+              "x-sdn-batch-id": batchId,
+            },
+            body,
+            signal: AbortSignal.timeout(publishTimeoutMs),
+          });
+          if (!res.ok) {
+            if (publishErrors.length < 10) publishErrors.push(`batch ${res.status}: ${(await res.text()).slice(0, 120)}`);
+            return;
+          }
+          const json = await res.json().catch(() => ({}));
+          const rows = Array.isArray(json.results) ? json.results : [];
+          published += rows.filter((r) => r && r.cid).length;
+          // Batch returns HTTP 201 even when individual records fail — surface
+          // the first per-record error so the run is honest about them.
+          const firstErr = rows.find((r) => r && r.error);
+          if (firstErr && publishErrors.length < 10) publishErrors.push(`record: ${String(firstErr.error).slice(0, 120)}`);
+          if (!publishFirstAt) publishFirstAt = performance.now();
+          publishLastAt = performance.now();
+          publishPosts += 1;
+          return;
+        } catch (e) {
+          if (attempt === 1 && publishErrors.length < 10) publishErrors.push(`post: ${String(e?.message ?? e).slice(0, 120)}`);
+        }
+      }
+    };
+    async function publisher() {
+      let frames = [];
+      for (;;) {
+        const item = await publishChannel.pull();
+        if (item === null) break;
+        try { frames.push(buildOmmFrame(item.fit, item.meta)); }
+        catch (e) { if (publishErrors.length < 10) publishErrors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`); continue; }
+        if (frames.length >= publishBatch) { await postBatch(frames); frames = []; }
+      }
+      if (frames.length) await postBatch(frames);
+    }
+    await Promise.all(Array.from({ length: publishConcurrency }, publisher));
+  })();
+
+  // --------------------------- progress heartbeat --------------------------
+  let lastBytes = 0;
+  let lastTick = performance.now();
+  // Poll the SAME anonymous surface the App 2 board reads: GET /api/v1/stats.
+  // Returns [total OMM records on node, this-batch sources[] count]. The batch
+  // count stays 0 until the publish handler persists SourceTags (see gap note).
+  const pollNodeStats = async () => {
+    try {
+      const res = await fetch(`${publishUrl}/api/v1/stats`, { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) return null;
+      const j = await res.json();
+      const schemaRow = (j.schemas || []).find((s) => (s.schema_name || s.schemaName) === "OMM.fbs");
+      const totalOmm = schemaRow ? schemaRow.count : (j.total_records ?? null);
+      const srcRow = (j.sources || []).find(
+        (s) => s.batch_id === batchId && (s.schema === "OMM.fbs" || s.schema === "OMM"),
+      );
+      return { totalOmm, batchCount: srcRow ? srcRow.count : 0 };
+    } catch { return null; }
+  };
+  const heartbeat = setInterval(async () => {
+    const now = performance.now();
+    const dt = (now - lastTick) / 1000;
+    const mbps = ((downloadBytes - lastBytes) / 1e6) / Math.max(0.001, dt);
+    lastBytes = downloadBytes; lastTick = now;
+    const stats = doPublish ? await pollNodeStats() : null;
+    const done = ((now - pipelineStart) / 1000).toFixed(0);
+    const nodeStr = stats
+      ? ` | node OMM ${stats.totalOmm} | stats.sources[batch] ${stats.batchCount}`
+      : "";
+    console.log(
+      `[+${done}s] dl ${mbps.toFixed(1)} MB/s (rolling) | got ${downloaded} reuse ${reused} fail ${failed.length} ` +
+      `| fitQ ${fitChannel.size} fitted ${results.length} skip ${skips.length} ` +
+      `| pubQ ${publishChannel.size} published ${published}${nodeStr}`,
+    );
+  }, 5000);
+
+  // -------------------------------- await ----------------------------------
+  await runDownload;
+  await runFit;
+  await runPublish;
+  clearInterval(heartbeat);
+
+  const fitWall = fitFirstAt ? (fitLastAt - fitFirstAt) / 1000 : 0;
+  const publishWall = publishFirstAt ? (publishLastAt - publishFirstAt) / 1000 : 0;
+  const totalWall = (performance.now() - pipelineStart) / 1000;
+
+  metrics.stages.download = {
+    wallClockSeconds: +downloadWall.toFixed(2),
+    downloaded, reusedFromDisk: reused, failed: failed.length,
+    megabytes: +(downloadBytes / 1e6).toFixed(1),
+    mbPerSecond: +((downloadBytes / 1e6) / Math.max(0.001, downloadWall)).toFixed(1),
+    concurrency: downloadConcurrency,
+  };
+  metrics.stages.fit = {
+    wallClockSeconds: +fitWall.toFixed(2),
+    fitted: results.length, skipped: skips.length, workers: fitWorkers,
+    satsPerSecond: +(results.length / Math.max(0.001, fitWall)).toFixed(1),
+    meanFitMs: +(results.reduce((s, r) => s + r.ms, 0) / Math.max(1, results.length)).toFixed(1),
+  };
+  if (doPublish) {
+    metrics.stages.publish = {
+      wallClockSeconds: +publishWall.toFixed(2),
+      published, posts: publishPosts, batchSize: publishBatch, concurrency: publishConcurrency,
+      recordsPerSecond: +(published / Math.max(0.001, publishWall)).toFixed(1),
+      errors: publishErrors.slice(0, 10), publishUrl,
+    };
+  }
+  metrics.stages.total = { wallClockSeconds: +totalWall.toFixed(2), overlapped: true };
+  for (const [name, s] of Object.entries(metrics.stages)) {
+    if (name === "manifest") continue;
+    console.log(`[stage ${name}] ${s.wallClockSeconds}s ${JSON.stringify(s)}`);
+  }
+
+  // ----------------- COMPARE vs CelesTrak SupGP + Space-Track --------------
+  const t0 = performance.now();
+  // RFC4180-ish line splitter: honours double-quoted fields (Space-Track's GP
+  // CSV quotes EVERY value, and COMMENT/TLE fields can contain commas), so a
+  // naive split(",") both misaligns columns and leaves quotes on values
+  // (parseInt('"44235"') -> NaN). CelesTrak's unquoted CSV parses identically.
+  const splitCsvLine = (line) => {
+    const out = [];
+    let cur = "";
+    let q = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const c = line[i];
+      if (q) {
+        if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i += 1; } else q = false; }
+        else cur += c;
+      } else if (c === '"') { q = true; }
+      else if (c === ",") { out.push(cur); cur = ""; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out;
+  };
   const parseCsv = (p) => {
     if (!p) return new Map();
     const lines = fs.readFileSync(p, "utf8").split(/\r?\n/).filter((l) => l.trim());
-    const header = lines[0].split(",");
+    const header = splitCsvLine(lines[0]);
     const col = (n) => header.indexOf(n);
     const rows = new Map();
     for (const line of lines.slice(1)) {
-      const f = line.split(",");
+      const f = splitCsvLine(line);
       const norad = Number.parseInt(f[col("NORAD_CAT_ID")], 10);
       if (!Number.isFinite(norad)) continue;
       rows.set(norad, {
@@ -242,59 +586,52 @@ if (isMainThread) {
   };
   const celestrak = parseCsv(args["celestrak-csv"]);
   const spacetrack = parseCsv(args["spacetrack-csv"]);
-  let beat = 0;
-  let comparedCt = 0;
-  let comparedSt = 0;
+  // Parse an epoch to ms, appending the Z only when absent (the module's fit
+  // EPOCH already carries a trailing Z; Space-Track's does not).
+  const epochMs = (e) => (e ? Date.parse(String(e).endsWith("Z") ? String(e) : `${e}Z`) : NaN);
+  let beat = 0, comparedCt = 0, comparedSt = 0;
   const perSat = results.map((r) => {
     const norad = provider.noradFromFilename(r.file);
     const ours = Number.parseFloat(r.fit.RMS);
     const ct = celestrak.get(norad);
     const st = spacetrack.get(norad);
-    if (ct && Number.isFinite(ct.rms)) {
-      comparedCt += 1;
-      if (ours < ct.rms) beat += 1;
-    }
+    if (ct && Number.isFinite(ct.rms)) { comparedCt += 1; if (ours < ct.rms) beat += 1; }
     if (st) comparedSt += 1;
     return {
-      norad,
-      object: provider.objectFromFilename(r.file),
-      ourRms: ours,
-      ourEpoch: r.fit.EPOCH,
+      norad, object: provider.objectFromFilename(r.file),
+      ourRms: ours, ourEpoch: r.fit.EPOCH,
       celestrakRms: ct?.rms ?? null,
       beatCelestrak: ct && Number.isFinite(ct.rms) ? ours < ct.rms : null,
-      spacetrack: st
-        ? {
-            epoch: st.epoch,
-            deltaMeanMotion: +(Number.parseFloat(r.fit.MEAN_MOTION) - st.meanMotion).toFixed(6),
-            deltaEccentricity: +(Number.parseFloat(r.fit.ECCENTRICITY) - st.eccentricity).toFixed(7),
-            deltaInclinationDeg: +(Number.parseFloat(r.fit.INCLINATION) - st.inclination).toFixed(4),
-            epochAgeHours: +((Date.parse(`${r.fit.EPOCH}Z`) - Date.parse(`${st.epoch}Z`)) / 3.6e6).toFixed(1),
-          }
-        : null,
+      spacetrack: st ? {
+        epoch: st.epoch,
+        deltaMeanMotion: +(Number.parseFloat(r.fit.MEAN_MOTION) - st.meanMotion).toFixed(6),
+        deltaEccentricity: +(Number.parseFloat(r.fit.ECCENTRICITY) - st.eccentricity).toFixed(7),
+        deltaInclinationDeg: +(Number.parseFloat(r.fit.INCLINATION) - st.inclination).toFixed(4),
+        epochAgeHours: +((epochMs(r.fit.EPOCH) - epochMs(st.epoch)) / 3.6e6).toFixed(1),
+      } : null,
     };
   });
-  stageEnd("compare", t0, {
-    celestrakMatched: comparedCt,
-    beatCelestrak: beat,
+  metrics.stages.compare = {
+    wallClockSeconds: +((performance.now() - t0) / 1000).toFixed(2),
+    celestrakMatched: comparedCt, beatCelestrak: beat,
     beatRate: comparedCt ? +(beat / comparedCt).toFixed(4) : null,
     spacetrackMatched: comparedSt,
-  });
+  };
+  console.log(`[stage compare] ${metrics.stages.compare.wallClockSeconds}s ${JSON.stringify(metrics.stages.compare)}`);
 
-  // -- Stage 4: REPORT.
+  // -------------------------------- REPORT ---------------------------------
   metrics.finishedAt = new Date().toISOString();
   metrics.totals = {
-    manifestFiles: manifest.length,
-    fitted: results.length,
-    skipped: skips.length,
-    beatCelestrak: `${beat}/${comparedCt}`,
+    manifestFiles: manifest.length, fitted: results.length, skipped: skips.length,
+    published: doPublish ? published : null, beatCelestrak: `${beat}/${comparedCt}`,
   };
   const rmsSorted = perSat.map((s) => s.ourRms).filter(Number.isFinite).sort((a, b) => a - b);
   const pct = (p) => rmsSorted[Math.min(rmsSorted.length - 1, Math.floor((p / 100) * rmsSorted.length))];
   metrics.rmsKm = rmsSorted.length
     ? { p50: +pct(50).toFixed(3), p90: +pct(90).toFixed(3), p99: +pct(99).toFixed(3), max: +rmsSorted.at(-1).toFixed(3) }
     : null;
-  const outDir = path.join(workdir, metrics.provider);
-  fs.writeFileSync(path.join(outDir, "report.json"), `${JSON.stringify({ metrics, skips }, null, 2)}\n`);
+  const outDir = path.join(workdir, providerName);
+  fs.writeFileSync(path.join(outDir, "report.json"), `${JSON.stringify({ metrics, skips: skips.slice(0, 200) }, null, 2)}\n`);
   fs.writeFileSync(
     path.join(outDir, "per-sat.csv"),
     ["NORAD,OBJECT,OUR_RMS_KM,CELESTRAK_RMS_KM,BEAT,ST_DELTA_MM,ST_EPOCH_AGE_H"]
