@@ -3,7 +3,7 @@
   "private": true,
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/test_wasm.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/test_wasm.mjs tests/ocm_emission.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {

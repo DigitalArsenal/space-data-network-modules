@@ -23,7 +23,15 @@
 //     --celestrak-csv <sup-gp.csv> [--spacetrack-csv <gp.csv>] \
 //     [--download-concurrency 96] [--fit-workers 20] [--limit N] \
 //     [--publish] [--publish-url http://127.0.0.1:15001] \
-//     [--publish-batch 100] [--publish-concurrency 4]
+//     [--publish-batch 100] [--publish-concurrency 4] [--emit-ocm]
+//
+// OCM lane (owner directive 2026-07-14): with --emit-ocm, each fitted object
+// also yields an SDS $OCM (Orbit Comprehensive Message) published alongside its
+// $OMM. The OCM carries the fitted mean-element state, OD metadata, and a
+// PERTURBATIONS block whose FIELD SELECTION follows the US Space Force VCM
+// taxonomy (VCM used as a REFERENCE SPEC only — no VCM record is read or
+// produced; all values are our own SGP4 fit-theory context, honest N/A where the
+// theory does not define a field). See scripts/lib/ocm-record.mjs.
 //
 // Must be run with cwd = analysis/od (the isomorphic harness resolves the
 // space-data-module-sdk from process.cwd()).
@@ -34,6 +42,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
+import { loadOcmBindings, buildOcmFrame } from "./lib/ocm-record.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -140,6 +149,8 @@ if (isMainThread) {
   const publishBatch = Number.parseInt(args["publish-batch"] ?? "100", 10);
   const publishConcurrency = Number.parseInt(args["publish-concurrency"] ?? "4", 10);
   const publishTimeoutMs = Number.parseInt(args["publish-timeout-ms"] ?? "30000", 10);
+  // OCM lane is opt-in so existing OMM-only runs are byte-for-byte unchanged.
+  const emitOcm = args["emit-ocm"] === "true" || args["emit-ocm"] === "" || args["emit-ocm"] === true;
 
   const startedAt = new Date().toISOString();
   const registryKey = provider.registryKey ?? providerName;
@@ -172,6 +183,7 @@ if (isMainThread) {
   // --- resolve the generated $OMM FlatBuffer builder (only if publishing) ----
   let OMM = null;
   let flatbuffers = null;
+  let ocmBindings = null;
   if (doPublish) {
     const anchors = [
       path.join(__dirname, "../../../propagator/sgp4/package.json"),
@@ -191,6 +203,8 @@ if (isMainThread) {
     if (!fbPath || !ommPath) throw new Error("cannot resolve flatbuffers + spacedatastandards.org for --publish");
     flatbuffers = await import(pathToFileURL(fbPath));
     ({ OMM } = await import(pathToFileURL(ommPath)));
+    // OCM bindings share the same require anchors (same node_modules copy).
+    if (emitOcm) ocmBindings = await loadOcmBindings(anchors);
   }
 
   const epochUnixSeconds = (iso) => {
@@ -317,11 +331,11 @@ if (isMainThread) {
   const skips = [];
   let fitFirstAt = 0;
   let fitLastAt = 0;
-  let published = 0;
-  let publishPosts = 0;
-  let publishFirstAt = 0;
-  let publishLastAt = 0;
-  const publishErrors = [];
+  // Per-schema publish tallies (OMM always; OCM only when --emit-ocm). Each: how
+  // many records the node acked (cid), POST count, first/last POST wall clock,
+  // and up to 10 sampled errors.
+  const ommStats = { published: 0, posts: 0, firstAt: 0, lastAt: 0, errors: [] };
+  const ocmStats = { published: 0, posts: 0, firstAt: 0, lastAt: 0, errors: [] };
 
   // ------------------------------ DOWNLOAD ---------------------------------
   const downloadStart = performance.now();
@@ -410,15 +424,16 @@ if (isMainThread) {
     // postBatch NEVER throws: a hung/failed POST is bounded by a request
     // timeout and retried once (a fresh connection recovers a keep-alive
     // socket the server dropped under load), then recorded as an error so one
-    // bad batch can't stall the whole publish stage.
-    const postBatch = async (frames) => {
+    // bad batch can't stall the whole publish stage. Parameterised by schema +
+    // its stats sink so the OMM and OCM lanes share one hardened poster.
+    const postBatch = async (frames, schema, st) => {
       const total = frames.reduce((s, f) => s + f.length, 0);
       const body = Buffer.allocUnsafe(total);
       let off = 0;
       for (const f of frames) { body.set(f, off); off += f.length; }
-      // Schema segment MUST be the full schema name "OMM.fbs" — the server
-      // validator rejects the short "OMM" ("unknown schema: OMM").
-      const url = `${publishUrl}/api/v1/data/publish/batch/OMM.fbs${publishQuery}`;
+      // Schema segment MUST be the full schema name ("OMM.fbs"/"OCM.fbs") — the
+      // server validator rejects the short form ("unknown schema: OMM").
+      const url = `${publishUrl}/api/v1/data/publish/batch/${schema}${publishQuery}`;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           const res = await fetch(url, {
@@ -435,35 +450,49 @@ if (isMainThread) {
             signal: AbortSignal.timeout(publishTimeoutMs),
           });
           if (!res.ok) {
-            if (publishErrors.length < 10) publishErrors.push(`batch ${res.status}: ${(await res.text()).slice(0, 120)}`);
+            if (st.errors.length < 10) st.errors.push(`batch ${res.status}: ${(await res.text()).slice(0, 120)}`);
             return;
           }
           const json = await res.json().catch(() => ({}));
           const rows = Array.isArray(json.results) ? json.results : [];
-          published += rows.filter((r) => r && r.cid).length;
+          st.published += rows.filter((r) => r && r.cid).length;
           // Batch returns HTTP 201 even when individual records fail — surface
           // the first per-record error so the run is honest about them.
           const firstErr = rows.find((r) => r && r.error);
-          if (firstErr && publishErrors.length < 10) publishErrors.push(`record: ${String(firstErr.error).slice(0, 120)}`);
-          if (!publishFirstAt) publishFirstAt = performance.now();
-          publishLastAt = performance.now();
-          publishPosts += 1;
+          if (firstErr && st.errors.length < 10) st.errors.push(`record: ${String(firstErr.error).slice(0, 120)}`);
+          if (!st.firstAt) st.firstAt = performance.now();
+          st.lastAt = performance.now();
+          st.posts += 1;
           return;
         } catch (e) {
-          if (attempt === 1 && publishErrors.length < 10) publishErrors.push(`post: ${String(e?.message ?? e).slice(0, 120)}`);
+          if (attempt === 1 && st.errors.length < 10) st.errors.push(`post: ${String(e?.message ?? e).slice(0, 120)}`);
         }
       }
     };
     async function publisher() {
-      let frames = [];
+      let ommFrames = [];
+      let ocmFrames = [];
+      const flush = async () => {
+        if (ommFrames.length) { await postBatch(ommFrames, "OMM.fbs", ommStats); ommFrames = []; }
+        if (ocmFrames.length) { await postBatch(ocmFrames, "OCM.fbs", ocmStats); ocmFrames = []; }
+      };
       for (;;) {
         const item = await publishChannel.pull();
         if (item === null) break;
-        try { frames.push(buildOmmFrame(item.fit, item.meta)); }
-        catch (e) { if (publishErrors.length < 10) publishErrors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`); continue; }
-        if (frames.length >= publishBatch) { await postBatch(frames); frames = []; }
+        try { ommFrames.push(buildOmmFrame(item.fit, item.meta)); }
+        catch (e) { if (ommStats.errors.length < 10) ommStats.errors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`); continue; }
+        // OCM is 1:1 with OMM. An OCM build failure is isolated (recorded, OMM
+        // still ships) so it can never regress the OMM lane or its gate.
+        if (emitOcm) {
+          try {
+            ocmFrames.push(buildOcmFrame({ fit: item.fit, meta: item.meta, batchId, creationDate, sourceUrl, bindings: ocmBindings }));
+          } catch (e) {
+            if (ocmStats.errors.length < 10) ocmStats.errors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`);
+          }
+        }
+        if (ommFrames.length >= publishBatch) await flush();
       }
-      if (frames.length) await postBatch(frames);
+      await flush();
     }
     await Promise.all(Array.from({ length: publishConcurrency }, publisher));
   })();
@@ -479,12 +508,24 @@ if (isMainThread) {
       const res = await fetch(`${publishUrl}/api/v1/stats`, { signal: AbortSignal.timeout(4000) });
       if (!res.ok) return null;
       const j = await res.json();
-      const schemaRow = (j.schemas || []).find((s) => (s.schema_name || s.schemaName) === "OMM.fbs");
-      const totalOmm = schemaRow ? schemaRow.count : (j.total_records ?? null);
-      const srcRow = (j.sources || []).find(
-        (s) => s.batch_id === batchId && (s.schema === "OMM.fbs" || s.schema === "OMM"),
-      );
-      return { totalOmm, batchCount: srcRow ? srcRow.count : 0 };
+      // stats rows key the schema as `schema` ("OMM.fbs"/"OCM.fbs"); tolerate the
+      // legacy schema_name/short-name forms too.
+      const schemaCount = (name) => {
+        const row = (j.schemas || []).find((s) => (s.schema || s.schema_name || s.schemaName) === name);
+        return row ? row.count : null;
+      };
+      const batchCount = (name) => {
+        const row = (j.sources || []).find(
+          (s) => s.batch_id === batchId && (s.schema === name || s.schema === name.replace(".fbs", "")),
+        );
+        return row ? row.count : 0;
+      };
+      return {
+        totalOmm: schemaCount("OMM.fbs") ?? (j.total_records ?? null),
+        batchOmm: batchCount("OMM.fbs"),
+        totalOcm: schemaCount("OCM.fbs"),
+        batchOcm: batchCount("OCM.fbs"),
+      };
     } catch { return null; }
   };
   const heartbeat = setInterval(async () => {
@@ -495,12 +536,13 @@ if (isMainThread) {
     const stats = doPublish ? await pollNodeStats() : null;
     const done = ((now - pipelineStart) / 1000).toFixed(0);
     const nodeStr = stats
-      ? ` | node OMM ${stats.totalOmm} | stats.sources[batch] ${stats.batchCount}`
+      ? ` | node OMM ${stats.totalOmm} src[batch] ${stats.batchOmm}` +
+        (emitOcm ? ` | node OCM ${stats.totalOcm ?? 0} src[batch] ${stats.batchOcm}` : "")
       : "";
     console.log(
       `[+${done}s] dl ${mbps.toFixed(1)} MB/s (rolling) | got ${downloaded} reuse ${reused} fail ${failed.length} ` +
       `| fitQ ${fitChannel.size} fitted ${results.length} skip ${skips.length} ` +
-      `| pubQ ${publishChannel.size} published ${published}${nodeStr}`,
+      `| pubQ ${publishChannel.size} pub OMM ${ommStats.published}${emitOcm ? ` OCM ${ocmStats.published}` : ""}${nodeStr}`,
     );
   }, 5000);
 
@@ -511,7 +553,8 @@ if (isMainThread) {
   clearInterval(heartbeat);
 
   const fitWall = fitFirstAt ? (fitLastAt - fitFirstAt) / 1000 : 0;
-  const publishWall = publishFirstAt ? (publishLastAt - publishFirstAt) / 1000 : 0;
+  const publishWall = ommStats.firstAt ? (ommStats.lastAt - ommStats.firstAt) / 1000 : 0;
+  const ocmWall = ocmStats.firstAt ? (ocmStats.lastAt - ocmStats.firstAt) / 1000 : 0;
   const totalWall = (performance.now() - pipelineStart) / 1000;
 
   metrics.stages.download = {
@@ -529,11 +572,21 @@ if (isMainThread) {
   };
   if (doPublish) {
     metrics.stages.publish = {
+      schema: "OMM.fbs",
       wallClockSeconds: +publishWall.toFixed(2),
-      published, posts: publishPosts, batchSize: publishBatch, concurrency: publishConcurrency,
-      recordsPerSecond: +(published / Math.max(0.001, publishWall)).toFixed(1),
-      errors: publishErrors.slice(0, 10), publishUrl,
+      published: ommStats.published, posts: ommStats.posts, batchSize: publishBatch, concurrency: publishConcurrency,
+      recordsPerSecond: +(ommStats.published / Math.max(0.001, publishWall)).toFixed(1),
+      errors: ommStats.errors.slice(0, 10), publishUrl,
     };
+    if (emitOcm) {
+      metrics.stages.publishOcm = {
+        schema: "OCM.fbs",
+        wallClockSeconds: +ocmWall.toFixed(2),
+        published: ocmStats.published, posts: ocmStats.posts, batchSize: publishBatch, concurrency: publishConcurrency,
+        recordsPerSecond: +(ocmStats.published / Math.max(0.001, ocmWall)).toFixed(1),
+        errors: ocmStats.errors.slice(0, 10), publishUrl,
+      };
+    }
   }
   metrics.stages.total = { wallClockSeconds: +totalWall.toFixed(2), overlapped: true };
   for (const [name, s] of Object.entries(metrics.stages)) {
@@ -623,7 +676,9 @@ if (isMainThread) {
   metrics.finishedAt = new Date().toISOString();
   metrics.totals = {
     manifestFiles: manifest.length, fitted: results.length, skipped: skips.length,
-    published: doPublish ? published : null, beatCelestrak: `${beat}/${comparedCt}`,
+    published: doPublish ? ommStats.published : null,
+    publishedOcm: doPublish && emitOcm ? ocmStats.published : null,
+    beatCelestrak: `${beat}/${comparedCt}`,
   };
   const rmsSorted = perSat.map((s) => s.ourRms).filter(Number.isFinite).sort((a, b) => a - b);
   const pct = (p) => rmsSorted[Math.min(rmsSorted.length - 1, Math.floor((p / 100) * rmsSorted.length))];

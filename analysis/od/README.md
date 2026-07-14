@@ -77,12 +77,46 @@ CelesTrak CSV, tolerances). Adding a provider (A2.4) is a data change, not code.
   not reproducible on our OEM. The reusable `ref*` fit option that feeds the gate
   is available to any provider whose arc supports it — GLONASS/CPF/Intelsat.)
 
+## OCM emission lane (constellation pipeline)
+
+`scripts/constellation-pipeline.mjs --emit-ocm` builds an SDS **$OCM** (Orbit
+Comprehensive Message, CCSDS 502.0-B-3) for every fitted object and publishes it
+alongside the fitted **$OMM** (`POST /api/v1/data/publish/batch/OCM.fbs`, same
+`source_name`/`provider_id`/`batch_id`/`source_url` tags), so an `OCM.fbs` row
+appears on the App 2 board's `/api/v1/stats`.
+
+The record builder + the fit-context→settings mapper live in
+`scripts/lib/ocm-record.mjs` (pure, dependency-injected, unit-tested). The OCM
+carries:
+
+- **METADATA / HEADER** — object identity (NORAD, name, COSPAR when known) from
+  the provider ephemeris, never fabricated.
+- **fitted mean-element state** — the same GP elements as the companion $OMM,
+  carried as `USER_DEFINED_PARAMETERS` (OCM has no native Keplerian trajectory
+  block; its `STATE_DATA` is Cartesian, which an element fit does not produce).
+- **ORBIT_DETERMINATION** — method (SGP4 differential correction, Levenberg-
+  Marquardt, multi-start), epoch, fit window (`11520` s = 2 orbital periods,
+  ~3.2 h), estimated parameters, RMS residuals, data source.
+- **PERTURBATIONS** — the propagation context, with FIELD SELECTION taken from
+  the US Space Force **Vector Covariance Message (VCM)** taxonomy (CCSDS
+  502.0-B-3) used as a **reference specification only**. No VCM schema is
+  imported and no VCM record is read or produced; every value is our own SGP4
+  fit-theory context (WGS-72 zonal geopotential J2/J3/J4, GM 398600.8, B* drag)
+  with honest `N/A` where the theory defines nothing (no density model, no SRP,
+  no third-body, no solar-flux/geomagnetic inputs). Provenance COMMENTs cite the
+  VCM spec as the field-selection reference and mark `vcm-unavailable`.
+
+To activate real VCM-derived settings, an operator must supply VCM records via an
+SSA sharing-agreement lane (this account has no VCM feed); that is a future
+mapper, not part of this OCM-only lane.
+
 ## Build And Test
 
 ```sh
 npm run build
 node --test tests/test_wasm.mjs
 node --test tests/sdk_compat.test.mjs
+node --test tests/ocm_emission.test.mjs   # OCM builder + perturbation mapper
 ```
 
 For the native benchmark helper:
