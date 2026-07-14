@@ -1,0 +1,42 @@
+{
+  "name": "ISS NASA OEM (LIVE 2026-07-14)",
+  "source": "ISS-E",
+  "format": "oem",
+  "gate": "beatsCelestrakSameEphemeris",
+  "_ownerRuling": "A2.4d (OWNER RULED 2026-07-13, evening: \"same ephemeris\"). ISS flipped from elementRange to beatsCelestrakSameEphemeris. The gate scores CelesTrak's OWN published Segment-01 SupGP elements via the SAME SGP4 over the SAME source-OEM states our fit used, and requires ours <= theirs. MEASURED (rebuilt module, this suite): ours 0.071 km <= CelesTrak 0.111 km (margin 0.040 km) \u2014 reproduces the A2.4c analysis exactly. This is the honest apples-to-apples comparison the packet gate text intends; the raw 0.071-vs-CelesTrak-reported-0.067 number is NOT apples-to-apples (0.067 is CelesTrak's in-sample RMS against their own ephemeris realization, not reproducible on our OEM \u2014 see rmsGapRootCause). The elementRange parity + range checks STILL run (this gate is a strict superset). Tolerances NEVER weakened.",
+  "inputFiles": [
+    "ISS.OEM_J2K_EPH.trimmed.txt"
+  ],
+  "objectName": "ISS",
+  "objectId": "1998-067-A",
+  "noradCatId": 25544,
+  "expect": {
+    "converged": true,
+    "meanMotion": [
+      15.3,
+      15.7
+    ],
+    "inclination": [
+      51.0,
+      52.2
+    ],
+    "eccentricityMax": 0.01,
+    "rmsMaxKm": 5.0
+  },
+  "celestrakCsv": "celestrak_supgp_iss-e_2026-07-14.csv",
+  "celestrakParity": {
+    "noradCatId": 25544,
+    "label": "independent raw-vs-fit element-space parity (same NASA ISS OEM, same epoch)",
+    "tolerances": {
+      "meanMotion": 0.0002,
+      "eccentricity": 5e-05,
+      "inclinationDeg": 0.01,
+      "raanDeg": 0.02,
+      "argLatDeg": 0.05
+    }
+  },
+  "tolerances": {
+    "note": "A2.4/A2.4d: element-space parity vs the SAME-EPOCH CelesTrak ISS-E SupGP OMM (captured 2026-07-13, NORAD 25544, [Segment 01] EPOCH 2026-07-13T12:00:00 == our fit epoch, \u0394epoch 0s). This is INDEPENDENT raw-vs-fit parity: both we and CelesTrak fit the same NASA public ISS OEM. Observed deltas (our A2.4c fit vs CelesTrak Segment 01): meanMotion 5.7e-5, eccentricity 9e-7, inclination 0.0009deg, RAAN 0.0005deg, arg-lat(argp+MA) 0.0001deg \u2014 tolerances set ~50-500x above observed. A2.4d (OWNER RULING 2026-07-13 \"same ephemeris\") ADDS the same-ephemeris RMS beat as the gate: CelesTrak's own Segment-01 elements propagated via the SAME SGP4 over the SAME OEM states score 0.111 km; our fit scores 0.071 km on the identical states \u2192 ours 0.071 <= theirs 0.111 (margin 0.040 km), PASS. The raw 0.071-vs-CelesTrak-reported-0.067 comparison is NOT used (0.067 is CelesTrak's in-sample RMS against their own realization, not reproducible on our OEM \u2014 see rmsGapRootCause). argp/MA compared as arg-lat (near-circular).",
+    "rmsGapRootCause": "A2.4c RESOLUTION (supersedes A2.4b). Two independent findings, both from measurement (native + WASM harness, evidence in the A2.4c worker report):\n(1) FITTER CONVERGENCE \u2014 genuinely improved. The primary Levenberg-Marquardt plateaus at ~1.6 km on the sparse 4-min ISS arc (49 pts) and the Nelder-Mead rescue (Phase 5) lands at 0.080 km but stops SHORT of the true minimum because no LM pass follows it. A2.4c adds Phase 7: a final Gauss-Newton/LM polish that runs only when a derivative-free phase (NM/DE) produced the best result. It walks the residual surface to the local floor \u2014 ISS 0.080 -> 0.071 km \u2014 and is byte-identical for fits already at their LM minimum (all 10 Starlink beatsCelestrak cases unchanged; sub-metre fixture fits unchanged; Phases 5-6 never fire there). Monotone (strict-improvement-only, converged never downgraded), provider-agnostic (trigger is the solver path, not the source).\n(2) THE 0.067 IS NOT MEASURED ON OUR FIXTURE \u2014 so it cannot be honestly beaten. Measured achievable SGP4 floor on our OEM by fit window: 1.6h 0.033 / 2.4h 0.056 / 3.2h (2-orbit, production) 0.071 / 4.8h 0.101 / 6h (CelesTrak's segment) 0.118 / 12h 0.38 km. RMS grows monotonically with arc length (SGP4 model error accumulates); a shorter window would trivially beat 0.067 but that gives WORSE forward-prediction elements = faking, forbidden by the directive. DECISIVE TEST: propagating CelesTrak's OWN published Segment-01 elements against our identical OEM scores 0.111-0.119 km (3.2h: 0.111, 6h: 0.119) \u2014 NOT 0.067. So CelesTrak's reported 0.067 is an in-sample RMS against THEIR ephemeris realization (issuance/sampling/TEME realization) that we cannot reproduce byte-for-byte, and on the SAME data our fit (0.071) already fits BETTER than CelesTrak's own elements (0.111). CONCLUSION: the honest apples-to-apples result is a win; the raw 0.071-vs-0.067 number comparison is not apples-to-apples. Per directive the gate stays honest elementRange \u2014 NOT faked to beatsCelestrak, tolerances NOT tuned. A2.4b's nutation ruling still holds (full 106-term IAU-1980; frame transform is not the cause)."
+  }
+}

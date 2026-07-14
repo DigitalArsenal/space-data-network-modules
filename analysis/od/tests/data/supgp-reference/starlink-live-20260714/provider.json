@@ -1,0 +1,14 @@
+{
+  "name": "SpaceX Starlink (LIVE 2026-07-14)",
+  "source": "SpaceX-E",
+  "format": "meme",
+  "gate": "beatsCelestrak",
+  "inputDir": "meme",
+  "inputPrefix": "MEME_",
+  "inputSuffix": ".txt",
+  "noradFromFilename": true,
+  "celestrakCsv": "celestrak_supgp_live.csv",
+  "tolerances": {
+    "rmsMustBeatCelestrak": true
+  }
+}
