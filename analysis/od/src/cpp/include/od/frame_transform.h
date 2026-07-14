@@ -16,12 +16,12 @@
  * rotation (Montenbruck & Gill "Satellite Orbits" 5.3; Vallado teme2eci) so
  * OEM elements are produced in the same TEME frame CelesTrak SupGP uses.
  *
- * Accuracy: IAU-76 precession (full), IAU-1980 nutation truncated to the ten
- * leading terms (Dpsi/Deps good to < 0.1 arcsec ~= a few metres at LEO), and
- * the 1982 equation of the equinoxes (Dpsi*cos(eps)). This is far tighter than
- * the fit needs to converge and to land inclination/mean-motion correctly; the
- * residual nutation truncation and eqe-of-equinoxes sign are called out for the
- * A2.4 element-space parity gate.
+ * Accuracy: IAU-76 precession (full), the FULL 106-term IAU-1980 nutation series
+ * (A2.4b — was truncated to the ten leading terms, which cost ~13 m on ISS
+ * EME2000->TEME; the full series reproduces the SOFA/ERFA eraNut80 reference to
+ * < 1e-13 rad), and the 1982 equation of the equinoxes (Dpsi*cos(eps_mean)). The
+ * eqe convention is TEME-standard (no 1994 complementary terms): its <9 cm effect
+ * at LEO is far below the fit floor and matches the SGP4/CelesTrak TEME datum.
  */
 
 #include <array>
@@ -46,9 +46,18 @@ enum class FrameKind {
 /// generic Earth-fixed tokens ECEF/ECF/ITRF/TRF as FrameKind::Ecef.
 FrameKind classify_frame(const std::string& token);
 
+/// IAU-1980 nutation in longitude (dpsi) and obliquity (deps), radians, from the
+/// FULL 106-term series (Wahr 1980 / IAU-1980), transcribed from SOFA/ERFA
+/// eraNut80 (Explanatory Supplement to the Astronomical Almanac, §3.222). t is
+/// Julian centuries of TT from J2000.0. Reproduces eraNut80(2400000.5, 53736.0)
+/// = (dpsi -0.9643658353226563966e-5, deps 0.4060051006879713322e-4) rad at
+/// t=0.06, the SOFA t_sofa_c/ERFA t_erfa_c reference vector, to < 1e-13 rad.
+void iau1980_nutation(double t, double& dpsi, double& deps);
+
 /// Rotation matrix R such that r_TEME = R * r_J2000 for the given UTC epoch.
-/// jd_utc: UTC Julian Date. (TT-UTC is neglected: it shifts precession by
-/// < 1e-4 arcsec, well below the truncation floor.)
+/// jd_utc: UTC Julian Date. (TT-UTC is neglected: it shifts precession/nutation
+/// by < 1e-4 arcsec, well below the model floor — the same policy the precession
+/// term uses.)
 Mat3 eci_j2000_to_teme_matrix(double jd_utc);
 
 /// Rotate a J2000/EME2000 position (km) and velocity (km/s) pair into TEME.

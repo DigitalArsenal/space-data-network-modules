@@ -70,6 +70,62 @@ void test_frame_classification() {
     CHECK(classify_frame("") == FrameKind::Unsupported, "empty frame fail-closed");
 }
 
+// ── 1b. FULL 106-term IAU-1980 nutation pinned to the SOFA/ERFA reference ────
+
+void test_nutation_reference() {
+    std::cout << "\n--- Test: IAU-1980 nutation (106-term) vs SOFA/ERFA reference ---" << std::endl;
+
+    // Authoritative pin: SOFA t_sofa_c / ERFA t_erfa_c eraNut80 test vector.
+    //   eraNut80(TT 2400000.5, 53736.0) -> t = ((2400000.5-2451545)+53736)/36525
+    //   = 2191.5/36525 = 0.06 centuries exactly. Published to 1e-13 rad:
+    //     dpsi = -0.9643658353226563966e-5 rad
+    //     deps =  0.4060051006879713322e-4 rad
+    double dpsi = 0.0, deps = 0.0;
+    iau1980_nutation(0.06, dpsi, deps);
+    std::cout << std::scientific;
+    std::cout << "    dpsi = " << dpsi << " rad  (ERFA -0.9643658353226563966e-5)" << std::endl;
+    std::cout << "    deps = " << deps << " rad  (ERFA  0.4060051006879713322e-4)" << std::endl;
+    CHECK(std::abs(dpsi - (-0.9643658353226563966e-5)) < 1e-13,
+          "dpsi matches SOFA/ERFA eraNut80 reference to < 1e-13 rad");
+    CHECK(std::abs(deps - (0.4060051006879713322e-4)) < 1e-13,
+          "deps matches SOFA/ERFA eraNut80 reference to < 1e-13 rad");
+
+    // Regression guard: the FULL series must differ measurably from the former
+    // 10-term truncation. At t=0.06 the discarded 96 terms move dpsi by ~1e-8 rad
+    // (a few metres of rotation at LEO) — the A2.4b motivation. The 10-term sum
+    // is recomputed inline here purely as a lower-bound sanity check.
+    struct { int nl,nlp,nf,nd,nom; double sp,spt,ce,cet; } kTrunc[] = {
+        {0,0,0,0,1,-171996.0,-174.2,92025.0,8.9}, {0,0,2,-2,2,-13187.0,-1.6,5736.0,-3.1},
+        {0,0,2,0,2,-2274.0,-0.2,977.0,-0.5}, {0,0,0,0,2,2062.0,0.2,-895.0,0.5},
+        {0,1,0,0,0,1426.0,-3.4,54.0,-0.1}, {1,0,0,0,0,712.0,0.1,-7.0,0.0},
+        {0,1,2,-2,2,-517.0,1.2,224.0,-0.6}, {0,0,2,0,1,-386.0,-0.4,200.0,0.0},
+        {1,0,2,0,2,-301.0,0.0,129.0,-0.1}, {0,-1,2,-2,2,217.0,-0.5,-95.0,0.3},
+    };
+    const double t = 0.06;
+    const double dtr = M_PI / (180.0 * 3600.0);
+    // Reuse the same fundamental arguments via a fresh nutation call is not
+    // possible (they are internal), so approximate with the degree-form args
+    // used by the old code; only the magnitude of the difference matters here.
+    const double deg = M_PI / 180.0, t2 = t*t, t3 = t2*t;
+    auto nr = [](double a){ double two=2*M_PI, r=std::fmod(a,two); return r<0?r+two:r; };
+    double l  = nr((134.96298139 + 477198.867398*t + 0.0086972*t2 + t3/56250.0)*deg);
+    double lp = nr((357.52772333 + 35999.050340*t - 0.0001603*t2 - t3/300000.0)*deg);
+    double ff = nr((93.27191028 + 483202.017538*t - 0.0036825*t2 + t3/327270.0)*deg);
+    double dd = nr((297.85036306 + 445267.111480*t - 0.0019142*t2 + t3/189474.0)*deg);
+    double om = nr((125.04452222 - 1934.136261*t + 0.0020708*t2 + t3/450000.0)*deg);
+    double dpsi10 = 0.0;
+    for (auto& x : kTrunc) {
+        double a = x.nl*l + x.nlp*lp + x.nf*ff + x.nd*dd + x.nom*om;
+        dpsi10 += (x.sp + x.spt*t)*std::sin(a);
+    }
+    dpsi10 *= 1e-4 * dtr;
+    double dpsi_diff_arcsec = std::abs(dpsi - dpsi10) / dtr;
+    std::cout << std::fixed;
+    std::cout << "    full-vs-10term dpsi diff = " << dpsi_diff_arcsec << " arcsec" << std::endl;
+    CHECK(dpsi_diff_arcsec > 1e-4,
+          "full 106-term series differs from the old 10-term truncation (terms added)");
+}
+
 void test_ecef_teme_transform() {
     std::cout << "\n--- Test: ECEF (IGS20/ITRF) -> TEME transform ---" << std::endl;
 
@@ -279,6 +335,7 @@ void test_glonass_position_only_fit() {
 int main() {
     std::cout << "=== A2.4-prereq: frame / time / position-only OD tests ===" << std::endl;
     test_frame_classification();
+    test_nutation_reference();
     test_ecef_teme_transform();
     test_time_systems();
     test_glonass_position_only_fit();
