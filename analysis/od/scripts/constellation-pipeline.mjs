@@ -18,6 +18,23 @@
 // pre-captured CSV paths. Publishing targets a node the operator points us at
 // (--publish-url), typically an SSH tunnel to the serving node's API port.
 //
+// PUBLISHING ON THE SERVING NODE ITSELF (the prod topology): point --publish-url
+// at the daemon's LOCAL PUBLISH LANE — a separate loopback-bound listener that
+// carries the publish routes with no HTTP auth, for pipelines running ON the host:
+//
+//     --publish --publish-url http://127.0.0.1:5011
+//
+// Enable it in the daemon config with `publishing.local_publish_addr: 127.0.0.1:5011`.
+// The daemon refuses to start if that address is not a literal loopback IP, and the
+// lane rejects any request carrying proxy headers — it must never be reverse-proxied.
+// No flag change is needed here: the lane serves the same
+// /api/v1/data/publish/{batch/}{schema} routes this script already posts to, plus the
+// GET /api/v1/stats that the completeness gate and progress heartbeat poll.
+//
+// Do NOT point --publish-url at the daemon's public API port on a node with
+// require_auth: that listener is reverse-proxied to the internet and every write
+// there returns 401 without a wallet session.
+//
 //   node scripts/constellation-pipeline.mjs \
 //     --provider starlink|iss|glonass|cpf|intelsat|celestrak-supgp|gps|oneweb \
 //     --workdir <dir> \
