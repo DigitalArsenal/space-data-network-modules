@@ -875,8 +875,9 @@ if (isMainThread) {
             body,
             // Escalating deadline: a fixed timeout below the server's
             // processing latency can NEVER collect an ack (the confirmed
-            // data-loss spiral) — each retry waits longer.
-            signal: AbortSignal.timeout(timeoutMs * (attempt + 1)),
+            // data-loss spiral) — each retry waits longer, CAPPED at 3x so a
+            // late attempt can't stall the lane for tens of minutes.
+            signal: AbortSignal.timeout(timeoutMs * Math.min(3, attempt + 1)),
           });
           if (!res.ok) {
             const text = (await res.text().catch(() => "")).slice(0, 160);
