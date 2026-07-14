@@ -57,6 +57,17 @@ struct SGP4Elements {
     int max_iterations = 0;
     bool converged = false;
     std::string data_source;   // "SpaceX-E", etc.
+
+    // A2.4d same-ephemeris reference RMS (OWNER RULING 2026-07-13 "same
+    // ephemeris"). When a reference element set is supplied to the fit (a
+    // captured CelesTrak SupGP OMM), the fitter ALSO propagates THOSE elements
+    // via the SAME SGP4 over the SAME winning fit_points and records their RMS
+    // here — enabling the beatsCelestrakSameEphemeris gate (our rms_km <=
+    // reference_rms_km on identical states). Absent by default; only emitted to
+    // JSON when has_reference_rms is true, so every non-reference fit is
+    // byte-for-byte unchanged.
+    bool has_reference_rms = false;
+    double reference_rms_km = 0.0;
 };
 
 /// Fitting configuration
@@ -85,6 +96,16 @@ struct FitterConfig {
     // input. DEFAULT false keeps every full-state path (MEME/OEM w/ velocities)
     // byte-for-byte unchanged. fit_sgp4_series sets this from series.meta.
     bool position_only = false;
+
+    // A2.4d same-ephemeris reference scoring (OWNER RULING 2026-07-13). When
+    // has_reference is true, the fitter propagates reference_elements via the
+    // SAME SGP4 over the SAME winning fit_points our fit used and reports
+    // reference_rms_km on the result (the beatsCelestrakSameEphemeris gate:
+    // our RMS <= theirs on identical states). Reusable by any provider manifest
+    // (GLONASS/CPF/Intelsat may adopt it once their arcs upgrade). Default false
+    // => no reference scoring, every existing fit byte-for-byte identical.
+    bool has_reference = false;
+    SGP4Elements reference_elements{};
 };
 
 /// Fit result

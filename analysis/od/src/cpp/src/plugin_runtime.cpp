@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <exception>
 #include <limits>
 #include <string>
@@ -130,6 +131,46 @@ std::string parse_string_option(std::string_view json, std::string_view key) {
     return value;
 }
 
+// Extract a JSON number value for `key` from a flat options object. Mirrors the
+// colon-anchored needle convention used by the int/string parsers, but accepts
+// signed, fractional, and E-notation values via strtod (BSTAR/ndot come in as
+// e.g. 9.2967e-4). Returns false when the key is absent or is not a number; the
+// quoted needle (with trailing ") disambiguates prefix keys like refMeanMotion
+// vs refMeanMotionDot vs refMeanMotionDdot.
+bool parse_double_option(std::string_view json, std::string_view key, double* out) {
+    if (json.empty() || !out) {
+        return false;
+    }
+    const std::string quoted_key = std::string("\"") + std::string(key) + "\"";
+    const auto key_pos = json.find(quoted_key);
+    if (key_pos == std::string_view::npos) {
+        return false;
+    }
+    const auto colon_pos = json.find(':', key_pos + quoted_key.size());
+    if (colon_pos == std::string_view::npos) {
+        return false;
+    }
+    size_t cursor = colon_pos + 1;
+    while (cursor < json.size() &&
+           std::isspace(static_cast<unsigned char>(json[cursor]))) {
+        cursor += 1;
+    }
+    if (cursor >= json.size()) {
+        return false;
+    }
+    // strtod needs a NUL-terminated buffer; it stops at the first non-numeric
+    // char (',', '}', whitespace), so the trailing JSON is ignored.
+    const std::string tail(json.substr(cursor));
+    const char* start = tail.c_str();
+    char* end = nullptr;
+    const double value = std::strtod(start, &end);
+    if (end == start) {
+        return false;  // no number parsed (e.g. a string or null value)
+    }
+    *out = value;
+    return true;
+}
+
 FitterConfig parse_fit_options(std::string_view options_json) {
     FitterConfig config;
     const int camel_case_limit =
@@ -140,6 +181,35 @@ FitterConfig parse_fit_options(std::string_view options_json) {
         camel_case_limit > 0 ? camel_case_limit : snake_case_limit;
     if (requested_limit > 0) {
         config.max_iterations = std::clamp(requested_limit, 1, 300);
+    }
+
+    // A2.4d same-ephemeris reference scoring (OWNER RULING 2026-07-13 "same
+    // ephemeris"). A caller may supply a reference GP element set (a captured
+    // CelesTrak SupGP OMM row) as flat ref* options; the fitter then scores those
+    // elements via the SAME SGP4 over the SAME fit points and reports
+    // REFERENCE_RMS (the beatsCelestrakSameEphemeris gate). Reusable by any
+    // provider manifest. Requires at least a valid epoch + mean motion; otherwise
+    // the option is ignored and the fit is byte-for-byte unchanged.
+    const std::string ref_epoch = parse_string_option(options_json, "refEpoch");
+    double ref_mm = 0.0;
+    if (!ref_epoch.empty() &&
+        parse_double_option(options_json, "refMeanMotion", &ref_mm) && ref_mm > 0.0) {
+        SGP4Elements ref{};
+        ref.epoch_iso = ref_epoch;
+        ref.epoch_jd = iso_to_jd(ref_epoch);  // same UTC-JD base as the fit points
+        ref.mean_motion = ref_mm;
+        parse_double_option(options_json, "refEccentricity", &ref.eccentricity);
+        parse_double_option(options_json, "refInclination", &ref.inclination);
+        parse_double_option(options_json, "refRaan", &ref.ra_of_asc_node);
+        parse_double_option(options_json, "refArgPericenter", &ref.arg_of_pericenter);
+        parse_double_option(options_json, "refMeanAnomaly", &ref.mean_anomaly);
+        parse_double_option(options_json, "refBstar", &ref.bstar);
+        parse_double_option(options_json, "refMeanMotionDot", &ref.mean_motion_dot);
+        parse_double_option(options_json, "refMeanMotionDdot", &ref.mean_motion_ddot);
+        if (ref.epoch_jd > 0.0) {
+            config.has_reference = true;
+            config.reference_elements = ref;
+        }
     }
     return config;
 }

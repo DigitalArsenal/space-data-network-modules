@@ -172,6 +172,12 @@ function parseCelestrakSupGpRows(csvPath) {
       raan: num("RA_OF_ASC_NODE"),
       argp: num("ARG_OF_PERICENTER"),
       meanAnomaly: num("MEAN_ANOMALY"),
+      // Drag terms — needed to propagate CelesTrak's own elements via SGP4 for
+      // the A2.4d same-ephemeris RMS score (a bare Keplerian set would misfit an
+      // LEO arc). Columns are present in the SupGP CSV; default 0 when blank.
+      bstar: Number.isFinite(num("BSTAR")) ? num("BSTAR") : 0,
+      meanMotionDot: Number.isFinite(num("MEAN_MOTION_DOT")) ? num("MEAN_MOTION_DOT") : 0,
+      meanMotionDdot: Number.isFinite(num("MEAN_MOTION_DDOT")) ? num("MEAN_MOTION_DDOT") : 0,
       rms: num("RMS"),
     };
     if (!byNorad.has(norad)) {
@@ -393,6 +399,113 @@ async function runElementRangeGate(t, harness, dir, manifest) {
     if (manifest.celestrakParity) {
       assertElementSpaceParity(fit, manifest.celestrakParity, celestrakByNorad, label);
     }
+  }
+}
+
+// ── A2.4d same-ephemeris beat (OWNER RULING 2026-07-13: "same ephemeris") ─────
+// Build the ref* fit options that carry a captured CelesTrak SupGP OMM row into
+// the module, so the fitter propagates THOSE elements via the SAME SGP4 over the
+// SAME source-OEM states our fit used and reports REFERENCE_RMS. Reusable: any
+// provider manifest declaring gate "beatsCelestrakSameEphemeris" + a
+// celestrakParity.noradCatId reference gets this for free (GLONASS/CPF/Intelsat
+// may adopt it once their arcs upgrade).
+function referenceOptionsFromRow(manifest, row) {
+  const options = fitOptionsForProvider(manifest);
+  options.refEpoch = row.epoch;
+  options.refMeanMotion = row.meanMotion;
+  options.refEccentricity = row.eccentricity;
+  options.refInclination = row.inclination;
+  options.refRaan = row.raan;
+  options.refArgPericenter = row.argp;
+  options.refMeanAnomaly = row.meanAnomaly;
+  options.refBstar = row.bstar;
+  options.refMeanMotionDot = row.meanMotionDot;
+  options.refMeanMotionDdot = row.meanMotionDdot;
+  return options;
+}
+
+// Same-ephemeris gate: our fitted RMS <= the RMS of CelesTrak's OWN published
+// SupGP elements, BOTH scored against the identical source-OEM states via the
+// SAME SGP4 (apples-to-apples, per the A2.4c analysis + the owner ruling). Runs
+// the existing elementRange checks too (element-space parity + ranges) so this
+// gate is a strict superset: parity + beat, both.
+async function runBeatsCelestrakSameEphemerisGate(t, harness, dir, manifest) {
+  // (1) parity + ranges (unchanged, never weakened).
+  await runElementRangeGate(t, harness, dir, manifest);
+
+  // (2) the same-ephemeris RMS beat.
+  const parity = manifest.celestrakParity;
+  assert.ok(
+    parity && Number.isFinite(parity.noradCatId),
+    `Provider ${manifest.name} declares beatsCelestrakSameEphemeris but no `
+      + `celestrakParity.noradCatId reference to score.`,
+  );
+  const byNorad = parseCelestrakSupGpRows(path.join(dir, manifest.celestrakCsv));
+  const refRows = byNorad.get(parity.noradCatId);
+  assert.ok(
+    refRows && refRows.length > 0,
+    `${manifest.name}: no CelesTrak SupGP rows for NORAD ${parity.noradCatId} `
+      + `(${manifest.celestrakCsv}).`,
+  );
+
+  const files = providerInputFiles(dir, manifest);
+  assert.ok(files.length > 0, `Provider ${manifest.name} declares no input files.`);
+  const baseOptions = fitOptionsForProvider(manifest);
+
+  for (const filePath of files) {
+    const content = fs.readFileSync(filePath);
+    const label = `${manifest.name}:${path.basename(filePath)}`;
+
+    // Pass 1 — fit WITHOUT a reference: learn our fit epoch, and prove the
+    // reference option does not perturb the fit (byte-identity contract).
+    const plain = await invokeFitJson(harness, content, baseOptions);
+    assert.equal(
+      "REFERENCE_RMS" in plain,
+      false,
+      `${label}: a non-reference fit must NOT emit REFERENCE_RMS.`,
+    );
+
+    // The same-ephemeris reference is the CelesTrak SupGP segment whose epoch is
+    // closest to OUR fit epoch (ISS Segment 01 EPOCH == our epoch, Δ0s).
+    const { row: refRow, deltaMs } = pickClosestEpochRow(refRows, plain.EPOCH);
+
+    // Pass 2 — fit WITH the reference: the module propagates CelesTrak's own
+    // elements via the SAME SGP4 over the SAME winning fit points → REFERENCE_RMS.
+    const scored = await invokeFitJson(
+      harness,
+      content,
+      referenceOptionsFromRow(manifest, refRow),
+    );
+
+    const oursRms = Number.parseFloat(scored.RMS);
+    const theirsRms = Number.parseFloat(scored.REFERENCE_RMS);
+    assert.ok(Number.isFinite(oursRms), `${label}: our fit RMS must be finite.`);
+    assert.ok(
+      Number.isFinite(theirsRms),
+      `${label}: REFERENCE_RMS must be present + finite (same-ephemeris score of `
+        + `CelesTrak's own SupGP elements).`,
+    );
+    assert.equal(
+      scored.RMS,
+      plain.RMS,
+      `${label}: the reference option perturbed the fit (${scored.RMS} vs ${plain.RMS}); `
+        + `same-ephemeris scoring must be side-effect free.`,
+    );
+
+    // Record BOTH numbers in the test output (A2.4d directive).
+    const summary =
+      `${label} same-ephemeris beat: ours=${oursRms.toFixed(3)} km <= `
+      + `CelesTrak=${theirsRms.toFixed(3)} km (margin ${(theirsRms - oursRms).toFixed(3)} km; `
+      + `ref NORAD ${parity.noradCatId} [${refRow.objectName}] Δepoch=`
+      + `${(deltaMs / 1000).toFixed(0)}s)`;
+    if (typeof t.diagnostic === "function") t.diagnostic(summary);
+    console.log(summary);
+
+    assert.ok(
+      oursRms <= theirsRms,
+      `${label}: same-ephemeris RMS gate FAILED — ours ${oursRms} km must be <= `
+        + `CelesTrak ${theirsRms} km on the identical OEM states.`,
+    );
   }
 }
 
@@ -708,6 +821,8 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
       if (manifest.gate === "beatsCelestrak") {
         await runBeatsCelestrakGate(t, harness, dir, manifest);
+      } else if (manifest.gate === "beatsCelestrakSameEphemeris") {
+        await runBeatsCelestrakSameEphemerisGate(t, harness, dir, manifest);
       } else if (manifest.gate === "elementRange") {
         await runElementRangeGate(t, harness, dir, manifest);
       } else {

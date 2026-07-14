@@ -66,9 +66,16 @@ CelesTrak CSV, tolerances). Adding a provider (A2.4) is a data change, not code.
   ```
 
   must pass for every checked-in reference case.
-- `iss/` — NASA public ISS OEM (trimmed). Gate `elementRange`: proves the
-  EME2000→TEME OEM ingest end-to-end (converges, ISS-like mean motion /
-  inclination). CelesTrak element-space parity for ISS is deferred to A2.4.
+- `iss/` — NASA public ISS OEM (trimmed). Gate `beatsCelestrakSameEphemeris`
+  (A2.4d, OWNER RULING 2026-07-13 "same ephemeris"): scores CelesTrak's OWN
+  Segment-01 SupGP elements via the SAME SGP4 over the SAME source-OEM states our
+  fit used, and requires ours ≤ theirs — MEASURED ours 0.071 km ≤ CelesTrak
+  0.111 km (margin 0.040 km). This gate is a strict superset of `elementRange`:
+  it ALSO runs the EME2000→TEME ingest sanity ranges + same-epoch CelesTrak
+  element-space parity. (The raw 0.071-vs-CelesTrak-reported-0.067 comparison is
+  NOT used — that 0.067 is CelesTrak's in-sample RMS on their own realization,
+  not reproducible on our OEM. The reusable `ref*` fit option that feeds the gate
+  is available to any provider whose arc supports it — GLONASS/CPF/Intelsat.)
 
 ## Build And Test
 
