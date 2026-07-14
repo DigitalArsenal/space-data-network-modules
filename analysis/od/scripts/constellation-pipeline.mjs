@@ -848,10 +848,19 @@ if (isMainThread) {
       // Distinct frames ever submitted (sha256 of bytes): the dedup-exact
       // server-side expectation even when acks are lost to client timeouts.
       distinctSubmitted: new Set(),
+      // Every distinct frame, retained until the completeness gate passes so a
+      // SERVER-SIDE loss of already-acked records (store wipe/restart mid-run,
+      // observed live 2026-07-14) can be recovered by re-posting everything —
+      // dedup-safe: still-present records answer with their cid instantly.
+      allFrames: [],
     };
     const pushErr = (m) => { if (state.errors.length < 12) state.errors.push(m); };
     const postAcked = async (frames) => {
-      for (const f of frames) state.distinctSubmitted.add(crypto.createHash("sha256").update(f).digest("hex"));
+      for (const f of frames) {
+        const h = crypto.createHash("sha256").update(f).digest("hex");
+        if (!state.distinctSubmitted.has(h)) state.allFrames.push(f); // retained for wipe-recovery re-posts
+        state.distinctSubmitted.add(h);
+      }
       let remaining = frames;
       for (let attempt = 0; remaining.length && attempt < maxAttempts; attempt += 1) {
         if (attempt) await sleep(Math.min(30000, 1000 * 2 ** (attempt - 1)));
@@ -1460,6 +1469,14 @@ if (isMainThread) {
   const gateLane = async ({ pub, schemaName, built, buildErrs, label }) => {
     let gate = null;
     for (let round = 0; round < 3; round += 1) {
+      if (round && !pub.state.unacked.length && pub.state.allFrames.length) {
+        // Server-side shortfall with nothing left to retry: the server lost
+        // records we already acked (store wipe/restart). Recovery: re-post the
+        // FULL retained frame set — dedup returns cids for survivors, the rest
+        // re-store. Never fabricates; identical bytes, identical batch tags.
+        console.error(`[publish gate ${label}] server shortfall with empty retry set — re-posting all ${pub.state.allFrames.length} retained frames (dedup-safe wipe recovery)`);
+        pub.state.unacked.push(...pub.state.allFrames);
+      }
       if (round && pub.state.unacked.length) await drainUnacked(pub, 1);
       const expectedDistinct = Math.max(pub.state.cids.size, pub.state.distinctSubmitted.size - pub.state.rejected);
       gate = await completenessGate({ batchIdWanted: batchId, expectedDistinct, schemaName, polls: round === 0 ? 24 : 12 });
