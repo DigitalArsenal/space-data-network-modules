@@ -137,6 +137,14 @@ const PROVIDERS = {
   // NON-INDEPENDENT labeling mirrored from data-source/celestrak-supgp (COMMENT
   // prose + CelesTrak's own RMS/DATA_SOURCE preserved). Fetched ONCE per token
   // via the host relay UNDER THE CELESTRAK FETCH POLICY (3h ledger, 2.5s serial).
+  //
+  // OneWeb-E (8th token, key "oneweb-supgp"): the OneWeb operator LTEF is an
+  // ALMANAC (one mean-element set per satellite for antenna pointing — see the
+  // oneweb blocked-lane note below), so there is no state ephemeris for an
+  // INDEPENDENT SDN OD. CelesTrak's OneWeb-E SupGP (fitted from the same LTEF) is
+  // therefore republished here on the NON-INDEPENDENT lane, exactly like the 7
+  // above. 'oneweb' stays reserved for a real OD lane should a state-vector
+  // OneWeb feed ever appear.
   "celestrak-supgp": {
     kind: "republish",
     tokens: [
@@ -147,27 +155,52 @@ const PROVIDERS = {
       { token: "Kuiper-E", key: "kuiper" },
       { token: "AST", key: "ast-spacemobile" },
       { token: "CSS-E", key: "css" },
+      { token: "OneWeb-E", key: "oneweb-supgp" },
     ],
   },
-  // BLOCKED lanes (honest skip taxonomy — the board renders these reasons).
+  // GPS: UNBLOCKED as a REAL position-only OD lane (owner directive 2026-07-14).
+  // The GPS *almanac* (GPS-A) is still un-fittable mean elements, but IAC's full
+  // multi-GNSS precise SP3-d rapid product carries GPS 'G' PRN *state vectors*
+  // (IGS20/ECEF, GPS time) — a real ephemeris fit exactly like the glonass lane.
+  // Identity comes from the checked-in public CelesTrak GPS-A PRN->NORAD registry
+  // (prn-norad-registry.json), never fabricated. See prepareGps.
   gps: {
-    kind: "blocked",
     registryKey: "gps",
-    skipReason:
-      "BLOCKED AT SOURCE: a GPS almanac (NAVCEN SEM/YUMA) is a set of GPS-LNAV mean Keplerian ELEMENTS, " +
-      "not a state-vector ephemeris — there is nothing to fit (A2.2c-2 forbids fabricating an ephemeris " +
-      "by propagating the almanac). Element-space parity vs CelesTrak GPS-A is also not independent and " +
-      "needs a GPS-BROADCAST->SGP4 theory reconciliation + PRN->NORAD cross-reference (OWNER-ASSIST). " +
-      "UNBLOCK LEAD: CelesTrak's GPS-E (state-vector) + IGS precise ephemeris + PRN->NORAD.",
+    source: "IAC",
+    dataSource: "GPS",
+    kind: "prepare",
+    prepare: "gps",
+    inputFormat: "oem",
+    noradFromFilename: () => 0,
+    objectFromFilename: (name) => name.replace(/\.oem\.kvn$/, ""),
+    objectNameFromFilename: (name) => name.replace(/\.oem\.kvn$/, ""),
+    objectIdFromFilename: () => "",
   },
+  // OneWeb: independent-OD lane stays BLOCKED — but NOT for the old reason. The
+  // LTEF 17-column encoding has now been REVERSE-ENGINEERED and VALIDATED (2026-
+  // 07-14): col7 = ascending-node longitude in an Earth-fixed frame at the file
+  // reference epoch, 2^18 == 360deg; inertial RAAN = col7*(360/2^18) + GMST(ref
+  // epoch). Proof: across all 563 LTEF rows the decoded RAAN matches CelesTrak
+  // OneWeb-E to max 0.087deg (median 0.022deg), and the GMST-derived offset
+  // (112.46deg) equals GMST at the file reference epoch (112.37deg). BUT LTEF is
+  // an ALMANAC (one element set per satellite; a/e/i are constellation nominals,
+  // NOT independently encoded, and there is NO state-vector series) — so per
+  // A2.2c-2 it CANNOT be independently OD-fit (same class as the GPS almanac).
+  // The publishable OneWeb data lane is the OneWeb-E republish above; this decode
+  // additionally VALIDATES that republish's LTEF->OneWeb-E provenance chain and
+  // resolves per-object identity (LTEF slot N == ONEWEB-000N, 563/563 confirmed).
   oneweb: {
     kind: "blocked",
     registryKey: "oneweb",
     skipReason:
-      "BLOCKED ON DECODE: OneWeb's operator feed is LTEF, a proprietary 17-column fixed-point encoding " +
-      "with no public column spec (A2.2c-1); SMA/eccentricity/frame are not decodable, so no raw state " +
-      "vectors can be fit. Element parity vs CelesTrak OneWeb-E would be non-independent anyway (their " +
-      "SupGP derives from the same LTEF). OWNER-ASSIST: obtain OneWeb's LTEF spec.",
+      "LTEF DECODE VALIDATED, BUT ALMANAC (no independent OD): the OneWeb operator feed is LTEF, one " +
+      "mean-element row per satellite (antenna-pointing almanac), NOT a state-vector ephemeris. The 17-" +
+      "column encoding was reverse-engineered + validated 2026-07-14 (col7 = Earth-fixed ascending-node " +
+      "longitude, 2^18==360deg; RAAN = col7*360/2^18 + GMST(file-ref-epoch); 563/563 rows match CelesTrak " +
+      "OneWeb-E RAAN to <=0.087deg). No public spec exists — decode is reverse-engineered, cited as such. " +
+      "Because a/e/i are constellation nominals (not encoded) and there is no state series, A2.2c-2 forbids " +
+      "fabricating a fittable ephemeris. Publishable OneWeb data ships on the NON-INDEPENDENT OneWeb-E " +
+      "republish lane (key oneweb-supgp); the decode validates that lane's provenance + resolves identity.",
   },
 };
 
@@ -452,7 +485,114 @@ async function prepareIntelsat(filesDir, cacheDir, { limit, arcHours, fetchConcu
   return { files, meta, note: `listing=${ecf.length} ecf entries, ${newestBySat.size} sats, prepared ${files.length}; ${notes.slice(0, 6).join("; ")}` };
 }
 
-const PREPARERS = { glonass: prepareGlonass, cpf: prepareCpf, intelsat: prepareIntelsat };
+// GPS: IAC's FULL multi-GNSS precise SP3-d rapid product (Sta*.sp3 — the same
+// anonymous-FTP directory the glonass lane reads, but the mixed product, NOT the
+// GLONASS-only .sp3.glo) carries GPS 'G' PRN STATE VECTORS (IGS20/ECEF, GPS
+// time). We keep only the 'PG' records and emit one position-only KVN OEM per
+// PRN -> fit, IDENTICAL frame/time chain to glonass (OD side owns ECEF->TEME +
+// GPS->UTC). The SP3 keys by PRN token only (G01..G32, time-varying SV
+// assignment); the checked-in public CelesTrak GPS-A PRN->NORAD registry
+// (tests/data/supgp-reference/gps/prn-norad-registry.json) resolves PRN -> real
+// NORAD/COSPAR (miss -> honest-empty, never fabricated).
+async function prepareGps(filesDir, cacheDir, { registryPath }) {
+  const dayMs = 86400000;
+  let sp3Path = null;
+  let sp3Name = null;
+  let dayDir = null;
+  for (let back = 0; back < 6 && !sp3Path; back += 1) {
+    const d = new Date(Date.now() - back * dayMs);
+    const doy = Math.floor((d - Date.UTC(d.getUTCFullYear(), 0, 0)) / dayMs);
+    dayDir = `${String(d.getUTCFullYear()).slice(2)}${String(doy).padStart(3, "0")}`;
+    const listUrl = `ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/${dayDir}/rapid/`;
+    try {
+      const { stdout } = await pExecFile("curl", ["-s", "-m", "40", listUrl]);
+      // full multi-GNSS product only: Sta<n>.sp3 NOT followed by another dot/word
+      // (excludes .sp3.glo / .clk / .cld).
+      const m = stdout.match(/Sta\d+\.sp3(?![.\w])/);
+      if (!m) continue;
+      sp3Name = m[0];
+      const cached = path.join(cacheDir, `${dayDir}_${sp3Name}`);
+      if (!fs.existsSync(cached) || fs.statSync(cached).size === 0) {
+        await pExecFile("curl", ["-s", "-m", "180", "-o", cached, `${listUrl}${sp3Name}`]);
+      }
+      if (fs.statSync(cached).size > 0) sp3Path = cached;
+    } catch { /* try previous day */ }
+  }
+  if (!sp3Path) throw new Error("gps: no IAC rapid Sta*.sp3 found in the last 6 days");
+
+  // Owner-verified PRN->NORAD registry (id_registry.hpp shape, keyed by the PRN
+  // token). Absent/empty -> honest-empty ids (still fitted, never fabricated).
+  let registry = {};
+  try { registry = JSON.parse(fs.readFileSync(registryPath, "utf8")); } catch { /* honest-empty */ }
+
+  const text = fs.readFileSync(sp3Path, "utf8");
+  const lines = text.split(/\r?\n/);
+  const frame = (lines[0].match(/\b(IGS\d+\w*|IGb\d+\w*|ITRF\w*)\b/) ?? [null, "IGS20"])[1];
+  const timeLine = lines.find((l) => l.startsWith("%c")) ?? "";
+  const timeSystem = (timeLine.match(/^%c\s+\S+\s+\S+\s+(\w+)/) ?? [null, "GPS"])[1];
+  let epoch = null;
+  const perSat = new Map();
+  for (const line of lines) {
+    if (line.startsWith("* ")) {
+      const f = line.slice(1).trim().split(/\s+/).map(Number);
+      epoch = isoStamp(f[0], f[1], f[2], f[3], f[4], f[5]);
+      continue;
+    }
+    // GPS ONLY: 'PG' position records (skip PR/PE/PC/PJ — other constellations).
+    if (epoch && /^PG\d\d/.test(line)) {
+      const sat = line.slice(1, 4);
+      const f = line.slice(4).trim().split(/\s+/).map(Number);
+      const [x, y, z] = f;
+      // SP3 bad-value sentinel 999999.999999 (or all-zero) positions are skipped.
+      if (![x, y, z].every(Number.isFinite)) continue;
+      if (Math.abs(x) >= 999999 || Math.abs(y) >= 999999 || Math.abs(z) >= 999999) continue;
+      if (x === 0 && y === 0 && z === 0) continue;
+      if (!perSat.has(sat)) perSat.set(sat, []);
+      perSat.get(sat).push({ epoch, x: x.toFixed(6), y: y.toFixed(6), z: z.toFixed(6) });
+    }
+  }
+  const meta = new Map();
+  const files = [];
+  let mapped = 0;
+  let unmapped = 0;
+  for (const [sat, points] of [...perSat.entries()].sort()) {
+    if (points.length < 3) continue;
+    const reg = (registry && typeof registry[sat] === "object") ? registry[sat] : null;
+    const norad = reg?.NORAD_CAT_ID ?? 0;
+    const objectId = reg?.OBJECT_ID ?? "";
+    const objectName = reg?.OBJECT_NAME ?? sat;
+    if (reg) mapped += 1; else unmapped += 1;
+    const file = `${sat}.oem.kvn`;
+    writeKvnOem(path.join(filesDir, file), {
+      objectName: sat, // KVN carries the PRN token (id_registry key); runner attaches identity via meta
+      objectId,
+      refFrame: frame,
+      timeSystem,
+      originator: "IAC",
+      comments: [
+        "DERIVED live by the constellation pipeline (App 2 all-providers lane).",
+        `Source: IAC multi-GNSS precise SP3-d rapid product ${sp3Name} (day ${dayDir}),`,
+        "  upstream ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/ — anonymous FTP; GPS 'PG' records only.",
+        `ECEF(${frame})/${timeSystem}-time, positions km, P-records copied verbatim.`,
+        reg
+          ? `Identity: PRN ${sat} -> NORAD ${norad} / ${objectId} (${objectName}) via the public CelesTrak`
+          : `Identity: PRN ${sat} not in the GPS-A PRN->NORAD registry -> honest-empty (never fabricated).`,
+        reg ? "  GPS-A almanac PRN->NORAD join (tests/data/supgp-reference/gps/prn-norad-registry.json)." : "",
+        "Element-space parity vs CelesTrak GPS-A is NON-COMPARABLE (SP3-position OD vs almanac-derived",
+        "  SGP4 are different theories) — DATA lane only; a formal gate stays coordinator-gated.",
+      ].filter(Boolean),
+      points,
+    });
+    meta.set(file, { norad, objectName, objectId });
+    files.push(file);
+  }
+  return {
+    files, meta,
+    note: `sp3=${sp3Name} day=${dayDir} frame=${frame} time=${timeSystem} gps_prns=${files.length} id_mapped=${mapped} id_unmapped=${unmapped}`,
+  };
+}
+
+const PREPARERS = { glonass: prepareGlonass, cpf: prepareCpf, intelsat: prepareIntelsat, gps: prepareGps };
 
 // ---------------------------------------------------------------- fit worker
 if (!isMainThread) {
@@ -541,6 +681,7 @@ if (isMainThread) {
   const publishBatch = Number.parseInt(args["publish-batch"] ?? "100", 10);
   const publishConcurrency = Number.parseInt(args["publish-concurrency"] ?? "4", 10);
   const publishTimeoutMs = Number.parseInt(args["publish-timeout-ms"] ?? "30000", 10);
+  const publishMaxAttempts = Number.parseInt(args["publish-max-attempts"] ?? "10", 10);
 
   const startedAt = new Date().toISOString();
   const registryKey = provider.registryKey ?? providerName;
@@ -564,6 +705,7 @@ if (isMainThread) {
     provider.kind === "single" ? provider.fileUrl()
     : provider.kind === "prepare" ? ({
         glonass: "ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/",
+        gps: "ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/",
         cpf: "https://edc.dgfi.tum.de/pub/slr/cpf_predicts_v2/",
         intelsat: "https://my.intelsat.com/ephemeris/public",
       }[provider.prepare] ?? "")
@@ -678,6 +820,116 @@ if (isMainThread) {
     }
     out.push(cur);
     return out;
+  };
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---------------------- ACKED PUBLISHING (data-loss fix) ------------------
+  // Publish is NOT done until every frame has a 201 ack carrying a cid. A
+  // client-side timeout can abort a batch upload mid-body: the server stores
+  // the records it fully read and the rest are LOST unless re-sent (confirmed
+  // data-loss mode: full-Starlink batch 88b486e72c41 landed 5,488/10,820).
+  // So: per-batch retry with exponential backoff on a FRESH request — safe
+  // because frames are byte-deterministic within a run, so re-POSTs of
+  // already-stored records dedupe by content-address and return their cid.
+  // Per-record server results are classified: "validation failed" = PERMANENT
+  // rejection (surfaced, never retried, still fails the gate); anything else
+  // (no result row / transient store error) is retried. Frames unacked after
+  // maxAttempts land in state.unacked — callers MUST gate and exit nonzero.
+  const createAckedPublisher = ({ url, timeoutMs, maxAttempts = 10 }) => {
+    const state = {
+      acked: 0, rejected: 0, posts: 0, cids: new Set(), unacked: [], errors: [],
+      // Distinct frames ever submitted (sha256 of bytes): the dedup-exact
+      // server-side expectation even when acks are lost to client timeouts.
+      distinctSubmitted: new Set(),
+    };
+    const pushErr = (m) => { if (state.errors.length < 12) state.errors.push(m); };
+    const postAcked = async (frames) => {
+      for (const f of frames) state.distinctSubmitted.add(crypto.createHash("sha256").update(f).digest("hex"));
+      let remaining = frames;
+      for (let attempt = 0; remaining.length && attempt < maxAttempts; attempt += 1) {
+        if (attempt) await sleep(Math.min(30000, 1000 * 2 ** (attempt - 1)));
+        try {
+          const total = remaining.reduce((s, f) => s + f.length, 0);
+          const body = Buffer.allocUnsafe(total);
+          let off = 0;
+          for (const f of remaining) { body.set(f, off); off += f.length; }
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/x-flatbuffers" },
+            body,
+            // Escalating deadline: a fixed timeout below the server's
+            // processing latency can NEVER collect an ack (the confirmed
+            // data-loss spiral) — each retry waits longer.
+            signal: AbortSignal.timeout(timeoutMs * (attempt + 1)),
+          });
+          if (!res.ok) {
+            const text = (await res.text().catch(() => "")).slice(0, 120);
+            if (res.status >= 400 && res.status < 500) {
+              // Whole-batch client error (schema forbidden, quota, auth):
+              // permanent — retrying identical bytes cannot succeed.
+              state.rejected += remaining.length;
+              pushErr(`batch ${res.status}: ${text}`);
+              return;
+            }
+            pushErr(`batch ${res.status} (retrying): ${text}`);
+            continue;
+          }
+          const json = await res.json().catch(() => null);
+          const rows = Array.isArray(json?.results) ? json.results : [];
+          state.posts += 1;
+          const next = [];
+          remaining.forEach((frame, i) => {
+            const r = rows[i];
+            if (r && r.cid) { state.acked += 1; state.cids.add(r.cid); return; }
+            if (r && r.error && /validation failed/i.test(String(r.error))) {
+              state.rejected += 1;
+              pushErr(`record: ${String(r.error).slice(0, 120)}`);
+              return;
+            }
+            next.push(frame); // missing row / transient store error -> retry
+          });
+          remaining = next;
+        } catch (e) {
+          pushErr(`post attempt ${attempt + 1}: ${String(e?.message ?? e).slice(0, 100)}`);
+        }
+      }
+      state.unacked.push(...remaining);
+    };
+    return { state, postAcked };
+  };
+
+  // End-of-run completeness gate: the server's /api/v1/stats sources[] row for
+  // this batch_id must account for every DISTINCT acked cid (distinct-cid set
+  // is the dedup-exact expectation — identical frames collapse to one record).
+  // Polls with patience: the daemon's aggregates lag under load.
+  const completenessGate = async ({ batchIdWanted, expectedDistinct, polls = 24, intervalMs = 5000 }) => {
+    // Nothing acked -> nothing to verify server-side (unacked/rejected counts
+    // fail the run separately). Also avoids polling a server that never acked.
+    if (expectedDistinct === 0) return { ok: true, serverCount: 0, expectedDistinct };
+    let serverCount = 0;
+    let unreachable = 0;
+    for (let i = 0; i < polls; i += 1) {
+      try {
+        const res = await fetch(`${publishUrl}/api/v1/stats`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          unreachable = 0;
+          const j = await res.json();
+          const row = (j.sources ?? []).find(
+            (s) => s.batch_id === batchIdWanted && (s.schema === "OMM.fbs" || s.schema === "OMM"),
+          );
+          serverCount = row ? Number(row.count) : 0;
+          if (serverCount >= expectedDistinct) return { ok: true, serverCount, expectedDistinct };
+        }
+      } catch {
+        // 3 consecutive unreachable polls: the server is gone — report the
+        // shortfall now instead of burning the full poll budget.
+        unreachable += 1;
+        if (unreachable >= 3) return { ok: false, serverCount, expectedDistinct, unreachable: true };
+      }
+      if (i < polls - 1) await sleep(intervalMs);
+    }
+    return { ok: serverCount >= expectedDistinct, serverCount, expectedDistinct };
   };
 
   // ---------------- CELESTRAK SUPGP REPUBLISH LANES (App 2 A2.9) ------------
@@ -806,40 +1058,63 @@ if (isMainThread) {
         `&provider_id=${encodeURIComponent(lane.key)}` +
         `&batch_id=${encodeURIComponent(lane.batchId)}` +
         `&source_url=${encodeURIComponent(`https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=${lane.token}&FORMAT=CSV`)}`;
+      const pub = createAckedPublisher({
+        url: `${publishUrl}/api/v1/data/publish/batch/OMM.fbs${laneQuery}`,
+        timeoutMs: publishTimeoutMs,
+        maxAttempts: publishMaxAttempts,
+      });
       for (let i = 0; i < rows.length; i += publishBatch) {
-        const frames = rows.slice(i, i + publishBatch).map((r) => buildRepublishFrame(r, lane.key, lane.batchId));
-        const total = frames.reduce((s, f) => s + f.length, 0);
-        const body = Buffer.allocUnsafe(total);
-        let off = 0;
-        for (const f of frames) { body.set(f, off); off += f.length; }
-        try {
-          const res = await fetch(`${publishUrl}/api/v1/data/publish/batch/OMM.fbs${laneQuery}`, {
-            method: "POST",
-            headers: { "content-type": "application/x-flatbuffers" },
-            body,
-            signal: AbortSignal.timeout(publishTimeoutMs),
-          });
-          if (!res.ok) { lane.errors.push(`batch ${res.status}`); continue; }
-          const json = await res.json().catch(() => ({}));
-          lane.published += (json.results ?? []).filter((r) => r && r.cid).length;
-          lane.posts += 1;
-        } catch (e) {
-          lane.errors.push(`post: ${String(e?.message ?? e).slice(0, 80)}`);
-        }
+        await pub.postAcked(rows.slice(i, i + publishBatch).map((r) => buildRepublishFrame(r, lane.key, lane.batchId)));
       }
-      console.log(`[lane ${lane.key}] fetch=${lane.fetch} rows=${lane.rows} published=${lane.published} batch=${lane.batchId.slice(0, 12)}…`);
+      // One more sweep over anything still unacked, then gate on the server.
+      if (pub.state.unacked.length) {
+        const retry = pub.state.unacked.splice(0);
+        for (let i = 0; i < retry.length; i += publishBatch) await pub.postAcked(retry.slice(i, i + publishBatch));
+      }
+      lane.published = pub.state.acked;
+      lane.posts = pub.state.posts;
+      lane.rejected = pub.state.rejected;
+      lane.unacked = pub.state.unacked.length;
+      lane.errors = pub.state.errors;
+      // Server evidence is the completeness authority (see fit-path gate).
+      lane.gate = await completenessGate({
+        batchIdWanted: lane.batchId,
+        expectedDistinct: Math.max(pub.state.cids.size, pub.state.distinctSubmitted.size - pub.state.rejected),
+        polls: 12,
+      });
+      lane.complete = lane.rejected === 0 && lane.gate.ok;
+      console.log(
+        `[lane ${lane.key}] fetch=${lane.fetch} rows=${lane.rows} acked=${lane.published} rejected=${lane.rejected} ` +
+        `unacked=${lane.unacked} server=${lane.gate.serverCount}/${lane.gate.expectedDistinct} ` +
+        `${lane.complete ? "COMPLETE" : "INCOMPLETE"} batch=${lane.batchId.slice(0, 12)}…`,
+      );
+    }
+
+    // NEVER report success on a partial publish: any lane with unacked frames,
+    // permanent rejections, or a failed server gate makes the run exit nonzero
+    // with the exact missing counts.
+    const incompleteLanes = lanes.filter((l) => doPublish && fs.existsSync(l.csvPath) && !l.complete);
+    if (incompleteLanes.length) {
+      for (const l of incompleteLanes) {
+        console.error(
+          `PUBLISH INCOMPLETE [${l.key}]: rows=${l.rows} acked=${l.published} rejected=${l.rejected} ` +
+          `unacked=${l.unacked} serverHas=${l.gate?.serverCount}/${l.gate?.expectedDistinct} batch=${l.batchId}`,
+        );
+      }
+      process.exitCode = 1;
     }
 
     const report = {
       provider: providerName, startedAt, finishedAt: new Date().toISOString(),
       republish: true,
       note: "NON-INDEPENDENT CelesTrak-fitted OMMs re-published per provider key — no SDN OD, no RMS claim of ours.",
-      lanes: lanes.map(({ token, key, batchId: bid, fetch: f, rows, published, posts, errors }) =>
-        ({ token, key, batchId: bid, fetch: f, rows, published, posts, errors: errors.slice(0, 5) })),
+      complete: incompleteLanes.length === 0,
+      lanes: lanes.map(({ token, key, batchId: bid, fetch: f, rows, published, posts, rejected, unacked, complete, gate, errors }) =>
+        ({ token, key, batchId: bid, fetch: f, rows, published, posts, rejected: rejected ?? 0, unacked: unacked ?? 0, complete: complete ?? !doPublish, gate: gate ?? null, errors: errors.slice(0, 5) })),
     };
     fs.writeFileSync(path.join(workdir, providerName, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));
-    process.exit(0);
+    process.exit(process.exitCode ?? 0); // exitCode 1 = partial publish, never masked
   }
 
   // ---- async channel: producer/consumer with backpressure-free handoff -----
@@ -885,6 +1160,10 @@ if (isMainThread) {
         arcHours: Number.parseInt(args["arc-hours"] ?? "24", 10),
         limit: Number.isFinite(limit) ? limit : Infinity,
         fetchConcurrency: 4,
+        // GPS PRN->NORAD registry (public CelesTrak GPS-A join). Ignored by other lanes.
+        registryPath: args["gps-registry"]
+          ? path.resolve(args["gps-registry"])
+          : path.resolve(__dirname, "../tests/data/supgp-reference/gps/prn-norad-registry.json"),
       });
       manifest = prepared.files;
       for (const [k, v] of prepared.meta) preparedMeta.set(k, v);
@@ -926,11 +1205,8 @@ if (isMainThread) {
   const skips = [];
   let fitFirstAt = 0;
   let fitLastAt = 0;
-  let published = 0;
-  let publishPosts = 0;
   let publishFirstAt = 0;
   let publishLastAt = 0;
-  const publishErrors = [];
 
   // ------------------------------ DOWNLOAD ---------------------------------
   const downloadStart = performance.now();
@@ -1022,67 +1298,50 @@ if (isMainThread) {
   })();
 
   // ------------------------------ PUBLISH ----------------------------------
+  // Acked publishing (data-loss fix): every frame must come back with a cid.
+  // Schema segment MUST be the full schema name "OMM.fbs" — the server
+  // validator rejects the short "OMM" ("unknown schema: OMM").
+  const fitPub = createAckedPublisher({
+    url: `${publishUrl}/api/v1/data/publish/batch/OMM.fbs${publishQuery}`,
+    timeoutMs: publishTimeoutMs,
+    maxAttempts: publishMaxAttempts,
+  });
+  let framesBuilt = 0;
+  let buildErrors = 0;
   const runPublish = (async () => {
     if (!doPublish) { publishChannel.close(); return; }
-    // postBatch NEVER throws: a hung/failed POST is bounded by a request
-    // timeout and retried once (a fresh connection recovers a keep-alive
-    // socket the server dropped under load), then recorded as an error so one
-    // bad batch can't stall the whole publish stage.
-    const postBatch = async (frames) => {
-      const total = frames.reduce((s, f) => s + f.length, 0);
-      const body = Buffer.allocUnsafe(total);
-      let off = 0;
-      for (const f of frames) { body.set(f, off); off += f.length; }
-      // Schema segment MUST be the full schema name "OMM.fbs" — the server
-      // validator rejects the short "OMM" ("unknown schema: OMM").
-      const url = `${publishUrl}/api/v1/data/publish/batch/OMM.fbs${publishQuery}`;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const res = await fetch(url, {
-            method: "POST",
-            headers: {
-              "content-type": "application/x-flatbuffers",
-              // Forward provenance as headers too (belt + suspenders for a
-              // tag-aware handler that reads headers rather than query params).
-              "x-sdn-source-name": registryKey,
-              "x-sdn-provider-id": registryKey,
-              "x-sdn-batch-id": batchId,
-            },
-            body,
-            signal: AbortSignal.timeout(publishTimeoutMs),
-          });
-          if (!res.ok) {
-            if (publishErrors.length < 10) publishErrors.push(`batch ${res.status}: ${(await res.text()).slice(0, 120)}`);
-            return;
-          }
-          const json = await res.json().catch(() => ({}));
-          const rows = Array.isArray(json.results) ? json.results : [];
-          published += rows.filter((r) => r && r.cid).length;
-          // Batch returns HTTP 201 even when individual records fail — surface
-          // the first per-record error so the run is honest about them.
-          const firstErr = rows.find((r) => r && r.error);
-          if (firstErr && publishErrors.length < 10) publishErrors.push(`record: ${String(firstErr.error).slice(0, 120)}`);
-          if (!publishFirstAt) publishFirstAt = performance.now();
-          publishLastAt = performance.now();
-          publishPosts += 1;
-          return;
-        } catch (e) {
-          if (attempt === 1 && publishErrors.length < 10) publishErrors.push(`post: ${String(e?.message ?? e).slice(0, 120)}`);
-        }
-      }
-    };
     async function publisher() {
       let frames = [];
+      const flush = async () => {
+        const f = frames;
+        frames = [];
+        if (!f.length) return;
+        if (!publishFirstAt) publishFirstAt = performance.now();
+        await fitPub.postAcked(f);
+        publishLastAt = performance.now();
+      };
       for (;;) {
         const item = await publishChannel.pull();
         if (item === null) break;
-        try { frames.push(buildOmmFrame(item.fit, item.meta)); }
-        catch (e) { if (publishErrors.length < 10) publishErrors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`); continue; }
-        if (frames.length >= publishBatch) { await postBatch(frames); frames = []; }
+        try {
+          frames.push(buildOmmFrame(item.fit, item.meta));
+          framesBuilt += 1;
+        } catch (e) {
+          buildErrors += 1;
+          if (fitPub.state.errors.length < 12) fitPub.state.errors.push(`build: ${String(e?.message ?? e).slice(0, 120)}`);
+          continue;
+        }
+        if (frames.length >= publishBatch) await flush();
       }
-      if (frames.length) await postBatch(frames);
+      await flush();
     }
     await Promise.all(Array.from({ length: publishConcurrency }, publisher));
+    // Final sweep: one more full retry cycle over anything still unacked.
+    if (fitPub.state.unacked.length) {
+      const retry = fitPub.state.unacked.splice(0);
+      for (let i = 0; i < retry.length; i += publishBatch) await fitPub.postAcked(retry.slice(i, i + publishBatch));
+      publishLastAt = performance.now();
+    }
   })();
 
   // --------------------------- progress heartbeat --------------------------
@@ -1114,10 +1373,13 @@ if (isMainThread) {
     const nodeStr = stats
       ? ` | node OMM ${stats.totalOmm} | stats.sources[batch] ${stats.batchCount}`
       : "";
+    // Publish-backlog depth makes daemon contention VISIBLE during the run:
+    // pubQ (frames not yet built/posted) + unacked (posted, no cid ack yet).
     console.log(
       `[+${done}s] dl ${mbps.toFixed(1)} MB/s (rolling) | got ${downloaded} reuse ${reused} fail ${failed.length} ` +
       `| fitQ ${fitChannel.size} fitted ${results.length} skip ${skips.length} ` +
-      `| pubQ ${publishChannel.size} published ${published}${nodeStr}`,
+      `| pubQ ${publishChannel.size} acked ${fitPub.state.acked} unacked ${fitPub.state.unacked.length} ` +
+      `rejected ${fitPub.state.rejected} backlog ${publishChannel.size + (framesBuilt - fitPub.state.acked - fitPub.state.rejected)}${nodeStr}`,
     );
   }, 5000);
 
@@ -1126,6 +1388,47 @@ if (isMainThread) {
   await runFit;
   await runPublish;
   clearInterval(heartbeat);
+
+  // ---- END-OF-RUN COMPLETENESS GATE (never report success on a partial
+  // publish). Every built frame must be acked with a cid, AND the server's
+  // sources[] row for this batch must account for every distinct acked cid
+  // (distinct-cid set = the dedup-exact expectation). Shortfall => retry
+  // already happened inside the publisher; if still short, EXIT NONZERO with
+  // the exact missing count.
+  let publishGate = null;
+  if (doPublish) {
+    // Server-evidence expectation: every DISTINCT frame submitted (minus
+    // permanent validation rejections) must be counted in the batch's
+    // sources[] row — the dedup-exact "count == fitted" of the directive.
+    // Acks drive retries; the server count is the completeness authority
+    // (acks can be lost to client timeouts while the records landed).
+    const expectedDistinct = Math.max(
+      fitPub.state.cids.size,
+      fitPub.state.distinctSubmitted.size - fitPub.state.rejected,
+    );
+    publishGate = await completenessGate({ batchIdWanted: batchId, expectedDistinct });
+    const unacked = fitPub.state.unacked.length;
+    const rejected = fitPub.state.rejected;
+    const serverShort = Math.max(0, publishGate.expectedDistinct - publishGate.serverCount);
+    publishGate.unacked = unacked;
+    publishGate.rejected = rejected;
+    publishGate.framesBuilt = framesBuilt;
+    publishGate.buildErrors = buildErrors;
+    publishGate.complete = rejected === 0 && buildErrors === 0 && publishGate.ok;
+    if (!publishGate.complete) {
+      console.error(
+        `PUBLISH INCOMPLETE: fitted=${results.length} framesBuilt=${framesBuilt} buildErrors=${buildErrors} ` +
+        `acked=${fitPub.state.acked} MISSING: unacked=${unacked} rejected=${rejected} serverShort=${serverShort} ` +
+        `(server has ${publishGate.serverCount}/${publishGate.expectedDistinct} distinct records for batch ${batchId})`,
+      );
+      process.exitCode = 1;
+    } else {
+      console.log(
+        `[publish gate] COMPLETE: ${fitPub.state.acked} acked, server ${publishGate.serverCount}/${publishGate.expectedDistinct} distinct records for batch ${batchId.slice(0, 12)}…` +
+        (unacked ? ` (${unacked} acks lost to client timeouts — server evidence confirms the records landed)` : ""),
+      );
+    }
+  }
 
   const fitWall = fitFirstAt ? (fitLastAt - fitFirstAt) / 1000 : 0;
   const publishWall = publishFirstAt ? (publishLastAt - publishFirstAt) / 1000 : 0;
@@ -1147,9 +1450,12 @@ if (isMainThread) {
   if (doPublish) {
     metrics.stages.publish = {
       wallClockSeconds: +publishWall.toFixed(2),
-      published, posts: publishPosts, batchSize: publishBatch, concurrency: publishConcurrency,
-      recordsPerSecond: +(published / Math.max(0.001, publishWall)).toFixed(1),
-      errors: publishErrors.slice(0, 10), publishUrl,
+      published: fitPub.state.acked, posts: fitPub.state.posts,
+      unacked: fitPub.state.unacked.length, rejected: fitPub.state.rejected, buildErrors,
+      batchSize: publishBatch, concurrency: publishConcurrency,
+      recordsPerSecond: +(fitPub.state.acked / Math.max(0.001, publishWall)).toFixed(1),
+      gate: publishGate,
+      errors: fitPub.state.errors.slice(0, 10), publishUrl,
     };
   }
   metrics.stages.total = { wallClockSeconds: +totalWall.toFixed(2), overlapped: true };
@@ -1221,7 +1527,9 @@ if (isMainThread) {
   metrics.finishedAt = new Date().toISOString();
   metrics.totals = {
     manifestFiles: manifest.length, fitted: results.length, skipped: skips.length,
-    published: doPublish ? published : null, beatCelestrak: `${beat}/${comparedCt}`,
+    published: doPublish ? fitPub.state.acked : null,
+    publishComplete: doPublish ? (publishGate?.complete ?? false) : null,
+    beatCelestrak: `${beat}/${comparedCt}`,
   };
   const rmsSorted = perSat.map((s) => s.ourRms).filter(Number.isFinite).sort((a, b) => a - b);
   const pct = (p) => rmsSorted[Math.min(rmsSorted.length - 1, Math.floor((p / 100) * rmsSorted.length))];
