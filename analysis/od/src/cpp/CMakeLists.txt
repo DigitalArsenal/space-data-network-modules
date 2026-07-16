@@ -124,6 +124,46 @@ if(EMSCRIPTEN)
             -s FILESYSTEM=0 \
         "
     )
+
+    # Resident-reactor artifact (server/isomorphic host). Same sources as
+    # od_wasm, but built with -DOD_REACTOR_BUILD so the command main()/_start is
+    # compiled out and the module exports _initialize/__wasm_call_ctors instead
+    # (mirrors propagator/sgp4's reactor link surface). The node's modulert hosts
+    # this as a RESIDENT instance and drives the fit via plugin_invoke_stream —
+    # no per-fit process restart, N instances can run concurrently. The command
+    # od_wasm is retained for the browser bundle + the reactor==command parity
+    # gate.
+    add_executable(
+        od_wasm_reactor
+        src/wasm_api.cpp
+        src/plugin_entrypoints.cpp
+        src/plugin_invoke_bridge.cpp
+    )
+    target_include_directories(
+        od_wasm_reactor PRIVATE
+        include
+        generated
+        "${VALLADO_SGP4_DIR}"
+        "${FLATBUFFERS_INCLUDE_DIR}"
+    )
+    target_compile_definitions(od_wasm_reactor PRIVATE OD_REACTOR_BUILD)
+    target_link_libraries(od_wasm_reactor od_lib)
+    set_target_properties(od_wasm_reactor PROPERTIES
+        SUFFIX ".js"
+        LINK_FLAGS "\
+            -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_wasm_malloc\",\"_wasm_free\",\"_wasm_parse\",\"_wasm_fit\",\"_wasm_parse_and_fit\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
+            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
+            -s STANDALONE_WASM=1 \
+            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+            -Wl,--allow-undefined \
+            -Wl,--export=__wasm_call_ctors \
+            --no-entry \
+            -s INITIAL_MEMORY=67108864 \
+            -s STACK_SIZE=2097152 \
+            -s MALLOC='emmalloc' \
+            -s FILESYSTEM=0 \
+        "
+    )
 elseif(WASI_SDK)
     add_executable(
         od_standalone

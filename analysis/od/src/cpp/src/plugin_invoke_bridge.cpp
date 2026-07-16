@@ -1100,6 +1100,21 @@ extern "C" uint32_t plugin_invoke_stream(
   return response_ptr;
 }
 
+#ifdef OD_REACTOR_BUILD
+
+// Resident-reactor surface (STANDALONE_WASM, --no-entry): the module is hosted
+// as a RESIDENT instance and driven repeatedly via plugin_invoke_stream — there
+// is NO command main()/_start. In reactor mode emscripten links crt1_reactor.o,
+// which supplies _initialize (it runs the guest's global constructors via
+// __wasm_call_ctors and sets up the runtime). The host (modulert) calls
+// _initialize exactly once at load, after which plugin_invoke_stream may be
+// called any number of times. We only need to EXPORT _initialize
+// (EXPORTED_FUNCTIONS: __initialize) and __wasm_call_ctors (-Wl,--export=…) — do
+// NOT redefine _initialize here or wasm-ld reports a duplicate symbol against
+// crt1_reactor.o. The command main() below is compiled out.
+
+#else  // !OD_REACTOR_BUILD — legacy WASI COMMAND surface (_start reads stdin).
+
 int main(int argc, char **argv) {
   const char *shortcut_method = nullptr;
   for (int index = 1; index < argc; index += 1) {
@@ -1195,3 +1210,5 @@ int main(int argc, char **argv) {
   }
   return runtime_error ? 1 : 0;
 }
+
+#endif  // OD_REACTOR_BUILD

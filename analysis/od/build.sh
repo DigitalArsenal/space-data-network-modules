@@ -9,6 +9,7 @@ DIST_DIR="$SCRIPT_DIR/dist"
 BROWSER_DIST_DIR="$DIST_DIR/browser"
 ISOMORPHIC_DIST_DIR="$DIST_DIR/isomorphic"
 BROWSER_TARGET="od_wasm"
+REACTOR_TARGET="od_wasm_reactor"
 
 cpu_count() {
     if command -v nproc >/dev/null 2>&1; then
@@ -72,15 +73,28 @@ echo "Configuring Emscripten build..."
 emcmake cmake -S "$SRC_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 
 echo ""
-echo "Building browser-compatible standalone artifact..."
+echo "Building browser-compatible standalone (command) artifact..."
 cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
 
+echo ""
+echo "Building isomorphic resident-reactor artifact..."
+cmake --build "$BUILD_DIR" --target "$REACTOR_TARGET" -j"$(cpu_count)"
+
+# Browser bundle stays the command build (MODULARIZE ES module + wasm).
 cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
 cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
-cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+
+# Server/isomorphic host loads the RESIDENT REACTOR as module.wasm (driven via
+# plugin_invoke_stream; no per-fit _start). The command build is retained beside
+# it as module.command.wasm for the reactor==command RMS parity gate.
+cp "$BUILD_DIR/${REACTOR_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.command.wasm"
 node "$SCRIPT_DIR/../../scripts/sign-module-artifact.mjs" \
     "$ISOMORPHIC_DIST_DIR/module.wasm"
+node "$SCRIPT_DIR/../../scripts/sign-module-artifact.mjs" \
+    "$ISOMORPHIC_DIST_DIR/module.command.wasm"
 
 echo ""
 echo "=== Build Complete ==="
-ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
+ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm" \
+    "$ISOMORPHIC_DIST_DIR/module.wasm" "$ISOMORPHIC_DIST_DIR/module.command.wasm"
