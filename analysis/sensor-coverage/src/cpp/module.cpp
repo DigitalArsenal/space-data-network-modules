@@ -131,9 +131,19 @@ struct GridCellGeometry {
   Vec3 surfacePosition;
   Vec3 surfaceNormal;
   Vec3 surfaceUnit;
-  Vec3 samplePositions[5];
-  Vec3 sampleNormals[5];
+  // 3x3 lat/lon lattice: center, edge midpoints, and corners. Five samples
+  // (center + corners) let footprints narrower than the cell sweep through
+  // the interior between sample points — a 51.6-deg LEO repeatedly skipped
+  // rim cells on the same grid rows that way. The lattice plus the
+  // boresight-ground-point-in-cell test below make cell access robust for
+  // footprints down to shallow edge clips.
+  Vec3 samplePositions[9];
+  Vec3 sampleNormals[9];
   int sampleCount = 0;
+  double minLatitudeDeg = 0.0;
+  double maxLatitudeDeg = 0.0;
+  double minLongitudeDeg = 0.0;
+  double maxLongitudeDeg = 0.0;
 };
 
 struct CellBounds {
@@ -344,7 +354,15 @@ GridCellGeometry grid_cell_geometry(
   set_grid_cell_sample(geometry, 2, min_latitude, max_longitude);
   set_grid_cell_sample(geometry, 3, max_latitude, min_longitude);
   set_grid_cell_sample(geometry, 4, max_latitude, max_longitude);
-  geometry.sampleCount = 5;
+  set_grid_cell_sample(geometry, 5, min_latitude, longitude_deg);
+  set_grid_cell_sample(geometry, 6, max_latitude, longitude_deg);
+  set_grid_cell_sample(geometry, 7, latitude_deg, min_longitude);
+  set_grid_cell_sample(geometry, 8, latitude_deg, max_longitude);
+  geometry.sampleCount = 9;
+  geometry.minLatitudeDeg = min_latitude;
+  geometry.maxLatitudeDeg = max_latitude;
+  geometry.minLongitudeDeg = min_longitude;
+  geometry.maxLongitudeDeg = max_longitude;
   return geometry;
 }
 
@@ -989,6 +1007,35 @@ bool surface_sample_visible_from_resolved_state(
   return classification.inside;
 }
 
+bool boresight_ground_point_inside_cell(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& resolved) {
+  // Only valid for shapes that actually contain their boresight direction —
+  // inner-cutout (annular) shapes see a ring, not the beam center.
+  if (!classify_local_look(sensor.shapeContract, {0.0, 0.0, 1.0}).inside) {
+    return false;
+  }
+  Vec3 ground_point;
+  if (!intersect_earth(
+        resolved.state.position,
+        resolved.frame.boresight,
+        sensor_max_range_m(sensor),
+        ground_point)) {
+    return false;
+  }
+  const Vertex ground = to_cartographic(ground_point);
+  if (
+    ground.latitudeDeg < cell.minLatitudeDeg ||
+    ground.latitudeDeg > cell.maxLatitudeDeg
+  ) {
+    return false;
+  }
+  return (
+    ground.longitudeDeg >= cell.minLongitudeDeg &&
+    ground.longitudeDeg <= cell.maxLongitudeDeg);
+}
+
 bool cell_visible_from_resolved_state(
     const GridCellGeometry& cell,
     const SensorConfig& sensor,
@@ -1002,7 +1049,11 @@ bool cell_visible_from_resolved_state(
       return true;
     }
   }
-  return false;
+  // Footprints narrower than the surface-sample pitch (pencil beams, small
+  // apertures on coarse grids) can lie entirely between lattice points. Any
+  // footprint contains its own boresight ground point, so a cell containing
+  // that point is accessed regardless of footprint size.
+  return boresight_ground_point_inside_cell(cell, sensor, state);
 }
 
 bool cell_visible_from_state(
