@@ -50,6 +50,48 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Builds the ISS $OEM FlatBuffer from the embedded fixture and emits it on a timer tick."
+    },
+    {
+      "methodId": "emit_compact",
+      "displayName": "Emit ISS $OEM Ephemeris (compact form)",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Timer tick frame (content ignored)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick that drives one compact $OEM emission."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+              ],
+              "description": "SDS $OEM ephemeris (compact form: EPHEMERIS_DATA + START_TIME + STEP_SIZE). Consumed in-memory by analysis/od.fit; never stored."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ISS $OEM ephemeris frame (compact form)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds the ISS $OEM in the COMPACT form (flat EPHEMERIS_DATA + START_TIME + STEP_SIZE) that uniform-cadence providers carry, and emits it on a timer tick."
     }
   ],
   "schemasUsed": [
