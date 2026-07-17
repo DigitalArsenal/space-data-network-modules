@@ -140,7 +140,7 @@ const implementationSource = await fs.readFile(sourcePath, "utf8");
 // implementation. This is the reusable builder every OD-flow provider source uses.
 const sharedOemBuilder = (
   await fs.readFile(
-    fileURLToPath(new URL("../common/oem_fb_builder.hpp", import.meta.url)),
+    fileURLToPath(new URL("../../common/oem_fb_builder.hpp", import.meta.url)),
     "utf8",
   )
 ).replace(/^#pragma once\s*\n/, ""); // strip: inlined into the main TU, not #included
