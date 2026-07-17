@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "provider_source.hpp"
+#include "meme_oem.hpp"
 
 namespace ps = provider_source;
 
@@ -65,133 +66,7 @@ namespace {
 
 // ── MEME parsing (SpaceX-specific) ───────────────────────────────────────────
 
-struct MemeMeta {
-    long norad_cat_id = 0;
-    std::string object_name;   // STARLINK-#####
-    std::string status;        // Operational
-    std::string created_iso;   // from `created:` header
-    std::string start_iso;     // from `ephemeris_start:` header
-    std::string stop_iso;      // from `ephemeris_stop:` header
-    std::string ephemeris_source;  // blend
-    long step_size = 0;
-};
-
-// Normalize a MEME header UTC stamp ("2026-05-14 02:02:54 UTC") to ISO 8601
-// ("2026-05-14T02:02:54Z"). Idempotent for already-ISO strings.
-std::string normalize_utc(const std::string& in) {
-    std::string s;
-    // trim
-    size_t a = in.find_first_not_of(" \t\r\n");
-    size_t b = in.find_last_not_of(" \t\r\n");
-    if (a == std::string::npos) return s;
-    s = in.substr(a, b - a + 1);
-    // strip trailing " UTC"
-    if (s.size() >= 4 && s.compare(s.size() - 4, 4, " UTC") == 0) s = s.substr(0, s.size() - 4);
-    // date/time separator space -> 'T'
-    size_t sp = s.find(' ');
-    if (sp != std::string::npos) s[sp] = 'T';
-    // ensure trailing Z
-    if (!s.empty() && s.back() != 'Z') s.push_back('Z');
-    return s;
-}
-
-std::vector<std::string> split_ws(const std::string& line) {
-    std::vector<std::string> toks;
-    size_t i = 0;
-    while (i < line.size()) {
-        while (i < line.size() && (line[i] == ' ' || line[i] == '\t' || line[i] == '\r')) i++;
-        size_t j = i;
-        while (j < line.size() && line[j] != ' ' && line[j] != '\t' && line[j] != '\r') j++;
-        if (j > i) toks.push_back(line.substr(i, j - i));
-        i = j;
-    }
-    return toks;
-}
-
-// A MEME state line's first token is a YYYYDDDHHMMSS.sss stamp (>=13 leading
-// digits, no exponent) — distinct from the scientific-notation covariance rows.
-bool is_state_epoch_token(const std::string& t) {
-    size_t digits = 0;
-    for (char c : t) {
-        if (c == '.') break;
-        if (c < '0' || c > '9') return false;
-        digits++;
-    }
-    return digits >= 13;
-}
-
-// Parse the MEME filename metadata.
-// MEME_{NORAD}_{NAME}_{COSPAR-internal}_{Status}_{UnixTS}_UNCLASSIFIED.txt
-// The 4th field is a SpaceX-internal id, NOT an international designator, so
-// OBJECT_ID is intentionally left unset (per A2.2a labeling rules).
-void parse_meme_filename(const std::string& filename, MemeMeta* m) {
-    std::vector<std::string> parts;
-    size_t start = 0;
-    while (start <= filename.size()) {
-        size_t us = filename.find('_', start);
-        parts.push_back(filename.substr(start, (us == std::string::npos ? filename.size() : us) - start));
-        if (us == std::string::npos) break;
-        start = us + 1;
-    }
-    if (parts.size() >= 6 && parts[0] == "MEME") {
-        m->norad_cat_id = strtol(parts[1].c_str(), nullptr, 10);
-        m->object_name = parts[2];
-        m->status = parts[4];
-    }
-}
-
-// Parse a raw MEME file: fills header meta and the flat row-major state array
-// [x0,y0,z0,vx0,vy0,vz0, x1,...] (km, km/s). Covariance rows are skipped for
-// the compact OEM (see README residuals).
-void parse_meme(const std::string& content, MemeMeta* m, std::vector<double>* states) {
-    size_t pos = 0;
-    auto next_line = [&](std::string* out) -> bool {
-        if (pos > content.size()) return false;
-        size_t nl = content.find('\n', pos);
-        *out = content.substr(pos, (nl == std::string::npos ? content.size() : nl) - pos);
-        pos = (nl == std::string::npos) ? content.size() + 1 : nl + 1;
-        return true;
-    };
-    std::string line;
-    // Header lines (created / ephemeris_start+stop+step / ephemeris_source / frame).
-    if (next_line(&line)) {
-        size_t k = line.find("created:");
-        if (k != std::string::npos) m->created_iso = normalize_utc(line.substr(k + 8));
-    }
-    if (next_line(&line)) {
-        size_t s = line.find("ephemeris_start:");
-        size_t e = line.find("ephemeris_stop:");
-        size_t z = line.find("step_size:");
-        if (s != std::string::npos && e != std::string::npos)
-            m->start_iso = normalize_utc(line.substr(s + 16, e - s - 16));
-        if (e != std::string::npos) {
-            size_t end = (z != std::string::npos) ? z : line.size();
-            m->stop_iso = normalize_utc(line.substr(e + 15, end - e - 15));
-        }
-        if (z != std::string::npos) m->step_size = strtol(line.c_str() + z + 10, nullptr, 10);
-    }
-    if (next_line(&line)) {
-        size_t k = line.find("ephemeris_source:");
-        if (k != std::string::npos) {
-            std::string v = line.substr(k + 17);
-            size_t a = v.find_first_not_of(" \t\r");
-            size_t b = v.find_last_not_of(" \t\r");
-            if (a != std::string::npos) m->ephemeris_source = v.substr(a, b - a + 1);
-        }
-    }
-    next_line(&line);  // covariance frame label (UVW) — not the state-vector frame
-
-    // Data blocks: each state line is followed by 3 scientific-notation
-    // covariance rows. A covariance row's first token never satisfies
-    // is_state_epoch_token (its integer part has < 13 digits), so selecting
-    // state lines directly transparently drops the covariance rows and is
-    // robust to covariance-absent (truncated) files.
-    while (next_line(&line)) {
-        std::vector<std::string> toks = split_ws(line);
-        if (toks.size() < 7 || !is_state_epoch_token(toks[0])) continue;
-        for (int c = 1; c <= 6; ++c) states->push_back(strtod(toks[c].c_str(), nullptr));
-    }
-}
+using namespace meme_oem;  // MemeMeta/parse_meme/build_oem_fb (src/meme_oem.hpp)
 
 // Build the canonical CCSDS OEM record (compact row-major format) as a
 // schema-exact JSON document. Keys mirror the SDS OEM schema

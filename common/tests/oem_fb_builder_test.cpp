@@ -6,9 +6,9 @@
 //
 // Compile (from repo root main-packages/):
 //   clang++ -std=c++17 -Iflatbuffers/include \
-//     -Ispace-data-network-modules/data-source/common \
+//     -Ispace-data-network-modules/common \
 //     -Ispace-data-network-modules/licensing/core/src/cpp/generated/sds \
-//     space-data-network-modules/data-source/common/tests/oem_fb_builder_test.cpp -o /tmp/oemfb && /tmp/oemfb
+//     space-data-network-modules/common/tests/oem_fb_builder_test.cpp -o /tmp/oemfb && /tmp/oemfb
 
 // Native macOS: undef the SVID math.h macros that collide with generated enum ids
 // (this hazard is native-only; the emscripten/WASI sysroot has none).
