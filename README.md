@@ -61,7 +61,7 @@ including migrated module families and Basilisk-derived module families.
 | `packages/link-analysis` | `DigitalArsenal/space-data-network-plugin-link-analysis` | `Friends-Of-Lobsternaut/link-analysis-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/linkanalysis` | `DigitalArsenal/space-data-network-plugin-linkanalysis` | `Friends-Of-Lobsternaut/linkanalysis-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/lst` | `DigitalArsenal/space-data-network-plugin-lst` | `Friends-Of-Lobsternaut/lst-sdn-plugin` | Pending | Not migrated yet. |
-| `analysis/maneuver` | `DigitalArsenal/space-data-network-plugin-maneuver` | `Friends-Of-Lobsternaut/maneuver-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, hosted-runtime example. |
+| `analysis/maneuver` | `DigitalArsenal/space-data-network-plugin-maneuver` | `Friends-Of-Lobsternaut/maneuver-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, hosted-runtime example. Includes `simulateRendezvous` closed-loop LVLH rendezvous sim (HCW combined-case drift, quintic braking, feedback-linearized PD); levers documented in the package README. |
 | `packages/mediameta` | `DigitalArsenal/space-data-network-plugin-mediameta` | `Friends-Of-Lobsternaut/mediameta-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/meteorite-falls` | `DigitalArsenal/space-data-network-plugin-meteorite-falls` | `Friends-Of-Lobsternaut/meteorite-falls-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/missile` | `DigitalArsenal/space-data-network-plugin-missile` | `Friends-Of-Lobsternaut/missile-sdn-plugin` | Pending | Not migrated yet. |

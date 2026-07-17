@@ -1,0 +1,28 @@
+{
+  "operation": "simulateRendezvous",
+  "params": {
+    "chief": {
+      "semiMajorAxis": 6778000.0,
+      "eccentricity": 0.0,
+      "inclination": 0.9005898940290741,
+      "mu": 398600441800000.0
+    },
+    "initialPosition": [100.0, -338.8, 0.0],
+    "brakePoint": [0.0, -80.0, 0.0],
+    "holdPoint": [0.0, -30.0, 0.0],
+    "driftDuration": 2000.0,
+    "brakeDuration": 400.0,
+    "holdDuration": 300.0,
+    "control": {
+      "dampingRatio": 1.0,
+      "useFeedforward": true,
+      "compensateCoriolis": true,
+      "compensateGravityGradient": true
+    },
+    "integration": {
+      "timeStep": 0.5,
+      "outputEvery": 40,
+      "includeJ2": false
+    }
+  }
+}

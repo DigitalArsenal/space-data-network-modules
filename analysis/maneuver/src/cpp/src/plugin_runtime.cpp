@@ -5,6 +5,7 @@
 #include "maneuver/constants.h"
 #include "maneuver/math.h"
 #include "maneuver/propagation.h"
+#include "maneuver/rendezvous.h"
 #include "maneuver/stm.h"
 #include "maneuver/targeting.h"
 #include "maneuver/transforms.h"
@@ -470,6 +471,105 @@ std::string compute_approach_json(const std::string& input) {
     }).dump();
 }
 
+const char* phase_name(RendezvousPhase phase) {
+    switch (phase) {
+        case RendezvousPhase::DRIFT: return "drift";
+        case RendezvousPhase::BRAKE: return "brake";
+        case RendezvousPhase::HOLD: return "hold";
+    }
+    return "unknown";
+}
+
+std::string simulate_rendezvous_json(const std::string& input) {
+    const auto j = json::parse(input);
+    const auto chief = json_to_chief(j.at("chief"));
+
+    RendezvousConfig config{};
+    config.initialPosition = json_to_vec3(j.at("initialPosition"));
+    if (j.contains("initialVelocity")) {
+        config.initialVelocity = json_to_vec3(j.at("initialVelocity"));
+        config.solveInitialVelocity = false;
+    }
+    config.solveInitialVelocity =
+        j.value("solveInitialVelocity", config.solveInitialVelocity);
+    config.brakePoint = json_to_vec3(j.at("brakePoint"));
+    config.holdPoint = json_to_vec3(j.at("holdPoint"));
+    config.driftDuration = j.at("driftDuration").get<double>();
+    config.brakeDuration = j.at("brakeDuration").get<double>();
+    config.holdDuration = j.value("holdDuration", 0.0);
+
+    if (j.contains("control")) {
+        const auto& control = j.at("control");
+        config.controlBandwidth = control.value("bandwidth", 0.0);
+        config.dampingRatio = control.value("dampingRatio", 1.0);
+        config.kp = control.value("kp", 0.0);
+        config.kd = control.value("kd", 0.0);
+        config.useFeedforward = control.value("useFeedforward", true);
+        config.compensateCoriolis =
+            control.value("compensateCoriolis", true);
+        config.compensateGravityGradient =
+            control.value("compensateGravityGradient", true);
+        config.maxAccel = control.value("maxAccel", 0.0);
+    }
+    if (j.contains("integration")) {
+        const auto& integration = j.at("integration");
+        config.timeStep = integration.value("timeStep", 1.0);
+        config.outputEvery = integration.value("outputEvery", 10);
+        config.includeJ2 = integration.value("includeJ2", false);
+    }
+
+    const auto result = simulateRendezvous(config, chief);
+    if (!result.valid) {
+        throw std::runtime_error(result.message);
+    }
+
+    json trajectory = json::array();
+    for (const auto& sample : result.trajectory) {
+        trajectory.push_back({
+            {"time", sample.time},
+            {"phase", phase_name(sample.phase)},
+            {"position", vec3_to_json(sample.position)},
+            {"velocity", vec3_to_json(sample.velocity)},
+            {"referencePosition", vec3_to_json(sample.referencePosition)},
+            {"referenceVelocity", vec3_to_json(sample.referenceVelocity)},
+            {"referenceAcceleration",
+             vec3_to_json(sample.referenceAcceleration)},
+            {"controlAccel", vec3_to_json(sample.controlAccel)},
+            {"positionError", sample.positionError},
+            {"velocityError", sample.velocityError},
+        });
+    }
+
+    return json({
+        {"reference",
+         "HCW combined-case drift + quintic brake + feedback-linearized PD"},
+        {"meanMotion", result.meanMotion},
+        {"solvedInitialVelocity", vec3_to_json(result.solvedInitialVelocity)},
+        {"gains", {
+            {"kp", vec3_to_json(result.gainKp)},
+            {"kd", vec3_to_json(result.gainKd)},
+        }},
+        {"phases", {
+            {"driftEnd", result.driftEnd},
+            {"brakeEnd", result.brakeEnd},
+            {"totalTime", result.totalTime},
+        }},
+        {"metrics", {
+            {"totalDeltaV", result.metrics.totalDeltaV},
+            {"maxControlAccel", result.metrics.maxControlAccel},
+            {"saturatedSteps", result.metrics.saturatedSteps},
+            {"maxPositionError", result.metrics.maxPositionError},
+            {"rmsPositionError", result.metrics.rmsPositionError},
+            {"maxPositionErrorDrift", result.metrics.maxPositionErrorDrift},
+            {"maxPositionErrorBrake", result.metrics.maxPositionErrorBrake},
+            {"maxPositionErrorHold", result.metrics.maxPositionErrorHold},
+            {"finalPositionError", result.metrics.finalPositionError},
+            {"finalVelocityError", result.metrics.finalVelocityError},
+        }},
+        {"trajectory", trajectory},
+    }).dump();
+}
+
 std::string dispatch_operation(const std::string& operation, const json& params) {
     const std::string payload = params.dump();
 
@@ -508,6 +608,9 @@ std::string dispatch_operation(const std::string& operation, const json& params)
     }
     if (operation == "computeApproach") {
         return compute_approach_json(payload);
+    }
+    if (operation == "simulateRendezvous") {
+        return simulate_rendezvous_json(payload);
     }
 
     throw std::runtime_error("Unknown maneuver operation: " + operation);
