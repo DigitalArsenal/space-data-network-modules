@@ -997,14 +997,13 @@ bool surface_sample_visible_from_resolved_state(
     return false;
   }
 
-  const SensorClassification classification = classify_local_look(
+  return local_look_inside(
     sensor.shapeContract,
     {
       dot(sensor_to_cell, frame.xAxis),
       dot(sensor_to_cell, frame.yAxis),
       dot(sensor_to_cell, frame.boresight),
     });
-  return classification.inside;
 }
 
 bool boresight_ground_point_inside_cell(
@@ -1013,7 +1012,7 @@ bool boresight_ground_point_inside_cell(
     const ResolvedVisibilityState& resolved) {
   // Only valid for shapes that actually contain their boresight direction —
   // inner-cutout (annular) shapes see a ring, not the beam center.
-  if (!classify_local_look(sensor.shapeContract, {0.0, 0.0, 1.0}).inside) {
+  if (!local_look_inside(sensor.shapeContract, {0.0, 0.0, 1.0})) {
     return false;
   }
   Vec3 ground_point;
