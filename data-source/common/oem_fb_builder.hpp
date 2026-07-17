@@ -6,15 +6,17 @@
 // Providers fetch+parse (per-provider format), then call this to emit ONE $OEM per
 // object into the OD flow — ephemeris in memory only, no store, no JSON.
 //
-// REQUIRES the generated SDS $OEM lib/cpp types in scope BEFORE this header:
+// REQUIRES the generated SDS $OEM types in scope BEFORE this header:
 //   OEM(+Builder), ephemerisDataBlock(+Builder), ephemerisDataLine(+Create),
-//   CAT(+Builder), RFM(+Builder), CelestialFrame, timingStandard,
-//   RFMUnion_CelestialFrameWrapper, CreateCelestialFrameWrapper, FinishOEMBuffer,
-//   and flatbuffers::FlatBufferBuilder.
-// oem-source-iss inlines lib/cpp/{RFM,TIM,IDM,PLD,LCC,CAT,PPE,OEM}/main_generated.h
-// ahead of this header (build.mjs); provider modules include them in the same
-// topological order before including this. The lib/cpp headers use UNSCOPED
-// (prefixed) enum members (CelestialFrame_EME2000, timingStandard_UTC, ...).
+//   CAT(+Builder), RFM(+Builder)/RFMUnionTraits, CelestialFrame, timingStandard,
+//   CreateCelestialFrameWrapper, FinishOEMBuffer, and flatbuffers::FlatBufferBuilder.
+// Works against BOTH SDS header variants: the lib/cpp headers (UNSCOPED/prefixed
+// enums, CelestialFrame_EME2000 — oem-source-iss inlines these) AND the
+// licensing/core headers (SCOPED enums, CelestialFrame::EME2000 — the em++
+// provider modules include these via CORE_SDS_GENERATED_DIR). The only builder-
+// internal union discriminator is taken variant-agnostically via
+// RFMUnionTraits<CelestialFrameWrapper>::enum_value (flatc emits the traits in
+// both); the frame/time_system ENUM MEMBER names live only in each CALLER's file.
 #include <cstdint>
 #include <vector>
 
@@ -64,7 +66,7 @@ inline std::vector<uint8_t> build_oem_flatbuffer(
     // REFERENCE_FRAME = RFM{ CelestialFrameWrapper{ frame } } — honest source frame.
     auto cfw = CreateCelestialFrameWrapper(fbb, frame);
     RFMBuilder rfmb(fbb);
-    rfmb.add_REFERENCE_FRAME_type(RFMUnion_CelestialFrameWrapper);
+    rfmb.add_REFERENCE_FRAME_type(RFMUnionTraits<CelestialFrameWrapper>::enum_value);
     rfmb.add_REFERENCE_FRAME(cfw.Union());
     auto rfm = rfmb.Finish();
 
@@ -118,7 +120,7 @@ inline std::vector<uint8_t> build_oem_flatbuffer_compact(
 
     auto cfw = CreateCelestialFrameWrapper(fbb, frame);
     RFMBuilder rfmb(fbb);
-    rfmb.add_REFERENCE_FRAME_type(RFMUnion_CelestialFrameWrapper);
+    rfmb.add_REFERENCE_FRAME_type(RFMUnionTraits<CelestialFrameWrapper>::enum_value);
     rfmb.add_REFERENCE_FRAME(cfw.Union());
     auto rfm = rfmb.Finish();
 
