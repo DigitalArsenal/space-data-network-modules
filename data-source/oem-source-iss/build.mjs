@@ -112,9 +112,23 @@ const headers = await Promise.all(
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
-// One translation unit: inlined SDS headers, then the fixture data, then the
-// module implementation that references both.
-const sourceCode = [...headers.map(inlineGeneratedHeader), fixtureInc, implementationSource].join("\n\n");
+// The shared $OEM FlatBuffer builder (common/oem_fb_builder.hpp) — inlined AFTER
+// the SDS headers (it references OEM/CAT/RFM/… types) and BEFORE the fixture +
+// implementation. This is the reusable builder every OD-flow provider source uses.
+const sharedOemBuilder = (
+  await fs.readFile(
+    fileURLToPath(new URL("../common/oem_fb_builder.hpp", import.meta.url)),
+    "utf8",
+  )
+).replace(/^#pragma once\s*\n/, ""); // strip: inlined into the main TU, not #included
+// One translation unit: inlined SDS headers, the shared $OEM builder, the fixture
+// data, then the module implementation that references all three.
+const sourceCode = [
+  ...headers.map(inlineGeneratedHeader),
+  sharedOemBuilder,
+  fixtureInc,
+  implementationSource,
+].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
