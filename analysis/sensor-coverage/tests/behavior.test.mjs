@@ -177,7 +177,7 @@ test("sensor coverage grid products bypass rendered swaths and broad-phase state
   assert.doesNotMatch(kernelSource, /index_swaths_by_sensor/);
   assert.match(kernelSource, /static_cast<void>\(swaths\);/);
   assert.match(kernelSource, /append_sensor_cap_candidates\(/);
-  assert.match(kernelSource, /refined_visibility_interval\(/);
+  assert.match(kernelSource, /append_refined_visibility_intervals\(/);
 });
 
 test("sensor coverage metric-product path goes directly to exact visibility without local footprint candidates", () => {
@@ -361,7 +361,7 @@ test("sensor coverage retains at most one generation of module output regions", 
   assert.match(source, /g_retained_output_allocations = std::move\(output_allocations\);/);
 });
 
-test("sensor coverage exact visibility resolves endpoint frames once per state window", () => {
+test("sensor coverage exact visibility reuses resolved endpoints and root state interpolation", () => {
   const source = fs.readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
@@ -397,8 +397,18 @@ test("sensor coverage exact visibility resolves endpoint frames once per state w
   );
   assert.match(directKernelSource, /const ResolvedVisibilityState& start_resolved = resolved_states\[state_index\];/);
   assert.match(directKernelSource, /const ResolvedVisibilityState& stop_resolved = resolved_states\[state_index \+ 1\];/);
-  assert.match(intervalSource, /cell_visible_from_resolved_state\(cell, sensor, start\)/);
-  assert.match(intervalSource, /cell_visible_from_resolved_state\(cell, sensor, stop\)/);
+  assert.match(
+    intervalSource,
+    /cell_visible_from_resolved_state\(\s*cell,\s*sensor,\s*interval_start\)/,
+  );
+  assert.match(
+    intervalSource,
+    /cell_visible_from_resolved_state\(\s*cell,\s*sensor,\s*interval_stop\)/,
+  );
+  assert.match(
+    intervalSource,
+    /interpolate_state\(\s*interpolation_start\.state,\s*interpolation_stop\.state/,
+  );
   assert.doesNotMatch(intervalSource, /resolve_sensor_frame/);
 });
 

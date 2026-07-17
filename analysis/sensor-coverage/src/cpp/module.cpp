@@ -11,6 +11,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <unordered_map>
 #include <utility>
 
 using namespace sdn_hypersonics;
@@ -36,6 +37,9 @@ constexpr double kWgs84Ep2 = kWgs84A2 / kWgs84B2 - 1.0;
 constexpr double kRadiansToDegrees = 180.0 / 3.14159265358979323846;
 constexpr double kCoverageSwathRenderAltitudeM = 1200.0;
 constexpr int kVisibilityTransitionRefinementIterations = 8;
+constexpr int kVisibilitySearchMaxDepth = 12;
+constexpr double kMaximumGeodeticGeocentricLatitudeSeparationDeg =
+  0.19242430115956035;
 constexpr size_t kGridCellCacheMaxEntries = 4;
 constexpr int kGridTileRowSpan = 8;
 constexpr int kGridTileColumnSpan = 8;
@@ -45,6 +49,9 @@ constexpr uint32_t kGeometryStRegionId = 3;
 constexpr uint32_t kGeometryRevealCoordsRegionId = 4;
 constexpr uint32_t kGeometryIndicesRegionId = 5;
 constexpr uint32_t kRasterRegionBaseId = 1000;
+
+double inflate_proof_upper_bound(double value);
+double deflate_proof_lower_bound(double value);
 
 struct Interval {
   double start = 0.0;
@@ -114,6 +121,13 @@ struct FootprintSample {
   bool boundaryComplete = false;
 };
 
+struct SurfacePatchGeometry {
+  float centerX = 0.0f;
+  float centerY = 0.0f;
+  float centerZ = 0.0f;
+  float radiusM = -1.0f;
+};
+
 struct SwathSegment {
   int index = 0;
   int sensorId = 0;
@@ -131,19 +145,24 @@ struct GridCellGeometry {
   Vec3 surfacePosition;
   Vec3 surfaceNormal;
   Vec3 surfaceUnit;
-  // 3x3 lat/lon lattice: center, edge midpoints, and corners. Five samples
-  // (center + corners) let footprints narrower than the cell sweep through
-  // the interior between sample points — a 51.6-deg LEO repeatedly skipped
-  // rim cells on the same grid rows that way. The lattice plus the
-  // boresight-ground-point-in-cell test below make cell access robust for
-  // footprints down to shallow edge clips.
+  // 3x3 lat/lon lattice: center, edge midpoints, and corners. This is only a
+  // fast accept path. Solid conics additionally search the continuous WGS84
+  // rectangle with rejection-safe patch bounds and exact point witnesses.
   Vec3 samplePositions[9];
   Vec3 sampleNormals[9];
   int sampleCount = 0;
   double minLatitudeDeg = 0.0;
   double maxLatitudeDeg = 0.0;
+  double minGeocentricLatitudeDeg = 0.0;
+  double maxGeocentricLatitudeDeg = 0.0;
   double minLongitudeDeg = 0.0;
   double maxLongitudeDeg = 0.0;
+  // Lazily populated quadtree geometry for proof-only surface bounds. These
+  // values depend solely on the immutable cell rectangle and are reused across
+  // every state segment and invocation served by the grid cache.
+  mutable std::vector<SurfacePatchGeometry> surfacePatchCache;
+  mutable std::unordered_map<uint32_t, SurfacePatchGeometry>
+    deepSurfacePatchCache;
 };
 
 struct CellBounds {
@@ -190,7 +209,12 @@ struct GridConfig {
   double latStep = 1.0;
   double lonStep = 1.0;
   double start = 0.0;
-  double stop = 86400.0;
+  double stop = 0.0;
+  double step = 0.0;
+  uint32_t gridIndexStart = 0;
+  uint32_t gridIndexCount = 0;
+  std::string epochIso;
+  double epochJulianDate = 0.0;
   int rows = 0;
   int columns = 0;
 };
@@ -312,6 +336,21 @@ Vec3 geodetic_surface_unit(double latitude_deg, double longitude_deg) {
   return normalize(geodetic_to_ecef(cartographic));
 }
 
+double geocentric_latitude_deg_from_geodetic(double latitude_deg) {
+  const double latitude_rad = latitude_deg / kRadiansToDegrees;
+  return std::atan2(
+    (1.0 - kWgs84E2) * std::sin(latitude_rad),
+    std::cos(latitude_rad)) * kRadiansToDegrees;
+}
+
+Vertex direction_lon_lat(Vec3 direction) {
+  const Vec3 unit = normalize(direction);
+  return {
+    std::atan2(unit.z, std::hypot(unit.x, unit.y)) * kRadiansToDegrees,
+    std::atan2(unit.y, unit.x) * kRadiansToDegrees,
+  };
+}
+
 Vec3 geodetic_surface_normal(Vec3 ecef_point) {
   return normalize({
     ecef_point.x / kWgs84A2,
@@ -336,20 +375,20 @@ void set_grid_cell_sample(GridCellGeometry& geometry, int index, double latitude
   geometry.sampleNormals[index] = normalize(scaled_normal);
 }
 
-GridCellGeometry grid_cell_geometry(
-    double latitude_deg,
-    double longitude_deg,
-    double latitude_step_deg,
-    double longitude_step_deg) {
+GridCellGeometry grid_cell_geometry(const CellBounds& bounds) {
   GridCellGeometry geometry{};
+  const double latitude_deg =
+    0.5 * (bounds.minLatitudeDeg + bounds.maxLatitudeDeg);
+  const double longitude_deg =
+    0.5 * (bounds.minLongitudeDeg + bounds.maxLongitudeDeg);
   set_grid_cell_sample(geometry, 0, latitude_deg, longitude_deg);
   geometry.surfacePosition = geometry.samplePositions[0];
   geometry.surfaceNormal = geometry.sampleNormals[0];
   geometry.surfaceUnit = normalize(geometry.surfacePosition);
-  const double min_latitude = clamp(latitude_deg - 0.5 * latitude_step_deg, -90.0, 90.0);
-  const double max_latitude = clamp(latitude_deg + 0.5 * latitude_step_deg, -90.0, 90.0);
-  const double min_longitude = clamp(longitude_deg - 0.5 * longitude_step_deg, -180.0, 180.0);
-  const double max_longitude = clamp(longitude_deg + 0.5 * longitude_step_deg, -180.0, 180.0);
+  const double min_latitude = bounds.minLatitudeDeg;
+  const double max_latitude = bounds.maxLatitudeDeg;
+  const double min_longitude = bounds.minLongitudeDeg;
+  const double max_longitude = bounds.maxLongitudeDeg;
   set_grid_cell_sample(geometry, 1, min_latitude, min_longitude);
   set_grid_cell_sample(geometry, 2, min_latitude, max_longitude);
   set_grid_cell_sample(geometry, 3, max_latitude, min_longitude);
@@ -361,6 +400,10 @@ GridCellGeometry grid_cell_geometry(
   geometry.sampleCount = 9;
   geometry.minLatitudeDeg = min_latitude;
   geometry.maxLatitudeDeg = max_latitude;
+  geometry.minGeocentricLatitudeDeg =
+    geocentric_latitude_deg_from_geodetic(min_latitude);
+  geometry.maxGeocentricLatitudeDeg =
+    geocentric_latitude_deg_from_geodetic(max_latitude);
   geometry.minLongitudeDeg = min_longitude;
   geometry.maxLongitudeDeg = max_longitude;
   return geometry;
@@ -484,8 +527,10 @@ SensorFrame sensor_frame_from_scv_quaternion(const State& state, const SCVStateS
   return frame;
 }
 
-GridConfig grid_from_scv_request(const SCVCoverageRequest* request) {
-  GridConfig config{};
+bool grid_from_scv_request(
+    const SCVCoverageRequest* request,
+    GridConfig& config,
+    std::string& error) {
   if (const auto* coverage_grid = request->COVERAGE_GRID()) {
     config.minLat = coverage_grid->MIN_LAT_DEG();
     config.maxLat = coverage_grid->MAX_LAT_DEG();
@@ -494,13 +539,54 @@ GridConfig grid_from_scv_request(const SCVCoverageRequest* request) {
     config.latStep = std::max(0.01, coverage_grid->LAT_STEP_DEG());
     config.lonStep = std::max(0.01, coverage_grid->LON_STEP_DEG());
   }
-  if (const auto* time_grid = request->TIME_GRID()) {
-    config.start = time_grid->START_OFFSET_SEC();
-    config.stop = time_grid->STOP_OFFSET_SEC();
+  const auto* time_grid = request->TIME_GRID();
+  if (!time_grid) {
+    error = "SCV coverage TIME_GRID is required.";
+    return false;
+  }
+  config.start = time_grid->START_OFFSET_SEC();
+  config.stop = time_grid->STOP_OFFSET_SEC();
+  config.step = time_grid->STEP_SEC();
+  config.gridIndexStart = time_grid->GRID_INDEX_START();
+  config.gridIndexCount = time_grid->GRID_INDEX_COUNT();
+  config.epochIso = time_grid->EPOCH_ISO()
+    ? time_grid->EPOCH_ISO()->str()
+    : "";
+  config.epochJulianDate = time_grid->EPOCH_JULIAN_DATE();
+
+  if (!std::isfinite(config.step) || !(config.step > 0.0)) {
+    error = "SCV coverage TIME_GRID STEP_SEC must be finite and greater than zero.";
+    return false;
+  }
+  if (config.gridIndexCount < 1u) {
+    error = "SCV coverage TIME_GRID GRID_INDEX_COUNT must be at least one.";
+    return false;
+  }
+  if (
+    !std::isfinite(config.start) ||
+    !std::isfinite(config.stop) ||
+    !(config.start < config.stop)
+  ) {
+    error = "SCV coverage TIME_GRID START_OFFSET_SEC must be less than STOP_OFFSET_SEC.";
+    return false;
+  }
+  const long double span =
+    static_cast<long double>(config.stop) -
+    static_cast<long double>(config.start);
+  const long double step = static_cast<long double>(config.step);
+  const long double minimum_span =
+    static_cast<long double>(config.gridIndexCount - 1u) * step;
+  const long double maximum_span =
+    static_cast<long double>(config.gridIndexCount) * step;
+  if (!(minimum_span < span && span <= maximum_span)) {
+    error =
+      "SCV coverage TIME_GRID span is inconsistent with STEP_SEC and "
+      "GRID_INDEX_COUNT; require (count-1)*step < stop-start <= count*step.";
+    return false;
   }
   config.rows = std::max(1, static_cast<int>(std::ceil((config.maxLat - config.minLat) / config.latStep)));
   config.columns = std::max(1, static_cast<int>(std::ceil((config.maxLon - config.minLon) / config.lonStep)));
-  return config;
+  return true;
 }
 
 void initialize_sensor_boundary_directions(SensorConfig& sensor) {
@@ -651,10 +737,12 @@ bool parse_coverage_input(const std::string& payload, CoverageInput& input, std:
       error = "Input port \"coverage\" SCV envelope must contain a REQUEST payload.";
       return false;
     }
-    input.isScv = true;
-    input.grid = grid_from_scv_request(envelope->REQUEST());
-    input.tracks = tracks_from_scv_request(envelope->REQUEST());
     const SCVCoverageRequest* request = envelope->REQUEST();
+    input.isScv = true;
+    if (!grid_from_scv_request(request, input.grid, error)) {
+      return false;
+    }
+    input.tracks = tracks_from_scv_request(request);
     const auto* requested_products = request->REQUESTED_PRODUCTS();
     const bool has_explicit_products =
       requested_products != nullptr && requested_products->size() > 0;
@@ -689,8 +777,24 @@ bool parse_coverage_input(const std::string& payload, CoverageInput& input, std:
 }
 
 CellBounds cell_bounds_for(int row, int column, const GridConfig& grid) {
-  const double latitude = grid.minLat + (row + 0.5) * grid.latStep;
-  const double longitude = grid.minLon + (column + 0.5) * grid.lonStep;
+  const double min_latitude = clamp(
+    grid.minLat + static_cast<double>(row) * grid.latStep,
+    -90.0,
+    90.0);
+  const double max_latitude = clamp(
+    std::min(grid.maxLat, grid.minLat + static_cast<double>(row + 1) * grid.latStep),
+    -90.0,
+    90.0);
+  const double min_longitude = clamp(
+    grid.minLon + static_cast<double>(column) * grid.lonStep,
+    -180.0,
+    180.0);
+  const double max_longitude = clamp(
+    std::min(grid.maxLon, grid.minLon + static_cast<double>(column + 1) * grid.lonStep),
+    -180.0,
+    180.0);
+  const double latitude = 0.5 * (min_latitude + max_latitude);
+  const double longitude = 0.5 * (min_longitude + max_longitude);
   const int tile_columns = std::max(
     1,
     (grid.columns + kGridTileColumnSpan - 1) / kGridTileColumnSpan);
@@ -698,10 +802,10 @@ CellBounds cell_bounds_for(int row, int column, const GridConfig& grid) {
   bounds.tileRow = row / kGridTileRowSpan;
   bounds.tileColumn = column / kGridTileColumnSpan;
   bounds.tileId = bounds.tileRow * tile_columns + bounds.tileColumn;
-  bounds.minLatitudeDeg = clamp(latitude - 0.5 * grid.latStep, -90.0, 90.0);
-  bounds.maxLatitudeDeg = clamp(latitude + 0.5 * grid.latStep, -90.0, 90.0);
-  bounds.minLongitudeDeg = clamp(longitude - 0.5 * grid.lonStep, -180.0, 180.0);
-  bounds.maxLongitudeDeg = clamp(longitude + 0.5 * grid.lonStep, -180.0, 180.0);
+  bounds.minLatitudeDeg = min_latitude;
+  bounds.maxLatitudeDeg = max_latitude;
+  bounds.minLongitudeDeg = min_longitude;
+  bounds.maxLongitudeDeg = max_longitude;
   bounds.centerUnit = geodetic_surface_unit(latitude, longitude);
   return bounds;
 }
@@ -716,9 +820,11 @@ std::vector<Cell> create_cells(const GridConfig& grid) {
       cell.index = index++;
       cell.row = row;
       cell.column = column;
-      cell.latitude = grid.minLat + (row + 0.5) * grid.latStep;
-      cell.longitude = grid.minLon + (column + 0.5) * grid.lonStep;
       cell.bounds = cell_bounds_for(row, column, grid);
+      cell.latitude = 0.5 * (
+        cell.bounds.minLatitudeDeg + cell.bounds.maxLatitudeDeg);
+      cell.longitude = 0.5 * (
+        cell.bounds.minLongitudeDeg + cell.bounds.maxLongitudeDeg);
       cell.surfaceUnit = cell.bounds.centerUnit;
       cell.surfaceUnitReady = true;
       cells.push_back(cell);
@@ -792,7 +898,7 @@ void ensure_cell_geometry(Cell& cell, const GridConfig& grid) {
   if (cell.geometryReady) {
     return;
   }
-  cell.geometry = grid_cell_geometry(cell.latitude, cell.longitude, grid.latStep, grid.lonStep);
+  cell.geometry = grid_cell_geometry(cell.bounds);
   cell.surfaceUnit = cell.geometry.surfaceUnit;
   cell.surfaceUnitReady = true;
   cell.geometryReady = true;
@@ -1006,10 +1112,507 @@ bool surface_sample_visible_from_resolved_state(
     });
 }
 
-bool boresight_ground_point_inside_cell(
+bool longitude_inside_closed_cell(
+    double longitude_deg,
+    double min_longitude_deg,
+    double max_longitude_deg) {
+  double longitude = longitude_deg;
+  const double reference = 0.5 * (min_longitude_deg + max_longitude_deg);
+  while (longitude - reference > 180.0) {
+    longitude -= 360.0;
+  }
+  while (longitude - reference < -180.0) {
+    longitude += 360.0;
+  }
+  constexpr double kLongitudeToleranceDeg = 1.0e-10;
+  return
+    longitude >= min_longitude_deg - kLongitudeToleranceDeg &&
+    longitude <= max_longitude_deg + kLongitudeToleranceDeg;
+}
+
+bool conservative_range_cap_radius_deg(
+    double observer_distance_m,
+    double maximum_range_m,
+    double& radius_deg) {
+  if (!(maximum_range_m > 0.0) || maximum_range_m >= 1.0e90) {
+    radius_deg = 180.0;
+    return true;
+  }
+  if (
+    !std::isfinite(observer_distance_m) ||
+    !std::isfinite(maximum_range_m) ||
+    !(observer_distance_m > kWgs84A)
+  ) {
+    radius_deg = 180.0;
+    return true;
+  }
+  // Every WGS84 surface point has radial magnitude in [B,A]. Minimize the
+  // law-of-cosines threshold over that complete shell. This is a necessary
+  // (therefore rejection-safe) maximum-range cap for the ellipsoid.
+  constexpr double kShapeRangeBoundaryEpsilonM = 1.0e-12;
+  const double proof_maximum_range_m = inflate_proof_upper_bound(
+    maximum_range_m + kShapeRangeBoundaryEpsilonM);
+  if (
+    proof_maximum_range_m <
+    deflate_proof_lower_bound(observer_distance_m) - kWgs84A
+  ) {
+    return false;
+  }
+  const double critical_radius = std::sqrt(std::max(
+    0.0,
+    observer_distance_m * observer_distance_m -
+      proof_maximum_range_m * proof_maximum_range_m));
+  const double radii[] = {
+    kWgs84B,
+    kWgs84A,
+    clamp(critical_radius, kWgs84B, kWgs84A),
+  };
+  double minimum_cosine = 1.0;
+  for (const double body_radius : radii) {
+    const double cosine = (
+      observer_distance_m * observer_distance_m +
+      body_radius * body_radius -
+      proof_maximum_range_m * proof_maximum_range_m) /
+      (2.0 * observer_distance_m * body_radius);
+    minimum_cosine = std::min(
+      minimum_cosine,
+      deflate_proof_lower_bound(cosine));
+  }
+  if (minimum_cosine > 1.0) {
+    return false;
+  }
+  radius_deg = inflate_proof_upper_bound(
+    std::acos(clamp(minimum_cosine, -1.0, 1.0)) *
+      kRadiansToDegrees);
+  return true;
+}
+
+bool conservative_boresight_footprint_cap_radius_deg(
+    double observer_distance_m,
+    double boresight_off_nadir_rad,
+    double cone_boundary_angle_rad,
+    double& radius_deg) {
+  if (
+    !std::isfinite(observer_distance_m) ||
+    !(observer_distance_m > kWgs84B) ||
+    !std::isfinite(boresight_off_nadir_rad) ||
+    !std::isfinite(cone_boundary_angle_rad) ||
+    cone_boundary_angle_rad < 0.0
+  ) {
+    return false;
+  }
+
+  const double radius_ratio = clamp(
+    kWgs84B / observer_distance_m,
+    0.0,
+    1.0);
+  const double horizon_look_rad = std::asin(radius_ratio);
+  const double maximum_look_rad =
+    boresight_off_nadir_rad + cone_boundary_angle_rad;
+  if (!(maximum_look_rad < horizon_look_rad)) {
+    return false;
+  }
+
+  // On the conservative B sphere, radial and azimuthal expansion bound the
+  // image of the local angular ball. WGS84/geocentric conversion slack is
+  // paid here and again by moving-cap callers.
+  const double distance_ratio = observer_distance_m / kWgs84B;
+  const double mapped_argument = clamp(
+    distance_ratio * std::sin(maximum_look_rad),
+    -1.0,
+    1.0);
+  const double denominator = std::sqrt(std::max(
+    1.0e-30,
+    1.0 - mapped_argument * mapped_argument));
+  const double radial_scale = std::max(
+    0.0,
+    distance_ratio * std::cos(maximum_look_rad) / denominator - 1.0);
+  const double mapped_ground_rad =
+    std::asin(mapped_argument) - maximum_look_rad;
+  const double azimuthal_scale = maximum_look_rad > 1.0e-14
+    ? std::sin(std::max(0.0, mapped_ground_rad)) /
+      std::sin(maximum_look_rad)
+    : std::max(0.0, distance_ratio - 1.0);
+  const double mapping_scale = std::max(radial_scale, azimuthal_scale);
+
+  radius_deg = inflate_proof_upper_bound(
+    mapping_scale * cone_boundary_angle_rad * kRadiansToDegrees +
+      2.0 * kMaximumGeodeticGeocentricLatitudeSeparationDeg);
+  return std::isfinite(radius_deg) && radius_deg >= 0.0;
+}
+
+bool cell_intersects_conservative_sensor_cap(
     const GridCellGeometry& cell,
     const SensorConfig& sensor,
     const ResolvedVisibilityState& resolved) {
+  const double observer_distance_m = magnitude(resolved.state.position);
+  if (!(observer_distance_m > kWgs84A) || !std::isfinite(observer_distance_m)) {
+    return true;
+  }
+  const Vec3 observer_unit = normalize(resolved.state.position);
+  const Vec3 nadir = scale(observer_unit, -1.0);
+  const double boresight_off_nadir_rad = std::acos(clamp(
+    dot(resolved.frame.boresight, nadir),
+    -1.0,
+    1.0));
+  double cap_radius_deg = sdn::coverage::conservativeGroundCapRadiusDeg(
+    observer_distance_m,
+    kWgs84B,
+    (boresight_off_nadir_rad + sensor.maxBoundaryAngleRad) *
+      kRadiansToDegrees) +
+    kMaximumGeodeticGeocentricLatitudeSeparationDeg + 1.0e-9;
+  const double horizon_radius_deg = inflate_proof_upper_bound(
+    std::acos(clamp(
+      kWgs84B / observer_distance_m,
+      0.0,
+      1.0)) * kRadiansToDegrees +
+      kMaximumGeodeticGeocentricLatitudeSeparationDeg + 1.0e-9);
+  cap_radius_deg = std::min(cap_radius_deg, horizon_radius_deg);
+
+  double range_radius_deg = 180.0;
+  if (!conservative_range_cap_radius_deg(
+        observer_distance_m,
+        sensor_max_range_m(sensor),
+        range_radius_deg)) {
+    return false;
+  }
+  cap_radius_deg = std::min(cap_radius_deg, range_radius_deg);
+
+  const bool subpoint_envelope_intersects =
+    sdn::coverage::sphericalCapIntersectsRectangle(
+    direction_lon_lat(observer_unit),
+    cap_radius_deg,
+    cell.minGeocentricLatitudeDeg,
+    cell.maxGeocentricLatitudeDeg,
+    cell.minLongitudeDeg,
+    cell.maxLongitudeDeg);
+  if (!subpoint_envelope_intersects) {
+    return false;
+  }
+  // A tighter boresight-centered spherical cap is tempting here, but the
+  // WGS84 ray-to-ground map is anisotropic near the limb. The subpoint cap is
+  // the last rejection authority; exact surface witnesses decide access.
+  return true;
+}
+
+bool has_solid_conic_continuum_contract(const SensorConfig& sensor) {
+  constexpr double kShapeToleranceRad = 1.0e-14;
+  return
+    sensor.shapeContract.kind == SensorShapeKind::Conic &&
+    sensor.shapeContract.rangeBoundary == SensorRangeBoundaryKind::RadialSpherical &&
+    sensor.shapeContract.innerHalfAngleRad <= kShapeToleranceRad &&
+    sensor.shapeContract.clockRange.fullCircle;
+}
+
+double radial_magnitude_at_geodetic_latitude(double latitude_deg);
+
+bool solid_conic_cell_proven_angle_disjoint(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& resolved) {
+  const double observer_distance_m = magnitude(resolved.state.position);
+  if (
+    !(observer_distance_m > kWgs84A) ||
+    !std::isfinite(observer_distance_m) ||
+    sensor.shapeContract.outerHalfAngleRad >= 3.14159265358979323846
+  ) {
+    return false;
+  }
+
+  // Every WGS84 surface point is P=r*q with r in [B,A]. Bound c=u*q over
+  // the exact geocentric lat/lon rectangle using its nearest directions to u
+  // and -u. For radial nadir n=-u, the forward score
+  //
+  //   f(r,c)=(D-r*c)/sqrt(D^2+r^2-2*D*r*c)
+  //
+  // is maximized over radius at r=B. As a function of c it has only an
+  // interior minimum, so its maximum over [cMin,cMax] is at an endpoint.
+  // The chord from radial nadir to the actual boresight then bounds arbitrary
+  // off-nadir pointing by Cauchy-Schwarz. This is an outer bound used only for
+  // rejection; it never supplies a positive access result.
+  const Vec3 observer_unit = normalize(resolved.state.position);
+  const Vertex observer_direction = direction_lon_lat(observer_unit);
+  const Vertex antipodal_direction = direction_lon_lat(scale(observer_unit, -1.0));
+  const double minimum_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      observer_direction,
+      cell.minGeocentricLatitudeDeg,
+      cell.maxGeocentricLatitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+  const double antipodal_minimum_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      antipodal_direction,
+      cell.minGeocentricLatitudeDeg,
+      cell.maxGeocentricLatitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+  if (
+    !std::isfinite(minimum_distance_deg) ||
+    !std::isfinite(antipodal_minimum_distance_deg)
+  ) {
+    return false;
+  }
+  const double c_max = clamp(inflate_proof_upper_bound(std::cos(
+    minimum_distance_deg / kRadiansToDegrees)), -1.0, 1.0);
+  const double rectangle_c_min = clamp(deflate_proof_lower_bound(-std::cos(
+    antipodal_minimum_distance_deg / kRadiansToDegrees)), -1.0, 1.0);
+  // A visible WGS84 point cannot lie beyond the radius-B spherical horizon
+  // by more than the maximum angle between its geodetic normal and radial
+  // direction. Restricting the relaxed cosine interval prevents far-side
+  // shell points (which geometrically look along nadir through Earth) from
+  // weakening the forward bound.
+  const double horizon_ground_angle_rad = std::min(
+    3.14159265358979323846,
+    std::acos(clamp(
+      kWgs84B / observer_distance_m,
+      0.0,
+      1.0)) +
+      kMaximumGeodeticGeocentricLatitudeSeparationDeg /
+        kRadiansToDegrees);
+  const double c_min = std::max(
+    rectangle_c_min,
+    deflate_proof_lower_bound(std::cos(horizon_ground_angle_rad)));
+  if (c_min > c_max) {
+    return true;
+  }
+  const double cell_minimum_radius_m = std::max(
+    kWgs84B,
+    deflate_proof_lower_bound(std::min(
+      radial_magnitude_at_geodetic_latitude(cell.minLatitudeDeg),
+      radial_magnitude_at_geodetic_latitude(cell.maxLatitudeDeg))));
+  if (
+    !(cell_minimum_radius_m >= kWgs84B) ||
+    !std::isfinite(cell_minimum_radius_m)
+  ) {
+    return false;
+  }
+  auto radial_forward = [&](double direction_cosine) {
+    const double range_m = std::sqrt(std::max(
+      0.0,
+      observer_distance_m * observer_distance_m +
+        cell_minimum_radius_m * cell_minimum_radius_m -
+        2.0 * observer_distance_m * cell_minimum_radius_m *
+          direction_cosine));
+    if (!(range_m > 0.0)) {
+      return 1.0;
+    }
+    return clamp(
+      (observer_distance_m -
+        cell_minimum_radius_m * direction_cosine) / range_m,
+      -1.0,
+      1.0);
+  };
+  const double radial_forward_upper = std::max(
+    radial_forward(c_min),
+    radial_forward(c_max));
+  const Vec3 radial_nadir = scale(observer_unit, -1.0);
+  const double boresight_chord = inflate_proof_upper_bound(magnitude(subtract(
+    resolved.frame.boresight,
+    radial_nadir)));
+  const double forward_upper = inflate_proof_upper_bound(
+    radial_forward_upper + boresight_chord);
+  constexpr double kShapeBoundaryEpsilonRad = 1.0e-12;
+  const double required_forward = deflate_proof_lower_bound(std::cos(std::min(
+    3.14159265358979323846,
+    sensor.shapeContract.outerHalfAngleRad +
+      kShapeBoundaryEpsilonRad)));
+  return forward_upper < required_forward;
+}
+
+bool solid_conic_nadir_sweep_proven_disjoint(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop) {
+  if (!has_solid_conic_continuum_contract(sensor)) {
+    return false;
+  }
+  const double start_distance_m = magnitude(start.state.position);
+  const double stop_distance_m = magnitude(stop.state.position);
+  if (
+    !(start_distance_m > kWgs84A) ||
+    !(stop_distance_m > kWgs84A)
+  ) {
+    return false;
+  }
+  const Vec3 start_unit = scale(
+    start.state.position,
+    1.0 / start_distance_m);
+  const Vec3 stop_unit = scale(
+    stop.state.position,
+    1.0 / stop_distance_m);
+  const double observer_chord = inflate_proof_upper_bound(magnitude(subtract(
+    start_unit,
+    stop_unit)));
+  if (!(observer_chord < 2.0 - 1.0e-12)) {
+    return false;
+  }
+  // Chord-based rotation remains conservative when dot(u,v) rounds to one;
+  // acos(dot) would otherwise collapse a small real sweep to zero.
+  const double observer_rotation_rad = inflate_proof_upper_bound(
+    2.0 * std::asin(clamp(0.5 * observer_chord, 0.0, 1.0)));
+  const double normalized_arc_minimum_length = deflate_proof_lower_bound(
+    std::sqrt(std::max(
+      0.0,
+      1.0 - 0.25 * observer_chord * observer_chord)));
+  if (!(normalized_arc_minimum_length > 0.0)) {
+    return false;
+  }
+
+  // Bound the complete interpolated boresight's departure from radial nadir.
+  // Endpoint raw-frame errors interpolate affinely, and unequal observer radii
+  // perturb the normalized position chord. Normalization changes either vector
+  // by no more than twice its relative precursor error divided by the chord's
+  // minimum length.
+  const double endpoint_nadir_chord_error = std::max(
+    magnitude(add(start.state.sensorFrame.boresight, start_unit)),
+    magnitude(add(stop.state.sensorFrame.boresight, stop_unit)));
+  const double maximum_distance_raw_m = std::max(
+    start_distance_m,
+    stop_distance_m);
+  const double maximum_distance_m = inflate_proof_upper_bound(
+    maximum_distance_raw_m);
+  const double radius_relative_error = inflate_proof_upper_bound(std::fabs(
+    stop_distance_m - start_distance_m) /
+      deflate_proof_lower_bound(maximum_distance_raw_m));
+  const double boresight_nadir_chord_bound = inflate_proof_upper_bound(
+    2.0 * (endpoint_nadir_chord_error + radius_relative_error) /
+      normalized_arc_minimum_length);
+  if (!(boresight_nadir_chord_bound < 0.25)) {
+    return false;
+  }
+  const double maximum_off_nadir_rad = 2.0 * std::asin(clamp(
+    0.5 * boresight_nadir_chord_bound,
+    0.0,
+    1.0));
+
+  const double cell_minimum_radius_m = std::max(
+    kWgs84B,
+    deflate_proof_lower_bound(std::min(
+      radial_magnitude_at_geodetic_latitude(cell.minLatitudeDeg),
+      radial_magnitude_at_geodetic_latitude(cell.maxLatitudeDeg))));
+  if (!(cell_minimum_radius_m > 0.0)) {
+    return false;
+  }
+
+  // Directly bound the conic forward score over the complete observer arc
+  // and cell rectangle. This is materially tighter than converting the cone
+  // to a B-sphere ground cap, yet remains rejection-only. The distance from
+  // either start direction to the moving arc can decrease by at most the
+  // observer rotation (spherical triangle inequality).
+  const double observer_rotation_deg =
+    observer_rotation_rad * kRadiansToDegrees;
+  const double nearest_start_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      direction_lon_lat(start_unit),
+      cell.minGeocentricLatitudeDeg,
+      cell.maxGeocentricLatitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+  const double nearest_antipodal_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      direction_lon_lat(scale(start_unit, -1.0)),
+      cell.minGeocentricLatitudeDeg,
+      cell.maxGeocentricLatitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+  if (
+    std::isfinite(nearest_start_distance_deg) &&
+    std::isfinite(nearest_antipodal_distance_deg)
+  ) {
+    constexpr double kAngularProofGuardDeg = 1.0e-9;
+    const double minimum_track_distance_deg = std::max(
+      0.0,
+      nearest_start_distance_deg - observer_rotation_deg -
+        kAngularProofGuardDeg);
+    const double minimum_antipodal_track_distance_deg = std::max(
+      0.0,
+      nearest_antipodal_distance_deg - observer_rotation_deg -
+        kAngularProofGuardDeg);
+    const double c_max = clamp(inflate_proof_upper_bound(std::cos(
+      minimum_track_distance_deg / kRadiansToDegrees)), -1.0, 1.0);
+    const double rectangle_c_min = clamp(deflate_proof_lower_bound(-std::cos(
+      minimum_antipodal_track_distance_deg / kRadiansToDegrees)),
+      -1.0,
+      1.0);
+    const double horizon_ground_angle_rad = std::min(
+      3.14159265358979323846,
+      std::acos(clamp(
+        kWgs84B / maximum_distance_m,
+        0.0,
+        1.0)) +
+        kMaximumGeodeticGeocentricLatitudeSeparationDeg /
+          kRadiansToDegrees);
+    const double c_min = std::max(
+      rectangle_c_min,
+      deflate_proof_lower_bound(std::cos(horizon_ground_angle_rad)));
+    if (c_min > c_max) {
+      return true;
+    }
+    auto radial_forward = [&](double direction_cosine) {
+      const double range_m = std::sqrt(std::max(
+        0.0,
+        maximum_distance_m * maximum_distance_m +
+          cell_minimum_radius_m * cell_minimum_radius_m -
+          2.0 * maximum_distance_m * cell_minimum_radius_m *
+            direction_cosine));
+      if (!(range_m > 0.0)) {
+        return 1.0;
+      }
+      return clamp(
+        (maximum_distance_m -
+          cell_minimum_radius_m * direction_cosine) / range_m,
+        -1.0,
+        1.0);
+    };
+    const double radial_forward_upper = inflate_proof_upper_bound(std::max(
+      radial_forward(c_min),
+      radial_forward(c_max)));
+    const double forward_upper = inflate_proof_upper_bound(
+      radial_forward_upper + boresight_nadir_chord_bound);
+    constexpr double kShapeBoundaryEpsilonRad = 1.0e-12;
+    const double required_forward = deflate_proof_lower_bound(std::cos(
+      std::min(
+        3.14159265358979323846,
+        sensor.shapeContract.outerHalfAngleRad +
+          kShapeBoundaryEpsilonRad)));
+    if (forward_upper < required_forward) {
+      return true;
+    }
+  }
+  const double instantaneous_ground_radius_deg =
+    sdn::coverage::conservativeGroundCapRadiusDeg(
+      maximum_distance_m,
+      cell_minimum_radius_m,
+      (maximum_off_nadir_rad + sensor.maxBoundaryAngleRad) *
+        kRadiansToDegrees) +
+      kMaximumGeodeticGeocentricLatitudeSeparationDeg;
+  const double swept_radius_deg = inflate_proof_upper_bound(
+    observer_rotation_deg +
+      instantaneous_ground_radius_deg + 1.0e-9);
+  const double minimum_cell_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      direction_lon_lat(start_unit),
+      cell.minGeocentricLatitudeDeg,
+      cell.maxGeocentricLatitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+  return std::isfinite(minimum_cell_distance_deg) &&
+    minimum_cell_distance_deg > swept_radius_deg;
+}
+
+bool solid_conic_cell_has_exact_spatial_witness(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& resolved,
+    Vec3* witness_position = nullptr);
+
+bool boresight_ground_point_inside_cell(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& resolved,
+    Vec3* witness_position = nullptr) {
   // Only valid for shapes that actually contain their boresight direction —
   // inner-cutout (annular) shapes see a ring, not the beam center.
   if (!local_look_inside(sensor.shapeContract, {0.0, 0.0, 1.0})) {
@@ -1019,8 +1622,15 @@ bool boresight_ground_point_inside_cell(
   if (!intersect_earth(
         resolved.state.position,
         resolved.frame.boresight,
-        sensor_max_range_m(sensor),
+        1.0e100,
         ground_point)) {
+    return false;
+  }
+  if (!surface_sample_visible_from_resolved_state(
+        ground_point,
+        geodetic_surface_normal(ground_point),
+        sensor,
+        resolved)) {
     return false;
   }
   const Vertex ground = to_cartographic(ground_point);
@@ -1030,15 +1640,29 @@ bool boresight_ground_point_inside_cell(
   ) {
     return false;
   }
-  return (
-    ground.longitudeDeg >= cell.minLongitudeDeg &&
-    ground.longitudeDeg <= cell.maxLongitudeDeg);
+  const bool inside = longitude_inside_closed_cell(
+    ground.longitudeDeg,
+    cell.minLongitudeDeg,
+    cell.maxLongitudeDeg);
+  if (inside && witness_position) {
+    *witness_position = ground_point;
+  }
+  return inside;
 }
 
 bool cell_visible_from_resolved_state(
     const GridCellGeometry& cell,
     const SensorConfig& sensor,
     const ResolvedVisibilityState& state) {
+  const bool solid_conic = has_solid_conic_continuum_contract(sensor);
+  if (solid_conic) {
+    if (!cell_intersects_conservative_sensor_cap(cell, sensor, state)) {
+      return false;
+    }
+    if (solid_conic_cell_proven_angle_disjoint(cell, sensor, state)) {
+      return false;
+    }
+  }
   for (int sample_index = 0; sample_index < cell.sampleCount; ++sample_index) {
     if (surface_sample_visible_from_resolved_state(
           cell.samplePositions[sample_index],
@@ -1049,10 +1673,21 @@ bool cell_visible_from_resolved_state(
     }
   }
   // Footprints narrower than the surface-sample pitch (pencil beams, small
-  // apertures on coarse grids) can lie entirely between lattice points. Any
-  // footprint contains its own boresight ground point, so a cell containing
-  // that point is accessed regardless of footprint size.
-  return boresight_ground_point_inside_cell(cell, sensor, state);
+  // apertures on coarse grids) can lie entirely between lattice points. The
+  // exact boresight point is another fast accept.
+  if (boresight_ground_point_inside_cell(cell, sensor, state)) {
+    return true;
+  }
+
+  // The WGS84/off-nadir conic footprint is not itself a spherical cap. The
+  // cap below is a proven superset built from independent cone, horizon, and
+  // range bounds. It may reject a disjoint cell, but cap overlap is never a
+  // positive access proof. Inner-cutout, clock-limited, and non-conic shapes
+  // retain exact lattice/boresight accepts only.
+  if (!solid_conic) {
+    return false;
+  }
+  return solid_conic_cell_has_exact_spatial_witness(cell, sensor, state);
 }
 
 bool cell_visible_from_state(
@@ -1101,67 +1736,3705 @@ double refined_transition_time(
 VisibilityInterval refined_visibility_interval(
     const GridCellGeometry& cell,
     const SensorConfig& sensor,
-    const ResolvedVisibilityState& start,
-    const ResolvedVisibilityState& stop) {
-  if (!(stop.state.elapsedSeconds > start.state.elapsedSeconds)) {
+    const ResolvedVisibilityState& interpolation_start,
+    const ResolvedVisibilityState& interpolation_stop,
+    const ResolvedVisibilityState& interval_start,
+    const ResolvedVisibilityState& interval_stop) {
+  if (!(interval_stop.state.elapsedSeconds > interval_start.state.elapsedSeconds)) {
     return {};
   }
 
-  const bool visible_start = cell_visible_from_resolved_state(cell, sensor, start);
-  const bool visible_stop = cell_visible_from_resolved_state(cell, sensor, stop);
+  const bool visible_start = cell_visible_from_resolved_state(
+    cell,
+    sensor,
+    interval_start);
+  const bool visible_stop = cell_visible_from_resolved_state(
+    cell,
+    sensor,
+    interval_stop);
 
   if (visible_start && visible_stop) {
-    return {start.state.elapsedSeconds, stop.state.elapsedSeconds, true};
+    return {
+      interval_start.state.elapsedSeconds,
+      interval_stop.state.elapsedSeconds,
+      true,
+    };
   }
   if (visible_start && !visible_stop) {
     const double exit = refined_transition_time(
       cell,
       sensor,
-      start,
-      stop,
-      start.state.elapsedSeconds,
+      interpolation_start,
+      interpolation_stop,
+      interval_start.state.elapsedSeconds,
       true,
-      stop.state.elapsedSeconds,
+      interval_stop.state.elapsedSeconds,
       false);
-    return {start.state.elapsedSeconds, exit, exit > start.state.elapsedSeconds};
+    return {
+      interval_start.state.elapsedSeconds,
+      exit,
+      exit >= interval_start.state.elapsedSeconds,
+    };
   }
   if (!visible_start && visible_stop) {
     const double entry = refined_transition_time(
       cell,
       sensor,
-      start,
-      stop,
-      start.state.elapsedSeconds,
+      interpolation_start,
+      interpolation_stop,
+      interval_start.state.elapsedSeconds,
       false,
-      stop.state.elapsedSeconds,
+      interval_stop.state.elapsedSeconds,
       true);
-    return {entry, stop.state.elapsedSeconds, stop.state.elapsedSeconds > entry};
+    return {
+      entry,
+      interval_stop.state.elapsedSeconds,
+      interval_stop.state.elapsedSeconds >= entry,
+    };
   }
 
-  const double mid_time = 0.5 * (start.state.elapsedSeconds + stop.state.elapsedSeconds);
-  const bool visible_mid = cell_visible_at_time(cell, sensor, start, stop, mid_time);
+  const double mid_time = 0.5 * (
+    interval_start.state.elapsedSeconds + interval_stop.state.elapsedSeconds);
+  const bool visible_mid = cell_visible_at_time(
+    cell,
+    sensor,
+    interpolation_start,
+    interpolation_stop,
+    mid_time);
   if (visible_mid) {
     const double entry = refined_transition_time(
       cell,
       sensor,
-      start,
-      stop,
-      start.state.elapsedSeconds,
+      interpolation_start,
+      interpolation_stop,
+      interval_start.state.elapsedSeconds,
       false,
       mid_time,
       true);
     const double exit = refined_transition_time(
       cell,
       sensor,
-      start,
-      stop,
+      interpolation_start,
+      interpolation_stop,
       mid_time,
       true,
-      stop.state.elapsedSeconds,
+      interval_stop.state.elapsedSeconds,
       false);
-    return {entry, exit, exit > entry};
+    return {entry, exit, exit >= entry};
   }
   return {};
+}
+
+struct SweptSensorCap {
+  Vertex center;
+  double angularRadiusDeg = 180.0;
+  double maximumBoresightOffNadirRad = 3.14159265358979323846;
+  double minimumObserverDistanceM = 0.0;
+  double maximumObserverDistanceM = 0.0;
+  bool positiveProofEligible = false;
+};
+
+double minimum_magnitude_on_segment(Vec3 start, Vec3 stop) {
+  const Vec3 displacement = subtract(stop, start);
+  const double displacement_squared = dot(displacement, displacement);
+  const double fraction = displacement_squared > 0.0
+    ? clamp(-dot(start, displacement) / displacement_squared, 0.0, 1.0)
+    : 0.0;
+  return magnitude(add(start, scale(displacement, fraction)));
+}
+
+SweptSensorCap conservative_swept_sensor_cap(
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const SensorConfig& sensor) {
+  const Vec3 start_observer_unit = normalize(start.state.position);
+  const Vec3 stop_observer_unit = normalize(stop.state.position);
+  const double observer_rotation_rad = std::acos(clamp(
+    dot(start_observer_unit, stop_observer_unit),
+    -1.0,
+    1.0));
+  const Vec3 start_nadir = scale(start_observer_unit, -1.0);
+  const Vec3 stop_nadir = scale(stop_observer_unit, -1.0);
+  const double start_off_nadir_rad = std::acos(clamp(
+    dot(start.frame.boresight, start_nadir),
+    -1.0,
+    1.0));
+  const double stop_off_nadir_rad = std::acos(clamp(
+    dot(stop.frame.boresight, stop_nadir),
+    -1.0,
+    1.0));
+  const double boresight_dot = clamp(
+    dot(start.frame.boresight, stop.frame.boresight),
+    -1.0,
+    1.0);
+  const double boresight_rotation_rad = std::acos(boresight_dot);
+
+  // Linear interpolation followed by normalization traces the minor great-
+  // circle arc for non-antipodal vectors. The triangle inequality therefore
+  // bounds every intermediate off-nadir angle by the start angle plus the
+  // complete boresight and observer rotations. Near-antipodal input falls
+  // back to the full sphere instead of making an unsafe pruning decision.
+  double maximum_off_nadir_rad = 3.14159265358979323846;
+  bool positive_proof_eligible = false;
+  if (
+    dot(start_observer_unit, stop_observer_unit) > -0.999999999999 &&
+    boresight_dot > -0.999999999999 &&
+    start.state.sensorFrame.valid &&
+    stop.state.sensorFrame.valid
+  ) {
+    maximum_off_nadir_rad = std::min(
+      3.14159265358979323846,
+      std::max({
+        start_off_nadir_rad,
+        stop_off_nadir_rad,
+        start_off_nadir_rad + boresight_rotation_rad + observer_rotation_rad,
+      }));
+    positive_proof_eligible = true;
+  }
+
+  const double maximum_observer_distance_m = std::max(
+    magnitude(start.state.position),
+    magnitude(stop.state.position));
+  const double minimum_observer_distance_m = minimum_magnitude_on_segment(
+    start.state.position,
+    stop.state.position);
+  const double instantaneous_radius_deg =
+    sdn::coverage::conservativeGroundCapRadiusDeg(
+      maximum_observer_distance_m,
+      kWgs84B,
+      (maximum_off_nadir_rad + sensor.maxBoundaryAngleRad) *
+        kRadiansToDegrees) +
+      kMaximumGeodeticGeocentricLatitudeSeparationDeg + 1.0e-9;
+  return {
+    direction_lon_lat(start_observer_unit),
+    std::min(
+      180.0,
+      observer_rotation_rad * kRadiansToDegrees +
+        instantaneous_radius_deg),
+    maximum_off_nadir_rad,
+    minimum_observer_distance_m,
+    maximum_observer_distance_m,
+    positive_proof_eligible,
+  };
+}
+
+bool fixed_local_shape_ray_angle_rad(
+    const SensorConfig& sensor,
+    double& angle_rad) {
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (!shape.supported) {
+    return false;
+  }
+  switch (shape.kind) {
+    case SensorShapeKind::Rectangular:
+      angle_rad = 0.0;
+      return true;
+    case SensorShapeKind::Conic:
+    case SensorShapeKind::SarAnnularSector:
+      if (
+        shape.outerHalfAngleRad < shape.innerHalfAngleRad ||
+        shape.innerHalfAngleRad > 3.14159265358979323846
+      ) {
+        return false;
+      }
+      angle_rad = clamp(
+        0.5 * (shape.innerHalfAngleRad + shape.outerHalfAngleRad),
+        0.0,
+        3.14159265358979323846);
+      return
+        angle_rad >= shape.innerHalfAngleRad &&
+        angle_rad <= shape.outerHalfAngleRad;
+    case SensorShapeKind::CustomPolygon:
+      if (sensor.localBoundaryDirections.empty()) {
+        return false;
+      }
+      angle_rad = std::acos(clamp(
+        sensor.localBoundaryDirections.front().z,
+        -1.0,
+        1.0));
+      return std::isfinite(angle_rad);
+    case SensorShapeKind::Unknown:
+    default:
+      return false;
+  }
+}
+
+bool local_shape_ray_reaches_visible_surface_for_entire_interval(
+    const SensorConfig& sensor,
+    const SweptSensorCap& cap,
+    double local_ray_angle_rad) {
+  if (
+    !cap.positiveProofEligible ||
+    !(cap.minimumObserverDistanceM > kWgs84A) ||
+    !(cap.maximumObserverDistanceM >= cap.minimumObserverDistanceM)
+  ) {
+    return false;
+  }
+
+  const double maximum_look_angle_rad =
+    cap.maximumBoresightOffNadirRad + local_ray_angle_rad;
+  const double horizon_look_angle_rad = std::asin(clamp(
+    kWgs84B / cap.maximumObserverDistanceM,
+    0.0,
+    1.0));
+  if (
+    !std::isfinite(maximum_look_angle_rad) ||
+    !(maximum_look_angle_rad < horizon_look_angle_rad)
+  ) {
+    return false;
+  }
+
+  // The WGS84 ellipsoid contains the sphere of radius B. A ray that crosses
+  // that sphere must enter WGS84 no later, so the sphere's near intersection
+  // is a conservative upper bound on the ellipsoid hit range.
+  const double sin_look = std::sin(maximum_look_angle_rad);
+  const double cos_look = std::cos(maximum_look_angle_rad);
+  const double discriminant =
+    kWgs84B * kWgs84B -
+    cap.maximumObserverDistanceM * cap.maximumObserverDistanceM *
+      sin_look * sin_look;
+  if (!(discriminant > 0.0)) {
+    return false;
+  }
+  const double maximum_hit_range_m =
+    cap.maximumObserverDistanceM * cos_look - std::sqrt(discriminant);
+  if (
+    sensor.shapeContract.maxRangeM > 0.0 &&
+    maximum_hit_range_m > sensor.shapeContract.maxRangeM
+  ) {
+    return false;
+  }
+
+  // Every WGS84 surface point lies inside the sphere of radius A. The reverse
+  // triangle inequality therefore supplies a range lower bound independent of
+  // ray azimuth and ellipsoid latitude.
+  const double minimum_hit_range_m =
+    cap.minimumObserverDistanceM - kWgs84A;
+  return
+    sensor.shapeContract.minRangeM <= 0.0 ||
+    minimum_hit_range_m >= sensor.shapeContract.minRangeM;
+}
+
+bool fixed_shape_ray_reaches_visible_surface_for_entire_interval(
+    const SensorConfig& sensor,
+    const SweptSensorCap& cap) {
+  double local_ray_angle_rad = 0.0;
+  return
+    fixed_local_shape_ray_angle_rad(sensor, local_ray_angle_rad) &&
+    local_shape_ray_reaches_visible_surface_for_entire_interval(
+      sensor,
+      cap,
+      local_ray_angle_rad);
+}
+
+bool spherical_cap_inside_cell(
+    const SweptSensorCap& cap,
+    const GridCellGeometry& cell) {
+  if (
+    !std::isfinite(cap.angularRadiusDeg) ||
+    cap.angularRadiusDeg < 0.0 ||
+    cap.angularRadiusDeg >= 180.0 ||
+    cap.center.latitudeDeg < cell.minGeocentricLatitudeDeg ||
+    cap.center.latitudeDeg > cell.maxGeocentricLatitudeDeg ||
+    !longitude_inside_closed_cell(
+      cap.center.longitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg)
+  ) {
+    return false;
+  }
+
+  double minimum_boundary_distance_deg = std::min(
+    cap.center.latitudeDeg - cell.minGeocentricLatitudeDeg,
+    cell.maxGeocentricLatitudeDeg - cap.center.latitudeDeg);
+  if (cell.maxLongitudeDeg - cell.minLongitudeDeg < 360.0) {
+    const double longitude_reference_deg =
+      0.5 * (cell.minLongitudeDeg + cell.maxLongitudeDeg);
+    double center_longitude_deg = cap.center.longitudeDeg;
+    while (center_longitude_deg - longitude_reference_deg > 180.0) {
+      center_longitude_deg -= 360.0;
+    }
+    while (center_longitude_deg - longitude_reference_deg < -180.0) {
+      center_longitude_deg += 360.0;
+    }
+    const double center_latitude_rad =
+      cap.center.latitudeDeg / kRadiansToDegrees;
+    auto distance_to_meridian_deg = [&](double longitude_deg) {
+      const double longitude_delta_rad =
+        (center_longitude_deg - longitude_deg) / kRadiansToDegrees;
+      return std::asin(clamp(
+        std::fabs(std::cos(center_latitude_rad) *
+          std::sin(longitude_delta_rad)),
+        0.0,
+        1.0)) * kRadiansToDegrees;
+    };
+    minimum_boundary_distance_deg = std::min({
+      minimum_boundary_distance_deg,
+      distance_to_meridian_deg(cell.minLongitudeDeg),
+      distance_to_meridian_deg(cell.maxLongitudeDeg),
+    });
+  }
+
+  constexpr double kContainmentSafetyDeg = 1.0e-9;
+  return
+    cap.angularRadiusDeg + kContainmentSafetyDeg <
+    minimum_boundary_distance_deg;
+}
+
+bool cell_contains_continuously_visible_sensor_footprint(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop) {
+  const SweptSensorCap cap = conservative_swept_sensor_cap(
+    start,
+    stop,
+    sensor);
+  return
+    spherical_cap_inside_cell(cap, cell) &&
+    fixed_shape_ray_reaches_visible_surface_for_entire_interval(sensor, cap);
+}
+
+double inflate_proof_upper_bound(double value) {
+  const double scale_value = std::max(1.0, std::fabs(value));
+  const double inflated = value +
+    128.0 * std::numeric_limits<double>::epsilon() * scale_value;
+  return std::nextafter(inflated, std::numeric_limits<double>::infinity());
+}
+
+double deflate_proof_lower_bound(double value) {
+  const double scale_value = std::max(1.0, std::fabs(value));
+  const double deflated = value -
+    128.0 * std::numeric_limits<double>::epsilon() * scale_value;
+  return std::nextafter(deflated, -std::numeric_limits<double>::infinity());
+}
+
+struct UnitDirectionEnvelope {
+  Vec3 center;
+  double chordError = 2.0;
+  bool valid = false;
+};
+
+UnitDirectionEnvelope normalized_arc_envelope(Vec3 start, Vec3 stop) {
+  const double start_length = magnitude(start);
+  const double stop_length = magnitude(stop);
+  if (
+    !(start_length > 0.0) ||
+    !(stop_length > 0.0) ||
+    !std::isfinite(start_length) ||
+    !std::isfinite(stop_length)
+  ) {
+    return {};
+  }
+  const Vec3 unit_start = scale(start, 1.0 / start_length);
+  const Vec3 unit_stop = scale(stop, 1.0 / stop_length);
+  if (dot(unit_start, unit_stop) <= -0.999999999999) {
+    return {};
+  }
+  const Vec3 center = normalize(add(unit_start, unit_stop));
+  const double chord_error = inflate_proof_upper_bound(std::max(
+    magnitude(subtract(unit_start, center)),
+    magnitude(subtract(unit_stop, center))));
+  return {center, chord_error, chord_error < 2.0};
+}
+
+UnitDirectionEnvelope normalized_ball_envelope(
+    Vec3 center_vector,
+    double vector_error) {
+  const double center_length = magnitude(center_vector);
+  const double error = inflate_proof_upper_bound(std::max(0.0, vector_error));
+  if (
+    !(center_length > error) ||
+    !std::isfinite(center_length) ||
+    !std::isfinite(error)
+  ) {
+    return {};
+  }
+  const double angular_error = std::asin(clamp(
+    error / center_length,
+    0.0,
+    1.0));
+  const double chord_error = inflate_proof_upper_bound(
+    2.0 * std::sin(0.5 * angular_error));
+  return {normalize(center_vector), chord_error, chord_error < 2.0};
+}
+
+bool resolved_frame_envelopes(
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    UnitDirectionEnvelope& boresight,
+    UnitDirectionEnvelope& x_axis,
+    UnitDirectionEnvelope& y_axis) {
+  if (!start.state.sensorFrame.valid || !stop.state.sensorFrame.valid) {
+    return false;
+  }
+
+  boresight = normalized_arc_envelope(
+    start.state.sensorFrame.boresight,
+    stop.state.sensorFrame.boresight);
+  const UnitDirectionEnvelope raw_x = normalized_arc_envelope(
+    start.state.sensorFrame.xAxis,
+    stop.state.sensorFrame.xAxis);
+  const UnitDirectionEnvelope raw_y = normalized_arc_envelope(
+    start.state.sensorFrame.yAxis,
+    stop.state.sensorFrame.yAxis);
+  if (!boresight.valid || !raw_x.valid || !raw_y.valid) {
+    return false;
+  }
+
+  const Vec3 projected_x = subtract(
+    raw_x.center,
+    scale(boresight.center, dot(raw_x.center, boresight.center)));
+  const double projected_x_error = inflate_proof_upper_bound(
+    2.0 * (raw_x.chordError + boresight.chordError));
+  x_axis = normalized_ball_envelope(projected_x, projected_x_error);
+  if (!x_axis.valid) {
+    return false;
+  }
+
+  const Vec3 y_without_boresight = subtract(
+    raw_y.center,
+    scale(boresight.center, dot(raw_y.center, boresight.center)));
+  const double y_without_boresight_error = inflate_proof_upper_bound(
+    2.0 * (raw_y.chordError + boresight.chordError));
+  const Vec3 projected_y = subtract(
+    y_without_boresight,
+    scale(x_axis.center, dot(y_without_boresight, x_axis.center)));
+  const double projected_y_error = inflate_proof_upper_bound(
+    2.0 * y_without_boresight_error + 2.0 * x_axis.chordError);
+  y_axis = normalized_ball_envelope(projected_y, projected_y_error);
+  return y_axis.valid;
+}
+
+struct IntervalShapeProofContext {
+  SweptSensorCap sweptCap;
+  UnitDirectionEnvelope boresight;
+  UnitDirectionEnvelope xAxis;
+  UnitDirectionEnvelope yAxis;
+  bool valid = false;
+};
+
+IntervalShapeProofContext interval_shape_proof_context(
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop) {
+  IntervalShapeProofContext context{};
+  context.sweptCap = conservative_swept_sensor_cap(start, stop, sensor);
+  context.valid = resolved_frame_envelopes(
+    start,
+    stop,
+    context.boresight,
+    context.xAxis,
+    context.yAxis);
+  return context;
+}
+
+Vec3 world_direction_for_local_ray(
+    const SensorFrame& frame,
+    SensorVec3 local_direction) {
+  return normalize(add(
+    add(
+      scale(frame.xAxis, local_direction.x),
+      scale(frame.yAxis, local_direction.y)),
+    scale(frame.boresight, local_direction.z)));
+}
+
+bool local_ray_is_inside_shape(
+    const SensorShapeContract& shape,
+    SensorVec3 local_direction) {
+  const double minimum_range_m = std::max(0.0, shape.minRangeM);
+  const double maximum_range_m = shape.maxRangeM > 0.0
+    ? shape.maxRangeM
+    : std::max(1.0, minimum_range_m + 1.0);
+  if (maximum_range_m < minimum_range_m) {
+    return false;
+  }
+  const double probe_range_m = 0.5 * (
+    minimum_range_m + maximum_range_m);
+  const double direction_length = std::sqrt(
+    local_direction.x * local_direction.x +
+    local_direction.y * local_direction.y +
+    local_direction.z * local_direction.z);
+  if (!(direction_length > 0.0)) {
+    return false;
+  }
+  return local_look_inside(shape, {
+    local_direction.x * probe_range_m / direction_length,
+    local_direction.y * probe_range_m / direction_length,
+    local_direction.z * probe_range_m / direction_length,
+  });
+}
+
+struct ProofInterval {
+  double lower = 0.0;
+  double upper = 0.0;
+  bool valid = false;
+};
+
+ProofInterval proof_interval(double lower, double upper) {
+  if (!std::isfinite(lower) || !std::isfinite(upper) || lower > upper) {
+    return {};
+  }
+  return {
+    deflate_proof_lower_bound(lower),
+    inflate_proof_upper_bound(upper),
+    true,
+  };
+}
+
+ProofInterval add_proof_intervals(
+    ProofInterval left,
+    ProofInterval right) {
+  if (!left.valid || !right.valid) {
+    return {};
+  }
+  return proof_interval(
+    left.lower + right.lower,
+    left.upper + right.upper);
+}
+
+ProofInterval subtract_proof_intervals(
+    ProofInterval left,
+    ProofInterval right) {
+  if (!left.valid || !right.valid) {
+    return {};
+  }
+  return proof_interval(
+    left.lower - right.upper,
+    left.upper - right.lower);
+}
+
+ProofInterval multiply_proof_intervals(
+    ProofInterval left,
+    ProofInterval right) {
+  if (!left.valid || !right.valid) {
+    return {};
+  }
+  const double products[] = {
+    left.lower * right.lower,
+    left.lower * right.upper,
+    left.upper * right.lower,
+    left.upper * right.upper,
+  };
+  return proof_interval(
+    *std::min_element(std::begin(products), std::end(products)),
+    *std::max_element(std::begin(products), std::end(products)));
+}
+
+ProofInterval square_proof_interval(ProofInterval value) {
+  if (!value.valid) {
+    return {};
+  }
+  const double maximum = std::max(
+    value.lower * value.lower,
+    value.upper * value.upper);
+  const double minimum = value.lower <= 0.0 && value.upper >= 0.0
+    ? 0.0
+    : std::min(
+      value.lower * value.lower,
+      value.upper * value.upper);
+  return proof_interval(minimum, maximum);
+}
+
+ProofInterval scale_proof_interval(ProofInterval value, double factor) {
+  if (!value.valid || !std::isfinite(factor)) {
+    return {};
+  }
+  return factor >= 0.0
+    ? proof_interval(value.lower * factor, value.upper * factor)
+    : proof_interval(value.upper * factor, value.lower * factor);
+}
+
+ProofInterval sqrt_proof_interval(ProofInterval value) {
+  if (!value.valid || value.lower < 0.0) {
+    return {};
+  }
+  return proof_interval(
+    std::sqrt(value.lower),
+    std::sqrt(value.upper));
+}
+
+ProofInterval divide_proof_intervals(
+    ProofInterval numerator,
+    ProofInterval denominator) {
+  if (
+    !numerator.valid ||
+    !denominator.valid ||
+    denominator.lower <= 0.0
+  ) {
+    return {};
+  }
+  return multiply_proof_intervals(
+    numerator,
+    proof_interval(
+      1.0 / denominator.upper,
+      1.0 / denominator.lower));
+}
+
+ProofInterval centered_proof_interval(double center, double error) {
+  if (!std::isfinite(center) || !std::isfinite(error) || error < 0.0) {
+    return {};
+  }
+  return proof_interval(center - error, center + error);
+}
+
+bool conservative_ray_ellipsoid_ground_track_cap(
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    UnitDirectionEnvelope ray,
+    double local_angular_radius_rad,
+    SweptSensorCap& ground_cap) {
+  if (!ray.valid || local_angular_radius_rad < 0.0) {
+    return false;
+  }
+  ray.chordError = inflate_proof_upper_bound(
+    ray.chordError +
+    2.0 * std::sin(0.5 * std::min(
+      local_angular_radius_rad,
+      3.14159265358979323846)));
+  if (!(ray.chordError < 2.0)) {
+    return false;
+  }
+
+  const Vec3 position_center = scale(add(
+    start.state.position,
+    stop.state.position), 0.5);
+  const Vec3 position_error_components = scale({
+    std::fabs(stop.state.position.x - start.state.position.x),
+    std::fabs(stop.state.position.y - start.state.position.y),
+    std::fabs(stop.state.position.z - start.state.position.z),
+  }, 0.5);
+  const ProofInterval positions[] = {
+    centered_proof_interval(
+      position_center.x,
+      position_error_components.x),
+    centered_proof_interval(
+      position_center.y,
+      position_error_components.y),
+    centered_proof_interval(
+      position_center.z,
+      position_error_components.z),
+  };
+  const ProofInterval directions[] = {
+    centered_proof_interval(ray.center.x, ray.chordError),
+    centered_proof_interval(ray.center.y, ray.chordError),
+    centered_proof_interval(ray.center.z, ray.chordError),
+  };
+  const double inverse_radii_squared[] = {
+    1.0 / kWgs84A2,
+    1.0 / kWgs84A2,
+    1.0 / kWgs84B2,
+  };
+
+  ProofInterval quadratic_a = proof_interval(0.0, 0.0);
+  ProofInterval quadratic_b = proof_interval(0.0, 0.0);
+  ProofInterval quadratic_c = proof_interval(-1.0, -1.0);
+  for (int component = 0; component < 3; ++component) {
+    quadratic_a = add_proof_intervals(
+      quadratic_a,
+      scale_proof_interval(
+        square_proof_interval(directions[component]),
+        inverse_radii_squared[component]));
+    quadratic_b = add_proof_intervals(
+      quadratic_b,
+      scale_proof_interval(
+        multiply_proof_intervals(
+          positions[component],
+          directions[component]),
+        inverse_radii_squared[component]));
+    quadratic_c = add_proof_intervals(
+      quadratic_c,
+      scale_proof_interval(
+        square_proof_interval(positions[component]),
+        inverse_radii_squared[component]));
+  }
+  const ProofInterval discriminant = subtract_proof_intervals(
+    square_proof_interval(quadratic_b),
+    multiply_proof_intervals(quadratic_a, quadratic_c));
+  if (
+    !quadratic_a.valid ||
+    !quadratic_b.valid ||
+    !quadratic_c.valid ||
+    !discriminant.valid ||
+    !(quadratic_a.lower > 0.0) ||
+    !(quadratic_c.lower > 0.0) ||
+    !(discriminant.lower > 0.0)
+  ) {
+    return false;
+  }
+
+  // The near positive root is evaluated as C/(-B+sqrt(D)); this is
+  // algebraically equivalent to the quadratic formula and avoids cancellation
+  // for a low-orbit observer looking toward Earth.
+  const ProofInterval negative_b = proof_interval(
+    -quadratic_b.upper,
+    -quadratic_b.lower);
+  const ProofInterval denominator = add_proof_intervals(
+    negative_b,
+    sqrt_proof_interval(discriminant));
+  const ProofInterval hit_range = divide_proof_intervals(
+    quadratic_c,
+    denominator);
+  if (
+    !hit_range.valid ||
+    !(hit_range.lower > 0.0) ||
+    (sensor.shapeContract.minRangeM > 0.0 &&
+      hit_range.lower < sensor.shapeContract.minRangeM) ||
+    (sensor.shapeContract.maxRangeM > 0.0 &&
+      hit_range.upper > sensor.shapeContract.maxRangeM)
+  ) {
+    return false;
+  }
+
+  const double reference_range_m = 0.5 * (
+    hit_range.lower + hit_range.upper);
+  const Vec3 ground_center_vector = add(
+    position_center,
+    scale(ray.center, reference_range_m));
+  const double ground_error_m = inflate_proof_upper_bound(
+    magnitude(position_error_components) +
+    hit_range.upper * ray.chordError +
+    0.5 * (hit_range.upper - hit_range.lower));
+  const UnitDirectionEnvelope ground_direction = normalized_ball_envelope(
+    ground_center_vector,
+    ground_error_m);
+  if (!ground_direction.valid) {
+    return false;
+  }
+  ground_cap = {};
+  ground_cap.center = direction_lon_lat(ground_direction.center);
+  ground_cap.angularRadiusDeg = inflate_proof_upper_bound(
+    2.0 * std::asin(clamp(
+      0.5 * ground_direction.chordError,
+      0.0,
+      1.0)) * kRadiansToDegrees);
+  ground_cap.minimumObserverDistanceM = minimum_magnitude_on_segment(
+    start.state.position,
+    stop.state.position);
+  ground_cap.maximumObserverDistanceM = std::max(
+    magnitude(start.state.position),
+    magnitude(stop.state.position));
+  ground_cap.positiveProofEligible = true;
+  return std::isfinite(ground_cap.angularRadiusDeg);
+}
+
+bool conservative_ray_sphere_shell_ground_track_cap(
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    UnitDirectionEnvelope ray,
+    double local_angular_radius_rad,
+    SweptSensorCap& ground_cap) {
+  if (!ray.valid || local_angular_radius_rad < 0.0) {
+    return false;
+  }
+  ray.chordError = inflate_proof_upper_bound(
+    ray.chordError +
+    2.0 * std::sin(0.5 * std::min(
+      local_angular_radius_rad,
+      3.14159265358979323846)));
+  const UnitDirectionEnvelope observer = normalized_arc_envelope(
+    start.state.position,
+    stop.state.position);
+  if (!observer.valid || !(ray.chordError < 2.0)) {
+    return false;
+  }
+
+  const double inward_cosine_center = dot(
+    ray.center,
+    scale(observer.center, -1.0));
+  const double inward_cosine_error = inflate_proof_upper_bound(
+    ray.chordError + observer.chordError);
+  const double minimum_inward_cosine = deflate_proof_lower_bound(
+    inward_cosine_center - inward_cosine_error);
+  const double maximum_inward_cosine = std::min(
+    1.0,
+    inflate_proof_upper_bound(
+      inward_cosine_center + inward_cosine_error));
+  if (!(minimum_inward_cosine > 0.0)) {
+    return false;
+  }
+
+  const double minimum_observer_distance_m = deflate_proof_lower_bound(
+    minimum_magnitude_on_segment(
+      start.state.position,
+      stop.state.position));
+  const double maximum_observer_distance_m = inflate_proof_upper_bound(
+    std::max(
+      magnitude(start.state.position),
+      magnitude(stop.state.position)));
+  if (!(minimum_observer_distance_m > kWgs84A)) {
+    return false;
+  }
+  auto sphere_hit_range = [](double distance, double inward_cosine, double radius) {
+    const double transverse_squared = distance * distance * std::max(
+      0.0,
+      1.0 - inward_cosine * inward_cosine);
+    const double discriminant = radius * radius - transverse_squared;
+    if (!(discriminant > 0.0)) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return distance * inward_cosine - std::sqrt(discriminant);
+  };
+  // WGS84 contains the B sphere and is contained by the A sphere. For an
+  // inward ray crossing B, the ellipsoid's first hit lies between the outer-
+  // sphere and inner-sphere hits. The near-hit range increases with observer
+  // distance and decreases with inward cosine for every observer outside A.
+  const double minimum_hit_range_m = deflate_proof_lower_bound(
+    sphere_hit_range(
+      minimum_observer_distance_m,
+      maximum_inward_cosine,
+      kWgs84A));
+  const double maximum_hit_range_m = inflate_proof_upper_bound(
+    sphere_hit_range(
+      maximum_observer_distance_m,
+      minimum_inward_cosine,
+      kWgs84B));
+  if (
+    !std::isfinite(minimum_hit_range_m) ||
+    !std::isfinite(maximum_hit_range_m) ||
+    !(minimum_hit_range_m > 0.0) ||
+    maximum_hit_range_m < minimum_hit_range_m ||
+    (sensor.shapeContract.minRangeM > 0.0 &&
+      minimum_hit_range_m < sensor.shapeContract.minRangeM) ||
+    (sensor.shapeContract.maxRangeM > 0.0 &&
+      maximum_hit_range_m > sensor.shapeContract.maxRangeM)
+  ) {
+    return false;
+  }
+
+  const Vec3 position_center = scale(add(
+    start.state.position,
+    stop.state.position), 0.5);
+  const double position_error_m = 0.5 * magnitude(subtract(
+    stop.state.position,
+    start.state.position));
+  const double reference_range_m = 0.5 * (
+    minimum_hit_range_m + maximum_hit_range_m);
+  const Vec3 ground_center_vector = add(
+    position_center,
+    scale(ray.center, reference_range_m));
+  const double ground_error_m = inflate_proof_upper_bound(
+    position_error_m +
+    maximum_hit_range_m * ray.chordError +
+    0.5 * (maximum_hit_range_m - minimum_hit_range_m));
+  const UnitDirectionEnvelope ground_direction = normalized_ball_envelope(
+    ground_center_vector,
+    ground_error_m);
+  if (!ground_direction.valid) {
+    return false;
+  }
+  ground_cap = {};
+  ground_cap.center = direction_lon_lat(ground_direction.center);
+  ground_cap.angularRadiusDeg = inflate_proof_upper_bound(
+    2.0 * std::asin(clamp(
+      0.5 * ground_direction.chordError,
+      0.0,
+      1.0)) * kRadiansToDegrees);
+  ground_cap.minimumObserverDistanceM = minimum_observer_distance_m;
+  ground_cap.maximumObserverDistanceM = maximum_observer_distance_m;
+  ground_cap.positiveProofEligible = true;
+  return std::isfinite(ground_cap.angularRadiusDeg);
+}
+
+bool conservative_fixed_local_ray_ground_track_cap(
+    const SensorConfig& sensor,
+    SensorVec3 local_direction,
+    double local_angular_radius_rad,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const SweptSensorCap& interval_cap,
+    const UnitDirectionEnvelope& boresight,
+    const UnitDirectionEnvelope& x_axis,
+    const UnitDirectionEnvelope& y_axis,
+    SweptSensorCap& ray_ground_cap) {
+  if (
+    !local_ray_is_inside_shape(sensor.shapeContract, local_direction) ||
+    !std::isfinite(local_angular_radius_rad) ||
+    local_angular_radius_rad < 0.0
+  ) {
+    return false;
+  }
+  const double local_length = std::sqrt(
+    local_direction.x * local_direction.x +
+    local_direction.y * local_direction.y +
+    local_direction.z * local_direction.z);
+  const double local_x = local_direction.x / local_length;
+  const double local_y = local_direction.y / local_length;
+  const double local_z = local_direction.z / local_length;
+  const double local_ray_angle_rad =
+    std::acos(clamp(local_z, -1.0, 1.0)) + local_angular_radius_rad;
+  if (!local_shape_ray_reaches_visible_surface_for_entire_interval(
+        sensor,
+        interval_cap,
+        local_ray_angle_rad)) {
+    return false;
+  }
+
+  const Vec3 ray_center_vector = add(
+    add(
+      scale(x_axis.center, local_x),
+      scale(y_axis.center, local_y)),
+    scale(boresight.center, local_z));
+  const double ray_vector_error = inflate_proof_upper_bound(
+    std::fabs(local_x) * x_axis.chordError +
+    std::fabs(local_y) * y_axis.chordError +
+    std::fabs(local_z) * boresight.chordError);
+  const UnitDirectionEnvelope ray_envelope = normalized_ball_envelope(
+    ray_center_vector,
+    ray_vector_error);
+  if (!ray_envelope.valid) {
+    return false;
+  }
+  if (conservative_ray_sphere_shell_ground_track_cap(
+        sensor,
+        start,
+        stop,
+        ray_envelope,
+        local_angular_radius_rad,
+        ray_ground_cap)) {
+    return true;
+  }
+  if (conservative_ray_ellipsoid_ground_track_cap(
+        sensor,
+        start,
+        stop,
+        ray_envelope,
+        local_angular_radius_rad,
+        ray_ground_cap)) {
+    return true;
+  }
+  const Vec3 start_ray = world_direction_for_local_ray(
+    start.frame,
+    {local_x, local_y, local_z});
+  Vec3 start_ground;
+  if (!intersect_earth(
+        start.state.position,
+        start_ray,
+        1.0e100,
+        start_ground)) {
+    return false;
+  }
+  const double ray_chord_from_start = inflate_proof_upper_bound(
+    magnitude(subtract(start_ray, ray_envelope.center)) +
+      ray_envelope.chordError);
+  if (!(ray_chord_from_start < 2.0)) {
+    return false;
+  }
+  const double ray_rotation_rad = inflate_proof_upper_bound(
+    2.0 * std::asin(clamp(
+      0.5 * ray_chord_from_start,
+      0.0,
+      1.0)));
+  const Vec3 start_observer_unit = normalize(start.state.position);
+  const Vec3 stop_observer_unit = normalize(stop.state.position);
+  const double observer_chord = inflate_proof_upper_bound(magnitude(subtract(
+    start_observer_unit,
+    stop_observer_unit)));
+  if (!(observer_chord < 2.0)) {
+    return false;
+  }
+  const double observer_rotation_rad = inflate_proof_upper_bound(
+    2.0 * std::asin(clamp(0.5 * observer_chord, 0.0, 1.0)));
+  const Vec3 start_nadir = scale(start_observer_unit, -1.0);
+  const double start_off_nadir_chord = inflate_proof_upper_bound(
+    magnitude(subtract(start_ray, start_nadir)));
+  const double start_off_nadir_rad = inflate_proof_upper_bound(
+    2.0 * std::asin(clamp(
+      0.5 * start_off_nadir_chord,
+      0.0,
+      1.0)));
+
+  double mapped_ray_radius_deg = 0.0;
+  if (!conservative_boresight_footprint_cap_radius_deg(
+        interval_cap.maximumObserverDistanceM,
+        start_off_nadir_rad,
+        ray_rotation_rad + observer_rotation_rad +
+          local_angular_radius_rad,
+        mapped_ray_radius_deg)) {
+    return false;
+  }
+  // Even with zero angular rotation, an off-nadir ray's ground hit moves as
+  // observer radius changes. Bound that radial mapping displacement on the B
+  // sphere at both extrema; WGS84 conversion slack is paid separately below.
+  const double start_observer_distance_m = magnitude(start.state.position);
+  if (
+    !(interval_cap.minimumObserverDistanceM > kWgs84B) ||
+    !(interval_cap.maximumObserverDistanceM >=
+      interval_cap.minimumObserverDistanceM) ||
+    !(start_observer_distance_m > kWgs84B)
+  ) {
+    return false;
+  }
+  const double start_ground_radius_deg =
+    sdn::coverage::conservativeGroundCapRadiusDeg(
+      start_observer_distance_m,
+      kWgs84B,
+      start_off_nadir_rad * kRadiansToDegrees);
+  const double minimum_distance_ground_radius_deg =
+    sdn::coverage::conservativeGroundCapRadiusDeg(
+      interval_cap.minimumObserverDistanceM,
+      kWgs84B,
+      start_off_nadir_rad * kRadiansToDegrees);
+  const double maximum_distance_ground_radius_deg =
+    sdn::coverage::conservativeGroundCapRadiusDeg(
+      interval_cap.maximumObserverDistanceM,
+      kWgs84B,
+      start_off_nadir_rad * kRadiansToDegrees);
+  const double observer_radius_mapping_shift_deg =
+    inflate_proof_upper_bound(std::max(
+      std::fabs(
+        minimum_distance_ground_radius_deg - start_ground_radius_deg),
+      std::fabs(
+        maximum_distance_ground_radius_deg - start_ground_radius_deg)));
+  ray_ground_cap = {};
+  ray_ground_cap.center = direction_lon_lat(start_ground);
+  ray_ground_cap.angularRadiusDeg = inflate_proof_upper_bound(
+    observer_rotation_rad * kRadiansToDegrees +
+      mapped_ray_radius_deg +
+      observer_radius_mapping_shift_deg +
+      2.0 * kMaximumGeodeticGeocentricLatitudeSeparationDeg +
+      1.0e-9);
+  return true;
+}
+
+bool fixed_local_ray_ground_track_inside_cell(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    SensorVec3 local_direction,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const SweptSensorCap& interval_cap,
+    const UnitDirectionEnvelope& boresight,
+    const UnitDirectionEnvelope& x_axis,
+    const UnitDirectionEnvelope& y_axis) {
+  SweptSensorCap ray_ground_cap;
+  return
+    conservative_fixed_local_ray_ground_track_cap(
+      sensor,
+      local_direction,
+      0.0,
+      start,
+      stop,
+      interval_cap,
+      boresight,
+      x_axis,
+      y_axis,
+      ray_ground_cap) &&
+    spherical_cap_inside_cell(ray_ground_cap, cell);
+}
+
+struct LocalLookEnvelope {
+  double xCenter = 0.0;
+  double yCenter = 0.0;
+  double zCenter = 0.0;
+  double xError = 2.0;
+  double yError = 2.0;
+  double zError = 2.0;
+  double transverseError = 2.0;
+  double minimumRangeM = 0.0;
+  double maximumRangeM = std::numeric_limits<double>::infinity();
+  bool valid = false;
+};
+
+double radial_magnitude_at_geodetic_latitude(double latitude_deg) {
+  const Vec3 position = geodetic_to_ecef({
+    0.0,
+    latitude_deg / kRadiansToDegrees,
+    0.0,
+  });
+  return magnitude(position);
+}
+
+double geocentric_latitude_at_geodetic_latitude(double latitude_deg) {
+  const Vec3 position = geodetic_to_ecef({
+    0.0,
+    latitude_deg / kRadiansToDegrees,
+    0.0,
+  });
+  return std::atan2(
+    position.z,
+    std::hypot(position.x, position.y));
+}
+
+double conservative_surface_patch_radius_m(
+    double min_latitude_deg,
+    double max_latitude_deg,
+    double min_longitude_deg,
+    double max_longitude_deg,
+    Vec3 center_position) {
+  const double center_latitude_deg =
+    0.5 * (min_latitude_deg + max_latitude_deg);
+  const double center_longitude_deg =
+    0.5 * (min_longitude_deg + max_longitude_deg);
+  const double center_radius_m = magnitude(center_position);
+  double minimum_radius_m = std::min(
+    radial_magnitude_at_geodetic_latitude(min_latitude_deg),
+    radial_magnitude_at_geodetic_latitude(max_latitude_deg));
+  double maximum_radius_m = std::max(
+    radial_magnitude_at_geodetic_latitude(min_latitude_deg),
+    radial_magnitude_at_geodetic_latitude(max_latitude_deg));
+  if (min_latitude_deg <= 0.0 && max_latitude_deg >= 0.0) {
+    maximum_radius_m = std::max(maximum_radius_m, kWgs84A);
+  }
+  const double center_geocentric_latitude_rad =
+    geocentric_latitude_at_geodetic_latitude(center_latitude_deg);
+  const double min_geocentric_latitude_deg =
+    geocentric_latitude_at_geodetic_latitude(min_latitude_deg) *
+      kRadiansToDegrees;
+  const double max_geocentric_latitude_deg =
+    geocentric_latitude_at_geodetic_latitude(max_latitude_deg) *
+      kRadiansToDegrees;
+  // The farthest rectangle direction from the center is the nearest one to
+  // its antipode. This remains exact for longitude spans above 180 degrees,
+  // where an endpoint-only latitude check can miss the interior extremum.
+  const double antipodal_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      {
+        -center_geocentric_latitude_rad * kRadiansToDegrees,
+        center_longitude_deg + 180.0,
+      },
+      min_geocentric_latitude_deg,
+      max_geocentric_latitude_deg,
+      min_longitude_deg,
+      max_longitude_deg);
+  const double minimum_direction_dot_bound =
+    deflate_proof_lower_bound(-std::cos(
+      antipodal_distance_deg / kRadiansToDegrees));
+  auto squared_distance_at_radius = [&](double radius_m) {
+    return std::max(
+      0.0,
+      center_radius_m * center_radius_m + radius_m * radius_m -
+        2.0 * center_radius_m * radius_m *
+          minimum_direction_dot_bound);
+  };
+  return inflate_proof_upper_bound(std::sqrt(std::max(
+    squared_distance_at_radius(minimum_radius_m),
+    squared_distance_at_radius(maximum_radius_m))));
+}
+
+struct SolidConicSpatialSearch {
+  const GridCellGeometry& cell;
+  const SensorConfig& sensor;
+  const ResolvedVisibilityState& resolved;
+  double preferredLatitudeDeg = 0.0;
+  double preferredLongitudeDeg = 0.0;
+  double preferredForward = -1.0;
+  bool hasPreferred = false;
+  Vec3 acceptedPosition;
+  bool hasAccepted = false;
+};
+
+bool evaluate_solid_conic_spatial_candidate(
+    SolidConicSpatialSearch& search,
+    double latitude_deg,
+    double longitude_deg) {
+  const Vec3 surface_position = geodetic_to_ecef({
+    longitude_deg / kRadiansToDegrees,
+    latitude_deg / kRadiansToDegrees,
+    0.0,
+  });
+  const Vec3 sensor_to_surface = subtract(
+    surface_position,
+    search.resolved.state.position);
+  const double range_m = magnitude(sensor_to_surface);
+  if (!(range_m > 0.0) || !std::isfinite(range_m)) {
+    return false;
+  }
+  const double forward = dot(
+    scale(sensor_to_surface, 1.0 / range_m),
+    search.resolved.frame.boresight);
+  if (!search.hasPreferred || forward > search.preferredForward) {
+    search.preferredLatitudeDeg = latitude_deg;
+    search.preferredLongitudeDeg = longitude_deg;
+    search.preferredForward = forward;
+    search.hasPreferred = true;
+  }
+  constexpr double kShapeBoundaryEpsilonRad = 1.0e-12;
+  if (
+    search.sensor.shapeContract.outerHalfAngleRad <
+      3.14159265358979323846 - kShapeBoundaryEpsilonRad &&
+    forward < std::cos(
+      search.sensor.shapeContract.outerHalfAngleRad +
+        kShapeBoundaryEpsilonRad)
+  ) {
+    // Exact horizon/range/normal work cannot turn an angle-disjoint point into
+    // a conic witness. Keep its score for search ordering, then stop cheaply.
+    return false;
+  }
+  // This is the only positive predicate in the continuum search. It applies
+  // the exact WGS84 horizon, Euclidean range, and shape tests. The shape model
+  // documents a 1e-12-radian inclusive boundary epsilon; no cap or patch
+  // inflation is promoted to access.
+  const bool visible = surface_sample_visible_from_resolved_state(
+    surface_position,
+    geodetic_surface_normal(surface_position),
+    search.sensor,
+    search.resolved);
+  if (visible) {
+    search.acceptedPosition = surface_position;
+    search.hasAccepted = true;
+  }
+  return visible;
+}
+
+bool optimize_solid_conic_rectangle_witness(
+    SolidConicSpatialSearch& search) {
+  constexpr int kSeedDivisions = 4;
+
+  // The cone axis hit, clamped to the rectangle, is the exact closest-point
+  // candidate for a nadir circular footprint and a strong starting point for
+  // an off-nadir WGS84 footprint. It is still only accepted by the exact point
+  // predicate above.
+  bool evaluated_boresight_candidate = false;
+  Vec3 boresight_ground_point;
+  if (intersect_earth(
+        search.resolved.state.position,
+        search.resolved.frame.boresight,
+        1.0e100,
+        boresight_ground_point)) {
+    const Vertex ground = to_cartographic(boresight_ground_point);
+    const double longitude_reference_deg = 0.5 * (
+      search.cell.minLongitudeDeg + search.cell.maxLongitudeDeg);
+    double longitude_deg = ground.longitudeDeg;
+    while (longitude_deg - longitude_reference_deg > 180.0) {
+      longitude_deg -= 360.0;
+    }
+    while (longitude_deg - longitude_reference_deg < -180.0) {
+      longitude_deg += 360.0;
+    }
+    evaluated_boresight_candidate = true;
+    if (evaluate_solid_conic_spatial_candidate(
+          search,
+          clamp(
+            ground.latitudeDeg,
+            search.cell.minLatitudeDeg,
+            search.cell.maxLatitudeDeg),
+          clamp(
+            longitude_deg,
+            search.cell.minLongitudeDeg,
+            search.cell.maxLongitudeDeg))) {
+      return true;
+    }
+  }
+
+  const Vec3 observer_unit = normalize(search.resolved.state.position);
+  const double nadir_alignment = dot(
+    search.resolved.frame.boresight,
+    scale(observer_unit, -1.0));
+  if (evaluated_boresight_candidate && nadir_alignment > 1.0 - 1.0e-13) {
+    // For the dominant nadir case, let the conservative patch subdivision
+    // prove rejection after the exact clamped-axis candidate misses. The
+    // generic optimizer adds no authority and would repeat hundreds of ECEF
+    // evaluations for each neighboring cap-overlap cell.
+    return false;
+  }
+
+  for (int latitude_index = 0;
+       latitude_index <= kSeedDivisions;
+       ++latitude_index) {
+    const double latitude_deg = search.cell.minLatitudeDeg +
+      (search.cell.maxLatitudeDeg - search.cell.minLatitudeDeg) *
+        static_cast<double>(latitude_index) / kSeedDivisions;
+    for (int longitude_index = 0;
+         longitude_index <= kSeedDivisions;
+         ++longitude_index) {
+      const double longitude_deg = search.cell.minLongitudeDeg +
+        (search.cell.maxLongitudeDeg - search.cell.minLongitudeDeg) *
+          static_cast<double>(longitude_index) / kSeedDivisions;
+      if (evaluate_solid_conic_spatial_candidate(
+            search,
+            latitude_deg,
+            longitude_deg)) {
+        return true;
+      }
+    }
+  }
+
+  if (!search.hasPreferred) {
+    return false;
+  }
+  double latitude_step_deg =
+    (search.cell.maxLatitudeDeg - search.cell.minLatitudeDeg) /
+      kSeedDivisions;
+  double longitude_step_deg =
+    (search.cell.maxLongitudeDeg - search.cell.minLongitudeDeg) /
+      kSeedDivisions;
+  constexpr double kCoordinateClosureDeg = 1.0e-7;
+  constexpr int kMaximumIterations = 72;
+  constexpr int kDirections[8][2] = {
+    {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+    {1, 1}, {1, -1}, {-1, 1}, {-1, -1},
+  };
+  for (int iteration = 0;
+       iteration < kMaximumIterations &&
+         (latitude_step_deg > kCoordinateClosureDeg ||
+          longitude_step_deg > kCoordinateClosureDeg);
+       ++iteration) {
+    const double prior_forward = search.preferredForward;
+    for (const auto& direction : kDirections) {
+      const double latitude_deg = clamp(
+        search.preferredLatitudeDeg +
+          direction[1] * latitude_step_deg,
+        search.cell.minLatitudeDeg,
+        search.cell.maxLatitudeDeg);
+      const double longitude_deg = clamp(
+        search.preferredLongitudeDeg +
+          direction[0] * longitude_step_deg,
+        search.cell.minLongitudeDeg,
+        search.cell.maxLongitudeDeg);
+      if (evaluate_solid_conic_spatial_candidate(
+            search,
+            latitude_deg,
+            longitude_deg)) {
+        return true;
+      }
+    }
+    if (!(search.preferredForward > prior_forward)) {
+      latitude_step_deg *= 0.5;
+      longitude_step_deg *= 0.5;
+    }
+  }
+  return false;
+}
+
+bool solid_conic_patch_may_contain_witness(
+    SolidConicSpatialSearch& search,
+    double min_latitude_deg,
+    double max_latitude_deg,
+    double min_longitude_deg,
+    double max_longitude_deg) {
+  const double observer_distance_m = magnitude(
+    search.resolved.state.position);
+  if (!(observer_distance_m > kWgs84A)) {
+    return true;
+  }
+  const Vec3 observer_unit = scale(
+    search.resolved.state.position,
+    1.0 / observer_distance_m);
+  const double center_latitude_deg = 0.5 * (
+    min_latitude_deg + max_latitude_deg);
+  const double center_longitude_deg = 0.5 * (
+    min_longitude_deg + max_longitude_deg);
+  const Vec3 center_position = geodetic_to_ecef({
+    center_longitude_deg / kRadiansToDegrees,
+    center_latitude_deg / kRadiansToDegrees,
+    0.0,
+  });
+  const double patch_radius_m = conservative_surface_patch_radius_m(
+    min_latitude_deg,
+    max_latitude_deg,
+    min_longitude_deg,
+    max_longitude_deg,
+    center_position);
+  const Vec3 center_look = subtract(
+    center_position,
+    search.resolved.state.position);
+  const double center_range_m = magnitude(center_look);
+  if (
+    !std::isfinite(patch_radius_m) ||
+    !std::isfinite(center_range_m)
+  ) {
+    return true;
+  }
+  constexpr double kShapeRangeBoundaryEpsilonM = 1.0e-12;
+  const double minimum_patch_range_m = deflate_proof_lower_bound(std::max(
+    0.0,
+    center_range_m - patch_radius_m));
+  const double maximum_patch_range_m = inflate_proof_upper_bound(
+    center_range_m + patch_radius_m);
+  if (
+    (search.sensor.shapeContract.minRangeM > 0.0 &&
+      maximum_patch_range_m + kShapeRangeBoundaryEpsilonM <
+        search.sensor.shapeContract.minRangeM) ||
+    (search.sensor.shapeContract.maxRangeM > 0.0 &&
+      minimum_patch_range_m - kShapeRangeBoundaryEpsilonM >
+        search.sensor.shapeContract.maxRangeM)
+  ) {
+    return false;
+  }
+  // Bound the exact ellipsoid horizon predicate H(P)=dot(S-P,N(P)).
+  // Every patch point is within patch_radius_m of the center, while WGS84's
+  // geodetic normal follows the unit lat/lon sphere. The meridian-plus-
+  // parallel path bounds the normal chord throughout the closed rectangle.
+  const double normal_path_bound_rad = inflate_proof_upper_bound(
+    0.5 * (
+      std::fabs(max_latitude_deg - min_latitude_deg) +
+      std::fabs(max_longitude_deg - min_longitude_deg)) /
+        kRadiansToDegrees);
+  const double normal_chord_bound = inflate_proof_upper_bound(
+    normal_path_bound_rad >= 3.14159265358979323846
+    ? 2.0
+    : 2.0 * std::sin(0.5 * normal_path_bound_rad));
+  const Vec3 center_normal = geodetic_surface_normal(center_position);
+  const double center_horizon_score = dot(
+    subtract(search.resolved.state.position, center_position),
+    center_normal);
+  const double horizon_score_error = inflate_proof_upper_bound(
+    patch_radius_m +
+      center_range_m * normal_chord_bound +
+      patch_radius_m * normal_chord_bound);
+  const double horizon_score_upper = inflate_proof_upper_bound(
+    center_horizon_score + horizon_score_error);
+  if (!(horizon_score_upper > 0.0)) {
+    return false;
+  }
+  const double boresight_chord = inflate_proof_upper_bound(magnitude(subtract(
+    search.resolved.frame.boresight,
+    scale(observer_unit, -1.0))));
+  if (boresight_chord > 1.0e-6) {
+    // The radial-shell relaxation intentionally pays the complete off-nadir
+    // chord and becomes too loose for a strongly tilted cone. In that regime,
+    // retain the boresight-centered ECEF patch ball: it is also rejection-only
+    // and converges directly around the actual look direction.
+    if (!(center_range_m > patch_radius_m)) {
+      return true;
+    }
+    const double center_angle_rad = std::acos(clamp(
+      dot(
+        scale(center_look, 1.0 / center_range_m),
+        search.resolved.frame.boresight),
+      -1.0,
+      1.0));
+    const double patch_angle_rad = std::asin(clamp(
+      patch_radius_m / center_range_m,
+      0.0,
+      1.0));
+    constexpr double kRejectionRoundingGuardRad = 1.0e-12;
+    return std::max(
+      0.0,
+      center_angle_rad - patch_angle_rad -
+        kRejectionRoundingGuardRad) <=
+      search.sensor.shapeContract.outerHalfAngleRad +
+        kRejectionRoundingGuardRad;
+  }
+  const double min_geocentric_latitude_deg =
+    geocentric_latitude_at_geodetic_latitude(min_latitude_deg) *
+      kRadiansToDegrees;
+  const double max_geocentric_latitude_deg =
+    geocentric_latitude_at_geodetic_latitude(max_latitude_deg) *
+      kRadiansToDegrees;
+  const double nearest_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      direction_lon_lat(observer_unit),
+      min_geocentric_latitude_deg,
+      max_geocentric_latitude_deg,
+      min_longitude_deg,
+      max_longitude_deg);
+  const double antipodal_distance_deg =
+    sdn::coverage::minimumAngularDistanceToRectangleDeg(
+      direction_lon_lat(scale(observer_unit, -1.0)),
+      min_geocentric_latitude_deg,
+      max_geocentric_latitude_deg,
+      min_longitude_deg,
+      max_longitude_deg);
+  if (
+    !std::isfinite(nearest_distance_deg) ||
+    !std::isfinite(antipodal_distance_deg)
+  ) {
+    return true;
+  }
+  const double c_max = clamp(inflate_proof_upper_bound(std::cos(
+    nearest_distance_deg / kRadiansToDegrees)), -1.0, 1.0);
+  const double horizon_angle_rad = std::min(
+    3.14159265358979323846,
+    std::acos(clamp(
+      kWgs84B / observer_distance_m,
+      0.0,
+      1.0)) +
+      kMaximumGeodeticGeocentricLatitudeSeparationDeg /
+        kRadiansToDegrees);
+  const double c_min = std::max(
+    clamp(deflate_proof_lower_bound(-std::cos(
+      antipodal_distance_deg / kRadiansToDegrees)), -1.0, 1.0),
+    deflate_proof_lower_bound(std::cos(horizon_angle_rad)));
+  if (c_min > c_max) {
+    return false;
+  }
+  const double minimum_radius_m = std::max(
+    kWgs84B,
+    deflate_proof_lower_bound(std::min(
+      radial_magnitude_at_geodetic_latitude(min_latitude_deg),
+      radial_magnitude_at_geodetic_latitude(max_latitude_deg))));
+  auto radial_forward = [&](double direction_cosine) {
+    const double range_m = std::sqrt(std::max(
+      0.0,
+      observer_distance_m * observer_distance_m +
+        minimum_radius_m * minimum_radius_m -
+        2.0 * observer_distance_m * minimum_radius_m *
+          direction_cosine));
+    return range_m > 0.0
+      ? clamp(
+        (observer_distance_m - minimum_radius_m * direction_cosine) /
+          range_m,
+        -1.0,
+        1.0)
+      : 1.0;
+  };
+  const double radial_forward_upper = std::max(
+    radial_forward(c_min),
+    radial_forward(c_max));
+  const double forward_upper = inflate_proof_upper_bound(
+    radial_forward_upper + boresight_chord);
+  constexpr double kShapeBoundaryEpsilonRad = 1.0e-12;
+  const double required_forward = deflate_proof_lower_bound(std::cos(std::min(
+    3.14159265358979323846,
+    search.sensor.shapeContract.outerHalfAngleRad +
+      kShapeBoundaryEpsilonRad)));
+  return forward_upper >= required_forward;
+}
+
+bool search_solid_conic_surface_patch(
+    SolidConicSpatialSearch& search,
+    double min_latitude_deg,
+    double max_latitude_deg,
+    double min_longitude_deg,
+    double max_longitude_deg,
+    int depth) {
+  const double mid_latitude_deg = 0.5 * (
+    min_latitude_deg + max_latitude_deg);
+  const double mid_longitude_deg = 0.5 * (
+    min_longitude_deg + max_longitude_deg);
+  if (!solid_conic_patch_may_contain_witness(
+        search,
+        min_latitude_deg,
+        max_latitude_deg,
+        min_longitude_deg,
+        max_longitude_deg)) {
+    return false;
+  }
+  if (evaluate_solid_conic_spatial_candidate(
+        search,
+        mid_latitude_deg,
+        mid_longitude_deg)) {
+    return true;
+  }
+
+  // Search depth can place candidates, but it grants no access authority:
+  // every positive result must come from the exact point predicate above.
+  // Sixteen bisections put an eight-degree cell below 15 metres. Exact
+  // optimizer candidates handle boundary/tangency witnesses; capping the
+  // fallback prevents an unresolved horizon edge from creating an unbounded
+  // quadtree denial of service.
+  constexpr int kSpatialSearchMaximumDepth = 16;
+  if (depth >= kSpatialSearchMaximumDepth) {
+    return false;
+  }
+
+  const int preferred_child = search.hasPreferred
+    ? (search.preferredLatitudeDeg >= mid_latitude_deg ? 2 : 0) +
+      (search.preferredLongitudeDeg >= mid_longitude_deg ? 1 : 0)
+    : 0;
+  const int child_order[4] = {
+    preferred_child,
+    preferred_child ^ 1,
+    preferred_child ^ 2,
+    preferred_child ^ 3,
+  };
+  for (const int child : child_order) {
+    const bool north = child >= 2;
+    const bool east = (child & 1) != 0;
+    if (search_solid_conic_surface_patch(
+          search,
+          north ? mid_latitude_deg : min_latitude_deg,
+          north ? max_latitude_deg : mid_latitude_deg,
+          east ? mid_longitude_deg : min_longitude_deg,
+          east ? max_longitude_deg : mid_longitude_deg,
+          depth + 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool solid_conic_cell_has_exact_spatial_witness(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& resolved,
+    Vec3* witness_position) {
+  SolidConicSpatialSearch search{cell, sensor, resolved};
+  const bool found = optimize_solid_conic_rectangle_witness(search) ||
+    search_solid_conic_surface_patch(
+      search,
+      cell.minLatitudeDeg,
+      cell.maxLatitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg,
+      0);
+  if (found && witness_position && search.hasAccepted) {
+    *witness_position = search.acceptedPosition;
+  }
+  return found;
+}
+
+LocalLookEnvelope surface_patch_local_look_envelope(
+    const GridCellGeometry& cell,
+    uint32_t patch_key,
+    int patch_depth,
+    double min_latitude_deg,
+    double max_latitude_deg,
+    double min_longitude_deg,
+    double max_longitude_deg,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const UnitDirectionEnvelope& boresight,
+    const UnitDirectionEnvelope& x_axis,
+    const UnitDirectionEnvelope& y_axis) {
+  const double center_latitude_deg =
+    0.5 * (min_latitude_deg + max_latitude_deg);
+  const double center_longitude_deg =
+    0.5 * (min_longitude_deg + max_longitude_deg);
+  constexpr uint32_t kQuadtreePowers[] = {
+    1u,
+    4u,
+    16u,
+    64u,
+    256u,
+    1024u,
+    4096u,
+    16384u,
+  };
+  constexpr size_t kSurfacePatchCacheSize = (65536u - 1u) / 3u;
+  if (patch_depth < 0) {
+    return {};
+  }
+  Vec3 center_position;
+  double patch_radius_m = 0.0;
+  if (patch_depth >= 8) {
+    if (cell.deepSurfacePatchCache.empty()) {
+      cell.deepSurfacePatchCache.reserve(4096u);
+    }
+    auto cached_patch = cell.deepSurfacePatchCache.find(patch_key);
+    if (cached_patch == cell.deepSurfacePatchCache.end()) {
+      const Vec3 exact_center_position = geodetic_to_ecef({
+        center_longitude_deg / kRadiansToDegrees,
+        center_latitude_deg / kRadiansToDegrees,
+        0.0,
+      });
+      SurfacePatchGeometry geometry{};
+      geometry.centerX = static_cast<float>(exact_center_position.x);
+      geometry.centerY = static_cast<float>(exact_center_position.y);
+      geometry.centerZ = static_cast<float>(exact_center_position.z);
+      const Vec3 stored_center_position{
+        static_cast<double>(geometry.centerX),
+        static_cast<double>(geometry.centerY),
+        static_cast<double>(geometry.centerZ),
+      };
+      const double required_radius_m = inflate_proof_upper_bound(
+        conservative_surface_patch_radius_m(
+          min_latitude_deg,
+          max_latitude_deg,
+          min_longitude_deg,
+          max_longitude_deg,
+          exact_center_position) +
+        magnitude(subtract(
+          exact_center_position,
+          stored_center_position)));
+      geometry.radiusM = static_cast<float>(required_radius_m);
+      if (static_cast<double>(geometry.radiusM) < required_radius_m) {
+        geometry.radiusM = std::nextafterf(
+          geometry.radiusM,
+          std::numeric_limits<float>::infinity());
+      }
+      cached_patch = cell.deepSurfacePatchCache.emplace(
+        patch_key,
+        geometry).first;
+    }
+    center_position = {
+      static_cast<double>(cached_patch->second.centerX),
+      static_cast<double>(cached_patch->second.centerY),
+      static_cast<double>(cached_patch->second.centerZ),
+    };
+    patch_radius_m = static_cast<double>(cached_patch->second.radiusM);
+  } else {
+    if (cell.surfacePatchCache.empty()) {
+      cell.surfacePatchCache.resize(kSurfacePatchCacheSize);
+    }
+    const uint32_t level_power = kQuadtreePowers[patch_depth];
+    if (patch_key < level_power || patch_key >= 2u * level_power) {
+      return {};
+    }
+    const size_t patch_index =
+      static_cast<size_t>((level_power - 1u) / 3u) +
+      static_cast<size_t>(patch_key - level_power);
+    SurfacePatchGeometry& cached_patch = cell.surfacePatchCache[patch_index];
+    if (!(cached_patch.radiusM >= 0.0f)) {
+      const Vec3 exact_center_position = geodetic_to_ecef({
+        center_longitude_deg / kRadiansToDegrees,
+        center_latitude_deg / kRadiansToDegrees,
+        0.0,
+      });
+      cached_patch.centerX = static_cast<float>(exact_center_position.x);
+      cached_patch.centerY = static_cast<float>(exact_center_position.y);
+      cached_patch.centerZ = static_cast<float>(exact_center_position.z);
+      const Vec3 stored_center_position{
+        static_cast<double>(cached_patch.centerX),
+        static_cast<double>(cached_patch.centerY),
+        static_cast<double>(cached_patch.centerZ),
+      };
+      const double center_quantization_error_m = magnitude(subtract(
+        exact_center_position,
+        stored_center_position));
+      const double required_radius_m = inflate_proof_upper_bound(
+        conservative_surface_patch_radius_m(
+          min_latitude_deg,
+          max_latitude_deg,
+          min_longitude_deg,
+          max_longitude_deg,
+          exact_center_position) +
+        center_quantization_error_m);
+      float stored_radius_m = static_cast<float>(required_radius_m);
+      if (static_cast<double>(stored_radius_m) < required_radius_m) {
+        stored_radius_m = std::nextafterf(
+          stored_radius_m,
+          std::numeric_limits<float>::infinity());
+      }
+      cached_patch.radiusM = stored_radius_m;
+    }
+    center_position = {
+      static_cast<double>(cached_patch.centerX),
+      static_cast<double>(cached_patch.centerY),
+      static_cast<double>(cached_patch.centerZ),
+    };
+    patch_radius_m = static_cast<double>(cached_patch.radiusM);
+  }
+  const Vec3 start_look_vector = subtract(
+    center_position,
+    start.state.position);
+  const Vec3 stop_look_vector = subtract(
+    center_position,
+    stop.state.position);
+  const UnitDirectionEnvelope center_look = normalized_arc_envelope(
+    start_look_vector,
+    stop_look_vector);
+  if (!center_look.valid) {
+    return {};
+  }
+
+  const Vec3 observer_displacement = subtract(
+    stop.state.position,
+    start.state.position);
+  const double displacement_squared = dot(
+    observer_displacement,
+    observer_displacement);
+  const double minimum_fraction = displacement_squared > 0.0
+    ? clamp(
+      dot(start_look_vector, observer_displacement) /
+        displacement_squared,
+      0.0,
+      1.0)
+    : 0.0;
+  const double center_minimum_range_m = deflate_proof_lower_bound(magnitude(
+    subtract(
+      start_look_vector,
+      scale(observer_displacement, minimum_fraction))));
+  if (!(center_minimum_range_m > patch_radius_m)) {
+    return {};
+  }
+  const double spatial_angular_error_rad = std::asin(clamp(
+    patch_radius_m / center_minimum_range_m,
+    0.0,
+    1.0));
+  const double spatial_chord_error = inflate_proof_upper_bound(
+    2.0 * std::sin(0.5 * spatial_angular_error_rad));
+  const double look_error = inflate_proof_upper_bound(
+    center_look.chordError + spatial_chord_error);
+
+  LocalLookEnvelope envelope{};
+  envelope.xCenter = dot(center_look.center, x_axis.center);
+  envelope.yCenter = dot(center_look.center, y_axis.center);
+  envelope.zCenter = dot(center_look.center, boresight.center);
+  envelope.xError = inflate_proof_upper_bound(
+    look_error + x_axis.chordError);
+  envelope.yError = inflate_proof_upper_bound(
+    look_error + y_axis.chordError);
+  envelope.zError = inflate_proof_upper_bound(
+    look_error + boresight.chordError);
+  // Projection of one 3-D look perturbation onto the orthonormal transverse
+  // plane has norm no greater than the original chord error. Treating that
+  // same perturbation independently in X and Y would introduce an unnecessary
+  // sqrt(2) inflation in the SAR clock-sector proof.
+  envelope.transverseError = inflate_proof_upper_bound(
+    look_error + std::hypot(
+      x_axis.chordError,
+      y_axis.chordError));
+  envelope.minimumRangeM = deflate_proof_lower_bound(
+    center_minimum_range_m - patch_radius_m);
+  envelope.maximumRangeM = inflate_proof_upper_bound(
+    std::max(
+      magnitude(start_look_vector),
+      magnitude(stop_look_vector)) +
+    patch_radius_m);
+  envelope.valid = true;
+  return envelope;
+}
+
+double minimum_absolute_interval_value(double lower, double upper) {
+  if (lower <= 0.0 && upper >= 0.0) {
+    return 0.0;
+  }
+  return std::min(std::fabs(lower), std::fabs(upper));
+}
+
+double circular_angular_distance(double left, double right) {
+  const double difference = std::remainder(
+    left - right,
+    2.0 * 3.14159265358979323846);
+  return std::fabs(difference);
+}
+
+bool local_look_envelope_is_shape_disjoint(
+    const LocalLookEnvelope& envelope,
+    const SensorShapeContract& shape) {
+  if (!envelope.valid) {
+    return false;
+  }
+  if (
+    (shape.maxRangeM > 0.0 &&
+      envelope.minimumRangeM > shape.maxRangeM + 1.0e-12) ||
+    (shape.minRangeM > 0.0 &&
+      envelope.maximumRangeM + 1.0e-12 < shape.minRangeM)
+  ) {
+    return true;
+  }
+
+  const double x_lower = std::max(-1.0, envelope.xCenter - envelope.xError);
+  const double x_upper = std::min(1.0, envelope.xCenter + envelope.xError);
+  const double y_lower = std::max(-1.0, envelope.yCenter - envelope.yError);
+  const double y_upper = std::min(1.0, envelope.yCenter + envelope.yError);
+  const double z_lower = std::max(-1.0, envelope.zCenter - envelope.zError);
+  const double z_upper = std::min(1.0, envelope.zCenter + envelope.zError);
+  if (z_upper <= 0.0) {
+    return true;
+  }
+
+  if (shape.kind == SensorShapeKind::Rectangular) {
+    const double maximum_forward = std::max(0.0, z_upper);
+    if (
+      shape.crossTrackHalfAngleRad <
+        0.5 * 3.14159265358979323846 &&
+      minimum_absolute_interval_value(x_lower, x_upper) >
+        std::tan(shape.crossTrackHalfAngleRad) * maximum_forward
+    ) {
+      return true;
+    }
+    return
+      shape.alongTrackHalfAngleRad <
+        0.5 * 3.14159265358979323846 &&
+      minimum_absolute_interval_value(y_lower, y_upper) >
+        std::tan(shape.alongTrackHalfAngleRad) * maximum_forward;
+  }
+
+  if (
+    shape.kind != SensorShapeKind::Conic &&
+    shape.kind != SensorShapeKind::SarAnnularSector
+  ) {
+    return false;
+  }
+  if (
+    shape.outerHalfAngleRad < 3.14159265358979323846 &&
+    z_upper < std::cos(std::min(
+      3.14159265358979323846,
+      shape.outerHalfAngleRad + 1.0e-12))
+  ) {
+    return true;
+  }
+  if (
+    shape.innerHalfAngleRad > 0.0 &&
+    z_lower > std::cos(std::max(
+      0.0,
+      shape.innerHalfAngleRad - 1.0e-12))
+  ) {
+    return true;
+  }
+  if (shape.clockRange.fullCircle) {
+    return false;
+  }
+
+  const double transverse_center = std::hypot(
+    envelope.xCenter,
+    envelope.yCenter);
+  const double transverse_error = envelope.transverseError;
+  if (!(transverse_center > transverse_error)) {
+    return false;
+  }
+  const double clock_error = inflate_proof_upper_bound(std::asin(clamp(
+    transverse_error / transverse_center,
+    0.0,
+    1.0)));
+  const double clock_angle = normalize_angle_rad(std::atan2(
+    envelope.yCenter,
+    envelope.xCenter));
+  const double from_clock_start = normalize_angle_rad(
+    clock_angle - shape.clockRange.startRad);
+  if (from_clock_start <= shape.clockRange.spanRad) {
+    return false;
+  }
+  const double distance_to_clock_range = std::min(
+    circular_angular_distance(clock_angle, shape.clockRange.startRad),
+    circular_angular_distance(clock_angle, shape.clockRange.stopRad));
+  return distance_to_clock_range > clock_error;
+}
+
+bool fixed_surface_witness_visible_for_entire_interval(
+    Vec3 surface_position,
+    Vec3 surface_normal,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop);
+
+int conservative_sar_interval_ground_caps(
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const IntervalShapeProofContext& context,
+    SweptSensorCap (&ground_caps)[2]) {
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (
+    !context.valid ||
+    shape.kind != SensorShapeKind::SarAnnularSector ||
+    shape.clockRange.fullCircle ||
+    shape.innerHalfAngleRad < 0.0 ||
+    shape.outerHalfAngleRad > 3.14159265358979323846 ||
+    shape.outerHalfAngleRad < shape.innerHalfAngleRad
+  ) {
+    return 0;
+  }
+  constexpr int kLookPartitions = 2;
+  const double look_span_rad =
+    shape.outerHalfAngleRad - shape.innerHalfAngleRad;
+  const double clock_center_rad = normalize_angle_rad(
+    shape.clockRange.startRad + 0.5 * shape.clockRange.spanRad);
+  for (int look_index = 0; look_index < kLookPartitions; ++look_index) {
+    const double sub_minimum_look_rad =
+      shape.innerHalfAngleRad +
+      static_cast<double>(look_index) *
+        look_span_rad / kLookPartitions;
+    const double sub_maximum_look_rad =
+      shape.innerHalfAngleRad +
+      static_cast<double>(look_index + 1) *
+        look_span_rad / kLookPartitions;
+    const double look_center_rad = 0.5 * (
+      sub_minimum_look_rad + sub_maximum_look_rad);
+    const double transverse = std::sin(look_center_rad);
+    const SensorVec3 local_center{
+      transverse * std::cos(clock_center_rad),
+      transverse * std::sin(clock_center_rad),
+      std::cos(look_center_rad),
+    };
+    double maximum_transverse_scale = std::max(
+      std::sin(sub_minimum_look_rad),
+      std::sin(sub_maximum_look_rad));
+    if (
+      sub_minimum_look_rad <= 0.5 * 3.14159265358979323846 &&
+      sub_maximum_look_rad >= 0.5 * 3.14159265358979323846
+    ) {
+      maximum_transverse_scale = 1.0;
+    }
+    const double local_radius_rad =
+      0.5 * (sub_maximum_look_rad - sub_minimum_look_rad) +
+      0.5 * maximum_transverse_scale * shape.clockRange.spanRad +
+      1.0e-12;
+    if (!conservative_fixed_local_ray_ground_track_cap(
+          sensor,
+          local_center,
+          local_radius_rad,
+          start,
+          stop,
+          context.sweptCap,
+          context.boresight,
+          context.xAxis,
+          context.yAxis,
+          ground_caps[look_index])) {
+      return 0;
+    }
+  }
+  return kLookPartitions;
+}
+
+bool surface_patch_proven_shape_disjoint(
+    double min_latitude_deg,
+    double max_latitude_deg,
+    double min_longitude_deg,
+    double max_longitude_deg,
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& midpoint,
+    const ResolvedVisibilityState& stop,
+    const SweptSensorCap& interval_cap,
+    const UnitDirectionEnvelope& boresight,
+    const UnitDirectionEnvelope& x_axis,
+    const UnitDirectionEnvelope& y_axis,
+    uint32_t patch_key,
+    int depth,
+    int maximum_depth,
+    bool has_preferred_point,
+    double preferred_latitude_deg,
+    double preferred_longitude_deg,
+    bool& visible_witness_proven) {
+  const LocalLookEnvelope envelope = surface_patch_local_look_envelope(
+    cell,
+    patch_key,
+    depth,
+    min_latitude_deg,
+    max_latitude_deg,
+    min_longitude_deg,
+    max_longitude_deg,
+    start,
+    stop,
+    boresight,
+    x_axis,
+    y_axis);
+  if (local_look_envelope_is_shape_disjoint(
+        envelope,
+        sensor.shapeContract)) {
+    return true;
+  }
+
+  if (depth >= maximum_depth) {
+    const Vec3 center_position = geodetic_to_ecef({
+      0.5 * (min_longitude_deg + max_longitude_deg) / kRadiansToDegrees,
+      0.5 * (min_latitude_deg + max_latitude_deg) / kRadiansToDegrees,
+      0.0,
+    });
+    visible_witness_proven = fixed_surface_witness_visible_for_entire_interval(
+      center_position,
+      geodetic_surface_normal(center_position),
+      sensor,
+      start,
+      stop);
+    if (!visible_witness_proven) {
+      const Vec3 midpoint_look = subtract(
+        center_position,
+        midpoint.state.position);
+      visible_witness_proven = fixed_local_ray_ground_track_inside_cell(
+        cell,
+        sensor,
+        {
+          dot(midpoint_look, midpoint.frame.xAxis),
+          dot(midpoint_look, midpoint.frame.yAxis),
+          dot(midpoint_look, midpoint.frame.boresight),
+        },
+        start,
+        stop,
+        interval_cap,
+        boresight,
+        x_axis,
+        y_axis);
+    }
+    return false;
+  }
+  const double mid_latitude_deg =
+    0.5 * (min_latitude_deg + max_latitude_deg);
+  const double mid_longitude_deg =
+    0.5 * (min_longitude_deg + max_longitude_deg);
+  bool all_disjoint = true;
+  auto visit = [&](uint32_t child_index) {
+    if (visible_witness_proven) {
+      return;
+    }
+    const bool north = child_index >= 2u;
+    const bool east = (child_index & 1u) != 0u;
+    const double child_min_lat = north
+      ? mid_latitude_deg
+      : min_latitude_deg;
+    const double child_max_lat = north
+      ? max_latitude_deg
+      : mid_latitude_deg;
+    const double child_min_lon = east
+      ? mid_longitude_deg
+      : min_longitude_deg;
+    const double child_max_lon = east
+      ? max_longitude_deg
+      : mid_longitude_deg;
+    const uint32_t child_key = patch_key * 4u + child_index;
+    all_disjoint = surface_patch_proven_shape_disjoint(
+      child_min_lat,
+      child_max_lat,
+      child_min_lon,
+      child_max_lon,
+      cell,
+      sensor,
+      start,
+      midpoint,
+      stop,
+      interval_cap,
+      boresight,
+      x_axis,
+      y_axis,
+      child_key,
+      depth + 1,
+      maximum_depth,
+      has_preferred_point,
+      preferred_latitude_deg,
+      preferred_longitude_deg,
+      visible_witness_proven) && all_disjoint;
+  };
+  if (has_preferred_point) {
+    const uint32_t preferred_child =
+      (preferred_latitude_deg >= mid_latitude_deg ? 2u : 0u) +
+      (preferred_longitude_deg >= mid_longitude_deg ? 1u : 0u);
+    visit(preferred_child);
+    visit(preferred_child ^ 1u);
+    visit(preferred_child ^ 2u);
+    visit(preferred_child ^ 3u);
+  } else {
+    visit(0u);
+    visit(1u);
+    visit(2u);
+    visit(3u);
+  }
+  return all_disjoint;
+}
+
+enum class CellIntervalGeometryProof {
+  Unknown,
+  Disjoint,
+  Visible,
+};
+
+CellIntervalGeometryProof sar_region_interval_geometry_proof(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const SweptSensorCap& interval_cap,
+    const UnitDirectionEnvelope& boresight,
+    const UnitDirectionEnvelope& x_axis,
+    const UnitDirectionEnvelope& y_axis,
+    double minimum_look_rad,
+    double maximum_look_rad,
+    double minimum_clock_offset_rad,
+    double maximum_clock_offset_rad,
+    int depth) {
+  const SensorShapeContract& shape = sensor.shapeContract;
+  const double look_center_rad = 0.5 * (
+    minimum_look_rad + maximum_look_rad);
+  const double clock_offset_center_rad = 0.5 * (
+    minimum_clock_offset_rad + maximum_clock_offset_rad);
+  const double clock_center_rad = normalize_angle_rad(
+    shape.clockRange.startRad + clock_offset_center_rad);
+  const double transverse = std::sin(look_center_rad);
+  const SensorVec3 local_center{
+    transverse * std::cos(clock_center_rad),
+    transverse * std::sin(clock_center_rad),
+    std::cos(look_center_rad),
+  };
+  const double local_radius_rad =
+    0.5 * (maximum_look_rad - minimum_look_rad) +
+    0.5 * (maximum_clock_offset_rad - minimum_clock_offset_rad) +
+    1.0e-12;
+  SweptSensorCap ground_cap;
+  const bool cap_proven = conservative_fixed_local_ray_ground_track_cap(
+    sensor,
+    local_center,
+    local_radius_rad,
+    start,
+    stop,
+    interval_cap,
+    boresight,
+    x_axis,
+    y_axis,
+    ground_cap);
+  if (cap_proven) {
+    if (!sdn::coverage::sphericalCapIntersectsRectangle(
+          ground_cap.center,
+          ground_cap.angularRadiusDeg,
+          cell.minGeocentricLatitudeDeg,
+          cell.maxGeocentricLatitudeDeg,
+          cell.minLongitudeDeg,
+          cell.maxLongitudeDeg)) {
+      return CellIntervalGeometryProof::Disjoint;
+    }
+    if (spherical_cap_inside_cell(ground_cap, cell)) {
+      return CellIntervalGeometryProof::Visible;
+    }
+  }
+
+  constexpr int kSarShapeRegionProofMaxDepth = 6;
+  if (depth >= kSarShapeRegionProofMaxDepth) {
+    return CellIntervalGeometryProof::Unknown;
+  }
+  const double look_span_rad = maximum_look_rad - minimum_look_rad;
+  const double clock_span_rad =
+    maximum_clock_offset_rad - minimum_clock_offset_rad;
+  CellIntervalGeometryProof first = CellIntervalGeometryProof::Unknown;
+  CellIntervalGeometryProof second = CellIntervalGeometryProof::Unknown;
+  if (look_span_rad >= clock_span_rad) {
+    const double middle_look_rad = 0.5 * (
+      minimum_look_rad + maximum_look_rad);
+    first = sar_region_interval_geometry_proof(
+      cell,
+      sensor,
+      start,
+      stop,
+      interval_cap,
+      boresight,
+      x_axis,
+      y_axis,
+      minimum_look_rad,
+      middle_look_rad,
+      minimum_clock_offset_rad,
+      maximum_clock_offset_rad,
+      depth + 1);
+    if (first == CellIntervalGeometryProof::Visible) {
+      return first;
+    }
+    second = sar_region_interval_geometry_proof(
+      cell,
+      sensor,
+      start,
+      stop,
+      interval_cap,
+      boresight,
+      x_axis,
+      y_axis,
+      middle_look_rad,
+      maximum_look_rad,
+      minimum_clock_offset_rad,
+      maximum_clock_offset_rad,
+      depth + 1);
+  } else {
+    const double middle_clock_offset_rad = 0.5 * (
+      minimum_clock_offset_rad + maximum_clock_offset_rad);
+    first = sar_region_interval_geometry_proof(
+      cell,
+      sensor,
+      start,
+      stop,
+      interval_cap,
+      boresight,
+      x_axis,
+      y_axis,
+      minimum_look_rad,
+      maximum_look_rad,
+      minimum_clock_offset_rad,
+      middle_clock_offset_rad,
+      depth + 1);
+    if (first == CellIntervalGeometryProof::Visible) {
+      return first;
+    }
+    second = sar_region_interval_geometry_proof(
+      cell,
+      sensor,
+      start,
+      stop,
+      interval_cap,
+      boresight,
+      x_axis,
+      y_axis,
+      minimum_look_rad,
+      maximum_look_rad,
+      middle_clock_offset_rad,
+      maximum_clock_offset_rad,
+      depth + 1);
+  }
+  if (second == CellIntervalGeometryProof::Visible) {
+    return second;
+  }
+  return
+    first == CellIntervalGeometryProof::Disjoint &&
+      second == CellIntervalGeometryProof::Disjoint
+    ? CellIntervalGeometryProof::Disjoint
+    : CellIntervalGeometryProof::Unknown;
+}
+
+CellIntervalGeometryProof cell_interval_geometry_proof(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const IntervalShapeProofContext& context,
+    int spatial_maximum_depth) {
+  if (!context.valid) {
+    return CellIntervalGeometryProof::Unknown;
+  }
+  const double midpoint_seconds = 0.5 * (
+    start.state.elapsedSeconds + stop.state.elapsedSeconds);
+  const ResolvedVisibilityState midpoint = resolve_visibility_state(
+    interpolate_state(start.state, stop.state, midpoint_seconds));
+  bool has_preferred_point = false;
+  double preferred_latitude_deg = 0.0;
+  double preferred_longitude_deg = 0.0;
+  SensorVec3 preferred_local_direction;
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (shape.kind == SensorShapeKind::Rectangular) {
+    preferred_local_direction = {0.0, 0.0, 1.0};
+    has_preferred_point = true;
+  } else if (
+    shape.kind == SensorShapeKind::Conic ||
+    shape.kind == SensorShapeKind::SarAnnularSector
+  ) {
+    const double look_angle_rad = 0.5 * (
+      shape.innerHalfAngleRad + shape.outerHalfAngleRad);
+    const double clock_angle_rad = shape.clockRange.fullCircle
+      ? 0.0
+      : normalize_angle_rad(
+        shape.clockRange.startRad + 0.5 * shape.clockRange.spanRad);
+    const double transverse = std::sin(look_angle_rad);
+    preferred_local_direction = {
+      transverse * std::cos(clock_angle_rad),
+      transverse * std::sin(clock_angle_rad),
+      std::cos(look_angle_rad),
+    };
+    has_preferred_point = true;
+  }
+  if (has_preferred_point) {
+    Vec3 preferred_surface_position;
+    has_preferred_point = intersect_earth(
+      midpoint.state.position,
+      world_direction_for_local_ray(
+        midpoint.frame,
+        preferred_local_direction),
+      1.0e100,
+      preferred_surface_position);
+    if (has_preferred_point) {
+      const Vertex preferred = to_cartographic(preferred_surface_position);
+      preferred_latitude_deg = clamp(
+        preferred.latitudeDeg,
+        cell.minLatitudeDeg,
+        cell.maxLatitudeDeg);
+      const double longitude_reference_deg = 0.5 * (
+        cell.minLongitudeDeg + cell.maxLongitudeDeg);
+      preferred_longitude_deg = preferred.longitudeDeg;
+      while (preferred_longitude_deg - longitude_reference_deg > 180.0) {
+        preferred_longitude_deg -= 360.0;
+      }
+      while (preferred_longitude_deg - longitude_reference_deg < -180.0) {
+        preferred_longitude_deg += 360.0;
+      }
+      preferred_longitude_deg = clamp(
+        preferred_longitude_deg,
+        cell.minLongitudeDeg,
+        cell.maxLongitudeDeg);
+    }
+  }
+  bool visible_witness_proven = false;
+  const bool disjoint = surface_patch_proven_shape_disjoint(
+    cell.minLatitudeDeg,
+    cell.maxLatitudeDeg,
+    cell.minLongitudeDeg,
+    cell.maxLongitudeDeg,
+    cell,
+    sensor,
+    start,
+    midpoint,
+    stop,
+    context.sweptCap,
+    context.boresight,
+    context.xAxis,
+    context.yAxis,
+    1u,
+    0,
+    spatial_maximum_depth,
+    has_preferred_point,
+    preferred_latitude_deg,
+    preferred_longitude_deg,
+    visible_witness_proven);
+  if (visible_witness_proven) {
+    return CellIntervalGeometryProof::Visible;
+  }
+  return disjoint
+    ? CellIntervalGeometryProof::Disjoint
+    : CellIntervalGeometryProof::Unknown;
+}
+
+bool fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
+    Vec3 surface_position,
+    Vec3 surface_normal,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const UnitDirectionEnvelope& boresight,
+    const UnitDirectionEnvelope& x_axis,
+    const UnitDirectionEnvelope& y_axis) {
+  // Horizon is affine for a fixed WGS84 point: dot(S(t)-P,N) > 0.
+  const double horizon_start = dot(
+    subtract(start.state.position, surface_position),
+    surface_normal);
+  const double horizon_stop = dot(
+    subtract(stop.state.position, surface_position),
+    surface_normal);
+  if (!(deflate_proof_lower_bound(
+        std::min(horizon_start, horizon_stop)) > 0.0)) {
+    return false;
+  }
+
+  // For affine observer motion, distance to a fixed point is convex: its
+  // maximum is at an endpoint and its minimum is the point-to-segment range.
+  const Vec3 start_look_vector = subtract(
+    surface_position,
+    start.state.position);
+  const Vec3 stop_look_vector = subtract(
+    surface_position,
+    stop.state.position);
+  const double maximum_range_m = inflate_proof_upper_bound(std::max(
+    magnitude(start_look_vector),
+    magnitude(stop_look_vector)));
+  const Vec3 observer_displacement = subtract(
+    stop.state.position,
+    start.state.position);
+  const double displacement_squared = dot(
+    observer_displacement,
+    observer_displacement);
+  const double minimum_fraction = displacement_squared > 0.0
+    ? clamp(
+      dot(start_look_vector, observer_displacement) /
+        displacement_squared,
+      0.0,
+      1.0)
+    : 0.0;
+  const double minimum_range_m = deflate_proof_lower_bound(magnitude(subtract(
+    start_look_vector,
+    scale(observer_displacement, minimum_fraction))));
+  if (
+    (sensor.shapeContract.minRangeM > 0.0 &&
+      minimum_range_m < sensor.shapeContract.minRangeM) ||
+    (sensor.shapeContract.maxRangeM > 0.0 &&
+      maximum_range_m > sensor.shapeContract.maxRangeM)
+  ) {
+    return false;
+  }
+
+  const UnitDirectionEnvelope look = normalized_arc_envelope(
+    start_look_vector,
+    stop_look_vector);
+  if (!look.valid) {
+    return false;
+  }
+
+  const double x_center = dot(look.center, x_axis.center);
+  const double y_center = dot(look.center, y_axis.center);
+  const double z_center = dot(look.center, boresight.center);
+  const double x_error = inflate_proof_upper_bound(
+    look.chordError + x_axis.chordError);
+  const double y_error = inflate_proof_upper_bound(
+    look.chordError + y_axis.chordError);
+  const double z_error = inflate_proof_upper_bound(
+    look.chordError + boresight.chordError);
+  const double x_lower = std::max(-1.0, x_center - x_error);
+  const double x_upper = std::min(1.0, x_center + x_error);
+  const double y_lower = std::max(-1.0, y_center - y_error);
+  const double y_upper = std::min(1.0, y_center + y_error);
+  const double z_lower = std::max(-1.0, z_center - z_error);
+  const double z_upper = std::min(1.0, z_center + z_error);
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (
+    shape.kind == SensorShapeKind::Conic &&
+    shape.innerHalfAngleRad <= 1.0e-14 &&
+    shape.clockRange.fullCircle
+  ) {
+    // Near the cone axis, subtracting a first-order chord error from z is far
+    // too loose because cosine clearance is second order. Bound the actual
+    // angular separation instead with the spherical triangle inequality.
+    const double center_angle_rad = inflate_proof_upper_bound(std::acos(clamp(
+      z_center,
+      -1.0,
+      1.0)));
+    const double look_angle_error_rad = inflate_proof_upper_bound(
+      2.0 * std::asin(clamp(0.5 * look.chordError, 0.0, 1.0)));
+    const double boresight_angle_error_rad = inflate_proof_upper_bound(
+      2.0 * std::asin(clamp(0.5 * boresight.chordError, 0.0, 1.0)));
+    const double maximum_angle_rad = inflate_proof_upper_bound(
+      center_angle_rad + look_angle_error_rad +
+        boresight_angle_error_rad);
+    return
+      maximum_angle_rad < 0.5 * 3.14159265358979323846 &&
+      (shape.outerHalfAngleRad >= 3.14159265358979323846 ||
+        maximum_angle_rad <= shape.outerHalfAngleRad);
+  }
+  if (!(z_lower > 0.0)) {
+    return false;
+  }
+
+  switch (shape.kind) {
+    case SensorShapeKind::Rectangular: {
+      auto axis_inside = [&](double lower, double upper, double half_angle) {
+        if (half_angle >= 0.5 * 3.14159265358979323846) {
+          return true;
+        }
+        const double maximum_absolute_component = inflate_proof_upper_bound(
+          std::max(std::fabs(lower), std::fabs(upper)));
+        const double permitted_component = deflate_proof_lower_bound(
+          std::tan(half_angle) * z_lower);
+        return maximum_absolute_component < permitted_component;
+      };
+      return
+        axis_inside(
+          x_lower,
+          x_upper,
+          shape.crossTrackHalfAngleRad) &&
+        axis_inside(
+          y_lower,
+          y_upper,
+          shape.alongTrackHalfAngleRad);
+    }
+    case SensorShapeKind::Conic:
+    case SensorShapeKind::SarAnnularSector: {
+      if (shape.outerHalfAngleRad < 3.14159265358979323846) {
+        const double outer_cosine = inflate_proof_upper_bound(
+          std::cos(shape.outerHalfAngleRad));
+        if (!(z_lower > outer_cosine)) {
+          return false;
+        }
+      }
+      if (shape.innerHalfAngleRad > 0.0) {
+        if (shape.innerHalfAngleRad >= 3.14159265358979323846) {
+          return false;
+        }
+        const double inner_cosine = deflate_proof_lower_bound(
+          std::cos(shape.innerHalfAngleRad));
+        if (!(z_upper < inner_cosine)) {
+          return false;
+        }
+      }
+      if (!shape.clockRange.fullCircle) {
+        const double transverse_center = std::hypot(x_center, y_center);
+        const double transverse_error = inflate_proof_upper_bound(
+          look.chordError + std::hypot(
+            x_axis.chordError,
+            y_axis.chordError));
+        if (!(transverse_center > transverse_error)) {
+          return false;
+        }
+        const double clock_error = inflate_proof_upper_bound(std::asin(clamp(
+          transverse_error / transverse_center,
+          0.0,
+          1.0)));
+        const double clock_angle = normalize_angle_rad(
+          std::atan2(y_center, x_center));
+        const double from_clock_start = normalize_angle_rad(
+          clock_angle - shape.clockRange.startRad);
+        if (
+          !(from_clock_start > clock_error) ||
+          !(shape.clockRange.spanRad - from_clock_start > clock_error)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case SensorShapeKind::CustomPolygon:
+    case SensorShapeKind::Unknown:
+    default:
+      return false;
+  }
+}
+
+bool fixed_surface_witness_visible_for_entire_interval(
+    Vec3 surface_position,
+    Vec3 surface_normal,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop) {
+  UnitDirectionEnvelope boresight;
+  UnitDirectionEnvelope x_axis;
+  UnitDirectionEnvelope y_axis;
+  if (!resolved_frame_envelopes(
+        start,
+        stop,
+        boresight,
+        x_axis,
+        y_axis)) {
+    return false;
+  }
+  return fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
+    surface_position,
+    surface_normal,
+    sensor,
+    start,
+    stop,
+    boresight,
+    x_axis,
+    y_axis);
+}
+
+bool exact_surface_witness_from_resolved_state(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& resolved,
+    Vec3& witness_position) {
+  for (int sample_index = 0; sample_index < cell.sampleCount; ++sample_index) {
+    if (surface_sample_visible_from_resolved_state(
+          cell.samplePositions[sample_index],
+          cell.sampleNormals[sample_index],
+          sensor,
+          resolved)) {
+      witness_position = cell.samplePositions[sample_index];
+      return true;
+    }
+  }
+  if (boresight_ground_point_inside_cell(
+        cell,
+        sensor,
+        resolved,
+        &witness_position)) {
+    return true;
+  }
+  return
+    has_solid_conic_continuum_contract(sensor) &&
+    solid_conic_cell_has_exact_spatial_witness(
+      cell,
+      sensor,
+      resolved,
+      &witness_position);
+}
+
+bool surface_position_inside_cell(
+    Vec3 surface_position,
+    const GridCellGeometry& cell) {
+  const Vertex position = to_cartographic(surface_position);
+  return
+    position.latitudeDeg >= cell.minLatitudeDeg &&
+    position.latitudeDeg <= cell.maxLatitudeDeg &&
+    longitude_inside_closed_cell(
+      position.longitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+}
+
+bool fixed_midpoint_local_ray_witness_visible_for_entire_interval(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    SensorVec3 local_direction,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& midpoint,
+    const ResolvedVisibilityState& stop,
+    const UnitDirectionEnvelope* cached_boresight = nullptr,
+    const UnitDirectionEnvelope* cached_x_axis = nullptr,
+    const UnitDirectionEnvelope* cached_y_axis = nullptr) {
+  const Vec3 world_direction = world_direction_for_local_ray(
+    midpoint.frame,
+    local_direction);
+  Vec3 surface_position;
+  if (!intersect_earth(
+        midpoint.state.position,
+        world_direction,
+        1.0e100,
+        surface_position)) {
+    return false;
+  }
+  if (!surface_position_inside_cell(surface_position, cell)) {
+    const Vertex representative = to_cartographic(surface_position);
+    const double latitude_deg = clamp(
+      representative.latitudeDeg,
+      cell.minLatitudeDeg,
+      cell.maxLatitudeDeg);
+    const double longitude_reference_deg =
+      0.5 * (cell.minLongitudeDeg + cell.maxLongitudeDeg);
+    double longitude_deg = representative.longitudeDeg;
+    while (longitude_deg - longitude_reference_deg > 180.0) {
+      longitude_deg -= 360.0;
+    }
+    while (longitude_deg - longitude_reference_deg < -180.0) {
+      longitude_deg += 360.0;
+    }
+    longitude_deg = clamp(
+      longitude_deg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+    surface_position = geodetic_to_ecef({
+      longitude_deg / kRadiansToDegrees,
+      latitude_deg / kRadiansToDegrees,
+      0.0,
+    });
+  }
+  if (cached_boresight && cached_x_axis && cached_y_axis) {
+    return fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
+      surface_position,
+      geodetic_surface_normal(surface_position),
+      sensor,
+      start,
+      stop,
+      *cached_boresight,
+      *cached_x_axis,
+      *cached_y_axis);
+  }
+  return fixed_surface_witness_visible_for_entire_interval(
+    surface_position,
+    geodetic_surface_normal(surface_position),
+    sensor,
+    start,
+    stop);
+}
+
+bool representative_local_shape_direction(
+    const SensorConfig& sensor,
+    SensorVec3& direction) {
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (shape.kind == SensorShapeKind::Rectangular) {
+    direction = {0.0, 0.0, 1.0};
+    return true;
+  }
+  if (
+    shape.kind != SensorShapeKind::Conic &&
+    shape.kind != SensorShapeKind::SarAnnularSector
+  ) {
+    return false;
+  }
+  if (shape.outerHalfAngleRad < shape.innerHalfAngleRad) {
+    return false;
+  }
+  if (
+    shape.kind == SensorShapeKind::Conic &&
+    shape.innerHalfAngleRad <= 1.0e-14 &&
+    shape.clockRange.fullCircle
+  ) {
+    // A solid cone contains its axis. Freezing the midpoint boresight Earth
+    // hit is the strongest common-witness candidate for a translating cone;
+    // acceptance still requires the full interval proof.
+    direction = {0.0, 0.0, 1.0};
+    return true;
+  }
+  const double angle = 0.5 * (
+    shape.innerHalfAngleRad + shape.outerHalfAngleRad);
+  const double clock = shape.clockRange.fullCircle
+    ? 0.0
+    : normalize_angle_rad(
+      shape.clockRange.startRad + 0.5 * shape.clockRange.spanRad);
+  const double radial = std::sin(angle);
+  direction = {
+    radial * std::cos(clock),
+    radial * std::sin(clock),
+    std::cos(angle),
+  };
+  return true;
+}
+
+bool cell_has_moving_local_shape_ray_for_entire_interval(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const IntervalShapeProofContext& context,
+    bool include_shape_subcones,
+    const ResolvedVisibilityState* midpoint = nullptr) {
+  if (!context.valid) {
+    return false;
+  }
+  auto ray_proves_access = [&](SensorVec3 local_direction) {
+    return fixed_local_ray_ground_track_inside_cell(
+      cell,
+      sensor,
+      local_direction,
+      start,
+      stop,
+      context.sweptCap,
+      context.boresight,
+      context.xAxis,
+      context.yAxis);
+  };
+
+  SensorVec3 representative;
+  if (
+    representative_local_shape_direction(sensor, representative) &&
+    ray_proves_access(representative)
+  ) {
+    return true;
+  }
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (
+    midpoint &&
+    has_solid_conic_continuum_contract(sensor)
+  ) {
+    SolidConicSpatialSearch spatial_search{
+      cell,
+      sensor,
+      *midpoint,
+    };
+    const bool has_exact_witness =
+      optimize_solid_conic_rectangle_witness(spatial_search) ||
+      search_solid_conic_surface_patch(
+        spatial_search,
+        cell.minLatitudeDeg,
+        cell.maxLatitudeDeg,
+        cell.minLongitudeDeg,
+        cell.maxLongitudeDeg,
+        0);
+    if (has_exact_witness && spatial_search.hasPreferred) {
+      const Vec3 surface_position = geodetic_to_ecef({
+        spatial_search.preferredLongitudeDeg / kRadiansToDegrees,
+        spatial_search.preferredLatitudeDeg / kRadiansToDegrees,
+        0.0,
+      });
+      const Vec3 midpoint_look = subtract(
+        surface_position,
+        midpoint->state.position);
+      if (ray_proves_access({
+            dot(midpoint_look, midpoint->frame.xAxis),
+            dot(midpoint_look, midpoint->frame.yAxis),
+            dot(midpoint_look, midpoint->frame.boresight),
+          })) {
+        return true;
+      }
+    }
+  }
+  if (
+    !include_shape_subcones ||
+    shape.kind != SensorShapeKind::SarAnnularSector ||
+    shape.clockRange.fullCircle
+  ) {
+    return false;
+  }
+  constexpr int kLookPartitions = 2;
+  constexpr int kClockPartitions = 2;
+  const double look_span_rad =
+    shape.outerHalfAngleRad - shape.innerHalfAngleRad;
+  for (int look_index = 0; look_index < kLookPartitions; ++look_index) {
+    const double look_rad = shape.innerHalfAngleRad +
+      (static_cast<double>(look_index) + 0.5) *
+        look_span_rad / kLookPartitions;
+    const double transverse = std::sin(look_rad);
+    for (int clock_index = 0; clock_index < kClockPartitions; ++clock_index) {
+      const double clock_rad = normalize_angle_rad(
+        shape.clockRange.startRad +
+        (static_cast<double>(clock_index) + 0.5) *
+          shape.clockRange.spanRad / kClockPartitions);
+      if (ray_proves_access({
+            transverse * std::cos(clock_rad),
+            transverse * std::sin(clock_rad),
+            std::cos(look_rad),
+          })) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool conservative_enclosing_local_shape_cap(
+    const SensorConfig& sensor,
+    SensorVec3& center_direction,
+    double& angular_radius_rad) {
+  const SensorShapeContract& shape = sensor.shapeContract;
+  constexpr double kPi = 3.14159265358979323846;
+  switch (shape.kind) {
+    case SensorShapeKind::Rectangular: {
+      center_direction = {0.0, 0.0, 1.0};
+      if (
+        shape.crossTrackHalfAngleRad >= 0.5 * kPi ||
+        shape.alongTrackHalfAngleRad >= 0.5 * kPi
+      ) {
+        angular_radius_rad = 0.5 * kPi;
+      } else {
+        angular_radius_rad = std::atan(std::hypot(
+          std::tan(shape.crossTrackHalfAngleRad),
+          std::tan(shape.alongTrackHalfAngleRad)));
+      }
+      return true;
+    }
+    case SensorShapeKind::Conic:
+      center_direction = {0.0, 0.0, 1.0};
+      angular_radius_rad = clamp(shape.outerHalfAngleRad, 0.0, kPi);
+      return true;
+    case SensorShapeKind::SarAnnularSector: {
+      if (
+        shape.outerHalfAngleRad < shape.innerHalfAngleRad ||
+        shape.innerHalfAngleRad < 0.0 ||
+        shape.outerHalfAngleRad > kPi
+      ) {
+        return false;
+      }
+      if (shape.clockRange.fullCircle) {
+        center_direction = {0.0, 0.0, 1.0};
+        angular_radius_rad = shape.outerHalfAngleRad;
+        return true;
+      }
+      const double look_center_rad = 0.5 * (
+        shape.innerHalfAngleRad + shape.outerHalfAngleRad);
+      const double clock_center_rad = normalize_angle_rad(
+        shape.clockRange.startRad + 0.5 * shape.clockRange.spanRad);
+      const double transverse = std::sin(look_center_rad);
+      center_direction = {
+        transverse * std::cos(clock_center_rad),
+        transverse * std::sin(clock_center_rad),
+        std::cos(look_center_rad),
+      };
+      // Move first in look angle and then along a constant-look small circle.
+      // The latter path length is sin(look) times its clock-angle sweep, so
+      // the triangle inequality encloses the complete annular sector.
+      double maximum_transverse_scale = std::max(
+        std::sin(shape.innerHalfAngleRad),
+        std::sin(shape.outerHalfAngleRad));
+      if (
+        shape.innerHalfAngleRad <= 0.5 * kPi &&
+        shape.outerHalfAngleRad >= 0.5 * kPi
+      ) {
+        maximum_transverse_scale = 1.0;
+      }
+      angular_radius_rad = std::min(
+        kPi,
+        0.5 * (shape.outerHalfAngleRad - shape.innerHalfAngleRad) +
+          0.5 * maximum_transverse_scale * shape.clockRange.spanRad);
+      return true;
+    }
+    case SensorShapeKind::CustomPolygon:
+    case SensorShapeKind::Unknown:
+    default:
+      return false;
+  }
+}
+
+bool cell_intersects_conservative_local_shape_ground_track(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    const IntervalShapeProofContext& context,
+    const SweptSensorCap* precomputed_sar_caps,
+    int precomputed_sar_cap_count) {
+  if (!context.valid) {
+    return true;
+  }
+  auto local_cap_intersects = [&](
+      SensorVec3 local_center,
+      double local_radius_rad,
+      bool& proven) {
+    SweptSensorCap ground_cap;
+    if (!conservative_fixed_local_ray_ground_track_cap(
+          sensor,
+          local_center,
+          local_radius_rad,
+          start,
+          stop,
+          context.sweptCap,
+          context.boresight,
+          context.xAxis,
+          context.yAxis,
+          ground_cap)) {
+      proven = false;
+      return true;
+    }
+    return sdn::coverage::sphericalCapIntersectsRectangle(
+      ground_cap.center,
+      ground_cap.angularRadiusDeg,
+      cell.minGeocentricLatitudeDeg,
+      cell.maxGeocentricLatitudeDeg,
+      cell.minLongitudeDeg,
+      cell.maxLongitudeDeg);
+  };
+
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (
+    shape.kind == SensorShapeKind::SarAnnularSector &&
+    !shape.clockRange.fullCircle
+  ) {
+    if (precomputed_sar_cap_count >= 0) {
+      for (int cap_index = 0;
+           cap_index < precomputed_sar_cap_count;
+           ++cap_index) {
+        const SweptSensorCap& cap = precomputed_sar_caps[cap_index];
+        if (sdn::coverage::sphericalCapIntersectsRectangle(
+              cap.center,
+              cap.angularRadiusDeg,
+              cell.minGeocentricLatitudeDeg,
+              cell.maxGeocentricLatitudeDeg,
+              cell.minLongitudeDeg,
+              cell.maxLongitudeDeg)) {
+          return true;
+        }
+      }
+      // A zero count means the conservative construction was inconclusive.
+      return precomputed_sar_cap_count == 0;
+    }
+    // Cover the annular clock sector by a small union of local spherical
+    // caps. Each cap is an outer bound for its radial/clock sub-rectangle;
+    // rejecting the cell against every member therefore cannot drop access.
+    constexpr int kLookPartitions = 2;
+    constexpr int kClockPartitions = 1;
+    const double look_span_rad =
+      shape.outerHalfAngleRad - shape.innerHalfAngleRad;
+    if (look_span_rad < 0.0 || shape.clockRange.spanRad < 0.0) {
+      return true;
+    }
+    for (int look_index = 0; look_index < kLookPartitions; ++look_index) {
+      const double look_center_rad = shape.innerHalfAngleRad +
+        (static_cast<double>(look_index) + 0.5) *
+          look_span_rad / kLookPartitions;
+      const double transverse = std::sin(look_center_rad);
+      for (int clock_index = 0; clock_index < kClockPartitions; ++clock_index) {
+        const double clock_center_rad = normalize_angle_rad(
+          shape.clockRange.startRad +
+          (static_cast<double>(clock_index) + 0.5) *
+            shape.clockRange.spanRad / kClockPartitions);
+        const SensorVec3 local_center{
+          transverse * std::cos(clock_center_rad),
+          transverse * std::sin(clock_center_rad),
+          std::cos(look_center_rad),
+        };
+        // Changing look by d moves exactly d on the sphere; changing clock by
+        // d at fixed look follows a small-circle path no longer than d.
+        const double sub_minimum_look_rad =
+          shape.innerHalfAngleRad +
+          static_cast<double>(look_index) *
+            look_span_rad / kLookPartitions;
+        const double sub_maximum_look_rad =
+          shape.innerHalfAngleRad +
+          static_cast<double>(look_index + 1) *
+            look_span_rad / kLookPartitions;
+        double maximum_transverse_scale = std::max(
+          std::sin(sub_minimum_look_rad),
+          std::sin(sub_maximum_look_rad));
+        if (
+          sub_minimum_look_rad <= 0.5 * 3.14159265358979323846 &&
+          sub_maximum_look_rad >= 0.5 * 3.14159265358979323846
+        ) {
+          maximum_transverse_scale = 1.0;
+        }
+        const double local_radius_rad =
+          0.5 * look_span_rad / kLookPartitions +
+          0.5 * maximum_transverse_scale *
+            shape.clockRange.spanRad / kClockPartitions +
+          1.0e-12;
+        bool proven = true;
+        if (local_cap_intersects(local_center, local_radius_rad, proven)) {
+          return true;
+        }
+        if (!proven) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  SensorVec3 local_center;
+  double local_radius_rad = 0.0;
+  if (!conservative_enclosing_local_shape_cap(
+        sensor,
+        local_center,
+        local_radius_rad)) {
+    return true;
+  }
+  bool proven = true;
+  return local_cap_intersects(local_center, local_radius_rad, proven) ||
+    !proven;
+}
+
+bool cell_has_fixed_visible_witness_for_entire_interval(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& midpoint,
+    const ResolvedVisibilityState& stop) {
+  // Coarse cells can wholly contain a footprint without containing any of the
+  // nine lattice samples. Freeze exact interior shape rays' midpoint Earth
+  // hits (or their closest closed-cell points), then certify the same WGS84
+  // point—not a moving ray—for the complete interval. The small deterministic
+  // basis covers inscribed rectangular/SAR sub-cones; it is only a source of
+  // proof witnesses, never a sample-based acceptance rule.
+  UnitDirectionEnvelope boresight;
+  UnitDirectionEnvelope x_axis;
+  UnitDirectionEnvelope y_axis;
+  if (!resolved_frame_envelopes(
+        start,
+        stop,
+        boresight,
+        x_axis,
+        y_axis)) {
+    return false;
+  }
+  auto direction_proves_access = [&](SensorVec3 local_direction) {
+    const bool visible = fixed_midpoint_local_ray_witness_visible_for_entire_interval(
+      cell,
+      sensor,
+      local_direction,
+      start,
+      midpoint,
+      stop,
+      &boresight,
+      &x_axis,
+      &y_axis);
+    return visible;
+  };
+
+  SensorVec3 local_direction;
+  if (
+    representative_local_shape_direction(sensor, local_direction) &&
+    direction_proves_access(local_direction)
+  ) {
+    return true;
+  }
+
+  for (int sample_index = 0; sample_index < cell.sampleCount; ++sample_index) {
+    if (fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
+          cell.samplePositions[sample_index],
+          cell.sampleNormals[sample_index],
+          sensor,
+          start,
+          stop,
+          boresight,
+          x_axis,
+          y_axis)) {
+      return true;
+    }
+  }
+
+  constexpr double kInteriorFractions[] = {0.25, 0.5, 0.75};
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (shape.kind == SensorShapeKind::Rectangular) {
+    for (double cross_fraction : kInteriorFractions) {
+      const double cross_angle =
+        (2.0 * cross_fraction - 1.0) * shape.crossTrackHalfAngleRad;
+      for (double along_fraction : kInteriorFractions) {
+        const double along_angle =
+          (2.0 * along_fraction - 1.0) * shape.alongTrackHalfAngleRad;
+        if (direction_proves_access({
+              std::tan(cross_angle),
+              std::tan(along_angle),
+              1.0,
+            })) {
+          return true;
+        }
+      }
+    }
+  } else if (
+    shape.kind == SensorShapeKind::Conic ||
+    shape.kind == SensorShapeKind::SarAnnularSector
+  ) {
+    for (double radial_fraction : kInteriorFractions) {
+      const double angle =
+        shape.innerHalfAngleRad +
+        radial_fraction * (
+          shape.outerHalfAngleRad - shape.innerHalfAngleRad);
+      const double radial = std::sin(angle);
+      for (double clock_fraction : kInteriorFractions) {
+        const double clock = shape.clockRange.fullCircle
+          ? 2.0 * 3.14159265358979323846 * clock_fraction
+          : normalize_angle_rad(
+            shape.clockRange.startRad +
+            clock_fraction * shape.clockRange.spanRad);
+        if (direction_proves_access({
+              radial * std::cos(clock),
+              radial * std::sin(clock),
+              std::cos(angle),
+            })) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+bool exact_visibility_geometry_is_constant(
+    const State& start,
+    const State& stop) {
+  auto same_vec3 = [](Vec3 left, Vec3 right) {
+    return
+      left.x == right.x &&
+      left.y == right.y &&
+      left.z == right.z;
+  };
+  return
+    same_vec3(start.position, stop.position) &&
+    same_vec3(start.velocity, stop.velocity) &&
+    start.sensorFrame.valid == stop.sensorFrame.valid &&
+    (!start.sensorFrame.valid || (
+      same_vec3(start.sensorFrame.boresight, stop.sensorFrame.boresight) &&
+      same_vec3(start.sensorFrame.xAxis, stop.sensorFrame.xAxis) &&
+      same_vec3(start.sensorFrame.yAxis, stop.sensorFrame.yAxis)));
+}
+
+bool cell_intersects_conservative_swept_sensor_cap(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop) {
+  const SweptSensorCap cap = conservative_swept_sensor_cap(
+    start,
+    stop,
+    sensor);
+  return sdn::coverage::sphericalCapIntersectsRectangle(
+    cap.center,
+    cap.angularRadiusDeg,
+    cell.minGeocentricLatitudeDeg,
+    cell.maxGeocentricLatitudeDeg,
+    cell.minLongitudeDeg,
+    cell.maxLongitudeDeg);
+}
+
+double extend_fixed_surface_witness_proof_from_sample(
+    Vec3 surface_position,
+    Vec3 surface_normal,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& interpolation_start,
+    const ResolvedVisibilityState& interpolation_stop,
+    const ResolvedVisibilityState& anchor,
+    const ResolvedVisibilityState& target) {
+  const double anchor_time = anchor.state.elapsedSeconds;
+  const double target_time = target.state.elapsedSeconds;
+  if (anchor_time == target_time) {
+    return anchor_time;
+  }
+  auto interval_is_proven = [&](double candidate_time) {
+    const ResolvedVisibilityState candidate = resolve_visibility_state(
+      interpolate_state(
+        interpolation_start.state,
+        interpolation_stop.state,
+        candidate_time));
+    const ResolvedVisibilityState& proof_start =
+      candidate_time < anchor_time ? candidate : anchor;
+    const ResolvedVisibilityState& proof_stop =
+      candidate_time < anchor_time ? anchor : candidate;
+    return fixed_surface_witness_visible_for_entire_interval(
+      surface_position,
+      surface_normal,
+      sensor,
+      proof_start,
+      proof_stop);
+  };
+  if (interval_is_proven(target_time)) {
+    return target_time;
+  }
+  if (!interval_is_proven(anchor_time)) {
+    return anchor_time;
+  }
+
+  // The same immutable WGS84 point is the authority for every accepted
+  // candidate. Bisection only enlarges an already-proven interval; it never
+  // infers a transition from aggregate cell visibility.
+  double proven_time = anchor_time;
+  double unproven_time = target_time;
+  constexpr int kWitnessProofExtensionIterations = 16;
+  for (int iteration = 0;
+       iteration < kWitnessProofExtensionIterations;
+       ++iteration) {
+    const double candidate_time = 0.5 * (proven_time + unproven_time);
+    if (interval_is_proven(candidate_time)) {
+      proven_time = candidate_time;
+    } else {
+      unproven_time = candidate_time;
+    }
+  }
+  return proven_time;
+}
+
+void append_proven_conic_leaf_witness_neighborhood(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& interpolation_start,
+    const ResolvedVisibilityState& interpolation_stop,
+    const ResolvedVisibilityState& left_target,
+    const ResolvedVisibilityState& sample,
+    bool visible_sample,
+    const ResolvedVisibilityState& right_target,
+    std::vector<VisibilityInterval>& intervals) {
+  if (!visible_sample) {
+    return;
+  }
+  Vec3 surface_position;
+  if (!exact_surface_witness_from_resolved_state(
+        cell,
+        sensor,
+        sample,
+        surface_position)) {
+    // The caller's exact predicate still proves this instant even if a
+    // witness cannot be recovered (for example, at a numeric boundary).
+    intervals.push_back({
+      sample.state.elapsedSeconds,
+      sample.state.elapsedSeconds,
+      true,
+    });
+    return;
+  }
+  const Vec3 surface_normal = geodetic_surface_normal(surface_position);
+  const double proven_left = extend_fixed_surface_witness_proof_from_sample(
+    surface_position,
+    surface_normal,
+    sensor,
+    interpolation_start,
+    interpolation_stop,
+    sample,
+    left_target);
+  const double proven_right = extend_fixed_surface_witness_proof_from_sample(
+    surface_position,
+    surface_normal,
+    sensor,
+    interpolation_start,
+    interpolation_stop,
+    sample,
+    right_target);
+  intervals.push_back({
+    std::min(proven_left, proven_right),
+    std::max(proven_left, proven_right),
+    true,
+  });
+}
+
+void append_refined_visibility_intervals_impl(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& interpolation_start,
+    const ResolvedVisibilityState& interpolation_stop,
+    const ResolvedVisibilityState& start,
+    bool visible_start,
+    const ResolvedVisibilityState& stop,
+    bool visible_stop,
+    int depth,
+    std::vector<VisibilityInterval>& intervals) {
+  if (!(stop.state.elapsedSeconds > start.state.elapsedSeconds)) {
+    return;
+  }
+  if (exact_visibility_geometry_is_constant(start.state, stop.state)) {
+    if (visible_start) {
+      intervals.push_back({
+        start.state.elapsedSeconds,
+        stop.state.elapsedSeconds,
+        true,
+      });
+    }
+    return;
+  }
+
+  const bool solid_conic_continuum =
+    has_solid_conic_continuum_contract(sensor);
+  if (
+    solid_conic_continuum &&
+    solid_conic_nadir_sweep_proven_disjoint(
+      cell,
+      sensor,
+      start,
+      stop)
+  ) {
+    return;
+  }
+
+  // Three aggregate visible probes are not a continuum proof: they can use
+  // different cell points. Accept a complete interval only when the swept
+  // outer footprint is proven to remain inside this cell and one immutable
+  // local ray is proven to hit WGS84 within range throughout the interval.
+  if (cell_contains_continuously_visible_sensor_footprint(
+        cell,
+        sensor,
+        start,
+        stop)) {
+    intervals.push_back({
+      start.state.elapsedSeconds,
+      stop.state.elapsedSeconds,
+      true,
+    });
+    return;
+  }
+
+  const IntervalShapeProofContext proof_context =
+    solid_conic_continuum
+    ? IntervalShapeProofContext{}
+    : interval_shape_proof_context(sensor, start, stop);
+  SweptSensorCap sar_limiting_caps[2];
+  const bool has_partial_sar_shape =
+    sensor.shapeContract.kind == SensorShapeKind::SarAnnularSector &&
+    !sensor.shapeContract.clockRange.fullCircle;
+  const bool sar_ground_cap_checkpoint =
+    depth == 0;
+  const int sar_limiting_cap_count =
+    has_partial_sar_shape && sar_ground_cap_checkpoint
+    ? conservative_sar_interval_ground_caps(
+      sensor,
+      start,
+      stop,
+      proof_context,
+      sar_limiting_caps)
+    : -1;
+  if (
+    !solid_conic_continuum &&
+    !cell_intersects_conservative_local_shape_ground_track(
+      cell,
+      sensor,
+      start,
+      stop,
+      proof_context,
+      sar_limiting_caps,
+      sar_limiting_cap_count)
+  ) {
+    return;
+  }
+
+  const double mid_time = 0.5 * (
+    start.state.elapsedSeconds + stop.state.elapsedSeconds);
+  const ResolvedVisibilityState mid = resolve_visibility_state(
+    interpolate_state(
+      interpolation_start.state,
+      interpolation_stop.state,
+      mid_time));
+  const bool nonconic_proof_checkpoint =
+    sensor.shapeContract.kind == SensorShapeKind::SarAnnularSector
+    ? (depth == 0 || depth == 4 || depth == 8)
+    : (depth == 0 || depth == 3 || depth == 6 || depth == 9);
+  const bool has_interval_geometry_proof =
+    sensor.shapeContract.kind == SensorShapeKind::Conic ||
+    sensor.shapeContract.kind == SensorShapeKind::Rectangular ||
+    sensor.shapeContract.kind == SensorShapeKind::SarAnnularSector;
+  const bool representative_ray_proves_access =
+    !solid_conic_continuum &&
+    (sensor.shapeContract.kind != SensorShapeKind::SarAnnularSector ||
+      nonconic_proof_checkpoint) &&
+    cell_has_moving_local_shape_ray_for_entire_interval(
+      cell,
+      sensor,
+      start,
+      stop,
+      proof_context,
+      false);
+  if (representative_ray_proves_access) {
+    intervals.push_back({
+      start.state.elapsedSeconds,
+      stop.state.elapsedSeconds,
+      true,
+    });
+    return;
+  }
+  SensorVec3 representative_local_direction;
+  const bool representative_fixed_witness_proves_access =
+    !solid_conic_continuum &&
+    representative_local_shape_direction(
+      sensor,
+      representative_local_direction) &&
+    fixed_midpoint_local_ray_witness_visible_for_entire_interval(
+      cell,
+      sensor,
+      representative_local_direction,
+      start,
+      mid,
+      stop);
+  if (representative_fixed_witness_proves_access) {
+    intervals.push_back({
+      start.state.elapsedSeconds,
+      stop.state.elapsedSeconds,
+      true,
+    });
+    return;
+  }
+  bool interval_geometry_was_checked = false;
+  if (
+    sensor.shapeContract.kind == SensorShapeKind::SarAnnularSector &&
+    nonconic_proof_checkpoint &&
+    !visible_start &&
+    !visible_stop
+  ) {
+    interval_geometry_was_checked = true;
+    const CellIntervalGeometryProof geometry_proof =
+      cell_interval_geometry_proof(
+        cell,
+        sensor,
+        start,
+        stop,
+        proof_context,
+        depth >= 8 ? 10 : 7);
+    if (geometry_proof == CellIntervalGeometryProof::Visible) {
+      intervals.push_back({
+        start.state.elapsedSeconds,
+        stop.state.elapsedSeconds,
+        true,
+      });
+      return;
+    }
+    if (geometry_proof == CellIntervalGeometryProof::Disjoint) {
+      return;
+    }
+  }
+  const bool visible_mid = cell_visible_from_resolved_state(
+    cell,
+    sensor,
+    mid);
+  if (
+    solid_conic_continuum &&
+    (visible_start || visible_mid || visible_stop)
+  ) {
+    const IntervalShapeProofContext conic_proof_context =
+      interval_shape_proof_context(sensor, start, stop);
+    if (cell_has_moving_local_shape_ray_for_entire_interval(
+          cell,
+          sensor,
+          start,
+          stop,
+          conic_proof_context,
+          false,
+          &mid)) {
+      intervals.push_back({
+        start.state.elapsedSeconds,
+        stop.state.elapsedSeconds,
+        true,
+      });
+      return;
+    }
+  }
+  if (
+    (visible_start || visible_mid || visible_stop ||
+      (nonconic_proof_checkpoint &&
+        sensor.shapeContract.kind != SensorShapeKind::SarAnnularSector)) &&
+    cell_has_fixed_visible_witness_for_entire_interval(
+      cell,
+      sensor,
+      start,
+      mid,
+      stop)
+  ) {
+    intervals.push_back({
+      start.state.elapsedSeconds,
+      stop.state.elapsedSeconds,
+      true,
+    });
+    return;
+  }
+
+  if (
+    !visible_start && !visible_mid && !visible_stop &&
+    nonconic_proof_checkpoint &&
+    !interval_geometry_was_checked &&
+    !solid_conic_continuum &&
+    has_interval_geometry_proof
+  ) {
+    const CellIntervalGeometryProof geometry_proof =
+      cell_interval_geometry_proof(
+        cell,
+        sensor,
+        start,
+        stop,
+        proof_context,
+        depth >= 8 ? 10 : 7);
+    if (geometry_proof == CellIntervalGeometryProof::Visible) {
+      intervals.push_back({
+        start.state.elapsedSeconds,
+        stop.state.elapsedSeconds,
+        true,
+      });
+      return;
+    }
+    if (geometry_proof == CellIntervalGeometryProof::Disjoint) {
+      return;
+    }
+  }
+
+  const bool swept_cap_intersects =
+    cell_intersects_conservative_swept_sensor_cap(
+      cell,
+      sensor,
+      start,
+      stop);
+  if (!visible_start && !visible_mid && !visible_stop &&
+      !swept_cap_intersects) {
+    return;
+  }
+
+  if (depth >= kVisibilitySearchMaxDepth) {
+    if (solid_conic_continuum) {
+      // Never connect existential cell samples by assumption. Recover the
+      // exact WGS84 witness behind each positive sample and extend it only as
+      // far as that same immutable point proves continuous visibility. Exact
+      // tangencies naturally remain zero-duration singleton intervals.
+      append_proven_conic_leaf_witness_neighborhood(
+        cell,
+        sensor,
+        interpolation_start,
+        interpolation_stop,
+        start,
+        start,
+        visible_start,
+        mid,
+        intervals);
+      append_proven_conic_leaf_witness_neighborhood(
+        cell,
+        sensor,
+        interpolation_start,
+        interpolation_stop,
+        start,
+        mid,
+        visible_mid,
+        stop,
+        intervals);
+      append_proven_conic_leaf_witness_neighborhood(
+        cell,
+        sensor,
+        interpolation_start,
+        interpolation_stop,
+        mid,
+        stop,
+        visible_stop,
+        stop,
+        intervals);
+      return;
+    }
+    const VisibilityInterval refined = refined_visibility_interval(
+      cell,
+      sensor,
+      interpolation_start,
+      interpolation_stop,
+      start,
+      stop);
+    if (refined.valid) {
+      intervals.push_back(refined);
+    }
+    return;
+  }
+
+  append_refined_visibility_intervals_impl(
+    cell,
+    sensor,
+    interpolation_start,
+    interpolation_stop,
+    start,
+    visible_start,
+    mid,
+    visible_mid,
+    depth + 1,
+    intervals);
+  append_refined_visibility_intervals_impl(
+    cell,
+    sensor,
+    interpolation_start,
+    interpolation_stop,
+    mid,
+    visible_mid,
+    stop,
+    visible_stop,
+    depth + 1,
+    intervals);
+}
+
+void append_refined_visibility_intervals(
+    const GridCellGeometry& cell,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& interpolation_start,
+    const ResolvedVisibilityState& interpolation_stop,
+    double interval_start_seconds,
+    double interval_stop_seconds,
+    int depth,
+    std::vector<VisibilityInterval>& intervals) {
+  if (!(interval_stop_seconds > interval_start_seconds)) {
+    return;
+  }
+  const ResolvedVisibilityState start = resolve_visibility_state(
+    interpolate_state(
+      interpolation_start.state,
+      interpolation_stop.state,
+      interval_start_seconds));
+  const ResolvedVisibilityState stop = resolve_visibility_state(
+    interpolate_state(
+      interpolation_start.state,
+      interpolation_stop.state,
+      interval_stop_seconds));
+  const bool visible_start = cell_visible_from_resolved_state(
+    cell,
+    sensor,
+    start);
+  const bool visible_stop = cell_visible_from_resolved_state(
+    cell,
+    sensor,
+    stop);
+  append_refined_visibility_intervals_impl(
+    cell,
+    sensor,
+    interpolation_start,
+    interpolation_stop,
+    start,
+    visible_start,
+    stop,
+    visible_stop,
+    depth,
+    intervals);
 }
 
 std::map<int, std::vector<const SwathSegment*>> index_swaths_by_sensor(
@@ -1174,7 +5447,7 @@ std::map<int, std::vector<const SwathSegment*>> index_swaths_by_sensor(
 }
 
 void add_cell_interval(Cell& cell, const VisibilityInterval& interval, int sensor_id) {
-  if (!interval.valid || !(interval.stop > interval.start)) {
+  if (!interval.valid || interval.stop < interval.start) {
     return;
   }
   cell.intervals.push_back({interval.start, interval.stop, {sensor_id}});
@@ -1209,28 +5482,25 @@ uint32_t next_candidate_generation(
 }
 
 void append_sensor_cap_candidates(
-    const ResolvedVisibilityState& resolved,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
     const SensorConfig& sensor,
     const sdn::coverage::GridDefinition& grid,
     std::vector<uint32_t>& candidate_marks,
     uint32_t generation,
     std::vector<uint32_t>& candidate_cell_indices) {
-  const Vec3 nadir = normalize(
-    scale(resolved.state.position, -1.0),
-    {0.0, 0.0, -1.0});
-  const double boresight_off_nadir_rad = std::acos(clamp(
-    dot(resolved.frame.boresight, nadir),
-    -1.0,
-    1.0));
-  const double angular_radius_deg =
-    sdn::coverage::conservativeGroundCapRadiusDeg(
-      magnitude(resolved.state.position),
-      kWgs84B,
-      (boresight_off_nadir_rad + sensor.maxBoundaryAngleRad) *
-        kRadiansToDegrees);
+  const SweptSensorCap cap = conservative_swept_sensor_cap(
+    start,
+    stop,
+    sensor);
+  const double angular_radius_deg = cap.angularRadiusDeg +
+      // Candidate caps are expressed in geodetic grid coordinates while the
+      // radius is geocentric. Twice the maximum WGS84 geodetic/geocentric
+      // latitude separation prevents fine polar-grid false negatives.
+      2.0 * kMaximumGeodeticGeocentricLatitudeSeparationDeg;
   sdn::coverage::appendSphericalCapCandidates(
     grid,
-    horizon_cap_center(resolved.state),
+    horizon_cap_center(start.state),
     angular_radius_deg,
     candidate_marks,
     generation,
@@ -1258,35 +5528,12 @@ void accumulate_grid_coverage_products_impl(
     const auto process_segment = [&](
         const ResolvedVisibilityState& seg_start,
         const ResolvedVisibilityState& seg_stop) {
-      const double midpoint_seconds = 0.5 * (
-        seg_start.state.elapsedSeconds +
-        seg_stop.state.elapsedSeconds);
-      const State midpoint_state = interpolate_state(
-        seg_start.state,
-        seg_stop.state,
-        midpoint_seconds);
-      const ResolvedVisibilityState midpoint_resolved =
-        resolve_visibility_state(midpoint_state);
-
       candidate_generation = next_candidate_generation(
         candidate_generation,
         candidate_marks);
       candidate_cell_indices.clear();
       append_sensor_cap_candidates(
         seg_start,
-        track.sensor,
-        candidate_grid,
-        candidate_marks,
-        candidate_generation,
-        candidate_cell_indices);
-      append_sensor_cap_candidates(
-        midpoint_resolved,
-        track.sensor,
-        candidate_grid,
-        candidate_marks,
-        candidate_generation,
-        candidate_cell_indices);
-      append_sensor_cap_candidates(
         seg_stop,
         track.sensor,
         candidate_grid,
@@ -1300,71 +5547,26 @@ void accumulate_grid_coverage_products_impl(
         }
         Cell& cell = cells[cell_index];
         ensure_cell_geometry(cell, grid);
-        const VisibilityInterval interval = refined_visibility_interval(
+        std::vector<VisibilityInterval> intervals;
+        append_refined_visibility_intervals(
           cell.geometry,
           track.sensor,
           seg_start,
-          seg_stop);
-        add_cell_interval(cell, interval, track.sensor.sensorId);
+          seg_stop,
+          seg_start.state.elapsedSeconds,
+          seg_stop.state.elapsedSeconds,
+          0,
+          intervals);
+        for (const VisibilityInterval& interval : intervals) {
+          add_cell_interval(cell, interval, track.sensor.sensorId);
+        }
       }
     };
-
-    // A sensor whose frame rotates quickly between samples (e.g. a
-    // quaternion sweep) can slew its footprint by more than its own angular
-    // width within one segment; endpoint+midpoint tests then miss every
-    // cell the beam crossed in between. Subdivide such segments so the
-    // boresight moves only a fraction of the sensor's angular extent per
-    // sub-segment. Slow-rotating (nadir/side-look without sweep) segments
-    // keep a subdivision count of 1 and pay nothing extra.
-    const double rotation_threshold = std::max(
-      0.25 * track.sensor.maxBoundaryAngleRad,
-      1.0 / kRadiansToDegrees);
 
     for (size_t state_index = 0; state_index + 1 < track.states.size(); ++state_index) {
       const ResolvedVisibilityState& start_resolved = resolved_states[state_index];
       const ResolvedVisibilityState& stop_resolved = resolved_states[state_index + 1];
-
-      int subdivisions = 1;
-      if (
-        start_resolved.frame.valid &&
-        stop_resolved.frame.valid &&
-        rotation_threshold > 0.0
-      ) {
-        const double boresight_dot = clamp(
-          dot(start_resolved.frame.boresight, stop_resolved.frame.boresight),
-          -1.0,
-          1.0);
-        const double rotation = std::acos(boresight_dot);
-        if (std::isfinite(rotation) && rotation > rotation_threshold) {
-          subdivisions = std::min(
-            32,
-            static_cast<int>(std::ceil(rotation / rotation_threshold)));
-        }
-      }
-
-      if (subdivisions <= 1) {
-        process_segment(start_resolved, stop_resolved);
-        continue;
-      }
-
-      const double seg_start_seconds = start_resolved.state.elapsedSeconds;
-      const double seg_span =
-        stop_resolved.state.elapsedSeconds - seg_start_seconds;
-      ResolvedVisibilityState previous = start_resolved;
-      for (int sub = 1; sub <= subdivisions; ++sub) {
-        ResolvedVisibilityState current;
-        if (sub == subdivisions) {
-          current = stop_resolved;
-        } else {
-          const State sub_state = interpolate_state(
-            start_resolved.state,
-            stop_resolved.state,
-            seg_start_seconds + (seg_span * sub) / subdivisions);
-          current = resolve_visibility_state(sub_state);
-        }
-        process_segment(previous, current);
-        previous = current;
-      }
+      process_segment(start_resolved, stop_resolved);
     }
   }
 }
@@ -1385,12 +5587,9 @@ void accumulate_grid_coverage_products(
   accumulate_grid_coverage_products_impl(cells, tracks, grid);
 }
 
-// A cell at the swath edge can flicker in and out of visibility between
-// consecutive propagation samples (footprint corner clips), splitting one
-// physical flyover into several refined intervals separated by sub-sample
-// gaps. Those fragments must merge into one access or pass counts double.
-// The tolerance is a couple of sample steps — orders of magnitude below any
-// real LEO revisit — so distinct passes are never merged.
+// Merge only overlapping or touching closed intervals. State cadence is an
+// interpolation input and cannot define a permissible access gap: using it as
+// a merge tolerance would erase real pass starts.
 void merge_intervals(
     Cell& cell,
     double scenario_start,
@@ -1405,12 +5604,15 @@ void merge_intervals(
   const double tolerance = std::max(0.0, gap_tolerance_seconds);
   std::vector<Interval> merged;
   for (const auto& interval : cell.intervals) {
+    if (interval.stop < scenario_start || interval.start > scenario_stop) {
+      continue;
+    }
     const Interval clipped{
       clamp(interval.start, scenario_start, scenario_stop),
       clamp(interval.stop, scenario_start, scenario_stop),
       interval.contributingSensorIds,
     };
-    if (clipped.stop <= clipped.start) {
+    if (clipped.stop < clipped.start) {
       continue;
     }
     if (merged.empty() || clipped.start > merged.back().stop + tolerance) {
@@ -1425,22 +5627,6 @@ void merge_intervals(
   for (const auto& interval : cell.intervals) {
     merge_sensor_ids(cell.contributingSensorIds, interval.contributingSensorIds);
   }
-}
-
-double interval_merge_gap_tolerance_seconds(
-    const std::vector<SensorTrack>& tracks) {
-  double max_step = 0.0;
-  for (const auto& track : tracks) {
-    for (size_t index = 1; index < track.states.size(); ++index) {
-      const double step =
-        track.states[index].elapsedSeconds -
-        track.states[index - 1].elapsedSeconds;
-      if (std::isfinite(step) && step > 0.0) {
-        max_step = std::max(max_step, step);
-      }
-    }
-  }
-  return 2.0 * max_step;
 }
 
 void update_cell_statistics(
@@ -1533,10 +5719,10 @@ CoverageStatistics coverage_statistics(
     revisit_gap_total += cell.revisitGapTotal;
     statistics.maxResponseTimeSec = std::max(statistics.maxResponseTimeSec, cell.maxResponse);
     response_sum += cell.meanResponse;
-    if (cell.totalAccess > 0.0) {
+    if (cell.accessCount > 0) {
       ++statistics.accessedCells;
-      statistics.totalAccessDurationSec += cell.totalAccess;
     }
+    statistics.totalAccessDurationSec += cell.totalAccess;
     if (cell.contributingSensorIds.size() > 1) {
       ++statistics.multiAccessCells;
     }
@@ -1551,16 +5737,6 @@ CoverageStatistics coverage_statistics(
     ? 0.0
     : 100.0 * static_cast<double>(statistics.accessedCells) / static_cast<double>(cells.size());
   return statistics;
-}
-
-uint32_t total_window_count(const std::vector<SensorTrack>& tracks) {
-  uint32_t total = 0;
-  for (const auto& track : tracks) {
-    if (track.states.size() > 1) {
-      total = std::max(total, static_cast<uint32_t>(track.states.size() - 1));
-    }
-  }
-  return total;
 }
 
 uint32_t statistics_count(size_t value) {
@@ -1776,9 +5952,7 @@ std::vector<uint8_t> build_scv_result(
   raster_bucket_start_seconds.reserve(raster_bucket_count);
   std::vector<double> raster_bucket_stop_seconds;
   raster_bucket_stop_seconds.reserve(raster_bucket_count);
-  const double raster_step = raster_bucket_count > 0
-    ? duration / static_cast<double>(raster_bucket_count)
-    : duration;
+  const double raster_step = grid.step;
   for (uint32_t bucket_index = 0; bucket_index < raster_bucket_count; ++bucket_index) {
     const double bucket_start =
       grid.start + static_cast<double>(bucket_index) * raster_step;
@@ -1839,15 +6013,20 @@ std::vector<uint8_t> build_scv_result(
         for (const auto& interval : cell.intervals) {
           const double interval_start = std::max(interval.start, grid.start);
           const double interval_stop = std::min(interval.stop, grid.stop);
-          if (!(interval_stop > interval_start)) {
+          if (interval_stop < interval_start) {
             continue;
           }
-          const uint32_t first_window = static_cast<uint32_t>(std::max(
-            0.0,
-            std::floor((interval_start - grid.start) / raster_step)));
-          const uint32_t last_window = static_cast<uint32_t>(std::min(
-            static_cast<double>(raster_bucket_count - 1u),
-            std::ceil((interval_stop - grid.start) / raster_step) - 1.0));
+          const auto containing_window = [&](double elapsed_seconds) {
+            if (elapsed_seconds >= grid.stop) {
+              return raster_bucket_count - 1u;
+            }
+            return static_cast<uint32_t>(clamp(
+              std::floor((elapsed_seconds - grid.start) / raster_step),
+              0.0,
+              static_cast<double>(raster_bucket_count - 1u)));
+          };
+          const uint32_t first_window = containing_window(interval_start);
+          const uint32_t last_window = containing_window(interval_stop);
           if (first_window > last_window) {
             continue;
           }
@@ -1855,7 +6034,14 @@ std::vector<uint8_t> build_scv_result(
             const double window_start =
               grid.start + static_cast<double>(window_index) * raster_step;
             const double window_stop = std::min(window_start + raster_step, grid.stop);
-            if (!(interval_stop > window_start && interval_start < window_stop)) {
+            const bool positive_duration_overlap =
+              interval_stop > interval_start &&
+              interval_stop >= window_start &&
+              interval_start < window_stop;
+            const bool singleton_in_window =
+              interval_stop == interval_start &&
+              window_index == first_window;
+            if (!positive_duration_overlap && !singleton_in_window) {
               continue;
             }
             const uint32_t word_index =
@@ -1914,7 +6100,7 @@ std::vector<uint8_t> build_scv_result(
           continue;
         }
         ++row_cell_count;
-        if (cell.totalAccess > 0.0) {
+        if (cell.accessCount > 0) {
           ++covered_cell_count;
         }
         revisit_sum += cell.meanRevisit;
@@ -2103,18 +6289,15 @@ std::vector<uint8_t> build_scv_result(
       &geometry_segments);
   }
 
-  const double step = total_windows > 0
-    ? duration / static_cast<double>(total_windows)
-    : duration;
   const auto time_grid = CreateSCVTimeGridDirect(
     builder,
-    nullptr,
-    0.0,
+    grid.epochIso.empty() ? nullptr : grid.epochIso.c_str(),
+    grid.epochJulianDate,
     grid.start,
     grid.stop,
-    step,
-    0,
-    total_windows);
+    grid.step,
+    grid.gridIndexStart,
+    grid.gridIndexCount);
   const auto target_body = CreateSCVEllipsoidDirect(
     builder,
     scvBodyKind_EARTH,
@@ -2546,7 +6729,7 @@ extern "C" int compute_sensor_coverage(void) {
     !swath_preview_output &&
     !input.includePackedGeometry;
 
-  const uint32_t total_windows = total_window_count(tracks);
+  const uint32_t total_windows = grid.gridIndexCount;
   const uint32_t progress_stride = std::max<uint32_t>(1, total_windows / 20);
   uint32_t completed_windows = 0;
   std::vector<FootprintSample> footprints;
@@ -2589,10 +6772,8 @@ extern "C" int compute_sensor_coverage(void) {
   }
 
   if (cells != nullptr) {
-    const double merge_gap_tolerance =
-      interval_merge_gap_tolerance_seconds(tracks);
     for (auto& cell : *cells) {
-      update_cell_statistics(cell, grid, merge_gap_tolerance);
+      update_cell_statistics(cell, grid, 0.0);
     }
   }
   const std::vector<Cell> empty_cells;

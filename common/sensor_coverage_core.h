@@ -27,6 +27,26 @@ double conservativeGroundCapRadiusDeg(
     double bodyMinimumRadiusM,
     double maximumLookAngleDeg);
 
+// Returns the exact minimum central angle on a sphere from `center` to any
+// point in the closed latitude/longitude rectangle. Longitudes are unwrapped
+// around the center, so edge cells adjacent to +/-180 degrees are handled
+// without a discontinuity. Callers working on WGS84 radial directions should
+// pass geocentric (not geodetic) latitude bounds.
+double minimumAngularDistanceToRectangleDeg(
+    const LonLat& center,
+    double minLatitudeDeg,
+    double maxLatitudeDeg,
+    double minLongitudeDeg,
+    double maxLongitudeDeg);
+
+bool sphericalCapIntersectsRectangle(
+    const LonLat& center,
+    double angularRadiusDeg,
+    double minLatitudeDeg,
+    double maxLatitudeDeg,
+    double minLongitudeDeg,
+    double maxLongitudeDeg);
+
 void appendAllGridCells(
     const GridDefinition& grid,
     std::vector<uint32_t>& marks,

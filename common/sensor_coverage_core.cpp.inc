@@ -95,6 +95,115 @@ double conservativeGroundCapRadiusDeg(
     horizonGroundAngleRad));
 }
 
+double minimumAngularDistanceToRectangleDeg(
+    const LonLat& center,
+    double minLatitudeDeg,
+    double maxLatitudeDeg,
+    double minLongitudeDeg,
+    double maxLongitudeDeg) {
+  if (
+    !std::isfinite(center.latitudeDeg) ||
+    !std::isfinite(center.longitudeDeg) ||
+    !std::isfinite(minLatitudeDeg) ||
+    !std::isfinite(maxLatitudeDeg) ||
+    !std::isfinite(minLongitudeDeg) ||
+    !std::isfinite(maxLongitudeDeg) ||
+    minLatitudeDeg > maxLatitudeDeg
+  ) {
+    return 0.0;
+  }
+
+  const double boundedMinLatitudeDeg =
+    clampCoverageValue(minLatitudeDeg, -90.0, 90.0);
+  const double boundedMaxLatitudeDeg =
+    clampCoverageValue(maxLatitudeDeg, -90.0, 90.0);
+  const double centerLatitudeRad = toCoverageRadians(
+    clampCoverageValue(center.latitudeDeg, -90.0, 90.0));
+
+  double longitudeDeltaRad = 0.0;
+  if (maxLongitudeDeg - minLongitudeDeg < 360.0) {
+    double minLongitude = unwrapLongitude(
+      minLongitudeDeg,
+      center.longitudeDeg);
+    double maxLongitude = unwrapLongitude(
+      maxLongitudeDeg,
+      center.longitudeDeg);
+    while (maxLongitude < minLongitude) {
+      maxLongitude += 360.0;
+    }
+
+    bool containsCenterLongitude = false;
+    for (int wrap = -1; wrap <= 1; ++wrap) {
+      const double candidate = center.longitudeDeg + 360.0 * wrap;
+      if (candidate >= minLongitude && candidate <= maxLongitude) {
+        containsCenterLongitude = true;
+        break;
+      }
+    }
+    if (!containsCenterLongitude) {
+      double minimumDeltaDeg = 180.0;
+      for (int wrap = -1; wrap <= 1; ++wrap) {
+        const double candidate = center.longitudeDeg + 360.0 * wrap;
+        minimumDeltaDeg = std::min(
+          minimumDeltaDeg,
+          std::min(
+            std::fabs(candidate - minLongitude),
+            std::fabs(candidate - maxLongitude)));
+      }
+      longitudeDeltaRad = toCoverageRadians(
+        clampCoverageValue(minimumDeltaDeg, 0.0, 180.0));
+    }
+  }
+
+  const double sinCenterLatitude = std::sin(centerLatitudeRad);
+  const double longitudeWeightedCosine =
+    std::cos(centerLatitudeRad) * std::cos(longitudeDeltaRad);
+  const double minLatitudeRad = toCoverageRadians(boundedMinLatitudeDeg);
+  const double maxLatitudeRad = toCoverageRadians(boundedMaxLatitudeDeg);
+
+  auto dotAtLatitude = [&](double latitudeRad) {
+    return
+      sinCenterLatitude * std::sin(latitudeRad) +
+      longitudeWeightedCosine * std::cos(latitudeRad);
+  };
+  double maximumDot = std::max(
+    dotAtLatitude(minLatitudeRad),
+    dotAtLatitude(maxLatitudeRad));
+  const double stationaryLatitude = std::atan2(
+    sinCenterLatitude,
+    longitudeWeightedCosine);
+  if (
+    stationaryLatitude >= minLatitudeRad &&
+    stationaryLatitude <= maxLatitudeRad
+  ) {
+    maximumDot = std::max(maximumDot, dotAtLatitude(stationaryLatitude));
+  }
+
+  return toCoverageDegrees(std::acos(clampCoverageValue(
+    maximumDot,
+    -1.0,
+    1.0)));
+}
+
+bool sphericalCapIntersectsRectangle(
+    const LonLat& center,
+    double angularRadiusDeg,
+    double minLatitudeDeg,
+    double maxLatitudeDeg,
+    double minLongitudeDeg,
+    double maxLongitudeDeg) {
+  if (!std::isfinite(angularRadiusDeg) || angularRadiusDeg < 0.0) {
+    return true;
+  }
+  constexpr double kInclusiveAngularToleranceDeg = 1.0e-9;
+  return minimumAngularDistanceToRectangleDeg(
+    center,
+    minLatitudeDeg,
+    maxLatitudeDeg,
+    minLongitudeDeg,
+    maxLongitudeDeg) <= angularRadiusDeg + kInclusiveAngularToleranceDeg;
+}
+
 void appendAllGridCells(
     const GridDefinition& grid,
     std::vector<uint32_t>& marks,
