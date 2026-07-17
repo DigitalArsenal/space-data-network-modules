@@ -57,6 +57,21 @@ if(NOT FLATBUFFERS_INCLUDE_DIR)
     message(FATAL_ERROR "flatbuffers headers not found. Install flatbuffers and retry.")
 endif()
 
+# Generated SDS C++ headers (flat licensing/core layout) — the SAME headers
+# iss-source / celestrak-parser reuse. Provides OEM_generated.h / OMM_generated.h
+# (+ RFM/TIM/CAT/PPE/MET) for the $OEM reader and $OMM builder. Overridable via
+# -DSDN_CORE_SDS_GENERATED_DIR or the env var of the same name.
+if(DEFINED ENV{SDN_CORE_SDS_GENERATED_DIR})
+    set(SDN_CORE_SDS_GENERATED_DIR "$ENV{SDN_CORE_SDS_GENERATED_DIR}" CACHE PATH "SDS generated C++ headers dir")
+else()
+    set(SDN_CORE_SDS_GENERATED_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../licensing/core/src/cpp/generated/sds"
+        CACHE PATH "SDS generated C++ headers dir")
+endif()
+if(NOT EXISTS "${SDN_CORE_SDS_GENERATED_DIR}/OEM_generated.h")
+    message(FATAL_ERROR "SDS generated headers not found at ${SDN_CORE_SDS_GENERATED_DIR} (need OEM_generated.h/OMM_generated.h). Set -DSDN_CORE_SDS_GENERATED_DIR.")
+endif()
+
 # Vallado SGP4 library (CelesTrak/fundamentals-of-astrodynamics)
 set(VALLADO_SGP4_DIR "${CMAKE_SOURCE_DIR}/deps/vallado-sgp4")
 add_library(sgp4_lib STATIC "${VALLADO_SGP4_DIR}/SGP4.cpp")
@@ -68,12 +83,22 @@ set(OD_SOURCES
     src/meme_parser.cpp
     src/frame_transform.cpp
     src/oem_parser.cpp
+    src/oem_fb_reader.cpp
+    src/omm_fb_builder.cpp
     src/sgp4_fitter.cpp
     src/plugin_runtime.cpp
 )
 
 add_library(od_lib STATIC ${OD_SOURCES})
 target_include_directories(od_lib PUBLIC include "${VALLADO_SGP4_DIR}")
+# The $OEM reader / $OMM builder TUs (oem_fb_reader.cpp / omm_fb_builder.cpp)
+# include the generated SDS + flatbuffers headers. PRIVATE: the reader/builder
+# public headers stay plain-C++ (no FlatBuffers types leak), so od_lib consumers
+# need neither include path.
+target_include_directories(od_lib PRIVATE
+    "${FLATBUFFERS_INCLUDE_DIR}"
+    "${SDN_CORE_SDS_GENERATED_DIR}"
+)
 target_link_libraries(od_lib PUBLIC sgp4_lib Eigen3::Eigen)
 
 # Test executable
@@ -92,6 +117,18 @@ if(NOT EMSCRIPTEN)
 
     add_executable(analyze_outliers tests/analyze_outliers.cpp)
     target_link_libraries(analyze_outliers od_lib)
+
+    # SACRED parity gate: fitting an $OEM FlatBuffer built from the ISS fixture
+    # must match the KVN text path bit-for-bit (RMS + every mean element). This
+    # test builds the $OEM FlatBuffer, so it needs the SDS + flatbuffers headers.
+    add_executable(test_oem_fb_parity tests/test_oem_fb_parity.cpp)
+    target_include_directories(test_oem_fb_parity PRIVATE
+        "${FLATBUFFERS_INCLUDE_DIR}"
+        "${SDN_CORE_SDS_GENERATED_DIR}"
+    )
+    target_compile_definitions(test_oem_fb_parity PRIVATE
+        OD_ISS_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../../tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt")
+    target_link_libraries(test_oem_fb_parity od_lib)
 endif()
 
 # WASM target (Emscripten)

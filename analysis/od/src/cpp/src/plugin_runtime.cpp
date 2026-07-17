@@ -1,7 +1,9 @@
 #include "od/plugin_runtime.h"
 
 #include "od/meme_parser.h"
+#include "od/oem_fb_reader.h"
 #include "od/oem_parser.h"
+#include "od/omm_fb_builder.h"
 #include "od/sgp4_fitter.h"
 #include "od/state_series.h"
 
@@ -171,6 +173,20 @@ bool parse_double_option(std::string_view json, std::string_view key, double* ou
     return true;
 }
 
+// Caller/manifest labeling overrides shared by the text and FlatBuffer paths.
+// data_source is never hardcoded; OBJECT_NAME/OBJECT_ID/NORAD may be supplied
+// when the payload omits them (or, for the FB path, moved to node CONFIG).
+void apply_series_labels(StateSeries* series, std::string_view options_json) {
+    const std::string data_source = parse_string_option(options_json, "dataSource");
+    if (!data_source.empty()) series->meta.data_source = data_source;
+    const std::string object_name = parse_string_option(options_json, "objectName");
+    if (!object_name.empty()) series->meta.object_name = object_name;
+    const std::string object_id = parse_string_option(options_json, "objectId");
+    if (!object_id.empty()) series->meta.object_id = object_id;
+    const int norad = parse_positive_int_option(options_json, "noradCatId");
+    if (norad > 0) series->meta.norad_cat_id = norad;
+}
+
 FitterConfig parse_fit_options(std::string_view options_json) {
     FitterConfig config;
     const int camel_case_limit =
@@ -284,16 +300,7 @@ PluginFitResult fit_ephemeris_payload(
             return result;
         }
 
-        // Caller/manifest labeling overrides. data_source is never hardcoded;
-        // OBJECT_NAME/OBJECT_ID may be supplied when the payload omits them.
-        const std::string data_source = parse_string_option(options_json, "dataSource");
-        if (!data_source.empty()) series.meta.data_source = data_source;
-        const std::string object_name = parse_string_option(options_json, "objectName");
-        if (!object_name.empty()) series.meta.object_name = object_name;
-        const std::string object_id = parse_string_option(options_json, "objectId");
-        if (!object_id.empty()) series.meta.object_id = object_id;
-        const int norad = parse_positive_int_option(options_json, "noradCatId");
-        if (norad > 0) series.meta.norad_cat_id = norad;
+        apply_series_labels(&series, options_json);
 
         FitterConfig config = parse_fit_options(options_json);
         auto fit = fit_sgp4_series(series, config);
@@ -310,6 +317,47 @@ PluginFitResult fit_ephemeris_payload(
 
     result.json =
         std::string("{\"error\":\"") + json_escape(result.error_message) + "\"}";
+    return result;
+}
+
+PluginFitFBResult fit_ephemeris_fb(
+    const uint8_t* oem_buf,
+    std::size_t oem_len,
+    std::string_view options_json) {
+    PluginFitFBResult result{};
+
+    try {
+        // Aligned-binary $OEM in. The reader mirrors the KVN parser sample-for-
+        // sample (frame classification, time-system->UTC, TEME rotation), so the
+        // fit below is byte-for-byte identical to the text path for the same
+        // states — the sacred parity gate. No JSON at this hop.
+        OEMParseResult parsed = read_oem_flatbuffer(oem_buf, oem_len);
+        if (!parsed.ok) {
+            result.error_code = parsed.error_code;
+            result.error_message = parsed.error_message;
+            return result;
+        }
+        StateSeries series = std::move(parsed.series);
+
+        apply_series_labels(&series, options_json);
+
+        FitterConfig config = parse_fit_options(options_json);
+        auto fit = fit_sgp4_series(series, config);
+
+        // Aligned-binary $OMM out (ORIGINATOR="SDN-OD").
+        result.omm = build_omm_flatbuffer(fit.elements);
+        result.rms_km = fit.elements.rms_km;
+        result.converged = fit.elements.converged;
+        result.mean_motion = fit.elements.mean_motion;
+        result.ok = true;
+        return result;
+    } catch (const std::exception& ex) {
+        result.error_code = "fit-failed";
+        result.error_message = ex.what();
+    } catch (...) {
+        result.error_code = "fit-failed";
+        result.error_message = "Unknown plugin error.";
+    }
     return result;
 }
 
