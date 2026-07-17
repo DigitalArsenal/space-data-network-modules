@@ -40,10 +40,6 @@ static const char* kBaseURL = "https://api.starlink.com/public-files/ephemerides
 static const char* kDefaultManifestURL =
     "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
 
-// Node signing key slot (host-side only) used to sign published PNMs.
-static const char* kSigningKeySlot = "node-signing";
-// PubSub topic the module publishes PNM pointers on (unchanged publisher topic).
-static const char* kPublishTopic = "sdn/data-source/spacex-starlink";
 
 // Fetch politeness (see README "Fetch politeness"): a small per-pull object cap
 // bounds burst load, and the manifest MEME cadence (regenerated a few times
@@ -72,36 +68,6 @@ using namespace meme_oem;  // MemeMeta/parse_meme/build_oem_fb (src/meme_oem.hpp
 // schema-exact JSON document. Keys mirror the SDS OEM schema
 // (OEM.EPHEMERIS_DATA_BLOCK[].{ CENTER_NAME, REFERENCE_FRAME, TIME_SYSTEM,
 // START_TIME, STOP_TIME, STEP_SIZE, STATE_VECTOR_SIZE, EPHEMERIS_DATA } plus
-// OBJECT identity). MEME state vectors are effectively TEME (validated by the
-// OD module's <1 m fit RMS); the "UVW" label is the covariance frame only.
-std::string build_oem_record(const MemeMeta& m, const std::vector<double>& states) {
-    std::string s;
-    s.reserve(states.size() * 20 + 512);
-    s += "{";
-    s += "\"CCSDS_OEM_VERS\":2.0,";
-    s += "\"CREATION_DATE\":\"" + ps::json_escape(m.created_iso) + "\",";
-    s += "\"ORIGINATOR\":\"SpaceX\",";
-    s += "\"CLASSIFICATION\":\"UNCLASSIFIED\",";
-    s += "\"EPHEMERIS_DATA_BLOCK\":[{";
-    s += "\"OBJECT_NAME\":\"" + ps::json_escape(m.object_name) + "\",";
-    s += "\"OBJECT_ID\":\"\",";  // MEME COSPAR field is SpaceX-internal; not an intl designator
-    s += "\"NORAD_CAT_ID\":" + std::to_string(m.norad_cat_id) + ",";
-    s += "\"CENTER_NAME\":\"EARTH\",";
-    s += "\"REFERENCE_FRAME\":\"TEME\",";
-    s += "\"TIME_SYSTEM\":\"UTC\",";
-    s += "\"START_TIME\":\"" + ps::json_escape(m.start_iso) + "\",";
-    s += "\"STOP_TIME\":\"" + ps::json_escape(m.stop_iso) + "\",";
-    s += "\"STEP_SIZE\":" + std::to_string(m.step_size > 0 ? m.step_size : 60) + ",";
-    s += "\"STATE_VECTOR_SIZE\":6,";
-    s += "\"EPHEMERIS_DATA\":[";
-    for (size_t i = 0; i < states.size(); ++i) {
-        if (i) s += ",";
-        s += ps::double_to_json(states[i]);
-    }
-    s += "]}]}";
-    return s;
-}
-
 // ── Config (optional, from the invoke request payload) ───────────────────────
 
 struct PullConfig {
@@ -132,76 +98,52 @@ PullConfig parse_config(const uint8_t* req, uint32_t len) {
 std::string run_pull(const uint8_t* req, uint32_t req_len) {
     PullConfig cfg = parse_config(req, req_len);
 
-    ps::ProviderConfig pcfg;
-    pcfg.signing_slot = kSigningKeySlot;
-    pcfg.publish_topic = kPublishTopic;
-    pcfg.signature_type = "ed25519";     // must match the node-signing slot's key
-    pcfg.source_name = "spacex-starlink";
-    pcfg.data_source = "SpaceX-E";        // CelesTrak-comparable SOURCE token (A2.1)
-    pcfg.record_schema = "OEM";           // honest canonical SDS type for operator ephemeris
-
     ps::HttpResult manifest = ps::http_get(cfg.manifest_url);
     std::vector<std::string> entries = ps::listing_lines(manifest.body, "MEME_");
 
-    long fetched = 0, stored = 0, signed_ = 0, published = 0;
     long plan = static_cast<long>(entries.size());
     if (plan > cfg.object_cap) plan = cfg.object_cap;  // per-pull politeness cap
+
+    // Emit an $OEM STREAM, never a store: fetch + parse + build one aligned-binary
+    // SDS $OEM per object and frame it into a length-prefixed stream the OD runner
+    // splits into the transient per-object set fed to the FlowPool. Ephemeris is
+    // in-memory only (SDN OD-flow invariant) — no storage.write / sign / publish;
+    // provenance rides on the RESULT $OMM/$OCM/$OBD the OD flow's store node writes.
+    // Stream layout: [u32le count]  then count x ( [u32le len][non-size-prefixed $OEM] ).
+    std::string stream(4, '\0');  // reserve the count header
+    uint32_t count = 0;
+    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
+        s[at + 0] = static_cast<char>(v & 0xFF);
+        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
+        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
+        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
+    };
 
     for (long i = 0; i < plan; ++i) {
         const std::string& filename = entries[static_cast<size_t>(i)];
         std::string url = std::string(kBaseURL) + filename;
         ps::HttpResult obj = ps::http_get(url);
         if (obj.status != 200 || obj.body.empty()) continue;  // skip; halt-friendly per object
-        fetched++;
 
         MemeMeta m;
         parse_meme_filename(filename, &m);
         std::vector<double> states;
         std::string content(obj.body.begin(), obj.body.end());
         parse_meme(content, &m, &states);
-        if (states.empty()) continue;  // nothing canonical to publish
+        if (states.empty()) continue;
 
-        // Raw source artifact is bound into signed provenance by SHA-256, not
-        // stored under a data schema (no honest raw-blob SDS type exists; the
-        // OEM-mislabel of the raw bytes was the A2.1-flagged placeholder bug).
-        std::string source_sha256 = ps::sha256_hex(obj.body.data(), obj.body.size());
+        std::vector<uint8_t> oem = build_oem_fb(m, states);  // in-memory $OEM (TEME)
+        if (oem.empty()) continue;
 
-        std::string oem = build_oem_record(m, states);
-
-        std::string file_id = pcfg.source_name + ":" + pcfg.record_schema + ":" +
-                              std::to_string(m.norad_cat_id) + ":" + m.start_iso;
-        std::string provenance =
-            std::string("{\"SOURCE_NAME\":\"") + ps::json_escape(pcfg.source_name) + "\"," +
-            "\"SOURCE_URL\":\"" + ps::json_escape(url) + "\"," +
-            "\"SOURCE_SHA256\":\"" + source_sha256 + "\"," +
-            "\"DATA_SOURCE\":\"" + ps::json_escape(pcfg.data_source) + "\"," +
-            "\"RECORD_SCHEMA\":\"" + ps::json_escape(pcfg.record_schema) + "\"," +
-            "\"NORAD_CAT_ID\":" + std::to_string(m.norad_cat_id) + "," +
-            "\"OBJECT_NAME\":\"" + ps::json_escape(m.object_name) + "\"," +
-            "\"OBJECT_STATUS\":\"" + ps::json_escape(m.status) + "\"," +
-            "\"EPHEMERIS_SOURCE\":\"" + ps::json_escape(m.ephemeris_source) + "\"," +
-            "\"STATE_COUNT\":" + std::to_string(states.size() / 6) + "}";
-
-        ps::PublishResult r = ps::publish_record_with_source(
-            pcfg,
-            reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-            filename, file_id, m.created_iso, provenance,
-            url, source_sha256);
-        if (r.stored) stored++;
-        if (r.signed_) signed_++;
-        if (r.published) published++;
+        const size_t hdr = stream.size();
+        stream.append(4, '\0');
+        put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
+        stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
+        count++;
     }
 
-    return std::string("{\"ok\":true,\"source\":\"") + pcfg.source_name + "\"," +
-           "\"discover_status\":" + std::to_string(manifest.status) + "," +
-           "\"manifest_entries\":" + std::to_string(entries.size()) + "," +
-           "\"object_cap\":" + std::to_string(cfg.object_cap) + "," +
-           "\"fetch_interval_ms\":" + std::to_string(cfg.fetch_interval_ms) + "," +
-           "\"record_schema\":\"" + pcfg.record_schema + "\"," +
-           "\"fetched\":" + std::to_string(fetched) + "," +
-           "\"stored\":" + std::to_string(stored) + "," +
-           "\"signed\":" + std::to_string(signed_) + "," +
-           "\"published\":" + std::to_string(published) + "}";
+    put_u32le(stream, 0, count);
+    return stream;
 }
 
 }  // namespace

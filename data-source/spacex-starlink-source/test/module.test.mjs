@@ -33,6 +33,11 @@ const REQUIRED_EXPORTS = [
 // The pull's host-call HTTP fetch requires these space_data_module_host imports.
 const REQUIRED_HOST_IMPORTS = ["call", "response_len", "read_response"];
 
+// The STANDALONE_WASM/PURE_WASI module imports a few wasi_snapshot_preview1 stdio
+// shims (fd_close/fd_write/fd_seek) via the flatbuffers/$OEM headers' error paths.
+// WasmEdge provides real WASI at runtime; the browser-style test harness stubs them.
+const WASI_STUB = { fd_close: () => 0, fd_write: () => 0, fd_seek: () => 0 };
+
 function loadWasm() {
   assert.ok(fs.existsSync(WASM_PATH), `built module not found at ${WASM_PATH}; run \`node build.mjs\` first`);
   return new Uint8Array(fs.readFileSync(WASM_PATH));
@@ -110,6 +115,7 @@ test("built WASM embeds + returns the real manifest", async () => {
       clear_response: stub,
       last_status_code: stub,
     },
+    wasi_snapshot_preview1: WASI_STUB,
   });
   const ex = instance.exports;
   const size = ex.plugin_get_manifest_flatbuffer_size();
@@ -122,12 +128,12 @@ test("built WASM embeds + returns the real manifest", async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fixture-driven end-to-end pull (A2.2b). Instantiates the real built WASM with
-// a mock `space_data_module_host` bridge that serves the checked-in MANIFEST +
-// MEME fixtures over http.request, captures storage.write + pubsub.publish, and
-// returns a signature for keyslot.sign. This exercises the actual C++ manifest
-// parse → capped per-object fetch → MEME→canonical-OEM record → signed PNM
-// publish flow against the rebuilt artifact (no live network).
+// Fixture-driven end-to-end pull (SDN OD-flow). Instantiates the real built WASM
+// with a mock `space_data_module_host` bridge that serves the checked-in MANIFEST
+// + MEME fixtures over http.request (and would capture any storage/pubsub, which
+// the OD-flow pull no longer uses). Exercises the actual C++ manifest parse →
+// capped per-object fetch → MEME→$OEM FlatBuffer → in-memory $OEM STREAM flow
+// against the rebuilt artifact (no live network, nothing stored).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
@@ -262,7 +268,7 @@ async function runPull(config) {
     last_status_code() { return 0; },
   };
 
-  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host });
+  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host, wasi_snapshot_preview1: WASI_STUB });
   instance = wasm.instance;
   const ex = instance.exports;
 
@@ -276,116 +282,63 @@ async function runPull(config) {
   const outLenPtr = ex.plugin_alloc(4);
   const resultPtr = ex.plugin_invoke_stream(cfgPtr, cfgBytes.length, outLenPtr);
   const outLen = u32le(mem(), outLenPtr);
-  const summary = JSON.parse(new TextDecoder().decode(readBytes(resultPtr, outLen)));
-  return { summary, ...captured };
+  const resultBytes = readBytes(resultPtr, outLen);
+  return { resultBytes, ...captured };
 }
 
-test("pull: manifest parse → capped per-object fetch → OEM records + signed PNMs", async () => {
-  const { summary, storage, publishes } = await runPull({ objectCap: 2, fetchIntervalMs: 0 });
-
-  // Manifest parsed (3 MEME lines) and fetch plan capped to 2.
-  assert.equal(summary.ok, true);
-  assert.equal(summary.discover_status, 200);
-  assert.equal(summary.manifest_entries, 3);
-  assert.equal(summary.object_cap, 2);
-  assert.equal(summary.record_schema, "OEM");
-  assert.equal(summary.fetched, 2, "capped to 2 objects");
-  assert.equal(summary.stored, 2);
-  assert.equal(summary.signed, 2);
-  assert.equal(summary.published, 2);
-
-  // Exactly two OEM records stored, honest schema (NOT a raw-listing "OEM" blob).
-  assert.equal(storage.length, 2);
-  for (const w of storage) assert.equal(w.schema, "OEM");
-
-  // A2.2c-3: each record is ingested with SourceTags provenance and reconcile:"none".
-  for (const w of storage) {
-    assert.equal(w.reconcile, "none", "reconcile must be none (protects NORAD=0 siblings)");
-    assert.equal(w.tags.source_name, "spacex-starlink", "SourceName is the fit-pipeline grouping key");
-    assert.equal(w.tags.provider_id, "spacex-starlink", "provider_id reuses source_name in-guest");
-    assert.equal(w.tags.content_key_id, "public");
-    assert.match(w.tags.batch_id, /^[0-9a-f]{64}$/, "batch_id = source_sha256 (raw upstream bytes hash)");
-    assert.ok(w.tags.source_url.startsWith(BASE_URL), "source_url is the per-object MEME URL");
+// run_pull now returns an $OEM STREAM (never a store): [u32le count] then count ×
+// ([u32le len][non-size-prefixed $OEM]). Parse it into the record byte slices.
+function parseOemStream(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 0;
+  const count = dv.getUint32(off, true);
+  off += 4;
+  const records = [];
+  for (let i = 0; i < count; i++) {
+    const len = dv.getUint32(off, true);
+    off += 4;
+    records.push(bytes.subarray(off, off + len));
+    off += len;
   }
-  // batch_id (source_sha256) matches an independent hash of the raw MEME bytes.
-  {
-    const memeName0 = "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt";
-    const rawSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(FIXTURES_DIR, "meme", memeName0))).digest("hex");
-    assert.equal(storage[0].tags.batch_id, rawSha);
-    assert.equal(storage[0].tags.source_url, BASE_URL + memeName0);
+  return { count, records, consumed: off };
+}
+
+test("pull: manifest parse → capped per-object fetch → in-memory $OEM stream (no store)", async () => {
+  const { resultBytes, storage, publishes } = await runPull({ objectCap: 2, fetchIntervalMs: 0 });
+  const { count, records, consumed } = parseOemStream(resultBytes);
+
+  // Manifest parsed (3 MEME lines), fetch plan capped to 2 → two $OEM records
+  // framed in the stream. (Full $OEM validity — TEME frame, NORAD, states — is
+  // covered by the native meme_oem_test against the same fixtures.)
+  assert.equal(count, 2, "capped to 2 objects");
+  assert.equal(records.length, 2);
+  assert.equal(consumed, resultBytes.length, "stream fully consumed (no trailing bytes)");
+
+  // Each framed record is an aligned-binary SDS $OEM (file identifier at bytes[4:8]
+  // of the non-size-prefixed buffer, the shape od.fit consumes).
+  for (const rec of records) {
+    assert.ok(rec.length > 8, "record non-empty");
+    assert.equal(new TextDecoder().decode(rec.subarray(4, 8)), "$OEM", "record carries the $OEM file id");
   }
 
-  // Canonical record bytes carry schema-exact keys (NORAD_CAT_ID, not norad_cat_id).
-  const rec0 = JSON.parse(storage[0].data.toString("utf8"));
-  assert.equal(rec0.CCSDS_OEM_VERS, 2.0);
-  assert.equal(rec0.ORIGINATOR, "SpaceX");
-  const blk0 = rec0.EPHEMERIS_DATA_BLOCK[0];
-  assert.equal(blk0.NORAD_CAT_ID, 67850);
-  assert.equal(blk0.OBJECT_NAME, "STARLINK-36840");
-  assert.equal(blk0.OBJECT_ID, ""); // MEME COSPAR field is SpaceX-internal, not an intl designator
-  assert.equal(blk0.CENTER_NAME, "EARTH");
-  assert.equal(blk0.REFERENCE_FRAME, "TEME");
-  assert.equal(blk0.TIME_SYSTEM, "UTC");
-  assert.equal(blk0.START_TIME, "2026-05-14T01:42:42Z");
-  assert.equal(blk0.STOP_TIME, "2026-05-17T01:42:42Z");
-  assert.equal(blk0.STEP_SIZE, 60);
-  assert.equal(blk0.STATE_VECTOR_SIZE, 6);
-  // 12 trimmed states × 6 components.
-  assert.equal(blk0.EPHEMERIS_DATA.length, 72);
-  // First MEME state row, preserved to full double precision.
-  assert.ok(Math.abs(blk0.EPHEMERIS_DATA[0] - -2877.5130811997) < 1e-9);
-  assert.ok(Math.abs(blk0.EPHEMERIS_DATA[5] - -3.1147385352) < 1e-9);
-
-  // Signed PNM structure per published object.
-  assert.equal(publishes.length, 2);
-  const memeName = "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt";
-  const pub0 = publishes.find((p) => p.message.PNM.FILE_NAME === memeName);
-  assert.ok(pub0, "published PNM for the first object");
-  assert.equal(pub0.topic, "sdn/data-source/spacex-starlink");
-  const pnm = pub0.message.PNM;
-  // Schema-exact PNM keys.
-  for (const k of ["MULTIFORMAT_ADDRESS", "PUBLISH_TIMESTAMP", "CID", "FILE_NAME", "FILE_ID", "SIGNATURE", "SIGNATURE_TYPE"]) {
-    assert.ok(k in pnm, `PNM missing ${k}`);
-  }
-  assert.equal(pnm.SIGNATURE_TYPE, "ed25519");
-  // A2.2c-3: PNM.CID is now the real in-guest CIDv1 (raw/sha2-256/base32), which
-  // byte-matches the CID the host assigns for the stored record bytes.
-  assert.ok(pnm.CID.startsWith("bafkrei"), `PNM.CID is a CIDv1 raw block (got ${pnm.CID})`);
-  assert.equal(pnm.CID, cidV1RawSha256(storage[0].data), "PNM.CID == host CID of the stored OEM record");
-  assert.equal(pnm.MULTIFORMAT_ADDRESS, "/ipfs/" + pnm.CID);
-  assert.equal(pnm.FILE_ID, "spacex-starlink:OEM:67850:2026-05-14T01:42:42Z");
-  assert.equal(pnm.PUBLISH_TIMESTAMP, "2026-05-14T02:02:54Z");
-  // SIGNATURE is base64 of a non-empty signature.
-  assert.ok(Buffer.from(pnm.SIGNATURE, "base64").length > 0);
-
-  // Provenance sidecar binds the raw MEME source by SHA-256 (DPM convention),
-  // matching an independent hash of the fixture bytes.
-  const prov = pub0.message.provenance;
-  const expectedSha = crypto
-    .createHash("sha256")
-    .update(fs.readFileSync(path.join(FIXTURES_DIR, "meme", memeName)))
-    .digest("hex");
-  assert.equal(prov.SOURCE_SHA256, expectedSha);
-  assert.equal(prov.SOURCE_NAME, "spacex-starlink");
-  assert.equal(prov.DATA_SOURCE, "SpaceX-E");
-  assert.equal(prov.RECORD_SCHEMA, "OEM");
-  assert.equal(prov.NORAD_CAT_ID, 67850);
-  assert.equal(prov.STATE_COUNT, 12);
-  assert.equal(prov.SOURCE_URL, BASE_URL + memeName);
+  // Ephemeris is IN-MEMORY ONLY (SDN OD-flow invariant): nothing stored, signed,
+  // or published — provenance rides on the RESULT records the OD flow's store node
+  // writes, not on the transient $OEM.
+  assert.equal(storage.length, 0, "no $OEM stored (in-memory-only invariant)");
+  assert.equal(publishes.length, 0, "no PNM published for transient ephemeris");
 });
 
 test("pull: raising the cap fetches more and skips unknown objects (404-safe)", async () => {
   // cap 3 → plans all 3 manifest entries; the 3rd has no fixture (404) → skipped.
-  const { summary, storage } = await runPull({ objectCap: 3 });
-  assert.equal(summary.manifest_entries, 3);
-  assert.equal(summary.fetched, 2, "third object 404s and is skipped");
-  assert.equal(summary.stored, 2);
-  assert.equal(storage.length, 2);
+  const { resultBytes, storage } = await runPull({ objectCap: 3 });
+  const { count } = parseOemStream(resultBytes);
+  assert.equal(count, 2, "third object 404s and is skipped");
+  assert.equal(storage.length, 0, "no $OEM stored");
 });
 
-test("pull: no config uses the default object cap", async () => {
-  const { summary } = await runPull(null);
-  assert.equal(summary.object_cap, 25, "default per-pull object cap");
-  // Only 2 fixtures resolve, so fetched is bounded by available objects.
-  assert.equal(summary.fetched, 2);
+test("pull: no config uses the default object cap (still an in-memory $OEM stream)", async () => {
+  const { resultBytes } = await runPull(null);
+  const { count } = parseOemStream(resultBytes);
+  // Only 2 fixtures resolve, so the default cap (25) doesn't bound them.
+  assert.equal(count, 2);
 });
