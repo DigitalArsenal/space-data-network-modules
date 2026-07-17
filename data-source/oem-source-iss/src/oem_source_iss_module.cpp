@@ -40,6 +40,29 @@ std::vector<uint8_t> build_iss_oem() {
                                         kIssStateCount);
 }
 
+// Build the SAME ISS ephemeris in the COMPACT $OEM form (flat EPHEMERIS_DATA +
+// START_TIME + STEP_SIZE) that uniform-cadence providers (e.g. SpaceX MEME) carry.
+// Because the fixture cadence is uniform, the OD reader reconstructs the identical
+// state epochs, so this exercises the compact builder path against a real fit.
+std::vector<uint8_t> build_iss_oem_compact() {
+    std::vector<double> flat;
+    flat.reserve(static_cast<size_t>(kIssStateCount) * 6);
+    for (int i = 0; i < kIssStateCount; ++i) {
+        const OemFixtureState& s = kIssStates[i];
+        flat.push_back(s.x);
+        flat.push_back(s.y);
+        flat.push_back(s.z);
+        flat.push_back(s.vx);
+        flat.push_back(s.vy);
+        flat.push_back(s.vz);
+    }
+    const oem_fb::Identity id{kOemObjectName, kOemObjectId, kOemNoradCatId};
+    return oem_fb::build_oem_flatbuffer_compact(
+        id, CelestialFrame_EME2000, kOemCenterName, timingStandard_UTC,
+        kOemStartIso, kOemStopIso, kOemStepSeconds, flat.data(),
+        static_cast<int>(flat.size()));
+}
+
 }  // namespace
 
 extern "C" {
@@ -51,6 +74,25 @@ int emit(void) {
     std::vector<uint8_t> oem = build_iss_oem();
     if (oem.empty()) {
         plugin_set_error("oem-build-failed", "ISS $OEM FlatBuffer build produced no bytes");
+        return 500;
+    }
+    const int32_t rc = plugin_push_output_ex(
+        "oem", "OEM.fbs", "$OEM",
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OEM",
+        /*fixed_string_length=*/0, /*required_alignment=*/8,
+        oem.data(), static_cast<uint32_t>(oem.size()));
+    return rc < 0 ? 500 : 0;
+}
+
+// emit_compact: same ISS ephemeris as `emit`, but built via the shared COMPACT
+// builder (EPHEMERIS_DATA + START_TIME + STEP_SIZE) — the form uniform-cadence
+// providers use. Proves oem_fb::build_oem_flatbuffer_compact against a real OD fit.
+int emit_compact(void) {
+    plugin_reset_output_state();
+    std::vector<uint8_t> oem = build_iss_oem_compact();
+    if (oem.empty()) {
+        plugin_set_error("oem-build-failed",
+                         "ISS compact $OEM FlatBuffer build produced no bytes");
         return 500;
     }
     const int32_t rc = plugin_push_output_ex(

@@ -83,6 +83,25 @@ if ((meta.TIME_SYSTEM || "").toUpperCase() !== "UTC")
 if ((meta.CENTER_NAME || "").toUpperCase() !== "EARTH")
   throw new Error(`ISS OEM fixture CENTER_NAME=${meta.CENTER_NAME} != Earth`);
 
+// Derive the uniform step (seconds) from the fixture epochs and verify it IS
+// uniform — the compact-form $OEM (EPHEMERIS_DATA + START_TIME + STEP_SIZE) only
+// round-trips bit-for-bit against the OD reader's epoch[i]=START+i*STEP when the
+// cadence is uniform. Fail-closed if the fixture ever drifts to non-uniform.
+const epochMs = states.map((s) => Date.parse(s.epoch));
+if (epochMs.length >= 2) {
+  const step0 = epochMs[1] - epochMs[0];
+  for (let i = 2; i < epochMs.length; i++) {
+    if (Math.abs(epochMs[i] - epochMs[i - 1] - step0) > 1) {
+      throw new Error(
+        `ISS OEM fixture is non-uniform at row ${i}: step ${epochMs[i] - epochMs[i - 1]}ms != ${step0}ms (compact-form $OEM requires uniform cadence)`,
+      );
+    }
+  }
+}
+const stepSeconds = epochMs.length >= 2 ? (epochMs[1] - epochMs[0]) / 1000 : 0;
+const startIso = states[0].epoch;
+const stopIso = states[states.length - 1].epoch;
+
 const cstr = (s) => `"${String(s).replace(/[\\"]/g, "\\$&")}"`;
 // Emit the RAW decimal tokens verbatim as C++ double literals (no JS float
 // round-trip): C++ parses the same decimal to the same nearest double the
@@ -97,6 +116,10 @@ struct OemFixtureState { const char* epoch; double x, y, z, vx, vy, vz; };
 static const char* const kOemObjectName = ${cstr(meta.OBJECT_NAME || "ISS")};
 static const char* const kOemObjectId   = ${cstr(meta.OBJECT_ID || "1998-067-A")};
 static const char* const kOemCenterName = ${cstr(meta.CENTER_NAME || "Earth")};
+// Uniform-cadence bounds for the COMPACT-form $OEM (START_TIME + STEP_SIZE).
+static const char* const kOemStartIso = ${cstr(startIso)};
+static const char* const kOemStopIso  = ${cstr(stopIso)};
+static const double kOemStepSeconds = ${stepSeconds};
 // NORAD is absent from the CCSDS OEM META; the ISS catalog id is well-known.
 static const uint32_t kOemNoradCatId = 25544u;
 static const OemFixtureState kIssStates[] = {

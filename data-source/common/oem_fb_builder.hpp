@@ -91,4 +91,65 @@ inline std::vector<uint8_t> build_oem_flatbuffer(
     return std::vector<uint8_t>(p, p + fbb.GetSize());
 }
 
+// Build a NON-size-prefixed SDS $OEM FlatBuffer in the COMPACT form: a flat
+// EPHEMERIS_DATA vector (stride 6: x,y,z,vx,vy,vz km/km-s) + START_TIME + STEP_SIZE
+// (seconds), from which analysis/od's oem_fb_reader reconstructs epoch[i] =
+// START_TIME + i*STEP_SIZE. This is the shape uniform-cadence providers carry
+// (e.g. SpaceX MEME: parse yields a flat state array + start/stop/step, per-line
+// epochs dropped), so they build $OEM without materializing an ISO string per
+// state. `ephemeris_data` length must be a multiple of 6.
+inline std::vector<uint8_t> build_oem_flatbuffer_compact(
+    const Identity& id, CelestialFrame frame, const char* center_name,
+    timingStandard time_system, const char* start_iso, const char* stop_iso,
+    double step_seconds, const double* ephemeris_data, int num_doubles) {
+    flatbuffers::FlatBufferBuilder fbb(1 << 16);
+
+    std::vector<double> data(
+        ephemeris_data, ephemeris_data + (num_doubles < 0 ? 0 : num_doubles));
+    auto data_vec = fbb.CreateVector(data);
+
+    auto obj_name = fbb.CreateString(id.object_name);
+    auto obj_id = fbb.CreateString(id.object_id);
+    CATBuilder catb(fbb);
+    catb.add_OBJECT_NAME(obj_name);
+    catb.add_OBJECT_ID(obj_id);
+    catb.add_NORAD_CAT_ID(id.norad_cat_id);
+    auto cat = catb.Finish();
+
+    auto cfw = CreateCelestialFrameWrapper(fbb, frame);
+    RFMBuilder rfmb(fbb);
+    rfmb.add_REFERENCE_FRAME_type(RFMUnion_CelestialFrameWrapper);
+    rfmb.add_REFERENCE_FRAME(cfw.Union());
+    auto rfm = rfmb.Finish();
+
+    auto center = fbb.CreateString(center_name);
+    auto start = fbb.CreateString(start_iso);
+    const bool has_stop = stop_iso != nullptr && stop_iso[0] != '\0';
+    auto stop = has_stop ? fbb.CreateString(stop_iso)
+                         : flatbuffers::Offset<flatbuffers::String>();
+
+    ephemerisDataBlockBuilder blk(fbb);
+    blk.add_OBJECT(cat);
+    blk.add_CENTER_NAME(center);
+    blk.add_REFERENCE_FRAME(rfm);
+    blk.add_TIME_SYSTEM(time_system);
+    blk.add_START_TIME(start);
+    if (has_stop) blk.add_STOP_TIME(stop);
+    blk.add_STEP_SIZE(step_seconds);
+    blk.add_STATE_VECTOR_SIZE(6);
+    blk.add_EPHEMERIS_DATA(data_vec);
+    auto block = blk.Finish();
+
+    std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{block};
+    auto blocks_vec = fbb.CreateVector(blocks);
+
+    OEMBuilder oemb(fbb);
+    oemb.add_EPHEMERIS_DATA_BLOCK(blocks_vec);
+    auto oem = oemb.Finish();
+    FinishOEMBuffer(fbb, oem);
+
+    const uint8_t* p = fbb.GetBufferPointer();
+    return std::vector<uint8_t>(p, p + fbb.GetSize());
+}
+
 }  // namespace oem_fb
