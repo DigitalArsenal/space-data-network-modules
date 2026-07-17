@@ -154,4 +154,65 @@ inline std::vector<uint8_t> build_oem_flatbuffer_compact(
     return std::vector<uint8_t>(p, p + fbb.GetSize());
 }
 
+// COMPACT-form $OEM with a CUSTOM frame (RFM{ CustomFrameWrapper{ frame } }) instead
+// of a celestial frame. This is what SpaceX MEME and other TEME providers need:
+// `frame = CustomFrame_TEME` reads back as the token "TEME" (the SDS CustomFrame
+// TEME arm is documented "same as TEMEOFDATE: Dynamic frame for SGP4"), which the
+// OD reader's classify_frame accepts as FrameKind::Teme — whereas CelestialFrame's
+// TEMEOFDATE would read back as "TEMEOFDATE", which it does NOT accept. Same shape
+// as the celestial compact builder otherwise; overloaded on the frame enum type.
+inline std::vector<uint8_t> build_oem_flatbuffer_compact(
+    const Identity& id, CustomFrame frame, const char* center_name,
+    timingStandard time_system, const char* start_iso, const char* stop_iso,
+    double step_seconds, const double* ephemeris_data, int num_doubles) {
+    flatbuffers::FlatBufferBuilder fbb(1 << 16);
+
+    std::vector<double> data(
+        ephemeris_data, ephemeris_data + (num_doubles < 0 ? 0 : num_doubles));
+    auto data_vec = fbb.CreateVector(data);
+
+    auto obj_name = fbb.CreateString(id.object_name);
+    auto obj_id = fbb.CreateString(id.object_id);
+    CATBuilder catb(fbb);
+    catb.add_OBJECT_NAME(obj_name);
+    catb.add_OBJECT_ID(obj_id);
+    catb.add_NORAD_CAT_ID(id.norad_cat_id);
+    auto cat = catb.Finish();
+
+    auto cfw = CreateCustomFrameWrapper(fbb, frame);
+    RFMBuilder rfmb(fbb);
+    rfmb.add_REFERENCE_FRAME_type(RFMUnionTraits<CustomFrameWrapper>::enum_value);
+    rfmb.add_REFERENCE_FRAME(cfw.Union());
+    auto rfm = rfmb.Finish();
+
+    auto center = fbb.CreateString(center_name);
+    auto start = fbb.CreateString(start_iso);
+    const bool has_stop = stop_iso != nullptr && stop_iso[0] != '\0';
+    auto stop = has_stop ? fbb.CreateString(stop_iso)
+                         : flatbuffers::Offset<flatbuffers::String>();
+
+    ephemerisDataBlockBuilder blk(fbb);
+    blk.add_OBJECT(cat);
+    blk.add_CENTER_NAME(center);
+    blk.add_REFERENCE_FRAME(rfm);
+    blk.add_TIME_SYSTEM(time_system);
+    blk.add_START_TIME(start);
+    if (has_stop) blk.add_STOP_TIME(stop);
+    blk.add_STEP_SIZE(step_seconds);
+    blk.add_STATE_VECTOR_SIZE(6);
+    blk.add_EPHEMERIS_DATA(data_vec);
+    auto block = blk.Finish();
+
+    std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{block};
+    auto blocks_vec = fbb.CreateVector(blocks);
+
+    OEMBuilder oemb(fbb);
+    oemb.add_EPHEMERIS_DATA_BLOCK(blocks_vec);
+    auto oem = oemb.Finish();
+    FinishOEMBuffer(fbb, oem);
+
+    const uint8_t* p = fbb.GetBufferPointer();
+    return std::vector<uint8_t>(p, p + fbb.GetSize());
+}
+
 }  // namespace oem_fb
