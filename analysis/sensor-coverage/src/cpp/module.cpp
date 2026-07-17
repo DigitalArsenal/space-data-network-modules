@@ -1327,13 +1327,24 @@ void accumulate_grid_coverage_products(
   accumulate_grid_coverage_products_impl(cells, tracks, grid);
 }
 
-void merge_intervals(Cell& cell, double scenario_start, double scenario_stop) {
+// A cell at the swath edge can flicker in and out of visibility between
+// consecutive propagation samples (footprint corner clips), splitting one
+// physical flyover into several refined intervals separated by sub-sample
+// gaps. Those fragments must merge into one access or pass counts double.
+// The tolerance is a couple of sample steps — orders of magnitude below any
+// real LEO revisit — so distinct passes are never merged.
+void merge_intervals(
+    Cell& cell,
+    double scenario_start,
+    double scenario_stop,
+    double gap_tolerance_seconds) {
   if (cell.intervals.empty()) {
     return;
   }
   std::sort(cell.intervals.begin(), cell.intervals.end(), [](const Interval& left, const Interval& right) {
     return left.start < right.start;
   });
+  const double tolerance = std::max(0.0, gap_tolerance_seconds);
   std::vector<Interval> merged;
   for (const auto& interval : cell.intervals) {
     const Interval clipped{
@@ -1344,7 +1355,7 @@ void merge_intervals(Cell& cell, double scenario_start, double scenario_stop) {
     if (clipped.stop <= clipped.start) {
       continue;
     }
-    if (merged.empty() || clipped.start > merged.back().stop) {
+    if (merged.empty() || clipped.start > merged.back().stop + tolerance) {
       merged.push_back(clipped);
     } else {
       merged.back().stop = std::max(merged.back().stop, clipped.stop);
@@ -1358,8 +1369,27 @@ void merge_intervals(Cell& cell, double scenario_start, double scenario_stop) {
   }
 }
 
-void update_cell_statistics(Cell& cell, const GridConfig& grid) {
-  merge_intervals(cell, grid.start, grid.stop);
+double interval_merge_gap_tolerance_seconds(
+    const std::vector<SensorTrack>& tracks) {
+  double max_step = 0.0;
+  for (const auto& track : tracks) {
+    for (size_t index = 1; index < track.states.size(); ++index) {
+      const double step =
+        track.states[index].elapsedSeconds -
+        track.states[index - 1].elapsedSeconds;
+      if (std::isfinite(step) && step > 0.0) {
+        max_step = std::max(max_step, step);
+      }
+    }
+  }
+  return 2.0 * max_step;
+}
+
+void update_cell_statistics(
+    Cell& cell,
+    const GridConfig& grid,
+    double merge_gap_tolerance) {
+  merge_intervals(cell, grid.start, grid.stop, merge_gap_tolerance);
   cell.accessCount = static_cast<int>(cell.intervals.size());
   cell.revisitCount = std::max(0, cell.accessCount - 1);
   cell.totalAccess = 0.0;
@@ -2484,8 +2514,10 @@ extern "C" int compute_sensor_coverage(void) {
   }
 
   if (cells != nullptr) {
+    const double merge_gap_tolerance =
+      interval_merge_gap_tolerance_seconds(tracks);
     for (auto& cell : *cells) {
-      update_cell_statistics(cell, grid);
+      update_cell_statistics(cell, grid, merge_gap_tolerance);
     }
   }
   const std::vector<Cell> empty_cells;
