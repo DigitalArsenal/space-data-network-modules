@@ -39,6 +39,7 @@ add_library(
     src/targeting.cpp
     src/classical.cpp
     src/approach.cpp
+    src/rendezvous.cpp
     src/maneuver_plugin.cpp
     src/plugin_runtime.cpp
 )
@@ -68,6 +69,10 @@ if(NOT EMSCRIPTEN)
     add_executable(test_sixdof tests/test_sixdof.cpp)
     target_include_directories(test_sixdof PRIVATE include)
 
+    add_executable(test_rendezvous tests/test_rendezvous.cpp)
+    target_link_libraries(test_rendezvous maneuver)
+    target_include_directories(test_rendezvous PRIVATE include)
+
     enable_testing()
     add_test(NAME math COMMAND test_math)
     add_test(NAME stm COMMAND test_stm)
@@ -75,6 +80,7 @@ if(NOT EMSCRIPTEN)
     add_test(NAME targeting COMMAND test_targeting)
     add_test(NAME approach COMMAND test_approach)
     add_test(NAME maneuver_sixdof COMMAND test_sixdof)
+    add_test(NAME rendezvous COMMAND test_rendezvous)
 endif()
 
 if(EMSCRIPTEN)

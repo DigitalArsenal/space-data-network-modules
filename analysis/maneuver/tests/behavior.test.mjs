@@ -184,6 +184,50 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result.propagatedRoe.every(Number.isFinite));
   });
 
+  test(`closed-loop rendezvous simulation tracks the combined-case profile on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const result = await invokeJsonRequest(harness, {
+      operation: "simulateRendezvous",
+      params: {
+        chief: {
+          semiMajorAxis: 6_778_000,
+          eccentricity: 0,
+          inclination: 51.6 * Math.PI / 180,
+          mu: MU_EARTH,
+        },
+        initialPosition: [100, -338.8, 0],
+        brakePoint: [0, -80, 0],
+        holdPoint: [0, -30, 0],
+        driftDuration: 2000,
+        brakeDuration: 400,
+        holdDuration: 300,
+        integration: { timeStep: 0.5, outputEvery: 40 },
+      },
+    });
+
+    assert.equal(result.phases.totalTime, 2700);
+    assert.ok(result.meanMotion > 0);
+    assert.ok(result.solvedInitialVelocity.every(Number.isFinite));
+    assert.ok(result.metrics.totalDeltaV > 0);
+    assert.ok(result.metrics.maxPositionError < 1);
+    assert.ok(result.metrics.finalPositionError < 0.05);
+    assert.ok(result.metrics.finalVelocityError < 1e-3);
+    assert.equal(result.metrics.saturatedSteps, 0);
+    assert.ok(result.trajectory.length > 0);
+    assert.equal(result.trajectory[0].phase, "drift");
+    assert.equal(result.trajectory.at(-1).phase, "hold");
+    const last = result.trajectory.at(-1);
+    assert.ok(Math.abs(last.position[1] - (-30)) < 0.1);
+    assert.ok(last.position.every(Number.isFinite));
+  });
+
   test(`relative waypoint mission planning returns finite burns and trajectory on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
