@@ -34,7 +34,9 @@ PluginFitResult fit_ephemeris_payload(
 /// not a data hop.
 struct PluginFitFBResult {
     bool ok = false;
-    std::vector<uint8_t> omm;  // size-prefixed $OMM FlatBuffer
+    std::vector<uint8_t> omm;  // size-prefixed $OMM FlatBuffer (mean elements)
+    std::vector<uint8_t> obd;  // size-prefixed $OBD FlatBuffer (OD run result: WRMS,
+                               // iterations, method) — same fit, emitted alongside $OMM
     std::string error_code;
     std::string error_message;
     double rms_km = 0.0;

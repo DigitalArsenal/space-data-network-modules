@@ -74,6 +74,22 @@
           "required": false
         },
         {
+          "portId": "obd",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd",
+              "allowedTypes": [
+                { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD" },
+                { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+              ],
+              "description": "SDS $OBD orbit-determination run result (WRMS, iterations, DIFFERENTIAL_CORRECTION), aligned-binary."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
           "portId": "result",
           "acceptedTypeSets": [
             {
@@ -93,6 +109,7 @@
   ],
   "schemasUsed": [
     { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
-    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" }
+    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
+    { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD" }
   ]
 }

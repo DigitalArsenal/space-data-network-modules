@@ -183,7 +183,7 @@ build_guest_link() {
     # od_lib TUs (every .cpp CMake compiles into od_lib) + sgp4_lib (Vallado).
     local LIB_TUS=(
         "src/orbit_determination.cpp" "src/meme_parser.cpp" "src/frame_transform.cpp"
-        "src/oem_parser.cpp" "src/oem_fb_reader.cpp" "src/omm_fb_builder.cpp"
+        "src/oem_parser.cpp" "src/oem_fb_reader.cpp" "src/omm_fb_builder.cpp" "src/obd_fb_builder.cpp"
         "src/sgp4_fitter.cpp" "src/plugin_runtime.cpp"
         "deps/vallado-sgp4/SGP4.cpp"
     )
