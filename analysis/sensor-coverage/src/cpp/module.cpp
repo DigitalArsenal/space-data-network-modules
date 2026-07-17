@@ -1756,6 +1756,18 @@ std::vector<uint8_t> build_scv_result(
   const uint32_t raster_words_per_bucket = std::max(
     1u,
     (raster_cell_count + 31u) / 32u);
+  // CURRENT_ACCESS_RGBA is a direct-texture visual product scaling as
+  // buckets x cells x 4 bytes. Fine grids push it past what plugin_alloc
+  // can provide (60 km GSD x 12 h / 15 s buckets = 1.6 GB) while shipped
+  // renderers rebuild colors from CURRENT_ACCESS_BITSET + PASS_COUNT and
+  // never sample a texture that large. Emit it only while texture-sized;
+  // past the cap the band is simply absent from the raster products.
+  constexpr size_t kMaxCurrentAccessRgbaBytes = 128ull * 1024ull * 1024ull;
+  const size_t current_access_rgba_bytes =
+    static_cast<size_t>(raster_bucket_count) * raster_cell_count * 4u;
+  const bool emit_current_access_rgba =
+    current_access_rgba_bytes > 0 &&
+    current_access_rgba_bytes <= kMaxCurrentAccessRgbaBytes;
   std::vector<double> raster_cell_bounds;
   raster_cell_bounds.reserve(cells.size() * 4);
   std::vector<double> raster_cell_centers;
@@ -1817,9 +1829,11 @@ std::vector<uint8_t> build_scv_result(
       ensure_uint_raster(
         raster_current_access_bitset,
         static_cast<size_t>(raster_bucket_count) * raster_words_per_bucket);
-      ensure_byte_raster(
-        raster_current_access_rgba,
-        static_cast<size_t>(raster_bucket_count) * raster_cell_count * 4u);
+      if (emit_current_access_rgba) {
+        ensure_byte_raster(
+          raster_current_access_rgba,
+          current_access_rgba_bytes);
+      }
       ensure_uint_raster(raster_bucket_active_cell_count, raster_bucket_count);
       if (raster_bucket_count > 0 && raster_step > 0.0) {
         for (const auto& interval : cell.intervals) {
@@ -1851,16 +1865,18 @@ std::vector<uint8_t> build_scv_result(
             if ((raster_current_access_bitset[word_index] & mask) == 0u) {
               raster_current_access_bitset[word_index] |= mask;
               ++raster_bucket_active_cell_count[window_index];
-              uint8_t access_rgba[4] = {};
-              current_access_rgba(coverage_fraction * 100.0, access_rgba);
-              write_rgba(
-                raster_current_access_rgba,
-                static_cast<size_t>(window_index) * raster_cell_count * 4u +
-                  raster_texture_cell_rgba_offset(cell, grid),
-                access_rgba[0],
-                access_rgba[1],
-                access_rgba[2],
-                access_rgba[3]);
+              if (emit_current_access_rgba) {
+                uint8_t access_rgba[4] = {};
+                current_access_rgba(coverage_fraction * 100.0, access_rgba);
+                write_rgba(
+                  raster_current_access_rgba,
+                  static_cast<size_t>(window_index) * raster_cell_count * 4u +
+                    raster_texture_cell_rgba_offset(cell, grid),
+                  access_rgba[0],
+                  access_rgba[1],
+                  access_rgba[2],
+                  access_rgba[3]);
+              }
             }
           }
         }
@@ -2363,12 +2379,13 @@ std::vector<uint8_t> build_scv_result(
       raster_current_access_bitset,
       raster_bucket_count,
       raster_words_per_bucket) ||
-    !push_uint8_band(
-      scvRasterProductKind_CURRENT_ACCESS_RGBA,
-      scvMetricSeriesKind_ACCESS_COUNT,
-      raster_current_access_rgba,
-      4,
-      raster_bucket_count) ||
+    (emit_current_access_rgba &&
+      !push_uint8_band(
+        scvRasterProductKind_CURRENT_ACCESS_RGBA,
+        scvMetricSeriesKind_ACCESS_COUNT,
+        raster_current_access_rgba,
+        4,
+        raster_bucket_count)) ||
     !push_uint32_band(
       scvRasterProductKind_BUCKET_ACTIVE_CELL_COUNT,
       scvMetricSeriesKind_ACCESS_COUNT,
