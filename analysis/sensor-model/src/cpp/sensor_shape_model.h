@@ -113,6 +113,13 @@ SensorShapeContract parse_sensor_shape_contract(const SensorShapeContract& contr
 SensorClassification classify_local_look(
     const SensorShapeContract& contract,
     SensorVec3 localLook);
+// Lean containment predicate for an ALREADY-PARSED contract: identical
+// inside/outside semantics to classify_local_look(...).inside, but no
+// contract re-parse, no conformance-label string copies, and no
+// classification bookkeeping. For hot per-sample paths.
+bool local_look_inside(
+    const SensorShapeContract& contract,
+    SensorVec3 localLook);
 std::vector<SensorVec3> generate_sensor_boundary_directions(
     const SensorShapeContract& contract);
 

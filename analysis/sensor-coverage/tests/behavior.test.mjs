@@ -79,11 +79,13 @@ test("sensor coverage source delegates SCV shape semantics to the shared sensor 
   assert.match(source, /parse_sensor_shape_contract\(sensor\)/);
   assert.match(source, /sensor->SHAPE_CONTRACT\(\)/);
   assert.doesNotMatch(source, /sensor->SHAPE\(\)/);
-  assert.match(source, /classify_local_look\(/);
+  // local_look_inside is the shared model's lean containment predicate —
+  // same delegation, minus per-call contract re-parse/label copies.
+  assert.match(source, /(classify_local_look|local_look_inside)\(/);
   assert.match(source, /generate_sensor_boundary_directions\(/);
   assert.match(source, /scvSensorShapeKind_SAR_ANNULAR_SECTOR/);
   assert.match(source, /scvSensorShapeKind_CUSTOM_POLYGON/);
-  assert.match(visibilitySource, /classify_local_look\(/);
+  assert.match(visibilitySource, /(classify_local_look|local_look_inside)\(/);
   assert.doesNotMatch(visibilitySource, /sensor\.type == "rectangular"/);
   assert.doesNotMatch(visibilitySource, /std::cos\(sensor\.outerHalfAngleRad\)/);
   assert.doesNotMatch(source, /\buses_full_clock_solid_conic_fast_bounds\b/);

@@ -545,6 +545,56 @@ SensorClassification classify_local_look(
   return classification;
 }
 
+bool local_look_inside(
+    const SensorShapeContract& contract,
+    SensorVec3 localLook) {
+  if (!contract.supported) {
+    return false;
+  }
+  if (!range_is_accepted(contract, vector_magnitude(localLook))) {
+    return false;
+  }
+  const SensorVec3 unitLook = normalize_vector(localLook);
+  switch (contract.kind) {
+    case SensorShapeKind::Rectangular:
+      return unitLook.z >= -kSensorEpsilon &&
+        std::fabs(std::atan2(unitLook.x, unitLook.z)) <=
+          contract.crossTrackHalfAngleRad + kSensorEpsilon &&
+        std::fabs(std::atan2(unitLook.y, unitLook.z)) <=
+          contract.alongTrackHalfAngleRad + kSensorEpsilon;
+    case SensorShapeKind::SarAnnularSector:
+    case SensorShapeKind::Conic: {
+      const double boresightAngleRad =
+        std::acos(sensor_clamp(unitLook.z, -1.0, 1.0));
+      const double clockAngleRad =
+        normalize_angle_rad(std::atan2(unitLook.y, unitLook.x));
+      return clock_angle_in_range(clockAngleRad, contract.clockRange) &&
+        boresightAngleRad <= contract.outerHalfAngleRad + kSensorEpsilon &&
+        boresightAngleRad + kSensorEpsilon >= contract.innerHalfAngleRad;
+    }
+    case SensorShapeKind::CustomPolygon: {
+      std::vector<std::pair<double, double>> projected;
+      projected.reserve(contract.polygonVertices.size());
+      for (const SensorVec3& vertex : contract.polygonVertices) {
+        double u = 0.0;
+        double v = 0.0;
+        if (!project_boresight_tangent(vertex, u, v)) {
+          return false;
+        }
+        projected.emplace_back(u, v);
+      }
+      double lookU = 0.0;
+      double lookV = 0.0;
+      return project_boresight_tangent(unitLook, lookU, lookV) &&
+        projected.size() >= 3 &&
+        point_in_projected_polygon(lookU, lookV, projected);
+    }
+    case SensorShapeKind::Unknown:
+    default:
+      return false;
+  }
+}
+
 std::vector<SensorVec3> generate_sensor_boundary_directions(
     const SensorShapeContract& inputContract) {
   const SensorShapeContract contract = parse_sensor_shape_contract(inputContract);
