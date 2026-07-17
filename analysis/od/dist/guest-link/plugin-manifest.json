@@ -1,0 +1,98 @@
+{
+  "pluginId": "orbit-determination",
+  "name": "Orbit Determination Plugin",
+  "version": "0.1.0",
+  "description": "Fits near-term SGP4 supplemental-GP mean elements ($OMM) to operator ephemeris ($OEM). Primary flow path is aligned-binary FlatBuffers ($OEM in -> fit -> $OMM out); a text command path (SpaceX MEME / CCSDS OEM KVN -> JSON) is retained for command back-compat.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["command", "direct"],
+  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "fit",
+      "displayName": "Fit supplemental-GP $OMM from operator $OEM ephemeris",
+      "inputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+              ],
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Held in memory only; never stored."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "options",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Labeling / fit-config / scoring overrides. In a baked flow these live in node CONFIG."
+        },
+        {
+          "portId": "meme",
+          "acceptedTypeSets": [
+            {
+              "setId": "text-ephemeris",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Back-compat command surface: SpaceX MEME text or CCSDS OEM KVN (inputFormat option selects/auto-detects)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
+                { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+              ],
+              "description": "SDS $OMM supplemental-GP mean elements (ORIGINATOR=SDN-OD), aligned-binary."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "json-result",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Back-compat command surface: JSON fit result (text path only)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" }
+  ]
+}
