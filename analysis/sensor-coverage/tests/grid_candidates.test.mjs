@@ -219,7 +219,7 @@ test("production coverage uses candidate cells before exact visibility", () => {
   assert.match(source, /conservativeGroundCapRadiusDeg\(/);
   assert.match(accumulationSource, /append_sensor_cap_candidates\(/);
   assert.match(accumulationSource, /candidate_cell_indices/);
-  assert.match(accumulationSource, /refined_visibility_interval\(/);
+  assert.match(accumulationSource, /append_refined_visibility_intervals\(/);
   assert.doesNotMatch(
     accumulationSource,
     /for \(int row = 0; row < grid\.rows; \+\+row\)[\s\S]*for \(int column = 0; column < grid\.columns; \+\+column\)/,
@@ -260,7 +260,7 @@ test("sensor-local boundary directions are cached outside the state loop", () =>
   assert.doesNotMatch(footprintSource, /generate_sensor_boundary_directions\(/);
 });
 
-test("grid candidate caps reuse resolved endpoints across adjacent windows", () => {
+test("swept grid candidate caps reuse resolved state-segment endpoints", () => {
   const source = readFileSync(
     new URL("../src/cpp/module.cpp", import.meta.url),
     "utf8",
@@ -277,7 +277,11 @@ test("grid candidate caps reuse resolved endpoints across adjacent windows", () 
   assert.match(accumulationSource, /resolve_visibility_states\(track\.states\)/);
   assert.match(accumulationSource, /const ResolvedVisibilityState& start_resolved/);
   assert.match(accumulationSource, /const ResolvedVisibilityState& stop_resolved/);
-  assert.match(accumulationSource, /const ResolvedVisibilityState midpoint_resolved/);
+  assert.match(
+    accumulationSource,
+    /append_sensor_cap_candidates\(\s*seg_start,\s*seg_stop/,
+  );
+  assert.doesNotMatch(accumulationSource, /midpoint_resolved/);
   assert.doesNotMatch(
     accumulationSource,
     /resolve_visibility_state\((?:start|stop)_resolved\.state\)/,
