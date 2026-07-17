@@ -27,64 +27,17 @@
 
 namespace {
 
-// Build a NON-size-prefixed SDS $OEM FlatBuffer (root table + "$OEM" file id, as
-// analysis/od::read_oem_flatbuffer / GetOEM expect). Verbose form: one explicit
-// EPHEMERIS_DATA_LINE per state (EME2000, per-line EPOCH). This is byte-for-byte
-// the build_oem_fb() the parity gate exercises, driven by the embedded fixture.
+// Build a NON-size-prefixed SDS $OEM FlatBuffer for the ISS fixture by delegating
+// to the shared oem_fb::build_oem_flatbuffer (common/oem_fb_builder.hpp, inlined by
+// build.mjs). EME2000/UTC/Earth is the honest source frame (the OD reader rotates
+// EME2000 -> TEME for the fit). OemFixtureState exposes exactly the fields the
+// builder template needs (.epoch/.x/.y/.z/.vx/.vy/.vz), so kIssStates passes
+// straight through — byte-for-byte the $OEM the RMS-parity gate exercises.
 std::vector<uint8_t> build_iss_oem() {
-    flatbuffers::FlatBufferBuilder fbb(1 << 16);
-
-    std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;
-    lines.reserve(static_cast<size_t>(kIssStateCount));
-    for (int i = 0; i < kIssStateCount; ++i) {
-        const OemFixtureState& s = kIssStates[i];
-        auto epoch = fbb.CreateString(s.epoch);
-        lines.push_back(CreateephemerisDataLine(fbb, epoch, s.x, s.y, s.z,
-                                                s.vx, s.vy, s.vz));
-    }
-    auto lines_vec = fbb.CreateVector(lines);
-
-    // Identity (CAT). NORAD is not in the CCSDS fixture META; the node carries
-    // the ISS catalog id so the downstream $OMM is labeled without options.
-    auto obj_name = fbb.CreateString(kOemObjectName);
-    auto obj_id = fbb.CreateString(kOemObjectId);
-    CATBuilder catb(fbb);
-    catb.add_OBJECT_NAME(obj_name);
-    catb.add_OBJECT_ID(obj_id);
-    catb.add_NORAD_CAT_ID(kOemNoradCatId);
-    auto cat = catb.Finish();
-
-    // REFERENCE_FRAME = RFM{ CelestialFrameWrapper{ EME2000 } } — honest source
-    // frame (the OD reader rotates EME2000 -> TEME for the fit). The SDS lib/cpp
-    // headers use unscoped (prefixed) enum members; the enum VALUES are identical
-    // to the flat scoped headers, so the emitted bytes are byte-identical.
-    auto cfw = CreateCelestialFrameWrapper(fbb, CelestialFrame_EME2000);
-    RFMBuilder rfmb(fbb);
-    rfmb.add_REFERENCE_FRAME_type(RFMUnion_CelestialFrameWrapper);
-    rfmb.add_REFERENCE_FRAME(cfw.Union());
-    auto rfm = rfmb.Finish();
-
-    auto center = fbb.CreateString(kOemCenterName);
-
-    ephemerisDataBlockBuilder blk(fbb);
-    blk.add_OBJECT(cat);
-    blk.add_CENTER_NAME(center);
-    blk.add_REFERENCE_FRAME(rfm);
-    blk.add_TIME_SYSTEM(timingStandard_UTC);
-    blk.add_STEP_SIZE(0.0);  // verbose form (explicit epoch per line)
-    blk.add_EPHEMERIS_DATA_LINES(lines_vec);
-    auto block = blk.Finish();
-
-    std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{block};
-    auto blocks_vec = fbb.CreateVector(blocks);
-
-    OEMBuilder oemb(fbb);
-    oemb.add_EPHEMERIS_DATA_BLOCK(blocks_vec);
-    auto oem = oemb.Finish();
-    FinishOEMBuffer(fbb, oem);  // stamps the "$OEM" file identifier
-
-    const uint8_t* p = fbb.GetBufferPointer();
-    return std::vector<uint8_t>(p, p + fbb.GetSize());
+    const oem_fb::Identity id{kOemObjectName, kOemObjectId, kOemNoradCatId};
+    return oem_fb::build_oem_flatbuffer(id, CelestialFrame_EME2000, kOemCenterName,
+                                        timingStandard_UTC, kIssStates,
+                                        kIssStateCount);
 }
 
 }  // namespace
