@@ -1,0 +1,67 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.oem-source-iss",
+  "name": "ISS $OEM Source Node",
+  "version": "0.1.0",
+  "description": "Single-source flow node (SDN OD-Flow Phase 1b): on a timer 'tick' it emits the ISS operator ephemeris as an SDS $OEM FlatBuffer (aligned-binary, typed $OEM) on the 'oem' output port. The $OEM is built in-module from the checked-in NASA ISS OEM fixture (EME2000, TIME_SYSTEM UTC, CENTER Earth) via the inverse of analysis/od's oem_fb_reader — the SAME state series the sacred RMS-parity gate uses. It STORES NOTHING: ephemeris exists only as the emitted frame, held in memory for the duration of the OD fit downstream. This ISS slice is the vertical-slice source; the real per-provider fetch chain (ephem-request/http/oem-parse) is a later increment. No capabilities.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "emit",
+      "displayName": "Emit ISS $OEM Ephemeris",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Timer tick frame (content ignored)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick that drives one $OEM emission."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+              ],
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Consumed in-memory by analysis/od.fit; never stored."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ISS $OEM ephemeris frame."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds the ISS $OEM FlatBuffer from the embedded fixture and emits it on a timer tick."
+    }
+  ],
+  "schemasUsed": [
+    { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "oem-source-iss-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
