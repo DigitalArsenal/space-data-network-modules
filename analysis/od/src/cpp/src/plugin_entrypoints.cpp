@@ -43,15 +43,8 @@ EMSCRIPTEN_KEEPALIVE
 int fit(void) {
     plugin_reset_output_state();
 
-    // The "meme" port carries the ephemeris payload for any supported format
-    // (MEME or CCSDS OEM); the format is selected data-level via the "options"
-    // frame's inputFormat field, or auto-detected. The port id is kept for ABI
-    // stability.
-    const auto* frame = find_input_frame("meme");
-    if (!frame || !frame->payload) {
-        plugin_set_error("missing-meme-input", "Input port \"meme\" is required.");
-        return 1;
-    }
+    // Optional "options" frame (labeling / fit-config / scoring). In a baked flow
+    // these live in node CONFIG; the port is kept for the command surface.
     const auto* options_frame = find_input_frame("options");
     const std::string_view options_json =
         options_frame && options_frame->payload
@@ -59,6 +52,40 @@ int fit(void) {
                   reinterpret_cast<const char*>(options_frame->payload),
                   options_frame->payload_length)
             : std::string_view{};
+
+    // ── FlatBuffer flow path (aligned-binary) ──────────────────────────────────
+    // The "oem" input port carries an SDS $OEM FlatBuffer. Fit the SAME core the
+    // text path fits and emit an SDS $OMM FlatBuffer on the "omm" output port as
+    // ALIGNED_BINARY. No JSON at this data hop.
+    const auto* oem_frame = find_input_frame("oem");
+    if (oem_frame && oem_frame->payload && oem_frame->payload_length > 0) {
+        const auto fb = od::fit_ephemeris_fb(oem_frame->payload,
+                                             oem_frame->payload_length, options_json);
+        if (!fb.ok) {
+            plugin_set_error(fb.error_code.c_str(), fb.error_message.c_str());
+            return 1;
+        }
+        if (plugin_push_output_ex(
+                "omm", "OMM.fbs", "$OMM",
+                PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
+                /*fixed_string_length=*/0, /*required_alignment=*/8,
+                fb.omm.data(), static_cast<uint32_t>(fb.omm.size())) < 0) {
+            plugin_set_error("emit-failed", "Failed to emit $OMM frame.");
+            return 1;
+        }
+        return 0;
+    }
+
+    // ── Text command path (back-compat: SpaceX MEME text or CCSDS OEM KVN) ──────
+    // The "meme" port carries the ephemeris payload for any supported text format;
+    // the format is selected data-level via the "options" inputFormat field, or
+    // auto-detected. The port id is kept for ABI stability.
+    const auto* frame = find_input_frame("meme");
+    if (!frame || !frame->payload) {
+        plugin_set_error("missing-input",
+                         "Input port \"oem\" ($OEM FlatBuffer) or \"meme\" (text) is required.");
+        return 1;
+    }
 
     const auto result = od::fit_ephemeris_payload(
         std::string_view(
