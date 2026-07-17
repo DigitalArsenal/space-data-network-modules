@@ -1255,15 +1255,16 @@ void accumulate_grid_coverage_products_impl(
     }
     const std::vector<ResolvedVisibilityState> resolved_states =
       resolve_visibility_states(track.states);
-    for (size_t state_index = 0; state_index + 1 < track.states.size(); ++state_index) {
-      const ResolvedVisibilityState& start_resolved = resolved_states[state_index];
-      const ResolvedVisibilityState& stop_resolved = resolved_states[state_index + 1];
+
+    const auto process_segment = [&](
+        const ResolvedVisibilityState& seg_start,
+        const ResolvedVisibilityState& seg_stop) {
       const double midpoint_seconds = 0.5 * (
-        start_resolved.state.elapsedSeconds +
-        stop_resolved.state.elapsedSeconds);
+        seg_start.state.elapsedSeconds +
+        seg_stop.state.elapsedSeconds);
       const State midpoint_state = interpolate_state(
-        start_resolved.state,
-        stop_resolved.state,
+        seg_start.state,
+        seg_stop.state,
         midpoint_seconds);
       const ResolvedVisibilityState midpoint_resolved =
         resolve_visibility_state(midpoint_state);
@@ -1273,7 +1274,7 @@ void accumulate_grid_coverage_products_impl(
         candidate_marks);
       candidate_cell_indices.clear();
       append_sensor_cap_candidates(
-        start_resolved,
+        seg_start,
         track.sensor,
         candidate_grid,
         candidate_marks,
@@ -1287,7 +1288,7 @@ void accumulate_grid_coverage_products_impl(
         candidate_generation,
         candidate_cell_indices);
       append_sensor_cap_candidates(
-        stop_resolved,
+        seg_stop,
         track.sensor,
         candidate_grid,
         candidate_marks,
@@ -1303,9 +1304,67 @@ void accumulate_grid_coverage_products_impl(
         const VisibilityInterval interval = refined_visibility_interval(
           cell.geometry,
           track.sensor,
-          start_resolved,
-          stop_resolved);
+          seg_start,
+          seg_stop);
         add_cell_interval(cell, interval, track.sensor.sensorId);
+      }
+    };
+
+    // A sensor whose frame rotates quickly between samples (e.g. a
+    // quaternion sweep) can slew its footprint by more than its own angular
+    // width within one segment; endpoint+midpoint tests then miss every
+    // cell the beam crossed in between. Subdivide such segments so the
+    // boresight moves only a fraction of the sensor's angular extent per
+    // sub-segment. Slow-rotating (nadir/side-look without sweep) segments
+    // keep a subdivision count of 1 and pay nothing extra.
+    const double rotation_threshold = std::max(
+      0.25 * track.sensor.maxBoundaryAngleRad,
+      1.0 / kRadiansToDegrees);
+
+    for (size_t state_index = 0; state_index + 1 < track.states.size(); ++state_index) {
+      const ResolvedVisibilityState& start_resolved = resolved_states[state_index];
+      const ResolvedVisibilityState& stop_resolved = resolved_states[state_index + 1];
+
+      int subdivisions = 1;
+      if (
+        start_resolved.frame.valid &&
+        stop_resolved.frame.valid &&
+        rotation_threshold > 0.0
+      ) {
+        const double boresight_dot = clamp(
+          dot(start_resolved.frame.boresight, stop_resolved.frame.boresight),
+          -1.0,
+          1.0);
+        const double rotation = std::acos(boresight_dot);
+        if (std::isfinite(rotation) && rotation > rotation_threshold) {
+          subdivisions = std::min(
+            32,
+            static_cast<int>(std::ceil(rotation / rotation_threshold)));
+        }
+      }
+
+      if (subdivisions <= 1) {
+        process_segment(start_resolved, stop_resolved);
+        continue;
+      }
+
+      const double seg_start_seconds = start_resolved.state.elapsedSeconds;
+      const double seg_span =
+        stop_resolved.state.elapsedSeconds - seg_start_seconds;
+      ResolvedVisibilityState previous = start_resolved;
+      for (int sub = 1; sub <= subdivisions; ++sub) {
+        ResolvedVisibilityState current;
+        if (sub == subdivisions) {
+          current = stop_resolved;
+        } else {
+          const State sub_state = interpolate_state(
+            start_resolved.state,
+            stop_resolved.state,
+            seg_start_seconds + (seg_span * sub) / subdivisions);
+          current = resolve_visibility_state(sub_state);
+        }
+        process_segment(previous, current);
+        previous = current;
       }
     }
   }
