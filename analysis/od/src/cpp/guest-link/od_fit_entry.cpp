@@ -55,5 +55,20 @@ extern "C" int fit(void) {
       PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
       /*fixed_string_length=*/0, /*required_alignment=*/8,
       r.omm.data(), (uint32_t)r.omm.size());
+  if (rc != 0) {
+    return rc;
+  }
+
+  // r.obd is a size-prefixed SDS $OBD FlatBuffer (the OD run result: WRMS,
+  // iterations, method) from the SAME fit; push it on the "obd" output port. A
+  // flow may wire it to a store node or leave it unwired (dropped). Same
+  // aligned-binary shape as $OMM.
+  if (!r.obd.empty()) {
+    rc = plugin_push_output_ex(
+        "obd", "OBD.fbs", "$OBD",
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OBD",
+        /*fixed_string_length=*/0, /*required_alignment=*/8,
+        r.obd.data(), (uint32_t)r.obd.size());
+  }
   return rc;
 }

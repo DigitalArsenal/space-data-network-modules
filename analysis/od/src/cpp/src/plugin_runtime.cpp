@@ -1,6 +1,7 @@
 #include "od/plugin_runtime.h"
 
 #include "od/meme_parser.h"
+#include "od/obd_fb_builder.h"
 #include "od/oem_fb_reader.h"
 #include "od/oem_parser.h"
 #include "od/omm_fb_builder.h"
@@ -346,6 +347,15 @@ PluginFitFBResult fit_ephemeris_fb(
 
         // Aligned-binary $OMM out (ORIGINATOR="SDN-OD").
         result.omm = build_omm_flatbuffer(fit.elements);
+        // Aligned-binary $OBD out (OD run result: WRMS, iterations, method) — the
+        // SAME fit, telemetry captured as a typed record. Fit span = the ephemeris
+        // time window the fit covered (JD is in days).
+        double fit_span_days = 0.0;
+        if (series.samples.size() >= 2) {
+            fit_span_days =
+                series.samples.back().epoch_jd - series.samples.front().epoch_jd;
+        }
+        result.obd = build_obd_flatbuffer(fit.elements, fit_span_days);
         result.rms_km = fit.elements.rms_km;
         result.converged = fit.elements.converged;
         result.mean_motion = fit.elements.mean_motion;
