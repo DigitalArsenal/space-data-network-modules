@@ -70,10 +70,23 @@ using namespace meme_oem;  // MemeMeta/parse_meme/build_oem_fb (src/meme_oem.hpp
 // START_TIME, STOP_TIME, STEP_SIZE, STATE_VECTOR_SIZE, EPHEMERIS_DATA } plus
 // ── Config (optional, from the invoke request payload) ───────────────────────
 
+// Per-object range-fetch cap: only the first ~2-3 orbits of the multi-day MEME
+// file are needed (the OD fit windows to ~2 orbits internally and the accuracy is
+// lossless — see analysis/od test_downsample_accuracy). 128 KiB of a Starlink MEME
+// (~118 B/line, 4 lines/state) is ~270 states ≈ ~4.5 h ≈ ~2.8 orbits. api.starlink.com
+// honors byte ranges (HTTP 206), cutting per-object download ~16x (2 MB -> 128 KB).
+static const long kDefaultRangeBytes = 131072;
+
 struct PullConfig {
-    long object_cap = kDefaultObjectCap;
+    long object_cap = kDefaultObjectCap;   // upper bound on total objects considered
     long fetch_interval_ms = kDefaultFetchIntervalMs;
     std::string manifest_url = kDefaultManifestURL;
+    // Batch window into the manifest (host-driven concurrent batches). offset<0 or
+    // count<0 => the whole [0, object_cap) span (legacy single-shot behavior).
+    long offset = -1;
+    long count = -1;
+    long range_bytes = kDefaultRangeBytes; // 0 => full file (no Range header)
+    bool probe = false;                    // true => return only the total object count (u32le)
 };
 
 PullConfig parse_config(const uint8_t* req, uint32_t len) {
@@ -90,7 +103,22 @@ PullConfig parse_config(const uint8_t* req, uint32_t len) {
     if (iv >= 0) c.fetch_interval_ms = iv;
     std::string url;
     if (ps::json_string_field(json, "manifestUrl", &url) && !url.empty()) c.manifest_url = url;
+    long off = ps::json_number_field(json, "offset", -1);
+    if (off >= 0) c.offset = off;
+    long cnt = ps::json_number_field(json, "count", -1);
+    if (cnt >= 0) c.count = cnt;
+    long rb = ps::json_number_field(json, "rangeBytes", -1);
+    if (rb >= 0) c.range_bytes = rb;
+    if (json.find("\"probe\":true") != std::string::npos) c.probe = true;
     return c;
+}
+
+// put_u32le appends a little-endian u32 at byte offset `at` in `s`.
+static inline void put_u32le(std::string& s, size_t at, uint32_t v) {
+    s[at + 0] = static_cast<char>(v & 0xFF);
+    s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
+    s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
+    s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
 }
 
 // ── The pull method ──────────────────────────────────────────────────────────
@@ -101,8 +129,26 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
     ps::HttpResult manifest = ps::http_get(cfg.manifest_url);
     std::vector<std::string> entries = ps::listing_lines(manifest.body, "MEME_");
 
-    long plan = static_cast<long>(entries.size());
-    if (plan > cfg.object_cap) plan = cfg.object_cap;  // per-pull politeness cap
+    // Total objects this pull is willing to cover (bounded by the object cap).
+    long total = static_cast<long>(entries.size());
+    if (total > cfg.object_cap) total = cfg.object_cap;
+    if (total < 0) total = 0;
+
+    // Probe mode: the host learns how many objects exist so it can schedule
+    // concurrent [offset,count) batches. Return the total as a bare u32le.
+    if (cfg.probe) {
+        std::string out(4, '\0');
+        put_u32le(out, 0, static_cast<uint32_t>(total));
+        return out;
+    }
+
+    // Batch window into the manifest. Default (offset<0 / count<0) = the whole
+    // [0,total) span (legacy single-shot). Host-driven batches pass explicit
+    // offset+count so many small pulls run concurrently with bounded memory.
+    long start = (cfg.offset >= 0) ? cfg.offset : 0;
+    long end = (cfg.count >= 0) ? (start + cfg.count) : total;
+    if (start > total) start = total;
+    if (end > total) end = total;
 
     // Emit an $OEM STREAM, never a store: fetch + parse + build one aligned-binary
     // SDS $OEM per object and frame it into a length-prefixed stream the OD runner
@@ -112,24 +158,22 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
     // Stream layout: [u32le count]  then count x ( [u32le len][non-size-prefixed $OEM] ).
     std::string stream(4, '\0');  // reserve the count header
     uint32_t count = 0;
-    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
-        s[at + 0] = static_cast<char>(v & 0xFF);
-        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
-        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
-        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
-    };
 
-    for (long i = 0; i < plan; ++i) {
+    for (long i = start; i < end; ++i) {
         const std::string& filename = entries[static_cast<size_t>(i)];
         std::string url = std::string(kBaseURL) + filename;
-        ps::HttpResult obj = ps::http_get(url);
-        if (obj.status != 200 || obj.body.empty()) continue;  // skip; halt-friendly per object
+        // Range-fetch only the fit window (first ~2-3 orbits) unless rangeBytes==0.
+        ps::HttpResult obj = (cfg.range_bytes > 0)
+                                 ? ps::http_get_range(url, cfg.range_bytes)
+                                 : ps::http_get(url);
+        // Range servers reply 206 (partial); non-range servers reply 200 (full).
+        if ((obj.status != 200 && obj.status != 206) || obj.body.empty()) continue;
 
         MemeMeta m;
         parse_meme_filename(filename, &m);
         std::vector<double> states;
         std::string content(obj.body.begin(), obj.body.end());
-        parse_meme(content, &m, &states);
+        parse_meme(content, &m, &states);  // drops the truncated trailing record
         if (states.empty()) continue;
 
         std::vector<uint8_t> oem = build_oem_fb(m, states);  // in-memory $OEM (TEME)

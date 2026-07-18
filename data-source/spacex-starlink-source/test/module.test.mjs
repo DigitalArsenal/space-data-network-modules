@@ -223,8 +223,14 @@ async function runPull(config) {
       const req = readReqMeta(payloadPtr, payloadLen);
       let meta;
       if (op === "http.request") {
+        captured.http = captured.http || [];
+        captured.http.push({ url: req.url, headers: req.headers || {} });
         const r = serveHttp(req.url);
-        meta = { ok: true, result: { status: r.status, body_encoding: "utf8", body: r.body } };
+        // Emulate a range server: a Range request on a MEME file yields 206.
+        const isMeme = !req.url.endsWith("MANIFEST.txt");
+        const hasRange = req.headers && req.headers.Range;
+        const status = (isMeme && hasRange && r.status === 200) ? 206 : r.status;
+        meta = { ok: true, result: { status, body_encoding: "utf8", body: r.body } };
       } else if (op === "storage.ingest_with_source") {
         // A2.2c-3: records arrive as a base64 size-prefixed stream + SourceTags.
         const stream = Buffer.from(req.records, "base64");
@@ -341,4 +347,42 @@ test("pull: no config uses the default object cap (still an in-memory $OEM strea
   const { count } = parseOemStream(resultBytes);
   // Only 2 fixtures resolve, so the default cap (25) doesn't bound them.
   assert.equal(count, 2);
+});
+
+// ── host-concurrent batch protocol (full-constellation scale) ────────────────
+
+test("probe: returns a bare u32le object count (no per-object fetch)", async () => {
+  const { resultBytes, http } = await runPull({ probe: true });
+  // Sample manifest has 3 MEME entries; default cap (25) doesn't bound them.
+  assert.equal(resultBytes.length, 4, "probe returns exactly a u32le");
+  assert.equal(u32le(resultBytes, 0), 3, "probe count = manifest entries");
+  // Probe fetches ONLY the manifest — never any MEME object file.
+  const memeFetches = (http || []).filter((h) => !h.url.endsWith("MANIFEST.txt"));
+  assert.equal(memeFetches.length, 0, "probe fetched no object files");
+});
+
+test("batch: offset/count select a window into the manifest", async () => {
+  const first = parseOemStream((await runPull({ offset: 0, count: 1 })).resultBytes);
+  assert.equal(first.count, 1, "offset 0 count 1 -> the first object");
+  // offset 2 is the 3rd manifest entry, which 404s (no fixture) -> 0 objects.
+  const tail = parseOemStream((await runPull({ offset: 2, count: 5 })).resultBytes);
+  assert.equal(tail.count, 0, "tail window past the resolvable fixtures is empty");
+});
+
+test("range: object files are range-fetched to the fit window (Range header, 206)", async () => {
+  const { http } = await runPull({ objectCap: 2 });
+  const memeFetches = (http || []).filter((h) => !h.url.endsWith("MANIFEST.txt"));
+  assert.ok(memeFetches.length >= 1, "at least one object fetched");
+  for (const f of memeFetches) {
+    assert.ok(f.headers.Range, `object fetch carries a Range header (${f.url})`);
+    assert.match(f.headers.Range, /^bytes=0-\d+$/, "Range is a leading byte window");
+  }
+});
+
+test("range: rangeBytes=0 opts out (full-file fetch, no Range header)", async () => {
+  const { http } = await runPull({ objectCap: 2, rangeBytes: 0 });
+  const memeFetches = (http || []).filter((h) => !h.url.endsWith("MANIFEST.txt"));
+  for (const f of memeFetches) {
+    assert.ok(!f.headers.Range, "no Range header when rangeBytes=0");
+  }
 });
