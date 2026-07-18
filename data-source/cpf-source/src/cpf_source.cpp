@@ -43,6 +43,29 @@
 
 #include "provider_source.hpp"
 
+// SDS $OEM FlatBuffer + shared builder (math.h SVID macro guards; native-only).
+#include <cmath>
+#ifdef SING
+#undef SING
+#endif
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#ifdef OVERFLOW
+#undef OVERFLOW
+#endif
+#ifdef UNDERFLOW
+#undef UNDERFLOW
+#endif
+#ifdef TLOSS
+#undef TLOSS
+#endif
+#ifdef PLOSS
+#undef PLOSS
+#endif
+#include "OEM_generated.h"
+#include "oem_fb_builder.hpp"
+
 namespace ps = provider_source;
 
 // ── Provider constants ──────────────────────────────────────────────────────
@@ -283,6 +306,39 @@ void parse_cpf(const std::string& content, CpfHeader* h, std::vector<CpfPos>* po
 // REFERENCE_FRAME is the CPF-declared frame (preserved, not transformed); the OD
 // side owns the ITRF->TEME transform (A2.2a). STATE_VECTOR_SIZE = 3 (CPF carries
 // no velocity — none is fabricated). Positions metres->km (CCSDS OEM unit).
+// Build a NON-size-prefixed SDS $OEM FlatBuffer for the CPF prediction: verbose,
+// position-only (CPF has no velocity -> velocity 0, unused by the position-residual
+// fit), positions metres->km, MJD+sec-of-day -> ISO UTC. Frame from the CPF code:
+// 0=ITRF (CustomFrame::ECEF), 2=EME2000 (CelestialFrame). Other codes (e.g. 1=TOD,
+// not accepted by the OD reader's classify_frame) are skipped (empty result). CPF
+// carries the real NORAD.
+std::vector<uint8_t> build_oem_fb(const CpfHeader& h, const std::vector<CpfPos>& pos,
+                                  const std::string& object_id) {
+    struct PosState {
+        std::string epoch;
+        double x, y, z, vx, vy, vz;
+    };
+    std::vector<PosState> full;
+    full.reserve(pos.size());
+    for (const CpfPos& c : pos) {
+        full.push_back({mjd_sod_to_iso(c.mjd, c.sec_of_day), c.x_m / 1000.0,
+                        c.y_m / 1000.0, c.z_m / 1000.0, 0.0, 0.0, 0.0});
+    }
+    const oem_fb::Identity id{h.target_name.c_str(), object_id.c_str(),
+                              static_cast<uint32_t>(h.norad)};
+    if (h.frame_code == 2) {
+        return oem_fb::build_oem_flatbuffer(id, CelestialFrame::EME2000, "EARTH",
+                                            timingStandard::UTC, full.data(),
+                                            static_cast<int>(full.size()));
+    }
+    if (h.frame_code == 0) {
+        return oem_fb::build_oem_flatbuffer(id, CustomFrame::ECEF, "EARTH",
+                                            timingStandard::UTC, full.data(),
+                                            static_cast<int>(full.size()));
+    }
+    return {};  // unsupported CPF frame (e.g. TOD) -> skip
+}
+
 std::string build_oem_record(const CpfHeader& h, const std::vector<CpfPos>& pos,
                              const std::string& object_id, const std::string& frame) {
     std::string s;
@@ -382,98 +438,48 @@ std::string join_url(const std::string& dir, const std::string& file) {
 
 std::string run_pull(const uint8_t* req, uint32_t req_len) {
     PullConfig cfg = parse_config(req, req_len);
-
-    ps::ProviderConfig pcfg;
-    pcfg.signing_slot = kSigningKeySlot;
-    pcfg.publish_topic = kPublishTopic;
-    pcfg.signature_type = "ed25519";   // must match the node-signing slot's key
-    pcfg.source_name = "cpf";
-    pcfg.data_source = "CPF";           // CelesTrak-comparable SOURCE token (A2.1)
-    pcfg.record_schema = "OEM";         // honest canonical SDS type (ephemeris)
-
     std::string marker = cfg.target + "_cpf_";
 
-    // 1) discover the newest CPF file for the target.
+    // $OEM STREAM (in-memory, never stored): [u32le count] then
+    // count x ( [u32le len][non-size-prefixed $OEM] ). One CPF target per pull.
+    std::string stream(4, '\0');
+    uint32_t count = 0;
+    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
+        s[at + 0] = static_cast<char>(v & 0xFF);
+        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
+        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
+        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
+    };
+
     ps::HttpResult listing = ps::http_get(cfg.listing_url);
     std::string filename;
     if (listing.status == 200 && !listing.body.empty())
         filename = select_newest_cpf(listing.body, marker);
 
-    long fetched = 0, stored = 0, signed_ = 0, published = 0, pos_count = 0;
-    long cpf_status = 0;
-    std::string frame, object_id;
-
     if (!filename.empty()) {
         std::string file_url = join_url(cfg.listing_url, filename);
         ps::HttpResult cpf = ps::http_get(file_url);
-        cpf_status = cpf.status;
         if (cpf.status == 200 && !cpf.body.empty()) {
-            fetched = 1;
             CpfHeader h;
             std::vector<CpfPos> pos;
             std::string content(cpf.body.begin(), cpf.body.end());
             parse_cpf(content, &h, &pos);
-            pos_count = static_cast<long>(pos.size());
-
             if (h.valid && !pos.empty()) {
-                frame = frame_name(h.frame_code);
-                object_id = ilrs_to_intl_designator(h.ilrs_id);
-
-                // Raw CPF bytes bound into signed provenance by SHA-256 (never
-                // stored under a data schema).
-                std::string source_sha256 = ps::sha256_hex(cpf.body.data(), cpf.body.size());
-                std::string oem = build_oem_record(h, pos, object_id, frame);
-
-                std::string file_id = pcfg.source_name + ":" + pcfg.record_schema + ":" +
-                                      std::to_string(h.norad) + ":" + h.start_time;
-                std::string provenance =
-                    std::string("{\"SOURCE_NAME\":\"") + ps::json_escape(pcfg.source_name) + "\"," +
-                    "\"SOURCE_URL\":\"" + ps::json_escape(file_url) + "\"," +
-                    "\"SOURCE_SHA256\":\"" + source_sha256 + "\"," +
-                    "\"DATA_SOURCE\":\"" + ps::json_escape(pcfg.data_source) + "\"," +
-                    "\"RECORD_SCHEMA\":\"" + ps::json_escape(pcfg.record_schema) + "\"," +
-                    "\"NORAD_CAT_ID\":" + std::to_string(h.norad) + "," +
-                    "\"OBJECT_NAME\":\"" + ps::json_escape(h.target_name) + "\"," +
-                    "\"OBJECT_ID\":\"" + ps::json_escape(object_id) + "\"," +
-                    "\"ILRS_SATELLITE_ID\":" + std::to_string(h.ilrs_id) + "," +
-                    "\"CPF_SOURCE_AGENCY\":\"" + ps::json_escape(h.source_agency) + "\"," +
-                    "\"CPF_FRAME_CODE\":" + std::to_string(h.frame_code) + "," +
-                    "\"REFERENCE_FRAME\":\"" + ps::json_escape(frame) + "\"," +
-                    "\"CPF_COM_CORRECTION\":" + std::to_string(h.com_correction) + "," +
-                    "\"SOURCE_UNITS\":\"m\"," +
-                    "\"RECORD_UNITS\":\"km\"," +
-                    "\"HAS_VELOCITY\":false," +
-                    "\"START_TIME\":\"" + ps::json_escape(h.start_time) + "\"," +
-                    "\"STOP_TIME\":\"" + ps::json_escape(h.stop_time) + "\"," +
-                    "\"INTERVAL_SEC\":" + std::to_string(h.interval) + "," +
-                    "\"POSITION_COUNT\":" + std::to_string(pos.size()) + "," +
-                    "\"PRODUCT_KIND\":\"prediction\"}";
-
-                ps::PublishResult r = ps::publish_record_with_source(
-                    pcfg,
-                    reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-                    filename, file_id, h.start_time, provenance,
-                    file_url, source_sha256);
-                if (r.stored) stored++;
-                if (r.signed_) signed_++;
-                if (r.published) published++;
+                std::string object_id = ilrs_to_intl_designator(h.ilrs_id);
+                std::vector<uint8_t> oem = build_oem_fb(h, pos, object_id);
+                if (!oem.empty()) {
+                    const size_t hdr = stream.size();
+                    stream.append(4, '\0');
+                    put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
+                    stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
+                    count++;
+                }
             }
         }
     }
 
-    std::string out = std::string("{\"ok\":true,\"source\":\"") + pcfg.source_name + "\",";
-    out += "\"listing_status\":" + std::to_string(listing.status) + ",";
-    out += "\"selected_file\":\"" + ps::json_escape(filename) + "\",";
-    out += "\"cpf_status\":" + std::to_string(cpf_status) + ",";
-    out += "\"record_schema\":\"" + pcfg.record_schema + "\",";
-    out += "\"reference_frame\":\"" + ps::json_escape(frame) + "\",";
-    out += "\"object_id\":\"" + ps::json_escape(object_id) + "\",";
-    out += "\"position_count\":" + std::to_string(pos_count) + ",";
-    out += "\"fetched\":" + std::to_string(fetched) + ",";
-    out += "\"stored\":" + std::to_string(stored) + ",";
-    out += "\"signed\":" + std::to_string(signed_) + ",";
-    out += "\"published\":" + std::to_string(published) + "}";
-    return out;
+    put_u32le(stream, 0, count);
+    return stream;
 }
 
 }  // namespace
