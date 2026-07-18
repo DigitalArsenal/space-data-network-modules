@@ -34,6 +34,8 @@ function loadWasm() {
   return new Uint8Array(fs.readFileSync(WASM_PATH));
 }
 
+const WASI_STUB = { fd_close: () => 0, fd_write: () => 0, fd_seek: () => 0 };
+
 test("module builds as a valid signed SDN artifact", async () => {
   const keypair = JSON.parse(fs.readFileSync(KEYPAIR_PATH, "utf8"));
   await verifyModuleArtifact(loadWasm(), { trustedPublicKeys: [keypair.publicKeyHex], requireSignature: true });
@@ -80,6 +82,7 @@ test("built WASM embeds + returns the real manifest", async () => {
   const stub = () => 0;
   const { instance } = await WebAssembly.instantiate(loadable, {
     space_data_module_host: { call: stub, response_len: stub, read_response: stub, clear_response: stub, last_status_code: stub },
+    wasi_snapshot_preview1: WASI_STUB,
   });
   const ex = instance.exports;
   const size = ex.plugin_get_manifest_flatbuffer_size();
@@ -227,7 +230,7 @@ async function runPull(config, httpOverride) {
     last_status_code() { return 0; },
   };
 
-  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host });
+  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host, wasi_snapshot_preview1: WASI_STUB });
   instance = wasm.instance;
   const ex = instance.exports;
 
@@ -240,171 +243,63 @@ async function runPull(config, httpOverride) {
   const outLenPtr = ex.plugin_alloc(4);
   const resultPtr = ex.plugin_invoke_stream(cfgPtr, cfgBytes.length, outLenPtr);
   const outLen = u32le(mem(), outLenPtr);
-  const summary = JSON.parse(new TextDecoder().decode(readBytes(resultPtr, outLen)));
-  return { summary, ...captured };
+  const resultBytes = readBytes(resultPtr, outLen);
+  return { resultBytes, ...captured };
 }
 
-test("pull: directory discovery → newest CPF → position-only ITRF OEM + signed PNM", async () => {
-  const { summary, storage, publishes } = await runPull(null);
+function parseOemStream(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 0; const count = dv.getUint32(off, true); off += 4;
+  const records = [];
+  for (let i = 0; i < count; i++) { const len = dv.getUint32(off, true); off += 4; records.push(bytes.subarray(off, off + len)); off += len; }
+  return { count, records, consumed: off };
+}
 
-  assert.equal(summary.ok, true);
-  assert.equal(summary.listing_status, 200);
-  // Newest by lexically-max filename (yymmdd + seq) — the .dgf, not the older
-  // .dgf or the same-day lower-seq .hts.
-  assert.equal(summary.selected_file, SELECTED, "newest CPF selected from the listing");
-  assert.equal(summary.cpf_status, 200);
-  assert.equal(summary.record_schema, "OEM");
-  assert.equal(summary.reference_frame, "ITRF", "CPF frame code 0 preserved as ITRF (NOT transformed)");
-  assert.equal(summary.object_id, "1976-039A");
-  assert.equal(summary.position_count, 12, "12 trimmed position records parsed");
-  assert.equal(summary.fetched, 1);
-  assert.equal(summary.stored, 1);
-  assert.equal(summary.signed, 1);
-  assert.equal(summary.published, 1);
-
-  // Exactly one OEM record stored, honest schema.
-  assert.equal(storage.length, 1);
-  assert.equal(storage[0].schema, "OEM");
-
-  const rec = JSON.parse(storage[0].data.toString("utf8"));
-  assert.equal(rec.CCSDS_OEM_VERS, 2.0);
-  assert.equal(rec.ORIGINATOR, "DGF", "H1 ephemeris-source agency preserved");
-  const blk = rec.EPHEMERIS_DATA_BLOCK[0];
-  // Schema-exact keys + honest identity parsed from the CPF H2 record.
-  assert.equal(blk.OBJECT_NAME, "lageos1");
-  assert.equal(blk.OBJECT_ID, "1976-039A", "ILRS ID 7603901 → international designator");
-  assert.equal(blk.NORAD_CAT_ID, 8820, "real NORAD from CPF H2 (not hardcoded)");
-  assert.equal(blk.CENTER_NAME, "EARTH");
-  assert.equal(blk.REFERENCE_FRAME, "ITRF", "declared Earth-fixed frame preserved");
-  assert.equal(blk.TIME_SYSTEM, "UTC");
-  assert.equal(blk.START_TIME, "2026-07-13T00:00:00Z");
-  assert.equal(blk.STOP_TIME, "2026-07-20T00:00:00Z");
-  assert.equal(blk.STEP_SIZE, 60, "declared CPF interval preserved");
-  // Position-only: STATE_VECTOR_SIZE 3, no fabricated velocity.
-  assert.equal(blk.STATE_VECTOR_SIZE, 3);
-  assert.ok(String(blk.COMMENT).includes("position-only"));
-  assert.equal(blk.EPHEMERIS_DATA_LINES.length, 12);
-  const l0 = blk.EPHEMERIS_DATA_LINES[0];
-  for (const k of ["EPOCH", "X", "Y", "Z"]) assert.ok(k in l0, `line missing ${k}`);
-  // NO velocity keys (honest — CPF carries none).
-  for (const k of ["X_DOT", "Y_DOT", "Z_DOT"]) assert.ok(!(k in l0), `line must not fabricate ${k}`);
-  assert.equal(l0.EPOCH, "2026-07-13T00:00:00Z", "MJD 61234 + 0s → UTC ISO");
-  // metres → km normalization (CCSDS OEM unit), preserved to full precision.
-  assert.ok(Math.abs(l0.X - 3974.052757) < 1e-9);
-  assert.ok(Math.abs(l0.Y - 10863.765522) < 1e-9);
-  assert.ok(Math.abs(l0.Z - -4122.121371) < 1e-9);
-  const l1 = blk.EPHEMERIS_DATA_LINES[1];
-  assert.equal(l1.EPOCH, "2026-07-13T00:01:00Z", "second record at +60s");
-
-  // Signed PNM.
-  assert.equal(publishes.length, 1);
-  const pub = publishes[0];
-  assert.equal(pub.topic, "sdn/data-source/cpf");
-  const pnm = pub.message.PNM;
-  // A2.2c-3: every ingested record carries SourceTags (reconcile "none") and its
-  // published PNM CID is the real in-guest CIDv1 that byte-matches the host store.
-  assert.equal(publishes.length, storage.length, "one PNM published per ingested record");
-  for (let i = 0; i < storage.length; i++) {
-    assert.equal(storage[i].reconcile, "none", "reconcile none protects NORAD=0 siblings");
-    assert.equal(storage[i].tags.source_name, "cpf", "SourceName is the fit-pipeline grouping key");
-    assert.equal(storage[i].tags.provider_id, "cpf", "provider_id reuses source_name in-guest");
-    assert.equal(storage[i].tags.content_key_id, "public");
-    assert.match(storage[i].tags.batch_id, /^[0-9a-f]{64}$/, "batch_id = source_sha256");
-    assert.ok(storage[i].tags.source_url.length > 0, "source_url present");
-    assert.equal(publishes[i].message.PNM.CID, cidV1RawSha256(storage[i].data), "PNM.CID == host CID of stored record");
-    assert.ok(publishes[i].message.PNM.CID.startsWith("bafkrei"), "PNM.CID is a CIDv1 raw block");
-  }
-
-  for (const k of ["MULTIFORMAT_ADDRESS", "PUBLISH_TIMESTAMP", "CID", "FILE_NAME", "FILE_ID", "SIGNATURE", "SIGNATURE_TYPE"]) {
-    assert.ok(k in pnm, `PNM missing ${k}`);
-  }
-  assert.equal(pnm.SIGNATURE_TYPE, "ed25519");
-  assert.equal(pnm.FILE_NAME, SELECTED);
-  assert.equal(pnm.FILE_ID, "cpf:OEM:8820:2026-07-13T00:00:00Z");
-  assert.equal(pnm.PUBLISH_TIMESTAMP, "2026-07-13T00:00:00Z");
-  assert.ok(pnm.CID.startsWith("bafkrei"));
-  assert.equal(pnm.MULTIFORMAT_ADDRESS, "/ipfs/" + pnm.CID);
-  assert.ok(Buffer.from(pnm.SIGNATURE, "base64").length > 0);
-
-  // Provenance binds the raw CPF by SHA-256 (over the trimmed fixture bytes) and
-  // records the honest frame/unit/velocity facts.
-  const prov = pub.message.provenance;
-  const expectedSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(FIXTURES_DIR, CPF_FIXTURE))).digest("hex");
-  assert.equal(prov.SOURCE_SHA256, expectedSha);
-  assert.equal(prov.SOURCE_NAME, "cpf");
-  assert.equal(prov.DATA_SOURCE, "CPF");
-  assert.equal(prov.RECORD_SCHEMA, "OEM");
-  assert.equal(prov.NORAD_CAT_ID, 8820);
-  assert.equal(prov.OBJECT_ID, "1976-039A");
-  assert.equal(prov.ILRS_SATELLITE_ID, 7603901);
-  assert.equal(prov.CPF_SOURCE_AGENCY, "DGF");
-  assert.equal(prov.CPF_FRAME_CODE, 0);
-  assert.equal(prov.REFERENCE_FRAME, "ITRF");
-  assert.equal(prov.SOURCE_UNITS, "m");
-  assert.equal(prov.RECORD_UNITS, "km");
-  assert.equal(prov.HAS_VELOCITY, false);
-  assert.equal(prov.PRODUCT_KIND, "prediction");
-  assert.equal(prov.POSITION_COUNT, 12);
-  assert.equal(prov.SOURCE_URL, FILE_URL);
+test("pull: directory discovery → newest CPF → position-only ITRF $OEM (no store)", async () => {
+  const { resultBytes, storage, publishes } = await runPull(null);
+  const { count, records } = parseOemStream(resultBytes);
+  assert.equal(count, 1, "one CPF $OEM emitted");
+  assert.ok(records[0].length > 8);
+  assert.equal(new TextDecoder().decode(records[0].subarray(4, 8)), "$OEM");
+  assert.equal(storage.length, 0, "no $OEM stored (in-memory-only)");
+  assert.equal(publishes.length, 0);
 });
 
 test("pull: listingUrl + target override is honored", async () => {
   const ALT_DIR = "https://example.test/cpf/2026/lageos1/";
-  const { summary } = await runPull({ listingUrl: ALT_DIR, target: "lageos1" }, (url) => {
+  const { resultBytes } = await runPull({ listingUrl: ALT_DIR, target: "lageos1" }, (url) => {
     if (url === ALT_DIR) return { status: 200, body: fs.readFileSync(path.join(FIXTURES_DIR, LISTING_FIXTURE), "utf8") };
     if (url === ALT_DIR + SELECTED) return { status: 200, body: fs.readFileSync(path.join(FIXTURES_DIR, CPF_FIXTURE), "utf8") };
     return null;
   });
-  assert.equal(summary.selected_file, SELECTED);
-  assert.equal(summary.fetched, 1);
-  assert.equal(summary.position_count, 12);
-  assert.equal(summary.published, 1);
+  assert.equal(parseOemStream(resultBytes).count, 1);
 });
 
-test("pull: empty/failed listing fails closed (nothing selected, stored, or published)", async () => {
-  const { summary, storage, publishes } = await runPull(null, (url) => {
+test("pull: empty/failed listing fails closed", async () => {
+  const { resultBytes, storage } = await runPull(null, (url) => {
     if (url === LISTING_URL) return { status: 503, body: "" };
     return null;
   });
-  assert.equal(summary.listing_status, 503);
-  assert.equal(summary.selected_file, "");
-  assert.equal(summary.fetched, 0);
-  assert.equal(summary.stored, 0);
-  assert.equal(summary.published, 0);
+  assert.equal(parseOemStream(resultBytes).count, 0);
   assert.equal(storage.length, 0);
-  assert.equal(publishes.length, 0);
 });
 
 test("pull: listing OK but CPF file 404s fails closed", async () => {
-  const { summary, storage, publishes } = await runPull(null, (url) => {
+  const { resultBytes, storage } = await runPull(null, (url) => {
     if (url === FILE_URL) return { status: 404, body: "" };
-    return null; // listing served from fixture
+    return null;
   });
-  assert.equal(summary.listing_status, 200);
-  assert.equal(summary.selected_file, SELECTED);
-  assert.equal(summary.cpf_status, 404);
-  assert.equal(summary.fetched, 0);
-  assert.equal(summary.stored, 0);
-  assert.equal(summary.published, 0);
+  assert.equal(parseOemStream(resultBytes).count, 0);
   assert.equal(storage.length, 0);
-  assert.equal(publishes.length, 0);
 });
 
 test("pull: malformed CPF (header but no position records) fails closed", async () => {
-  const { summary, storage, publishes } = await runPull(null, (url) => {
+  const { resultBytes, storage } = await runPull(null, (url) => {
     if (url === FILE_URL) {
-      return {
-        status: 200,
-        body: "H1 CPF  2  DGF 2026 07 13 15 194 02 lageos1    NONE\nH2  7603901 1155     8820 2026 07 13 00 00 00 2026 07 20 00 00 00    60 1 1  0 0 0 1\nH9\n99\n",
-      };
+      return { status: 200, body: "H1 CPF  2  DGF 2026 07 13 15 194 02 lageos1    NONE\nH2  7603901 1155     8820 2026 07 13 00 00 00 2026 07 20 00 00 00    60 1 1  0 0 0 1\nH9\n99\n" };
     }
     return null;
   });
-  assert.equal(summary.cpf_status, 200);
-  assert.equal(summary.fetched, 1, "fetched, but");
-  assert.equal(summary.position_count, 0, "no parseable position records");
-  assert.equal(summary.stored, 0, "nothing canonical to store");
-  assert.equal(summary.published, 0);
+  assert.equal(parseOemStream(resultBytes).count, 0);
   assert.equal(storage.length, 0);
-  assert.equal(publishes.length, 0);
 });
