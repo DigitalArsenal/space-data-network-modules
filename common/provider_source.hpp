@@ -329,6 +329,28 @@ inline HttpResult http_get(const std::string& url) {
     return r;
 }
 
+// http_get_range: fetch only the first `max_bytes` of `url` via an HTTP Range
+// request (Range: bytes=0-(max_bytes-1)). Servers that honor ranges reply 206
+// with just that prefix; servers that don't reply 200 with the full body (still
+// correct, just no bandwidth saving). Used to pull only the OD fit window (~2
+// orbits) from a large operator ephemeris file instead of the whole multi-day
+// file. The kubo http cap already forwards request Headers, so no host change.
+inline HttpResult http_get_range(const std::string& url, long max_bytes) {
+    HttpResult r;
+    std::string payload = "{\"method\":\"GET\",\"url\":\"" + json_escape(url) +
+                          "\",\"headers\":{\"Range\":\"bytes=0-" +
+                          std::to_string(max_bytes > 0 ? max_bytes - 1 : 0) + "\"}}";
+    std::vector<uint8_t> env = hostcall("http.request", payload);
+    std::string meta = envelope_meta_json(env);
+    r.status = json_number_field(meta, "status", 0);
+    std::string encoding, body;
+    json_string_field(meta, "body_encoding", &encoding);
+    if (!json_string_field(meta, "body", &body)) return r;
+    if (encoding == "base64") r.body = base64_decode(body);
+    else r.body = std::vector<uint8_t>(body.begin(), body.end());
+    return r;
+}
+
 // STORAGE_WRITE: store raw record bytes under a schema. Returns the content id
 // (cid) the host assigns, or "" on failure.
 inline std::string storage_write(const std::string& schema, const uint8_t* data, size_t len) {
