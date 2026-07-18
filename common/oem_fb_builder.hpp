@@ -93,6 +93,65 @@ inline std::vector<uint8_t> build_oem_flatbuffer(
     return std::vector<uint8_t>(p, p + fbb.GetSize());
 }
 
+// VERBOSE-form overload with a CUSTOM frame (RFM{ CustomFrameWrapper{ frame } }).
+// For Earth-fixed / position-only providers (SP3 IGS20, ECF, CPF ITRF): pass
+// CustomFrame_ECEF (token "ECEF" -> the OD reader's FrameKind::Ecef, GMST-rotated
+// to TEME). StateT exposes .epoch + doubles .x/.y/.z/.vx/.vy/.vz (km, km/s);
+// position-only providers pass velocity 0 (unused by the position-residual fit).
+// Same construction order as the celestial verbose builder.
+template <typename StateT>
+inline std::vector<uint8_t> build_oem_flatbuffer(
+    const Identity& id, CustomFrame frame, const char* center_name,
+    timingStandard time_system, const StateT* states, int state_count) {
+    flatbuffers::FlatBufferBuilder fbb(1 << 16);
+
+    std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;
+    lines.reserve(state_count < 0 ? 0 : static_cast<std::size_t>(state_count));
+    for (int i = 0; i < state_count; ++i) {
+        const StateT& s = states[i];
+        auto epoch = fbb.CreateString(s.epoch);
+        lines.push_back(
+            CreateephemerisDataLine(fbb, epoch, s.x, s.y, s.z, s.vx, s.vy, s.vz));
+    }
+    auto lines_vec = fbb.CreateVector(lines);
+
+    auto obj_name = fbb.CreateString(id.object_name);
+    auto obj_id = fbb.CreateString(id.object_id);
+    CATBuilder catb(fbb);
+    catb.add_OBJECT_NAME(obj_name);
+    catb.add_OBJECT_ID(obj_id);
+    catb.add_NORAD_CAT_ID(id.norad_cat_id);
+    auto cat = catb.Finish();
+
+    auto cfw = CreateCustomFrameWrapper(fbb, frame);
+    RFMBuilder rfmb(fbb);
+    rfmb.add_REFERENCE_FRAME_type(RFMUnionTraits<CustomFrameWrapper>::enum_value);
+    rfmb.add_REFERENCE_FRAME(cfw.Union());
+    auto rfm = rfmb.Finish();
+
+    auto center = fbb.CreateString(center_name);
+
+    ephemerisDataBlockBuilder blk(fbb);
+    blk.add_OBJECT(cat);
+    blk.add_CENTER_NAME(center);
+    blk.add_REFERENCE_FRAME(rfm);
+    blk.add_TIME_SYSTEM(time_system);
+    blk.add_STEP_SIZE(0.0);
+    blk.add_EPHEMERIS_DATA_LINES(lines_vec);
+    auto block = blk.Finish();
+
+    std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{block};
+    auto blocks_vec = fbb.CreateVector(blocks);
+
+    OEMBuilder oemb(fbb);
+    oemb.add_EPHEMERIS_DATA_BLOCK(blocks_vec);
+    auto oem = oemb.Finish();
+    FinishOEMBuffer(fbb, oem);
+
+    const uint8_t* p = fbb.GetBufferPointer();
+    return std::vector<uint8_t>(p, p + fbb.GetSize());
+}
+
 // Build a NON-size-prefixed SDS $OEM FlatBuffer in the COMPACT form: a flat
 // EPHEMERIS_DATA vector (stride 6: x,y,z,vx,vy,vz km/km-s) + START_TIME + STEP_SIZE
 // (seconds), from which analysis/od's oem_fb_reader reconstructs epoch[i] =

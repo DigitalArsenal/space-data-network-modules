@@ -34,6 +34,8 @@ function loadWasm() {
   return new Uint8Array(fs.readFileSync(WASM_PATH));
 }
 
+const WASI_STUB = { fd_close: () => 0, fd_write: () => 0, fd_seek: () => 0 };
+
 test("module builds as a valid signed SDN artifact", async () => {
   const keypair = JSON.parse(fs.readFileSync(KEYPAIR_PATH, "utf8"));
   await verifyModuleArtifact(loadWasm(), { trustedPublicKeys: [keypair.publicKeyHex], requireSignature: true });
@@ -80,6 +82,7 @@ test("built WASM embeds + returns the real manifest", async () => {
   const stub = () => 0;
   const { instance } = await WebAssembly.instantiate(loadable, {
     space_data_module_host: { call: stub, response_len: stub, read_response: stub, clear_response: stub, last_status_code: stub },
+    wasi_snapshot_preview1: WASI_STUB,
   });
   const ex = instance.exports;
   const size = ex.plugin_get_manifest_flatbuffer_size();
@@ -221,7 +224,7 @@ async function runPull(config, httpOverride) {
     last_status_code() { return 0; },
   };
 
-  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host });
+  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host, wasi_snapshot_preview1: WASI_STUB });
   instance = wasm.instance;
   const ex = instance.exports;
 
@@ -234,143 +237,56 @@ async function runPull(config, httpOverride) {
   const outLenPtr = ex.plugin_alloc(4);
   const resultPtr = ex.plugin_invoke_stream(cfgPtr, cfgBytes.length, outLenPtr);
   const outLen = u32le(mem(), outLenPtr);
-  const summary = JSON.parse(new TextDecoder().decode(readBytes(resultPtr, outLen)));
-  return { summary, ...captured };
+  const resultBytes = readBytes(resultPtr, outLen);
+  return { resultBytes, ...captured };
 }
 
-test("pull: SP3 → verbose position-only OEM per GLONASS sat, frame/time AS DECLARED", async () => {
-  const { summary, storage, publishes } = await runPull(null);
+function parseOemStream(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 0; const count = dv.getUint32(off, true); off += 4;
+  const records = [];
+  for (let i = 0; i < count; i++) { const len = dv.getUint32(off, true); off += 4; records.push(bytes.subarray(off, off + len)); off += len; }
+  return { count, records, consumed: off };
+}
 
-  assert.equal(summary.ok, true);
-  assert.equal(summary.fetch_status, 200);
-  assert.equal(summary.record_schema, "OEM");
-  assert.equal(summary.glonass_sats, 25, "25 GLONASS sats in the fixture (R01-R24, R26)");
-  // AS DECLARED in the SP3 header — the mission-correcting finding.
-  assert.equal(summary.coordinate_system, "IGS20", "IAC SP3 declares IGS20 (ITRF2020), NOT PZ-90.11");
-  assert.equal(summary.time_system, "GPS", "IAC SP3 declares GPS time, NOT GLONASS time");
-  assert.equal(summary.fetched, 1);
-  assert.equal(summary.records, 25);
-  assert.equal(summary.stored, 25);
-  assert.equal(summary.signed, 25);
-  assert.equal(summary.published, 25);
-  assert.equal(storage.length, 25);
-  for (const s of storage) assert.equal(s.schema, "OEM");
-
-  // First record = R01 (has the bad-clock 999999.999999 edge case; position kept).
-  const rec = JSON.parse(storage[0].data.toString("utf8"));
-  assert.equal(rec.CCSDS_OEM_VERS, 2.0);
-  assert.equal(rec.ORIGINATOR, "IAC");
-  const blk = rec.EPHEMERIS_DATA_BLOCK[0];
-  assert.equal(blk.OBJECT_NAME, "GLONASS R01");
-  assert.equal(blk.OBJECT_ID, "", "no international designator in SP3 — not fabricated");
-  assert.equal(blk.NORAD_CAT_ID, 0, "GLONASS slot is not a NORAD id — not fabricated");
-  assert.equal(blk.CENTER_NAME, "EARTH");
-  assert.equal(blk.REFERENCE_FRAME, "IGS20", "declared frame preserved (NOT relabeled to PZ-90.11, NOT transformed)");
-  assert.equal(blk.TIME_SYSTEM, "GPS", "declared time system preserved");
-  assert.ok(blk.COMMENT.includes("NOT PZ-90.11"));
-  assert.ok(blk.COMMENT.includes("Position-only"));
-  // Verbose + position-only.
-  assert.equal(blk.STEP_SIZE, 0);
-  assert.equal(blk.STATE_VECTOR_SIZE, 3, "position-only (SP3 has no velocity records)");
-  assert.equal(blk.EPHEMERIS_DATA_LINES.length, 3, "3 trimmed epochs (bad clock did NOT drop the position)");
-  const l0 = blk.EPHEMERIS_DATA_LINES[0];
-  for (const k of ["EPOCH", "X", "Y", "Z"]) assert.ok(k in l0, `line missing ${k}`);
-  for (const k of ["X_DOT", "Y_DOT", "Z_DOT"]) assert.ok(!(k in l0), `no fabricated velocity ${k}`);
-  assert.equal(l0.EPOCH, "2026-07-11T00:00:00.000");
-  assert.ok(Math.abs(l0.X - 17423.248833) < 1e-6, `X ${l0.X}`);
-  assert.ok(Math.abs(l0.Y - -17601.471220) < 1e-6);
-  assert.ok(Math.abs(l0.Z - 6137.362851) < 1e-6);
-  assert.equal(blk.START_TIME, "2026-07-11T00:00:00.000");
-  assert.equal(blk.STOP_TIME, "2026-07-11T00:30:00.000");
-
-  // Signed PNM + FILE_ID partition convention.
-  assert.equal(publishes.length, 25);
-  const pub = publishes[0];
-  assert.equal(pub.topic, "sdn/data-source/glonass");
-  const pnm = pub.message.PNM;
-  // A2.2c-3: every ingested record carries SourceTags (reconcile "none") and its
-  // published PNM CID is the real in-guest CIDv1 that byte-matches the host store.
-  assert.equal(publishes.length, storage.length, "one PNM published per ingested record");
-  for (let i = 0; i < storage.length; i++) {
-    assert.equal(storage[i].reconcile, "none", "reconcile none protects NORAD=0 siblings");
-    assert.equal(storage[i].tags.source_name, "glonass", "SourceName is the fit-pipeline grouping key");
-    assert.equal(storage[i].tags.provider_id, "glonass", "provider_id reuses source_name in-guest");
-    assert.equal(storage[i].tags.content_key_id, "public");
-    assert.match(storage[i].tags.batch_id, /^[0-9a-f]{64}$/, "batch_id = source_sha256");
-    assert.ok(storage[i].tags.source_url.length > 0, "source_url present");
-    assert.equal(publishes[i].message.PNM.CID, cidV1RawSha256(storage[i].data), "PNM.CID == host CID of stored record");
-    assert.ok(publishes[i].message.PNM.CID.startsWith("bafkrei"), "PNM.CID is a CIDv1 raw block");
+test("pull: SP3 → in-memory $OEM stream, one per GLONASS sat (no store)", async () => {
+  const { resultBytes, storage, publishes } = await runPull(null);
+  const { count, records, consumed } = parseOemStream(resultBytes);
+  assert.equal(count, 25, "25 GLONASS sats -> 25 framed $OEM");
+  assert.equal(consumed, resultBytes.length, "stream fully consumed");
+  for (const r of records) {
+    assert.ok(r.length > 8);
+    assert.equal(new TextDecoder().decode(r.subarray(4, 8)), "$OEM");
   }
-
-  for (const k of ["MULTIFORMAT_ADDRESS", "PUBLISH_TIMESTAMP", "CID", "FILE_NAME", "FILE_ID", "SIGNATURE", "SIGNATURE_TYPE"]) {
-    assert.ok(k in pnm, `PNM missing ${k}`);
-  }
-  assert.equal(pnm.SIGNATURE_TYPE, "ed25519");
-  assert.equal(pnm.FILE_NAME, "Final.sp3");
-  assert.equal(pnm.FILE_ID, "glonass:OEM:R01:2026-07-11T00:00:00.000");
-  assert.equal(pnm.MULTIFORMAT_ADDRESS, "/ipfs/" + pnm.CID);
-
-  // Provenance binds raw SP3 by SHA-256 + records the honest frame finding.
-  const prov = pub.message.provenance;
-  const expectedSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(FIXTURES_DIR, FIXTURE_FILE))).digest("hex");
-  assert.equal(prov.SOURCE_SHA256, expectedSha);
-  assert.equal(prov.SOURCE_NAME, "glonass");
-  assert.equal(prov.DATA_SOURCE, "GLONASS-RE");
-  assert.equal(prov.RECORD_SCHEMA, "OEM");
-  assert.equal(prov.SP3_SAT_ID, "R01");
-  assert.equal(prov.SP3_VERSION, "d");
-  assert.equal(prov.COORDINATE_SYSTEM, "IGS20");
-  assert.equal(prov.TIME_SYSTEM, "GPS");
-  assert.ok(prov.FRAME_NOTE.includes("NOT PZ-90.11"));
-  assert.equal(prov.STATE_REPRESENTATION, "position-only; SP3 has no velocity records");
-  assert.equal(prov.ORBIT_TYPE, "FIT");
-  assert.equal(prov.AGENCY, "IAC");
-  assert.equal(prov.GPS_WEEK, 2426);
-  assert.equal(prov.STATE_COUNT, 3);
-  assert.equal(prov.SOURCE_URL, SOURCE_URL);
+  assert.equal(storage.length, 0, "no $OEM stored (in-memory-only)");
+  assert.equal(publishes.length, 0);
 });
 
 test("pull: objectCap bounds per-pull record churn", async () => {
-  const { summary, storage, publishes } = await runPull({ objectCap: 4 });
-  assert.equal(summary.glonass_sats, 25, "all sats parsed");
-  assert.equal(summary.records, 4, "but only objectCap emitted");
-  assert.equal(storage.length, 4);
-  assert.equal(publishes.length, 4);
+  const { resultBytes } = await runPull({ objectCap: 4 });
+  assert.equal(parseOemStream(resultBytes).count, 4, "only objectCap emitted");
 });
 
 test("pull: sourceUrl override is honored", async () => {
   const ALT = "https://example.test/iac_glonass.sp3";
-  const { summary } = await runPull({ sourceUrl: ALT }, (url) => {
+  const { resultBytes } = await runPull({ sourceUrl: ALT }, (url) => {
     if (url === ALT) return { status: 200, body: fs.readFileSync(path.join(FIXTURES_DIR, FIXTURE_FILE), "utf8") };
     return null;
   });
-  assert.equal(summary.fetched, 1);
-  assert.equal(summary.glonass_sats, 25);
-  assert.equal(summary.records, 25);
+  assert.equal(parseOemStream(resultBytes).count, 25);
 });
 
-test("pull: non-200 upstream fails closed (nothing stored or published)", async () => {
-  const { summary, storage, publishes } = await runPull(null, () => ({ status: 502, body: "" }));
-  assert.equal(summary.fetch_status, 502);
-  assert.equal(summary.fetched, 0);
-  assert.equal(summary.records, 0);
-  assert.equal(summary.stored, 0);
-  assert.equal(summary.published, 0);
+test("pull: non-200 upstream fails closed (empty stream)", async () => {
+  const { resultBytes, storage } = await runPull(null, () => ({ status: 502, body: "" }));
+  assert.equal(parseOemStream(resultBytes).count, 0);
   assert.equal(storage.length, 0);
-  assert.equal(publishes.length, 0);
 });
 
 test("pull: malformed body (no P records) fails closed", async () => {
-  const { summary, storage, publishes } = await runPull(null, () => ({
+  const { resultBytes, storage } = await runPull(null, () => ({
     status: 200,
     body: "#dP2026  7 11  0  0  0.00000000       0 __u+U IGS20 FIT  IAC\r\n## 2426 518400.0 900.0 61231 1.0\r\nEOF\r\n",
   }));
-  assert.equal(summary.fetch_status, 200);
-  assert.equal(summary.fetched, 1, "fetched, but");
-  assert.equal(summary.glonass_sats, 0, "no GLONASS P records");
-  assert.equal(summary.records, 0);
-  assert.equal(summary.stored, 0);
-  assert.equal(summary.published, 0);
+  assert.equal(parseOemStream(resultBytes).count, 0);
   assert.equal(storage.length, 0);
-  assert.equal(publishes.length, 0);
 });

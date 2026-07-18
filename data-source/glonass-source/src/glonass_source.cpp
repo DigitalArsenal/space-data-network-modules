@@ -43,6 +43,29 @@
 
 #include "provider_source.hpp"
 
+// SDS $OEM FlatBuffer + shared builder (math.h SVID macro guards; native-only).
+#include <cmath>
+#ifdef SING
+#undef SING
+#endif
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#ifdef OVERFLOW
+#undef OVERFLOW
+#endif
+#ifdef UNDERFLOW
+#undef UNDERFLOW
+#endif
+#ifdef TLOSS
+#undef TLOSS
+#endif
+#ifdef PLOSS
+#undef PLOSS
+#endif
+#include "OEM_generated.h"
+#include "oem_fb_builder.hpp"
+
 namespace ps = provider_source;
 
 // ── Provider constants ──────────────────────────────────────────────────────
@@ -229,6 +252,26 @@ void parse_sp3(const std::string& content, Sp3Meta* meta, std::vector<SatEphem>*
 }
 
 // Build a schema-exact verbose OEM record (position-only) for one satellite.
+// Build a NON-size-prefixed SDS $OEM FlatBuffer for one GLONASS sat: verbose,
+// position-only (SP3 has no velocity -> velocity 0, unused by the position-residual
+// fit), Earth-fixed (CustomFrame::ECEF; SP3 coord_system is an ITRF realization),
+// GPS time, km. SP3 carries only the slot id -> NORAD_CAT_ID 0 (not fabricated).
+std::vector<uint8_t> build_oem_fb(const SatEphem& sat, const std::string& object_name) {
+    struct PosState {
+        const char* epoch;
+        double x, y, z, vx, vy, vz;
+    };
+    std::vector<PosState> full;
+    full.reserve(sat.states.size());
+    for (const StateLine& s : sat.states) {
+        full.push_back({s.epoch.c_str(), s.x, s.y, s.z, 0.0, 0.0, 0.0});
+    }
+    const oem_fb::Identity id{object_name.c_str(), "", 0u};
+    return oem_fb::build_oem_flatbuffer(id, CustomFrame::ECEF, "EARTH",
+                                        timingStandard::GPS, full.data(),
+                                        static_cast<int>(full.size()));
+}
+
 std::string build_oem_record(const Sp3Meta& m, const SatEphem& sat,
                              const std::string& object_name) {
     const std::string& start = sat.states.empty() ? std::string() : sat.states.front().epoch;
@@ -298,94 +341,40 @@ PullConfig parse_config(const uint8_t* req, uint32_t len) {
 
 std::string run_pull(const uint8_t* req, uint32_t req_len) {
     PullConfig cfg = parse_config(req, req_len);
-
-    ps::ProviderConfig pcfg;
-    pcfg.signing_slot = kSigningKeySlot;
-    pcfg.publish_topic = kPublishTopic;
-    pcfg.signature_type = "ed25519";
-    pcfg.source_name = "glonass";
-    pcfg.data_source = "GLONASS-RE";   // CelesTrak-comparable SupGP SOURCE token (A2.1)
-    pcfg.record_schema = "OEM";        // state vectors -> OEM (honest container)
-
     ps::HttpResult src = ps::http_get(cfg.source_url);
-    std::string source_sha256 =
-        (src.status == 200 && !src.body.empty())
-            ? ps::sha256_hex(src.body.data(), src.body.size())
-            : std::string();
 
-    long fetched = 0, sats_total = 0, records = 0, stored = 0, signed_ = 0, published = 0;
-    Sp3Meta meta;
+    // $OEM STREAM (in-memory, never stored): [u32le count] then count x
+    // ( [u32le len][non-size-prefixed $OEM] ). One $OEM per GLONASS satellite.
+    std::string stream(4, '\0');
+    uint32_t count = 0;
+    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
+        s[at + 0] = static_cast<char>(v & 0xFF);
+        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
+        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
+        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
+    };
 
     if (src.status == 200 && !src.body.empty()) {
-        fetched = 1;
         std::string content(src.body.begin(), src.body.end());
+        Sp3Meta meta;
         std::vector<SatEphem> sats;
         parse_sp3(content, &meta, &sats);
-        sats_total = static_cast<long>(sats.size());
-
-        std::string file_name;
-        {
-            std::string url = cfg.source_url;
-            size_t slash = url.find_last_of('/');
-            file_name = (slash == std::string::npos) ? url : url.substr(slash + 1);
-        }
-
         for (const SatEphem& sat : sats) {
             if (sat.states.empty()) continue;
-            if (records >= cfg.object_cap) break;
-            records++;
-
+            if (static_cast<long>(count) >= cfg.object_cap) break;
             std::string object_name = "GLONASS " + sat.sat_id;
-            std::string oem = build_oem_record(meta, sat, object_name);
-            const std::string& start = sat.states.front().epoch;
-
-            std::string file_id = pcfg.source_name + ":" + pcfg.record_schema + ":" +
-                                  sat.sat_id + ":" + start;
-
-            std::string provenance =
-                std::string("{\"SOURCE_NAME\":\"") + ps::json_escape(pcfg.source_name) + "\"," +
-                "\"SOURCE_URL\":\"" + ps::json_escape(cfg.source_url) + "\"," +
-                "\"SOURCE_SHA256\":\"" + source_sha256 + "\"," +
-                "\"DATA_SOURCE\":\"" + ps::json_escape(pcfg.data_source) + "\"," +
-                "\"RECORD_SCHEMA\":\"" + ps::json_escape(pcfg.record_schema) + "\"," +
-                "\"OBJECT_NAME\":\"" + ps::json_escape(object_name) + "\"," +
-                "\"SP3_SAT_ID\":\"" + ps::json_escape(sat.sat_id) + "\"," +
-                "\"SP3_VERSION\":\"" + ps::json_escape(meta.version) + "\"," +
-                "\"COORDINATE_SYSTEM\":\"" + ps::json_escape(meta.coord_system) + "\"," +
-                "\"TIME_SYSTEM\":\"" + ps::json_escape(meta.time_system) + "\"," +
-                "\"FRAME_NOTE\":\"declared " + ps::json_escape(meta.coord_system) +
-                    " (ITRF2020 realization), NOT PZ-90.11; OD owns transform\"," +
-                "\"STATE_REPRESENTATION\":\"position-only; SP3 has no velocity records\"," +
-                "\"ORBIT_TYPE\":\"" + ps::json_escape(meta.orbit_type) + "\"," +
-                "\"AGENCY\":\"" + ps::json_escape(meta.agency) + "\"," +
-                "\"GPS_WEEK\":" + std::to_string(meta.gps_week) + "," +
-                "\"STATE_COUNT\":" + std::to_string(sat.states.size()) + "," +
-                "\"START_TIME\":\"" + ps::json_escape(start) + "\"," +
-                "\"STOP_TIME\":\"" + ps::json_escape(sat.states.back().epoch) + "\"}";
-
-            ps::PublishResult r = ps::publish_record_with_source(
-                pcfg,
-                reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-                file_name, file_id, meta.creation_date, provenance,
-                cfg.source_url, source_sha256);
-            if (r.stored) stored++;
-            if (r.signed_) signed_++;
-            if (r.published) published++;
+            std::vector<uint8_t> oem = build_oem_fb(sat, object_name);
+            if (oem.empty()) continue;
+            const size_t hdr = stream.size();
+            stream.append(4, '\0');
+            put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
+            stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
+            count++;
         }
     }
 
-    return std::string("{\"ok\":true,\"source\":\"") + pcfg.source_name + "\"," +
-           "\"fetch_status\":" + std::to_string(src.status) + "," +
-           "\"record_schema\":\"" + pcfg.record_schema + "\"," +
-           "\"coordinate_system\":\"" + ps::json_escape(meta.coord_system) + "\"," +
-           "\"time_system\":\"" + ps::json_escape(meta.time_system) + "\"," +
-           "\"object_cap\":" + std::to_string(cfg.object_cap) + "," +
-           "\"glonass_sats\":" + std::to_string(sats_total) + "," +
-           "\"fetched\":" + std::to_string(fetched) + "," +
-           "\"records\":" + std::to_string(records) + "," +
-           "\"stored\":" + std::to_string(stored) + "," +
-           "\"signed\":" + std::to_string(signed_) + "," +
-           "\"published\":" + std::to_string(published) + "}";
+    put_u32le(stream, 0, count);
+    return stream;
 }
 
 }  // namespace
