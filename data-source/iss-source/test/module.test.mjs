@@ -34,6 +34,8 @@ function loadWasm() {
   return new Uint8Array(fs.readFileSync(WASM_PATH));
 }
 
+const WASI_STUB = { fd_close: () => 0, fd_write: () => 0, fd_seek: () => 0 };
+
 test("module builds as a valid signed SDN artifact", async () => {
   const keypair = JSON.parse(fs.readFileSync(KEYPAIR_PATH, "utf8"));
   await verifyModuleArtifact(loadWasm(), { trustedPublicKeys: [keypair.publicKeyHex], requireSignature: true });
@@ -80,6 +82,7 @@ test("built WASM embeds + returns the real manifest", async () => {
   const stub = () => 0;
   const { instance } = await WebAssembly.instantiate(loadable, {
     space_data_module_host: { call: stub, response_len: stub, read_response: stub, clear_response: stub, last_status_code: stub },
+    wasi_snapshot_preview1: WASI_STUB,
   });
   const ex = instance.exports;
   const size = ex.plugin_get_manifest_flatbuffer_size();
@@ -222,7 +225,7 @@ async function runPull(config, httpOverride) {
     last_status_code() { return 0; },
   };
 
-  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host });
+  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host, wasi_snapshot_preview1: WASI_STUB });
   instance = wasm.instance;
   const ex = instance.exports;
 
@@ -235,128 +238,61 @@ async function runPull(config, httpOverride) {
   const outLenPtr = ex.plugin_alloc(4);
   const resultPtr = ex.plugin_invoke_stream(cfgPtr, cfgBytes.length, outLenPtr);
   const outLen = u32le(mem(), outLenPtr);
-  const summary = JSON.parse(new TextDecoder().decode(readBytes(resultPtr, outLen)));
-  return { summary, ...captured };
+  const resultBytes = readBytes(resultPtr, outLen);
+  return { resultBytes, ...captured };
 }
 
-test("pull: OEM fetch → verbose OEM record + signed PNM", async () => {
-  const { summary, storage, publishes } = await runPull(null);
-
-  assert.equal(summary.ok, true);
-  assert.equal(summary.fetch_status, 200);
-  assert.equal(summary.record_schema, "OEM");
-  assert.equal(summary.state_count, 15, "15 trimmed state vectors parsed");
-  assert.equal(summary.fetched, 1);
-  assert.equal(summary.stored, 1);
-  assert.equal(summary.signed, 1);
-  assert.equal(summary.published, 1);
-
-  // Exactly one OEM record stored, honest schema.
-  assert.equal(storage.length, 1);
-  assert.equal(storage[0].schema, "OEM");
-
-  const rec = JSON.parse(storage[0].data.toString("utf8"));
-  assert.equal(rec.CCSDS_OEM_VERS, 2.0);
-  assert.equal(rec.ORIGINATOR, "NASA/JSC/FOD/TOPO");
-  const blk = rec.EPHEMERIS_DATA_BLOCK[0];
-  // Schema-exact keys + honest frame/time.
-  assert.equal(blk.OBJECT_NAME, "ISS");
-  assert.equal(blk.OBJECT_ID, "1998-067-A", "real international designator preserved");
-  assert.equal(blk.NORAD_CAT_ID, 25544);
-  assert.equal(blk.CENTER_NAME, "EARTH");
-  assert.equal(blk.REFERENCE_FRAME, "EME2000", "declared frame preserved (NOT transformed to TEME)");
-  assert.equal(blk.TIME_SYSTEM, "UTC");
-  assert.equal(blk.START_TIME, "2026-07-13T12:00:00.000");
-  assert.equal(blk.STOP_TIME, "2026-07-28T12:00:00.000");
-  assert.equal(blk.USEABLE_START_TIME, "2026-07-13T12:00:00.000");
-  assert.equal(blk.USEABLE_STOP_TIME, "2026-07-28T12:00:00.000");
-  // Verbose format: STEP_SIZE 0 + explicit-epoch lines (source is non-uniform).
-  assert.equal(blk.STEP_SIZE, 0);
-  assert.equal(blk.STATE_VECTOR_SIZE, 6);
-  assert.equal(blk.EPHEMERIS_DATA_LINES.length, 15);
-  const l0 = blk.EPHEMERIS_DATA_LINES[0];
-  for (const k of ["EPOCH", "X", "Y", "Z", "X_DOT", "Y_DOT", "Z_DOT"]) assert.ok(k in l0, `line missing ${k}`);
-  assert.equal(l0.EPOCH, "2026-07-13T12:00:00.000");
-  assert.ok(Math.abs(l0.X - -4024.53611737582) < 1e-6);
-  assert.ok(Math.abs(l0.Z_DOT - 4.12530324917983) < 1e-9);
-  // No compact array when verbose.
-  assert.ok(!("EPHEMERIS_DATA" in blk) || blk.EPHEMERIS_DATA === undefined);
-
-  // Signed PNM.
-  assert.equal(publishes.length, 1);
-  const pub = publishes[0];
-  assert.equal(pub.topic, "sdn/data-source/iss");
-  const pnm = pub.message.PNM;
-  // A2.2c-3: every ingested record carries SourceTags (reconcile "none") and its
-  // published PNM CID is the real in-guest CIDv1 that byte-matches the host store.
-  assert.equal(publishes.length, storage.length, "one PNM published per ingested record");
-  for (let i = 0; i < storage.length; i++) {
-    assert.equal(storage[i].reconcile, "none", "reconcile none protects NORAD=0 siblings");
-    assert.equal(storage[i].tags.source_name, "iss", "SourceName is the fit-pipeline grouping key");
-    assert.equal(storage[i].tags.provider_id, "iss", "provider_id reuses source_name in-guest");
-    assert.equal(storage[i].tags.content_key_id, "public");
-    assert.match(storage[i].tags.batch_id, /^[0-9a-f]{64}$/, "batch_id = source_sha256");
-    assert.ok(storage[i].tags.source_url.length > 0, "source_url present");
-    assert.equal(publishes[i].message.PNM.CID, cidV1RawSha256(storage[i].data), "PNM.CID == host CID of stored record");
-    assert.ok(publishes[i].message.PNM.CID.startsWith("bafkrei"), "PNM.CID is a CIDv1 raw block");
+// run_pull returns an $OEM STREAM: [u32le count] then count x ([u32le len][$OEM]).
+function parseOemStream(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 0;
+  const count = dv.getUint32(off, true); off += 4;
+  const records = [];
+  for (let i = 0; i < count; i++) {
+    const len = dv.getUint32(off, true); off += 4;
+    records.push(bytes.subarray(off, off + len)); off += len;
   }
+  return { count, records, consumed: off };
+}
 
-  for (const k of ["MULTIFORMAT_ADDRESS", "PUBLISH_TIMESTAMP", "CID", "FILE_NAME", "FILE_ID", "SIGNATURE", "SIGNATURE_TYPE"]) {
-    assert.ok(k in pnm, `PNM missing ${k}`);
-  }
-  assert.equal(pnm.SIGNATURE_TYPE, "ed25519");
-  assert.equal(pnm.FILE_NAME, "ISS.OEM_J2K_EPH.txt");
-  assert.equal(pnm.FILE_ID, "iss:OEM:25544:2026-07-13T12:00:00.000");
-  assert.equal(pnm.PUBLISH_TIMESTAMP, "2026-07-13T16:28:15.273");
-  assert.ok(pnm.CID.startsWith("bafkrei"));
-  assert.equal(pnm.MULTIFORMAT_ADDRESS, "/ipfs/" + pnm.CID);
-  assert.ok(Buffer.from(pnm.SIGNATURE, "base64").length > 0);
+test("pull: OEM fetch → in-memory $OEM stream (1 record, no store)", async () => {
+  const { resultBytes, storage, publishes } = await runPull(null);
+  const { count, records, consumed } = parseOemStream(resultBytes);
 
-  // Provenance binds the raw source by SHA-256 (over the trimmed fixture bytes).
-  const prov = pub.message.provenance;
-  const expectedSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(FIXTURES_DIR, FIXTURE_FILE))).digest("hex");
-  assert.equal(prov.SOURCE_SHA256, expectedSha);
-  assert.equal(prov.SOURCE_NAME, "iss");
-  assert.equal(prov.DATA_SOURCE, "ISS-E");
-  assert.equal(prov.RECORD_SCHEMA, "OEM");
-  assert.equal(prov.NORAD_CAT_ID, 25544);
-  assert.equal(prov.OBJECT_ID, "1998-067-A");
-  assert.equal(prov.REFERENCE_FRAME, "EME2000");
-  assert.equal(prov.STATE_COUNT, 15);
-  assert.equal(prov.SOURCE_URL, SOURCE_URL);
+  // The single ISS OEM (15 states, EME2000) becomes one framed $OEM record. Full
+  // $OEM validity is covered by the OD flow tests (TestODFlowStreamToPool) + the
+  // od.fit reader; here we assert framing + the in-memory-only invariant.
+  assert.equal(count, 1, "one ISS $OEM emitted");
+  assert.equal(records.length, 1);
+  assert.equal(consumed, resultBytes.length, "stream fully consumed");
+  assert.ok(records[0].length > 8);
+  assert.equal(new TextDecoder().decode(records[0].subarray(4, 8)), "$OEM", "record carries the $OEM file id");
+
+  // Ephemeris in-memory only: nothing stored/signed/published.
+  assert.equal(storage.length, 0, "no $OEM stored (in-memory-only invariant)");
+  assert.equal(publishes.length, 0, "no PNM published for transient ephemeris");
 });
 
 test("pull: sourceUrl override is honored", async () => {
   const ALT = "https://example.test/ISS.OEM_J2K_EPH.txt";
-  const { summary } = await runPull({ sourceUrl: ALT }, (url) => {
+  const { resultBytes } = await runPull({ sourceUrl: ALT }, (url) => {
     if (url === ALT) return { status: 200, body: fs.readFileSync(path.join(FIXTURES_DIR, FIXTURE_FILE), "utf8") };
     return null;
   });
-  assert.equal(summary.fetched, 1);
-  assert.equal(summary.state_count, 15);
-  assert.equal(summary.published, 1);
+  assert.equal(parseOemStream(resultBytes).count, 1, "override URL served -> one $OEM");
 });
 
-test("pull: non-200 upstream fails closed (nothing stored or published)", async () => {
-  const { summary, storage, publishes } = await runPull(null, () => ({ status: 503, body: "" }));
-  assert.equal(summary.fetch_status, 503);
-  assert.equal(summary.fetched, 0);
-  assert.equal(summary.stored, 0);
-  assert.equal(summary.published, 0);
+test("pull: non-200 upstream fails closed (empty stream, nothing stored)", async () => {
+  const { resultBytes, storage } = await runPull(null, () => ({ status: 503, body: "" }));
+  assert.equal(parseOemStream(resultBytes).count, 0);
   assert.equal(storage.length, 0);
-  assert.equal(publishes.length, 0);
 });
 
 test("pull: malformed body (no state vectors) fails closed", async () => {
-  const { summary, storage, publishes } = await runPull(null, () => ({
+  const { resultBytes, storage } = await runPull(null, () => ({
     status: 200,
     body: "CCSDS_OEM_VERS = 2.0\nCREATION_DATE = 2026-07-13T00:00:00\nMETA_START\nOBJECT_NAME = ISS\nMETA_STOP\n(garbage, no state lines)\n",
   }));
-  assert.equal(summary.fetch_status, 200);
-  assert.equal(summary.fetched, 1, "fetched, but");
-  assert.equal(summary.state_count, 0, "no parseable state vectors");
-  assert.equal(summary.stored, 0, "nothing canonical to store");
-  assert.equal(summary.published, 0);
+  assert.equal(parseOemStream(resultBytes).count, 0, "no parseable states -> empty stream");
   assert.equal(storage.length, 0);
-  assert.equal(publishes.length, 0);
 });

@@ -37,6 +37,31 @@
 
 #include "provider_source.hpp"
 
+// SDS $OEM FlatBuffer + the shared builder. math.h SVID macros (SING/DOMAIN/…)
+// collide with generated enum ids on native builds; undef before the generated
+// header (the em++/WASI sysroot is clean).
+#include <cmath>
+#ifdef SING
+#undef SING
+#endif
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#ifdef OVERFLOW
+#undef OVERFLOW
+#endif
+#ifdef UNDERFLOW
+#undef UNDERFLOW
+#endif
+#ifdef TLOSS
+#undef TLOSS
+#endif
+#ifdef PLOSS
+#undef PLOSS
+#endif
+#include "OEM_generated.h"
+#include "oem_fb_builder.hpp"
+
 namespace ps = provider_source;
 
 // ── Provider constants ──────────────────────────────────────────────────────
@@ -191,42 +216,16 @@ std::string upper_center(const std::string& in) {
 // TIME_SYSTEM, START_TIME, USEABLE_START_TIME, USEABLE_STOP_TIME, STOP_TIME,
 // STEP_SIZE(=0), STATE_VECTOR_SIZE, EPHEMERIS_DATA_LINES[] } (mirroring the
 // A2.2b Starlink adapter's flattened-OBJECT decision, extended to verbose lines).
-std::string build_oem_record(const OemMeta& m, const std::vector<StateLine>& states) {
-    std::string s;
-    s.reserve(states.size() * 140 + 512);
-    s += "{";
-    s += "\"CCSDS_OEM_VERS\":2.0,";
-    s += "\"CREATION_DATE\":\"" + ps::json_escape(m.creation_date) + "\",";
-    s += "\"ORIGINATOR\":\"" + ps::json_escape(m.originator) + "\",";
-    s += "\"CLASSIFICATION\":\"UNCLASSIFIED\",";
-    s += "\"EPHEMERIS_DATA_BLOCK\":[{";
-    s += "\"OBJECT_NAME\":\"" + ps::json_escape(m.object_name) + "\",";
-    s += "\"OBJECT_ID\":\"" + ps::json_escape(m.object_id) + "\",";
-    s += "\"NORAD_CAT_ID\":" + std::to_string(kIssNoradCatId) + ",";
-    s += "\"CENTER_NAME\":\"" + ps::json_escape(upper_center(m.center_name)) + "\",";
-    // Declared frame, preserved honestly (EME2000). OD side owns the transform.
-    s += "\"REFERENCE_FRAME\":\"" + ps::json_escape(m.reference_frame) + "\",";
-    s += "\"TIME_SYSTEM\":\"" + ps::json_escape(m.time_system) + "\",";
-    s += "\"START_TIME\":\"" + ps::json_escape(m.start_time) + "\",";
-    s += "\"USEABLE_START_TIME\":\"" + ps::json_escape(m.useable_start) + "\",";
-    s += "\"USEABLE_STOP_TIME\":\"" + ps::json_escape(m.useable_stop) + "\",";
-    s += "\"STOP_TIME\":\"" + ps::json_escape(m.stop_time) + "\",";
-    s += "\"STEP_SIZE\":0,";  // non-uniform / explicit-epoch -> verbose format
-    s += "\"STATE_VECTOR_SIZE\":6,";
-    s += "\"EPHEMERIS_DATA_LINES\":[";
-    for (size_t i = 0; i < states.size(); ++i) {
-        const StateLine& st = states[i];
-        if (i) s += ",";
-        s += "{\"EPOCH\":\"" + ps::json_escape(st.epoch) + "\",";
-        s += "\"X\":" + ps::double_to_json(st.x) + ",";
-        s += "\"Y\":" + ps::double_to_json(st.y) + ",";
-        s += "\"Z\":" + ps::double_to_json(st.z) + ",";
-        s += "\"X_DOT\":" + ps::double_to_json(st.vx) + ",";
-        s += "\"Y_DOT\":" + ps::double_to_json(st.vy) + ",";
-        s += "\"Z_DOT\":" + ps::double_to_json(st.vz) + "}";
-    }
-    s += "]}]}";
-    return s;
+// Build a NON-size-prefixed SDS $OEM FlatBuffer for the ISS OEM: verbose form
+// (per-line EPOCH, non-uniform cadence), EME2000/UTC/EARTH — the honest declared
+// frame (the OD reader rotates EME2000 -> TEME). StateLine feeds the shared builder
+// template directly (.epoch/.x/.y/.z/.vx/.vy/.vz). Ephemeris in-memory only.
+std::vector<uint8_t> build_oem_fb(const OemMeta& m, const std::vector<StateLine>& states) {
+    const oem_fb::Identity id{m.object_name.c_str(), m.object_id.c_str(),
+                              static_cast<uint32_t>(kIssNoradCatId)};
+    return oem_fb::build_oem_flatbuffer(id, CelestialFrame::EME2000, "EARTH",
+                                        timingStandard::UTC, states.data(),
+                                        static_cast<int>(states.size()));
 }
 
 // ── Config (optional, from the invoke request payload) ───────────────────────
@@ -251,70 +250,38 @@ PullConfig parse_config(const uint8_t* req, uint32_t len) {
 
 std::string run_pull(const uint8_t* req, uint32_t req_len) {
     PullConfig cfg = parse_config(req, req_len);
-
-    ps::ProviderConfig pcfg;
-    pcfg.signing_slot = kSigningKeySlot;
-    pcfg.publish_topic = kPublishTopic;
-    pcfg.signature_type = "ed25519";   // must match the node-signing slot's key
-    pcfg.source_name = "iss";
-    pcfg.data_source = "ISS-E";         // CelesTrak-comparable SOURCE token (A2.1)
-    pcfg.record_schema = "OEM";         // honest canonical SDS type (source IS OEM)
-
     ps::HttpResult src = ps::http_get(cfg.source_url);
-    long fetched = 0, stored = 0, signed_ = 0, published = 0, state_count = 0;
+
+    // Emit an $OEM STREAM (in-memory, never stored): [u32le count] then
+    // count x ( [u32le len][non-size-prefixed $OEM] ). ISS is a single object.
+    std::string stream(4, '\0');
+    uint32_t count = 0;
+    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
+        s[at + 0] = static_cast<char>(v & 0xFF);
+        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
+        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
+        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
+    };
 
     if (src.status == 200 && !src.body.empty()) {
-        fetched = 1;
         OemMeta m;
         std::vector<StateLine> states;
         std::string content(src.body.begin(), src.body.end());
         parse_oem(content, &m, &states);
-        state_count = static_cast<long>(states.size());
-
         if (!states.empty()) {
-            // Raw OEM bytes bound into signed provenance by SHA-256 (DPM
-            // convention), never stored under a mislabeled schema.
-            std::string source_sha256 = ps::sha256_hex(src.body.data(), src.body.size());
-            std::string oem = build_oem_record(m, states);
-
-            std::string file_id = pcfg.source_name + ":" + pcfg.record_schema + ":" +
-                                  std::to_string(kIssNoradCatId) + ":" + m.start_time;
-            std::string provenance =
-                std::string("{\"SOURCE_NAME\":\"") + ps::json_escape(pcfg.source_name) + "\"," +
-                "\"SOURCE_URL\":\"" + ps::json_escape(cfg.source_url) + "\"," +
-                "\"SOURCE_SHA256\":\"" + source_sha256 + "\"," +
-                "\"DATA_SOURCE\":\"" + ps::json_escape(pcfg.data_source) + "\"," +
-                "\"RECORD_SCHEMA\":\"" + ps::json_escape(pcfg.record_schema) + "\"," +
-                "\"NORAD_CAT_ID\":" + std::to_string(kIssNoradCatId) + "," +
-                "\"OBJECT_NAME\":\"" + ps::json_escape(m.object_name) + "\"," +
-                "\"OBJECT_ID\":\"" + ps::json_escape(m.object_id) + "\"," +
-                "\"REFERENCE_FRAME\":\"" + ps::json_escape(m.reference_frame) + "\"," +
-                "\"CREATION_DATE\":\"" + ps::json_escape(m.creation_date) + "\"," +
-                "\"START_TIME\":\"" + ps::json_escape(m.start_time) + "\"," +
-                "\"STOP_TIME\":\"" + ps::json_escape(m.stop_time) + "\"," +
-                "\"STATE_COUNT\":" + std::to_string(states.size()) + "}";
-
-            // FILE_NAME = source artifact basename.
-            std::string file_name = "ISS.OEM_J2K_EPH.txt";
-            ps::PublishResult r = ps::publish_record_with_source(
-                pcfg,
-                reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-                file_name, file_id, m.creation_date, provenance,
-                cfg.source_url, source_sha256);
-            if (r.stored) stored++;
-            if (r.signed_) signed_++;
-            if (r.published) published++;
+            std::vector<uint8_t> oem = build_oem_fb(m, states);
+            if (!oem.empty()) {
+                const size_t hdr = stream.size();
+                stream.append(4, '\0');
+                put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
+                stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
+                count++;
+            }
         }
     }
 
-    return std::string("{\"ok\":true,\"source\":\"") + pcfg.source_name + "\"," +
-           "\"fetch_status\":" + std::to_string(src.status) + "," +
-           "\"record_schema\":\"" + pcfg.record_schema + "\"," +
-           "\"state_count\":" + std::to_string(state_count) + "," +
-           "\"fetched\":" + std::to_string(fetched) + "," +
-           "\"stored\":" + std::to_string(stored) + "," +
-           "\"signed\":" + std::to_string(signed_) + "," +
-           "\"published\":" + std::to_string(published) + "}";
+    put_u32le(stream, 0, count);
+    return stream;
 }
 
 }  // namespace
