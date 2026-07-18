@@ -52,6 +52,29 @@
 
 #include "provider_source.hpp"
 
+// SDS $OEM FlatBuffer + shared builder (math.h SVID macro guards; native-only).
+#include <cmath>
+#ifdef SING
+#undef SING
+#endif
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#ifdef OVERFLOW
+#undef OVERFLOW
+#endif
+#ifdef UNDERFLOW
+#undef UNDERFLOW
+#endif
+#ifdef TLOSS
+#undef TLOSS
+#endif
+#ifdef PLOSS
+#undef PLOSS
+#endif
+#include "OEM_generated.h"
+#include "oem_fb_builder.hpp"
+
 namespace ps = provider_source;
 
 // ── Provider constants ──────────────────────────────────────────────────────
@@ -174,6 +197,27 @@ void parse_ecf(const std::string& content, EcfDoc* doc) {
 // table. REFERENCE_FRAME is the declared Earth-fixed frame (ECEF); the OD side
 // owns the ECEF->TEME transform (A2.2a). STATE_VECTOR_SIZE = 3 (ECF carries no
 // velocity — none is fabricated). Positions metres->km (CCSDS OEM unit).
+// Build a NON-size-prefixed SDS $OEM FlatBuffer for the Intelsat ECF ephemeris:
+// verbose, position-only (ECF has no velocity -> velocity 0, unused by the
+// position-residual fit), Earth-fixed (CustomFrame::ECEF), UTC. ECF positions are
+// METRES -> convert to km. ECF carries no NORAD -> NORAD_CAT_ID 0.
+std::vector<uint8_t> build_oem_fb(const EcfDoc& doc, const std::string& object_name) {
+    struct PosState {
+        const char* epoch;
+        double x, y, z, vx, vy, vz;
+    };
+    std::vector<PosState> full;
+    full.reserve(doc.rows.size());
+    for (const EcfRow& r : doc.rows) {
+        full.push_back({r.epoch.c_str(), r.x_m / 1000.0, r.y_m / 1000.0,
+                        r.z_m / 1000.0, 0.0, 0.0, 0.0});
+    }
+    const oem_fb::Identity id{object_name.c_str(), "", 0u};
+    return oem_fb::build_oem_flatbuffer(id, CustomFrame::ECEF, "EARTH",
+                                        timingStandard::UTC, full.data(),
+                                        static_cast<int>(full.size()));
+}
+
 std::string build_oem_record(const EcfDoc& doc, const std::string& object_name) {
     std::string s;
     s.reserve(doc.rows.size() * 110 + 640);
@@ -294,103 +338,49 @@ std::string join_url(const std::string& base, const std::string& file) {
 
 std::string run_pull(const uint8_t* req, uint32_t req_len) {
     PullConfig cfg = parse_config(req, req_len);
-
-    ps::ProviderConfig pcfg;
-    pcfg.signing_slot = kSigningKeySlot;
-    pcfg.publish_topic = kPublishTopic;
-    pcfg.signature_type = "ed25519";   // must match the node-signing slot's key
-    pcfg.source_name = "intelsat";
-    pcfg.data_source = "Intelsat-11P";  // CelesTrak-comparable SOURCE token (A2.1)
-    pcfg.record_schema = "OEM";         // honest canonical SDS type (ephemeris)
-
     std::string sat_marker = "_" + cfg.target + "_";
 
-    // 1) discover the newest ECF file for the target satellite.
+    // $OEM STREAM (in-memory, never stored): [u32le count] then
+    // count x ( [u32le len][non-size-prefixed $OEM] ). Intelsat = one object.
+    std::string stream(4, '\0');
+    uint32_t count = 0;
+    auto put_u32le = [](std::string& s, size_t at, uint32_t v) {
+        s[at + 0] = static_cast<char>(v & 0xFF);
+        s[at + 1] = static_cast<char>((v >> 8) & 0xFF);
+        s[at + 2] = static_cast<char>((v >> 16) & 0xFF);
+        s[at + 3] = static_cast<char>((v >> 24) & 0xFF);
+    };
+
     ps::HttpResult listing = ps::http_get(cfg.listing_url);
     std::string filename;
     if (listing.status == 200 && !listing.body.empty())
         filename = select_newest_ecf(listing.body, sat_marker, kEcfCategoryMarker);
 
-    long fetched = 0, stored = 0, signed_ = 0, published = 0, row_count = 0;
-    long ecf_status = 0;
-    std::string object_name;
-    std::vector<std::string> fields;
-
     if (!filename.empty()) {
-        fields = split_filename_fields(filename);
+        std::vector<std::string> fields = split_filename_fields(filename);
         std::string file_url = join_url(cfg.ephemeris_base, filename + ".txt");
         ps::HttpResult ecf = ps::http_get(file_url);
-        ecf_status = ecf.status;
         if (ecf.status == 200 && !ecf.body.empty()) {
-            fetched = 1;
             EcfDoc doc;
             std::string content(ecf.body.begin(), ecf.body.end());
             parse_ecf(content, &doc);
-            row_count = static_cast<long>(doc.rows.size());
-
-            // Prefer the header's operator name; fall back to the filename sat field.
-            object_name = !doc.object_name.empty() ? doc.object_name
-                        : (fields.size() >= 5 ? fields[4] : cfg.target);
-
             if (!doc.rows.empty()) {
-                std::string source_sha256 = ps::sha256_hex(ecf.body.data(), ecf.body.size());
-                std::string oem = build_oem_record(doc, object_name);
-
-                std::string sat_field = fields.size() >= 5 ? fields[4] : cfg.target;
-                std::string region = fields.size() >= 2 ? fields[1] : std::string();
-                std::string longitude = fields.size() >= 4 ? fields[3] : std::string();
-                const std::string& start_time = doc.rows.front().epoch;
-                const std::string& stop_time = doc.rows.back().epoch;
-
-                std::string file_id = pcfg.source_name + ":" + pcfg.record_schema + ":" +
-                                      sat_field + ":" + start_time;
-                std::string provenance =
-                    std::string("{\"SOURCE_NAME\":\"") + ps::json_escape(pcfg.source_name) + "\"," +
-                    "\"SOURCE_URL\":\"" + ps::json_escape(file_url) + "\"," +
-                    "\"SOURCE_SHA256\":\"" + source_sha256 + "\"," +
-                    "\"DATA_SOURCE\":\"" + ps::json_escape(pcfg.data_source) + "\"," +
-                    "\"RECORD_SCHEMA\":\"" + ps::json_escape(pcfg.record_schema) + "\"," +
-                    "\"NORAD_CAT_ID\":0," +
-                    "\"OBJECT_ID\":\"\"," +
-                    "\"OBJECT_NAME\":\"" + ps::json_escape(object_name) + "\"," +
-                    "\"INTELSAT_SAT\":\"" + ps::json_escape(sat_field) + "\"," +
-                    "\"INTELSAT_REGION\":\"" + ps::json_escape(region) + "\"," +
-                    "\"INTELSAT_LONGITUDE_DEG_E\":\"" + ps::json_escape(longitude) + "\"," +
-                    "\"INTELSAT_HEADER\":\"" + ps::json_escape(doc.header_raw) + "\"," +
-                    "\"REFERENCE_FRAME\":\"ECEF\"," +
-                    "\"SOURCE_UNITS\":\"m\"," +
-                    "\"RECORD_UNITS\":\"km\"," +
-                    "\"HAS_VELOCITY\":false," +
-                    "\"START_TIME\":\"" + ps::json_escape(start_time) + "\"," +
-                    "\"STOP_TIME\":\"" + ps::json_escape(stop_time) + "\"," +
-                    "\"ROW_COUNT\":" + std::to_string(doc.rows.size()) + "," +
-                    "\"PRODUCT_KIND\":\"ephemeris\"}";
-
-                ps::PublishResult r = ps::publish_record_with_source(
-                    pcfg,
-                    reinterpret_cast<const uint8_t*>(oem.data()), oem.size(),
-                    filename + ".txt", file_id, start_time, provenance,
-                    file_url, source_sha256);
-                if (r.stored) stored++;
-                if (r.signed_) signed_++;
-                if (r.published) published++;
+                std::string object_name = !doc.object_name.empty() ? doc.object_name
+                            : (fields.size() >= 5 ? fields[4] : cfg.target);
+                std::vector<uint8_t> oem = build_oem_fb(doc, object_name);
+                if (!oem.empty()) {
+                    const size_t hdr = stream.size();
+                    stream.append(4, '\0');
+                    put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
+                    stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
+                    count++;
+                }
             }
         }
     }
 
-    std::string out = std::string("{\"ok\":true,\"source\":\"") + pcfg.source_name + "\",";
-    out += "\"listing_status\":" + std::to_string(listing.status) + ",";
-    out += "\"selected_file\":\"" + ps::json_escape(filename) + "\",";
-    out += "\"ecf_status\":" + std::to_string(ecf_status) + ",";
-    out += "\"record_schema\":\"" + pcfg.record_schema + "\",";
-    out += "\"reference_frame\":\"ECEF\",";
-    out += "\"object_name\":\"" + ps::json_escape(object_name) + "\",";
-    out += "\"row_count\":" + std::to_string(row_count) + ",";
-    out += "\"fetched\":" + std::to_string(fetched) + ",";
-    out += "\"stored\":" + std::to_string(stored) + ",";
-    out += "\"signed\":" + std::to_string(signed_) + ",";
-    out += "\"published\":" + std::to_string(published) + "}";
-    return out;
+    put_u32le(stream, 0, count);
+    return stream;
 }
 
 }  // namespace
