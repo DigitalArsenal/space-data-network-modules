@@ -41,14 +41,18 @@ static const char* kDefaultManifestURL =
     "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
 
 
-// Fetch politeness (see README "Fetch politeness"): a small per-pull object cap
-// bounds burst load, and the manifest MEME cadence (regenerated a few times
-// daily) plus the module TIMERS cadence bound pulls/day. Both are configurable
-// via the invoke request payload; the guest is synchronous with no clock, so
-// intra-pull pacing (`fetchIntervalMs`) is an advisory the host scheduler can
-// honor — it is echoed in the summary but never busy-waits.
-static const long kDefaultObjectCap = 25;
-static const long kDefaultFetchIntervalMs = 2000;
+// Fetch policy (see README "Fetch politeness"): the DEFAULT object cap is
+// UNLIMITED — the WASM-only OD flow has no host pager, so a default run (the tick
+// the composed flow sends carries NO objectCap) must emit the ENTIRE Starlink
+// constellation (~11k MEME entries) itself. `objectCap` stays an OPTIONAL invoke
+// override for tests/ops: a positive value caps; <=0 means the whole catalog.
+// Starlink is UNTHROTTLED — the >=2.5s/3h spacing policy is CelesTrak/Space-Track
+// ONLY (hosts this provider never touches). The per-object spacing default is 0 so
+// the full-catalog fetch is bounded by bandwidth, not an artificial delay.
+// `fetchIntervalMs` is advisory only (the guest has no clock; the streaming path
+// never busy-waits) and stays an optional override.
+static const long kDefaultObjectCap = 0;        // 0 => unlimited (whole constellation)
+static const long kDefaultFetchIntervalMs = 0;  // 0 => no artificial inter-object spacing
 
 extern "C" {
 // Guest allocator used by the host to pass request/response buffers.
@@ -78,7 +82,7 @@ using namespace meme_oem;  // MemeMeta/parse_meme/build_oem_fb (src/meme_oem.hpp
 static const long kDefaultRangeBytes = 131072;
 
 struct PullConfig {
-    long object_cap = kDefaultObjectCap;   // upper bound on total objects considered
+    long object_cap = kDefaultObjectCap;   // <=0 => unlimited (emit the whole catalog)
     long fetch_interval_ms = kDefaultFetchIntervalMs;
     std::string manifest_url = kDefaultManifestURL;
     // Batch window into the manifest (host-driven concurrent batches). offset<0 or
@@ -129,9 +133,10 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
     ps::HttpResult manifest = ps::http_get(cfg.manifest_url);
     std::vector<std::string> entries = ps::listing_lines(manifest.body, "MEME_");
 
-    // Total objects this pull is willing to cover (bounded by the object cap).
+    // Total objects this pull will cover. DEFAULT = the WHOLE manifest (no host
+    // pager in the WASM-only flow); a positive objectCap override bounds it.
     long total = static_cast<long>(entries.size());
-    if (total > cfg.object_cap) total = cfg.object_cap;
+    if (cfg.object_cap > 0 && total > cfg.object_cap) total = cfg.object_cap;
     if (total < 0) total = 0;
 
     // Probe mode: the host learns how many objects exist so it can schedule
@@ -157,6 +162,16 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
     // provenance rides on the RESULT $OMM/$OCM/$OBD the OD flow's store node writes.
     // Stream layout: [u32le count]  then count x ( [u32le len][non-size-prefixed $OEM] ).
     std::string stream(4, '\0');  // reserve the count header
+    // Bound peak memory for the full-catalog emit: pre-reserve an estimate (~14 KiB
+    // per range-fetched $OEM = ~264 states * 48 B + FlatBuffer overhead) so the
+    // accumulating stream never reallocates by doubling. Without this the final
+    // ~150 MB (~11k Starlink) would transiently need ~2x during the last grow.
+    // Negligible for the small-fixture test path (a few objects).
+    {
+        const size_t est_per_oem = 14336;
+        const size_t span = (end > start) ? static_cast<size_t>(end - start) : 0;
+        stream.reserve(4 + span * est_per_oem);
+    }
     uint32_t count = 0;
 
     for (long i = start; i < end; ++i) {
