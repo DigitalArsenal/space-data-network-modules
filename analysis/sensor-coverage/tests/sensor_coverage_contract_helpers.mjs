@@ -49,6 +49,7 @@ const {
   SCVSensorT,
   SCVSensorShapeContractT,
   SCVStateSampleT,
+  SCVTargetT,
   SCVTimeGridT,
   SCVT,
   SCVVec3T,
@@ -61,12 +62,18 @@ const {
   scvRasterProductKind,
   scvSensorRangeBoundaryKind,
   scvSensorShapeKind,
+  scvTargetShape,
 } = bindings;
 
 export {
+  SCVTargetT,
+  SCVVec3T,
   SCVTimeGridT,
+  scvCoordinateFrame,
+  scvGeometryDomain,
   scvMetricSeriesKind,
   scvRasterProductKind,
+  scvTargetShape,
 };
 
 export const SENSOR_COVERAGE_TYPE_REF = Object.freeze({
@@ -345,6 +352,7 @@ export function createCoveragePayload({
   requestedProducts = [scvMetricSeriesKind.ACCESS_COUNT],
   includeTimeGrid = true,
   includePackedGeometry = false,
+  targets = [],
 }) {
   const { rows, columns } = gridDimensions(grid);
   const stateSamples = states.map((state) => new SCVStateSampleT(
@@ -410,7 +418,7 @@ export function createCoveragePayload({
       ),
     ],
     stateSamples,
-    [],
+    targets,
     [],
     requestedProducts,
     0,
@@ -424,6 +432,98 @@ export function createCoveragePayload({
   const builder = new flatbuffers.Builder(1024);
   SCV.finishSCVBuffer(builder, envelope.pack(builder));
   return builder.asUint8Array();
+}
+
+// PHASE-1 INTEGRATION CONTRACT: POINT target → POSITION_M = ECEF WGS84 metres +
+// RADIUS_M (BoundingSphere), TARGET_KIND=POINT, DOMAIN=SURFACE.
+export function pointTarget({
+  targetId = 0,
+  name = null,
+  latitudeDeg,
+  longitudeDeg,
+  altitudeM = 0,
+  radiusM,
+}) {
+  const ecef = geodeticToEcef(latitudeDeg, longitudeDeg, altitudeM);
+  return new SCVTargetT(
+    targetId,
+    null,
+    name,
+    scvCoordinateFrame.ECEF,
+    new SCVVec3T(ecef.x, ecef.y, ecef.z),
+    null,
+    radiusM,
+    scvTargetShape.POINT,
+    scvGeometryDomain.SURFACE,
+    [],
+    0.0,
+    0.0,
+  );
+}
+
+// PHASE-1 INTEGRATION CONTRACT: POLYGON target → POLYGON_VERTICES = lon/lat
+// degrees with z=0, TARGET_KIND=POLYGON, DOMAIN=SURFACE.
+export function polygonTarget({ targetId = 0, name = null, ring }) {
+  const vertices = ring.map(
+    ({ lonDeg, latDeg }) => new SCVVec3T(lonDeg, latDeg, 0.0),
+  );
+  return new SCVTargetT(
+    targetId,
+    null,
+    name,
+    scvCoordinateFrame.ECEF,
+    null,
+    null,
+    0.0,
+    scvTargetShape.POLYGON,
+    scvGeometryDomain.SURFACE,
+    vertices,
+    0.0,
+    0.0,
+  );
+}
+
+export function decodeTargetResults(response) {
+  const resultEnvelope = response.outputs
+    .filter((frame) => frame.typeRef?.fileIdentifier === "$SCV")
+    .map((frame) => {
+      const byteBuffer = new flatbuffers.ByteBuffer(frame.payload);
+      assert.equal(SCV.bufferHasIdentifier(byteBuffer), true);
+      return SCV.getRootAsSCV(byteBuffer);
+    })
+    .find((envelope) => envelope.ENVELOPE_KIND() === scvEnvelopeKind.RESULT);
+  assert.ok(resultEnvelope, "missing canonical SCV RESULT output frame");
+  const result = resultEnvelope.RESULT();
+  assert.ok(result, "missing SCV RESULT payload");
+  const targets = [];
+  for (let index = 0; index < result.targetResultsLength(); index += 1) {
+    const target = result.TARGET_RESULTS(index);
+    const intervalStart = [];
+    const intervalStop = [];
+    const passStartBuckets = [];
+    for (let i = 0; i < target.intervalStartSecLength(); i += 1) {
+      intervalStart.push(target.INTERVAL_START_SEC(i));
+    }
+    for (let i = 0; i < target.intervalStopSecLength(); i += 1) {
+      intervalStop.push(target.INTERVAL_STOP_SEC(i));
+    }
+    for (let i = 0; i < target.passStartBucketsLength(); i += 1) {
+      passStartBuckets.push(target.PASS_START_BUCKETS(i));
+    }
+    targets.push({
+      targetId: target.TARGET_ID(),
+      name: target.NAME(),
+      accessCount: target.ACCESS_COUNT(),
+      revisitCount: target.REVISIT_COUNT(),
+      totalAccessDurationSec: target.TOTAL_ACCESS_DURATION_SEC(),
+      meanRevisitTimeSec: target.MEAN_REVISIT_TIME_SEC(),
+      maxGapSec: target.MAX_GAP_SEC(),
+      intervalStart,
+      intervalStop,
+      passStartBuckets,
+    });
+  }
+  return targets;
 }
 
 export async function createContractHarness(t) {
