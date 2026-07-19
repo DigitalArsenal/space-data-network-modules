@@ -32,14 +32,14 @@ docker run --rm -v "$MP_ROOT":/mp -v "$BUILD_DIR":/work "$WASI_SDK_IMAGE" bash -
 set -e
 MODS=/mp/space-data-network-modules
 NODE=\$MODS/hostcap/flatsql-store
-INC=\"-I\$MODS/analysis/od/src/cpp/include\"
+INC=\"-I\$MODS/analysis/od/src/cpp/include -I/mp/flatbuffers/include\"
 CF=\"--target=wasm32-wasip1-threads -std=c++17 -O3 -matomics -mbulk-memory -fignore-exceptions -pthread -DNDEBUG\"
 mkdir -p /work/gl
 /opt/wasi-sdk/bin/clang++ \$CF \$INC -Dstore=${PREFIX}store -c \$NODE/src/flatsql_store_module.cpp -o /work/gl/flatsql_store.o
 /opt/wasi-sdk/bin/clang++ \$CF -c $STUBS -o /work/gl/noexcept_stubs.o
 /opt/wasi-sdk/bin/wasm-ld -r /work/gl/flatsql_store.o /work/gl/noexcept_stubs.o -o /work/module-link.o
 echo '--- llvm-nm evidence (T=defined, U=undefined bake-resolved) ---'
-/opt/wasi-sdk/bin/llvm-nm /work/module-link.o | grep -E '${PREFIX}store|flatsql_exec_envelope|plugin_push_output|plugin_find_input_index|sdm_host_call' | head
+/opt/wasi-sdk/bin/llvm-nm /work/module-link.o | grep -E '${PREFIX}store|flatsql_ingest_record|flatsql_exec_envelope|plugin_push_output|plugin_find_input_index|sdm_host_call' | head
 echo '--- NO sdm_host_call (no Go sink) expected above ---'
 echo '--- target_features ---'
 /opt/wasi-sdk/bin/llvm-objdump --section=target_features -s /work/module-link.o 2>/dev/null | strings | grep -iE 'atomics|bulk' | head -1
