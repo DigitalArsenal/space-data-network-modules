@@ -101,8 +101,13 @@ bool write_file(const std::string& path, const std::vector<uint8_t>& data) {
 
 // ── WASI command entry ──────────────────────────────────────────────────────
 int main(int argc, char** argv) {
-    int num_threads = static_cast<int>(std::thread::hardware_concurrency());
-    if (num_threads < 1) num_threads = 4;
+    // Default (no --threads): 0 => run_batch_fit resolves the effective worker
+    // count (kOdFitDefaultThreads under wasi-threads, where hardware_concurrency()
+    // reports 1 and would otherwise single-thread the pool). This is the SAME
+    // default resolution the composed-flow fit() entry uses, so the "no --threads"
+    // path exercises and PROVES the composed default path threads. An explicit
+    // `--threads N` (N>0) overrides it unchanged.
+    int num_threads = 0;
     std::string out_dir = ".";
     std::vector<std::string> files;
     for (int i = 1; i < argc; ++i) {
