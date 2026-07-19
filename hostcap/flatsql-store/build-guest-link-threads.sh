@@ -39,7 +39,7 @@ mkdir -p /work/gl
 /opt/wasi-sdk/bin/clang++ \$CF -c $STUBS -o /work/gl/noexcept_stubs.o
 /opt/wasi-sdk/bin/wasm-ld -r /work/gl/flatsql_store.o /work/gl/noexcept_stubs.o -o /work/module-link.o
 echo '--- llvm-nm evidence (T=defined, U=undefined bake-resolved) ---'
-/opt/wasi-sdk/bin/llvm-nm /work/module-link.o | grep -E '${PREFIX}store|flatsql_ingest_record|flatsql_exec_envelope|plugin_push_output|plugin_find_input_index|sdm_host_call' | head
+/opt/wasi-sdk/bin/llvm-nm /work/module-link.o | grep -E '${PREFIX}store|flatsql_ingest_record|flatsql_exec_envelope|flatsql_query_rows|flatsql_mark_deleted_bulk|flatsql_compact|plugin_push_output|plugin_find_input_index|sdm_host_call' | head -20
 echo '--- NO sdm_host_call (no Go sink) expected above ---'
 echo '--- target_features ---'
 /opt/wasi-sdk/bin/llvm-objdump --section=target_features -s /work/module-link.o 2>/dev/null | strings | grep -iE 'atomics|bulk' | head -1
