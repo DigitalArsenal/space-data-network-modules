@@ -71,14 +71,15 @@ echo '--- llvm-nm evidence (T=defined text, U=undefined import) ---'
 "
 cp "$BUILD_DIR/module-link.o" "$GL_DIST/module-link.o"
 
-# metadata.json — threadModel emscripten-pthreads (the wasi-threads model), the
-# prefixed batch `fit` entry the baker links.
+# metadata.json — threadModel "wasi-threads" (the string kubo's bake gate,
+# sdn/flowrt/bake.go, treats as threaded), the prefixed batch fit entry the baker
+# links.
 node -e '
   const fs=require("fs");
   const out=process.argv[1], prefix=process.argv[2];
   fs.writeFileSync(out, JSON.stringify({
     version:1, format:"wasm-object", language:"c++",
-    threadModel:"emscripten-pthreads", symbolPrefix:prefix,
+    threadModel:"wasi-threads", symbolPrefix:prefix,
     methodSymbols:{ fit: prefix+"fit" },
   }, null, 2)+"\n");
 ' "$GL_DIST/metadata.json" "$PREFIX"
