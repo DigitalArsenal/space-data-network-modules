@@ -32,7 +32,7 @@ docker run --rm -v "$MP_ROOT":/mp -v "$BUILD_DIR":/work "$WASI_SDK_IMAGE" bash -
 set -e
 MODS=/mp/space-data-network-modules
 NODE=\$MODS/hostcap/flatsql-store
-INC=\"-I\$MODS/analysis/od/src/cpp/include -I/mp/flatbuffers/include\"
+INC=\"-I\$MODS/analysis/od/src/cpp/include -I\$MODS/common -I/mp/flatbuffers/include\"
 CF=\"--target=wasm32-wasip1-threads -std=c++17 -O3 -matomics -mbulk-memory -fignore-exceptions -pthread -DNDEBUG\"
 mkdir -p /work/gl
 /opt/wasi-sdk/bin/clang++ \$CF \$INC -Dstore=${PREFIX}store -c \$NODE/src/flatsql_store_module.cpp -o /work/gl/flatsql_store.o

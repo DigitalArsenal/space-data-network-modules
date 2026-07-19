@@ -6,8 +6,13 @@
   "pluginFamily": "hostcap",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "store",
@@ -20,9 +25,27 @@
             {
               "setId": "sds-fitted-results",
               "allowedTypes": [
-                { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM", "wireFormat": "aligned-binary", "requiredAlignment": 8 },
-                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM", "wireFormat": "aligned-binary", "requiredAlignment": 8 },
-                { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                },
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                },
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
               ],
               "description": "1..N fitted OD result records. ONLY $OMM/$OCM/$OBD — $OEM is NOT an accepted type (ephemeris is transient and never stored)."
             }
@@ -36,13 +59,53 @@
           "acceptedTypeSets": [
             {
               "setId": "store-provenance",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
               "description": "Optional node CONFIG provenance (aligned binary, no JSON): [u32le provider_len][provider][u32le source_name_len][source_name][u32le batch_id_len][batch_id]."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false
+        },
+        {
+          "portId": "provenance",
+          "acceptedTypeSets": [
+            {
+              "setId": "cid-provenance",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "CID-keyed provenance frames from analysis/od: [u32 cid_len][cid][u32 provider_len][provider][u32 source_name_len][source_name]."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Per-record provider/source_name attribution (cid-keyed); falls back to config."
+        },
+        {
+          "portId": "trigger",
+          "acceptedTypeSets": [
+            {
+              "setId": "fire-timestamp",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Optional host trigger metadata: [u64le unix_ms] fire timestamp (a capability read, not orchestration) -> the pulled_at column."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional fire wall-clock timestamp for the pulled_at column."
         }
       ],
       "outputPorts": [
@@ -51,7 +114,11 @@
           "acceptedTypeSets": [
             {
               "setId": "inserted-count",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
               "description": "4-byte little-endian inserted-record count (aligned-binary)."
             }
           ],
@@ -65,8 +132,20 @@
     }
   ],
   "schemasUsed": [
-    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
-    { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" },
-    { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD" }
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "OBD.fbs",
+      "fileIdentifier": "$OBD",
+      "rootTypeName": "OBD"
+    }
   ]
 }

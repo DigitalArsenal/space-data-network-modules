@@ -52,7 +52,7 @@ echo "Building threaded guest-link object via $WASI_SDK_IMAGE ..."
 docker run --rm -v "$MP_ROOT":/mp -v "$BUILD_DIR":/work "$WASI_SDK_IMAGE" bash -lc "
 set -e
 OD=/mp/space-data-network-modules/analysis/od/src/cpp
-INC=\"-I\$OD/include -I\$OD/src -I\$OD/deps/vallado-sgp4 -I/work/eigen3 -I/mp/flatbuffers/include -I/mp/space-data-network-modules/licensing/core/src/cpp/generated/sds\"
+INC=\"-I\$OD/include -I\$OD/src -I/mp/space-data-network-modules/common -I\$OD/deps/vallado-sgp4 -I/work/eigen3 -I/mp/flatbuffers/include -I/mp/space-data-network-modules/licensing/core/src/cpp/generated/sds\"
 CF=\"--target=wasm32-wasip1-threads -std=c++17 -O3 -matomics -mbulk-memory -fignore-exceptions -pthread -DNDEBUG -DEIGEN_DONT_PARALLELIZE -ffast-math\"
 mkdir -p /work/gl
 OBJS=''
