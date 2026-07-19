@@ -98,6 +98,23 @@ async function resolveEmscriptenRoot(compileConfig) {
   return null;
 }
 
+function threadModelOption(value) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (
+    normalized === "single-thread" ||
+    normalized === "emscripten-pthreads"
+  ) {
+    return normalized;
+  }
+  throw new Error(
+    `Invalid sdnModuleCompile.threadModel "${value}". Expected ` +
+      '"single-thread" or "emscripten-pthreads".',
+  );
+}
+
 async function resolveCompileOptions(packageJson) {
   const compileConfig = packageJson.sdnModuleCompile ?? {};
   const compileOptions = {
@@ -116,6 +133,16 @@ async function resolveCompileOptions(packageJson) {
         compileConfig.maximumMemoryBytes,
     ),
   };
+  // Opt into the isomorphic wasi-threads model (compileWithWasiThreads) when the
+  // module declares it. The SDK routes "emscripten-pthreads" through the
+  // wasi-threads toolchain and validates the emitted artifact
+  // (assertPthreadArtifact). Overridable via SDM_MODULE_THREAD_MODEL for spikes.
+  const threadModel = threadModelOption(
+    process.env.SDM_MODULE_THREAD_MODEL ?? compileConfig.threadModel,
+  );
+  if (threadModel) {
+    compileOptions.threadModel = threadModel;
+  }
   const emscriptenRoot = await resolveEmscriptenRoot(compileConfig);
   if (emscriptenRoot) {
     compileOptions.emscriptenRoot = emscriptenRoot;

@@ -266,7 +266,7 @@ test("swept grid candidate caps reuse resolved state-segment endpoints", () => {
     "utf8",
   );
   const accumulationStart = source.indexOf(
-    "void accumulate_grid_coverage_products_impl",
+    "void accumulate_grid_coverage_products_range",
   );
   const accumulationStop = source.indexOf(
     "void accumulate_grid_coverage_products(",
@@ -294,7 +294,7 @@ test("production grid bounds use closed-form sensor caps before limb fallback", 
     "utf8",
   );
   const accumulationStart = source.indexOf(
-    "void accumulate_grid_coverage_products_impl",
+    "void accumulate_grid_coverage_products_range",
   );
   const accumulationStop = source.indexOf(
     "void accumulate_grid_coverage_products(",
