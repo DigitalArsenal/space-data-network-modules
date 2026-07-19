@@ -503,6 +503,12 @@ function copyBand(raster, productKind, memoryBuffer, ArrayType) {
   );
 }
 
+function copyOptionalBand(raster, productKind, memoryBuffer, ArrayType) {
+  return findBand(raster, productKind)
+    ? copyBand(raster, productKind, memoryBuffer, ArrayType)
+    : null;
+}
+
 export async function invokeAndReadCoverage(harness, payload) {
   const response = await invokeCoveragePayload(harness, payload);
   assert.equal(response.statusCode, 0, `module invoke failed: ${response.errorMessage}`);
@@ -519,6 +525,12 @@ export async function invokeAndReadCoverage(harness, payload) {
   const passCount = copyBand(
     raster,
     scvRasterProductKind.PASS_COUNT,
+    memory,
+    Uint32Array,
+  );
+  const bucketPassStartCount = copyOptionalBand(
+    raster,
+    scvRasterProductKind.BUCKET_PASS_START_COUNT,
     memory,
     Uint32Array,
   );
@@ -548,6 +560,7 @@ export async function invokeAndReadCoverage(harness, payload) {
     wordsPerBucket: raster.WORDS_PER_BUCKET(),
     bitset,
     passCount,
+    bucketPassStartCount,
     bucketStart,
     bucketStop,
     activeCellCount,

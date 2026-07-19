@@ -22,16 +22,31 @@ const STATE_STEP_SECONDS = 15;
 const STATE_COUNT = WINDOW_SECONDS / STATE_STEP_SECONDS + 1;
 const GRID_STEP_SECONDS = 60;
 const GRID_INDEX_COUNT = WINDOW_SECONDS / GRID_STEP_SECONDS;
-const COMPUTE_BUDGET_MS = 5000;
+const COARSE_COMPUTE_BUDGET_MS = 5000;
+const FINE_COMPUTE_BUDGET_MS = 10000;
 const WORKER_RESULT_GRACE_MS = 1000;
 const WORKER_SETUP_TIMEOUT_MS = 8000;
+const configuredFineWatchdogMs = Number(
+  process.env.SENSOR_COVERAGE_FINE_WATCHDOG_MS,
+);
+const FINE_WORKER_WATCHDOG_MS =
+  Number.isFinite(configuredFineWatchdogMs) && configuredFineWatchdogMs > 0
+    ? configuredFineWatchdogMs
+    : FINE_COMPUTE_BUDGET_MS + WORKER_RESULT_GRACE_MS;
 
 const EARTH_RADIUS_M = 6378137;
 const ORBIT_RADIUS_M = EARTH_RADIUS_M + 550000;
 const EARTH_GM_M3_PER_S2 = 3.986004418e14;
 const ORBIT_SPEED_MPS = Math.sqrt(EARTH_GM_M3_PER_S2 / ORBIT_RADIUS_M);
 const ORBIT_RATE_RAD_PER_SEC = ORBIT_SPEED_MPS / ORBIT_RADIUS_M;
+const EARTH_ROTATION_RATE_RAD_PER_SEC = 7.292115e-5;
 const INCLINATION_RAD = (51.6 * Math.PI) / 180;
+const FINE_SENSOR_ATTITUDE = Object.freeze({
+  x: Math.sin(0.1 * Math.PI / 180),
+  y: 0,
+  z: 0,
+  w: Math.cos(0.1 * Math.PI / 180),
+});
 
 const COARSE_GRID = Object.freeze({
   minLatitudeDeg: -60,
@@ -40,6 +55,20 @@ const COARSE_GRID = Object.freeze({
   maxLongitudeDeg: 180,
   latitudeStepDeg: 8,
   longitudeStepDeg: 8,
+});
+
+const FINE_GRID = Object.freeze({
+  minLatitudeDeg: -60,
+  maxLatitudeDeg: 60,
+  minLongitudeDeg: -180,
+  maxLongitudeDeg: 180,
+  latitudeStepDeg: 2,
+  longitudeStepDeg: 2,
+});
+
+const GRID_CASES = Object.freeze({
+  coarse: COARSE_GRID,
+  fine: FINE_GRID,
 });
 
 const SHAPES = Object.freeze({
@@ -62,35 +91,63 @@ const SHAPES = Object.freeze({
   }),
 });
 
-function orbitState(elapsedSeconds) {
+function orbitState(elapsedSeconds, earthFixedGroundTrack = false) {
   const theta = ORBIT_RATE_RAD_PER_SEC * elapsedSeconds;
   const cosTheta = Math.cos(theta);
   const sinTheta = Math.sin(theta);
   const cosInclination = Math.cos(INCLINATION_RAD);
   const sinInclination = Math.sin(INCLINATION_RAD);
+  const inertialPosition = {
+    x: ORBIT_RADIUS_M * cosTheta,
+    y: ORBIT_RADIUS_M * sinTheta * cosInclination,
+    z: ORBIT_RADIUS_M * sinTheta * sinInclination,
+  };
+  const inertialVelocity = {
+    x: -ORBIT_SPEED_MPS * sinTheta,
+    y: ORBIT_SPEED_MPS * cosTheta * cosInclination,
+    z: ORBIT_SPEED_MPS * cosTheta * sinInclination,
+  };
+  if (!earthFixedGroundTrack) {
+    return stateSample({
+      elapsedSeconds,
+      position: inertialPosition,
+      velocity: inertialVelocity,
+    });
+  }
+  const earthAngle = EARTH_ROTATION_RATE_RAD_PER_SEC * elapsedSeconds;
+  const cosEarth = Math.cos(earthAngle);
+  const sinEarth = Math.sin(earthAngle);
+  const rotateToEarthFixed = ({ x, y, z }) => ({
+    x: cosEarth * x + sinEarth * y,
+    y: -sinEarth * x + cosEarth * y,
+    z,
+  });
+  const relativeInertialVelocity = {
+    x: inertialVelocity.x +
+      EARTH_ROTATION_RATE_RAD_PER_SEC * inertialPosition.y,
+    y: inertialVelocity.y -
+      EARTH_ROTATION_RATE_RAD_PER_SEC * inertialPosition.x,
+    z: inertialVelocity.z,
+  };
   return stateSample({
     elapsedSeconds,
-    position: {
-      x: ORBIT_RADIUS_M * cosTheta,
-      y: ORBIT_RADIUS_M * sinTheta * cosInclination,
-      z: ORBIT_RADIUS_M * sinTheta * sinInclination,
-    },
-    velocity: {
-      x: -ORBIT_SPEED_MPS * sinTheta,
-      y: ORBIT_SPEED_MPS * cosTheta * cosInclination,
-      z: ORBIT_SPEED_MPS * cosTheta * sinInclination,
-    },
+    position: rotateToEarthFixed(inertialPosition),
+    velocity: rotateToEarthFixed(relativeInertialVelocity),
+    quaternion: FINE_SENSOR_ATTITUDE,
   });
 }
 
-function createBudgetPayload(shapeName) {
+function createBudgetPayload(shapeName, gridName) {
   const states = Array.from(
     { length: STATE_COUNT },
-    (_, index) => orbitState(index * STATE_STEP_SECONDS),
+    (_, index) => orbitState(
+      index * STATE_STEP_SECONDS,
+      gridName === "fine",
+    ),
   );
   return createCoveragePayload({
-    id: `compute-time-budget-${shapeName}`,
-    grid: COARSE_GRID,
+    id: `compute-time-budget-${gridName}-${shapeName}`,
+    grid: GRID_CASES[gridName],
     timeGrid: {
       start: 0,
       stop: WINDOW_SECONDS,
@@ -103,14 +160,14 @@ function createBudgetPayload(shapeName) {
   });
 }
 
-async function prepareShapeMeasurement(shapeName) {
+async function prepareShapeMeasurement(shapeName, gridName) {
   const t = {
     skip(message) {
       throw new Error(message);
     },
   };
   const harness = await createContractHarness(t);
-  const payload = createBudgetPayload(shapeName);
+  const payload = createBudgetPayload(shapeName, gridName);
   return {
     async invoke() {
       const start = performance.now();
@@ -125,12 +182,12 @@ async function prepareShapeMeasurement(shapeName) {
   };
 }
 
-function measureShapeInWorker(shapeName) {
+function measureShapeInWorker(shapeName, gridName, workerWatchdogMs) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let computeTimeout = null;
     const worker = new Worker(new URL(import.meta.url), {
-      workerData: { role: "compute-budget", shapeName },
+      workerData: { role: "compute-budget", shapeName, gridName },
       execArgv: [],
     });
     const settleAfterTermination = (callback) => {
@@ -151,9 +208,9 @@ function measureShapeInWorker(shapeName) {
           settled = true;
           settleAfterTermination(() => reject(new Error(
             `${shapeName} did not report completion within the ` +
-              `${COMPUTE_BUDGET_MS} ms compute budget`,
+              `${workerWatchdogMs} ms worker watchdog`,
           )));
-        }, COMPUTE_BUDGET_MS + WORKER_RESULT_GRACE_MS);
+        }, workerWatchdogMs);
         worker.postMessage({ invoke: true });
         worker.once("message", (result) => {
           if (settled) return;
@@ -192,29 +249,52 @@ function measureShapeInWorker(shapeName) {
 }
 
 if (workerData?.role !== "compute-budget") {
-  const dimensions = gridDimensions(COARSE_GRID);
-  assert.equal(dimensions.rows * dimensions.columns, 675);
+  const coarseDimensions = gridDimensions(COARSE_GRID);
+  const fineDimensions = gridDimensions(FINE_GRID);
+  assert.equal(coarseDimensions.rows * coarseDimensions.columns, 675);
+  assert.equal(fineDimensions.rows * fineDimensions.columns, 10800);
   assert.equal(STATE_COUNT, 2881);
   assert.equal(GRID_INDEX_COUNT, 720);
 
   test("conic, rectangular, and SAR meet the 12-hour coarse-grid compute budget", {
     timeout: Object.keys(SHAPES).length *
-      (WORKER_SETUP_TIMEOUT_MS + COMPUTE_BUDGET_MS +
+      (WORKER_SETUP_TIMEOUT_MS + COARSE_COMPUTE_BUDGET_MS +
         WORKER_RESULT_GRACE_MS + 1000),
   }, async (t) => {
     for (const shapeName of Object.keys(SHAPES)) {
       await t.test(`${shapeName} completes under five seconds`, async (t) => {
-        const elapsedMs = await measureShapeInWorker(shapeName);
+        const elapsedMs = await measureShapeInWorker(
+          shapeName,
+          "coarse",
+          COARSE_COMPUTE_BUDGET_MS + WORKER_RESULT_GRACE_MS,
+        );
         t.diagnostic(`${shapeName} compute time: ${elapsedMs.toFixed(3)} ms`);
         assert.ok(
-          elapsedMs < COMPUTE_BUDGET_MS,
-          `${shapeName} compute time ${elapsedMs.toFixed(3)} ms exceeded ${COMPUTE_BUDGET_MS} ms`,
+          elapsedMs < COARSE_COMPUTE_BUDGET_MS,
+          `${shapeName} compute time ${elapsedMs.toFixed(3)} ms exceeded ` +
+            `${COARSE_COMPUTE_BUDGET_MS} ms`,
         );
       });
     }
   });
+
+  test("conic meets the 12-hour fine-grid compute budget", {
+    timeout: WORKER_SETUP_TIMEOUT_MS + FINE_WORKER_WATCHDOG_MS + 1000,
+  }, async (t) => {
+    const elapsedMs = await measureShapeInWorker(
+      "conic",
+      "fine",
+      FINE_WORKER_WATCHDOG_MS,
+    );
+    t.diagnostic(`fine conic compute time: ${elapsedMs.toFixed(3)} ms`);
+    assert.ok(
+      elapsedMs < FINE_COMPUTE_BUDGET_MS,
+      `fine conic compute time ${elapsedMs.toFixed(3)} ms exceeded ` +
+        `${FINE_COMPUTE_BUDGET_MS} ms`,
+    );
+  });
 } else {
-  prepareShapeMeasurement(workerData.shapeName).then(
+  prepareShapeMeasurement(workerData.shapeName, workerData.gridName).then(
     (measurement) => {
       parentPort.postMessage({ ready: true });
       parentPort.once("message", () => {
