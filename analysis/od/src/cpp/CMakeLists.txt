@@ -85,6 +85,8 @@ set(OD_SOURCES
     src/oem_parser.cpp
     src/oem_fb_reader.cpp
     src/omm_fb_builder.cpp
+    src/obd_fb_builder.cpp
+    src/ocm_fb_builder.cpp
     src/sgp4_fitter.cpp
     src/plugin_runtime.cpp
 )

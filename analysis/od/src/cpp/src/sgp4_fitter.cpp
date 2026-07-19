@@ -1048,6 +1048,104 @@ static void estimate_velocity_from_positions(
     vz = p0.z * L0 + p1.z * L1 + p2.z * L2;
 }
 
+// ── Fit-covariance (SDN OD-Flow $OCM) ──────────────────────────────────────
+// Post-fit, read-only: given the converged elements + the SAME fit_points the
+// fit used, form the normal-equations parameter covariance
+//   Cov_params = sigma^2 * (JᵀJ)^-1,   sigma^2 = rᵀr / (3N - NPARAMS)
+// (J = the 3N x NPARAMS position-residual Jacobian by CENTRAL differences — the
+// same perturbation scheme the LM uses), then map it to the 6x6 epoch Cartesian
+// TEME state covariance via the epoch-state Jacobian G (6 x NPARAMS):
+//   Cov_state = G · Cov_params · Gᵀ.
+// This NEVER touches the fit itself (Vallado AIAA 2008-6770 formal covariance).
+static bool compute_state_covariance_impl(
+    const SGP4Elements& el,
+    const std::vector<EphemerisPoint>& fit_points,
+    double out_state[6], double out_cov21[21], int& num_obs) {
+    const size_t N = fit_points.size();
+    if (N < 4) return false;
+    const size_t M = 3 * N;
+
+    static constexpr double COV_PERCENTCHG = 0.001;   // == LM PERCENTCHG
+    static constexpr double COV_DELTAAMTCHG = 1e-7;   // == LM DELTAAMTCHG
+
+    double params[NPARAMS];
+    get_equinoctial(el, params);
+    Eigen::VectorXd residuals;
+    compute_residuals_3d(el, fit_points, residuals);  // fills 3N residual vector
+
+    Eigen::MatrixXd J(M, NPARAMS);
+    for (int j = 0; j < NPARAMS; j++) {
+        double saved = params[j];
+        double delta = std::abs(saved) * COV_PERCENTCHG;
+        for (int b = 0; b < 5 && delta < COV_DELTAAMTCHG; b++)
+            delta = (delta == 0.0) ? COV_DELTAAMTCHG : delta * 10.0;
+        params[j] = saved + delta;
+        Eigen::VectorXd rp; compute_residuals_3d(set_equinoctial(el, params), fit_points, rp);
+        params[j] = saved - delta;
+        Eigen::VectorXd rm; compute_residuals_3d(set_equinoctial(el, params), fit_points, rm);
+        params[j] = saved;
+        for (size_t i = 0; i < M; i++) J(i, j) = (rp(static_cast<Eigen::Index>(i)) - rm(static_cast<Eigen::Index>(i))) / (2.0 * delta);
+    }
+
+    Eigen::MatrixXd JtJ = J.transpose() * J;  // NPARAMS x NPARAMS
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(JtJ, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    const Eigen::VectorXd& sv = svd.singularValues();
+    if (sv(0) <= 0.0) return false;
+    double tol = 1e-12 * sv(0) * static_cast<double>(NPARAMS);
+    Eigen::MatrixXd Sinv = Eigen::MatrixXd::Zero(NPARAMS, NPARAMS);
+    for (int i = 0; i < NPARAMS; i++) if (sv(i) > tol) Sinv(i, i) = 1.0 / sv(i);
+    Eigen::MatrixXd JtJ_inv = svd.matrixV() * Sinv * svd.matrixU().transpose();
+
+    double dof = static_cast<double>(M) - static_cast<double>(NPARAMS);
+    if (dof < 1.0) dof = 1.0;
+    double sigma2 = residuals.squaredNorm() / dof;
+    Eigen::MatrixXd Cov_params = sigma2 * JtJ_inv;  // NPARAMS x NPARAMS
+
+    auto state_at = [&](const SGP4Elements& e, double s[6]) -> bool {
+        PropState ps;
+        if (!propagate_elements(e, e.epoch_jd, ps)) return false;
+        s[0] = ps.x; s[1] = ps.y; s[2] = ps.z; s[3] = ps.vx; s[4] = ps.vy; s[5] = ps.vz;
+        return true;
+    };
+    double s0[6];
+    if (!state_at(el, s0)) return false;
+    for (int k = 0; k < 6; k++) out_state[k] = s0[k];
+
+    Eigen::MatrixXd G(6, NPARAMS);
+    double gp[NPARAMS];
+    get_equinoctial(el, gp);
+    for (int j = 0; j < NPARAMS; j++) {
+        double saved = gp[j];
+        double delta = std::abs(saved) * COV_PERCENTCHG;
+        for (int b = 0; b < 5 && delta < COV_DELTAAMTCHG; b++)
+            delta = (delta == 0.0) ? COV_DELTAAMTCHG : delta * 10.0;
+        double sp[6], sm[6];
+        gp[j] = saved + delta;
+        if (!state_at(set_equinoctial(el, gp), sp)) return false;
+        gp[j] = saved - delta;
+        if (!state_at(set_equinoctial(el, gp), sm)) return false;
+        gp[j] = saved;
+        for (int r = 0; r < 6; r++) G(r, j) = (sp[r] - sm[r]) / (2.0 * delta);
+    }
+
+    Eigen::MatrixXd Cov_state = G * Cov_params * G.transpose();  // 6x6
+    int idx = 0;
+    for (int r = 0; r < 6; r++)
+        for (int c = 0; c <= r; c++)
+            out_cov21[idx++] = Cov_state(r, c);
+
+    // Sanity under -ffast-math (isfinite is unreliable there): variances must be
+    // finite-magnitude and the position/velocity variances strictly positive.
+    for (int i = 0; i < 21; i++)
+        if (!(std::abs(out_cov21[i]) < 1e18)) return false;
+    const int diag[6] = {0, 2, 5, 9, 14, 20};  // (k,k) lower-tri row-major indices
+    for (int k = 0; k < 6; k++)
+        if (!(out_cov21[diag[k]] > 0.0)) return false;
+
+    num_obs = static_cast<int>(M);
+    return true;
+}
+
 static FitResult fit_single_epoch(
     const std::vector<EphemerisPoint>& all_points,
     size_t epoch_idx,
@@ -1204,6 +1302,16 @@ static FitResult fit_single_epoch(
         result.elements.reference_rms_km =
             compute_rms_position(config.reference_elements, fit_points);
         result.elements.has_reference_rms = true;
+    }
+
+    // SDN OD-Flow $OCM: opt-in, post-fit, read-only covariance over the SAME
+    // winning fit_points. Never alters the numerics above; default-off keeps all
+    // existing gates byte-identical. The multi-start winner carries its own
+    // covariance in the returned FitResult.
+    if (config.compute_covariance) {
+        result.has_state_covariance = compute_state_covariance_impl(
+            result.elements, fit_points,
+            result.state_teme, result.state_covariance, result.cov_num_observations);
     }
 
     return result;

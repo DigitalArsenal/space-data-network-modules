@@ -2,6 +2,7 @@
 
 #include "od/meme_parser.h"
 #include "od/obd_fb_builder.h"
+#include "od/ocm_fb_builder.h"
 #include "od/oem_fb_reader.h"
 #include "od/oem_parser.h"
 #include "od/omm_fb_builder.h"
@@ -343,6 +344,9 @@ PluginFitFBResult fit_ephemeris_fb(
         apply_series_labels(&series, options_json);
 
         FitterConfig config = parse_fit_options(options_json);
+        // SDN OD-Flow: request the post-fit $OCM covariance (opt-in; does not
+        // change the fit numerics — the $OMM/$OBD bytes stay identical).
+        config.compute_covariance = true;
         auto fit = fit_sgp4_series(series, config);
 
         // Aligned-binary $OMM out (ORIGINATOR="SDN-OD").
@@ -356,6 +360,28 @@ PluginFitFBResult fit_ephemeris_fb(
                 series.samples.back().epoch_jd - series.samples.front().epoch_jd;
         }
         result.obd = build_obd_flatbuffer(fit.elements, fit_span_days);
+
+        // Aligned-binary $OCM out (epoch STATE + 6x6 COVARIANCE + OD residual
+        // summary) — the SAME fit. Covariance is the real normal-equations fit
+        // covariance when the solve was well-conditioned; otherwise the builder
+        // emits its documented RMS-seeded formal placeholder. $OEM is never
+        // persisted here; only these fitted result records leave the fit.
+        {
+            OCMInputs oc{};
+            oc.el = &fit.elements;
+            oc.has_state = fit.has_state_covariance;
+            oc.has_covariance = fit.has_state_covariance;
+            if (fit.has_state_covariance) {
+                for (int i = 0; i < 6; i++) oc.state_teme[i] = fit.state_teme[i];
+                for (int i = 0; i < 21; i++) oc.covariance[i] = fit.state_covariance[i];
+            }
+            oc.rms_km = fit.elements.rms_km;
+            oc.num_observations = fit.cov_num_observations;
+            oc.iterations = fit.elements.iterations;
+            oc.converged = fit.elements.converged;
+            oc.convergence_tol = config.convergence_tol;
+            result.ocm = build_ocm_flatbuffer(oc, "SDN-OD", fit.elements.epoch_iso);
+        }
         result.rms_km = fit.elements.rms_km;
         result.converged = fit.elements.converged;
         result.mean_motion = fit.elements.mean_motion;
