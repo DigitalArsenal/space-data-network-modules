@@ -20,8 +20,13 @@
       "description": "Periodic ISS OEM pull (default every 12h; NASA refreshes the continuous 15-day EME2000 ephemeris a few times a week — one small file, no per-object fan-out)."
     }
   ],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "pull",
@@ -39,12 +44,79 @@
               "setId": "data-source.iss.pnm",
               "description": "Signed PNM pointer for each published pull.",
               "allowedTypes": [
-                { "schemaName": "PNM", "fileIdentifier": "$PNM", "rootTypeName": "PNM" }
+                {
+                  "schemaName": "PNM",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM"
+                }
               ]
             }
           ]
         }
       ]
+    },
+    {
+      "methodId": "emit",
+      "displayName": "Fetch + parse operator ephemeris and emit $OEM (OD-flow guest-link)",
+      "description": "Fetches the provider catalog via the host http connector (ps::http_get), parses to SDS $OEM in-memory, and emits one $OEM aligned-binary frame per object on the oem port. Nothing stored/signed/published.",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "od-flow-config",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Optional node CONFIG (endpoints/target/objectCap); default provider endpoints otherwise."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional per-node fetch config (JSON bytes)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM ephemeris (aligned-binary), one per operator object. Consumed in-memory by analysis/od.fit; never stored."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 100000,
+          "required": true,
+          "description": "Fetched+parsed $OEM ephemeris frames (1..N objects)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
     }
   ]
 }

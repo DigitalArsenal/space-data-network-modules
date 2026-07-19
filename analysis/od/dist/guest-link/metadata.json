@@ -2,7 +2,7 @@
   "version": 1,
   "format": "wasm-object",
   "language": "c++",
-  "threadModel": "emscripten-pthreads",
+  "threadModel": "wasi-threads",
   "symbolPrefix": "sdm_guest_6f726269742d64657465726d_",
   "methodSymbols": {
     "fit": "sdm_guest_6f726269742d64657465726d_fit"

@@ -1,0 +1,122 @@
+{
+  "pluginId": "com.orbpro.glonass-source",
+  "name": "GLONASS Precise Ephemeris (IAC SP3) Data Source",
+  "version": "1.0.0",
+  "description": "Executable data-source: pulls an IAC GLONASS precise ephemeris (SP3-d) over HTTP on a timer, emits a schema-exact SDS OEM record per GLONASS satellite (frame/time preserved AS DECLARED in the SP3 header, position-only), and signs + publishes a PNM pointer.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "storage_ingest",
+    "wallet_sign",
+    "crypto_sign",
+    "pubsub"
+  ],
+  "protocols": [],
+  "timers": [
+    {
+      "timerId": "glonass-pull",
+      "methodId": "pull",
+      "defaultIntervalMs": 43200000,
+      "description": "Periodic GLONASS IAC SP3 pull (default every 12h; IAC regenerates its precise products ~daily — one SP3 file, per-pull record churn bounded by objectCap)."
+    }
+  ],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "pull",
+      "displayName": "Pull GLONASS Ephemeris",
+      "description": "Fetches an IAC GLONASS precise ephemeris (SP3-d) over HTTP, emits a schema-exact SDS OEM record per GLONASS satellite, signs a PNM, and publishes it.",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "published",
+          "displayName": "Published PNMs",
+          "description": "Signed PNM pointer published for each pulled + stored GLONASS ephemeris record.",
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "data-source.glonass.pnm",
+              "description": "Signed PNM pointer for each published pull record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "emit",
+      "displayName": "Fetch + parse operator ephemeris and emit $OEM (OD-flow guest-link)",
+      "description": "Fetches the provider catalog via the host http connector (ps::http_get), parses to SDS $OEM in-memory, and emits one $OEM aligned-binary frame per object on the oem port. Nothing stored/signed/published.",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "od-flow-config",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Optional node CONFIG (endpoints/target/objectCap); default provider endpoints otherwise."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional per-node fetch config (JSON bytes)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM ephemeris (aligned-binary), one per operator object. Consumed in-memory by analysis/od.fit; never stored."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 100000,
+          "required": true,
+          "description": "Fetched+parsed $OEM ephemeris frames (1..N objects)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    }
+  ]
+}

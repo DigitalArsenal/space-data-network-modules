@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "wasi-threads",
+  "symbolPrefix": "sdm_guest_636f6d2e6f726270726f2e696e74656c7361742d736f75726365_",
+  "methodSymbols": {
+    "emit": "sdm_guest_636f6d2e6f726270726f2e696e74656c7361742d736f75726365_emit"
+  }
+}
