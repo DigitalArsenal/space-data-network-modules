@@ -43,9 +43,22 @@ struct BatchRunStats {
     std::size_t distinct_thread_ids = 0;  // distinct OS threads observed across fits
 };
 
+// Default worker-thread count for the auto path (num_threads <= 0). CRITICAL:
+// std::thread::hardware_concurrency() returns 1 under wasm32-wasip1-threads
+// (wasi-libc exposes no CPU-count source; WasmEdge 0.14.1 and V8 both report 1),
+// so relying on it single-threads the pool and NO std::thread ever spawns. This
+// fixed positive default guarantees the bounded work-stealing pool actually
+// spawns workers; run_batch_fit clamps it down to the object count, so a batch of
+// one still degenerates to a single fit. 8 gives real parallelism on the 2-vCPU
+// prod node plus the observable >1-thread spawn proof, without a
+// one-thread-per-object blow-up on the ~11k-object catalog (work-stealing churns
+// the full set across the 8 workers).
+inline constexpr int kOdFitDefaultThreads = 8;
+
 // Fit an entire batch. worker_count = clamp(num_threads>0 ? num_threads :
-// hardware_concurrency(), 1, objs.size()). Deterministic: results[i] is the fit
-// of objs[i] regardless of thread count.
+// (hardware_concurrency()>=2 ? hardware_concurrency() : kOdFitDefaultThreads), 1,
+// objs.size()). Deterministic: results[i] is the fit of objs[i] regardless of
+// thread count (per-object fits are independent; RMS bit-parity preserved).
 std::vector<BatchResult> run_batch_fit(const std::vector<BatchObject>& objs,
                                        int num_threads,
                                        BatchRunStats* stats);

@@ -45,8 +45,13 @@ std::vector<BatchResult> run_batch_fit(const std::vector<BatchObject>& objs,
 
     int requested = num_threads;
     if (requested <= 0) {
+        // hardware_concurrency() returns 1 under wasm32-wasip1-threads (wasi-libc
+        // has no CPU-count source), which would single-thread the pool and spawn
+        // ZERO std::threads. Trust it only when it actually reports parallelism
+        // (>=2, e.g. a native build); otherwise fall back to the fixed positive
+        // default so the bounded work-stealing pool still spawns real workers.
         unsigned hc = std::thread::hardware_concurrency();
-        requested = hc > 0 ? static_cast<int>(hc) : 1;
+        requested = hc >= 2 ? static_cast<int>(hc) : kOdFitDefaultThreads;
     }
     int worker_count = requested;
     if (worker_count < 1) worker_count = 1;

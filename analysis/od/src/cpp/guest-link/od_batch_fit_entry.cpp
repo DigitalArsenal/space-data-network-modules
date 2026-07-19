@@ -49,10 +49,18 @@ extern "C" int fit(void) {
     return 1;
   }
 
-  // Thread the fits: 0 => od::run_batch_fit uses std::thread::hardware_concurrency,
-  // clamped to the object count (bounded work-stealing pool, not one-per-object).
+  // Thread the fits with a POSITIVE, hardware_concurrency()-INDEPENDENT worker
+  // count. Under wasm32-wasip1-threads hardware_concurrency() returns 1 (wasi-libc
+  // has no CPU-count source), so passing 0 here would resolve to a single worker
+  // and spawn ZERO std::threads — the composed flow would run single-threaded.
+  // od::kOdFitDefaultThreads (a fixed positive default) makes run_batch_fit's
+  // bounded work-stealing pool actually spawn workers; run_batch_fit clamps it to
+  // the object count, so a batch of one still degenerates to a single fit and a
+  // batch of >=2 spawns >=2 std::threads. Determinism/RMS parity is unchanged:
+  // results stay indexed by input order regardless of worker count.
   od::BatchRunStats stats{};
-  std::vector<od::BatchResult> results = od::run_batch_fit(objs, 0, &stats);
+  std::vector<od::BatchResult> results =
+      od::run_batch_fit(objs, od::kOdFitDefaultThreads, &stats);
 
   // Emit records per fitted object. A failed/unfittable object emits nothing
   // (honest skip) — never a wrong record. $OMM is required; $OCM/$OBD ride along.
