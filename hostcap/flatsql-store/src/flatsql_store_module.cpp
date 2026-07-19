@@ -3,70 +3,85 @@
  *
  * The composed-WASM store terminal for the supplemental-OMM OD flow. It replaces
  * the repudiated Go storage sink (storage.ingest_with_source -> sdnstore.Store,
- * which did SDS type derivation + record decode + per-record store IN GO). Here
- * every store decision happens IN WASM: the node reads the fitted result frames,
- * derives the SDS type from each record's FlatBuffer file_identifier in C++, and
- * INSERTs per-record into the FlatSQL engine over the flow-runtime's linked-engine
- * interface (flow_runtime.cpp SDN_FLATSQL_LINKED: the flatsql engine is a separate
- * wasm instance imported via import_module("flatsql"), driven under the held lock;
- * the engine's DB persists through the host's generic filesystem connector — NOT
- * a Go store). No Go orchestration, no SDS-aware Go decode, no per-record Go loop.
+ * which did SDS type derivation + record decode + per-record store IN GO). Every
+ * store decision happens IN WASM.
  *
- * INPUT PORTS (by construction carry ONLY $OMM/$OCM/$OBD — NEVER $OEM; the flow's
- * $OEM is transient and never reaches here, and a mis-wired $OEM record's file id
- * "$OEM" matches no table and is skipped):
+ * PERSISTENCE MODEL (empirically pinned by the deploy leg): FlatSQL's ONLY
+ * persistable substrate is the FlatBuffer ARENA, populated via flatsql ingest.
+ * The schema-declared tables (sds_omm/sds_ocm/sds_obd) are READ-ONLY vtabs over
+ * that arena — a SQL INSERT into them errors ("may not be modified") and native
+ * CREATE TABLE rows never reach ExportData (0-byte snapshots). So the store
+ * TERMINAL is an ARENA INGEST, not a SQL INSERT:
+ *   1. Per record, build a wrapper FlatBuffer matching the kubo-declared table
+ *        table sds_<t> { cid:string(key); provider:string; source_name:string;
+ *                        batch_id:string; data:[ubyte]; }
+ *      (data = the raw $OMM/$OCM/$OBD record bytes; provenance from the config
+ *      port), stamped with a STORE-LOCAL file_identifier SOMM/SOCM/SOBD (distinct
+ *      from the real SDS ids so a raw record can never be mis-routed as a
+ *      wrapper), and ingest it via flatsql.ingest_record.
+ *   2. DEDUP is in-wasm (the arena index is PRIMARY KEY(key,sequence) and does
+ *      NOT reject duplicate ingests): before ingesting, pre-check with a READ-ONLY
+ *      SELECT COUNT(*) over the vtab via flatsql.exec_envelope and skip when the
+ *      cid is already present — preserving INSERT-OR-IGNORE (content-addressed)
+ *      semantics exactly.
+ *
+ * ALL record semantics (per-SDS-type routing from the file_identifier, CID,
+ * wrapper build, provenance) stay in C++. The two host trampolines are pure
+ * byte-movers over THIS module's memory. No sdm_host_call (no Go sink), no
+ * storage.* hostcalls, no fs calls (the engine snapshots the arena via opaque
+ * ExportData through the host fs connector — not this node's concern).
+ *
+ * INPUT PORTS (carry ONLY $OMM/$OCM/$OBD — NEVER $OEM):
  *   "records" : 1..N size-prefixed SDS records ($OMM/$OCM/$OBD, aligned-binary).
- *   "config"  : OPTIONAL provenance from node CONFIG (aligned binary, no JSON):
+ *   "config"  : OPTIONAL provenance (aligned binary, no JSON):
  *               [u32le provider_len][provider][u32le source_name_len][source_name]
- *               [u32le batch_id_len][batch_id]. Absent => NULL provenance columns.
+ *               [u32le batch_id_len][batch_id]. Absent => empty provenance.
  * OUTPUT:
- *   "result"  : a 4-byte little-endian inserted-count (aligned-binary), for
- *               downstream chaining / run telemetry.
- *
- * FlatBuffers/aligned-binary only, no JSON at any data hop. No caps: every record
- * on the port is stored.
+ *   "result"  : 4-byte little-endian ingested-count (aligned-binary).
  */
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
 
+#include "flatbuffers/flatbuffers.h"
 #include "space_data_module_invoke.h"
 
-// ── The FlatSQL store trampoline (single minimal import) ──────────────────────
-// The FlatSQL engine is a SEPARATE flatsqlrt runtime — NOT linked into this
-// module. The composition spike proved the host trampoline reads the statement
-// envelope DIRECTLY from THIS module's (the reactor's) shared memory via the
-// calling frame and marshals it into the engine's high-level API — so this node
-// needs NO engine-memory-crossing (no malloc/poke/peek into engine memory) and
-// NO Go-side type/table derivation. ALL record semantics stay in wasm here (per-
-// SDS-type table from the file_identifier, provenance columns, the typed INSERT
-// SQL + params); the host stays a pure byte-mover. No sdm_host_call (no Go sink),
-// no fs calls (the engine persists via opaque ExportData snapshots — not this
-// node's concern).
+// ── FlatSQL host trampolines (host-provided at LOAD; declared for the deploy
+// node's bake+load+$PLG — pointers are into THIS module's memory, the host is a
+// dumb byte-mover, NO engine-memory-crossing). The FlatSQL engine is a SEPARATE
+// flatsqlrt runtime — NOT linked into this module.
 //
-// IMPORT SURFACE (declared for the deploy node — the ONLY trampoline to wire):
+//   module "flatsql", name "ingest_record":
+//     int64_t ingest_record(uint32_t buf_ptr, uint32_t buf_len)
+//       Ingest one wrapper FlatBuffer (buf_ptr/buf_len in this module's memory)
+//       into the flow's linked FlatSQL arena. >= 0 ok, < 0 error. THIS is the
+//       persistable path (arena -> ExportData). The buffer's file_identifier
+//       (SOMM/SOCM/SOBD) selects the target arena table.
+//
 //   module "flatsql", name "exec_envelope":
 //     int64_t exec_envelope(uint32_t env_ptr, uint32_t env_len)
-//   env_ptr/env_len point into THIS module's memory. The envelope is one SQL
-//   statement + its bound params, aligned-binary (no JSON):
-//     [u32le sql_len][sql_len bytes UTF-8 SQL]
-//     [u32le param_count]
-//     param_count x TLV param: [u8 tag][u32le size][size bytes]
-//       tag: 4 = TEXT (UTF-8), 5 = BYTES (BLOB)  (== flatsql_capi ParamTag)
-//   The host executes it on the flow's linked FlatSQL DB via the engine's
-//   QueryRawFlatBufferStream and returns: >= 0 rows affected on success, < 0 on
-//   error. The store peeks NOTHING back except this scalar.
-extern "C" __attribute__((import_module("flatsql"), import_name("exec_envelope")))
+//       Execute one statement envelope (this module's memory) on the flow's
+//       linked DB. Envelope (aligned-binary, no JSON):
+//         [u32le sql_len][sql bytes][u32le param_count]
+//         param_count x [u8 tag][u32le size][bytes]  (tag 4=TEXT, 5=BYTES)
+//       DEDUP CONTRACT: for the scalar `SELECT COUNT(*) ... WHERE cid = ?`
+//       read-only query over the arena vtab, the host returns the COUNT scalar
+//       (>= 0). This node treats > 0 as "already stored" and skips the ingest.
+//       (For DML the same call would return rows-affected; here it is used only
+//       for the read-only COUNT pre-check.)
+extern "C" {
+__attribute__((import_module("flatsql"), import_name("ingest_record")))
+int64_t flatsql_ingest_record(uint32_t buf_ptr, uint32_t buf_len);
+__attribute__((import_module("flatsql"), import_name("exec_envelope")))
 int64_t flatsql_exec_envelope(uint32_t env_ptr, uint32_t env_len);
+}
 
 namespace {
 
 // ── minimal SHA-256 + CIDv1(raw, sha2-256) for the record content id ──────────
-// Byte-identical to the CID the store's read side / PNMs reference
-// (common/provider_source.hpp::cid_v1_raw_sha256), inlined to avoid the SDK
-// keyslot dependency in this thin store TU.
 void sha256_raw(const uint8_t* data, size_t len, uint8_t out[32]) {
   static const uint32_t K[64] = {
       0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
@@ -131,45 +146,28 @@ std::string cid_v1_raw_sha256(const uint8_t* data, size_t len) {
   return std::string("b") + base32_lower_nopad(frame, sizeof(frame));
 }
 
-// ── param TLV (matches flatsql_capi.cpp decodeParamsNoThrow) ───────────────────
+// ── statement-envelope TLV (matches flatsql_capi.cpp decodeParamsNoThrow) ─────
 void tlv_u32(std::vector<uint8_t>& t, uint32_t n) {
   t.push_back(n & 0xff); t.push_back((n >> 8) & 0xff); t.push_back((n >> 16) & 0xff); t.push_back((n >> 24) & 0xff);
 }
 void tlv_string(std::vector<uint8_t>& t, const std::string& s) {
   t.push_back(4 /*PARAM_STRING*/); tlv_u32(t, static_cast<uint32_t>(s.size())); t.insert(t.end(), s.begin(), s.end());
 }
-void tlv_bytes(std::vector<uint8_t>& t, const uint8_t* p, uint32_t n) {
-  t.push_back(5 /*PARAM_BYTES*/); tlv_u32(t, n); t.insert(t.end(), p, p + n);
-}
 
 uint32_t rd_u32le(const uint8_t* p) {
   return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
 }
 
-// Map the SDS file_identifier at record[8..12] (size-prefixed FlatBuffer) to its
-// per-SDS-type table. $OEM (or anything else) => nullptr => skipped, so ephemeris
-// is structurally unstorable even if mis-wired.
-const char* table_for_record(const uint8_t* rec, uint32_t len) {
-  if (len < 12) return nullptr;
-  if (std::memcmp(rec + 8, "$OMM", 4) == 0) return "sds_omm";
-  if (std::memcmp(rec + 8, "$OCM", 4) == 0) return "sds_ocm";
-  if (std::memcmp(rec + 8, "$OBD", 4) == 0) return "sds_obd";
-  return nullptr;
-}
-
-// Build the aligned-binary statement envelope ([u32 sql_len][sql][u32
-// param_count][params TLV]) in THIS module's memory and execute it via the single
-// host trampoline. Returns rows affected (>= 0) or a negative engine/host error.
-int64_t run_sql(const std::string& sql, const std::vector<uint8_t>& params_tlv,
-                uint32_t param_count) {
-  std::vector<uint8_t> env;
-  env.reserve(4 + sql.size() + 4 + params_tlv.size());
-  tlv_u32(env, static_cast<uint32_t>(sql.size()));
-  env.insert(env.end(), sql.begin(), sql.end());
-  tlv_u32(env, param_count);
-  env.insert(env.end(), params_tlv.begin(), params_tlv.end());
-  return flatsql_exec_envelope(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(env.data())),
-                               static_cast<uint32_t>(env.size()));
+// Route the record by its SDS file_identifier at rec[8..12] (size-prefixed
+// FlatBuffer). table = the arena vtab to dedup-query; wrapper_fid = the
+// store-local wrapper file_identifier to ingest. $OEM / anything else => skipped.
+struct Route { const char* table; const char* wrapper_fid; };
+Route route_for_record(const uint8_t* rec, uint32_t len) {
+  if (len < 12) return {nullptr, nullptr};
+  if (std::memcmp(rec + 8, "$OMM", 4) == 0) return {"sds_omm", "SOMM"};
+  if (std::memcmp(rec + 8, "$OCM", 4) == 0) return {"sds_ocm", "SOCM"};
+  if (std::memcmp(rec + 8, "$OBD", 4) == 0) return {"sds_obd", "SOBD"};
+  return {nullptr, nullptr};
 }
 
 struct Provenance { std::string provider, source_name, batch_id; };
@@ -192,6 +190,46 @@ Provenance read_provenance() {
   return p;
 }
 
+// Build the wrapper FlatBuffer for the kubo-declared table. Field order (and thus
+// vtable slot -> voffset) MUST match the schema EXACTLY:
+//   0 cid (key)  voffset 4 ; 1 provider  6 ; 2 source_name  8 ;
+//   3 batch_id   10        ; 4 data ([ubyte])  12
+// Stamped with the store-local file_identifier (SOMM/SOCM/SOBD).
+std::vector<uint8_t> build_wrapper_fb(const char* file_id, const std::string& cid,
+                                      const Provenance& prov, const uint8_t* data, uint32_t data_len) {
+  flatbuffers::FlatBufferBuilder fbb(data_len + 256);
+  auto cid_o = fbb.CreateString(cid);
+  auto provider_o = fbb.CreateString(prov.provider);
+  auto source_o = fbb.CreateString(prov.source_name);
+  auto batch_o = fbb.CreateString(prov.batch_id);
+  auto data_o = fbb.CreateVector(data, static_cast<size_t>(data_len));  // [ubyte]
+  const flatbuffers::uoffset_t start = fbb.StartTable();
+  fbb.AddOffset(4, cid_o);        // cid (key)
+  fbb.AddOffset(6, provider_o);   // provider
+  fbb.AddOffset(8, source_o);     // source_name
+  fbb.AddOffset(10, batch_o);     // batch_id
+  fbb.AddOffset(12, data_o);      // data
+  const flatbuffers::uoffset_t table = fbb.EndTable(start);
+  fbb.Finish(flatbuffers::Offset<void>(table), file_id);
+  const uint8_t* p = fbb.GetBufferPointer();
+  return std::vector<uint8_t>(p, p + fbb.GetSize());
+}
+
+// Read-only dedup pre-check: COUNT the cid in the arena vtab. Returns >0 when
+// already stored, 0 when absent, <0 on engine/host error.
+int64_t cid_present(const char* table, const std::string& cid) {
+  std::string sql = std::string("SELECT COUNT(*) FROM ") + table + " WHERE cid = ?";
+  std::vector<uint8_t> params;
+  tlv_string(params, cid);
+  std::vector<uint8_t> env;
+  tlv_u32(env, static_cast<uint32_t>(sql.size()));
+  env.insert(env.end(), sql.begin(), sql.end());
+  tlv_u32(env, 1);  // param_count
+  env.insert(env.end(), params.begin(), params.end());
+  return flatsql_exec_envelope(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(env.data())),
+                               static_cast<uint32_t>(env.size()));
+}
+
 }  // namespace
 
 extern "C" {
@@ -201,54 +239,43 @@ int store(void) {
 
   const Provenance prov = read_provenance();
 
-  // Per-SDS-type tables (idempotent). Content-addressed PK => re-store is a no-op.
-  // A negative return on the first DDL means the engine trampoline is unavailable
-  // (bake/load did not wire the flatsql.exec_envelope trampoline / flow DB).
-  static const char* const kCreate[3] = {
-      "CREATE TABLE IF NOT EXISTS sds_omm (cid TEXT PRIMARY KEY, provider TEXT, source_name TEXT, batch_id TEXT, data BLOB)",
-      "CREATE TABLE IF NOT EXISTS sds_ocm (cid TEXT PRIMARY KEY, provider TEXT, source_name TEXT, batch_id TEXT, data BLOB)",
-      "CREATE TABLE IF NOT EXISTS sds_obd (cid TEXT PRIMARY KEY, provider TEXT, source_name TEXT, batch_id TEXT, data BLOB)"};
-  for (int i = 0; i < 3; ++i) {
-    std::vector<uint8_t> none;
-    if (run_sql(kCreate[i], none, 0) < 0) {
-      plugin_set_error("flatsql-ddl-failed",
-                       "CREATE TABLE via flatsql.exec_envelope failed (engine trampoline "
-                       "unavailable or DDL error).");
-      return 2;
-    }
-  }
-
-  uint32_t inserted = 0;
+  uint32_t ingested = 0;
   for (uint32_t ordinal = 0;; ++ordinal) {
     const int32_t idx = plugin_find_input_index("records", ordinal);
     if (idx < 0) break;
     const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
     if (!f || !f->payload || f->payload_length == 0) continue;
 
-    const char* table = table_for_record(f->payload, f->payload_length);
-    if (table == nullptr) continue;  // not $OMM/$OCM/$OBD ($OEM never stored) — skip
+    const Route r = route_for_record(f->payload, f->payload_length);
+    if (r.table == nullptr) continue;  // not $OMM/$OCM/$OBD ($OEM never stored) — skip
 
     const std::string cid = cid_v1_raw_sha256(f->payload, f->payload_length);
 
-    std::string sql = std::string("INSERT OR IGNORE INTO ") + table +
-                      " (cid, provider, source_name, batch_id, data) VALUES (?,?,?,?,?)";
-    std::vector<uint8_t> tlv;
-    tlv_string(tlv, cid);
-    tlv_string(tlv, prov.provider);
-    tlv_string(tlv, prov.source_name);
-    tlv_string(tlv, prov.batch_id);
-    tlv_bytes(tlv, f->payload, f->payload_length);
-    if (run_sql(sql, tlv, 5) < 0) {
-      plugin_set_error("flatsql-insert-failed",
-                       "INSERT via flatsql.exec_envelope failed.");
+    const int64_t present = cid_present(r.table, cid);
+    if (present < 0) {
+      plugin_set_error("flatsql-dedup-failed",
+                       "cid dedup SELECT via flatsql.exec_envelope failed (engine "
+                       "trampoline unavailable or query error).");
+      return 2;
+    }
+    if (present > 0) continue;  // content-addressed dedup: already stored (INSERT OR IGNORE)
+
+    const std::vector<uint8_t> wrapper =
+        build_wrapper_fb(r.wrapper_fid, cid, prov, f->payload, f->payload_length);
+    const int64_t rc = flatsql_ingest_record(
+        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(wrapper.data())),
+        static_cast<uint32_t>(wrapper.size()));
+    if (rc < 0) {
+      plugin_set_error("flatsql-ingest-failed",
+                       "arena ingest via flatsql.ingest_record failed.");
       return 3;
     }
-    ++inserted;
+    ++ingested;
   }
 
   uint8_t count_le[4];
-  count_le[0] = inserted & 0xff; count_le[1] = (inserted >> 8) & 0xff;
-  count_le[2] = (inserted >> 16) & 0xff; count_le[3] = (inserted >> 24) & 0xff;
+  count_le[0] = ingested & 0xff; count_le[1] = (ingested >> 8) & 0xff;
+  count_le[2] = (ingested >> 16) & 0xff; count_le[3] = (ingested >> 24) & 0xff;
   const int32_t pushed = plugin_push_output_ex(
       "result", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 4,
       count_le, 4);
