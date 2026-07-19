@@ -237,19 +237,37 @@ extern "C" {
 int store(void) {
   plugin_reset_output_state();
 
-  const Provenance prov = read_provenance();
+  Provenance prov = read_provenance();
 
-  uint32_t ingested = 0;
+  // Collect this fire's records (pass 1) and derive a PER-FIRE-UNIQUE batch_id so
+  // run grouping stays correct across fires: batch_id = CIDv1 over the ordered
+  // concatenation of every stored record's own CID. Deterministic + in-wasm (the
+  // store has no clock/nonce); a re-fire of the identical record set yields the
+  // same batch_id, which is correct — the content-addressed ingest is idempotent,
+  // so an identical batch IS the same run. Overrides any static config batch_id
+  // (keeps config provider/source_name).
+  struct Rec { const uint8_t* ptr; uint32_t len; std::string cid; Route route; };
+  std::vector<Rec> recs;
+  std::vector<uint8_t> cid_concat;
   for (uint32_t ordinal = 0;; ++ordinal) {
     const int32_t idx = plugin_find_input_index("records", ordinal);
     if (idx < 0) break;
     const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(idx));
     if (!f || !f->payload || f->payload_length == 0) continue;
-
     const Route r = route_for_record(f->payload, f->payload_length);
     if (r.table == nullptr) continue;  // not $OMM/$OCM/$OBD ($OEM never stored) — skip
+    std::string cid = cid_v1_raw_sha256(f->payload, f->payload_length);
+    cid_concat.insert(cid_concat.end(), cid.begin(), cid.end());
+    recs.push_back(Rec{f->payload, f->payload_length, std::move(cid), r});
+  }
+  if (!cid_concat.empty()) {
+    prov.batch_id = cid_v1_raw_sha256(cid_concat.data(), cid_concat.size());
+  }
 
-    const std::string cid = cid_v1_raw_sha256(f->payload, f->payload_length);
+  uint32_t ingested = 0;
+  for (const Rec& rec : recs) {
+    const Route& r = rec.route;
+    const std::string& cid = rec.cid;
 
     const int64_t present = cid_present(r.table, cid);
     if (present < 0) {
@@ -261,7 +279,7 @@ int store(void) {
     if (present > 0) continue;  // content-addressed dedup: already stored (INSERT OR IGNORE)
 
     const std::vector<uint8_t> wrapper =
-        build_wrapper_fb(r.wrapper_fid, cid, prov, f->payload, f->payload_length);
+        build_wrapper_fb(r.wrapper_fid, cid, prov, rec.ptr, rec.len);
     const int64_t rc = flatsql_ingest_record(
         static_cast<uint32_t>(reinterpret_cast<uintptr_t>(wrapper.data())),
         static_cast<uint32_t>(wrapper.size()));
