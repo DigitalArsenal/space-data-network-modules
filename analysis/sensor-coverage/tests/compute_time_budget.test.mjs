@@ -23,6 +23,18 @@ const STATE_COUNT = WINDOW_SECONDS / STATE_STEP_SECONDS + 1;
 const GRID_STEP_SECONDS = 60;
 const GRID_INDEX_COUNT = WINDOW_SECONDS / GRID_STEP_SECONDS;
 const COARSE_COMPUTE_BUDGET_MS = 5000;
+// Per-shape coarse ceilings tighter than the shared 5 s watchdog. Solid-conic
+// coarse compute is pinned here so the 7cca542 fine-grid trade cannot silently
+// widen back toward the 5 s ceiling: it measures ~1.40 s after the nadir
+// closest-point fast-reject was restored to optimize_solid_conic_rectangle_
+// witness (the reject-only heuristic 7cca542 dropped; every skipped optimizer
+// still falls back to the exact patch-subdivision search, so access output is
+// byte-identical). 2.1 s is roughly achieved+50%, leaving headroom for CI load
+// jitter while catching any real regression. Rectangular/SAR keep the shared
+// ceiling (SAR runs ~4.8 s, already near it — out of scope here).
+const COARSE_SHAPE_BUDGET_MS = Object.freeze({
+  conic: 2100,
+});
 const FINE_COMPUTE_BUDGET_MS = 10000;
 const WORKER_RESULT_GRACE_MS = 1000;
 const WORKER_SETUP_TIMEOUT_MS = 8000;
@@ -262,7 +274,9 @@ if (workerData?.role !== "compute-budget") {
         WORKER_RESULT_GRACE_MS + 1000),
   }, async (t) => {
     for (const shapeName of Object.keys(SHAPES)) {
-      await t.test(`${shapeName} completes under five seconds`, async (t) => {
+      const shapeBudgetMs =
+        COARSE_SHAPE_BUDGET_MS[shapeName] ?? COARSE_COMPUTE_BUDGET_MS;
+      await t.test(`${shapeName} completes under its coarse budget`, async (t) => {
         const elapsedMs = await measureShapeInWorker(
           shapeName,
           "coarse",
@@ -270,9 +284,9 @@ if (workerData?.role !== "compute-budget") {
         );
         t.diagnostic(`${shapeName} compute time: ${elapsedMs.toFixed(3)} ms`);
         assert.ok(
-          elapsedMs < COARSE_COMPUTE_BUDGET_MS,
+          elapsedMs < shapeBudgetMs,
           `${shapeName} compute time ${elapsedMs.toFixed(3)} ms exceeded ` +
-            `${COARSE_COMPUTE_BUDGET_MS} ms`,
+            `${shapeBudgetMs} ms`,
         );
       });
     }

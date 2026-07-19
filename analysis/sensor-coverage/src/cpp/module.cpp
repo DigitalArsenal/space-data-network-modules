@@ -3254,11 +3254,12 @@ bool optimize_solid_conic_rectangle_witness(
   // an off-nadir WGS84 footprint. It is still only accepted by the exact point
   // predicate above.
   Vec3 boresight_ground_point;
-  if (intersect_earth(
+  const bool evaluated_boresight_candidate = intersect_earth(
         search.resolved.state.position,
         search.resolved.frame.boresight,
         1.0e100,
-        boresight_ground_point)) {
+        boresight_ground_point);
+  if (evaluated_boresight_candidate) {
     const Vertex ground = to_cartographic(boresight_ground_point);
     const double longitude_reference_deg = 0.5 * (
       search.cell.minLongitudeDeg + search.cell.maxLongitudeDeg);
@@ -3281,6 +3282,28 @@ bool optimize_solid_conic_rectangle_witness(
             search.cell.maxLongitudeDeg)) &&
         stop_at_first_visible) {
       return true;
+    }
+  }
+
+  // Nadir fast-reject (reject-only performance heuristic; never an access
+  // authority). When the boresight axis pierces WGS84 essentially straight
+  // down, the clamped-axis candidate evaluated above is the exact
+  // closest-point candidate for the circular footprint; if it missed the
+  // rectangle, the generic seed grid and its hill-climb add no positive
+  // authority and would repeat dozens of ECEF evaluations for every
+  // neighboring cap-overlap cell. The only first-visible caller
+  // (solid_conic_cell_has_exact_spatial_witness) always follows a false
+  // optimizer result with the exact search_solid_conic_surface_patch
+  // subdivision, so any real witness is still recovered and the visibility
+  // decision is byte-identical. The maximum-clearance mode
+  // (stop_at_first_visible == false) keeps the full search.
+  if (stop_at_first_visible && evaluated_boresight_candidate) {
+    const Vec3 observer_unit = normalize(search.resolved.state.position);
+    const double nadir_alignment = dot(
+      search.resolved.frame.boresight,
+      scale(observer_unit, -1.0));
+    if (nadir_alignment > 1.0 - 1.0e-13) {
+      return false;
     }
   }
 
