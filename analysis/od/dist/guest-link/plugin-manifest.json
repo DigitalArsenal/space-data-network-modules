@@ -22,11 +22,11 @@
                 { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
                 { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
               ],
-              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Held in memory only; never stored."
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Accepts a BATCH of 1..N $OEM frames (one per operator object); the threaded `fit` fans them across std::thread workers. Held in memory only; never stored."
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 100000,
           "required": true
         },
         {
@@ -66,11 +66,43 @@
                 { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
                 { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
               ],
-              "description": "SDS $OMM supplemental-GP mean elements (ORIGINATOR=SDN-OD), aligned-binary."
+              "description": "SDS $OMM supplemental-GP mean elements (ORIGINATOR=SDN-OD), aligned-binary. One $OMM per fitted object in the batch."
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 100000,
+          "required": false
+        },
+        {
+          "portId": "obd",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd",
+              "allowedTypes": [
+                { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD" },
+                { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+              ],
+              "description": "SDS $OBD orbit-determination run result (WRMS, iterations, DIFFERENTIAL_CORRECTION), aligned-binary."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" },
+                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+              ],
+              "description": "SDS $OCM comprehensive message: epoch STATE + 6x6 COVARIANCE (normal-equations fit covariance) + OD residual summary, aligned-binary."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
           "required": false
         },
         {
@@ -93,6 +125,8 @@
   ],
   "schemasUsed": [
     { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
-    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" }
+    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
+    { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD" },
+    { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" }
   ]
 }
