@@ -55,6 +55,31 @@ constexpr uint32_t kGeometryRevealCoordsRegionId = 4;
 constexpr uint32_t kGeometryIndicesRegionId = 5;
 constexpr uint32_t kRasterRegionBaseId = 1000;
 
+// ── Area/point-target region gate (area-targets Phase 1) ─────────────────────
+// While a ground target (POINT / POLYGON) is being accumulated this thread-local
+// points at that target's immutable spatial region. It narrows EVERY footprint
+// acceptance to witnesses that also lie inside the region (containsWorldPoint)
+// and suppresses the cap-inside-rectangle fast-accepts (spherical_cap_inside_cell
+// and everything that funnels through it), so a target hit always requires a
+// concrete witness inside footprint AND region. The gate NEVER prunes: a
+// rejected point is simply "not visible", so the exact-accept/conservative-reject
+// subdivision continues unchanged. It is nullptr for all grid-cell work, which
+// keeps the cell path byte-identical. Each target is owned by exactly one worker
+// and the region is const during accumulation, so no synchronization is needed.
+// See design/AREA_TARGETS_REVISIT_DESIGN.md (§1 hit predicate + GUARDIAN GATE).
+thread_local const sdn_spatial_region::SpatialRegion* t_target_region_gate =
+  nullptr;
+// When the active target is a ground POINT (BoundingSphere) these carry its
+// sub-point + angular radius so the witness subdivision can prune patches that
+// are provably outside the sphere. This is a SOUND, target-only, prune-only
+// bound (a patch entirely outside the region holds no region∩footprint witness),
+// so it never affects an accept — it only stops the search from exhausting the
+// footprint area for a point target whose footprint sits just off the region.
+thread_local bool t_target_is_point = false;
+thread_local double t_target_point_lat_deg = 0.0;
+thread_local double t_target_point_lon_deg = 0.0;
+thread_local double t_target_point_radius_deg = 0.0;
+
 double inflate_proof_upper_bound(double value);
 double deflate_proof_lower_bound(double value);
 
@@ -257,13 +282,41 @@ struct CachedGridCells {
   std::vector<Cell> cells;
 };
 
+// One accumulator per SCVTarget. It embeds a Cell so the exact per-cell interval
+// machinery (merge_intervals + update_cell_statistics) runs verbatim over the
+// target — identical tangency / pass-splitting / revisit semantics. `region` is
+// the immutable spatial region (constructed before fan-out, const during
+// accumulation) that gates every footprint acceptance to the target. `rejected`
+// targets (unsupported kind/domain or antimeridian-crossing polygon) carry no
+// region and produce a zero-coverage result, preserving target-index order.
+struct TargetAccumulator {
+  Cell cell;
+  sdn_spatial_region::SpatialRegion region{
+    sdn_spatial_region::SpatialRegionType::BOUNDING_SPHERE};
+  uint32_t targetId = 0;
+  std::string name;
+  bool rejected = false;
+  // Conservative segment-level cull geometry (see target_region_disjoint_from_cap).
+  // For a POINT: a lon/lat disc. For a POLYGON: the ring in [lon,lat] degrees.
+  bool boundIsPoint = false;
+  double boundPointLatDeg = 0.0;
+  double boundPointLonDeg = 0.0;
+  double boundPointRadiusDeg = 0.0;
+  std::vector<double> boundRingLonLatDeg;
+};
+
 struct CoverageInput {
   GridConfig grid;
   std::vector<SensorTrack> tracks;
   std::vector<scvMetricSeriesKind> requestedProducts;
+  std::vector<TargetAccumulator> targets;
   bool isScv = false;
   bool includePackedGeometry = true;
   bool scvSwathOnly = false;
+  // targets_only mode (PHASE-1 INTEGRATION CONTRACT): TARGETS non-empty AND
+  // REQUESTED_PRODUCTS empty AND INCLUDE_PACKED_GEOMETRY false → emit only
+  // TARGET_RESULTS and skip ALL grid cell allocation / accumulation.
+  bool targetsOnly = false;
 };
 
 struct VisibilityInterval {
@@ -936,6 +989,9 @@ bool metric_product_requested(
   return false;
 }
 
+std::vector<TargetAccumulator> parse_targets_from_scv_request(
+    const SCVCoverageRequest* request);
+
 bool parse_coverage_input(const std::string& payload, CoverageInput& input, std::string& error) {
   if (payload_has_scv_identifier(payload)) {
     flatbuffers::Verifier verifier(
@@ -961,7 +1017,15 @@ bool parse_coverage_input(const std::string& payload, CoverageInput& input, std:
       requested_products != nullptr && requested_products->size() > 0;
     input.scvSwathOnly = request->ANALYSIS_MODE() == scvAnalysisMode_SWATH;
     input.includePackedGeometry = request->INCLUDE_PACKED_GEOMETRY();
-    if (!input.scvSwathOnly && !has_explicit_products) {
+    input.targets = parse_targets_from_scv_request(request);
+    const bool has_targets = !input.targets.empty();
+    // PHASE-1 INTEGRATION CONTRACT: TARGETS non-empty + REQUESTED_PRODUCTS empty
+    // + INCLUDE_PACKED_GEOMETRY false → targets_only recompute. Otherwise the
+    // usual "declare your products" contract holds.
+    input.targetsOnly =
+      has_targets && !has_explicit_products &&
+      !input.includePackedGeometry && !input.scvSwathOnly;
+    if (!input.scvSwathOnly && !has_explicit_products && !input.targetsOnly) {
       error = "SCV coverage REQUESTED_PRODUCTS must explicitly declare every requested FOM/raster product.";
       return false;
     }
@@ -1116,6 +1180,157 @@ void ensure_cell_geometry(Cell& cell, const GridConfig& grid) {
   cell.surfaceUnit = cell.geometry.surfaceUnit;
   cell.surfaceUnitReady = true;
   cell.geometryReady = true;
+}
+
+// Build one TargetAccumulator per SCVTarget. Regions are constructed fully here,
+// before any fan-out, and stay const during accumulation. Phase 1 ships ground
+// POINT and POLYGON/RECTANGLE targets in the SURFACE domain; anything else (SPACE
+// volumes, malformed geometry) or an antimeridian-crossing polygon is rejected
+// fail-closed and kept in target-index order with zero coverage.
+std::vector<TargetAccumulator> parse_targets_from_scv_request(
+    const SCVCoverageRequest* request) {
+  std::vector<TargetAccumulator> targets;
+  const auto* scv_targets = request->TARGETS();
+  if (scv_targets == nullptr || scv_targets->size() == 0) {
+    return targets;
+  }
+  targets.reserve(scv_targets->size());
+  for (uint32_t index = 0; index < scv_targets->size(); ++index) {
+    const SCVTarget* scv_target = scv_targets->Get(index);
+    TargetAccumulator target;
+    target.cell.index = static_cast<int>(index);
+    if (scv_target == nullptr) {
+      target.rejected = true;
+      targets.push_back(std::move(target));
+      continue;
+    }
+    target.targetId = scv_target->TARGET_ID();
+    if (scv_target->NAME() != nullptr) {
+      target.name = scv_target->NAME()->str();
+    }
+    const scvTargetShape kind = scv_target->TARGET_KIND();
+    const bool surface_domain =
+      scv_target->DOMAIN() == scvGeometryDomain_SURFACE;
+
+    double min_lat_deg = 0.0;
+    double max_lat_deg = 0.0;
+    double min_lon_deg = 0.0;
+    double max_lon_deg = 0.0;
+    bool built = false;
+
+    if (surface_domain && kind == scvTargetShape_POINT &&
+        scv_target->POSITION_M() != nullptr) {
+      // POINT: POSITION_M is ECEF WGS84 metres, RADIUS_M the BoundingSphere.
+      const Vec3 center_ecef = vec3_from_scv(scv_target->POSITION_M());
+      const double radius_m = std::max(scv_target->RADIUS_M(), 1.0);
+      sdn_spatial_region::SpatialRegion region(
+        sdn_spatial_region::SpatialRegionType::BOUNDING_SPHERE);
+      region.setBoundingSphereConfig({
+        center_ecef.x, center_ecef.y, center_ecef.z, radius_m});
+      target.region = std::move(region);
+      // Search rect = the lon/lat rectangle that strictly contains the sphere's
+      // surface footprint. Widen longitude by 1/cos(latitude) since parallels
+      // shrink toward the poles.
+      const Cartographic center = ecef_to_geodetic(center_ecef);
+      const double center_lat_deg = center.latitudeRad * kRadiansToDegrees;
+      const double center_lon_deg = center.longitudeRad * kRadiansToDegrees;
+      const double angular_radius_deg = (radius_m / kWgs84B) * kRadiansToDegrees;
+      const double lat_pad_deg = angular_radius_deg + 1.0e-6;
+      const double cos_lat = std::cos(center.latitudeRad);
+      const double lon_pad_deg =
+        angular_radius_deg / std::max(cos_lat, 1.0e-3) + 1.0e-6;
+      target.boundIsPoint = true;
+      target.boundPointLatDeg = center_lat_deg;
+      target.boundPointLonDeg = center_lon_deg;
+      target.boundPointRadiusDeg = angular_radius_deg;
+      min_lat_deg = clamp(center_lat_deg - lat_pad_deg, -90.0, 90.0);
+      max_lat_deg = clamp(center_lat_deg + lat_pad_deg, -90.0, 90.0);
+      min_lon_deg = center_lon_deg - lon_pad_deg;
+      max_lon_deg = center_lon_deg + lon_pad_deg;
+      if (max_lon_deg - min_lon_deg >= 360.0) {
+        min_lon_deg = -180.0;
+        max_lon_deg = 180.0;
+        built = true;
+      } else if (min_lon_deg < -180.0 || max_lon_deg > 180.0) {
+        // Seam-adjacent point: keep the search rect seam-free — fail closed.
+        target.rejected = true;
+      } else {
+        built = true;
+      }
+    } else if (surface_domain &&
+               (kind == scvTargetShape_POLYGON ||
+                kind == scvTargetShape_RECTANGLE) &&
+               scv_target->POLYGON_VERTICES() != nullptr &&
+               scv_target->POLYGON_VERTICES()->size() >= 3) {
+      // POLYGON/RECTANGLE: POLYGON_VERTICES carry lon/lat degrees (z ignored),
+      // stored into the region as interleaved [lon,lat] radians.
+      const auto* verts = scv_target->POLYGON_VERTICES();
+      std::vector<double> positions_rad;
+      positions_rad.reserve(static_cast<size_t>(verts->size()) * 2u);
+      min_lat_deg = max_lat_deg = verts->Get(0)->Y();
+      min_lon_deg = max_lon_deg = verts->Get(0)->X();
+      bool antimeridian = false;
+      double previous_lon_deg = verts->Get(0)->X();
+      for (uint32_t v = 0; v < verts->size(); ++v) {
+        const double lon_deg = verts->Get(v)->X();
+        const double lat_deg = verts->Get(v)->Y();
+        // A single edge jumping more than 180° in longitude marks an
+        // antimeridian crossing: the naive lon min/max rect would exclude the
+        // seam (SpatialRegion normalizes to [-π,π]). Reject fail-closed.
+        if (v > 0 && std::fabs(lon_deg - previous_lon_deg) > 180.0) {
+          antimeridian = true;
+        }
+        previous_lon_deg = lon_deg;
+        min_lat_deg = std::min(min_lat_deg, lat_deg);
+        max_lat_deg = std::max(max_lat_deg, lat_deg);
+        min_lon_deg = std::min(min_lon_deg, lon_deg);
+        max_lon_deg = std::max(max_lon_deg, lon_deg);
+        positions_rad.push_back(lon_deg / kRadiansToDegrees);
+        positions_rad.push_back(lat_deg / kRadiansToDegrees);
+        target.boundRingLonLatDeg.push_back(lon_deg);
+        target.boundRingLonLatDeg.push_back(lat_deg);
+      }
+      if (antimeridian || (max_lon_deg - min_lon_deg) > 180.0) {
+        target.rejected = true;
+      } else {
+        sdn_spatial_region::SpatialRegion region(
+          sdn_spatial_region::SpatialRegionType::CARTOGRAPHIC_POLYGON);
+        region.setCartographicPolygonConfig(
+          positions_rad.data(),
+          static_cast<uint32_t>(positions_rad.size() / 2u),
+          0.0,
+          0.0);
+        target.region = std::move(region);
+        // Small pad so exact boundary witnesses fall inside the search rect.
+        min_lat_deg = clamp(min_lat_deg - 1.0e-6, -90.0, 90.0);
+        max_lat_deg = clamp(max_lat_deg + 1.0e-6, -90.0, 90.0);
+        min_lon_deg = clamp(min_lon_deg - 1.0e-6, -180.0, 180.0);
+        max_lon_deg = clamp(max_lon_deg + 1.0e-6, -180.0, 180.0);
+        built = true;
+      }
+    } else {
+      target.rejected = true;
+    }
+
+    if (built && max_lat_deg > min_lat_deg && max_lon_deg > min_lon_deg) {
+      CellBounds bounds{};
+      bounds.minLatitudeDeg = min_lat_deg;
+      bounds.maxLatitudeDeg = max_lat_deg;
+      bounds.minLongitudeDeg = min_lon_deg;
+      bounds.maxLongitudeDeg = max_lon_deg;
+      target.cell.bounds = bounds;
+      target.cell.latitude = 0.5 * (min_lat_deg + max_lat_deg);
+      target.cell.longitude = 0.5 * (min_lon_deg + max_lon_deg);
+      target.cell.geometry = grid_cell_geometry(bounds);
+      target.cell.surfaceUnit = target.cell.geometry.surfaceUnit;
+      target.cell.surfaceUnitReady = true;
+      target.cell.geometryReady = true;
+    } else {
+      target.rejected = true;
+    }
+    targets.push_back(std::move(target));
+  }
+  return targets;
 }
 
 SensorFrame resolve_sensor_frame(const State& state) {
@@ -1381,13 +1596,26 @@ bool surface_sample_visible_from_resolved_state(
     return false;
   }
 
-  return sensor_local_look_inside(
-    sensor,
-    {
-      dot(sensor_to_cell, frame.xAxis),
-      dot(sensor_to_cell, frame.yAxis),
-      dot(sensor_to_cell, frame.boresight),
-    });
+  if (!sensor_local_look_inside(
+        sensor,
+        {
+          dot(sensor_to_cell, frame.xAxis),
+          dot(sensor_to_cell, frame.yAxis),
+          dot(sensor_to_cell, frame.boresight),
+        })) {
+    return false;
+  }
+  // Area/point-target region gate (Gate 1 — instantaneous concrete witness).
+  // A footprint witness only counts for a target when it also lies inside the
+  // target's spatial region. This is accept-narrowing only: a rejected point is
+  // reported not visible, so every surface-patch subdivision that consults this
+  // predicate keeps searching (it never prunes on a region miss).
+  if (t_target_region_gate != nullptr &&
+      !t_target_region_gate->containsWorldPoint(
+        surface_position.x, surface_position.y, surface_position.z)) {
+    return false;
+  }
+  return true;
 }
 
 bool longitude_inside_closed_cell(
@@ -2320,6 +2548,16 @@ bool fixed_shape_ray_reaches_visible_surface_for_entire_interval(
 bool spherical_cap_inside_cell(
     const SweptSensorCap& cap,
     const GridCellGeometry& cell) {
+  // Area/point-target region gate (Gate 3 — suppress cap-inside-rectangle
+  // fast-accept). A swept cap contained in the target's bounding rectangle does
+  // NOT imply it is contained in the region (rect ⊋ region), so this and every
+  // whole-interval proof that funnels through it (continuously-visible footprint,
+  // moving-ray, SAR/patch geometry proofs) must not short-circuit to VISIBLE for
+  // a target. Returning false only cancels the fast-accept; the concrete
+  // region-gated witness search below still decides the target.
+  if (t_target_region_gate != nullptr) {
+    return false;
+  }
   if (
     !std::isfinite(cap.angularRadiusDeg) ||
     cap.angularRadiusDeg < 0.0 ||
@@ -3643,6 +3881,28 @@ bool search_solid_conic_surface_patch(
     min_latitude_deg + max_latitude_deg);
   const double mid_longitude_deg = 0.5 * (
     min_longitude_deg + max_longitude_deg);
+  // Sound region-patch cull for a ground POINT target: if the closest point of
+  // this patch rectangle to the sphere sub-point is farther than the sphere
+  // radius, the whole patch is outside the region and holds no witness — prune.
+  // Distances use a scaled-planar chord (a lower bound on the true angular
+  // distance) so a patch that could touch the sphere is never dropped.
+  if (t_target_region_gate != nullptr && t_target_is_point) {
+    const double clamped_lat = clamp(
+      t_target_point_lat_deg, min_latitude_deg, max_latitude_deg);
+    double point_lon = t_target_point_lon_deg;
+    const double lon_ref = 0.5 * (min_longitude_deg + max_longitude_deg);
+    while (point_lon - lon_ref > 180.0) point_lon -= 360.0;
+    while (point_lon - lon_ref < -180.0) point_lon += 360.0;
+    const double clamped_lon = clamp(
+      point_lon, min_longitude_deg, max_longitude_deg);
+    const double d_lat = t_target_point_lat_deg - clamped_lat;
+    const double d_lon = (point_lon - clamped_lon) *
+      std::cos(t_target_point_lat_deg / kRadiansToDegrees);
+    const double planar_distance_deg = std::hypot(d_lat, d_lon);
+    if (planar_distance_deg - 0.02 > t_target_point_radius_deg) {
+      return false;
+    }
+  }
   if (!solid_conic_patch_may_contain_witness(
         search,
         patch_key,
@@ -3666,8 +3926,18 @@ bool search_solid_conic_surface_patch(
   // optimizer candidates handle boundary/tangency witnesses; capping the
   // fallback prevents an unresolved horizon edge from creating an unbounded
   // quadtree denial of service.
+  // Targets (region gate active) use a shallower cap: their region∩footprint
+  // overlap can sit OFF the footprint centre, so the optimizer's centre-seeking
+  // candidates miss it and this fallback would otherwise subdivide the whole
+  // footprint disc. A cap of 12 keeps a large target bounding rectangle at a
+  // few-hundred-metre leaf (finer than the target's own extent) — ample for
+  // area/point targets — while bounding the search. Cells keep depth 16.
   constexpr int kSpatialSearchMaximumDepth = 16;
-  if (depth >= kSpatialSearchMaximumDepth) {
+  constexpr int kTargetSpatialSearchMaximumDepth = 12;
+  const int spatial_search_max_depth = t_target_region_gate != nullptr
+    ? kTargetSpatialSearchMaximumDepth
+    : kSpatialSearchMaximumDepth;
+  if (depth >= spatial_search_max_depth) {
     return false;
   }
 
@@ -4582,6 +4852,16 @@ bool fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
     const UnitDirectionEnvelope& boresight,
     const UnitDirectionEnvelope& x_axis,
     const UnitDirectionEnvelope& y_axis) {
+  // Area/point-target region gate (Gate 2 — whole-interval concrete witness).
+  // This is the single sink for every "one immutable ground point stays visible
+  // across the interval" proof. Region membership is time-invariant for a fixed
+  // ground point, so one check on the witness suffices: outside the region it is
+  // not a target witness. Accept-narrowing only; the caller keeps searching.
+  if (t_target_region_gate != nullptr &&
+      !t_target_region_gate->containsWorldPoint(
+        surface_position.x, surface_position.y, surface_position.z)) {
+    return false;
+  }
   // Horizon is affine for a fixed WGS84 point: dot(S(t)-P,N) > 0.
   const double horizon_start = dot(
     subtract(start.state.position, surface_position),
@@ -6426,6 +6706,300 @@ void accumulate_grid_coverage_products(
   accumulate_grid_coverage_products_impl(cells, tracks, grid);
 }
 
+// Conservative, target-only, PRUNE-ONLY segment cull. Returns true when the
+// target's spatial region is provably outside the segment's footprint swept cap,
+// so the whole segment can be skipped. This is essential for viability: without
+// it a footprint that sweeps a large target bounding rectangle while missing the
+// region (concave / triangular polygons) can never accept early and would
+// exhaust the depth-capped witness subdivision. It CANNOT cause a false reject —
+// the swept cap conservatively contains the footprint, so "region outside cap"
+// implies "region ∩ footprint empty" over the whole segment. Distances are a
+// LOWER bound (equirectangular chord, longitude scaled by cos φ) with a margin
+// that absorbs the geodetic/geocentric latitude gap of the cap centre, so a
+// region anywhere near the footprint is never culled. NOTE: this is a sound
+// region-based cull; it does not touch the accept path (Gates 1/2/3), where the
+// guardian's "region never prunes an accept" rule still holds exactly.
+bool target_region_disjoint_from_cap(
+    const TargetAccumulator& target,
+    const SweptSensorCap& cap) {
+  if (!(cap.angularRadiusDeg >= 0.0) || cap.angularRadiusDeg >= 180.0) {
+    return false;
+  }
+  constexpr double kCullMarginDeg = 0.4;  // geodetic/geocentric + chord slack
+  const double sub_lat_deg = cap.center.latitudeDeg;
+  const double sub_lon_deg = cap.center.longitudeDeg;
+  const double threshold_deg = cap.angularRadiusDeg + kCullMarginDeg;
+  const auto normalized_delta_lon = [](double a, double b) {
+    double d = a - b;
+    while (d > 180.0) d -= 360.0;
+    while (d < -180.0) d += 360.0;
+    return d;
+  };
+  const double cos_sub_lat = std::cos(sub_lat_deg / kRadiansToDegrees);
+  if (target.boundIsPoint) {
+    const double d_lat = sub_lat_deg - target.boundPointLatDeg;
+    const double d_lon = normalized_delta_lon(sub_lon_deg, target.boundPointLonDeg) *
+      cos_sub_lat;
+    const double distance_deg = std::hypot(d_lat, d_lon);
+    return distance_deg - target.boundPointRadiusDeg > threshold_deg;
+  }
+  const std::vector<double>& ring = target.boundRingLonLatDeg;
+  const size_t vertex_count = ring.size() / 2;
+  if (vertex_count < 3) {
+    return false;
+  }
+  // Sub-point inside the polygon → region is reachable, never cull.
+  bool inside = false;
+  for (size_t i = 0, j = vertex_count - 1; i < vertex_count; j = i++) {
+    const double yi = ring[i * 2 + 1];
+    const double yj = ring[j * 2 + 1];
+    const double xi = normalized_delta_lon(ring[i * 2], sub_lon_deg);
+    const double xj = normalized_delta_lon(ring[j * 2], sub_lon_deg);
+    if ((yi > sub_lat_deg) != (yj > sub_lat_deg) &&
+        0.0 < (xj - xi) * (sub_lat_deg - yi) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  if (inside) {
+    return false;
+  }
+  // Minimum distance from the sub-point to any polygon edge (scaled planar).
+  double min_edge_deg = std::numeric_limits<double>::infinity();
+  for (size_t i = 0, j = vertex_count - 1; i < vertex_count; j = i++) {
+    const double ax = normalized_delta_lon(ring[j * 2], sub_lon_deg) * cos_sub_lat;
+    const double ay = ring[j * 2 + 1];
+    const double bx = normalized_delta_lon(ring[i * 2], sub_lon_deg) * cos_sub_lat;
+    const double by = ring[i * 2 + 1];
+    const double vx = bx - ax;
+    const double vy = by - ay;
+    const double wx = 0.0 - ax;
+    const double wy = sub_lat_deg - ay;
+    const double len_sq = vx * vx + vy * vy;
+    double t = len_sq > 0.0 ? (vx * wx + vy * wy) / len_sq : 0.0;
+    t = clamp(t, 0.0, 1.0);
+    const double cx = ax + t * vx;
+    const double cy = ay + t * vy;
+    min_edge_deg = std::min(min_edge_deg, std::hypot(0.0 - cx, sub_lat_deg - cy));
+  }
+  return min_edge_deg > threshold_deg;
+}
+
+// ── Target coverage accumulation (area-targets Phase 1) ──────────────────────
+// Mirrors accumulate_grid_coverage_products_range but partitions by TARGET index
+// (target_index % stride == residue). Each target runs the exact per-cell
+// interval search on its synthetic bounding-rectangle geometry with its region
+// gate active, so every acceptance is a witness inside footprint AND region. All
+// disjoint/prune bounds are unchanged and remain sound: region ⊆ the bounding
+// rectangle, so a rectangle-disjoint footprint is region-disjoint. Results are
+// independent of worker count — each target is owned by exactly one worker and
+// targets never interact — so TARGET_RESULTS is byte-identical for any stride.
+void accumulate_target_coverage_products_range(
+    std::vector<TargetAccumulator>& targets,
+    const std::vector<SensorTrack>& tracks,
+    const GridConfig& grid,
+    uint32_t stride,
+    uint32_t residue) {
+  static_cast<void>(grid);
+  const uint32_t target_count = static_cast<uint32_t>(targets.size());
+  if (target_count == 0u) {
+    return;
+  }
+  for (const auto& track : tracks) {
+    if (track.states.size() < 2) {
+      continue;
+    }
+    const std::vector<ResolvedVisibilityState> resolved_states =
+      resolve_visibility_states(track.states);
+    const bool solid_conic = has_solid_conic_continuum_contract(track.sensor);
+    for (size_t state_index = 0;
+         state_index + 1 < track.states.size();
+         ++state_index) {
+      const ResolvedVisibilityState& seg_start = resolved_states[state_index];
+      const ResolvedVisibilityState& seg_stop = resolved_states[state_index + 1];
+      const IntervalShapeProofContext segment_proof_context =
+        interval_shape_proof_context(track.sensor, seg_start, seg_stop);
+      const SweptSensorCap& segment_cap = segment_proof_context.sweptCap;
+      for (uint32_t t = 0; t < target_count; ++t) {
+        // Interleaved ownership: each target belongs to exactly one worker.
+        if (stride > 1u && (t % stride) != residue) {
+          continue;
+        }
+        TargetAccumulator& target = targets[t];
+        if (target.rejected) {
+          continue;
+        }
+        GridCellGeometry& geometry = target.cell.geometry;
+        // Region-vs-swept-cap cull FIRST: skips the (potentially expensive)
+        // exhaustive witness search whenever the region is provably outside the
+        // segment footprint. Prune-only, cannot false-reject.
+        if (target_region_disjoint_from_cap(target, segment_cap)) {
+          continue;
+        }
+        // Disjoint prefilters, identical to the cell path and run with the gate
+        // OFF (they never accept). Sound for targets because region ⊆ rect.
+        if (!sdn::coverage::sphericalCapIntersectsRectangle(
+              segment_cap.center,
+              segment_cap.angularRadiusDeg,
+              geometry.minGeocentricLatitudeDeg,
+              geometry.maxGeocentricLatitudeDeg,
+              geometry.minLongitudeDeg,
+              geometry.maxLongitudeDeg)) {
+          continue;
+        }
+        if (solid_conic_nadir_sweep_proven_disjoint(
+              geometry, track.sensor, seg_start, seg_stop)) {
+          continue;
+        }
+        if (solid_conic &&
+            segment_proof_context.valid &&
+            solid_conic_interval_surface_patch_proven_angle_disjoint(
+              geometry,
+              track.sensor,
+              seg_start,
+              seg_stop,
+              seg_start,
+              seg_stop,
+              segment_proof_context,
+              1u,
+              geometry.minLatitudeDeg,
+              geometry.maxLatitudeDeg,
+              geometry.minLongitudeDeg,
+              geometry.maxLongitudeDeg,
+              0)) {
+          continue;
+        }
+        // Region gate ON only around the acceptance-bearing search + gap bridge.
+        // The (solid_conic, solid_conic, true) root flags mirror the cell body:
+        // the nadir / joint-angle / swept-cap root checks were just performed.
+        std::vector<VisibilityInterval> intervals;
+        bool visible_stop = false;
+        t_target_region_gate = &target.region;
+        t_target_is_point = target.boundIsPoint;
+        t_target_point_lat_deg = target.boundPointLatDeg;
+        t_target_point_lon_deg = target.boundPointLonDeg;
+        t_target_point_radius_deg = target.boundPointRadiusDeg;
+        append_refined_visibility_intervals(
+          geometry,
+          track.sensor,
+          seg_start,
+          seg_stop,
+          seg_start.state.elapsedSeconds,
+          seg_stop.state.elapsedSeconds,
+          0,
+          intervals,
+          nullptr,
+          &visible_stop,
+          &segment_proof_context,
+          solid_conic,
+          solid_conic,
+          true);
+        bridge_proven_solid_conic_gaps(
+          geometry,
+          track.sensor,
+          seg_start,
+          seg_stop,
+          intervals);
+        t_target_region_gate = nullptr;
+        t_target_is_point = false;
+        for (const VisibilityInterval& interval : intervals) {
+          add_cell_interval(target.cell, interval, track.sensor.sensorId);
+        }
+      }
+    }
+  }
+}
+
+int sensor_coverage_target_worker_count(uint32_t target_count) {
+  int requested = kSensorCoverageDefaultWorkers;
+  const unsigned hc = std::thread::hardware_concurrency();
+  if (hc >= 2u) {
+    requested = static_cast<int>(hc);
+  }
+  if (const char* env = std::getenv("SENSOR_COVERAGE_WORKERS")) {
+    const int parsed = std::atoi(env);
+    if (parsed > 0) {
+      requested = parsed;
+    }
+  }
+  if (requested > kSensorCoverageMaxWorkers) {
+    requested = kSensorCoverageMaxWorkers;
+  }
+  if (requested > static_cast<int>(target_count)) {
+    requested = static_cast<int>(target_count);
+  }
+  if (requested < 1) {
+    requested = 1;
+  }
+  return requested;
+}
+
+struct TargetAccumWorkerArg {
+  std::vector<TargetAccumulator>* targets;
+  const std::vector<SensorTrack>* tracks;
+  const GridConfig* grid;
+  uint32_t stride;
+  uint32_t residue;
+};
+
+void* sensor_coverage_target_accum_worker(void* raw) {
+  TargetAccumWorkerArg* arg = static_cast<TargetAccumWorkerArg*>(raw);
+  accumulate_target_coverage_products_range(
+    *arg->targets, *arg->tracks, *arg->grid, arg->stride, arg->residue);
+  return nullptr;
+}
+
+// Fan targets across the SAME wasi-threads pool as the grid. EMPTY-TARGETS
+// ZERO-COST SHORT-CIRCUIT: no targets → no spawn, no per-segment work (callers
+// additionally skip this call entirely when TARGETS is empty).
+void accumulate_target_coverage_products(
+    std::vector<TargetAccumulator>& targets,
+    const std::vector<SensorTrack>& tracks,
+    const GridConfig& grid) {
+  const uint32_t target_count = static_cast<uint32_t>(targets.size());
+  if (target_count == 0u) {
+    return;
+  }
+  const int workers = sensor_coverage_target_worker_count(target_count);
+  if (workers <= 1) {
+    accumulate_target_coverage_products_range(targets, tracks, grid, 1u, 0u);
+    return;
+  }
+  const uint32_t stride = static_cast<uint32_t>(workers);
+  std::vector<TargetAccumWorkerArg> args(static_cast<size_t>(workers));
+  std::vector<pthread_t> thread_ids(static_cast<size_t>(workers));
+  std::vector<uint8_t> spawned(static_cast<size_t>(workers), 0u);
+  for (int w = 0; w < workers; ++w) {
+    args[static_cast<size_t>(w)] = TargetAccumWorkerArg{
+      &targets, &tracks, &grid, stride, static_cast<uint32_t>(w)};
+  }
+  int spawned_count = 0;
+  for (int w = 1; w < workers; ++w) {
+    const int rc = pthread_create(
+      &thread_ids[static_cast<size_t>(w)], nullptr,
+      &sensor_coverage_target_accum_worker, &args[static_cast<size_t>(w)]);
+    if (rc == 0) {
+      spawned[static_cast<size_t>(w)] = 1u;
+      ++spawned_count;
+    }
+  }
+  if (spawned_count == 0) {
+    accumulate_target_coverage_products_range(targets, tracks, grid, 1u, 0u);
+    return;
+  }
+  for (int w = 1; w < workers; ++w) {
+    if (!spawned[static_cast<size_t>(w)]) {
+      accumulate_target_coverage_products_range(
+        targets, tracks, grid, stride, static_cast<uint32_t>(w));
+    }
+  }
+  accumulate_target_coverage_products_range(targets, tracks, grid, stride, 0u);
+  for (int w = 1; w < workers; ++w) {
+    if (spawned[static_cast<size_t>(w)]) {
+      pthread_join(thread_ids[static_cast<size_t>(w)], nullptr);
+    }
+  }
+}
+
 // Merge only overlapping or touching closed intervals. State cadence is an
 // interpolation input and cannot define a permissible access gap: using it as
 // a merge tolerance would erase real pass starts.
@@ -6758,6 +7332,100 @@ void release_retained_output_allocations() {
   g_retained_output_allocations.clear();
 }
 
+// Serialize one SCVTargetResult per target, in target-index order (byte-
+// identical for any worker count). INTERVAL_START/STOP_SEC are window-relative
+// seconds (0 = window start = grid.start), the same frame as the TIME_GRID.
+// Rejected targets fall through with zero intervals (fail-closed).
+std::vector<::flatbuffers::Offset<SCVTargetResult>> build_target_results(
+    flatbuffers::FlatBufferBuilder& builder,
+    const std::vector<TargetAccumulator>& targets,
+    double window_start_seconds) {
+  std::vector<::flatbuffers::Offset<SCVTargetResult>> target_results;
+  target_results.reserve(targets.size());
+  for (const auto& target : targets) {
+    const Cell& cell = target.cell;
+    std::vector<double> interval_start_sec;
+    std::vector<double> interval_stop_sec;
+    interval_start_sec.reserve(cell.intervals.size());
+    interval_stop_sec.reserve(cell.intervals.size());
+    for (const auto& interval : cell.intervals) {
+      interval_start_sec.push_back(interval.start - window_start_seconds);
+      interval_stop_sec.push_back(interval.stop - window_start_seconds);
+    }
+    const std::vector<uint32_t> pass_start_buckets = cell.passStartBuckets;
+    target_results.push_back(CreateSCVTargetResultDirect(
+      builder,
+      target.targetId,
+      target.name.empty() ? nullptr : target.name.c_str(),
+      static_cast<uint32_t>(std::max(0, cell.accessCount)),
+      static_cast<uint32_t>(std::max(0, cell.revisitCount)),
+      cell.totalAccess,
+      cell.meanRevisit,
+      cell.maxGap,
+      &interval_start_sec,
+      &interval_stop_sec,
+      &pass_start_buckets,
+      nullptr));  // ACCESS_BITSET optional — omitted in Phase 1.
+  }
+  return target_results;
+}
+
+// targets_only result: only TARGET_RESULTS (+ time grid / body / status /
+// message). No raster products, no packed geometry — the cheap target-only
+// recompute path of the PHASE-1 INTEGRATION CONTRACT.
+std::vector<uint8_t> build_scv_targets_only_result(
+    const GridConfig& grid,
+    const std::vector<TargetAccumulator>& targets,
+    uint32_t total_windows,
+    const std::string& message) {
+  flatbuffers::FlatBufferBuilder builder(1024);
+  const auto time_grid = CreateSCVTimeGridDirect(
+    builder,
+    grid.epochIso.empty() ? nullptr : grid.epochIso.c_str(),
+    grid.epochJulianDate,
+    grid.start,
+    grid.stop,
+    grid.step,
+    grid.gridIndexStart,
+    grid.gridIndexCount);
+  const auto target_body = CreateSCVEllipsoidDirect(
+    builder,
+    scvBodyKind_EARTH,
+    "Earth",
+    kEarthRadiusM,
+    6356752.314245,
+    kEarthRadiusM,
+    scvCoordinateFrame_BODY_FIXED);
+  const auto target_results = build_target_results(builder, targets, grid.start);
+  const auto result = CreateSCVResultDirect(
+    builder,
+    "sensor-coverage-analysis",
+    0,
+    scvResultState_OK,
+    time_grid,
+    target_body,
+    0,
+    total_windows,
+    nullptr,
+    nullptr,
+    0,
+    0,
+    message.c_str(),
+    0,
+    target_results.empty() ? nullptr : &target_results);
+  const auto envelope = CreateSCV(
+    builder,
+    scvEnvelopeKind_RESULT,
+    0,
+    0,
+    0,
+    result,
+    0);
+  FinishSCVBuffer(builder, envelope);
+  const uint8_t* begin = builder.GetBufferPointer();
+  return std::vector<uint8_t>(begin, begin + builder.GetSize());
+}
+
 std::vector<uint8_t> build_scv_result(
     const GridConfig& grid,
     const std::vector<SensorTrack>& tracks,
@@ -6768,6 +7436,7 @@ std::vector<uint8_t> build_scv_result(
     const std::vector<scvMetricSeriesKind>& requested_products,
     bool include_geometry,
     const std::string& message,
+    const std::vector<TargetAccumulator>& targets,
     std::string* error = nullptr) {
   flatbuffers::FlatBufferBuilder builder(4096);
   std::vector<ModuleOutputAllocation> output_allocations;
@@ -7483,6 +8152,7 @@ std::vector<uint8_t> build_scv_result(
     statistics.maxResponseTimeSec,
     statistics.meanResponseTimeSec,
     statistics.percentCoverage);
+  const auto target_results = build_target_results(builder, targets, grid.start);
   const auto result = CreateSCVResultDirect(
     builder,
     "sensor-coverage-analysis",
@@ -7497,7 +8167,8 @@ std::vector<uint8_t> build_scv_result(
     geometry,
     raster_products,
     message.c_str(),
-    aggregate_statistics);
+    aggregate_statistics,
+    target_results.empty() ? nullptr : &target_results);
   const auto envelope = CreateSCV(
     builder,
     scvEnvelopeKind_RESULT,
@@ -7596,6 +8267,28 @@ extern "C" int compute_sensor_coverage(void) {
     return fail("missing-states", "Coverage request must include at least two propagated sensor-owner states.");
   }
 
+  // targets_only recompute (PHASE-1 INTEGRATION CONTRACT): accumulate ONLY the
+  // targets and emit TARGET_RESULTS — no grid cell allocation, no accumulation,
+  // no raster products, no swaths.
+  if (input.targetsOnly) {
+    accumulate_target_coverage_products(input.targets, tracks, grid);
+    for (auto& target : input.targets) {
+      update_cell_statistics(target.cell, grid, 0.0);
+    }
+    const std::vector<uint8_t> targets_only_result =
+      build_scv_targets_only_result(
+        grid,
+        input.targets,
+        grid.gridIndexCount,
+        "sensor-coverage-analysis complete");
+    return emit_bytes(
+      "coverage",
+      "SCV/main.fbs",
+      "$SCV",
+      targets_only_result.data(),
+      static_cast<uint32_t>(targets_only_result.size()));
+  }
+
   const std::string output_mode = "";
   const bool swath_preview_output =
     input.scvSwathOnly;
@@ -7650,6 +8343,14 @@ extern "C" int compute_sensor_coverage(void) {
       update_cell_statistics(cell, grid, 0.0);
     }
   }
+  // Full run may also carry targets — compute them in the same invocation
+  // (empty TARGETS is a zero-cost no-op inside accumulate_target_coverage_products).
+  if (!input.targets.empty()) {
+    accumulate_target_coverage_products(input.targets, tracks, grid);
+    for (auto& target : input.targets) {
+      update_cell_statistics(target.cell, grid, 0.0);
+    }
+  }
   const std::vector<Cell> empty_cells;
   const std::vector<Cell>& response_cells = cells == nullptr ? empty_cells : *cells;
   const CoverageStatistics statistics =
@@ -7678,6 +8379,7 @@ extern "C" int compute_sensor_coverage(void) {
       input.requestedProducts,
       input.includePackedGeometry,
       scv_summary_message,
+      input.targets,
       &result_error);
   if (scv_result.empty() && !result_error.empty()) {
     return fail("coverage-output-regions", result_error.c_str());
