@@ -106,6 +106,15 @@ struct FitterConfig {
     // => no reference scoring, every existing fit byte-for-byte identical.
     bool has_reference = false;
     SGP4Elements reference_elements{};
+
+    // SDN OD-Flow $OCM covariance (additive, OPT-IN). When true, the fitter ALSO
+    // computes — after the fit, reading only the converged elements over the SAME
+    // winning fit_points — the epoch Cartesian TEME state and its 6x6 covariance
+    // from the normal equations (sigma^2 * (JᵀJ)^-1 mapped to state space). This
+    // is a post-fit read-only computation: it NEVER changes the fit numerics, so
+    // every existing result stays byte-for-byte identical. DEFAULT false => zero
+    // change to the sacred fit path and all its gates.
+    bool compute_covariance = false;
 };
 
 /// Fit result
@@ -115,6 +124,16 @@ struct FitResult {
     double rms_km;
     int iterations;
     bool converged;
+
+    // Fit-covariance outputs (populated only when FitterConfig::compute_covariance
+    // is true AND the normal-equations solve is well-conditioned; otherwise
+    // has_state_covariance stays false and downstream falls back to a documented
+    // RMS-seeded placeholder). Units: km, km/s. state_covariance is the 6x6
+    // covariance lower triangle, row-major (indices (0,0),(1,0),(1,1),(2,0),...).
+    bool has_state_covariance = false;
+    double state_teme[6] = {0, 0, 0, 0, 0, 0};
+    double state_covariance[21] = {0};
+    int cov_num_observations = 0;
 };
 
 /// Fit SGP4 elements to ephemeris data
