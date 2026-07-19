@@ -11,15 +11,20 @@
 // the real runtime); this TU is only linked into the wasi-threads artifact.
 #include <cstdlib>
 
+// WEAK so this TU is composable: the standalone module.wasm links it as the sole
+// definition, and a baked flow that partial-links MANY guest-link objects (each
+// carrying these stubs) resolves to a single weak def with no duplicate-symbol
+// conflict — and a stronger runtime-provided def (if any) still wins.
+#define OD_WEAK __attribute__((weak))
 extern "C" {
-void* __cxa_allocate_exception(unsigned long) { std::abort(); }
-void __cxa_free_exception(void*) {}
-void __cxa_throw(void*, void*, void*) { std::abort(); }
-void __cxa_rethrow() { std::abort(); }
-void* __cxa_begin_catch(void*) { std::abort(); }
-void __cxa_end_catch() {}
-void __cxa_call_unexpected(void*) { std::abort(); }
-void __cxa_pure_virtual() { std::abort(); }
-int __gxx_personality_v0(int, int, unsigned long long, void*, void*) { std::abort(); }
-void _Unwind_Resume(void*) { std::abort(); }
+OD_WEAK void* __cxa_allocate_exception(unsigned long) { std::abort(); }
+OD_WEAK void __cxa_free_exception(void*) {}
+OD_WEAK void __cxa_throw(void*, void*, void*) { std::abort(); }
+OD_WEAK void __cxa_rethrow() { std::abort(); }
+OD_WEAK void* __cxa_begin_catch(void*) { std::abort(); }
+OD_WEAK void __cxa_end_catch() {}
+OD_WEAK void __cxa_call_unexpected(void*) { std::abort(); }
+OD_WEAK void __cxa_pure_virtual() { std::abort(); }
+OD_WEAK int __gxx_personality_v0(int, int, unsigned long long, void*, void*) { std::abort(); }
+OD_WEAK void _Unwind_Resume(void*) { std::abort(); }
 }
