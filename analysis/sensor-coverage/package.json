@@ -14,6 +14,7 @@
     "sharedMemory": true,
     "initialMemoryBytes": 67108864,
     "maximumMemoryBytes": 2147483648,
+    "threadModel": "emscripten-pthreads",
     "sharedCppSources": [
       "common/sensor_coverage_core.h",
       "common/sensor_coverage_core.cpp.inc"

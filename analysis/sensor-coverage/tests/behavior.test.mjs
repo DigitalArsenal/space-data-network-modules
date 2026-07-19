@@ -249,7 +249,7 @@ test("sensor coverage uses conservative candidates before the exact visibility k
     "utf8",
   );
   const directKernelStart = source.indexOf(
-    "void accumulate_grid_coverage_products_impl",
+    "void accumulate_grid_coverage_products_range",
   );
   const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
   assert.notEqual(directKernelStart, -1);
@@ -301,7 +301,7 @@ test("sensor coverage exact grid geometry is built lazily for candidate cells", 
   const createStart = source.indexOf("std::vector<Cell> create_cells");
   const createStop = source.indexOf("void ensure_cell_geometry", createStart);
   const kernelStart = source.indexOf(
-    "void accumulate_grid_coverage_products_impl",
+    "void accumulate_grid_coverage_products_range",
   );
   const kernelStop = source.indexOf("void merge_intervals", kernelStart);
   assert.notEqual(createStart, -1);
@@ -369,7 +369,7 @@ test("sensor coverage exact visibility reuses resolved endpoints and root state 
   const intervalStart = source.indexOf("VisibilityInterval refined_visibility_interval");
   const intervalStop = source.indexOf("std::map<int, std::vector<const SwathSegment*>>", intervalStart);
   const directKernelStart = source.indexOf(
-    "void accumulate_grid_coverage_products_impl",
+    "void accumulate_grid_coverage_products_range",
   );
   const directKernelStop = source.indexOf("void merge_intervals", directKernelStart);
   assert.notEqual(intervalStart, -1);

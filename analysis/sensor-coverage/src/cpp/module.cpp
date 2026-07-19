@@ -9,10 +9,14 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <map>
+#include <pthread.h>
+#include <thread>
 #include <utility>
+#include <vector>
 
 using namespace sdn_hypersonics;
 
@@ -6113,10 +6117,21 @@ void append_sensor_cap_candidates(
   static_cast<void>(stop);
 }
 
-void accumulate_grid_coverage_products_impl(
+// Interleaved-ownership worker body: process ONLY the cells this worker owns,
+// i.e. those whose cell_index satisfies (cell_index % stride) == residue. A
+// stride of 1 (residue 0) is the whole grid (the single-thread control). Every
+// scratch buffer below is function-local, so N of these run concurrently over
+// disjoint cell stripes with ZERO shared mutable state — each cell's intervals
+// are produced by exactly one worker in the same track/segment order as the
+// single-thread path, so the merged result is BIT-IDENTICAL regardless of
+// stride. Interleaving (not contiguous ranges) spreads each sensor's spatially
+// banded footprint evenly across workers for load balance.
+void accumulate_grid_coverage_products_range(
     std::vector<Cell>& cells,
     const std::vector<SensorTrack>& tracks,
-    const GridConfig& grid) {
+    const GridConfig& grid,
+    uint32_t stride,
+    uint32_t residue) {
   const sdn::coverage::GridDefinition candidate_grid =
     coverage_grid_definition(grid);
   std::vector<uint32_t> candidate_marks(cells.size(), 0u);
@@ -6167,6 +6182,12 @@ void accumulate_grid_coverage_products_impl(
 
       for (const uint32_t cell_index : candidate_cell_indices) {
         if (cell_index >= cells.size()) {
+          continue;
+        }
+        // Interleaved ownership: skip cells belonging to a sibling worker. The
+        // (cheap) candidate enumeration above runs in every worker; only the
+        // expensive per-cell visibility work below is partitioned.
+        if (stride > 1u && (cell_index % stride) != residue) {
           continue;
         }
         Cell& cell = cells[cell_index];
@@ -6263,6 +6284,128 @@ void accumulate_grid_coverage_products_impl(
         start_resolved,
         stop_resolved,
         static_cast<uint32_t>(state_index));
+    }
+  }
+}
+
+// ── Isomorphic wasi-threads fan-out ──────────────────────────────────────────
+// The per-cell visibility work is embarrassingly parallel (each cell's result
+// depends only on the cell + the const tracks/grid). We partition it across
+// std::thread-equivalent pthreads. Results are bit-identical to the single
+// thread path for ANY worker count (interleaved ownership, see
+// accumulate_grid_coverage_products_range).
+constexpr int kSensorCoverageDefaultWorkers = 8;
+constexpr int kSensorCoverageMaxWorkers = 32;
+constexpr uint32_t kSensorCoverageMinCellsPerWorker = 96u;
+
+int sensor_coverage_worker_count(uint32_t cell_count) {
+  int requested = kSensorCoverageDefaultWorkers;
+  // hardware_concurrency() reports 1 under wasm32-wasip1-threads (wasi-libc has
+  // no CPU-count source); trust it only when it actually reports parallelism.
+  const unsigned hc = std::thread::hardware_concurrency();
+  if (hc >= 2u) {
+    requested = static_cast<int>(hc);
+  }
+  // Optional host override (WASI env) for scaling benchmarks + a 1-worker
+  // parity control. Unset/invalid -> the default above.
+  if (const char* env = std::getenv("SENSOR_COVERAGE_WORKERS")) {
+    const int parsed = std::atoi(env);
+    if (parsed > 0) {
+      requested = parsed;
+    }
+  }
+  if (requested > kSensorCoverageMaxWorkers) {
+    requested = kSensorCoverageMaxWorkers;
+  }
+  // Never split below the minimum useful stripe size.
+  const int by_cells =
+    static_cast<int>(cell_count / kSensorCoverageMinCellsPerWorker);
+  if (requested > by_cells) {
+    requested = by_cells;
+  }
+  if (requested < 1) {
+    requested = 1;
+  }
+  return requested;
+}
+
+struct CoverageAccumWorkerArg {
+  std::vector<Cell>* cells;
+  const std::vector<SensorTrack>* tracks;
+  const GridConfig* grid;
+  uint32_t stride;
+  uint32_t residue;
+};
+
+void* sensor_coverage_accum_worker(void* raw) {
+  CoverageAccumWorkerArg* arg = static_cast<CoverageAccumWorkerArg*>(raw);
+  accumulate_grid_coverage_products_range(
+    *arg->cells, *arg->tracks, *arg->grid, arg->stride, arg->residue);
+  return nullptr;
+}
+
+void accumulate_grid_coverage_products_impl(
+    std::vector<Cell>& cells,
+    const std::vector<SensorTrack>& tracks,
+    const GridConfig& grid) {
+  const uint32_t cell_count = static_cast<uint32_t>(cells.size());
+  const int workers = sensor_coverage_worker_count(cell_count);
+  if (workers <= 1) {
+    // Single-thread control path (RMS / bit-parity reference).
+    accumulate_grid_coverage_products_range(cells, tracks, grid, 1u, 0u);
+    return;
+  }
+
+  const uint32_t stride = static_cast<uint32_t>(workers);
+  std::vector<CoverageAccumWorkerArg> args(static_cast<size_t>(workers));
+  std::vector<pthread_t> thread_ids(static_cast<size_t>(workers));
+  std::vector<uint8_t> spawned(static_cast<size_t>(workers), 0u);
+  for (int w = 0; w < workers; ++w) {
+    args[static_cast<size_t>(w)] = CoverageAccumWorkerArg{
+      &cells, &tracks, &grid, stride, static_cast<uint32_t>(w)};
+  }
+
+  // Try to spawn residues 1..W-1 as pthreads. pthread_create is used DIRECTLY
+  // (not std::thread) so a host that cannot spawn a guest thread degrades
+  // gracefully rather than aborting (std::thread's ctor calls std::terminate
+  // under -fno-exceptions on spawn failure). The wasi-threads contract
+  // (wasi.thread-spawn import + wasi_thread_start export) is satisfied by the
+  // pthread_create reference regardless of runtime spawn success.
+  int spawned_count = 0;
+  for (int w = 1; w < workers; ++w) {
+    const int rc = pthread_create(
+      &thread_ids[static_cast<size_t>(w)], nullptr,
+      &sensor_coverage_accum_worker, &args[static_cast<size_t>(w)]);
+    if (rc == 0) {
+      spawned[static_cast<size_t>(w)] = 1u;
+      ++spawned_count;
+    }
+  }
+
+  if (spawned_count == 0) {
+    // No host thread support at all (e.g. the browser Web-Worker path, where a
+    // guest thread cannot share the SharedArrayBuffer). Run the WHOLE grid as a
+    // single stride-1 pass so the (cheap but non-trivial) candidate enumeration
+    // is done ONCE — NOT once per stripe. This makes the sequential fallback as
+    // fast as the pre-threading single-thread path; the per-stripe inline
+    // fallback below would otherwise re-enumerate W times.
+    accumulate_grid_coverage_products_range(cells, tracks, grid, 1u, 0u);
+    return;
+  }
+
+  // Some workers are running. The calling thread covers residue 0 plus any
+  // stripe whose spawn failed (disjoint cells from the running workers — race
+  // free). Then join the spawned workers.
+  for (int w = 1; w < workers; ++w) {
+    if (!spawned[static_cast<size_t>(w)]) {
+      accumulate_grid_coverage_products_range(
+        cells, tracks, grid, stride, static_cast<uint32_t>(w));
+    }
+  }
+  accumulate_grid_coverage_products_range(cells, tracks, grid, stride, 0u);
+  for (int w = 1; w < workers; ++w) {
+    if (spawned[static_cast<size_t>(w)]) {
+      pthread_join(thread_ids[static_cast<size_t>(w)], nullptr);
     }
   }
 }

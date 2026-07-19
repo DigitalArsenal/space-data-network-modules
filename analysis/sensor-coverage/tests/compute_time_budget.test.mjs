@@ -22,20 +22,23 @@ const STATE_STEP_SECONDS = 15;
 const STATE_COUNT = WINDOW_SECONDS / STATE_STEP_SECONDS + 1;
 const GRID_STEP_SECONDS = 60;
 const GRID_INDEX_COUNT = WINDOW_SECONDS / GRID_STEP_SECONDS;
-const COARSE_COMPUTE_BUDGET_MS = 5000;
-// Per-shape coarse ceilings tighter than the shared 5 s watchdog. Solid-conic
-// coarse compute is pinned here so the 7cca542 fine-grid trade cannot silently
-// widen back toward the 5 s ceiling: it measures ~1.40 s after the nadir
-// closest-point fast-reject was restored to optimize_solid_conic_rectangle_
-// witness (the reject-only heuristic 7cca542 dropped; every skipped optimizer
-// still falls back to the exact patch-subdivision search, so access output is
-// byte-identical). 2.1 s is roughly achieved+50%, leaving headroom for CI load
-// jitter while catching any real regression. Rectangular/SAR keep the shared
-// ceiling (SAR runs ~4.8 s, already near it — out of scope here).
+const COARSE_COMPUTE_BUDGET_MS = 2200; // shared watchdog fallback (per-shape below is tighter)
+// C6 isomorphic-pthreads retightening. The coverage kernel now fans the per-cell
+// work across pthread workers (interleaved ownership, bit-identical results), so
+// these ceilings are pulled WELL below the old single-thread pins to catch a
+// threading-lost regression while keeping local headroom for thread-scheduling
+// jitter. Local (28-core) threaded measurements: coarse conic ~0.28 s,
+// rectangular ~0.71 s, SAR ~0.90 s, fine conic ~1.20 s. Single-thread baselines
+// (what a threading regression would restore): coarse conic ~1.40 s, SAR ~4.8 s,
+// fine conic ~7.2 s — every pin below sits under its single-thread baseline, so a
+// regression to sequential FAILS here. Ceilings are ~2.5-3x the threaded
+// measurement to absorb spawn/scheduling variance and fewer-core hosts.
 const COARSE_SHAPE_BUDGET_MS = Object.freeze({
-  conic: 2100,
+  conic: 900,
+  rectangular: 1800,
+  sar: 2200,
 });
-const FINE_COMPUTE_BUDGET_MS = 10000;
+const FINE_COMPUTE_BUDGET_MS = 3000;
 const WORKER_RESULT_GRACE_MS = 1000;
 const WORKER_SETUP_TIMEOUT_MS = 8000;
 const configuredFineWatchdogMs = Number(

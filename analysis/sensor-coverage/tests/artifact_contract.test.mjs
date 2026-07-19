@@ -7,52 +7,64 @@ import {
   decodePluginManifest,
   inspectModule,
 } from "space-data-module-sdk";
+import { analyzeWasmThreadFeatures } from "space-data-module-sdk/compiler";
 
-// Phase 4 pthread-architecture contract pin (see PHASE4_PTHREAD_AUDIT.md).
+// C6 isomorphic-pthreads (wasi-threads) contract pin.
 //
-// sensor-coverage compiles with `-pthread` + `SHARED_MEMORY=1` ONLY because it
-// opts into shared memory for zero-copy output — it is a SINGLE-THREAD build
-// (manifest runtimeTargets:["browser"] -> ModuleThreadModel.SINGLE_THREAD). It
-// contains no thread-spawn primitive; the emscripten pthread-runtime imports
-// are inert housekeeping that the SDK/browser loader safely stubs.
+// sensor-coverage compiles with threadModel "emscripten-pthreads", which the SDK
+// routes through the WASI-threads toolchain (clang --target=wasm32-wasip1-threads
+// -pthread ... -mexec-model=reactor). The emitted artifact genuinely spawns
+// std::thread/pthread workers to parallelize the per-cell coverage kernel, so it
+// MUST carry the wasi-threads contract: a SHARED imported memory + atomics, an
+// imported `wasi.thread-spawn`, an exported `wasi_thread_start`, and ZERO
+// Emscripten browser thread hooks. It is a reactor (`_initialize`, no `_start`).
 //
-// This suite fails loudly if the artifact ever drifts toward a real- or
-// fake-threaded build. When the separate C6 task converts the module to actual
-// pthreads (ORBPRO_SENSOR_COVERAGE_LOOP.md:846-864), these assertions are
-// EXPECTED to fail and be replaced by C6's threaded contract tests.
+// These pins REPLACE the prior single-thread pins (which forbade any thread
+// primitive) with equally strict threaded pins: any drift back toward a
+// single-thread build, an emscripten browser-worker build, or a command (non-
+// reactor) build fails here. Import-allowlist + signature coverage is retained.
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 
-// Mirrors STANDALONE_SHARED_MEMORY_ENV_STUBS in
-// space-data-module-sdk/src/testing/browserModuleHarness.js:68-84. Every
-// `env` function import the artifact carries MUST be in this closed set, or
-// detectArtifactProfile reclassifies the artifact "emscripten" and
-// createBrowserModuleHarness refuses to load it (fail-closed).
-const SDK_THREAD_HOUSEKEEPING_STUB_ALLOWLIST = new Set([
-  "_emscripten_init_main_thread_js",
-  "_emscripten_notify_mailbox_postmessage",
-  "_emscripten_receive_on_main_thread_js",
-  "_emscripten_thread_cleanup",
-  "_emscripten_thread_mailbox_await",
-  "_emscripten_thread_set_strongref",
-  "emscripten_check_blocking_allowed",
-  "emscripten_exit_with_live_runtime",
-  "pthread_mutex_lock",
-  "pthread_mutex_unlock",
-  "pthread_cond_broadcast",
-  "pthread_cond_wait",
-  "emscripten_thread_sleep",
-  "__do_set_thread_state",
-  "__get_tp",
+// The exact WASI preview1 surface the reactor wasi-threads build imports. Every
+// wasi_snapshot_preview1 import MUST be in this closed set (a superset of the
+// observed reactor set — args_* appear in the command variant — but nothing
+// outside WASI). sched_yield is REQUIRED (pthread backoff) and its presence is
+// asserted separately.
+const WASI_PREVIEW1_ALLOWLIST = new Set([
+  "args_get",
+  "args_sizes_get",
+  "environ_get",
+  "environ_sizes_get",
+  "clock_time_get",
+  "fd_close",
+  "fd_read",
+  "fd_seek",
+  "fd_write",
+  "fd_fdstat_get",
+  "proc_exit",
+  "random_get",
+  "sched_yield",
 ]);
 
-// Names that would indicate the module actually spawns OS/worker threads.
-const THREAD_SPAWN_NAMES = ["pthread_create", "__pthread_create_js", "spawn"];
+// Emscripten browser-worker thread hooks that a wasi-threads artifact must NEVER
+// import (their presence means the wrong -pthread toolchain was used).
+const FORBIDDEN_EMSCRIPTEN_THREAD_HOOKS = [
+  "__pthread_create_js",
+  "_emscripten_init_main_thread_js",
+  "_emscripten_thread_mailbox_await",
+  "_emscripten_notify_mailbox_postmessage",
+  "_emscripten_receive_on_main_thread_js",
+  "_emscripten_thread_set_strongref",
+  "_emscripten_thread_cleanup",
+  "emscripten_check_blocking_allowed",
+  "emscripten_exit_with_live_runtime",
+];
 
 const WASM_PAGE_BYTES = 65536;
-const EXPECTED_MEMORY_MIN_PAGES = 256; // 16 MiB (emscripten SHARED_MEMORY default)
-const EXPECTED_MEMORY_MAX_PAGES = 32768; // 2 GiB (maximumMemoryBytes)
+const EXPECTED_MEMORY_MIN_PAGES = 2; // wasi-libc reactor initial (host supplies the real size)
+const EXPECTED_MEMORY_MAX_PAGES = 32768; // 2 GiB — the enforced -Wl,--max-memory
 
 // ---- minimal wasm import-section parser: recover memory limits + shared flag,
 // which WebAssembly.Module.imports() does not expose. ----
@@ -77,7 +89,6 @@ function readName(buf, off) {
 }
 
 function parseImportedMemory(buf) {
-  // buf must be the loadable wasm (no appended publication trailer).
   assert.equal(buf[0], 0x00);
   assert.equal(buf[1], 0x61);
   assert.equal(buf[2], 0x73);
@@ -103,7 +114,7 @@ function parseImportedMemory(buf) {
       if (kind === 0x00) {
         off = readVarU32(buf, off).off;
       } else if (kind === 0x01) {
-        off++; // reftype
+        off++;
         const fl = buf[off++];
         off = readVarU32(buf, off).off;
         if (fl & 0x01) off = readVarU32(buf, off).off;
@@ -125,7 +136,7 @@ function parseImportedMemory(buf) {
           max,
         };
       } else if (kind === 0x03) {
-        off += 2; // valtype + mut
+        off += 2;
       }
     }
     off = end;
@@ -133,38 +144,58 @@ function parseImportedMemory(buf) {
   return null;
 }
 
-test("artifact is a standalone single-thread profile", async () => {
-  const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
+test("artifact is a validated isomorphic-pthreads wasi-threads wasm", () => {
+  const bytes = fs.readFileSync(WASM_PATH);
+  const features = analyzeWasmThreadFeatures(bytes);
   assert.equal(
-    inspection.profile,
-    "standalone",
-    "sensor-coverage must stay a standalone (single-thread) artifact; an " +
-      "'emscripten' profile means real thread imports leaked in — see C6",
+    features.isIsomorphicPthreads,
+    true,
+    "sensor-coverage must be a wasi-threads artifact (shared memory + atomics + " +
+      "wasi.thread-spawn import + wasi_thread_start export + no emscripten hooks)",
+  );
+  assert.equal(features.hasSharedMemory, true, "requires shared memory");
+  assert.equal(features.usesAtomics, true, "requires real atomics");
+  assert.ok(
+    features.atomicInstructionCount > 0,
+    "must use genuine atomic instructions (not a byte-scan false positive)",
+  );
+  assert.equal(
+    features.hasWasiThreadSpawnImport,
+    true,
+    "must import wasi.thread-spawn (WasmEdge/browser guest thread spawn)",
+  );
+  assert.equal(
+    features.hasWasiThreadStartExport,
+    true,
+    "must export wasi_thread_start (the wasi-threads entry a host runs)",
+  );
+  assert.deepEqual(
+    features.emscriptenThreadHooks,
+    [],
+    "must NOT carry Emscripten browser-worker thread hooks",
   );
 });
 
-test("artifact carries no thread-spawn import or export", async () => {
-  const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
-
-  const spawnImports = inspection.imports.filter((entry) =>
-    THREAD_SPAWN_NAMES.some((needle) => entry.name.includes(needle)),
+test("artifact is a standalone reactor (WASI-threads), not command or emscripten", async () => {
+  const bytes = fs.readFileSync(WASM_PATH);
+  const inspection = await inspectModule(bytes);
+  assert.equal(inspection.profile, "standalone");
+  // Reactor: _initialize present, _start absent (direct-invoke without _start).
+  assert.equal(
+    inspection.exports.includes("_initialize"),
+    true,
+    "wasi-threads reactor must export _initialize (runs global ctors)",
   );
-  assert.deepEqual(
-    spawnImports,
-    [],
-    "single-thread contract: artifact must import no thread-spawn primitive",
+  assert.equal(
+    inspection.exports.includes("_start"),
+    false,
+    "reactor must NOT export _start (a command _start would trap on missing main)",
   );
-
-  const spawnExports = inspection.exports.filter((name) =>
-    THREAD_SPAWN_NAMES.some((needle) => name.includes(needle)),
+  assert.equal(
+    inspection.exports.includes("wasi_thread_start"),
+    true,
+    "must export the wasi_thread_start thread entry",
   );
-  assert.deepEqual(
-    spawnExports,
-    [],
-    "single-thread contract: artifact must export no thread-spawn entry point",
-  );
-
-  // Positive: the expected application + ABI exports are present.
   for (const expected of [
     "compute_sensor_coverage",
     "plugin_alloc",
@@ -178,20 +209,71 @@ test("artifact carries no thread-spawn import or export", async () => {
       `missing expected export ${expected}`,
     );
   }
-  assert.equal(inspection.exports.includes("_start"), false, "reactor: no _start");
 });
 
-test("env.memory import is shared with the expected min/max pages", async () => {
+test("imports: wasi.thread-spawn + shared env.memory + WASI only; no emscripten hooks", async () => {
   const bytes = fs.readFileSync(WASM_PATH);
+  const inspection = await inspectModule(bytes);
 
-  // SDK view: exactly one memory import, env::memory.
+  // Import namespaces are exactly env + wasi + wasi_snapshot_preview1.
+  const namespaces = Array.from(
+    new Set(inspection.imports.map((entry) => entry.module)),
+  ).sort();
+  assert.deepEqual(namespaces, ["env", "wasi", "wasi_snapshot_preview1"]);
+
+  // env holds ONLY the shared memory (no emscripten thread scaffolding).
+  const envImports = inspection.imports.filter((e) => e.module === "env");
+  assert.deepEqual(
+    envImports,
+    [{ module: "env", name: "memory", kind: "memory" }],
+    "env must import only the shared memory — any emscripten thread hook here " +
+      "means the wrong -pthread toolchain was used",
+  );
+
+  // wasi namespace holds exactly thread-spawn.
+  const wasiImports = inspection.imports.filter((e) => e.module === "wasi");
+  assert.deepEqual(wasiImports, [
+    { module: "wasi", name: "thread-spawn", kind: "function" },
+  ]);
+
+  // Every wasi_snapshot_preview1 import is within the WASI allowlist, and
+  // sched_yield (pthread backoff) is present.
+  const wasiPreview = inspection.imports.filter(
+    (e) => e.module === "wasi_snapshot_preview1",
+  );
+  const outside = wasiPreview
+    .map((e) => e.name)
+    .filter((name) => !WASI_PREVIEW1_ALLOWLIST.has(name));
+  assert.deepEqual(outside, [], "no non-WASI preview1 imports allowed");
+  assert.ok(
+    wasiPreview.some((e) => e.name === "sched_yield"),
+    "wasi-threads pthread build must import sched_yield",
+  );
+
+  // No thread-spawn primitive from the wrong toolchains anywhere.
+  const importNames = inspection.imports.map((e) => `${e.module}.${e.name}`);
+  for (const hook of FORBIDDEN_EMSCRIPTEN_THREAD_HOOKS) {
+    assert.ok(
+      !importNames.some((n) => n.endsWith(`.${hook}`)),
+      `forbidden emscripten thread hook imported: ${hook}`,
+    );
+  }
+  for (const banned of ["pthread_create", "__pthread_create_js"]) {
+    assert.ok(
+      !importNames.some((n) => n.includes(banned)),
+      `artifact must not import ${banned}`,
+    );
+  }
+});
+
+test("env.memory import is SHARED with the enforced 2 GiB maximum", async () => {
+  const bytes = fs.readFileSync(WASM_PATH);
   const inspection = await inspectModule(bytes);
   assert.deepEqual(
     inspection.imports.filter((entry) => entry.kind === "memory"),
     [{ module: "env", name: "memory", kind: "memory" }],
   );
 
-  // Binary view: shared flag + limits (parsed from loadable wasm bytes).
   const { toLoadableWasmBytes } = await import(
     "space-data-module-sdk/testing/browser"
   );
@@ -200,7 +282,7 @@ test("env.memory import is shared with the expected min/max pages", async () => 
   assert.ok(mem, "artifact must declare an imported memory");
   assert.equal(mem.module, "env");
   assert.equal(mem.name, "memory");
-  assert.equal(mem.shared, true, "zero-copy output requires shared memory");
+  assert.equal(mem.shared, true, "wasi-threads requires a SHARED imported memory");
   assert.equal(
     mem.min,
     EXPECTED_MEMORY_MIN_PAGES,
@@ -211,55 +293,25 @@ test("env.memory import is shared with the expected min/max pages", async () => 
   assert.equal(
     mem.max,
     EXPECTED_MEMORY_MAX_PAGES,
-    `declared memory maximum drifted (pages; ${
-      (mem.max * WASM_PAGE_BYTES) / (1024 * 1024 * 1024)
-    } GiB)`,
+    `declared memory maximum drifted from the enforced --max-memory=2GiB ` +
+      `(pages; ${(mem.max * WASM_PAGE_BYTES) / (1024 * 1024 * 1024)} GiB)`,
   );
 });
 
-test("every env import is within the SDK thread-housekeeping stub allowlist", async () => {
-  const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
-  const envFunctionImports = inspection.imports.filter(
-    (entry) => entry.module === "env" && entry.kind === "function",
-  );
-  assert.ok(
-    envFunctionImports.length > 0,
-    "expected the shared-memory pthread-runtime housekeeping imports",
-  );
-  const outsideAllowlist = envFunctionImports
-    .map((entry) => entry.name)
-    .filter((name) => !SDK_THREAD_HOUSEKEEPING_STUB_ALLOWLIST.has(name));
-  assert.deepEqual(
-    outsideAllowlist,
-    [],
-    "an env import outside the SDK stub allowlist would make " +
-      "createBrowserModuleHarness refuse to load this artifact",
-  );
-
-  // Only the inert housekeeping functions are imported — no lock/cond/tp
-  // stubs are actually needed by this artifact.
-  const importModuleNames = Array.from(
-    new Set(inspection.imports.map((entry) => entry.module)),
-  ).sort();
-  assert.deepEqual(importModuleNames, ["env", "wasi_snapshot_preview1"]);
-});
-
-test("on-disk manifest declares browser/direct single-thread targets", () => {
+test("on-disk manifest declares browser/direct targets", () => {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
-  assert.deepEqual(
-    manifest.runtimeTargets,
-    ["browser"],
-    "runtimeTargets:['browser'] is what maps to ModuleThreadModel.SINGLE_THREAD",
-  );
+  assert.deepEqual(manifest.runtimeTargets, ["browser"]);
   assert.deepEqual(manifest.invokeSurfaces, ["direct"]);
 });
 
-test("runtime-embedded manifest matches the single-thread browser/direct contract", async (t) => {
+test("threaded artifact loads through the signed browser harness with a matching runtime manifest", async (t) => {
   if (typeof SharedArrayBuffer !== "function") {
     t.skip("SharedArrayBuffer is not available in this runtime.");
     return;
   }
 
+  // Loading proves: valid SDS signature, wasi-threads instantiation (the SDK
+  // harness satisfies wasi.thread-spawn + shared memory + reactor _initialize).
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(WASM_PATH),
     surface: "direct",
@@ -272,9 +324,8 @@ test("runtime-embedded manifest matches the single-thread browser/direct contrac
     harness.destroy();
   });
 
-  // Loading at all proves the artifact passes the SDK allowlist gate and
-  // instantiates with only stubbed housekeeping + shared memory.
   assert.equal(harness.memory.buffer instanceof SharedArrayBuffer, true);
+  assert.ok(harness.threadHost, "wasi-threads harness must expose a thread host");
 
   const exports = harness.instance.exports;
   const size = exports.plugin_get_manifest_flatbuffer_size();
