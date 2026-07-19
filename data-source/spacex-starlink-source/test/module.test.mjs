@@ -342,10 +342,10 @@ test("pull: raising the cap fetches more and skips unknown objects (404-safe)", 
   assert.equal(storage.length, 0, "no $OEM stored");
 });
 
-test("pull: no config uses the default object cap (still an in-memory $OEM stream)", async () => {
+test("pull: no config uses the default (unlimited) cap (still an in-memory $OEM stream)", async () => {
   const { resultBytes } = await runPull(null);
   const { count } = parseOemStream(resultBytes);
-  // Only 2 fixtures resolve, so the default cap (25) doesn't bound them.
+  // Default cap is now UNLIMITED (whole catalog); only 2 fixtures resolve here.
   assert.equal(count, 2);
 });
 
@@ -353,7 +353,7 @@ test("pull: no config uses the default object cap (still an in-memory $OEM strea
 
 test("probe: returns a bare u32le object count (no per-object fetch)", async () => {
   const { resultBytes, http } = await runPull({ probe: true });
-  // Sample manifest has 3 MEME entries; default cap (25) doesn't bound them.
+  // Sample manifest has 3 MEME entries; default cap is unlimited (whole catalog).
   assert.equal(resultBytes.length, 4, "probe returns exactly a u32le");
   assert.equal(u32le(resultBytes, 0), 3, "probe count = manifest entries");
   // Probe fetches ONLY the manifest — never any MEME object file.

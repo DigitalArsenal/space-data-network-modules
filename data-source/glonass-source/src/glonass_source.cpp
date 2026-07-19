@@ -70,20 +70,29 @@ namespace ps = provider_source;
 
 // ── Provider constants ──────────────────────────────────────────────────────
 
-// IAC precise ephemeris, rolling "latest" product (SP3-d). NOTE (2026-07-13): the
-// IAC HTTPS frontend (glonass-iac.ru) is returning 502; the live product is on
-// the IAC anonymous FTP server. The host `http` capability performs the fetch, so
-// the transport (ftp:// vs https://) is a host concern — see README (OWNER-ASSIST
-// transport residual). `sourceUrl` overrides this default.
+// IAC precise ephemeris, rolling "latest" product (SP3-d), fetched via the host
+// `http` capability (ps::http_get). TRANSPORT (2026-07-19 re-verified): every IAC
+// HTTP/HTTPS frontend is dead — www.glonass-iac.ru => 502, ftp.glonass-iac.ru
+// speaks only ftp (http/https connect fails) — so the ONLY live source is this
+// ftp:// product (curl on the node => 226). The kubo host `http` cap uses net/http,
+// which supports http/https but NOT ftp, so this fetch fails on prod until EITHER
+// (a) the host `http` cap gains ftp:// support (the robust fix — a HOST concern,
+// out of module scope: "modules only, no host changes"), OR (b) ops set `sourceUrl`
+// to a live HTTPS IGS mirror of the same SP3 content. No rolling-"latest" HTTPS
+// mirror exists (ESA GSSC / WHU serve date-coded IGS filenames, which would need
+// GPS-week/DOY URL construction — beyond a transport swap). The module stays
+// transport-agnostic (whatever scheme the host cap supports); `sourceUrl` overrides.
 static const char* kDefaultSp3URL =
     "ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/LATEST/Final.sp3";
 
 static const char* kSigningKeySlot = "node-signing";
 static const char* kPublishTopic = "sdn/data-source/glonass";
 
-// One record per GLONASS satellite; cap bounds per-pull record churn. A GLONASS
-// SP3 carries ~21-24 satellites, so the default emits the whole constellation.
-static const long kDefaultObjectCap = 40;
+// One record per GLONASS satellite. The DEFAULT is UNLIMITED — the WASM-only OD
+// flow sends no per-run cap, so a default run emits the WHOLE constellation
+// (~21-24 sats). `objectCap` stays an OPTIONAL invoke override: a positive value
+// caps; <=0 means the whole constellation.
+static const long kDefaultObjectCap = 0;  // 0 => unlimited (whole constellation)
 
 extern "C" {
 __attribute__((visibility("default")))
@@ -319,7 +328,7 @@ std::string build_oem_record(const Sp3Meta& m, const SatEphem& sat,
 // ── Config (optional, from the invoke request payload) ───────────────────────
 
 struct PullConfig {
-    long object_cap = kDefaultObjectCap;
+    long object_cap = kDefaultObjectCap;  // <=0 => unlimited (whole constellation)
     std::string source_url = kDefaultSp3URL;
 };
 
@@ -361,7 +370,7 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
         parse_sp3(content, &meta, &sats);
         for (const SatEphem& sat : sats) {
             if (sat.states.empty()) continue;
-            if (static_cast<long>(count) >= cfg.object_cap) break;
+            if (cfg.object_cap > 0 && static_cast<long>(count) >= cfg.object_cap) break;
             std::string object_name = "GLONASS " + sat.sat_id;
             std::vector<uint8_t> oem = build_oem_fb(sat, object_name);
             if (oem.empty()) continue;
