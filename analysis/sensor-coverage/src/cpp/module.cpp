@@ -3932,6 +3932,16 @@ bool search_solid_conic_surface_patch(
   // footprint disc. A cap of 12 keeps a large target bounding rectangle at a
   // few-hundred-metre leaf (finer than the target's own extent) — ample for
   // area/point targets — while bounding the search. Cells keep depth 16.
+  //
+  // CONTRACT (guardian-pinned): the target witness-subdivision worst-case
+  // resolution is  rect_max_degrees / 2^12  =  rect_max_degrees / 4096  (the
+  // widest side of the target's own bounding rectangle divided by 4096). It is
+  // RELATIVE to the target extent, so arbitrarily small targets are still
+  // resolved: a sub-metre target has a sub-metre bounding rectangle and hence a
+  // sub-millimetre leaf. Direct-under-track hits are found by the exact optimizer
+  // candidate (the boresight ground point), independent of this cap. The
+  // depth-12 pin in tests/target_hits.test.mjs guards this (<=1 m point AND
+  // <=1 m polygon under-track must register access).
   constexpr int kSpatialSearchMaximumDepth = 16;
   constexpr int kTargetSpatialSearchMaximumDepth = 12;
   const int spatial_search_max_depth = t_target_region_gate != nullptr

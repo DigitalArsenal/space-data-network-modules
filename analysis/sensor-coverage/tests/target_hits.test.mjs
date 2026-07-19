@@ -18,7 +18,9 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { parentPort, Worker, workerData } from "node:worker_threads";
@@ -192,6 +194,40 @@ function windowFor(states, step) {
   const stop = states[states.length - 1].elapsedSeconds;
   const count = Math.max(1, Math.round(stop / step));
   return { start: 0, stop, step, count };
+}
+
+// The 12-hour LEO ground track used by compute_time_budget (earth-fixed, 51.6°).
+function coarseOrbitStates() {
+  const WINDOW = 12 * 3600;
+  const STEP = 15;
+  const EARTH = 6378137;
+  const ORB = EARTH + 550000;
+  const SP = Math.sqrt(3.986004418e14 / ORB);
+  const RATE = SP / ORB;
+  const EROT = 7.292115e-5;
+  const INC = (51.6 * Math.PI) / 180;
+  const ATT = {
+    x: Math.sin((0.1 * Math.PI) / 180),
+    y: 0,
+    z: 0,
+    w: Math.cos((0.1 * Math.PI) / 180),
+  };
+  return Array.from({ length: WINDOW / STEP + 1 }, (_, i) => {
+    const t = i * STEP;
+    const th = RATE * t;
+    const c = Math.cos(th);
+    const s = Math.sin(th);
+    const ci = Math.cos(INC);
+    const si = Math.sin(INC);
+    const p = { x: ORB * c, y: ORB * s * ci, z: ORB * s * si };
+    const v = { x: -SP * s, y: SP * c * ci, z: SP * c * si };
+    const ea = EROT * t;
+    const ce = Math.cos(ea);
+    const se = Math.sin(ea);
+    const rot = ({ x, y, z }) => ({ x: ce * x + se * y, y: -se * x + ce * y, z });
+    const rv = { x: v.x + EROT * p.y, y: v.y - EROT * p.x, z: v.z };
+    return stateSample({ elapsedSeconds: t, position: rot(p), velocity: rot(rv), quaternion: ATT });
+  });
 }
 
 function targetsOnlyPayload({ id, states, timeGrid, shape, targets }) {
@@ -591,6 +627,206 @@ if (workerData?.role === "determinism") {
       assert.equal(result.targetId, 21, "rejected target still appears in index order");
       assert.equal(result.accessCount, 0, "antimeridian polygon must be fail-closed (zero access)");
       assert.equal(result.intervalStart.length, 0);
+    } finally {
+      await harness.destroy?.();
+    }
+  });
+
+  // ── Guardian-required pins ─────────────────────────────────────────────────
+
+  // PIN 1 — depth-12 cap. The target witness subdivision is capped at depth 12,
+  // giving a worst-case resolution of rect_max_degrees/4096 (relative to the
+  // target's own extent). Guards that arbitrarily small targets under-track are
+  // still hit (via the exact boresight optimizer candidate, independent of the
+  // cap): a <=1 m point AND a <=1 m polygon directly under the ground track must
+  // register access.
+  test("depth-12 pin: <=1 m point AND <=1 m polygon under-track register access", async (t) => {
+    if (!sharedMemoryAvailable()) return t.skip("SharedArrayBuffer unavailable.");
+    const states = sweepStates(
+      Array.from({ length: 11 }, (_, i) => [i * 5, -0.5 + i * 0.1]),
+    );
+    const timeGrid = windowFor(states, 10);
+    const d = 4.5e-6; // ~0.5 m in degrees → ~1 m square
+    const point1m = pointTarget({ targetId: 1, name: "pt1m", latitudeDeg: 0, longitudeDeg: 0, radiusM: 1 });
+    const poly1m = polygonTarget({
+      targetId: 2,
+      name: "poly1m",
+      ring: [
+        { lonDeg: -d, latDeg: -d },
+        { lonDeg: d, latDeg: -d },
+        { lonDeg: d, latDeg: d },
+        { lonDeg: -d, latDeg: d },
+      ],
+    });
+    const harness = await createHarness();
+    try {
+      const results = decodeTargetResults(
+        await invokeTargets(
+          harness,
+          targetsOnlyPayload({ id: "tiny-targets", states, timeGrid, shape: CONIC, targets: [point1m, poly1m] }),
+        ),
+      );
+      assert.ok(
+        results.find((r) => r.targetId === 1).accessCount >= 1,
+        "<=1 m point under-track must register access (depth cap must not lose it)",
+      );
+      assert.ok(
+        results.find((r) => r.targetId === 2).accessCount >= 1,
+        "<=1 m polygon under-track must register access (depth cap must not lose it)",
+      );
+    } finally {
+      await harness.destroy?.();
+    }
+  });
+
+  // PIN 2 — cell raster-value regression. Grid-cell results MUST be unchanged by
+  // the target plumbing. The raw SCV frame CID/hash changed by an inert 19-byte
+  // FlatBuffer layout shift (the appended TARGET_RESULTS vtable slot), but the
+  // DECODED cell values below are byte-for-byte identical to 3637a31. Expected
+  // values captured from the current signed artifact; any future perturbation of
+  // cell results under the target code fails loudly here.
+  test("cell raster values unchanged under target plumbing (regression pin)", async (t) => {
+    if (!sharedMemoryAvailable()) return t.skip("SharedArrayBuffer unavailable.");
+    const grid = { minLatitudeDeg: -10, maxLatitudeDeg: 10, minLongitudeDeg: -20, maxLongitudeDeg: 20, latitudeStepDeg: 5, longitudeStepDeg: 5 };
+    const states = Array.from({ length: 21 }, (_, i) =>
+      stateSample({ elapsedSeconds: i * 15, latitudeDeg: 0, longitudeDeg: -15 + (i * 30) / 20, altitudeM: ALTITUDE_M }),
+    );
+    const timeGrid = { start: 0, stop: 300, step: 30, count: 10 };
+    const harness = await createHarness();
+    try {
+      const cov = await invokeAndReadCoverage(
+        harness,
+        createCoveragePayload({ id: "cell-regression", grid, timeGrid, states, shape: CONIC, requestedProducts: [scvMetricSeriesKind.ACCESS_COUNT], includePackedGeometry: false }),
+      );
+      assert.equal(cov.bucketCount, 10);
+      assert.equal(cov.wordsPerBucket, 1);
+      assert.deepEqual(cov.passCount, [
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+      ]);
+      assert.deepEqual(cov.activeCellCount, [4, 4, 6, 4, 4, 4, 4, 6, 4, 4]);
+      const arraysHash = createHash("sha256");
+      for (const a of [cov.passCount, cov.bitset, cov.bucketStart, cov.bucketStop, cov.bucketPassStartCount, cov.activeCellCount]) {
+        arraysHash.update(Buffer.from(new Float64Array(a.map(Number)).buffer));
+      }
+      assert.equal(
+        arraysHash.digest("hex"),
+        "98354c17aae8a3bc4f6735eb7c16b5a73d754990ca9c25ce7da2619fae43f33e",
+        "decoded cell arrays (passCount+bitset+bucketStart/Stop+bucketPassStartCount+activeCellCount) drifted",
+      );
+      const ag = cov.result.AGGREGATE_STATISTICS();
+      assert.deepEqual(
+        {
+          TOTAL_CELLS: ag.TOTAL_CELLS(),
+          ACCESSED_CELLS: ag.ACCESSED_CELLS(),
+          MULTI_ACCESS_CELLS: ag.MULTI_ACCESS_CELLS(),
+          ACTIVE_SENSOR_COUNT: ag.ACTIVE_SENSOR_COUNT(),
+          TOTAL_WINDOWS: ag.TOTAL_WINDOWS(),
+          TOTAL_INTERVAL_COUNT: ag.TOTAL_INTERVAL_COUNT(),
+          TOTAL_REVISIT_COUNT: ag.TOTAL_REVISIT_COUNT(),
+          TOTAL_ACCESS_DURATION_SEC: ag.TOTAL_ACCESS_DURATION_SEC(),
+          TOTAL_GAP_DURATION_SEC: ag.TOTAL_GAP_DURATION_SEC(),
+          MAX_GAP_DURATION_SEC: ag.MAX_GAP_DURATION_SEC(),
+          MEAN_REVISIT_TIME_SEC: ag.MEAN_REVISIT_TIME_SEC(),
+          MAX_RESPONSE_TIME_SEC: ag.MAX_RESPONSE_TIME_SEC(),
+          MEAN_RESPONSE_TIME_SEC: ag.MEAN_RESPONSE_TIME_SEC(),
+          PERCENT_COVERAGE: ag.PERCENT_COVERAGE(),
+        },
+        {
+          TOTAL_CELLS: 32,
+          ACCESSED_CELLS: 16,
+          MULTI_ACCESS_CELLS: 0,
+          ACTIVE_SENSOR_COUNT: 1,
+          TOTAL_WINDOWS: 10,
+          TOTAL_INTERVAL_COUNT: 16,
+          TOTAL_REVISIT_COUNT: 0,
+          TOTAL_ACCESS_DURATION_SEC: 863.2655554264784,
+          TOTAL_GAP_DURATION_SEC: 8736.734444573522,
+          MAX_GAP_DURATION_SEC: 300,
+          MEAN_REVISIT_TIME_SEC: 0,
+          MAX_RESPONSE_TIME_SEC: 300,
+          MEAN_RESPONSE_TIME_SEC: 211.51147569646128,
+          PERCENT_COVERAGE: 50,
+        },
+        "aggregate cell statistics drifted from the committed baseline",
+      );
+    } finally {
+      await harness.destroy?.();
+    }
+  });
+
+  // PIN 3 — empty-TARGETS zero cost. The no-targets path stays byte-identical and
+  // spawns no target fan-out. Verified by (a) source inspection of the guards and
+  // (b) a runtime spawn counter on a small no-targets run.
+  test("empty TARGETS is zero-cost (guards present + no target fan-out spawn)", async (t) => {
+    if (!sharedMemoryAvailable()) return t.skip("SharedArrayBuffer unavailable.");
+    const src = readFileSync(new URL("../src/cpp/module.cpp", import.meta.url), "utf8");
+    assert.ok(
+      src.includes("target_count == 0u"),
+      "accumulate_target_coverage_products must short-circuit on empty targets",
+    );
+    assert.ok(
+      src.includes("if (!input.targets.empty())"),
+      "compute must gate target accumulation on non-empty TARGETS",
+    );
+    assert.ok(src.includes("input.targetsOnly"), "targets_only detection present");
+    // Runtime: small grid (1 grid worker) + empty targets → zero guest threads.
+    const grid = { minLatitudeDeg: -5, maxLatitudeDeg: 5, minLongitudeDeg: -10, maxLongitudeDeg: 10, latitudeStepDeg: 5, longitudeStepDeg: 5 };
+    const states = sweepStates(Array.from({ length: 13 }, (_, i) => [i * 10, -6 + i]));
+    const timeGrid = windowFor(states, 10);
+    const harness = await createStandaloneHarness("browser", WASM_URL, {
+      surface: "direct",
+      sharedMemory: true,
+      allowRawInvoke: false,
+      initialMemoryBytes: 64 * 1024 * 1024,
+      maximumMemoryBytes: 2 * 1024 * 1024 * 1024,
+      // default worker count (no SENSOR_COVERAGE_WORKERS=1 override)
+    });
+    try {
+      const response = await invokeTargets(
+        harness,
+        createCoveragePayload({ id: "empty-targets", grid, timeGrid, states, shape: CONIC, requestedProducts: [scvMetricSeriesKind.ACCESS_COUNT], includePackedGeometry: false }),
+      );
+      assert.equal(decodeTargetResults(response).length, 0, "no TARGETS → no TARGET_RESULTS");
+      assert.equal(
+        harness.threadHost ? harness.threadHost.spawnCount() : 0,
+        0,
+        "empty TARGETS + small grid must spawn no guest thread (no target fan-out)",
+      );
+    } finally {
+      await harness.destroy?.();
+    }
+  });
+
+  // PIN 4 — with-targets wall-clock ceiling on the coarse 12-hour grid (the
+  // compute_time_budget fixture) with a representative point + polygon pair.
+  // Achieved single-thread ~2.45 s; ceiling 4.5 s is achieved + ~85% — a bound
+  // the code comfortably meets, present to catch a gross target-path regression.
+  test("with-targets coarse-grid wall-clock ceiling (point + polygon)", { timeout: 30000 }, async (t) => {
+    if (!sharedMemoryAvailable()) return t.skip("SharedArrayBuffer unavailable.");
+    const states = coarseOrbitStates();
+    const grid = { minLatitudeDeg: -60, maxLatitudeDeg: 60, minLongitudeDeg: -180, maxLongitudeDeg: 180, latitudeStepDeg: 8, longitudeStepDeg: 8 };
+    const timeGrid = { start: 0, stop: 12 * 3600, step: 60, count: (12 * 3600) / 60 };
+    const targets = [
+      pointTarget({ targetId: 1, name: "pt", latitudeDeg: 0, longitudeDeg: 0, radiusM: 200000 }),
+      polygonTarget({ targetId: 2, name: "poly", ring: [
+        { lonDeg: 8, latDeg: 8 }, { lonDeg: 14, latDeg: 8 }, { lonDeg: 14, latDeg: 14 }, { lonDeg: 8, latDeg: 14 },
+      ] }),
+    ];
+    const harness = await createHarness("1"); // single-thread → no main-thread pthread_join block
+    try {
+      const payload = createCoveragePayload({ id: "with-targets-budget", grid, timeGrid, states, shape: CONIC, requestedProducts: [scvMetricSeriesKind.ACCESS_COUNT], includePackedGeometry: false, targets });
+      const start = performance.now();
+      const response = await invokeTargets(harness, payload);
+      const elapsedMs = performance.now() - start;
+      t.diagnostic(`with-targets coarse compute: ${elapsedMs.toFixed(0)} ms`);
+      const results = decodeTargetResults(response);
+      assert.ok(results.find((r) => r.targetId === 1).accessCount >= 1, "point target must register access");
+      assert.ok(results.find((r) => r.targetId === 2).accessCount >= 1, "polygon target must register access");
+      assert.ok(
+        elapsedMs < 4500,
+        `with-targets coarse compute ${elapsedMs.toFixed(0)} ms exceeded the 4500 ms ceiling`,
+      );
     } finally {
       await harness.destroy?.();
     }
