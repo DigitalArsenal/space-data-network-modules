@@ -238,6 +238,8 @@ test("module build opts into the reusable sensor coverage C++ core", () => {
   assert.deepEqual(packageJson.sdnModuleCompile.sharedCppSources, [
     "common/sensor_coverage_core.h",
     "common/sensor_coverage_core.cpp.inc",
+    "analysis/common/spatial_region_core.h",
+    "analysis/common/spatial_region_core.cpp.inc",
   ]);
   assert.match(buildSource, /sharedCppSources/);
   assert.match(buildSource, /resolveSharedCppSources/);
