@@ -43,6 +43,41 @@ constexpr double kSensorShapeEpsilon = 1.0e-12;
 constexpr double kCoverageSwathRenderAltitudeM = 1200.0;
 constexpr int kVisibilityTransitionRefinementIterations = 8;
 constexpr int kVisibilitySearchMaxDepth = 12;
+// ── Sweep-phase temporal subdivision (scanning/swept sensors) ────────────────
+// When the boresight swings widely across a single state segment (a scanning
+// SAR or rectangular sensor whose gimbal rolls tens of degrees between the
+// 15 s attitude samples), the conservative swept-sensor cap for that whole
+// segment degenerates: it spans the entire sweep, so the per-segment candidate
+// prefilter rejects nothing and every candidate cell pays for the full exact
+// temporal search. The fix is to split such a segment, BEFORE the candidate
+// prefilter, into equal-time sub-intervals whose per-sub-interval boresight arc
+// is at most kSweepSubIntervalTargetSwingDeg wide. Each sub-interval then has a
+// TIGHT swept cap that the existing prefilter can use to reject most cells
+// cheaply, and its shape-proof context is built ONCE and reused as the depth-0
+// root context for every candidate cell in that sub-window (per-sub-window
+// envelope caching). Segments whose swing is at or below the target (every
+// non-swept sensor, and any conic-continuum sensor, which is excluded) take
+// subdivisions == 1 and run the byte-identical legacy path.
+//
+// The split is a POWER OF TWO and each sub-window RESUMES the search at its
+// depth. A segment's exact temporal search is a binary bisection of
+// [seg_start, seg_stop]; its 2^m depth-m nodes are exactly the 2^m equal
+// sub-windows. So subdividing into 2^m equal windows and starting each window's
+// search at depth m reproduces the depth-m frontier of the un-subdivided tree
+// verbatim — identical child depths, identical proof-checkpoints (which are
+// keyed to the ABSOLUTE depth: 0/4/8...), and identical leaf resolution
+// (seg_span / 2^kMaxDepth, NOT the finer sub-window span). That checkpoint- and
+// leaf-alignment is essential: a shallower start or finer resolution changes
+// where the conservative geometry proofs coalesce and resolves grazing
+// micro-gaps the un-subdivided segment merges over, splitting one pass into two
+// (measured: +2 pass starts). The only thing skipped is the proof battery at
+// the top m (wide-swing) levels, which cannot conclude across the swing and
+// would only bisect; the tight per-window swept cap is used by the candidate
+// prefilter instead so most cells never enter the search. Verified bit-
+// identical against origin/main. m is the smallest depth with
+// 2^m >= ceil(swing / target), capped below the leaf depth.
+constexpr double kSweepSubIntervalTargetSwingDeg = 3.0;
+constexpr int kSweepMaxSubIntervalDepth = 6; // 2^6 = 64 sub-windows max
 constexpr double kMaximumGeodeticGeocentricLatitudeSeparationDeg =
   0.19242430115956035;
 constexpr size_t kGridCellCacheMaxEntries = 4;
@@ -6584,10 +6619,31 @@ void accumulate_grid_coverage_products_range(
       std::numeric_limits<uint32_t>::max());
     std::vector<uint8_t> cached_visibility(cells.size(), 0u);
 
-    const auto process_segment = [&](
+    // Process ONE temporal window of a state segment. For the byte-identical
+    // legacy path the window spans the whole segment (interp basis == window);
+    // for a swept sensor the enclosing process_segment splits the segment into
+    // tighter sub-windows and calls this once per sub-window. The interpolation
+    // basis is ALWAYS the full segment (interp_start/interp_stop) so the
+    // nlerp attitude curve the temporal search samples is unchanged; only the
+    // searched window [seg_start, seg_stop] and its cached shape-proof context
+    // narrow. use_cache carries the cross-segment start/stop visibility reuse,
+    // which is disabled for sub-windows (their candidate sets differ).
+    const auto process_window = [&](
+        const ResolvedVisibilityState& interp_start,
+        const ResolvedVisibilityState& interp_stop,
         const ResolvedVisibilityState& seg_start,
         const ResolvedVisibilityState& seg_stop,
-        uint32_t state_index) {
+        uint32_t state_index,
+        bool use_cache,
+        int start_depth) {
+      // A sub-window RESUMES the segment's bisection at its depth-m frontier
+      // (start_depth == m) so the proof-checkpoints (which are keyed to the
+      // ABSOLUTE search depth) fire at exactly the depths the un-subdivided
+      // segment would — that is what keeps the merged intervals and pass starts
+      // bit-identical. It therefore must NOT reuse the depth-0 root context or
+      // checkpoint flags; the legacy whole-segment window runs at depth 0 and
+      // reuses them.
+      const bool at_segment_root = start_depth == 0;
       candidate_generation = next_candidate_generation(
         candidate_generation,
         candidate_marks);
@@ -6595,7 +6651,7 @@ void accumulate_grid_coverage_products_range(
       const bool solid_conic =
         has_solid_conic_continuum_contract(track.sensor);
       // The interval frame envelopes and swept cap depend only on the state
-      // segment and sensor, not on the candidate cell. Reuse them for every
+      // window and sensor, not on the candidate cell. Reuse them for every
       // shape: narrow rectangular/SAR footprints otherwise rebuild the same
       // trigonometric proof context once per candidate cell at the root of
       // the temporal search.
@@ -6674,7 +6730,7 @@ void accumulate_grid_coverage_products_range(
         std::vector<VisibilityInterval> intervals;
         bool known_visible_start = false;
         const bool* known_visible_start_pointer = nullptr;
-        if (cached_visibility_state_index[cell_index] == state_index) {
+        if (use_cache && cached_visibility_state_index[cell_index] == state_index) {
           known_visible_start = cached_visibility[cell_index] != 0u;
           known_visible_start_pointer = &known_visible_start;
         }
@@ -6682,32 +6738,99 @@ void accumulate_grid_coverage_products_range(
         append_refined_visibility_intervals(
           cell.geometry,
           track.sensor,
-          seg_start,
-          seg_stop,
+          interp_start,
+          interp_stop,
           seg_start.state.elapsedSeconds,
           seg_stop.state.elapsedSeconds,
-          0,
+          start_depth,
           intervals,
           known_visible_start_pointer,
           &visible_stop,
-          &segment_proof_context,
-          solid_conic,
-          solid_conic,
-          true);
+          at_segment_root ? &segment_proof_context : nullptr,
+          at_segment_root && solid_conic,
+          at_segment_root && solid_conic,
+          at_segment_root);
         bridge_proven_solid_conic_gaps(
           cell.geometry,
           track.sensor,
           seg_start,
           seg_stop,
           intervals);
-        cached_visibility_state_index[cell_index] = state_index + 1u;
-        cached_visibility[cell_index] = visible_stop ? 1u : 0u;
+        if (use_cache) {
+          cached_visibility_state_index[cell_index] = state_index + 1u;
+          cached_visibility[cell_index] = visible_stop ? 1u : 0u;
+        }
         for (const VisibilityInterval& interval : intervals) {
           add_cell_interval(
             cell,
             interval,
             track.sensor.sensorId);
         }
+      }
+    };
+
+    // Sweep-phase temporal subdivision dispatcher. A non-swept segment (and any
+    // conic-continuum sensor) runs the single byte-identical whole-segment
+    // window below (start_depth 0); a scanning SAR/rectangular segment whose
+    // boresight swings more than the target is split into 2^m equal-time
+    // sub-windows, each resuming the segment's bisection at depth m so its
+    // leaves, absolute proof-checkpoints, and merged intervals match the
+    // un-subdivided search exactly. Each window carries a TIGHT swept cap so the
+    // candidate prefilter rejects most cells cheaply.
+    const auto process_segment = [&](
+        const ResolvedVisibilityState& seg_start,
+        const ResolvedVisibilityState& seg_stop,
+        uint32_t state_index) {
+      int subdivision_depth = 0;
+      const SensorShapeKind shape_kind = track.sensor.shapeContract.kind;
+      const bool subdividable =
+        !has_solid_conic_continuum_contract(track.sensor) &&
+        (shape_kind == SensorShapeKind::SarAnnularSector ||
+         shape_kind == SensorShapeKind::Rectangular);
+      if (subdividable) {
+        const double swing_cos = clamp(
+          dot(seg_start.frame.boresight, seg_stop.frame.boresight), -1.0, 1.0);
+        const double swing_deg = std::acos(swing_cos) * 57.29577951308232;
+        if (swing_deg > kSweepSubIntervalTargetSwingDeg) {
+          const int windows_needed = static_cast<int>(
+            std::ceil(swing_deg / kSweepSubIntervalTargetSwingDeg));
+          // Smallest m with 2^m >= windows_needed, capped below the leaf depth
+          // so the resumed search still has room to bisect.
+          const int depth_cap = std::min(
+            kSweepMaxSubIntervalDepth, kVisibilitySearchMaxDepth - 1);
+          while (subdivision_depth < depth_cap &&
+                 (1 << subdivision_depth) < windows_needed) {
+            ++subdivision_depth;
+          }
+        }
+      }
+      if (subdivision_depth <= 0) {
+        process_window(
+          seg_start, seg_stop, seg_start, seg_stop, state_index, true, 0);
+        return;
+      }
+      const int subdivisions = 1 << subdivision_depth;
+      const double t0 = seg_start.state.elapsedSeconds;
+      const double t1 = seg_stop.state.elapsedSeconds;
+      for (int s = 0; s < subdivisions; ++s) {
+        const ResolvedVisibilityState win_start =
+          (s == 0)
+            ? seg_start
+            : resolve_visibility_state(interpolate_state(
+                seg_start.state,
+                seg_stop.state,
+                t0 + (t1 - t0) * (static_cast<double>(s) / subdivisions)));
+        const ResolvedVisibilityState win_stop =
+          (s == subdivisions - 1)
+            ? seg_stop
+            : resolve_visibility_state(interpolate_state(
+                seg_start.state,
+                seg_stop.state,
+                t0 + (t1 - t0) * (static_cast<double>(s + 1) / subdivisions)));
+        // Each window resumes the segment's binary search at its depth-m node.
+        process_window(
+          seg_start, seg_stop, win_start, win_stop, state_index, false,
+          subdivision_depth);
       }
     };
 
