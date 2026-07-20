@@ -407,6 +407,70 @@ if (workerData?.role === "volume-determinism") {
     });
   }
 
+  // ── Adversarial temporal oracles (guardian correction A) ───────────────────
+  // These target the two defects of a FIXED temporal subdivision (segment/8):
+  //   (a) a transit shorter than one sub-interval is MISSED;
+  //   (b) a brief dip-out inside a solid sub-interval is OVER-CLAIMED, merging two
+  //       genuinely separate passes. RED on the fixed-K commit (3196ed7), GREEN on
+  //       the adaptive swept-guided search.
+
+  // (a) Brief transit shorter than segment/8, coarse cadence, MUST be caught. One
+  // 30 s segment (states at t=0,30); the narrow (3°) footprint clips a small space
+  // sphere for ~2.6 s around t≈9.5 s — between every fixed-K sample time.
+  test("brief transit shorter than segment/8 is caught (adaptive temporal search)", async (t) => {
+    if (!sharedMemoryAvailable()) return t.skip("SharedArrayBuffer unavailable.");
+    const NARROW = conicShape({ outerHalfAngleDeg: 3, maxRangeM: 2000000 });
+    const states = sweepStates([[0, 0], [30, 6]]); // rate 0.2°/s, one 30 s segment
+    const timeGrid = { start: 0, stop: 30, step: 5, count: 6 };
+    const model = sphereModel({ targetId: 70, name: "blip", centerLatDeg: 0, centerLonDeg: 1.9, centerAltM: 20000, radiusM: 6000 });
+    // The transit is real at its centre and invisible at the fixed-K sample times
+    // (segment/8 = 3.75 s ⇒ samples at 0,3.75,7.5,11.25,15,… ). A fixed subdivision
+    // therefore never samples inside it.
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 9.5), NARROW, 0), true, "transit must be real at its centre");
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 7.5), NARROW, 0), false, "invisible at fixed-K endpoint 7.5 s");
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 11.25), NARROW, 0), false, "invisible at fixed-K midpoint 11.25 s");
+    const harness = await createHarness();
+    try {
+      const [result] = decodeTargetResults(
+        await invokeTargets(harness, targetsOnlyPayload({ id: "brief-transit", states, timeGrid, shape: NARROW, targets: [model.scv] })),
+      );
+      assert.ok(result.accessCount >= 1, "adaptive search must catch the sub-segment/8 transit");
+    } finally {
+      await harness.destroy?.();
+    }
+  });
+
+  // (b) Brief dip-out inside a solid sub-interval MUST split into two passes. A SAR
+  // annular sector (inner 6°, outer 30°) sweeps over a small space sphere: visible
+  // on the annulus, INVISIBLE crossing the inner hole (nadir), visible again. The
+  // ~5 s dip sits inside the fixed-K sub-interval [7.5,15] whose endpoints are both
+  // visible, so a fixed va&&vb solid push over-claims and merges the two passes.
+  test("brief dip-out inside a solid sub-interval splits into two passes", async (t) => {
+    if (!sharedMemoryAvailable()) return t.skip("SharedArrayBuffer unavailable.");
+    const SAR = sarAnnularSectorShape({ innerLookAngleDeg: 6, outerLookAngleDeg: 30, minClockAngleDeg: -180, maxClockAngleDeg: 180, maxRangeM: 3000000, samplingDensity: 64 });
+    const states = sweepStates([[0, 0], [30, 6]]); // rate 0.2°/s, one 30 s segment
+    const timeGrid = { start: 0, stop: 30, step: 5, count: 6 };
+    const model = sphereModel({ targetId: 71, name: "dip", centerLatDeg: 0, centerLonDeg: 2.25, centerAltM: 20000, radiusM: 6000 });
+    // The dip is real mid-sub-interval (invisible over the hole at t≈11.25) while
+    // BOTH fixed-K endpoints of [7.5,15] are visible — the exact merge trap.
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 6), SAR, 0), true, "visible on the approaching annulus");
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 11.25), SAR, 0), false, "invisible crossing the inner hole (dip)");
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 18), SAR, 0), true, "visible on the departing annulus");
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 7.5), SAR, 0), true, "fixed-K sub-interval [7.5,15] left endpoint visible");
+    assert.equal(referenceVisibleAt(model, stateAtTime(states, 15), SAR, 0), true, "fixed-K sub-interval [7.5,15] right endpoint visible");
+    const harness = await createHarness();
+    try {
+      const [result] = decodeTargetResults(
+        await invokeTargets(harness, targetsOnlyPayload({ id: "brief-dip", states, timeGrid, shape: SAR, targets: [model.scv] })),
+      );
+      assert.equal(result.accessCount, 2, "the dip must split the pass into TWO accesses (no over-claim/merge)");
+      assert.equal(result.passStartBuckets.length, 2, "two passes → two PASS_START_BUCKETS");
+      assert.ok(result.revisitCount === 1, "two passes → REVISIT_COUNT 1");
+    } finally {
+      await harness.destroy?.();
+    }
+  });
+
   test("tiny-volume (≤1 m) SPACE box + sphere directly under-track register access", async (t) => {
     if (!sharedMemoryAvailable()) return t.skip("SharedArrayBuffer unavailable.");
     const states = sweepStates(Array.from({ length: 11 }, (_, i) => [i * 5, -0.5 + i * 0.1]));
@@ -456,9 +520,11 @@ if (workerData?.role === "volume-determinism") {
       const results = decodeTargetResults(response);
       assert.ok(results.length === 3, "three volume targets");
       assert.ok(results.some((r) => r.accessCount >= 1), "at least one volume target seen");
-      // Achieved single-thread ~103 ms on the build host; ceiling = achieved+50%
-      // (≈160 ms). Present to catch a gross volume-octree regression.
-      const CEILING_MS = Number(process.env.SENSOR_COVERAGE_VOLUME_BUDGET_MS ?? 0) || 160;
+      // Adaptive swept-guided temporal search (continuity-proven solid intervals
+      // + depth-9 leaf) with three large volume targets: achieved single-thread
+      // ~382 ms on the build host; ceiling = achieved+50% (≈580 ms). Present to
+      // catch a gross volume-octree regression.
+      const CEILING_MS = Number(process.env.SENSOR_COVERAGE_VOLUME_BUDGET_MS ?? 0) || 580;
       assert.ok(elapsedMs < CEILING_MS, `volume-target compute ${elapsedMs.toFixed(0)} ms exceeded the ${CEILING_MS} ms ceiling`);
     } finally {
       await harness.destroy?.();
