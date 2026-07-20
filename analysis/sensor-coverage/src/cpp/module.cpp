@@ -6872,9 +6872,20 @@ void accumulate_grid_coverage_products(
 // The octree result is a deterministic function of (region, AABB, sensor state),
 // so target-index partitioning makes TARGET_RESULTS byte-identical for any worker
 // count.
-constexpr int kVolumeOctreeMaxDepth = 7;
+constexpr int kVolumeOctreeMaxDepth = 6;
 constexpr double kVolumeConeMarginRad = 1.0e-2;  // provably-enclosing cone slack
-constexpr int kVolumeTemporalSubdivisions = 4;
+// Temporal recursion depth cap for the ADAPTIVE volume interval search. Justified
+// volume-specific depth: a state segment is bisected in time down to at most
+// segment/2^9 (= segment/512). This is far finer than the transit width the
+// guardian flagged (the old fixed subdivision only resolved ~segment/8), while
+// keeping the moving-witness straddle cost bounded (the adaptive search tiles an
+// unprovable straddle window with leaves, so cost scales with 2^depth). The
+// surface path can afford depth 12 because it has many continuous-visibility
+// proofs; the volume path has one (a fixed region point over the interval), so a
+// straddle where the witness moves across the region has no solid proof and must
+// tile — depth 9 keeps that affordable while resolving transits/dips two orders
+// of magnitude below the flagged bound. See append_volume_visibility_intervals_impl.
+constexpr int kVolumeTemporalMaxDepth = 9;
 
 bool world_point_in_sensor_footprint(
     const Vec3& sensor_position,
@@ -7043,7 +7054,7 @@ bool octree_volume_witness(
     const double* lo, const double* hi, int depth,
     const sdn_spatial_region::SpatialRegion& region,
     const Vec3& sensor_position, const SensorFrame& frame,
-    const SensorConfig& sensor) {
+    const SensorConfig& sensor, Vec3* out_witness) {
   if (!aabb_may_intersect_footprint(lo, hi, sensor_position, frame, sensor)) {
     return false;
   }
@@ -7054,6 +7065,9 @@ bool octree_volume_witness(
                        0.5 * (lo[2] + hi[2])};
   if (region.containsWorldPoint(center.x, center.y, center.z) &&
       world_point_in_sensor_footprint(sensor_position, frame, sensor, center)) {
+    if (out_witness) {
+      *out_witness = center;
+    }
     return true;
   }
   if (depth >= kVolumeOctreeMaxDepth) {
@@ -7063,6 +7077,9 @@ bool octree_volume_witness(
                       (corner & 4) ? hi[2] : lo[2]};
       if (region.containsWorldPoint(p.x, p.y, p.z) &&
           world_point_in_sensor_footprint(sensor_position, frame, sensor, p)) {
+        if (out_witness) {
+          *out_witness = p;
+        }
         return true;
       }
     }
@@ -7078,7 +7095,7 @@ bool octree_volume_witness(
       child_hi[k] = high ? hi[k] : mid[k];
     }
     if (octree_volume_witness(child_lo, child_hi, depth + 1, region,
-                              sensor_position, frame, sensor)) {
+                              sensor_position, frame, sensor, out_witness)) {
       return true;
     }
   }
@@ -7088,10 +7105,11 @@ bool octree_volume_witness(
 bool volume_visible_from_resolved_state(
     const TargetAccumulator& target,
     const SensorConfig& sensor,
-    const ResolvedVisibilityState& resolved) {
+    const ResolvedVisibilityState& resolved,
+    Vec3* out_witness = nullptr) {
   return octree_volume_witness(
     target.aabbLo, target.aabbHi, 0, target.region,
-    resolved.state.position, resolved.frame, sensor);
+    resolved.state.position, resolved.frame, sensor, out_witness);
 }
 
 bool volume_visible_at_time(
@@ -7123,65 +7141,9 @@ double volume_refined_transition_time(
   return right_visible ? right : left;
 }
 
-// Build the segment's volume visibility intervals. Each state segment is split
-// into a fixed number of temporal sub-intervals (to catch brief passes), and
-// each sub-interval's crossings are bisection-refined on the octree predicate —
-// the same structure as the surface refined_visibility_interval. merge_intervals
-// later collapses adjacent sub-intervals into continuous passes. Fully
-// deterministic (independent of worker count).
-void append_volume_visibility_intervals(
-    const TargetAccumulator& target, const SensorConfig& sensor,
-    const ResolvedVisibilityState& seg_start,
-    const ResolvedVisibilityState& seg_stop,
-    std::vector<VisibilityInterval>& intervals) {
-  const double t0 = seg_start.state.elapsedSeconds;
-  const double t1 = seg_stop.state.elapsedSeconds;
-  if (!(t1 > t0)) {
-    return;
-  }
-  const int subdivisions = kVolumeTemporalSubdivisions;
-  for (int step = 0; step < subdivisions; ++step) {
-    const double ta = t0 + (t1 - t0) * static_cast<double>(step) / subdivisions;
-    const double tb =
-      t0 + (t1 - t0) * static_cast<double>(step + 1) / subdivisions;
-    const ResolvedVisibilityState a = resolve_visibility_state(
-      interpolate_state(seg_start.state, seg_stop.state, ta));
-    const ResolvedVisibilityState b = resolve_visibility_state(
-      interpolate_state(seg_start.state, seg_stop.state, tb));
-    const bool va = volume_visible_from_resolved_state(target, sensor, a);
-    const bool vb = volume_visible_from_resolved_state(target, sensor, b);
-    if (va && vb) {
-      intervals.push_back({ta, tb, true});
-    } else if (va && !vb) {
-      const double exit = volume_refined_transition_time(
-        target, sensor, seg_start, seg_stop, ta, true, tb, false);
-      if (exit >= ta) {
-        intervals.push_back({ta, exit, true});
-      }
-    } else if (!va && vb) {
-      const double entry = volume_refined_transition_time(
-        target, sensor, seg_start, seg_stop, ta, false, tb, true);
-      if (tb >= entry) {
-        intervals.push_back({entry, tb, true});
-      }
-    } else {
-      const double tm = 0.5 * (ta + tb);
-      if (volume_visible_at_time(target, sensor, seg_start, seg_stop, tm)) {
-        const double entry = volume_refined_transition_time(
-          target, sensor, seg_start, seg_stop, ta, false, tm, true);
-        const double exit = volume_refined_transition_time(
-          target, sensor, seg_start, seg_stop, tm, true, tb, false);
-        if (exit >= entry) {
-          intervals.push_back({entry, exit, true});
-        }
-      }
-    }
-  }
-}
-
-// Conservative per-segment cull for volume targets: every footprint point over
-// the segment lies within maxRange of the sensor-position segment [P0,P1]. The
-// set of points within maxRange of [P0,P1] is contained in the region AABB
+// Conservative per-segment RANGE cull for volume targets: every footprint point
+// over the segment lies within maxRange of the sensor-position segment [P0,P1].
+// The set of points within maxRange of [P0,P1] is contained in the region AABB
 // grown by maxRange on every axis; if the segment [P0,P1] does not intersect
 // that grown box, the region holds no footprint witness for the whole segment.
 // PRUNE-ONLY and sound; never fires for unbounded range.
@@ -7226,6 +7188,296 @@ bool volume_region_disjoint_from_segment(
     }
   }
   return false;
+}
+
+// Conservative WHOLE-SUB-INTERVAL footprint disjoint proof (range capsule + a
+// swept outer cone). Over [ta,tb] the apex is on segment [Pa,Pb] and the
+// boresight is within the arc-envelope of the endpoint boresights. Bounding the
+// region by its circumsphere (centre cm, radius r) and the apex motion by its
+// half-length rho, every look vector to a region point lies within angle
+// asin((r+rho)/dist) of (cm − Pm); every boresight lies within bore_half of the
+// envelope centre. If even that widened separation exceeds the outer bounding
+// cone (maxBoundaryAngleRad, which contains every shape's FOV) the region holds
+// no footprint point for ANY t in [ta,tb]. This is the volume analog of the
+// surface swept-sensor-cap prune — the swept guide for the adaptive recursion.
+// PRUNE-ONLY and sound.
+bool volume_footprint_swept_disjoint(
+    const TargetAccumulator& target, const SensorConfig& sensor,
+    const ResolvedVisibilityState& a, const ResolvedVisibilityState& b,
+    const UnitDirectionEnvelope& boresight) {
+  if (volume_region_disjoint_from_segment(target, sensor, a, b)) {
+    return true;
+  }
+  if (!boresight.valid) {
+    return false;
+  }
+  const Vec3 pa = a.state.position;
+  const Vec3 pb = b.state.position;
+  const Vec3 pm = scale(add(pa, pb), 0.5);
+  const double rho = 0.5 * magnitude(subtract(pb, pa));
+  const Vec3 cm = {0.5 * (target.aabbLo[0] + target.aabbHi[0]),
+                   0.5 * (target.aabbLo[1] + target.aabbHi[1]),
+                   0.5 * (target.aabbLo[2] + target.aabbHi[2])};
+  const double r = 0.5 * std::sqrt(
+    (target.aabbHi[0] - target.aabbLo[0]) * (target.aabbHi[0] - target.aabbLo[0]) +
+    (target.aabbHi[1] - target.aabbLo[1]) * (target.aabbHi[1] - target.aabbLo[1]) +
+    (target.aabbHi[2] - target.aabbLo[2]) * (target.aabbHi[2] - target.aabbLo[2]));
+  const Vec3 to_cm = subtract(cm, pm);
+  const double dist = magnitude(to_cm);
+  const double reach = r + rho;
+  if (!(dist > reach)) {
+    return false;  // apex can get inside the region envelope — cannot cone-prune
+  }
+  const double alpha = std::asin(clamp(reach / dist, 0.0, 1.0));
+  const double bore_half =
+    2.0 * std::asin(clamp(0.5 * boresight.chordError, 0.0, 1.0));
+  const double center_angle =
+    std::acos(clamp(dot(scale(to_cm, 1.0 / dist), boresight.center), -1.0, 1.0));
+  return center_angle - alpha - bore_half >
+         sensor.maxBoundaryAngleRad + kVolumeConeMarginRad;
+}
+
+// CONTINUITY PROOF: a single fixed 3D point proven to stay inside the sensor
+// footprint across the whole interval [start,stop]. Faithful copy of the surface
+// fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes MINUS
+// the region gate (region membership is time-invariant for a fixed point and is
+// established separately by the octree) and MINUS the surface-normal horizon
+// check (a free 3D point has no local horizon). The range-convexity + look/frame
+// direction-envelope + shape-membership reasoning is identical and sound for any
+// fixed point. When this holds for a region witness, the region has a continuous
+// footprint witness ⇒ a genuinely solid interval (no over-claim).
+bool volume_fixed_point_visible_over_interval(
+    const Vec3& point, const SensorConfig& sensor,
+    const ResolvedVisibilityState& start, const ResolvedVisibilityState& stop,
+    const UnitDirectionEnvelope& boresight,
+    const UnitDirectionEnvelope& x_axis,
+    const UnitDirectionEnvelope& y_axis) {
+  const Vec3 start_look_vector = subtract(point, start.state.position);
+  const Vec3 stop_look_vector = subtract(point, stop.state.position);
+  const double maximum_range_m = inflate_proof_upper_bound(std::max(
+    magnitude(start_look_vector), magnitude(stop_look_vector)));
+  const Vec3 observer_displacement =
+    subtract(stop.state.position, start.state.position);
+  const double displacement_squared =
+    dot(observer_displacement, observer_displacement);
+  const double minimum_fraction = displacement_squared > 0.0
+    ? clamp(dot(start_look_vector, observer_displacement) / displacement_squared,
+            0.0, 1.0)
+    : 0.0;
+  const double minimum_range_m = deflate_proof_lower_bound(magnitude(subtract(
+    start_look_vector, scale(observer_displacement, minimum_fraction))));
+  if ((sensor.shapeContract.minRangeM > 0.0 &&
+       minimum_range_m < sensor.shapeContract.minRangeM) ||
+      (sensor.shapeContract.maxRangeM > 0.0 &&
+       maximum_range_m > sensor.shapeContract.maxRangeM)) {
+    return false;
+  }
+  const UnitDirectionEnvelope look =
+    normalized_arc_envelope(start_look_vector, stop_look_vector);
+  if (!look.valid) {
+    return false;
+  }
+  const double x_center = dot(look.center, x_axis.center);
+  const double y_center = dot(look.center, y_axis.center);
+  const double z_center = dot(look.center, boresight.center);
+  const double x_error =
+    inflate_proof_upper_bound(look.chordError + x_axis.chordError);
+  const double y_error =
+    inflate_proof_upper_bound(look.chordError + y_axis.chordError);
+  const double z_error =
+    inflate_proof_upper_bound(look.chordError + boresight.chordError);
+  const double x_lower = std::max(-1.0, x_center - x_error);
+  const double x_upper = std::min(1.0, x_center + x_error);
+  const double y_lower = std::max(-1.0, y_center - y_error);
+  const double y_upper = std::min(1.0, y_center + y_error);
+  const double z_lower = std::max(-1.0, z_center - z_error);
+  const double z_upper = std::min(1.0, z_center + z_error);
+  const SensorShapeContract& shape = sensor.shapeContract;
+  if (shape.kind == SensorShapeKind::Conic &&
+      shape.innerHalfAngleRad <= 1.0e-14 && shape.clockRange.fullCircle) {
+    const double center_angle_rad =
+      inflate_proof_upper_bound(std::acos(clamp(z_center, -1.0, 1.0)));
+    const double look_angle_error_rad =
+      inflate_proof_upper_bound(2.0 * std::asin(clamp(0.5 * look.chordError, 0.0, 1.0)));
+    const double boresight_angle_error_rad = inflate_proof_upper_bound(
+      2.0 * std::asin(clamp(0.5 * boresight.chordError, 0.0, 1.0)));
+    const double maximum_angle_rad = inflate_proof_upper_bound(
+      center_angle_rad + look_angle_error_rad + boresight_angle_error_rad);
+    constexpr double kShapeBoundaryEpsilonRad = 1.0e-12;
+    return maximum_angle_rad < 0.5 * 3.14159265358979323846 &&
+           (shape.outerHalfAngleRad >= 3.14159265358979323846 ||
+            maximum_angle_rad <=
+              shape.outerHalfAngleRad + kShapeBoundaryEpsilonRad);
+  }
+  if (!(z_lower > 0.0)) {
+    return false;
+  }
+  switch (shape.kind) {
+    case SensorShapeKind::Rectangular: {
+      auto axis_inside = [&](double lower, double upper, double half_angle) {
+        if (half_angle >= 0.5 * 3.14159265358979323846) {
+          return true;
+        }
+        const double maximum_absolute_component = inflate_proof_upper_bound(
+          std::max(std::fabs(lower), std::fabs(upper)));
+        const double permitted_component =
+          deflate_proof_lower_bound(std::tan(half_angle) * z_lower);
+        return maximum_absolute_component < permitted_component;
+      };
+      return axis_inside(x_lower, x_upper, shape.crossTrackHalfAngleRad) &&
+             axis_inside(y_lower, y_upper, shape.alongTrackHalfAngleRad);
+    }
+    case SensorShapeKind::Conic:
+    case SensorShapeKind::SarAnnularSector: {
+      if (shape.outerHalfAngleRad < 3.14159265358979323846) {
+        if (!(z_lower > sensor.outerHalfAngleCosUpper)) {
+          return false;
+        }
+      }
+      if (shape.innerHalfAngleRad > 0.0) {
+        if (shape.innerHalfAngleRad >= 3.14159265358979323846) {
+          return false;
+        }
+        if (!(z_upper < sensor.innerHalfAngleCosLower)) {
+          return false;
+        }
+      }
+      if (!shape.clockRange.fullCircle) {
+        const double transverse_center = std::hypot(x_center, y_center);
+        const double transverse_error = inflate_proof_upper_bound(
+          look.chordError + std::hypot(x_axis.chordError, y_axis.chordError));
+        if (!(transverse_center > transverse_error)) {
+          return false;
+        }
+        const double clock_error = inflate_proof_upper_bound(
+          std::asin(clamp(transverse_error / transverse_center, 0.0, 1.0)));
+        const double clock_angle =
+          normalize_angle_rad(std::atan2(y_center, x_center));
+        const double from_clock_start =
+          normalize_angle_rad(clock_angle - shape.clockRange.startRad);
+        if (!(from_clock_start > clock_error) ||
+            !(shape.clockRange.spanRad - from_clock_start > clock_error)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case SensorShapeKind::CustomPolygon:
+    case SensorShapeKind::Unknown:
+    default:
+      return false;
+  }
+}
+
+// ── Adaptive, swept-guided temporal interval search (area-targets Phase 2) ────
+// Mirrors the surface append_refined_visibility_intervals_impl: bisect the state
+// segment in time, early-returning where the swept footprint is provably
+// DISJOINT from the region (volume_footprint_swept_disjoint) or where a fixed
+// region witness is PROVEN continuously in-footprint over the sub-interval
+// (volume_fixed_point_visible_over_interval → a genuinely solid interval).
+// Elsewhere it recurses down to kVolumeTemporalMaxDepth (=9), catching transits
+// far shorter than the old fixed subdivision's ~segment/8; at the leaf it emits
+// intervals by endpoint + midpoint + bisection.
+//
+// TEMPORAL-RESOLUTION CONTRACT: solid intervals are either continuity-PROVEN
+// (a fixed region point held in the footprint across the whole sub-interval — no
+// over-claim), or bounded to a temporal leaf of width ≤ segment/2^9. A dip-out
+// or transit shorter than that leaf is the documented fail-closed residual (two
+// orders of magnitude below the old segment/8 bound the guardian flagged). Fully
+// deterministic (fixed traversal + depth cap), so TARGET_RESULTS is byte-identical
+// for any worker count.
+void append_volume_visibility_intervals_impl(
+    const TargetAccumulator& target, const SensorConfig& sensor,
+    const ResolvedVisibilityState& interp_start,
+    const ResolvedVisibilityState& interp_stop,
+    const ResolvedVisibilityState& a, bool va,
+    const ResolvedVisibilityState& b, bool vb,
+    int depth, std::vector<VisibilityInterval>& intervals) {
+  const double ta = a.state.elapsedSeconds;
+  const double tb = b.state.elapsedSeconds;
+  if (!(tb > ta)) {
+    return;
+  }
+  // Degenerate segment (no sensor motion/rotation): endpoint decides all of it.
+  if (exact_visibility_geometry_is_constant(a.state, b.state)) {
+    if (va) {
+      intervals.push_back({ta, tb, true});
+    }
+    return;
+  }
+
+  UnitDirectionEnvelope boresight;
+  UnitDirectionEnvelope x_axis;
+  UnitDirectionEnvelope y_axis;
+  const bool envelopes_valid =
+    resolved_frame_envelopes(a, b, boresight, x_axis, y_axis);
+
+  // Swept-cap disjoint prune (whole sub-interval) → no interval.
+  if (envelopes_valid &&
+      volume_footprint_swept_disjoint(target, sensor, a, b, boresight)) {
+    return;
+  }
+
+  const double tm = 0.5 * (ta + tb);
+  const ResolvedVisibilityState m = resolve_visibility_state(
+    interpolate_state(interp_start.state, interp_stop.state, tm));
+  Vec3 mid_witness;
+  const bool vm = volume_visible_from_resolved_state(target, sensor, m, &mid_witness);
+
+  // Continuity proof: the mid witness (a fixed region point) proven in-footprint
+  // across the whole sub-interval ⇒ solid interval with no over-claim.
+  if (vm && envelopes_valid &&
+      volume_fixed_point_visible_over_interval(
+        mid_witness, sensor, a, b, boresight, x_axis, y_axis)) {
+    intervals.push_back({ta, tb, true});
+    return;
+  }
+
+  if (depth >= kVolumeTemporalMaxDepth) {
+    // Temporal leaf: resolve crossings by bisection. A solid [ta,tb] is emitted
+    // only when both ends are visible; its residual error is < the leaf width
+    // (≤ segment/2^12), matching the surface path's own leaf bound.
+    if (va && vb) {
+      intervals.push_back({ta, tb, true});
+    } else if (va && !vb) {
+      const double exit = volume_refined_transition_time(
+        target, sensor, interp_start, interp_stop, ta, true, tb, false);
+      if (exit >= ta) {
+        intervals.push_back({ta, exit, true});
+      }
+    } else if (!va && vb) {
+      const double entry = volume_refined_transition_time(
+        target, sensor, interp_start, interp_stop, ta, false, tb, true);
+      if (tb >= entry) {
+        intervals.push_back({entry, tb, true});
+      }
+    } else if (vm) {
+      const double entry = volume_refined_transition_time(
+        target, sensor, interp_start, interp_stop, ta, false, tm, true);
+      const double exit = volume_refined_transition_time(
+        target, sensor, interp_start, interp_stop, tm, true, tb, false);
+      if (exit >= entry) {
+        intervals.push_back({entry, exit, true});
+      }
+    }
+    return;
+  }
+
+  append_volume_visibility_intervals_impl(
+    target, sensor, interp_start, interp_stop, a, va, m, vm, depth + 1, intervals);
+  append_volume_visibility_intervals_impl(
+    target, sensor, interp_start, interp_stop, m, vm, b, vb, depth + 1, intervals);
+}
+
+void append_volume_visibility_intervals(
+    const TargetAccumulator& target, const SensorConfig& sensor,
+    const ResolvedVisibilityState& seg_start,
+    const ResolvedVisibilityState& seg_stop,
+    std::vector<VisibilityInterval>& intervals) {
+  const bool va = volume_visible_from_resolved_state(target, sensor, seg_start);
+  const bool vb = volume_visible_from_resolved_state(target, sensor, seg_stop);
+  append_volume_visibility_intervals_impl(
+    target, sensor, seg_start, seg_stop, seg_start, va, seg_stop, vb, 0, intervals);
 }
 
 // Conservative, target-only, PRUNE-ONLY segment cull. Returns true when the
