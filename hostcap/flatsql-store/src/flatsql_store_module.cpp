@@ -17,13 +17,24 @@
  * This node maps cid -> {provider, source_name} (order-independent, no SDS parsing)
  * and writes those columns for the matching record; absent -> node CONFIG fallback.
  *
- * PULLED_AT: an OPTIONAL "trigger" input frame carries the fire wall-clock time
- * ([u64le unix_ms]) — host-supplied trigger metadata (a capability read, not
- * orchestration; the store has no clock). Written into the wrapper's pulled_at.
+ * PULLED_AT / BATCH_ID (fire-scoped, not invocation-scoped): an OPTIONAL
+ * "trigger" input frame carries the fire wall-clock time ([u64le unix_ms]) —
+ * host-supplied trigger metadata (a capability read, not orchestration; the
+ * store has no clock). The reactor may dispatch this node's `store()` entry
+ * MULTIPLE TIMES per fire (the OD node can emit results across more than one
+ * invocation/wave), so batch_id is derived from the FIRE's trigger timestamp
+ * ("F" + 16-hex unix_ms), NOT from the record set any single invocation
+ * happens to see — every store() call within one fire resolves to the SAME
+ * batch_id (see resolve_fire_scope for the full derivation + the drain-
+ * ordering guarantee it relies on: the trigger frame is always present on a
+ * fire's FIRST store() invocation). pulled_at is written from that same
+ * resolved fire timestamp for every row of the fire, not just the invocation
+ * that happened to carry the trigger frame.
  *
  * RETENTION (store-bloat bound): each fire appends a full fresh batch; without a
  * bound the arena grows unboundedly. The bound is decided ENTIRELY IN WASM here:
- * keep the latest K runs (distinct batch_id, ordered by pulled_at) PER TABLE — K
+ * keep the latest K runs (distinct batch_id, ordered by recency of ingest —
+ * MAX(_rowid), a trigger-independent ground truth) PER TABLE — K
  * from node CONFIG (default 4). Older runs are tombstoned and the arena is
  * physically reclaimed. Empirically (arena layer): tombstoning ALONE does NOT
  * shrink the snapshot (exportData dumps the raw append-only stream); reclaim
@@ -176,13 +187,109 @@ std::map<std::string, std::pair<std::string, std::string>> read_provenance_map()
   return m;
 }
 
-// Optional fire timestamp (unix ms) from the "trigger" port (host trigger metadata).
-uint64_t read_pulled_at() {
+// Optional fire timestamp (unix ms) carried by THIS invocation's "trigger" port
+// frame. Returns 0 when this particular invocation carries no trigger frame
+// (see fire-scoped batch identity below for why that is expected/handled, not
+// an error).
+uint64_t read_pulled_at_this_invocation() {
   const int32_t ti = plugin_find_input_index("trigger", 0);
   if (ti < 0) return 0;
   const plugin_input_frame_t* f = plugin_get_input_frame(static_cast<uint32_t>(ti));
   if (!f || !f->payload || f->payload_length < 8) return 0;
   return rd_u64le(f->payload);
+}
+
+// ── Fire-scoped batch identity (fixes the SILENT-DROP bug) ────────────────────
+// ROOT CAUSE this replaces: batch_id used to be a CIDv1 hash over the record
+// CIDs *seen by this one store() invocation*. But the flow reactor dispatches
+// `store` MULTIPLE TIMES per fire — the OD node emits omm/ocm/obd (+
+// provenance) across possibly-multiple invocations/waves, and each of those
+// routes new frames into the store node's queue, re-satisfying
+// flow_node_is_ready (kubo sdn/flowrt flow_runtime.cpp: a consumer is ready
+// once every upstream edge-producer has completed at least once AND its queue
+// is non-empty — it does NOT wait for the *whole* fire to finish). So one fire
+// could mint N distinct batch_ids, one per store() invocation; keep-K
+// retention (by distinct batch_id recency) then prunes same-fire siblings as
+// if they were separate historical runs — exactly the observed 26->11 drop
+// with ISS pruned entirely.
+//
+// FIX: derive batch_id from the FIRE's trigger timestamp, not from the record
+// set any single invocation happens to see. All store() invocations within
+// one fire must resolve to the SAME batch_id.
+//
+// DERIVATION (fixed, documented): batch_id = "F" + 16 lowercase-hex digits of
+// the fire's unix_ms timestamp (big-endian nibble order, zero-padded). Plain
+// hex rather than a hash: it is trivially human-auditable in the stored rows
+// (a raw wall-clock value, not another content hash indistinguishable from
+// the per-record cid), and it sorts lexicographically with recency — useful
+// for the retention debug story going forward. Format is otherwise opaque to
+// the read layer (a plain TEXT column), so this is a free choice, not a wire
+// contract.
+//
+// DRAIN-ORDERING ASSUMPTION THIS RELIES ON: kubo sdn/flowrt cronmount.go
+// `fireLocked` enqueues EVERY trigger-bound port's frame (the providers'
+// "config" tick AND the store's "trigger" fire-timestamp) via
+// `rt.EnqueueTriggerFrame` in a loop that completes BEFORE `rt.Drain(...)` is
+// ever called. So the store node's "trigger" port frame is already sitting at
+// the FRONT of its queue before any node in the flow is dispatched for this
+// fire, and nothing else can be queued ahead of it (route_output only queues
+// records once the upstream od node produces output, which cannot happen
+// before the drain begins). Given `begin_node_invocation` drains a node's
+// queue strictly front-first, the STORE NODE'S VERY FIRST INVOCATION OF EVERY
+// FIRE IS GUARANTEED TO CARRY THE TRIGGER FRAME (see od_supplemental_flow.go +
+// od_supplemental_drive_test.go, which enqueues config/trigger before Drain()
+// identically). Only that first invocation will have a non-zero
+// read_pulled_at_this_invocation(); every subsequent invocation of the SAME
+// fire (2nd+ wave) will see 0 (the single trigger frame was already consumed).
+//
+// So: this module keeps a PERSISTED (module-instance-lifetime) "last known
+// fire" — updated whenever an invocation DOES carry a trigger frame, and
+// reused by every invocation that doesn't. Because the trigger frame always
+// arrives on invocation #1 of a fire (never invocation 2+), by the time any
+// later invocation of the SAME fire runs, the persisted state already reflects
+// THIS fire's timestamp — not a stale one. The very first fire the module
+// instance ever processes is the only case where read is well-defined from
+// the first store() call, which is exactly when the trigger frame is present.
+//
+// If a deployment never wires the "trigger" port at all (trigger port is
+// declared optional in plugin-manifest.json), no fire timestamp is ever
+// available; the code falls back to the OLD per-invocation CID-hash (or the
+// config-supplied batch_id), which is honest best-effort in that configuration
+// (no way to know fire scope without a clock signal) — this is not a
+// regression, since that configuration never had fire-scoping information to
+// begin with.
+uint64_t g_last_fire_ts = 0;             // unix_ms of the most recent fire seen
+std::string g_last_fire_batch_id;        // derived batch_id for that fire
+
+std::string derive_batch_id_from_fire_ts(uint64_t unix_ms) {
+  static const char* kHex = "0123456789abcdef";
+  std::string s;
+  s.reserve(17);
+  s.push_back('F');
+  for (int shift = 60; shift >= 0; shift -= 4) {
+    s.push_back(kHex[(unix_ms >> shift) & 0xfu]);
+  }
+  return s;
+}
+
+// Resolves this invocation's effective (batch_id, pulled_at), updating/using
+// the persisted last-fire state as documented above.
+struct FireScope { std::string batch_id; uint64_t pulled_at; };
+FireScope resolve_fire_scope(const std::string& fallback_cid_concat_hash,
+                            const std::string& cfg_batch_id) {
+  const uint64_t this_invocation_ts = read_pulled_at_this_invocation();
+  if (this_invocation_ts != 0) {
+    g_last_fire_ts = this_invocation_ts;
+    g_last_fire_batch_id = derive_batch_id_from_fire_ts(this_invocation_ts);
+  }
+  if (!g_last_fire_batch_id.empty()) {
+    return FireScope{g_last_fire_batch_id, g_last_fire_ts};
+  }
+  // No trigger frame ever observed by this module instance (trigger port not
+  // wired in this deployment) — best-effort fallback, honest but NOT
+  // fire-scoped (documented above).
+  const std::string fb = fallback_cid_concat_hash.empty() ? cfg_batch_id : fallback_cid_concat_hash;
+  return FireScope{fb, 0};
 }
 
 // Wrapper FlatBuffer for the kubo-declared table. Field order == schema (voffset):
@@ -347,10 +454,14 @@ int store(void) {
 
   const Provenance cfg = read_config_provenance();
   const auto prov_map = read_provenance_map();
-  const uint64_t pulled_at = read_pulled_at();
 
-  // Pass 1: collect valid records + a PER-FIRE-UNIQUE batch_id = CIDv1 over the
-  // ordered concatenation of every valid record's own CID (deterministic, in-wasm).
+  // Pass 1: collect valid records. cid_concat is retained ONLY as the
+  // no-trigger-wired fallback hash input (see resolve_fire_scope) — it is no
+  // longer the primary batch_id source, because it varies per INVOCATION
+  // (this fire may dispatch `store` more than once; see the fire-scoped
+  // batch-identity comment above resolve_fire_scope for why that fragmented
+  // one fire into multiple batch_ids and caused retention to prune same-fire
+  // siblings, e.g. ISS, as if they were separate historical runs).
   struct Rec { const uint8_t* ptr; uint32_t len; std::string cid; Route route; };
   std::vector<Rec> recs;
   std::vector<uint8_t> cid_concat;
@@ -365,8 +476,11 @@ int store(void) {
     cid_concat.insert(cid_concat.end(), cid.begin(), cid.end());
     recs.push_back(Rec{f->payload, f->payload_length, std::move(cid), r});
   }
-  const std::string batch_id =
-      cid_concat.empty() ? cfg.batch_id : cid_v1_raw_sha256(cid_concat.data(), cid_concat.size());
+  const std::string fallback_hash =
+      cid_concat.empty() ? std::string() : cid_v1_raw_sha256(cid_concat.data(), cid_concat.size());
+  const FireScope fire = resolve_fire_scope(fallback_hash, cfg.batch_id);
+  const std::string& batch_id = fire.batch_id;
+  const uint64_t pulled_at = fire.pulled_at;
 
   uint32_t ingested = 0;
   for (const Rec& rec : recs) {
