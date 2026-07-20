@@ -6,8 +6,15 @@
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command", "direct"],
-  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "invokeSurfaces": [
+    "command",
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasi",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "fit",
@@ -19,22 +26,37 @@
             {
               "setId": "sds-oem",
               "allowedTypes": [
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
-                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
               ],
               "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Accepts a BATCH of 1..N $OEM frames (one per operator object); the threaded `fit` fans them across std::thread workers. Held in memory only; never stored."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 100000,
-          "required": true
+          "required": false,
+          "description": "Generic $OEM batch (untagged; provider from node CONFIG). At least one frame across any oem* port is required."
         },
         {
           "portId": "options",
           "acceptedTypeSets": [
             {
               "setId": "options",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
             }
           ],
           "minStreams": 0,
@@ -47,13 +69,152 @@
           "acceptedTypeSets": [
             {
               "setId": "text-ephemeris",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
           "description": "Back-compat command surface: SpaceX MEME text or CCSDS OEM KVN (inputFormat option selects/auto-detects)."
+        },
+        {
+          "portId": "oem_starlink",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Accepts a BATCH of 1..N $OEM frames (one per operator object); the threaded `fit` fans them across std::thread workers. Held in memory only; never stored."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Per-provider $OEM batch (starlink); the fit derives the provider token from the port and emits it on the provenance port."
+        },
+        {
+          "portId": "oem_glonass",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Accepts a BATCH of 1..N $OEM frames (one per operator object); the threaded `fit` fans them across std::thread workers. Held in memory only; never stored."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Per-provider $OEM batch (glonass); the fit derives the provider token from the port and emits it on the provenance port."
+        },
+        {
+          "portId": "oem_intelsat",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Accepts a BATCH of 1..N $OEM frames (one per operator object); the threaded `fit` fans them across std::thread workers. Held in memory only; never stored."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Per-provider $OEM batch (intelsat); the fit derives the provider token from the port and emits it on the provenance port."
+        },
+        {
+          "portId": "oem_cpf",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Accepts a BATCH of 1..N $OEM frames (one per operator object); the threaded `fit` fans them across std::thread workers. Held in memory only; never stored."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Per-provider $OEM batch (cpf); the fit derives the provider token from the port and emits it on the provenance port."
+        },
+        {
+          "portId": "oem_iss",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM ephemeris (FlatBuffer or aligned-binary). Accepts a BATCH of 1..N $OEM frames (one per operator object); the threaded `fit` fans them across std::thread workers. Held in memory only; never stored."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Per-provider $OEM batch (iss); the fit derives the provider token from the port and emits it on the provenance port."
         }
       ],
       "outputPorts": [
@@ -63,8 +224,18 @@
             {
               "setId": "sds-omm",
               "allowedTypes": [
-                { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
-                { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
               ],
               "description": "SDS $OMM supplemental-GP mean elements (ORIGINATOR=SDN-OD), aligned-binary. One $OMM per fitted object in the batch."
             }
@@ -79,8 +250,18 @@
             {
               "setId": "sds-obd",
               "allowedTypes": [
-                { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD" },
-                { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD"
+                },
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
               ],
               "description": "SDS $OBD orbit-determination run result (WRMS, iterations, DIFFERENTIAL_CORRECTION), aligned-binary."
             }
@@ -95,8 +276,18 @@
             {
               "setId": "sds-ocm",
               "allowedTypes": [
-                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" },
-                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM", "wireFormat": "aligned-binary", "requiredAlignment": 8 }
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                },
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
               ],
               "description": "SDS $OCM comprehensive message: epoch STATE + 6x6 COVARIANCE (normal-equations fit covariance) + OD residual summary, aligned-binary."
             }
@@ -110,13 +301,35 @@
           "acceptedTypeSets": [
             {
               "setId": "json-result",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }]
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
           "description": "Back-compat command surface: JSON fit result (text path only)."
+        },
+        {
+          "portId": "provenance",
+          "acceptedTypeSets": [
+            {
+              "setId": "od-provenance",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "CID-keyed provenance sidecar per emitted record: [u32 cid_len][cid][u32 provider_len][provider][u32 source_name_len][source_name]. The flatsql-store maps cid->{provider,source_name}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "Per-record provider attribution keyed by the record CID."
         }
       ],
       "maxBatch": 1,
@@ -124,9 +337,25 @@
     }
   ],
   "schemasUsed": [
-    { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
-    { "schemaName": "OMM.fbs", "fileIdentifier": "$OMM", "rootTypeName": "OMM" },
-    { "schemaName": "OBD.fbs", "fileIdentifier": "$OBD", "rootTypeName": "OBD" },
-    { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" }
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OBD.fbs",
+      "fileIdentifier": "$OBD",
+      "rootTypeName": "OBD"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    }
   ]
 }
