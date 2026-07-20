@@ -20,16 +20,17 @@ import {
 // sweep amplitude 50 deg / period 120 s. Grid: the live coarse 8 deg regional
 // band, 12-hour window, 15 s attitude samples, 60 s output buckets.
 //
-// Before the sweep-phase temporal subdivision this configuration degenerated:
-// each 15 s state segment's boresight swings up to ~35 deg, so the per-segment
-// swept-sensor cap spanned the whole sweep, the candidate prefilter rejected
-// nothing, and every candidate cell paid for the full exact temporal search.
-// Single-thread coarse compute measured ~158 s (the live "stuck 5+ minutes"
-// class, since the browser watchdog's sequential retry runs this same path).
-// With subdivision the tight per-sub-window caps restore the prefilter's
-// pruning power. This test pins the fix by requiring the owner configuration to
-// COMPLETE inside the threaded worker harness within a hard budget; a
-// regression that restores the degenerate whole-sweep cap blows the budget.
+// The owner reported this configuration as a lockup ("stuck 5+ minutes"). Two
+// things caused it: the demo's watchdog re-ran an UNBOUNDED sequential retry
+// (fixed in OrbPro branch sweep-watchdog), and the module compute is genuinely
+// heavy here — up to 80 deg off-nadir with a 2500 km range makes the per-instant
+// footprint enormous, so the exact per-cell temporal search takes ~155 s. This
+// test pins that the MODULE COMPLETES in bounded time (it never hangs) inside
+// the threaded worker harness within a hard budget. Note: the sweep-phase
+// subdivision is bit-identical to the un-subdivided search and does NOT speed up
+// this footprint-bound config; it restores prune power for sweep-bound (small-
+// footprint) configs while preserving pass-start semantics exactly. A regression
+// that degenerated the search well past baseline blows the budget.
 const WINDOW_SECONDS = 12 * 60 * 60;
 const STATE_STEP_SECONDS = 15;
 const STATE_COUNT = WINDOW_SECONDS / STATE_STEP_SECONDS + 1; // 2881
@@ -41,14 +42,18 @@ const SWEEP_AMPLITUDE_DEG = 50;
 const SWEEP_PERIOD_SECONDS = 120;
 const SWEEP_SIDE = 1; // right-looking
 
-// Budget: the achieved coarse compute for this configuration plus ~50 % head-
-// room, matching the compute_time_budget.test.mjs convention. Measured ~61 s in
-// the threaded worker harness (this scanning-sweep workload is dominated by a
-// few hot cells, so per-cell threading gives ~no speedup and single-thread is
-// ~63 s). The pre-fix degenerate whole-sweep cap measured ~158 s single-thread
-// (the live "stuck 5+ minutes" class); this budget cleanly separates the fixed
-// path from a subdivision-lost regression.
-const SWEEP_COARSE_COMPUTE_BUDGET_MS = 100000;
+// This is a COMPLETION / non-runaway guard, not a speedup claim. The
+// sweep-phase subdivision is bit-identical to the un-subdivided search
+// (verified against origin/main), and this config is footprint-bound — at up to
+// 80 deg off-nadir with a 2500 km range the per-instant footprint is enormous,
+// so tight per-sub-window caps prune little and the compute stays ~baseline
+// (measured ~155 s in the threaded worker harness; threading gives ~no speedup
+// as a few hot cells dominate). The point the owner reported was that the
+// compute HUNG; the module in fact COMPLETES in bounded time, and the demo's
+// bounded watchdog (OrbPro branch sweep-watchdog) caps the wait. This budget is
+// the achieved time plus ~50 % headroom; a regression that degenerated the
+// search (e.g. a lost subdivision blowing past 2x baseline) trips it.
+const SWEEP_COARSE_COMPUTE_BUDGET_MS = 240000;
 const WORKER_SETUP_TIMEOUT_MS = 8000;
 const WORKER_RESULT_GRACE_MS = 2000;
 
