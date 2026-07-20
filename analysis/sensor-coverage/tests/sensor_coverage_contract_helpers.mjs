@@ -483,6 +483,162 @@ export function polygonTarget({ targetId = 0, name = null, ring }) {
   );
 }
 
+// area-targets Phase 2 (3D volume targets). SPACE-domain witness is a free 3D
+// point, not a surface patch. Encodings (parser-matched in module.cpp):
+//   SPHERE → POSITION_M = ECEF centre, RADIUS_M, TARGET_KIND=SPHERE, DOMAIN=SPACE.
+//   BOX    → POLYGON_VERTICES = [minCornerEcef, maxCornerEcef] (two SCVVec3),
+//            TARGET_KIND=BOX, DOMAIN=SPACE.
+//   EXTRUDED_POLYGON → POLYGON_VERTICES = lon/lat degrees (z=0),
+//            MIN_ALTITUDE_M/MAX_ALTITUDE_M altitude band, DOMAIN=SPACE.
+export function sphereTarget({
+  targetId = 0,
+  name = null,
+  latitudeDeg,
+  longitudeDeg,
+  altitudeM = 0,
+  radiusM,
+  centerEcef = null,
+}) {
+  const ecef = centerEcef ?? geodeticToEcef(latitudeDeg, longitudeDeg, altitudeM);
+  return new SCVTargetT(
+    targetId,
+    null,
+    name,
+    scvCoordinateFrame.ECEF,
+    new SCVVec3T(ecef.x, ecef.y, ecef.z),
+    null,
+    radiusM,
+    scvTargetShape.SPHERE,
+    scvGeometryDomain.SPACE,
+    [],
+    0.0,
+    0.0,
+  );
+}
+
+export function boxTarget({ targetId = 0, name = null, minEcef, maxEcef }) {
+  return new SCVTargetT(
+    targetId,
+    null,
+    name,
+    scvCoordinateFrame.ECEF,
+    null,
+    null,
+    0.0,
+    scvTargetShape.BOX,
+    scvGeometryDomain.SPACE,
+    [
+      new SCVVec3T(minEcef.x, minEcef.y, minEcef.z),
+      new SCVVec3T(maxEcef.x, maxEcef.y, maxEcef.z),
+    ],
+    0.0,
+    0.0,
+  );
+}
+
+export function extrudedPolygonTarget({
+  targetId = 0,
+  name = null,
+  ring,
+  minAltitudeM,
+  maxAltitudeM,
+}) {
+  const vertices = ring.map(
+    ({ lonDeg, latDeg }) => new SCVVec3T(lonDeg, latDeg, 0.0),
+  );
+  return new SCVTargetT(
+    targetId,
+    null,
+    name,
+    scvCoordinateFrame.ECEF,
+    null,
+    null,
+    0.0,
+    scvTargetShape.EXTRUDED_POLYGON,
+    scvGeometryDomain.SPACE,
+    vertices,
+    minAltitudeM,
+    maxAltitudeM,
+  );
+}
+
+// Inverse of geodeticToEcef (iterative, machine-precision — the reference is
+// independent of the module's closed-form Bowring, and exact at any altitude).
+// Returns { latitudeDeg, longitudeDeg, altitudeM }.
+export function ecefToGeodetic({ x, y, z }) {
+  const a = WGS84_A_M;
+  const e2 = WGS84_E2;
+  const p = Math.hypot(x, y);
+  const longitude = Math.atan2(y, x);
+  let latitude = Math.atan2(z, p * (1 - e2));
+  let height = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const sinLat = Math.sin(latitude);
+    const primeVertical = a / Math.sqrt(1 - e2 * sinLat * sinLat);
+    const cosLat = Math.cos(latitude);
+    height = Math.abs(cosLat) > 1e-12
+      ? p / cosLat - primeVertical
+      : z / Math.max(Math.abs(sinLat), 1e-12) - primeVertical * (1 - e2);
+    latitude = Math.atan2(z, p * (1 - (e2 * primeVertical) / (primeVertical + height)));
+  }
+  return {
+    latitudeDeg: radiansToDegrees(latitude),
+    longitudeDeg: radiansToDegrees(longitude),
+    altitudeM: height,
+  };
+}
+
+// Footprint membership for a FREE 3D world point (no surface normal / horizon):
+// the SPACE-domain half of the volume-target hit predicate. Mirrors the module's
+// sensor_local_look_inside (range + conic/rect/SAR angular membership).
+// toleranceRad inflates (+) or shrinks (−) the exact angular boundaries.
+export function spacePointVisible(point, state, shape, toleranceRad = 0) {
+  const frame = state.resolvedFrame ?? resolvedFrame(state);
+  const sensorToPoint = subtract(point, state.position);
+  const range = magnitude(sensorToPoint);
+  if (!(range > 0) || !Number.isFinite(range)) {
+    return false;
+  }
+  if (range + 1e-6 < (shape.minRangeM ?? 0) || range - 1e-6 > shape.maxRangeM) {
+    return false;
+  }
+  const local = {
+    x: dot(sensorToPoint, frame.xAxis),
+    y: dot(sensorToPoint, frame.yAxis),
+    z: dot(sensorToPoint, frame.boresight),
+  };
+  if (!(local.z > 0)) {
+    return false;
+  }
+  if (shape.kind === "rectangular") {
+    const cross = Math.atan2(Math.abs(local.x), local.z);
+    const along = Math.atan2(Math.abs(local.y), local.z);
+    return (
+      cross <= degreesToRadians(shape.crossTrackHalfAngleDeg) + toleranceRad &&
+      along <= degreesToRadians(shape.alongTrackHalfAngleDeg) + toleranceRad
+    );
+  }
+  const off = Math.acos(clamp(local.z / range, -1, 1));
+  if (shape.kind === "sar-annular-sector") {
+    const inInner = off + toleranceRad >= degreesToRadians(shape.innerLookAngleDeg);
+    const inOuter = off <= degreesToRadians(shape.outerLookAngleDeg) + toleranceRad;
+    if (!inInner || !inOuter) return false;
+    const clockDeg = radiansToDegrees(Math.atan2(local.y, local.x));
+    const normalize360 = (v) => ((v % 360) + 360) % 360;
+    const c = normalize360(clockDeg);
+    const lo = normalize360(shape.minClockAngleDeg);
+    const hi = normalize360(shape.maxClockAngleDeg);
+    const span = (hi - lo + 360) % 360;
+    if (span === 0) return true; // full circle
+    return ((c - lo + 360) % 360) <= span;
+  }
+  // conic
+  return (
+    off <= degreesToRadians(shape.outerHalfAngleDeg) + toleranceRad &&
+    off + toleranceRad >= degreesToRadians(shape.innerHalfAngleDeg ?? 0)
+  );
+}
+
 export function decodeTargetResults(response) {
   const resultEnvelope = response.outputs
     .filter((frame) => frame.typeRef?.fileIdentifier === "$SCV")
