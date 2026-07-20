@@ -43,6 +43,28 @@ constexpr double kSensorShapeEpsilon = 1.0e-12;
 constexpr double kCoverageSwathRenderAltitudeM = 1200.0;
 constexpr int kVisibilityTransitionRefinementIterations = 8;
 constexpr int kVisibilitySearchMaxDepth = 12;
+// ── Sweep-phase temporal subdivision (scanning/swept sensors) ────────────────
+// When the boresight swings widely across a single state segment (a scanning
+// SAR or rectangular sensor whose gimbal rolls tens of degrees between the
+// 15 s attitude samples), the conservative swept-sensor cap for that whole
+// segment degenerates: it spans the entire sweep, so the per-segment candidate
+// prefilter rejects nothing and every candidate cell pays for the full exact
+// temporal search. The fix is to split such a segment, BEFORE the candidate
+// prefilter, into equal-time sub-intervals whose per-sub-interval boresight arc
+// is at most kSweepSubIntervalTargetSwingDeg wide. Each sub-interval then has a
+// TIGHT swept cap that the existing prefilter can use to reject most cells
+// cheaply, and its shape-proof context is built ONCE and reused as the root
+// context for every candidate cell in that sub-interval (per-sub-interval
+// envelope caching). This is prune-only: the sub-intervals tile the segment
+// exactly (interpolation basis unchanged), every exact accept and leaf
+// refinement is the untouched search run over a narrower window, and the
+// emitted intervals are re-coalesced by merge_intervals, so the accumulated
+// raster matches the dense brute-force reference. Segments whose swing is at or
+// below the target (every non-swept sensor, and any conic-continuum sensor,
+// which is excluded) take subdivisions == 1 and run the byte-identical legacy
+// path.
+constexpr double kSweepSubIntervalTargetSwingDeg = 3.0;
+constexpr int kSweepMaxSubIntervals = 64;
 constexpr double kMaximumGeodeticGeocentricLatitudeSeparationDeg =
   0.19242430115956035;
 constexpr size_t kGridCellCacheMaxEntries = 4;
@@ -6440,10 +6462,22 @@ void accumulate_grid_coverage_products_range(
       std::numeric_limits<uint32_t>::max());
     std::vector<uint8_t> cached_visibility(cells.size(), 0u);
 
-    const auto process_segment = [&](
+    // Process ONE temporal window of a state segment. For the byte-identical
+    // legacy path the window spans the whole segment (interp basis == window);
+    // for a swept sensor the enclosing process_segment splits the segment into
+    // tighter sub-windows and calls this once per sub-window. The interpolation
+    // basis is ALWAYS the full segment (interp_start/interp_stop) so the
+    // nlerp attitude curve the temporal search samples is unchanged; only the
+    // searched window [seg_start, seg_stop] and its cached shape-proof context
+    // narrow. use_cache carries the cross-segment start/stop visibility reuse,
+    // which is disabled for sub-windows (their candidate sets differ).
+    const auto process_window = [&](
+        const ResolvedVisibilityState& interp_start,
+        const ResolvedVisibilityState& interp_stop,
         const ResolvedVisibilityState& seg_start,
         const ResolvedVisibilityState& seg_stop,
-        uint32_t state_index) {
+        uint32_t state_index,
+        bool use_cache) {
       candidate_generation = next_candidate_generation(
         candidate_generation,
         candidate_marks);
@@ -6530,7 +6564,7 @@ void accumulate_grid_coverage_products_range(
         std::vector<VisibilityInterval> intervals;
         bool known_visible_start = false;
         const bool* known_visible_start_pointer = nullptr;
-        if (cached_visibility_state_index[cell_index] == state_index) {
+        if (use_cache && cached_visibility_state_index[cell_index] == state_index) {
           known_visible_start = cached_visibility[cell_index] != 0u;
           known_visible_start_pointer = &known_visible_start;
         }
@@ -6538,8 +6572,8 @@ void accumulate_grid_coverage_products_range(
         append_refined_visibility_intervals(
           cell.geometry,
           track.sensor,
-          seg_start,
-          seg_stop,
+          interp_start,
+          interp_stop,
           seg_start.state.elapsedSeconds,
           seg_stop.state.elapsedSeconds,
           0,
@@ -6556,14 +6590,75 @@ void accumulate_grid_coverage_products_range(
           seg_start,
           seg_stop,
           intervals);
-        cached_visibility_state_index[cell_index] = state_index + 1u;
-        cached_visibility[cell_index] = visible_stop ? 1u : 0u;
+        if (use_cache) {
+          cached_visibility_state_index[cell_index] = state_index + 1u;
+          cached_visibility[cell_index] = visible_stop ? 1u : 0u;
+        }
         for (const VisibilityInterval& interval : intervals) {
           add_cell_interval(
             cell,
             interval,
             track.sensor.sensorId);
         }
+      }
+    };
+
+    // Sweep-phase temporal subdivision dispatcher. A non-swept segment (and any
+    // conic-continuum sensor) runs the single byte-identical window below; a
+    // scanning SAR/rectangular segment whose boresight swings more than the
+    // target is split into equal-time sub-windows so each carries a TIGHT swept
+    // cap and shape-proof context. Sub-windows tile the segment exactly (first
+    // starts at seg_start, last ends at seg_stop) and are re-coalesced by
+    // merge_intervals downstream.
+    const auto process_segment = [&](
+        const ResolvedVisibilityState& seg_start,
+        const ResolvedVisibilityState& seg_stop,
+        uint32_t state_index) {
+      int subdivisions = 1;
+      const SensorShapeKind shape_kind = track.sensor.shapeContract.kind;
+      const bool subdividable =
+        !has_solid_conic_continuum_contract(track.sensor) &&
+        (shape_kind == SensorShapeKind::SarAnnularSector ||
+         shape_kind == SensorShapeKind::Rectangular);
+      if (subdividable) {
+        const double swing_cos = clamp(
+          dot(seg_start.frame.boresight, seg_stop.frame.boresight), -1.0, 1.0);
+        const double swing_deg = std::acos(swing_cos) * 57.29577951308232;
+        if (swing_deg > kSweepSubIntervalTargetSwingDeg) {
+          subdivisions = static_cast<int>(
+            std::ceil(swing_deg / kSweepSubIntervalTargetSwingDeg));
+          if (subdivisions > kSweepMaxSubIntervals) {
+            subdivisions = kSweepMaxSubIntervals;
+          }
+          if (subdivisions < 1) {
+            subdivisions = 1;
+          }
+        }
+      }
+      if (subdivisions <= 1) {
+        process_window(
+          seg_start, seg_stop, seg_start, seg_stop, state_index, true);
+        return;
+      }
+      const double t0 = seg_start.state.elapsedSeconds;
+      const double t1 = seg_stop.state.elapsedSeconds;
+      for (int s = 0; s < subdivisions; ++s) {
+        const ResolvedVisibilityState win_start =
+          (s == 0)
+            ? seg_start
+            : resolve_visibility_state(interpolate_state(
+                seg_start.state,
+                seg_stop.state,
+                t0 + (t1 - t0) * (static_cast<double>(s) / subdivisions)));
+        const ResolvedVisibilityState win_stop =
+          (s == subdivisions - 1)
+            ? seg_stop
+            : resolve_visibility_state(interpolate_state(
+                seg_start.state,
+                seg_stop.state,
+                t0 + (t1 - t0) * (static_cast<double>(s + 1) / subdivisions)));
+        process_window(
+          seg_start, seg_stop, win_start, win_stop, state_index, false);
       }
     };
 
