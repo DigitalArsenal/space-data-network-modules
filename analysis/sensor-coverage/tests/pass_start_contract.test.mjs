@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -6,11 +7,23 @@ import {
   conicShape,
   createContractHarness,
   createCoveragePayload,
+  dot,
+  geodeticToEcef,
   gridDimensions,
+  interpolateState,
   invokeAndReadCoverage,
   lookAngleDegrees,
+  magnitude,
+  resolvedFrame,
   stateSample,
+  subtract,
+  surfacePointVisible,
 } from "./sensor_coverage_contract_helpers.mjs";
+
+const MODULE_SOURCE = readFileSync(
+  new URL("../src/cpp/module.cpp", import.meta.url),
+  "utf8",
+);
 
 // Live-scale contract fixture: WGS84 BODY_FIXED ECEF metres and SI seconds,
 // 12 hours of a closed-form 550 km / 51.6 degree circular orbit sampled every
@@ -73,6 +86,375 @@ function contiguousRunStarts(output, cellIndex) {
   }
   return starts;
 }
+
+// Exact owner-reported GSD-20/H3 provenance fixture. These are the live
+// BODY_FIXED ECEF states and sensor-frame quaternions bounding the false
+// first-swath split. The single cell is raster member 13375 of H3
+// 83d743fffffffff in the production request.
+const LIVE_MICROGAP_GRID = Object.freeze({
+  minLatitudeDeg: -51,
+  maxLatitudeDeg: -50.5,
+  minLongitudeDeg: 27.5,
+  maxLongitudeDeg: 28,
+  latitudeStepDeg: 0.5,
+  longitudeStepDeg: 0.5,
+});
+const LIVE_MICROGAP_SHAPE = conicShape({
+  outerHalfAngleDeg: 12.5,
+  maxRangeM: 1_600_000,
+});
+const LIVE_MICROGAP_STATES = Object.freeze([
+  stateSample({
+    elapsedSeconds: 9885,
+    position: {
+      x: 4008024.7429048102,
+      y: 2064414.0666255667,
+      z: -5200760.295066231,
+    },
+    velocity: {
+      x: -4769.122505597513,
+      y: 5288.686849553442,
+      z: -1575.8934750947878,
+    },
+    quaternion: {
+      x: 0.0015684387115439593,
+      y: -0.0005480348341834906,
+      z: -0.000017333637233522627,
+      w: 0.9999986196777344,
+    },
+  }),
+  stateSample({
+    elapsedSeconds: 9900,
+    position: {
+      x: 3936030.6103196903,
+      y: 2143537.1950419247,
+      z: -5223682.249652127,
+    },
+    velocity: {
+      x: -4829.9110941748295,
+      y: 5260.874646371834,
+      z: -1480.2992874511644,
+    },
+    quaternion: {
+      x: 0.0015761964840169613,
+      y: -0.0005171159050773068,
+      z: 0.000015129295544017382,
+      w: 0.999998623982498,
+    },
+  }),
+]);
+
+function lerpVector(start, stop, fraction) {
+  return {
+    x: start.x + (stop.x - start.x) * fraction,
+    y: start.y + (stop.y - start.y) * fraction,
+    z: (start.z ?? 0) + ((stop.z ?? 0) - (start.z ?? 0)) * fraction,
+  };
+}
+
+function quadraticBernsteinProduct(left, right) {
+  return [
+    left[0] * right[0],
+    0.5 * (left[0] * right[1] + left[1] * right[0]),
+    (
+      left[0] * right[2] +
+      4 * left[1] * right[1] +
+      left[2] * right[0]
+    ) / 6,
+    0.5 * (left[1] * right[2] + left[2] * right[1]),
+    left[2] * right[2],
+  ];
+}
+
+function jointConicQuarticControls(
+  lookStart,
+  lookStop,
+  rawBoresightStart,
+  rawBoresightStop,
+  thresholdCosine,
+) {
+  const numerator = [
+    dot(lookStart, rawBoresightStart),
+    0.5 * (
+      dot(lookStart, rawBoresightStop) +
+      dot(lookStop, rawBoresightStart)
+    ),
+    dot(lookStop, rawBoresightStop),
+  ];
+  const lookNormSquared = [
+    dot(lookStart, lookStart),
+    dot(lookStart, lookStop),
+    dot(lookStop, lookStop),
+  ];
+  const boresightNormSquared = [
+    dot(rawBoresightStart, rawBoresightStart),
+    dot(rawBoresightStart, rawBoresightStop),
+    dot(rawBoresightStop, rawBoresightStop),
+  ];
+  const numeratorSquared = quadraticBernsteinProduct(numerator, numerator);
+  const normProduct = quadraticBernsteinProduct(
+    lookNormSquared,
+    boresightNormSquared,
+  );
+  return {
+    numerator,
+    quartic: numeratorSquared.map(
+      (value, index) =>
+        value - thresholdCosine * thresholdCosine * normProduct[index],
+    ),
+  };
+}
+
+test("bridge proof is pinned to the original affine nlerp parameter", () => {
+  assert.match(
+    MODULE_SOURCE,
+    /raw_affine_boresight_interval/,
+    "bridge must recover raw boresights from the original interpolation basis",
+  );
+  assert.match(
+    MODULE_SOURCE,
+    /positive_quartic_bernstein_lower_bound/,
+    "solid-conic bridge must use the cancellation-safe quartic proof",
+  );
+  assert.match(
+    MODULE_SOURCE,
+    /lower_operation_scale[\s\S]*std::fabs\(left\.lower\)[\s\S]*std::fabs\(right\.lower\)/,
+    "cross-control averages must guard pre-cancellation operand magnitude",
+  );
+});
+
+test("absolute-fraction quartic rejects a normalized-local false proof", () => {
+  // Materially separated original boresights make nlerp non-associative in
+  // parameter. On this deterministic adversary, replacing the raw absolute
+  // chords U(f) with normalized local endpoints would falsely certify a cone
+  // whose cosine threshold is 0.3.
+  const originalBoresightStart = { x: 1, y: 0, z: 0 };
+  const originalBoresightStop = {
+    x: -0.9321599516425437,
+    y: 0.3620467159825795,
+    z: 0,
+  };
+  const fractionStart = 0.568141835155412;
+  const fractionStop = 0.9549578646382244;
+  const lookStart = {
+    x: 0.3508176350688649,
+    y: 0.3906522777438855,
+    z: 0,
+  };
+  const lookStop = {
+    x: -0.19103289117691374,
+    y: 0.5612612540252514,
+    z: 0,
+  };
+  const rawStart = lerpVector(
+    originalBoresightStart,
+    originalBoresightStop,
+    fractionStart,
+  );
+  const rawStop = lerpVector(
+    originalBoresightStart,
+    originalBoresightStop,
+    fractionStop,
+  );
+  const unitStart = lerpVector(rawStart, rawStart, 0);
+  const unitStop = lerpVector(rawStop, rawStop, 0);
+  for (const unit of [unitStart, unitStop]) {
+    const length = magnitude(unit);
+    unit.x /= length;
+    unit.y /= length;
+  }
+  const wrongLocalNumerator = [
+    dot(lookStart, unitStart),
+    0.5 * (dot(lookStart, unitStop) + dot(lookStop, unitStart)),
+    dot(lookStop, unitStop),
+  ];
+  const absoluteCrossDots = [
+    dot(lookStart, rawStop),
+    dot(lookStop, rawStart),
+  ];
+  assert.ok(
+    absoluteCrossDots[0] < 0 && absoluteCrossDots[1] > 0,
+    "adversary must exercise opposite-signed cross-control cancellation",
+  );
+  const wrongLocalLower = Math.min(...wrongLocalNumerator) /
+    Math.max(magnitude(lookStart), magnitude(lookStop));
+  assert.ok(
+    wrongLocalLower > 0.3,
+    `control requires the unsound local proof to accept; got ${wrongLocalLower}`,
+  );
+
+  const absoluteProof = jointConicQuarticControls(
+    lookStart,
+    lookStop,
+    rawStart,
+    rawStop,
+    0.3,
+  );
+  assert.ok(
+    Math.min(...absoluteProof.quartic) < 0,
+    "the absolute-fraction proof must stay inconclusive",
+  );
+
+  let denseMinimumCosine = 1;
+  let denseMinimumSquaredClearance = Number.POSITIVE_INFINITY;
+  const denseSteps = 100_000;
+  for (let index = 0; index <= denseSteps; index += 1) {
+    const localFraction = index / denseSteps;
+    const absoluteFraction = fractionStart +
+      (fractionStop - fractionStart) * localFraction;
+    const look = lerpVector(lookStart, lookStop, localFraction);
+    const rawBoresight = lerpVector(
+      originalBoresightStart,
+      originalBoresightStop,
+      absoluteFraction,
+    );
+    denseMinimumCosine = Math.min(
+      denseMinimumCosine,
+      dot(look, rawBoresight) /
+        (magnitude(look) * magnitude(rawBoresight)),
+    );
+    const numerator = dot(look, rawBoresight);
+    denseMinimumSquaredClearance = Math.min(
+      denseMinimumSquaredClearance,
+      numerator * numerator -
+        0.3 * 0.3 * dot(look, look) * dot(rawBoresight, rawBoresight),
+    );
+  }
+  assert.ok(
+    denseMinimumCosine < 0.3,
+    `adversary must contain real invisibility; got ${denseMinimumCosine}`,
+  );
+  assert.ok(
+    Math.min(...absoluteProof.quartic) <=
+      denseMinimumSquaredClearance + 1e-12,
+    "absolute Bernstein minimum must contain the dense actual clearance",
+  );
+});
+
+test("live GSD-20 grazing corner remains one contiguous solid-conic pass", async (t) => {
+  // Independent closed-form oracle: the cell's northeast corner is one of
+  // the module's own nine fixed samples. It stays inside the solid cone at
+  // every microsecond across the exact 1.443 ms interval that the deployed
+  // module declares inactive. A bridge is therefore physically required.
+  const gapStartSeconds = 9896.826783;
+  const gapStopSeconds = 9896.828226;
+  const witnessStepSeconds = 0.000001;
+  const witnessSampleCount = Math.round(
+    (gapStopSeconds - gapStartSeconds) / witnessStepSeconds,
+  );
+  const originalStartFrame = resolvedFrame(LIVE_MICROGAP_STATES[0]);
+  const originalStopFrame = resolvedFrame(LIVE_MICROGAP_STATES[1]);
+  const interpolationSpan =
+    LIVE_MICROGAP_STATES[1].elapsedSeconds -
+    LIVE_MICROGAP_STATES[0].elapsedSeconds;
+  const rawBoresightAt = (elapsedSeconds) => lerpVector(
+    originalStartFrame.boresight,
+    originalStopFrame.boresight,
+    (elapsedSeconds - LIVE_MICROGAP_STATES[0].elapsedSeconds) /
+      interpolationSpan,
+  );
+  const surfacePosition = geodeticToEcef(-50.5, 28, 0);
+  const proofStartState = interpolateState(
+    LIVE_MICROGAP_STATES[0],
+    LIVE_MICROGAP_STATES[1],
+    gapStartSeconds,
+  );
+  const proofStopState = interpolateState(
+    LIVE_MICROGAP_STATES[0],
+    LIVE_MICROGAP_STATES[1],
+    gapStopSeconds,
+  );
+  const membershipThreshold = Math.cos(12.5 * Math.PI / 180 + 1e-12);
+  const liveProof = jointConicQuarticControls(
+    subtract(surfacePosition, proofStartState.position),
+    subtract(surfacePosition, proofStopState.position),
+    rawBoresightAt(gapStartSeconds),
+    rawBoresightAt(gapStopSeconds),
+    membershipThreshold,
+  );
+  assert.ok(
+    Math.min(...liveProof.numerator) > 0,
+    "positive numerator makes squared cone membership equivalent",
+  );
+  assert.ok(
+    Math.min(...liveProof.quartic) > 0,
+    `absolute-fraction quartic must prove the live gap: ${liveProof.quartic}`,
+  );
+  let denseMinimumSquaredClearance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index <= witnessSampleCount; index += 1) {
+    const elapsedSeconds = index === witnessSampleCount
+      ? gapStopSeconds
+      : gapStartSeconds + index * witnessStepSeconds;
+    const state = interpolateState(
+      LIVE_MICROGAP_STATES[0],
+      LIVE_MICROGAP_STATES[1],
+      elapsedSeconds,
+    );
+    assert.equal(
+      surfacePointVisible(-50.5, 28, state, LIVE_MICROGAP_SHAPE),
+      true,
+      `northeast-corner exact witness must remain visible at ${elapsedSeconds}`,
+    );
+    const look = subtract(surfacePosition, state.position);
+    const rawBoresight = rawBoresightAt(elapsedSeconds);
+    const numerator = dot(look, rawBoresight);
+    denseMinimumSquaredClearance = Math.min(
+      denseMinimumSquaredClearance,
+      numerator * numerator -
+        membershipThreshold * membershipThreshold *
+          dot(look, look) * dot(rawBoresight, rawBoresight),
+    );
+  }
+  assert.ok(denseMinimumSquaredClearance > 0);
+  assert.ok(
+    Math.min(...liveProof.quartic) <= denseMinimumSquaredClearance + 0.1,
+    "live Bernstein minimum must contain the dense actual clearance",
+  );
+
+  const harness = await createContractHarness(t);
+  if (!harness) return;
+  t.after(async () => {
+    await harness.destroy();
+  });
+  const output = await invokeAndReadCoverage(
+    harness,
+    createCoveragePayload({
+      id: "live-gsd20-solid-conic-microgap",
+      grid: LIVE_MICROGAP_GRID,
+      timeGrid: {
+        start: 9896.82,
+        stop: 9896.84,
+        step: 0.000001,
+        count: 20_001,
+      },
+      states: LIVE_MICROGAP_STATES,
+      shape: LIVE_MICROGAP_SHAPE,
+      includePackedGeometry: false,
+    }),
+  );
+  const passStartBuckets = output.bucketPassStartCount.flatMap(
+    (count, bucketIndex) => Array.from({ length: count }, () => bucketIndex),
+  );
+  const accessRunStarts = contiguousRunStarts(output, 0);
+  const observed = {
+    passCount: output.passCount[0],
+    passStartCount: passStartBuckets.length,
+    accessRunCount: accessRunStarts.length,
+  };
+  const provenance = {
+    passStartsSeconds: passStartBuckets.map(
+      (bucketIndex) => output.bucketStart[bucketIndex],
+    ),
+    accessRunStartsSeconds: accessRunStarts.map(
+      (bucketIndex) => output.bucketStart[bucketIndex],
+    ),
+  };
+  assert.deepEqual(
+    observed,
+    { passCount: 1, passStartCount: 1, accessRunCount: 1 },
+    `one continuous exact witness must produce one pass/start/run; observed ${JSON.stringify(provenance)}`,
+  );
+});
 
 const TANGENCY_GRID = Object.freeze({
   minLatitudeDeg: 0,
