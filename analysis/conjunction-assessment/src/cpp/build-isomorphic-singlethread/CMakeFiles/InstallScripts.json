@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
