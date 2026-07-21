@@ -2819,6 +2819,216 @@ double deflate_proof_lower_bound(double value) {
   return std::nextafter(deflated, -std::numeric_limits<double>::infinity());
 }
 
+struct ProofBounds {
+  double lower = -std::numeric_limits<double>::infinity();
+  double upper = std::numeric_limits<double>::infinity();
+  bool valid = false;
+};
+
+ProofBounds proof_dot_bounds(Vec3 left, Vec3 right) {
+  const double terms[3] = {
+    left.x * right.x,
+    left.y * right.y,
+    left.z * right.z,
+  };
+  const double value = (terms[0] + terms[1]) + terms[2];
+  const double operation_scale =
+    std::fabs(terms[0]) + std::fabs(terms[1]) + std::fabs(terms[2]);
+  if (!std::isfinite(value) || !std::isfinite(operation_scale)) {
+    return {};
+  }
+  // Scale the guard by the pre-cancellation terms, not by the rounded dot.
+  // That keeps this interval outward when differently signed ECEF products
+  // nearly cancel.
+  const double error =
+    128.0 * std::numeric_limits<double>::epsilon() *
+      std::max(1.0, operation_scale);
+  return {
+    std::nextafter(
+      value - error,
+      -std::numeric_limits<double>::infinity()),
+    std::nextafter(
+      value + error,
+      std::numeric_limits<double>::infinity()),
+    true,
+  };
+}
+
+ProofBounds proof_average_bounds(
+    const ProofBounds& left,
+    const ProofBounds& right) {
+  if (!left.valid || !right.valid) {
+    return {};
+  }
+  const double lower_sum = left.lower + right.lower;
+  const double upper_sum = left.upper + right.upper;
+  const double lower_operation_scale =
+    0.5 * (std::fabs(left.lower) + std::fabs(right.lower));
+  const double upper_operation_scale =
+    0.5 * (std::fabs(left.upper) + std::fabs(right.upper));
+  if (
+    !std::isfinite(lower_sum) ||
+    !std::isfinite(upper_sum) ||
+    !std::isfinite(lower_operation_scale) ||
+    !std::isfinite(upper_operation_scale)
+  ) {
+    return {};
+  }
+  // The two cross dots can be large and opposite-signed. Bound the average's
+  // addition by the operand magnitudes so cancellation cannot erase its
+  // rounding guard.
+  const double lower_error =
+    128.0 * std::numeric_limits<double>::epsilon() *
+      std::max(1.0, lower_operation_scale);
+  const double upper_error =
+    128.0 * std::numeric_limits<double>::epsilon() *
+      std::max(1.0, upper_operation_scale);
+  return {
+    std::nextafter(
+      0.5 * lower_sum - lower_error,
+      -std::numeric_limits<double>::infinity()),
+    std::nextafter(
+      0.5 * upper_sum + upper_error,
+      std::numeric_limits<double>::infinity()),
+    true,
+  };
+}
+
+ProofBounds positive_bernstein_product_control(
+    const ProofBounds (&left)[3],
+    const ProofBounds (&right)[3],
+    int control_index) {
+  // Degree-2 Bernstein products become degree 4. Integer numerators avoid
+  // treating rounded 1/6 and 2/3 coefficients as exact:
+  //   k=0: [1]/1; k=1: [1,1]/2; k=2: [1,4,1]/6;
+  //   k=3: [1,1]/2; k=4: [1]/1.
+  static constexpr int kWeights[5][3] = {
+    {1, 0, 0},
+    {1, 1, 0},
+    {1, 4, 1},
+    {1, 1, 0},
+    {1, 0, 0},
+  };
+  static constexpr int kDenominators[5] = {1, 2, 6, 2, 1};
+  const int first_left_index = std::max(0, control_index - 2);
+  const int last_left_index = std::min(2, control_index);
+  double lower_numerator = 0.0;
+  double upper_numerator = 0.0;
+  int term_index = 0;
+  for (int left_index = first_left_index;
+       left_index <= last_left_index;
+       ++left_index, ++term_index) {
+    const int right_index = control_index - left_index;
+    const ProofBounds& left_control = left[left_index];
+    const ProofBounds& right_control = right[right_index];
+    if (
+      !left_control.valid ||
+      !right_control.valid ||
+      !(left_control.lower > 0.0) ||
+      !(right_control.lower > 0.0)
+    ) {
+      return {};
+    }
+    const double weight = static_cast<double>(
+      kWeights[control_index][term_index]);
+    const double lower_term = deflate_proof_lower_bound(
+      weight * left_control.lower * right_control.lower);
+    const double upper_term = inflate_proof_upper_bound(
+      weight * left_control.upper * right_control.upper);
+    lower_numerator = deflate_proof_lower_bound(
+      lower_numerator + lower_term);
+    upper_numerator = inflate_proof_upper_bound(
+      upper_numerator + upper_term);
+  }
+  const double denominator = static_cast<double>(
+    kDenominators[control_index]);
+  return {
+    deflate_proof_lower_bound(lower_numerator / denominator),
+    inflate_proof_upper_bound(upper_numerator / denominator),
+    true,
+  };
+}
+
+double proof_difference_lower_bound(
+    double minuend_lower,
+    double subtrahend_upper) {
+  const double value = minuend_lower - subtrahend_upper;
+  const double operation_scale =
+    std::fabs(minuend_lower) + std::fabs(subtrahend_upper);
+  if (!std::isfinite(value) || !std::isfinite(operation_scale)) {
+    return -std::numeric_limits<double>::infinity();
+  }
+  // The two terms can be O(1e11) while their physically meaningful cone
+  // clearance is O(1e3). Guard the subtraction by both operands so
+  // cancellation cannot turn an inconclusive interval into an accept.
+  const double error =
+    128.0 * std::numeric_limits<double>::epsilon() *
+      std::max(1.0, operation_scale);
+  return std::nextafter(
+    value - error,
+    -std::numeric_limits<double>::infinity());
+}
+
+bool positive_quartic_bernstein_lower_bound(
+    const ProofBounds (&numerator)[3],
+    const ProofBounds (&look_norm_squared)[3],
+    const ProofBounds (&boresight_norm_squared)[3],
+    double threshold_cosine) {
+  if (
+    !(threshold_cosine > 0.0) ||
+    !(threshold_cosine <= 1.0) ||
+    !std::isfinite(threshold_cosine)
+  ) {
+    // Squaring is equivalent to the positive-cone predicate only for a
+    // positive cosine threshold. Wider cones keep the established fallback.
+    return false;
+  }
+  for (int index = 0; index < 3; ++index) {
+    if (
+      !numerator[index].valid ||
+      !look_norm_squared[index].valid ||
+      !boresight_norm_squared[index].valid ||
+      !(numerator[index].lower > 0.0) ||
+      !(look_norm_squared[index].lower > 0.0) ||
+      !(boresight_norm_squared[index].lower > 0.0)
+    ) {
+      // Positive Bernstein controls prove A(v)>0 and both squared norms >0
+      // throughout the interval. Signed controls require general interval
+      // products and deliberately fall back instead.
+      return false;
+    }
+  }
+  const double threshold_square = threshold_cosine * threshold_cosine;
+  const ProofBounds threshold_squared{
+    deflate_proof_lower_bound(threshold_square),
+    inflate_proof_upper_bound(threshold_square),
+    std::isfinite(threshold_square),
+  };
+  for (int control_index = 0; control_index < 5; ++control_index) {
+    const ProofBounds numerator_squared =
+      positive_bernstein_product_control(
+        numerator,
+        numerator,
+        control_index);
+    const ProofBounds norm_product =
+      positive_bernstein_product_control(
+        look_norm_squared,
+        boresight_norm_squared,
+        control_index);
+    if (!numerator_squared.valid || !norm_product.valid) {
+      return false;
+    }
+    const double threshold_norm_upper = inflate_proof_upper_bound(
+      threshold_squared.upper * norm_product.upper);
+    if (!(proof_difference_lower_bound(
+          numerator_squared.lower,
+          threshold_norm_upper) >= 0.0)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 struct UnitDirectionEnvelope {
   Vec3 center;
   double chordError = 2.0;
@@ -5040,7 +5250,9 @@ bool fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
     const ResolvedVisibilityState& stop,
     const UnitDirectionEnvelope& boresight,
     const UnitDirectionEnvelope& x_axis,
-    const UnitDirectionEnvelope& y_axis) {
+    const UnitDirectionEnvelope& y_axis,
+    const Vec3* raw_affine_boresight_start = nullptr,
+    const Vec3* raw_affine_boresight_stop = nullptr) {
   // Area/point-target region gate (Gate 2 — whole-interval concrete witness).
   // This is the single sink for every "one immutable ground point stays visible
   // across the interval" proof. Region membership is time-invariant for a fixed
@@ -5127,6 +5339,61 @@ bool fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
     shape.innerHalfAngleRad <= 1.0e-14 &&
     shape.clockRange.fullCircle
   ) {
+    if (raw_affine_boresight_start && raw_affine_boresight_stop) {
+      // On the ORIGINAL state segment, observer position P(f) and the
+      // unnormalized nlerp chord U(f) are affine in the same absolute
+      // fraction f. Restricting that segment to this bridge interval keeps
+      // L(v)=surface-P(v) and U(v) affine in one local v; the actual boresight
+      // is exactly U/|U|. Therefore A=L.U, R=|L|^2, and S=|U|^2 are quadratic
+      // Bernstein polynomials. Positive A plus
+      //
+      //   F(v) = A(v)^2 - membershipCos^2 R(v)S(v) >= 0
+      //
+      // proves the same fixed WGS84 witness remains inside the inclusive
+      // cone. Degree-2 products have exact degree-4 Bernstein controls, so
+      // outward-lower-bounding all five F controls is a constructive proof
+      // for the complete interval. The positive-control restriction also
+      // proves L and raw U never vanish; signed/inconclusive cases retain the
+      // established independent-envelope fallback below.
+      const ProofBounds numerator[3] = {
+        proof_dot_bounds(
+          start_look_vector,
+          *raw_affine_boresight_start),
+        proof_average_bounds(
+          proof_dot_bounds(
+            start_look_vector,
+            *raw_affine_boresight_stop),
+          proof_dot_bounds(
+            stop_look_vector,
+            *raw_affine_boresight_start)),
+        proof_dot_bounds(
+          stop_look_vector,
+          *raw_affine_boresight_stop),
+      };
+      const ProofBounds look_norm_squared[3] = {
+        proof_dot_bounds(start_look_vector, start_look_vector),
+        proof_dot_bounds(start_look_vector, stop_look_vector),
+        proof_dot_bounds(stop_look_vector, stop_look_vector),
+      };
+      const ProofBounds boresight_norm_squared[3] = {
+        proof_dot_bounds(
+          *raw_affine_boresight_start,
+          *raw_affine_boresight_start),
+        proof_dot_bounds(
+          *raw_affine_boresight_start,
+          *raw_affine_boresight_stop),
+        proof_dot_bounds(
+          *raw_affine_boresight_stop,
+          *raw_affine_boresight_stop),
+      };
+      if (positive_quartic_bernstein_lower_bound(
+            numerator,
+            look_norm_squared,
+            boresight_norm_squared,
+            sensor.membershipOuterBoundaryCos)) {
+        return true;
+      }
+    }
     // Near the cone axis, subtracting a first-order chord error from z is far
     // too loose because cosine clearance is second order. Bound the actual
     // angular separation instead with the spherical triangle inequality.
@@ -5248,6 +5515,93 @@ bool fixed_surface_witness_visible_for_entire_interval(
     boresight,
     x_axis,
     y_axis);
+}
+
+bool fixed_surface_witness_visible_for_entire_interval_on_affine_boresight(
+    Vec3 surface_position,
+    Vec3 surface_normal,
+    const SensorConfig& sensor,
+    const ResolvedVisibilityState& start,
+    const ResolvedVisibilityState& stop,
+    Vec3 raw_affine_boresight_start,
+    Vec3 raw_affine_boresight_stop) {
+  UnitDirectionEnvelope boresight;
+  UnitDirectionEnvelope x_axis;
+  UnitDirectionEnvelope y_axis;
+  if (!resolved_frame_envelopes(
+        start,
+        stop,
+        boresight,
+        x_axis,
+        y_axis)) {
+    return false;
+  }
+  return fixed_surface_witness_visible_for_entire_interval_with_frame_envelopes(
+    surface_position,
+    surface_normal,
+    sensor,
+    start,
+    stop,
+    boresight,
+    x_axis,
+    y_axis,
+    &raw_affine_boresight_start,
+    &raw_affine_boresight_stop);
+}
+
+bool raw_affine_boresight_interval(
+    const ResolvedVisibilityState& interpolation_start,
+    const ResolvedVisibilityState& interpolation_stop,
+    double interval_start_seconds,
+    double interval_stop_seconds,
+    Vec3& raw_start,
+    Vec3& raw_stop) {
+  const double interpolation_start_seconds =
+    interpolation_start.state.elapsedSeconds;
+  const double interpolation_stop_seconds =
+    interpolation_stop.state.elapsedSeconds;
+  const double span_seconds =
+    interpolation_stop_seconds - interpolation_start_seconds;
+  if (
+    !interpolation_start.state.sensorFrame.valid ||
+    !interpolation_stop.state.sensorFrame.valid ||
+    !(span_seconds > 0.0) ||
+    interval_start_seconds < interpolation_start_seconds ||
+    interval_stop_seconds > interpolation_stop_seconds ||
+    interval_stop_seconds < interval_start_seconds
+  ) {
+    return false;
+  }
+  const double start_fraction =
+    (interval_start_seconds - interpolation_start_seconds) / span_seconds;
+  const double stop_fraction =
+    (interval_stop_seconds - interpolation_start_seconds) / span_seconds;
+  const Vec3& original_start_boresight =
+    interpolation_start.state.sensorFrame.boresight;
+  const Vec3& original_stop_boresight =
+    interpolation_stop.state.sensorFrame.boresight;
+  const Vec3 boresight_delta = subtract(
+    original_stop_boresight,
+    original_start_boresight);
+  raw_start = add(
+    original_start_boresight,
+    scale(boresight_delta, start_fraction));
+  raw_stop = add(
+    original_start_boresight,
+    scale(boresight_delta, stop_fraction));
+  auto finite_vector = [](Vec3 value) {
+    return
+      std::isfinite(value.x) &&
+      std::isfinite(value.y) &&
+      std::isfinite(value.z);
+  };
+  if (!finite_vector(raw_start) || !finite_vector(raw_stop)) {
+    return false;
+  }
+  // The quartic gate additionally requires all three Bernstein controls of
+  // |U(v)|^2 to have positive outward lower bounds. That is the definitive
+  // whole-interval proof that the raw nlerp chord never reaches zero.
+  return true;
 }
 
 bool exact_surface_witness_from_resolved_state(
@@ -6395,6 +6749,33 @@ bool solid_conic_interval_has_constructive_visible_cover(
       interpolation_start.state,
       interpolation_stop.state,
       interval_stop_seconds));
+  Vec3 raw_boresight_start;
+  Vec3 raw_boresight_stop;
+  const bool has_raw_affine_boresight = raw_affine_boresight_interval(
+    interpolation_start,
+    interpolation_stop,
+    interval_start_seconds,
+    interval_stop_seconds,
+    raw_boresight_start,
+    raw_boresight_stop);
+  auto fixed_witness_proves_interval = [&](Vec3 witness_position) {
+    if (has_raw_affine_boresight) {
+      return fixed_surface_witness_visible_for_entire_interval_on_affine_boresight(
+        witness_position,
+        geodetic_surface_normal(witness_position),
+        sensor,
+        interval_start,
+        interval_stop,
+        raw_boresight_start,
+        raw_boresight_stop);
+    }
+    return fixed_surface_witness_visible_for_entire_interval(
+      witness_position,
+      geodetic_surface_normal(witness_position),
+      sensor,
+      interval_start,
+      interval_stop);
+  };
   const double midpoint_seconds = 0.5 * (
     interval_start_seconds + interval_stop_seconds);
   const double candidate_seconds[3] = {
@@ -6422,12 +6803,7 @@ bool solid_conic_interval_has_constructive_visible_cover(
     }
     if (
       optimized_found &&
-      fixed_surface_witness_visible_for_entire_interval(
-        witness_position,
-        geodetic_surface_normal(witness_position),
-        sensor,
-        interval_start,
-        interval_stop)
+      fixed_witness_proves_interval(witness_position)
     ) {
       return true;
     }
@@ -6438,12 +6814,7 @@ bool solid_conic_interval_has_constructive_visible_cover(
         witness_position);
     if (
       exact_found &&
-      fixed_surface_witness_visible_for_entire_interval(
-        witness_position,
-        geodetic_surface_normal(witness_position),
-        sensor,
-        interval_start,
-        interval_stop)
+      fixed_witness_proves_interval(witness_position)
     ) {
       return true;
     }
