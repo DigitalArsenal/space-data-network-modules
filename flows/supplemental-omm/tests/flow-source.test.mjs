@@ -134,7 +134,7 @@ test("native responses are reassembled and parsed only inside the OD WASM node",
 test("the bundle owns one self-contained APP status board", () => {
   const app = readJson("app/app.json");
   const ui = fs.readFileSync(requireFile("app/ui/index.html"), "utf8");
-  assert.equal(app.id, "io.spaceaware.supplemental-omm");
+  assert.equal(app.id, "supplemental-omm");
   assert.deepEqual(
     app.modules.map(({ id, pluginId, version, role }) => ({ id, pluginId, version, role })),
     [{ id: "supplemental-omm", pluginId: programId, version: "1.0.0", role: "primary" }],
