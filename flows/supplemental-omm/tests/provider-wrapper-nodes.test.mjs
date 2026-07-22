@@ -765,6 +765,8 @@ test("Starlink declares the signed 64-way opaque-spool and progress contract", (
   assert.match(source, /kMaxFetchConcurrency\s*=\s*64/);
   assert.match(source, /kDefaultFetchConcurrency\s*=\s*64/);
   assert.match(source, /kDefaultBatchSize\s*=\s*64/);
+  assert.match(source, /kMaxCatalogUnits\s*=\s*100'000/);
+  assert.match(source, /kMaxDurableFilesPerInvocation\s*=\s*16/);
   assert.match(source, /storage\.adapter\.opaque\.replace/);
   assert.match(source, /storage\.adapter\.opaque\.sync/);
   assert.doesNotMatch(source, /storage_engine_link|hostcap/i);
@@ -2883,15 +2885,24 @@ test("Starlink exact artifact downloads one page with 64 concurrent complete-fil
   });
   assert.equal(first.statusCode, 0, first.errorMessage);
   assert.deepEqual(first.outputs.map(({ portId }) => portId), ["progress"]);
-  assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 64n);
+  assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 16n);
   assert.equal(maxConcurrentFullFetchCalls, 64);
   assert.equal(probeCalls, 64);
   assert.equal(fullFetchCalls, 64);
 
-  const second = await harness.invoke({ methodId: "emit", inputs: [] });
-  assert.equal(second.statusCode, 0, second.errorMessage);
-  assert.deepEqual(second.outputs.map(({ portId }) => portId), ["progress"]);
-  assert.equal(decodeProgressDss(second.outputs[0]).status, 2);
+  for (const expected of [32n, 48n, 64n]) {
+    const continuation = await harness.invoke({ methodId: "emit", inputs: [] });
+    assert.equal(continuation.statusCode, 0, continuation.errorMessage);
+    assert.deepEqual(continuation.outputs.map(({ portId }) => portId), ["progress"]);
+    assert.equal(decodeProgressDss(continuation.outputs[0]).syncedRows, expected);
+    assert.equal(probeCalls, 64);
+    assert.equal(fullFetchCalls, 64);
+  }
+
+  const final = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(final.statusCode, 0, final.errorMessage);
+  assert.deepEqual(final.outputs.map(({ portId }) => portId), ["progress"]);
+  assert.equal(decodeProgressDss(final.outputs[0]).status, 2);
   assert.equal(probeCalls, 65);
   assert.equal(fullFetchCalls, 65);
   assert.deepEqual(calls.filter(({ url }) => url === manifestUrl), [
@@ -2908,6 +2919,60 @@ test("Starlink exact artifact downloads one page with 64 concurrent complete-fil
       `${filename} must be fetched exactly once`,
     );
   }
+});
+
+test("Starlink advances across every 64-file wave instead of truncating the catalog", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-multiple-waves/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-multiple-waves/`;
+  const filenames = Array.from(
+    { length: 130 },
+    (_, index) =>
+      `MEME_${31001 + index}_STARLINK-MULTIWAVE-${index + 1}_1_Operational_${index + 1}_UNCLASSIFIED.txt`,
+  );
+  const body = new TextEncoder().encode([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: multiple-wave-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "1.0e-4 0 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ].join("\n"));
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filenames.join("\n")}\n`)],
+    ...filenames.map((filename) => [joinFixtureUrl(ephemerisBase, filename), body]),
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  let probeCalls = 0;
+  let fullFetchCalls = 0;
+  const harness = await createWorkerHarness("starlink", (operation, params) => {
+    if (operation === "http.request") {
+      if (params.url !== manifestUrl) {
+        if (isStarlinkSizeProbe(params)) probeCalls += 1;
+        else fullFetchCalls += 1;
+      }
+      return serveFixtureHttp(params, responses);
+    }
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => harness.destroy());
+
+  let response = await harness.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase })],
+  });
+  for (const expected of [16n, 32n, 48n, 64n, 80n, 96n, 112n, 128n, 130n]) {
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
+    const progress = decodeProgressDss(response.outputs[0]);
+    assert.equal(progress.syncedRows, expected);
+    assert.equal(progress.totalRows, 130n);
+    if (expected < 130n) {
+      response = await harness.invoke({ methodId: "emit", inputs: [] });
+    }
+  }
+  assert.equal(probeCalls, 130);
+  assert.equal(fullFetchCalls, 130);
 });
 
 test("Starlink completes a 64-file production-shaped wave below the one-GiB memory ceiling", async (t) => {
@@ -2989,19 +3054,30 @@ test("Starlink completes a 64-file production-shaped wave below the one-GiB memo
   t.after(() => clearTimeout(fullFetchGate.timer));
 
   const startedAt = performance.now();
-  const response = await harness.invoke({
+  let response = await harness.invoke({
     methodId: "emit",
     inputs: [configFrame({ manifestUrl, ephemerisBase })],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
-  const progress = decodeProgressDss(response.outputs[0]);
-  assert.equal(progress.status, 2);
-  assert.equal(progress.syncedRows, 64n);
+  let progress = decodeProgressDss(response.outputs[0]);
+  assert.equal(progress.status, 1);
+  assert.equal(progress.syncedRows, 16n);
   assert.equal(progress.totalRows, 64n);
   assert.equal(probeCalls, 64);
   assert.equal(fullFetchCalls, 64);
   assert.equal(maxConcurrentFullFetchCalls, 64);
+  for (const expected of [32n, 48n, 64n]) {
+    response = await harness.invoke({ methodId: "emit", inputs: [] });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
+    progress = decodeProgressDss(response.outputs[0]);
+    assert.equal(progress.status, expected === 64n ? 2 : 1);
+    assert.equal(progress.syncedRows, expected);
+    assert.equal(progress.totalRows, 64n);
+    assert.equal(probeCalls, 64, "a retained wave must not be probed twice");
+    assert.equal(fullFetchCalls, 64, "a retained wave must not be downloaded twice");
+  }
   const wasmMemoryBytes = wasmMemory.buffer.byteLength;
   assert.ok(
     wasmMemoryBytes < 1024 * 1024 * 1024,
@@ -3012,6 +3088,124 @@ test("Starlink completes a 64-file production-shaped wave below the one-GiB memo
       `${(performance.now() - startedAt).toFixed(1)} ms, ` +
       `${wasmMemoryBytes} bytes monotonic WASM memory`,
   );
+});
+
+test("Starlink bounds each durable slice by bytes without refetching its retained wave", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-durable-byte-slice/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-durable-byte-slice/`;
+  const filenames = [
+    "MEME_28001_STARLINK-BYTE-SLICE-1_1_Operational_1_UNCLASSIFIED.txt",
+    "MEME_28002_STARLINK-BYTE-SLICE-2_1_Operational_2_UNCLASSIFIED.txt",
+  ];
+  const body = memeToExactSize([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: durable-byte-slice-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "1.0e-4 0 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ], 20 * 1024 * 1024);
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filenames.join("\n")}\n`)],
+    ...filenames.map((filename) => [joinFixtureUrl(ephemerisBase, filename), body]),
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  let probeCalls = 0;
+  let fullFetchCalls = 0;
+  const harness = await createHarness("starlink", (operation, params) => {
+    if (operation === "http.request") {
+      if (params.url !== manifestUrl) {
+        if (isStarlinkSizeProbe(params)) probeCalls += 1;
+        else fullFetchCalls += 1;
+      }
+      return serveFixtureHttp(params, responses);
+    }
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => harness.destroy());
+
+  const first = await harness.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase, batchSize: 2 })],
+  });
+  assert.equal(first.statusCode, 0, first.errorMessage);
+  assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 1n);
+  assert.equal(probeCalls, 2);
+  assert.equal(fullFetchCalls, 2);
+
+  const second = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(second.statusCode, 0, second.errorMessage);
+  assert.equal(decodeProgressDss(second.outputs[0]).syncedRows, 2n);
+  assert.equal(probeCalls, 2, "the retained wave must not be probed twice");
+  assert.equal(fullFetchCalls, 2, "the retained wave must not be downloaded twice");
+});
+
+test("Starlink restarts from the durable slice when an in-memory 64-file wave is lost", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-durable-slice/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-durable-slice/`;
+  const filenames = Array.from(
+    { length: 20 },
+    (_, index) =>
+      `MEME_${29001 + index}_STARLINK-SLICE-${index + 1}_1_Operational_${index + 1}_UNCLASSIFIED.txt`,
+  );
+  const body = new TextEncoder().encode([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: durable-slice-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "1.0e-4 0 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ].join("\n"));
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filenames.join("\n")}\n`)],
+    ...filenames.map((filename) => [joinFixtureUrl(ephemerisBase, filename), body]),
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  const calls = [];
+  const dispatch = (operation, params) => {
+    if (operation === "http.request") {
+      calls.push({ url: params.url, probe: isStarlinkSizeProbe(params) });
+      return serveFixtureHttp(params, responses);
+    }
+    return opaque.dispatch(operation, params);
+  };
+
+  const firstInstance = await createHarness("starlink", dispatch);
+  const first = await firstInstance.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase })],
+  });
+  assert.equal(first.statusCode, 0, first.errorMessage);
+  assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 16n);
+  firstInstance.destroy();
+  const callsBeforeRestart = calls.length;
+
+  const resumed = await createHarness("starlink", dispatch);
+  t.after(() => resumed.destroy());
+  const replay = await resumed.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(replay.statusCode, 0, replay.errorMessage);
+  assert.equal(decodeProgressDss(replay.outputs[0]).syncedRows, 16n);
+  assert.equal(calls.length, callsBeforeRestart, "restart must replay durable progress first");
+
+  const completed = await resumed.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(completed.statusCode, 0, completed.errorMessage);
+  assert.equal(decodeProgressDss(completed.outputs[0]).status, 2);
+  assert.equal(decodeProgressDss(completed.outputs[0]).syncedRows, 20n);
+  assert.equal(
+    calls.filter(({ url, probe }) => url !== manifestUrl && !probe).length,
+    24,
+    "only the four fetched-but-uncommitted bodies may be downloaded again",
+  );
+  for (const [index, filename] of filenames.entries()) {
+    const url = joinFixtureUrl(ephemerisBase, filename);
+    assert.equal(
+      calls.filter((call) => call.url === url && !call.probe).length,
+      index < 16 ? 1 : 2,
+      `${filename} restart fetch count`,
+    );
+  }
 });
 
 test("Starlink clamps oversized wave requests to 64 complete files", async (t) => {
@@ -3065,15 +3259,15 @@ test("Starlink clamps oversized wave requests to 64 complete files", async (t) =
   assert.deepEqual(first.outputs.map(({ portId }) => portId), ["progress"]);
   assert.deepEqual(decodeProgressDss(first.outputs[0]), {
     status: 1,
-    syncedRows: 64n,
+    syncedRows: 16n,
     totalRows: 65n,
-    localRows: 64n,
-    missingRows: 1n,
+    localRows: 16n,
+    missingRows: 49n,
     cachedBytes: BigInt(
-      responseBodies.slice(0, 64).reduce((sum, body) => sum + body.byteLength, 0),
+      responseBodies.slice(0, 16).reduce((sum, body) => sum + body.byteLength, 0),
     ),
     downloadedBytes: BigInt(
-      responseBodies.slice(0, 64).reduce((sum, body) => sum + body.byteLength, 0),
+      responseBodies.slice(0, 16).reduce((sum, body) => sum + body.byteLength, 0),
     ),
   });
   assert.equal(
@@ -3085,10 +3279,25 @@ test("Starlink clamps oversized wave requests to 64 complete files", async (t) =
     64,
   );
 
-  const second = await harness.invoke({ methodId: "emit", inputs: [] });
-  assert.equal(second.statusCode, 0, second.errorMessage);
-  assert.deepEqual(second.outputs.map(({ portId }) => portId), ["progress"]);
-  assert.equal(decodeProgressDss(second.outputs[0]).status, 2);
+  for (const expected of [32n, 48n, 64n]) {
+    const continuation = await harness.invoke({ methodId: "emit", inputs: [] });
+    assert.equal(continuation.statusCode, 0, continuation.errorMessage);
+    assert.deepEqual(continuation.outputs.map(({ portId }) => portId), ["progress"]);
+    assert.equal(decodeProgressDss(continuation.outputs[0]).syncedRows, expected);
+    assert.equal(
+      calls.filter(({ url, probe }) => url !== manifestUrl && probe).length,
+      64,
+    );
+    assert.equal(
+      calls.filter(({ url, probe }) => url !== manifestUrl && !probe).length,
+      64,
+    );
+  }
+
+  const final = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(final.statusCode, 0, final.errorMessage);
+  assert.deepEqual(final.outputs.map(({ portId }) => portId), ["progress"]);
+  assert.equal(decodeProgressDss(final.outputs[0]).status, 2);
   assert.deepEqual(calls.filter(({ url }) => url === manifestUrl), [
     { url: manifestUrl, probe: false },
   ]);
@@ -3361,6 +3570,8 @@ test("Starlink bounded parallel planning is authored in the WASM node", () => {
   assert.match(source, /kMaxFetchConcurrency\s*=\s*64/);
   assert.match(source, /kDefaultFetchConcurrency\s*=\s*64/);
   assert.match(source, /kDefaultBatchSize\s*=\s*64/);
+  assert.match(source, /kMaxDurableFilesPerInvocation\s*=\s*16/);
+  assert.match(source, /kMaxDurableBytesPerInvocation\s*=\s*32ull\s*\*\s*1024\s*\*\s*1024/);
   assert.match(source, /pthread_create\s*\(/);
   assert.match(source, /pthread_join\s*\(/);
   assert.match(source, /std::atomic\s*<\s*size_t\s*>/);
@@ -3368,6 +3579,16 @@ test("Starlink bounded parallel planning is authored in the WASM node", () => {
   assert.match(source, /probe_complete_page/);
   assert.match(source, /fetch_complete_page/);
   assert.match(source, /kMaxDownstreamObjectsPerInvocation\s*=\s*1/);
+  assert.match(
+    source,
+    /g_pending_wave_begin\s*=\s*static_cast<uint32_t>\(begin\);\s*g_pending_wave\s*=\s*fetch_complete_page/,
+    "the durable wave marker must publish before the retained response vector",
+  );
+  assert.doesNotMatch(
+    source,
+    /g_pending_wave_begin\s*=\s*0;\s*g_pending_wave\.clear\(\);/,
+    "retained responses must clear before their durable wave marker",
+  );
   assert.match(source, /storage\.adapter\.opaque\.read/);
   assert.match(source, /storage\.adapter\.opaque\.replace/);
   assert.match(source, /storage\.adapter\.opaque\.delete/);

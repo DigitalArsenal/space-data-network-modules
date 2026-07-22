@@ -1,6 +1,7 @@
 #include "space_data_module_invoke.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -81,6 +82,11 @@ constexpr size_t kMaxNativeResponseBytes = 64u * 1024u * 1024u;
 constexpr int kMaxFitIterations = 40;
 constexpr std::string_view kFitOptions =
     R"json({"maxIterations":40})json";
+constexpr std::string_view kFlatSqlTransactionIdDomain =
+    "sdn:supplemental-omm:od:flatsql-transaction:v1";
+constexpr std::string_view kFlatSqlRecordStreamIdDomain =
+    "sdn:supplemental-omm:od:flatsql-record-stream:v1";
+constexpr const char* kRecordPortOrder[] = {"omm", "ocm", "obd"};
 
 enum class Provider : uint8_t {
   Starlink,
@@ -149,6 +155,18 @@ struct RecordStreamAccumulator {
   std::vector<uint8_t> data;
 };
 
+struct OutputStreamRequestIdentity {
+  const RecordStreamAccumulator* stream = nullptr;
+  std::array<uint8_t, 32> digest{};
+  uint64_t request_id = 0;
+};
+
+struct OutputRequestIdentity {
+  std::array<uint8_t, 32> transaction_digest{};
+  uint64_t configuration_request_id = 0;
+  std::vector<OutputStreamRequestIdentity> streams;
+};
+
 struct NativeState {
   std::string epoch;
   double x = 0.0;
@@ -170,7 +188,124 @@ std::map<AssemblyKey, Assembly> g_assemblies;
 std::deque<PendingFitObject> g_pending_fit_objects;
 alignas(8) Aligned::FSB g_aligned_output{};
 alignas(8) uint8_t g_aligned_control[kFsoAlignedSize]{};
-uint64_t g_output_request_id = 1;
+
+void append_u32_be(std::vector<uint8_t>* output, uint32_t value) {
+  output->push_back(static_cast<uint8_t>((value >> 24) & 0xff));
+  output->push_back(static_cast<uint8_t>((value >> 16) & 0xff));
+  output->push_back(static_cast<uint8_t>((value >> 8) & 0xff));
+  output->push_back(static_cast<uint8_t>(value & 0xff));
+}
+
+void append_u64_be(std::vector<uint8_t>* output, uint64_t value) {
+  for (int shift = 56; shift >= 0; shift -= 8) {
+    output->push_back(static_cast<uint8_t>((value >> shift) & 0xff));
+  }
+}
+
+void append_text(std::vector<uint8_t>* output, std::string_view value) {
+  append_u32_be(output, static_cast<uint32_t>(value.size()));
+  output->insert(output->end(), value.begin(), value.end());
+}
+
+void append_domain(std::vector<uint8_t>* output, std::string_view domain) {
+  output->insert(output->end(), domain.begin(), domain.end());
+  output->push_back(0);
+}
+
+uint64_t project_nonzero_request_id(const uint8_t digest[32]) {
+  uint64_t request_id = 0;
+  for (size_t index = 0; index < sizeof(uint64_t); ++index) {
+    request_id = (request_id << 8) | digest[index];
+  }
+  return request_id == 0 ? 1 : request_id;
+}
+
+bool request_id_is_used(const OutputRequestIdentity& identity,
+                        uint64_t request_id,
+                        const OutputStreamRequestIdentity* excluded) {
+  if (identity.configuration_request_id == request_id) return true;
+  return std::any_of(
+      identity.streams.begin(), identity.streams.end(),
+      [request_id, excluded](const OutputStreamRequestIdentity& stream) {
+        return &stream != excluded && stream.request_id == request_id;
+      });
+}
+
+bool derive_output_request_identity(
+    const std::vector<RecordStreamAccumulator>& streams,
+    OutputRequestIdentity* identity) {
+  if (!identity || streams.size() != std::size(kRecordPortOrder)) return false;
+  identity->streams.clear();
+  identity->streams.reserve(std::size(kRecordPortOrder));
+
+  std::vector<uint8_t> transaction_preimage;
+  append_domain(&transaction_preimage, kFlatSqlTransactionIdDomain);
+  append_u32_be(&transaction_preimage,
+                static_cast<uint32_t>(std::size(kRecordPortOrder)));
+  for (const char* port_id : kRecordPortOrder) {
+    auto found = std::find_if(
+        streams.begin(), streams.end(),
+        [port_id](const RecordStreamAccumulator& stream) {
+          return std::strcmp(stream.port_id, port_id) == 0;
+        });
+    if (found == streams.end() || found->data.empty() ||
+        found->record_count == 0 ||
+        std::find_if(std::next(found), streams.end(),
+                     [port_id](const RecordStreamAccumulator& stream) {
+                       return std::strcmp(stream.port_id, port_id) == 0;
+                     }) != streams.end()) {
+      return false;
+    }
+    OutputStreamRequestIdentity stream_identity;
+    stream_identity.stream = &*found;
+    sdn_cid::sha256_raw(found->data.data(), found->data.size(),
+                        stream_identity.digest.data());
+    append_text(&transaction_preimage, found->port_id);
+    append_text(&transaction_preimage, found->schema_name);
+    append_text(&transaction_preimage, found->file_identifier);
+    append_u64_be(&transaction_preimage, found->record_count);
+    append_u64_be(&transaction_preimage,
+                  static_cast<uint64_t>(found->data.size()));
+    transaction_preimage.insert(transaction_preimage.end(),
+                                stream_identity.digest.begin(),
+                                stream_identity.digest.end());
+    identity->streams.push_back(stream_identity);
+  }
+
+  sdn_cid::sha256_raw(transaction_preimage.data(),
+                      transaction_preimage.size(),
+                      identity->transaction_digest.data());
+  identity->configuration_request_id =
+      project_nonzero_request_id(identity->transaction_digest.data());
+
+  for (OutputStreamRequestIdentity& stream_identity : identity->streams) {
+    const RecordStreamAccumulator& stream = *stream_identity.stream;
+    std::vector<uint8_t> base_preimage;
+    append_domain(&base_preimage, kFlatSqlRecordStreamIdDomain);
+    base_preimage.insert(base_preimage.end(),
+                         identity->transaction_digest.begin(),
+                         identity->transaction_digest.end());
+    append_text(&base_preimage, stream.port_id);
+    append_text(&base_preimage, stream.schema_name);
+    append_text(&base_preimage, stream.file_identifier);
+    append_u64_be(&base_preimage, stream.record_count);
+    append_u64_be(&base_preimage,
+                  static_cast<uint64_t>(stream.data.size()));
+    base_preimage.insert(base_preimage.end(), stream_identity.digest.begin(),
+                         stream_identity.digest.end());
+    uint32_t collision_salt = 0;
+    do {
+      std::vector<uint8_t> preimage = base_preimage;
+      if (collision_salt != 0) append_u32_be(&preimage, collision_salt);
+      std::array<uint8_t, 32> digest{};
+      sdn_cid::sha256_raw(preimage.data(), preimage.size(), digest.data());
+      stream_identity.request_id = project_nonzero_request_id(digest.data());
+      ++collision_salt;
+    } while (request_id_is_used(*identity, stream_identity.request_id,
+                                &stream_identity));
+  }
+  return true;
+}
 
 std::string trim(const std::string& input) {
   const size_t start = input.find_first_not_of(" \t\r\n");
@@ -783,11 +918,10 @@ int32_t push_aligned_stream_chunk(
       reinterpret_cast<const uint8_t*>(&g_aligned_output), kFsbAlignedSize);
 }
 
-int32_t push_record_stream(const RecordStreamAccumulator& stream) {
+int32_t push_record_stream(const RecordStreamAccumulator& stream,
+                           uint64_t request_id,
+                           const std::array<uint8_t, 32>& digest) {
   if (stream.data.empty() || stream.record_count == 0) return 0;
-  uint8_t digest[32];
-  sdn_cid::sha256_raw(stream.data.data(), stream.data.size(), digest);
-  const uint64_t request_id = g_output_request_id++;
   size_t offset = 0;
   uint32_t sequence = 0;
   while (offset < stream.data.size()) {
@@ -797,10 +931,12 @@ int32_t push_record_stream(const RecordStreamAccumulator& stream) {
     const int32_t status =
         stream.wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY
             ? push_aligned_stream_chunk(stream, request_id, sequence, final,
-                                        digest, stream.data.data() + offset,
+                                        digest.data(),
+                                        stream.data.data() + offset,
                                         chunk_size)
             : push_canonical_stream_chunk(stream, request_id, sequence, final,
-                                          digest, stream.data.data() + offset,
+                                          digest.data(),
+                                          stream.data.data() + offset,
                                           chunk_size);
     if (status < 0) return status;
     offset += chunk_size;
@@ -992,8 +1128,7 @@ int32_t push_aligned_configuration(uint64_t request_id) {
       kFsoAlignedSize, kFsoAlignment, g_aligned_control, kFsoAlignedSize);
 }
 
-int32_t push_configuration(uint32_t wire_format) {
-  const uint64_t request_id = g_output_request_id++;
+int32_t push_configuration(uint32_t wire_format, uint64_t request_id) {
   if (wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
     return push_aligned_configuration(request_id);
   }
@@ -1216,13 +1351,23 @@ extern "C" int fit(void) {
     publish_pending_fit_state();
     return 0;
   }
-  if (push_configuration(configuration_wire_format) < 0) {
+  OutputRequestIdentity output_identity;
+  if (!derive_output_request_identity(streams, &output_identity)) {
+    plugin_set_error("od-output-identity",
+                     "unable to derive complete fitted output identity");
+    publish_pending_fit_state();
+    return 500;
+  }
+  if (push_configuration(configuration_wire_format,
+                         output_identity.configuration_request_id) < 0) {
     plugin_set_error("od-output", "unable to emit FlatSQL CONFIGURE_INDEX control");
     publish_pending_fit_state();
     return 500;
   }
-  for (const RecordStreamAccumulator& stream : streams) {
-    if (push_record_stream(stream) < 0) {
+  for (const OutputStreamRequestIdentity& stream_identity :
+       output_identity.streams) {
+    if (push_record_stream(*stream_identity.stream, stream_identity.request_id,
+                           stream_identity.digest) < 0) {
       plugin_set_error("od-output", "unable to emit fitted FSB record stream");
       publish_pending_fit_state();
       return 500;

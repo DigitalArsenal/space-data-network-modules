@@ -18,6 +18,7 @@ import {
 import { FSB } from "../../../../spacedatastandards.org/lib/js/FSB/FSB.js";
 import { FSO } from "../../../../spacedatastandards.org/lib/js/FSO/FSO.js";
 import { FTB } from "../../../../spacedatastandards.org/lib/js/FSO/FTB.js";
+import { flatSqlNodeOperation } from "../../../../spacedatastandards.org/lib/js/FSO/flatSqlNodeOperation.js";
 import { flatSqlNodeStatus } from "../../../../spacedatastandards.org/lib/js/FSO/flatSqlNodeStatus.js";
 import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OCM } from "../../../../spacedatastandards.org/lib/js/OCM/OCM.js";
@@ -498,8 +499,112 @@ function resultMetrics(response, wireFormat) {
   return { affectedRecords, resultBytes };
 }
 
-async function createFlatSqlPersistenceHarness(t) {
-  const flatSqlRoot = path.join(packageRoot, "../../../flatsql/wasm/node");
+function expectedOdFlatSqlRequestIds(response) {
+  const encodeU32 = (value) => {
+    const bytes = Buffer.alloc(4);
+    bytes.writeUInt32BE(value);
+    return bytes;
+  };
+  const encodeU64 = (value) => {
+    const bytes = Buffer.alloc(8);
+    bytes.writeBigUInt64BE(BigInt(value));
+    return bytes;
+  };
+  const encodeText = (value) => {
+    const bytes = Buffer.from(value, "utf8");
+    return Buffer.concat([encodeU32(bytes.byteLength), bytes]);
+  };
+  const project = (digest) => digest.readBigUInt64BE(0) || 1n;
+  const streams = recordOutputPorts.map((portId) => {
+    const reassembled = reassembleRecordStream(response.outputs, portId);
+    const first = reassembled.chunks[0];
+    const digest = crypto.createHash("sha256").update(reassembled.stream).digest();
+    assert.deepEqual(digest, Buffer.from(first.checksum));
+    return {
+      portId,
+      schemaName: first.schemaName,
+      fileIdentifier: first.fileIdentifier,
+      recordCount: first.recordCount,
+      stream: reassembled.stream,
+      digest,
+    };
+  });
+  const transactionDigest = crypto.createHash("sha256").update(Buffer.concat([
+    Buffer.from("sdn:supplemental-omm:od:flatsql-transaction:v1\0", "utf8"),
+    encodeU32(streams.length),
+    ...streams.flatMap((stream) => [
+      encodeText(stream.portId),
+      encodeText(stream.schemaName),
+      encodeText(stream.fileIdentifier),
+      encodeU64(stream.recordCount),
+      encodeU64(stream.stream.byteLength),
+      stream.digest,
+    ]),
+  ])).digest();
+  const used = new Set([project(transactionDigest)]);
+  const streamIds = {};
+  for (const stream of streams) {
+    const base = [
+      Buffer.from("sdn:supplemental-omm:od:flatsql-record-stream:v1\0", "utf8"),
+      transactionDigest,
+      encodeText(stream.portId),
+      encodeText(stream.schemaName),
+      encodeText(stream.fileIdentifier),
+      encodeU64(stream.recordCount),
+      encodeU64(stream.stream.byteLength),
+      stream.digest,
+    ];
+    let salt = 0;
+    let requestId;
+    do {
+      requestId = project(
+        crypto.createHash("sha256").update(
+          Buffer.concat(salt === 0 ? base : [...base, encodeU32(salt)]),
+        ).digest(),
+      );
+      salt += 1;
+    } while (used.has(requestId));
+    used.add(requestId);
+    streamIds[stream.portId] = requestId;
+  }
+  return {
+    control: project(transactionDigest),
+    streams: streamIds,
+  };
+}
+
+function odFlatSqlRequestIds(response) {
+  const control = response.outputs.find((output) => output.portId === "control");
+  assert.ok(control, "OD response is missing FlatSQL control");
+  const controlRequestId = control.wireFormat === "aligned-binary"
+    ? new DataView(
+        control.payload.buffer,
+        control.payload.byteOffset,
+        control.payload.byteLength,
+      ).getBigUint64(8, true)
+    : decodeControl(control).requestId;
+  const streamIds = Object.fromEntries(recordOutputPorts.map((portId) => {
+    const outputs = response.outputs.filter((output) => output.portId === portId);
+    assert.ok(outputs.length > 0, `OD response is missing ${portId}`);
+    const requestIds = new Set(outputs.map((output) =>
+      output.wireFormat === "aligned-binary"
+        ? new DataView(
+            output.payload.buffer,
+            output.payload.byteOffset,
+            output.payload.byteLength,
+          ).getBigUint64(8, true)
+        : decodeOutput(output).requestId));
+    assert.equal(requestIds.size, 1, `${portId} chunks changed request identity`);
+    return [portId, [...requestIds][0]];
+  }));
+  return { control: controlRequestId, streams: streamIds };
+}
+
+async function createFlatSqlPersistenceHarness(
+  t,
+  { opaqueValues = new Map(), registerCleanup = true } = {},
+) {
+  const flatSqlRoot = path.join(packageRoot, "nodes/flatsql");
   const manifest = JSON.parse(
     fs.readFileSync(path.join(flatSqlRoot, "plugin-manifest.json"), "utf8"),
   );
@@ -507,7 +612,6 @@ async function createFlatSqlPersistenceHarness(t) {
     fs.readFileSync(path.join(flatSqlRoot, "dist/isomorphic/module.wasm")),
   );
   const portable = extractPublicationRecordCollection(signed)?.payloadBytes ?? signed;
-  const opaqueValues = new Map();
   const opaqueKey = (params) => `${params.namespace}\0${params.key}`;
   const harness = await createBrowserModuleHarness({
     wasmSource: portable,
@@ -545,8 +649,94 @@ async function createFlatSqlPersistenceHarness(t) {
       throw new Error(`unexpected FlatSQL host operation ${operation}`);
     },
   });
-  t.after(() => harness.destroy());
+  if (registerCleanup) t.after(() => harness.destroy());
   return harness;
+}
+
+function flatSqlMethodType(methodId, direction, portId) {
+  const manifest = JSON.parse(
+    fs.readFileSync(
+      path.join(packageRoot, "nodes/flatsql/plugin-manifest.json"),
+      "utf8",
+    ),
+  );
+  const method = manifest.methods.find((candidate) => candidate.methodId === methodId);
+  assert.ok(method, `missing FlatSQL method ${methodId}`);
+  const ports = direction === "input" ? method.inputPorts : method.outputPorts;
+  const port = ports.find((candidate) => candidate.portId === portId);
+  assert.ok(port, `missing FlatSQL ${methodId}.${portId} ${direction} port`);
+  const type = port.acceptedTypeSets
+    .flatMap((set) => set.allowedTypes)
+    .find((candidate) => candidate.wireFormat === "flatbuffer");
+  assert.ok(type, `FlatSQL ${methodId}.${portId} needs canonical FlatBuffer`);
+  return type;
+}
+
+function makeFlatSqlQuery(requestId, query) {
+  const builder = new Builder(query.length + 256);
+  const databaseName = builder.createString("supplemental-omm");
+  const queryBytes = FSO.createQueryVector(builder, new TextEncoder().encode(query));
+  FSO.startFSO(builder);
+  FSO.addOperation(builder, flatSqlNodeOperation.QUERY_RECORDS);
+  FSO.addRequestId(builder, requestId);
+  FSO.addDatabaseName(builder, databaseName);
+  FSO.addQuery(builder, queryBytes);
+  const root = FSO.endFSO(builder);
+  FSO.finishFSOBuffer(builder, root);
+  return builder.asUint8Array();
+}
+
+async function flatSqlTableRecordCount(harness, tableName, requestId) {
+  const response = await harness.invoke({
+    methodId: "query_records",
+    inputs: [{
+      portId: "query",
+      typeRef: flatSqlMethodType("query_records", "input", "query"),
+      payload: makeFlatSqlQuery(requestId, `SELECT _data FROM ${tableName}`),
+    }],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const status = decodeStatusOutput(response);
+  assert.equal(status.status, flatSqlNodeStatus.COMPLETE, status.message);
+  const chunks = response.outputs
+    .filter((output) => output.portId === "records")
+    .map(decodeOutput)
+    .sort((left, right) => left.sequence - right.sequence);
+  assert.ok(chunks.length > 0, `FlatSQL query returned no ${tableName} frames`);
+  assert.equal(chunks[0].recordCount, status.affectedRecords);
+  return chunks[0].recordCount;
+}
+
+function odOutputsForFlatSql(response) {
+  return response.outputs
+    .filter((output) => output.portId !== "status")
+    .map((output) => ({
+      portId: output.portId === "control" ? "control" : "records",
+      wireFormat: output.wireFormat,
+      typeRef: { ...output.typeRef },
+      payload: new Uint8Array(output.payload).slice(),
+    }));
+}
+
+function rewriteControlRequestId(output, requestId) {
+  const payload = new Uint8Array(output.payload).slice();
+  const value = FSO.getRootAsFSO(new ByteBuffer(payload));
+  const field = value.bb.__offset(value.bb_pos, 6);
+  assert.ok(field, "FSO control request ID is present");
+  new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
+    .setBigUint64(value.bb_pos + field, requestId, true);
+  return { ...output, payload };
+}
+
+function opaqueStateDigest(opaqueValues) {
+  const digest = crypto.createHash("sha256");
+  for (const [key, value] of [...opaqueValues.entries()].sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0)) {
+    digest.update(key);
+    digest.update("\0");
+    digest.update(value);
+  }
+  return digest.digest("hex");
 }
 
 test("OD is a strict dual-FSB native-response transform", () => {
@@ -1516,6 +1706,292 @@ test("OD fits one queued provider object per invocation and drains through zero-
   );
 });
 
+test("OD derives transport-, chunk-, request-, and restart-stable FlatSQL IDs", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const createOdHarness = async () => {
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+    return harness;
+  };
+  const fixture = new Uint8Array(
+    fs.readFileSync(
+      path.join(
+        packageRoot,
+        "../../data-source/spacex-starlink-source/test/fixtures/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+      ),
+    ),
+  );
+  const checksum = crypto.createHash("sha256").update(fixture).digest();
+  const fit = (harness, {
+    requestId,
+    norad,
+    objectName,
+    wireFormat = "flatbuffer",
+    boundaries = [],
+  }) => {
+    const schemaName = `MEME:${norad}:${objectName}`;
+    if (wireFormat === "aligned-binary") {
+      return harness.invoke({
+        methodId: "fit",
+        inputs: [inputFrame(makeAlignedChunk({
+          data: fixture,
+          checksum,
+          requestId,
+          schemaName,
+          fileIdentifier: "MEME",
+        }), { wireFormat })],
+      });
+    }
+    const offsets = [0, ...boundaries, fixture.byteLength];
+    return harness.invoke({
+      methodId: "fit",
+      inputs: offsets.slice(0, -1).map((start, sequence) => inputFrame(
+        makeChunk({
+          data: fixture.slice(start, offsets[sequence + 1]),
+          sequence,
+          final: sequence + 2 === offsets.length,
+          totalBytes: fixture.byteLength,
+          checksum,
+          requestId,
+          schemaName,
+        }),
+      )),
+    });
+  };
+
+  const instanceA = await createOdHarness();
+  const warmup = await fit(instanceA, {
+    requestId: 79_100n,
+    norad: 79_100,
+    objectName: "STARLINK-ID-WARMUP",
+  });
+  assert.equal(warmup.statusCode, 0, warmup.errorMessage);
+  const targetAfterWarmup = await fit(instanceA, {
+    requestId: 79_101n,
+    norad: 79_101,
+    objectName: "STARLINK-ID-TARGET",
+    boundaries: [
+      Math.floor(fixture.byteLength / 3),
+      Math.floor((fixture.byteLength * 2) / 3),
+    ],
+  });
+  assert.equal(targetAfterWarmup.statusCode, 0, targetAfterWarmup.errorMessage);
+
+  const instanceB = await createOdHarness();
+  const targetAfterRestart = await fit(instanceB, {
+    requestId: 79_199n,
+    norad: 79_101,
+    objectName: "STARLINK-ID-TARGET",
+    wireFormat: "aligned-binary",
+  });
+  assert.equal(targetAfterRestart.statusCode, 0, targetAfterRestart.errorMessage);
+
+  assertOutputWireFormat(targetAfterWarmup, "flatbuffer");
+  assertOutputWireFormat(targetAfterRestart, "aligned-binary");
+  const afterWarmupIds = odFlatSqlRequestIds(targetAfterWarmup);
+  const afterRestartIds = odFlatSqlRequestIds(targetAfterRestart);
+  assert.equal(
+    afterWarmupIds.control,
+    afterRestartIds.control,
+    "CONFIGURE_INDEX must identify the fitted content, not process history",
+  );
+  assert.deepEqual(
+    afterWarmupIds.streams,
+    afterRestartIds.streams,
+    "record-stream IDs must survive a fresh OD instance",
+  );
+  for (const portId of recordOutputPorts) {
+    assert.deepEqual(
+      reassembleRecordStream(targetAfterWarmup.outputs, portId).stream,
+      readAlignedRecordStream(targetAfterRestart.outputs, portId).stream,
+      `${portId} fitted bytes changed with input wire format, request ID, chunking, or process history`,
+    );
+  }
+  assert.deepEqual(
+    afterWarmupIds,
+    expectedOdFlatSqlRequestIds(targetAfterWarmup),
+    "request IDs must bind the ordered OMM/OCM/OBD identities, counts, lengths, and full-stream digests",
+  );
+  assert.equal(
+    new Set(Object.values(afterWarmupIds.streams)).size,
+    recordOutputPorts.length,
+    "OMM, OCM, and OBD need distinct request IDs because FlatSQL groups chunks by request ID alone",
+  );
+  assert.ok(afterWarmupIds.control > 0n);
+  assert.ok(Object.values(afterWarmupIds.streams).every((requestId) => requestId > 0n));
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8"),
+    /g_output_request_id/,
+    "process-local output counters cannot provide restart idempotency",
+  );
+});
+
+test("fresh OD and FlatSQL instances replay a lost response exactly once", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const createOdHarness = async () => {
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+    return harness;
+  };
+  const fixture = new Uint8Array(
+    fs.readFileSync(
+      path.join(
+        packageRoot,
+        "../../data-source/spacex-starlink-source/test/fixtures/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+      ),
+    ),
+  );
+  const checksum = crypto.createHash("sha256").update(fixture).digest();
+  const fit = (harness, { requestId, norad, objectName }) =>
+    harness.invoke({
+      methodId: "fit",
+      inputs: [
+        inputFrame(
+          makeChunk({
+            data: fixture,
+            sequence: 0,
+            final: true,
+            totalBytes: fixture.byteLength,
+            checksum,
+            requestId,
+            schemaName: `MEME:${norad}:${objectName}`,
+          }),
+        ),
+      ],
+    });
+
+  const odA = await createOdHarness();
+  const warmup = await fit(odA, {
+    requestId: 79_200n,
+    norad: 79_200,
+    objectName: "STARLINK-REPLAY-WARMUP",
+  });
+  assert.equal(warmup.statusCode, 0, warmup.errorMessage);
+  const targetA = await fit(odA, {
+    requestId: 79_201n,
+    norad: 79_201,
+    objectName: "STARLINK-REPLAY-TARGET",
+  });
+  assert.equal(targetA.statusCode, 0, targetA.errorMessage);
+  const expectedCounts = Object.fromEntries(
+    recordOutputPorts.map((portId) => [
+      portId,
+      reassembleRecordStream(targetA.outputs, portId).recordCount,
+    ]),
+  );
+  const transactionId = decodeControl(
+    targetA.outputs.find((output) => output.portId === "control"),
+  ).requestId;
+
+  const opaqueValues = new Map();
+  const flatSqlA = await createFlatSqlPersistenceHarness(t, {
+    opaqueValues,
+    registerCleanup: false,
+  });
+  const committed = await flatSqlA.invoke({
+    methodId: "append_records",
+    inputs: odOutputsForFlatSql(targetA),
+  });
+  assert.equal(committed.statusCode, 0, committed.errorMessage);
+  assert.equal(
+    decodeStatusOutput(committed).status,
+    flatSqlNodeStatus.COMPLETE,
+  );
+  const durableAfterLostResponse = opaqueStateDigest(opaqueValues);
+  flatSqlA.destroy();
+
+  const odB = await createOdHarness();
+  const targetB = await fit(odB, {
+    requestId: 79_201n,
+    norad: 79_201,
+    objectName: "STARLINK-REPLAY-TARGET",
+  });
+  assert.equal(targetB.statusCode, 0, targetB.errorMessage);
+  assert.deepEqual(
+    expectedOdFlatSqlRequestIds(targetA),
+    expectedOdFlatSqlRequestIds(targetB),
+  );
+
+  const flatSqlB = await createFlatSqlPersistenceHarness(t, {
+    opaqueValues,
+    registerCleanup: false,
+  });
+  t.after(() => flatSqlB.destroy());
+  const replay = await flatSqlB.invoke({
+    methodId: "append_records",
+    inputs: odOutputsForFlatSql(targetB),
+  });
+  assert.equal(replay.statusCode, 0, replay.errorMessage);
+  const replayStatus = decodeStatusOutput(replay);
+  assert.equal(replayStatus.status, flatSqlNodeStatus.COMPLETE, replayStatus.message);
+  assert.match(replayStatus.message, /already committed/i);
+  assert.equal(
+    opaqueStateDigest(opaqueValues),
+    durableAfterLostResponse,
+    "a replay after response loss must not append another durable WAL entry",
+  );
+  for (const [index, portId] of recordOutputPorts.entries()) {
+    assert.equal(
+      await flatSqlTableRecordCount(flatSqlB, portId.toUpperCase(), 79_300n + BigInt(index)),
+      expectedCounts[portId],
+      `${portId} was duplicated by replay`,
+    );
+  }
+
+  const conflictingOd = await fit(odB, {
+    requestId: 79_202n,
+    norad: 79_202,
+    objectName: "STARLINK-REPLAY-CONFLICT",
+  });
+  assert.equal(conflictingOd.statusCode, 0, conflictingOd.errorMessage);
+  const conflictingInputs = odOutputsForFlatSql(conflictingOd).map((output) =>
+    output.portId === "control"
+      ? rewriteControlRequestId(output, transactionId)
+      : output);
+  const conflict = await flatSqlB.invoke({
+    methodId: "append_records",
+    inputs: conflictingInputs,
+  });
+  assert.equal(conflict.statusCode, 0, conflict.errorMessage);
+  const conflictStatus = decodeStatusOutput(conflict);
+  assert.equal(conflictStatus.status, flatSqlNodeStatus.INVALID_ARGUMENT);
+  assert.equal(conflictStatus.errorCode, "receipt-conflict");
+  assert.equal(
+    opaqueStateDigest(opaqueValues),
+    durableAfterLostResponse,
+    "same transaction ID with a new digest must leave durable state unchanged",
+  );
+  for (const [index, portId] of recordOutputPorts.entries()) {
+    assert.equal(
+      await flatSqlTableRecordCount(flatSqlB, portId.toUpperCase(), 79_310n + BigInt(index)),
+      expectedCounts[portId],
+      `${portId} live state changed after a receipt conflict`,
+    );
+  }
+  flatSqlB.destroy();
+
+  const flatSqlC = await createFlatSqlPersistenceHarness(t, {
+    opaqueValues,
+    registerCleanup: false,
+  });
+  t.after(() => flatSqlC.destroy());
+  for (const [index, portId] of recordOutputPorts.entries()) {
+    assert.equal(
+      await flatSqlTableRecordCount(flatSqlC, portId.toUpperCase(), 79_320n + BigInt(index)),
+      expectedCounts[portId],
+      `${portId} durable state changed after a receipt conflict and reload`,
+    );
+  }
+});
+
 test("OD bounds optimizer work across one complete production-shaped three-day arc", async (t) => {
   const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
   const maxIterations = Number(
@@ -1555,6 +2031,8 @@ test("OD bounds optimizer work across one complete production-shaped three-day a
   const omm = reassembleRecordStream(response.outputs, "omm");
   const ocm = reassembleRecordStream(response.outputs, "ocm");
   const obd = reassembleRecordStream(response.outputs, "obd");
+  const combinedOutputBytes =
+    omm.stream.byteLength + ocm.stream.byteLength + obd.stream.byteLength;
   assert.ok(omm.recordCount >= 20n, "the complete three-day arc must retain multiple local epochs");
   assert.equal(ocm.recordCount, omm.recordCount);
   assert.equal(obd.recordCount, omm.recordCount);
@@ -1581,7 +2059,7 @@ test("OD bounds optimizer work across one complete production-shaped three-day a
   const reportedIterations = records.map((record) => record.NUM_ITERATIONS());
   const reportedRmsKm = records.map((record) => record.WRMS());
   t.diagnostic(
-    `maxIterations=${maxIterations} inputBytes=${fixture.byteLength} epochs=${records.length} maxReportedIterations=${Math.max(...reportedIterations)} maxRmsKm=${Math.max(...reportedRmsKm)}`,
+    `maxIterations=${maxIterations} inputBytes=${fixture.byteLength} outputBytes=${combinedOutputBytes} ommBytes=${omm.stream.byteLength} ocmBytes=${ocm.stream.byteLength} obdBytes=${obd.stream.byteLength} ommRecords=${omm.recordCount} ocmRecords=${ocm.recordCount} obdRecords=${obd.recordCount} maxReportedIterations=${Math.max(...reportedIterations)} maxRmsKm=${Math.max(...reportedRmsKm)}`,
   );
   for (const record of records) {
     assert.ok(Number.isFinite(record.WRMS()), "every epoch must report finite RMS");
@@ -1709,7 +2187,7 @@ test("OD reassembles native chunks, aggregates one object's epochs, and persists
     );
   }
 
-  const flatSqlRoot = path.join(packageRoot, "../../../flatsql/wasm/node");
+  const flatSqlRoot = path.join(packageRoot, "nodes/flatsql");
   const flatSqlManifest = JSON.parse(
     fs.readFileSync(path.join(flatSqlRoot, "plugin-manifest.json"), "utf8"),
   );

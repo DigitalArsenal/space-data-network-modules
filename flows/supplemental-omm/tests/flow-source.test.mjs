@@ -142,6 +142,11 @@ test("timer, native provider, OD, FlatSQL, publication, and status lanes are exp
 test("every child dependency resolves to an independently packaged module", () => {
   const flow = readJson("flow.json");
   const deps = readJson("deps.json");
+  assert.equal(
+    deps["com.digitalarsenal.flatsql.store"],
+    "./nodes/flatsql",
+    "Supplemental OMM must instantiate its independently packaged local FlatSQL node",
+  );
   assert.deepEqual(
     Object.keys(deps).sort(),
     independentNodes.map(([, pluginId]) => pluginId).sort(),
