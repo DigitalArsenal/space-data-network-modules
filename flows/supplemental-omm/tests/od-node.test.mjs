@@ -71,6 +71,7 @@ function makeChunk({
   final,
   totalBytes,
   checksum,
+  requestId = 67850n,
 }) {
   const builder = new Builder(data.byteLength + 512);
   const schemaName = builder.createString("MEME:67850:STARLINK-36840");
@@ -78,7 +79,7 @@ function makeChunk({
   const dataVector = FSB.createDataVector(builder, data);
   const checksumVector = FSB.createSha256Vector(builder, checksum);
   FSB.startFSB(builder);
-  FSB.addRequestId(builder, 67850n);
+  FSB.addRequestId(builder, requestId);
   FSB.addChunkSequence(builder, sequence);
   FSB.addFinal(builder, final);
   FSB.addTotalBytes(builder, BigInt(totalBytes));
@@ -113,10 +114,30 @@ function decodeOutput(output) {
       : new TextDecoder().decode(candidate ?? new Uint8Array());
   return {
     portId: output.portId,
+    requestId: value.REQUEST_ID(),
+    sequence: value.CHUNK_SEQUENCE(),
+    final: value.FINAL(),
+    totalBytes: value.TOTAL_BYTES(),
+    recordCount: value.RECORD_COUNT(),
     schemaName: decode(value.SCHEMA_NAME()),
     fileIdentifier: decode(value.FILE_IDENTIFIER()),
     data: new Uint8Array(value.dataArray() ?? []),
+    checksum: new Uint8Array(value.sha256Array() ?? []),
   };
+}
+
+function countSizePrefixedRecords(bytes) {
+  let offset = 0;
+  let count = 0;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  while (offset < bytes.byteLength) {
+    assert.ok(bytes.byteLength - offset >= 4, "record stream ends inside a size prefix");
+    const size = view.getUint32(offset, true);
+    assert.ok(size <= bytes.byteLength - offset - 4, "record stream ends inside a record");
+    offset += size + 4;
+    count += 1;
+  }
+  return count;
 }
 
 function decodeControl(output) {
@@ -301,7 +322,21 @@ test("OD retains native chunks across invocations and fits only the complete res
 
   const complete = await harness.invoke({
     methodId: "fit",
-    inputs: [inputFrame(chunks[2])],
+    inputs: [
+      inputFrame(chunks[2]),
+      ...Array.from({ length: 1_399 }, (_, index) =>
+        inputFrame(
+          makeChunk({
+            data: fixture,
+            sequence: 0,
+            final: true,
+            totalBytes: fixture.byteLength,
+            checksum,
+            requestId: 67851n + BigInt(index),
+          }),
+        ),
+      ),
+    ],
   });
   assert.equal(complete.statusCode, 0, complete.errorMessage);
   const controlFrames = complete.outputs.filter((output) => output.portId === "control");
@@ -328,19 +363,61 @@ test("OD retains native chunks across invocations and fits only the complete res
   const outputs = complete.outputs
     .filter((output) => recordOutputPorts.includes(output.portId))
     .map(decodeOutput);
+  let persistedRecordCount = 0n;
+  let multiChunkStreamSeen = false;
   for (const portId of recordOutputPorts) {
-    const matches = outputs.filter((output) => output.portId === portId);
+    const matches = outputs
+      .filter((output) => output.portId === portId)
+      .sort((left, right) => left.sequence - right.sequence);
     assert.ok(matches.length >= 1, `missing fitted ${portId}`);
-    for (const output of matches) {
+    multiChunkStreamSeen ||= matches.length > 1;
+    const first = matches[0];
+    assert.ok(
+      first.recordCount > BigInt(matches.length),
+      `${portId} records were not aggregated: records=${first.recordCount} frames=${matches.length}`,
+    );
+    persistedRecordCount += first.recordCount;
+    const stream = new Uint8Array(
+      matches.reduce((total, output) => total + output.data.byteLength, 0),
+    );
+    let streamOffset = 0;
+    for (let index = 0; index < matches.length; index += 1) {
+      const output = matches[index];
+      assert.equal(output.requestId, first.requestId);
+      assert.equal(output.sequence, index);
+      assert.equal(output.final, index + 1 === matches.length);
+      assert.equal(output.totalBytes, first.totalBytes);
+      assert.equal(output.recordCount, first.recordCount);
+      assert.deepEqual(output.checksum, first.checksum);
       assert.equal(output.schemaName, portId.toUpperCase());
       assert.equal(output.fileIdentifier, `$${portId.toUpperCase()}`);
       assert.ok(output.data.byteLength > 8);
-      assert.equal(
-        new TextDecoder().decode(output.data.subarray(8, 12)),
-        `$${portId.toUpperCase()}`,
-      );
+      assert.ok(output.data.byteLength <= 1_048_576);
+      stream.set(output.data, streamOffset);
+      streamOffset += output.data.byteLength;
     }
+    assert.equal(BigInt(stream.byteLength), first.totalBytes);
+    assert.deepEqual(
+      first.checksum,
+      new Uint8Array(crypto.createHash("sha256").update(stream).digest()),
+    );
+    assert.equal(BigInt(countSizePrefixedRecords(stream)), first.recordCount);
+    assert.equal(
+      new TextDecoder().decode(stream.subarray(8, 12)),
+      `$${portId.toUpperCase()}`,
+    );
   }
+  assert.equal(
+    multiChunkStreamSeen,
+    true,
+    `the large fit batch must exercise FSB chunking: ${JSON.stringify(
+      outputs.map((output) => ({
+        portId: output.portId,
+        recordCount: output.recordCount.toString(),
+        bytes: output.data.byteLength,
+      })),
+    )}`,
+  );
 
   const flatSqlRoot = path.join(packageRoot, "../../../flatsql/wasm/node");
   const flatSqlManifest = JSON.parse(
@@ -415,7 +492,7 @@ test("OD retains native chunks across invocations and fits only the complete res
   );
   assert.equal(
     appendStatus.AFFECTED_RECORDS(),
-    BigInt(outputs.length),
+    persistedRecordCount,
     "every fitted epoch record is persisted by the independent FlatSQL node",
   );
 });

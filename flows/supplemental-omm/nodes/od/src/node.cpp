@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <map>
 #include <string>
 #include <utility>
@@ -29,6 +30,8 @@ constexpr const char* kFsbFileIdentifier = "$FSB";
 constexpr const char* kFsbRootType = "FSB";
 constexpr uint32_t kFsbAlignedSize = 1'048'744;
 constexpr uint16_t kFsbAlignment = 8;
+constexpr size_t kFsbDataCapacity = 1'048'576;
+constexpr size_t kMaxOutputStreamBytes = 128u * 1024u * 1024u;
 constexpr const char* kFsoSchemaName = "FSO.fbs";
 constexpr const char* kFsoFileIdentifier = "$FSO";
 constexpr const char* kFsoRootType = "FSO";
@@ -96,6 +99,15 @@ struct Assembly {
   std::string file_identifier;
   std::vector<uint8_t> sha256;
   std::vector<uint8_t> bytes;
+};
+
+struct RecordStreamAccumulator {
+  const char* port_id = nullptr;
+  const char* schema_name = nullptr;
+  const char* file_identifier = nullptr;
+  uint32_t wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
+  uint64_t record_count = 0;
+  std::vector<uint8_t> data;
 };
 
 struct NativeState {
@@ -632,73 +644,110 @@ bool append_chunk(Provider provider, const Chunk& chunk, Assembly* completed,
   return true;
 }
 
-int32_t push_canonical_record(const char* port_id, const char* schema_name,
-                              const char* file_identifier,
-                              const std::vector<uint8_t>& record) {
-  uint8_t digest[32];
-  sdn_cid::sha256_raw(record.data(), record.size(), digest);
-  flatbuffers::FlatBufferBuilder builder(record.size() + 256);
-  const auto schema = builder.CreateString(schema_name);
-  const auto identifier = builder.CreateString(file_identifier);
-  const auto data = builder.CreateVector(record);
-  const auto checksum = builder.CreateVector(digest, sizeof(digest));
-  FSBBuilder stream(builder);
-  stream.add_REQUEST_ID(g_output_request_id++);
-  stream.add_KIND(flatSqlByteStreamKind_RECORD_STREAM);
-  stream.add_CHUNK_SEQUENCE(0);
-  stream.add_FINAL(true);
-  stream.add_TOTAL_BYTES(record.size());
-  stream.add_RECORD_COUNT(1);
-  stream.add_SCHEMA_NAME(schema);
-  stream.add_FILE_IDENTIFIER(identifier);
-  stream.add_DATA(data);
-  stream.add_SHA256(checksum);
-  const auto root = stream.Finish();
+int32_t push_canonical_stream_chunk(
+    const RecordStreamAccumulator& records, uint64_t request_id,
+    uint32_t sequence, bool final, const uint8_t digest[32],
+    const uint8_t* chunk_data, size_t chunk_size) {
+  flatbuffers::FlatBufferBuilder builder(chunk_size + 256);
+  const auto schema = builder.CreateString(records.schema_name);
+  const auto identifier = builder.CreateString(records.file_identifier);
+  const auto data = builder.CreateVector(chunk_data, chunk_size);
+  const auto checksum = builder.CreateVector(digest, 32);
+  FSBBuilder stream_builder(builder);
+  stream_builder.add_REQUEST_ID(request_id);
+  stream_builder.add_KIND(flatSqlByteStreamKind_RECORD_STREAM);
+  stream_builder.add_CHUNK_SEQUENCE(sequence);
+  stream_builder.add_FINAL(final);
+  stream_builder.add_TOTAL_BYTES(records.data.size());
+  stream_builder.add_RECORD_COUNT(records.record_count);
+  stream_builder.add_SCHEMA_NAME(schema);
+  stream_builder.add_FILE_IDENTIFIER(identifier);
+  stream_builder.add_DATA(data);
+  stream_builder.add_SHA256(checksum);
+  const auto root = stream_builder.Finish();
   FinishFSBBuffer(builder, root);
   return plugin_push_output_typed(
-      port_id, kFsbSchemaName, kFsbFileIdentifier,
+      records.port_id, kFsbSchemaName, kFsbFileIdentifier,
       PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, kFsbRootType, 0, 0, 0,
       builder.GetBufferPointer(), static_cast<uint32_t>(builder.GetSize()));
 }
 
-int32_t push_aligned_record(const char* port_id, const char* schema_name,
-                            const char* file_identifier,
-                            const std::vector<uint8_t>& record) {
-  if (record.size() > 1'048'576) return -1;
+int32_t push_aligned_stream_chunk(
+    const RecordStreamAccumulator& stream, uint64_t request_id,
+    uint32_t sequence, bool final, const uint8_t digest[32],
+    const uint8_t* chunk_data, size_t chunk_size) {
+  if (chunk_size > kFsbDataCapacity) return -1;
   std::memset(&g_aligned_output, 0, sizeof(g_aligned_output));
-  g_aligned_output.REQUEST_ID = g_output_request_id++;
+  g_aligned_output.REQUEST_ID = request_id;
   g_aligned_output.KIND = flatSqlByteStreamKind_RECORD_STREAM;
-  g_aligned_output.CHUNK_SEQUENCE = 0;
-  g_aligned_output.FINAL = true;
-  g_aligned_output.TOTAL_BYTES = record.size();
-  g_aligned_output.RECORD_COUNT = 1;
-  g_aligned_output.SCHEMA_NAME.set(schema_name);
+  g_aligned_output.CHUNK_SEQUENCE = sequence;
+  g_aligned_output.FINAL = final;
+  g_aligned_output.TOTAL_BYTES = stream.data.size();
+  g_aligned_output.RECORD_COUNT = stream.record_count;
+  g_aligned_output.SCHEMA_NAME.set(stream.schema_name);
   g_aligned_output.set_has_SCHEMA_NAME(true);
-  g_aligned_output.FILE_IDENTIFIER.set(file_identifier);
+  g_aligned_output.FILE_IDENTIFIER.set(stream.file_identifier);
   g_aligned_output.set_has_FILE_IDENTIFIER(true);
-  g_aligned_output.DATA.set_length(static_cast<uint32_t>(record.size()));
-  std::memcpy(g_aligned_output.DATA.values, record.data(), record.size());
+  g_aligned_output.DATA.set_length(static_cast<uint32_t>(chunk_size));
+  std::memcpy(g_aligned_output.DATA.values, chunk_data, chunk_size);
   g_aligned_output.set_has_DATA(true);
   g_aligned_output.SHA256.set_length(32);
-  sdn_cid::sha256_raw(record.data(), record.size(),
-                      g_aligned_output.SHA256.values);
+  std::memcpy(g_aligned_output.SHA256.values, digest, 32);
   g_aligned_output.set_has_SHA256(true);
   return plugin_push_output_typed(
-      port_id, kFsbSchemaName, kFsbFileIdentifier,
+      stream.port_id, kFsbSchemaName, kFsbFileIdentifier,
       PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, kFsbRootType, 0,
       kFsbAlignedSize, kFsbAlignment,
       reinterpret_cast<const uint8_t*>(&g_aligned_output), kFsbAlignedSize);
 }
 
-int32_t push_record(const char* port_id, const char* schema_name,
-                    const char* file_identifier,
-                    const std::vector<uint8_t>& record,
-                    uint32_t wire_format) {
-  if (record.empty()) return 0;
-  if (wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
-    return push_aligned_record(port_id, schema_name, file_identifier, record);
+int32_t push_record_stream(const RecordStreamAccumulator& stream) {
+  if (stream.data.empty() || stream.record_count == 0) return 0;
+  uint8_t digest[32];
+  sdn_cid::sha256_raw(stream.data.data(), stream.data.size(), digest);
+  const uint64_t request_id = g_output_request_id++;
+  size_t offset = 0;
+  uint32_t sequence = 0;
+  while (offset < stream.data.size()) {
+    const size_t chunk_size =
+        std::min(kFsbDataCapacity, stream.data.size() - offset);
+    const bool final = offset + chunk_size == stream.data.size();
+    const int32_t status =
+        stream.wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY
+            ? push_aligned_stream_chunk(stream, request_id, sequence, final,
+                                        digest, stream.data.data() + offset,
+                                        chunk_size)
+            : push_canonical_stream_chunk(stream, request_id, sequence, final,
+                                          digest, stream.data.data() + offset,
+                                          chunk_size);
+    if (status < 0) return status;
+    offset += chunk_size;
+    ++sequence;
   }
-  return push_canonical_record(port_id, schema_name, file_identifier, record);
+  return 0;
+}
+
+bool append_record(std::vector<RecordStreamAccumulator>* streams,
+                   const char* port_id, const char* schema_name,
+                   const char* file_identifier,
+                   const std::vector<uint8_t>& record,
+                   uint32_t wire_format) {
+  if (!streams) return false;
+  if (record.empty()) return true;
+  auto found = std::find_if(
+      streams->begin(), streams->end(),
+      [port_id, wire_format](const RecordStreamAccumulator& stream) {
+        return stream.wire_format == wire_format &&
+               std::strcmp(stream.port_id, port_id) == 0;
+      });
+  if (found == streams->end()) {
+    streams->push_back({port_id, schema_name, file_identifier, wire_format});
+    found = std::prev(streams->end());
+  }
+  if (record.size() > kMaxOutputStreamBytes - found->data.size()) return false;
+  found->data.insert(found->data.end(), record.begin(), record.end());
+  ++found->record_count;
+  return true;
 }
 
 int32_t push_canonical_configuration(uint64_t request_id) {
@@ -788,26 +837,26 @@ int32_t push_configuration(uint32_t wire_format) {
   return push_canonical_configuration(request_id);
 }
 
-int32_t emit_result(const od::BatchResult& result, uint32_t wire_format) {
-  int32_t status = push_record("omm", "OMM", "$OMM", result.omm,
-                               wire_format);
-  if (status < 0) return status;
-  status = push_record("ocm", "OCM", "$OCM", result.ocm, wire_format);
-  if (status < 0) return status;
-  status = push_record("obd", "OBD", "$OBD", result.obd, wire_format);
-  if (status < 0) return status;
+bool append_result(std::vector<RecordStreamAccumulator>* streams,
+                   const od::BatchResult& result, uint32_t wire_format) {
+  bool accepted =
+      append_record(streams, "omm", "OMM", "$OMM", result.omm,
+                    wire_format) &&
+      append_record(streams, "ocm", "OCM", "$OCM", result.ocm,
+                    wire_format) &&
+      append_record(streams, "obd", "OBD", "$OBD", result.obd,
+                    wire_format);
   for (const od::BatchEpochResult& additional : result.additional_epochs) {
-    status = push_record("omm", "OMM", "$OMM", additional.omm,
-                         wire_format);
-    if (status < 0) return status;
-    status = push_record("ocm", "OCM", "$OCM", additional.ocm,
-                         wire_format);
-    if (status < 0) return status;
-    status = push_record("obd", "OBD", "$OBD", additional.obd,
-                         wire_format);
-    if (status < 0) return status;
+    accepted =
+        accepted &&
+        append_record(streams, "omm", "OMM", "$OMM", additional.omm,
+                      wire_format) &&
+        append_record(streams, "ocm", "OCM", "$OCM", additional.ocm,
+                      wire_format) &&
+        append_record(streams, "obd", "OBD", "$OBD", additional.obd,
+                      wire_format);
   }
-  return 0;
+  return accepted;
 }
 
 bool provider_for_port(const char* port_id, Provider* provider) {
@@ -862,7 +911,8 @@ extern "C" int fit(void) {
   const std::vector<od::BatchResult> results =
       od::run_batch_fit(objects, 0, &stats);
   size_t emitted = 0;
-  bool configuration_emitted = false;
+  uint32_t configuration_wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
+  std::vector<RecordStreamAccumulator> streams;
   std::string first_fit_error;
   for (size_t index = 0; index < results.size(); ++index) {
     const od::BatchResult& result = results[index];
@@ -874,19 +924,11 @@ extern "C" int fit(void) {
         index < output_wire_formats.size()
             ? output_wire_formats[index]
             : PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
-    if (!configuration_emitted) {
-      const int32_t configuration_status =
-          push_configuration(output_wire_format);
-      if (configuration_status < 0) {
-        plugin_set_error("od-output", "unable to emit FlatSQL CONFIGURE_INDEX control");
-        return 500;
-      }
-      configuration_emitted = true;
-    }
-    const int32_t status = emit_result(result, output_wire_format);
-    if (status < 0) {
-      plugin_set_error("od-output", "unable to emit fitted FSB record stream");
-      return 500;
+    if (emitted == 0) configuration_wire_format = output_wire_format;
+    if (!append_result(&streams, result, output_wire_format)) {
+      plugin_set_error("od-output-too-large",
+                       "one fitted schema stream exceeds 128 MiB");
+      return 413;
     }
     ++emitted;
   }
@@ -896,6 +938,16 @@ extern "C" int fit(void) {
         first_fit_error.empty() ? "OD produced no converged record set"
                                 : first_fit_error.c_str());
     return 422;
+  }
+  if (push_configuration(configuration_wire_format) < 0) {
+    plugin_set_error("od-output", "unable to emit FlatSQL CONFIGURE_INDEX control");
+    return 500;
+  }
+  for (const RecordStreamAccumulator& stream : streams) {
+    if (push_record_stream(stream) < 0) {
+      plugin_set_error("od-output", "unable to emit fitted FSB record stream");
+      return 500;
+    }
   }
   return 0;
 }
