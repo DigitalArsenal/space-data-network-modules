@@ -19,6 +19,13 @@ constexpr const char* kDefaultEphemerisBase =
 constexpr uint32_t kMaxFetchConcurrency = 64;
 constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
+// Keep 64 requests in flight to saturate the link, but bound parsing, opaque
+// writes, hashing, and checkpoint serialization in any one guest invocation.
+// WasmEdge grants each independently signed child a finite scheduled fuel
+// budget; retaining the rest of the fetched wave in this node's own memory
+// lets the flow yield and resume without downloading those files twice.
+constexpr size_t kMaxDurableFilesPerInvocation = 16;
+constexpr uint64_t kMaxDurableBytesPerInvocation = 32ull * 1024 * 1024;
 constexpr uint32_t kMaxDownstreamObjectsPerInvocation = 1;
 constexpr size_t kMaxStarlinkFileBytes = 64 * 1024 * 1024;
 constexpr uint64_t kMaxRetainedWaveBytes = 288ull * 1024 * 1024;
@@ -87,6 +94,8 @@ struct State {
 };
 
 State g_state;
+std::vector<provider_node::HttpResult> g_pending_wave;
+uint32_t g_pending_wave_begin = 0;
 bool g_emitted_transient = false;
 bool g_progress_emitted_transient = false;
 uint64_t g_trusted_emission_epoch_count = 0;
@@ -1325,6 +1334,8 @@ bool emit_progress() {
 
 void reset_state() {
   g_state = State{};
+  g_pending_wave.clear();
+  g_pending_wave_begin = 0;
   g_emitted_transient = false;
   g_progress_emitted_transient = false;
   g_trusted_emission_epoch_count = 0;
@@ -1405,14 +1416,27 @@ bool begin_catalog(const Config& config, std::string* error) {
 }
 
 bool stage_download_page(
-                         size_t begin,
-                         const std::vector<provider_node::HttpResult>& responses,
-                         std::string* error) {
+    size_t begin,
+    const std::vector<provider_node::HttpResult>& responses,
+    size_t response_offset,
+    size_t response_count,
+    std::string* error) {
+  if (response_count == 0 ||
+      response_count > kMaxDurableFilesPerInvocation ||
+      response_offset > responses.size() ||
+      response_count > responses.size() - response_offset ||
+      begin != g_state.downloaded_count ||
+      begin > g_state.units.size() ||
+      response_count > g_state.units.size() - begin) {
+    if (error) *error = "Starlink durable slice bounds are invalid";
+    return false;
+  }
   uint64_t page_bytes = 0;
   std::vector<uint64_t> epoch_counts;
-  epoch_counts.reserve(responses.size());
-  for (size_t local = 0; local < responses.size(); ++local) {
-    const provider_node::HttpResult& response = responses[local];
+  epoch_counts.reserve(response_count);
+  for (size_t local = 0; local < response_count; ++local) {
+    const provider_node::HttpResult& response =
+        responses[response_offset + local];
     if (response.status != 200 || response.body.empty() ||
         response.body.size() > kMaxStarlinkFileBytes) {
       if (error) *error = "a complete Starlink ephemeris fetch failed";
@@ -1431,9 +1455,14 @@ bool stage_download_page(
     }
     epoch_counts.push_back(epochs);
   }
+  if (response_count > 1 && page_bytes > kMaxDurableBytesPerInvocation) {
+    if (error) *error = "Starlink durable slice exceeds its byte bound";
+    return false;
+  }
 
-  for (size_t local = 0; local < responses.size(); ++local) {
-    const provider_node::HttpResult& response = responses[local];
+  for (size_t local = 0; local < response_count; ++local) {
+    const provider_node::HttpResult& response =
+        responses[response_offset + local];
     PlannedUnit& unit = g_state.units[begin + local];
     unit.byte_length = response.body.size();
     unit.chunk_count = static_cast<uint32_t>(
@@ -1465,7 +1494,7 @@ bool stage_download_page(
     return false;
   }
   g_state.downloaded_bytes = next_bytes;
-  g_state.downloaded_count = static_cast<uint32_t>(begin + responses.size());
+  g_state.downloaded_count = static_cast<uint32_t>(begin + response_count);
   if (!persist_checkpoint()) {
     if (error) *error = "opaque Starlink checkpoint commit failed";
     return false;
@@ -1548,6 +1577,63 @@ int fail_invocation(const char* code, const std::string& message,
 
 int run_drain_phase();
 
+int commit_pending_downloads() {
+  const size_t begin = g_state.downloaded_count;
+  const size_t wave_begin = g_pending_wave_begin;
+  if (g_pending_wave.empty() ||
+      wave_begin > g_state.units.size() ||
+      g_pending_wave.size() > g_state.units.size() - wave_begin ||
+      begin < wave_begin ||
+      begin - wave_begin > g_pending_wave.size()) {
+    return fail_invocation(
+        "checkpoint-invalid",
+        "Starlink retained download wave does not match its durable cursor",
+        422);
+  }
+  const size_t response_offset = begin - wave_begin;
+  if (response_offset == g_pending_wave.size()) {
+    g_pending_wave.clear();
+    g_pending_wave_begin = 0;
+  } else {
+    size_t count = 0;
+    uint64_t slice_bytes = 0;
+    while (count < kMaxDurableFilesPerInvocation &&
+           response_offset + count < g_pending_wave.size()) {
+      const size_t body_bytes =
+          g_pending_wave[response_offset + count].body.size();
+      if (count > 0 &&
+          (body_bytes > kMaxDurableBytesPerInvocation ||
+           slice_bytes > kMaxDurableBytesPerInvocation - body_bytes)) {
+        break;
+      }
+      if (!add_without_overflow(slice_bytes, body_bytes, &slice_bytes)) {
+        return fail_invocation(
+            "spool-write", "Starlink durable slice byte count overflowed",
+            503);
+      }
+      ++count;
+    }
+
+    std::string error;
+    if (!stage_download_page(
+            begin, g_pending_wave, response_offset, count, &error)) {
+      return fail_invocation("spool-write", error, 503);
+    }
+    if (response_offset + count == g_pending_wave.size()) {
+      g_pending_wave.clear();
+      g_pending_wave_begin = 0;
+    }
+  }
+  if (!emit_progress()) {
+    return fail_invocation("progress-output",
+                           "unable to emit Starlink progress snapshot", 500);
+  }
+  g_progress_emitted_transient = true;
+  plugin_set_backlog_remaining(work_remaining());
+  plugin_set_yielded(1);
+  return 0;
+}
+
 int run_download_phase() {
   const size_t begin = g_state.downloaded_count;
   if (begin > 0 && !g_progress_emitted_transient) {
@@ -1564,6 +1650,7 @@ int run_download_phase() {
   if (g_progress_emitted_transient) {
     g_progress_emitted_transient = false;
   }
+  if (!g_pending_wave.empty()) return commit_pending_downloads();
   if (begin == g_state.units.size()) {
     g_state.phase = Phase::kDraining;
     if (!persist_checkpoint()) {
@@ -1602,21 +1689,11 @@ int run_download_phase() {
     return fail_invocation(
         "memory-bound", "Starlink retained download wave cannot fit", 413);
   }
-  std::vector<provider_node::HttpResult> responses = fetch_complete_page(
+  g_pending_wave_begin = static_cast<uint32_t>(begin);
+  g_pending_wave = fetch_complete_page(
       g_state.units, begin, end, g_state.config.fetch_concurrency,
       expected_sizes);
-  std::string error;
-  if (!stage_download_page(begin, responses, &error)) {
-    return fail_invocation("spool-write", error, 503);
-  }
-  if (!emit_progress()) {
-    return fail_invocation("progress-output",
-                           "unable to emit Starlink progress snapshot", 500);
-  }
-  g_progress_emitted_transient = true;
-  plugin_set_backlog_remaining(work_remaining());
-  plugin_set_yielded(1);
-  return 0;
+  return commit_pending_downloads();
 }
 
 int run_drain_phase() {

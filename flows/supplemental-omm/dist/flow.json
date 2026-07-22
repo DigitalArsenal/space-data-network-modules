@@ -35,7 +35,7 @@
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "eca46d33c7f6716a929426742e382d6c3c551763c3e4ffa767a3c46b164a7da6"
+        "sha256": "8eb401458c2cf1f890f1ac3da36bf78c899e3df79e84dcf585538a135503713d"
       }
     },
     {
@@ -113,7 +113,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "485d068641cf97961d44f33881f6082f734b6b68b3c92ecf9df4a9a6cd2c9e82"
+        "sha256": "7b760e34ff6a4c3dad440e4c040de25e457a944ed37284abcb77c2ae10f17577"
       }
     },
     {
@@ -127,9 +127,9 @@
       ],
       "drainPolicy": "drain-until-yield",
       "artifact": {
-        "path": "../../../flatsql/wasm/node/dist/isomorphic/module.wasm",
-        "publisher": "../../../flatsql/wasm/node/publisher.json",
-        "sha256": "593bd94c0964835c5077a60973cd1da42f5ccf1f5ca63dcd71a82e59df97a93e"
+        "path": "./nodes/flatsql/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/flatsql/publisher.json",
+        "sha256": "399cbe6796f3804de70a1c5d23af1423701c8963e16bef562f72af1ce9be2a60"
       }
     },
     {

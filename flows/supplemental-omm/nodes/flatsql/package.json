@@ -1,0 +1,13 @@
+{
+  "name": "@digitalarsenal/flatsql-wasm-node-incremental",
+  "version": "2.0.2",
+  "private": true,
+  "description": "Independently signed isomorphic FlatSQL node with bounded incremental persistence",
+  "type": "module",
+  "license": "Apache-2.0",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "FLATSQL_NODE_BUILD_MODE=development node build.mjs",
+    "test": "FLATSQL_INCREMENTAL_NODE_ROOT=. node --test ../../tests/flatsql-incremental-persistence.test.mjs"
+  }
+}

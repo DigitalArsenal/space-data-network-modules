@@ -17,11 +17,17 @@ import {
 } from "../../../../spacedatastandards.org/node_modules/flatbuffers/js/flatbuffers.js";
 import { DSS } from "../../../../spacedatastandards.org/lib/js/DSS/DSS.js";
 import { FSB } from "../../../../spacedatastandards.org/lib/js/FSB/FSB.js";
+import { FSO } from "../../../../spacedatastandards.org/lib/js/FSO/FSO.js";
+import { flatSqlNodeStatus } from "../../../../spacedatastandards.org/lib/js/FSO/flatSqlNodeStatus.js";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const releaseArtifactPath = path.join(
   packageRoot,
   "dist/isomorphic/module.wasm",
+);
+const starlinkArtifactPath = path.join(
+  packageRoot,
+  "nodes/providers/starlink/dist/isomorphic/module.wasm",
 );
 const trustedReleaseSigner =
   "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89";
@@ -31,11 +37,11 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "ed649e974613cf365ab8eadc33df19785eef8f8d17cc6780c2995fbf899698e0";
+  "fb2b85bcba270b470727aa7673bee1ef2a809ce0aa635cc2180128606fde6e52";
 const expectedChildSha256 = Object.freeze({
   timer: "db8d7a3506a0c3188b006886ebea30cfda9e9c2c2b9c477baefb5c37a375d6bd",
   "provider-starlink":
-    "eca46d33c7f6716a929426742e382d6c3c551763c3e4ffa767a3c46b164a7da6",
+    "8eb401458c2cf1f890f1ac3da36bf78c899e3df79e84dcf585538a135503713d",
   "provider-glonass":
     "d8462af69d5fd2311bfdf279ebb665cb5a3fbc1e73d7eba303b0522ca43c4095",
   "provider-intelsat":
@@ -44,9 +50,9 @@ const expectedChildSha256 = Object.freeze({
     "ffcaa7abe9533eeab795bf7e8452de6e79e6746c6d5d40226dbf50e5dd537fa1",
   "provider-iss":
     "97e0f6231db85dd7dec479cc346cfb37b885c81fe90436d109423f04e9861d17",
-  od: "485d068641cf97961d44f33881f6082f734b6b68b3c92ecf9df4a9a6cd2c9e82",
+  od: "7b760e34ff6a4c3dad440e4c040de25e457a944ed37284abcb77c2ae10f17577",
   store:
-    "593bd94c0964835c5077a60973cd1da42f5ccf1f5ca63dcd71a82e59df97a93e",
+    "399cbe6796f3804de70a1c5d23af1423701c8963e16bef562f72af1ce9be2a60",
   publication:
     "18a8ef6baaef1b92e7f93940ced3233ab2fa83512fd808b48b6c34b49681ce61",
   status:
@@ -304,6 +310,45 @@ function fixtureResponses() {
   ]);
 }
 
+function multiWaveFixtureResponses(fileCount = 130) {
+  const responses = fixtureResponses();
+  for (const url of [...responses.keys()]) {
+    if (url.startsWith(defaultUrls.starlinkBase)) responses.delete(url);
+  }
+
+  const templateFilename =
+    "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt";
+  const template = fs.readFileSync(
+    path.resolve(
+      packageRoot,
+      "../../data-source/spacex-starlink-source/test/fixtures/meme",
+      templateFilename,
+    ),
+    "utf8",
+  );
+  const filenames = Array.from(
+    { length: fileCount },
+    (_, index) =>
+      `MEME_${70000 + index}_STARLINK-COMPOSED-${index + 1}_1_Operational_${1700000000 + index}_UNCLASSIFIED.txt`,
+  );
+  const bodies = filenames.map((_, index) =>
+    encode(
+      template.replace(
+        "ephemeris_source:blend",
+        `ephemeris_source:composed-multi-wave-${index + 1}`,
+      ),
+    ),
+  );
+  responses.set(
+    defaultUrls.starlinkManifest,
+    encode(`${filenames.join("\n")}\n`),
+  );
+  filenames.forEach((filename, index) => {
+    responses.set(`${defaultUrls.starlinkBase}${filename}`, bodies[index]);
+  });
+  return { responses, filenames, bodies };
+}
+
 function serveCompleteHttpFixture(params, body, description) {
   assert.equal(params.method, "GET");
   if (params.headers?.Range === "bytes=0-0") {
@@ -368,6 +413,26 @@ function decodeDssRoute(output) {
     missingRows: dss.MISSING_ROWS(),
     downloadedBytes: dss.DOWNLOADED_BYTES(),
     error: dss.ERROR() ?? "",
+  };
+}
+
+function decodeFlatSqlStatus(output) {
+  assert.equal(
+    output.wireFormat,
+    "flatbuffer",
+    "separate signed child instances must use canonical FSO fallback",
+  );
+  const value = FSO.getRootAsFSO(
+    new ByteBuffer(new Uint8Array(output.payload)),
+  );
+  const decode = (candidate) =>
+    typeof candidate === "string"
+      ? candidate
+      : new TextDecoder().decode(candidate ?? new Uint8Array());
+  return {
+    status: value.STATUS(),
+    errorCode: decode(value.ERROR_CODE()),
+    message: new TextDecoder().decode(value.messageArray() ?? new Uint8Array()),
   };
 }
 
@@ -462,6 +527,15 @@ test("exact release-signed Supplemental flow commits the Starlink catalog before
           return {
             found: value !== undefined,
             bytes_b64: value?.slice() ?? new Uint8Array(),
+          };
+        }
+        if (operation === "storage.adapter.opaque.list") {
+          const prefix = `${descriptor.nodeId}\0${params.namespace}\0`;
+          return {
+            keys: [...opaqueValues.keys()]
+              .filter((key) => key.startsWith(prefix))
+              .map((key) => key.slice(prefix.length))
+              .sort(),
           };
         }
         if (operation === "storage.adapter.opaque.replace") {
@@ -973,6 +1047,564 @@ test("exact release-signed Supplemental flow commits the Starlink catalog before
     [...opaqueValues.keys()].some((key) => key.endsWith("\0snapshot.manifest")),
     "FlatSQL did not retain a committed snapshot manifest",
   );
+});
+
+test("exact signed composed flow drains 130 Starlink files across 64-file waves", async (t) => {
+  const published = new Uint8Array(fs.readFileSync(releaseArtifactPath));
+  assert.equal(sha256(published), expectedOuterSha256);
+  const outerVerification = await verifyModuleArtifact(published, {
+    trustedPublicKeys: [trustedReleaseSigner],
+    requireSignature: true,
+  });
+  assert.equal(outerVerification.verified, true);
+  assert.equal(outerVerification.signatureScope, "bundle");
+  assert.equal(outerVerification.publicKeyHex, trustedReleaseSigner);
+
+  const parsed = await parseSingleFileBundle(published);
+  const entries = new Map(parsed.entries.map((entry) => [entry.entryId, entry]));
+  const artifact = parseJsonEntry(entries.get("artifact.json"), "artifact.json");
+  const starlinkDescriptor = artifact.nodeArtifacts.find(
+    ({ nodeId }) => nodeId === "provider-starlink",
+  );
+  assert.ok(starlinkDescriptor, "signed parent has no Starlink child descriptor");
+  const exactStarlink = new Uint8Array(fs.readFileSync(starlinkArtifactPath));
+  const exactStarlinkVerification = await verifyModuleArtifact(exactStarlink, {
+    trustedPublicKeys: [trustedReleaseSigner],
+    requireSignature: true,
+  });
+  assert.equal(exactStarlinkVerification.verified, true);
+  assert.equal(exactStarlinkVerification.publicKeyHex, trustedReleaseSigner);
+  assert.equal(
+    starlinkDescriptor.sha256,
+    sha256(exactStarlink),
+    "signed parent must embed the exact current signed Starlink child",
+  );
+  assert.deepEqual(
+    new Uint8Array(entries.get(starlinkDescriptor.entryId).payloadBytes),
+    exactStarlink,
+    "signed parent changed the exact current signed Starlink child bytes",
+  );
+  assert.deepEqual(
+    Object.fromEntries(
+      artifact.nodeArtifacts.map(({ nodeId, sha256: childSha256 }) => [
+        nodeId,
+        childSha256,
+      ]),
+    ),
+    expectedChildSha256,
+  );
+
+  const {
+    responses: httpBodies,
+    filenames: starlinkFilenames,
+  } = multiWaveFixtureResponses(130);
+  const starlinkEphemerisUrls = new Set(
+    starlinkFilenames.map(
+      (filename) => `${defaultUrls.starlinkBase}${filename}`,
+    ),
+  );
+  let clockNowMs = Date.parse("2026-07-22T12:34:56Z");
+  let activeStarlinkInvocation = null;
+  const executionEvents = [];
+  const recordEvent = (event) => {
+    const recorded = { sequence: executionEvents.length, ...event };
+    executionEvents.push(recorded);
+    return recorded;
+  };
+  const opaqueValues = new Map();
+  const opaqueKey = (nodeId, params) =>
+    `${nodeId}\0${params.namespace}\0${params.key}`;
+  const children = [];
+  for (const descriptor of artifact.nodeArtifacts) {
+    const childEntry = entries.get(descriptor.entryId);
+    assert.ok(childEntry, `signed bundle is missing ${descriptor.entryId}`);
+    assert.equal(sha256(childEntry.payloadBytes), descriptor.sha256);
+    const publisher = parseJsonEntry(
+      entries.get(descriptor.publisherEntryId),
+      descriptor.publisherEntryId,
+    );
+    assert.equal(publisher.publicKeyHex, trustedReleaseSigner);
+    assert.equal(publisher.developmentOnly, false);
+
+    children.push({
+      pluginId: descriptor.pluginId,
+      wasmSource: childEntry.payloadBytes,
+      verifySignature: {
+        trustedPublicKeys: [trustedReleaseSigner],
+        requireSignature: true,
+      },
+      hostcallDispatch(operation, params) {
+        if (operation === "clock.now") return clockNowMs;
+        if (operation === "timers.arm" || operation === "timers.cancel") {
+          return { accepted: true };
+        }
+        if (operation === "http.request") {
+          if (descriptor.nodeId === "provider-starlink") {
+            recordEvent({
+              kind: "starlink-http",
+              invocation: activeStarlinkInvocation,
+              url: params?.url,
+              range: params?.headers?.Range ?? "",
+            });
+          }
+          const body = httpBodies.get(params?.url);
+          assert.ok(body, `no 130-file browser fixture for ${params?.url}`);
+          return serveCompleteHttpFixture(
+            params,
+            body,
+            `signed provider ${params?.url}`,
+          );
+        }
+        if (operation === "pubsub.publish") return true;
+        if (operation === "storage.adapter.opaque.read") {
+          if (descriptor.nodeId === "provider-starlink") {
+            recordEvent({
+              kind: "starlink-storage",
+              invocation: activeStarlinkInvocation,
+              operation,
+              key: params?.key,
+            });
+          }
+          const value = opaqueValues.get(opaqueKey(descriptor.nodeId, params));
+          return {
+            found: value !== undefined,
+            bytes_b64: value?.slice() ?? new Uint8Array(),
+          };
+        }
+        if (operation === "storage.adapter.opaque.list") {
+          const prefix = `${descriptor.nodeId}\0${params.namespace}\0`;
+          return {
+            keys: [...opaqueValues.keys()]
+              .filter((key) => key.startsWith(prefix))
+              .map((key) => key.slice(prefix.length))
+              .sort(),
+          };
+        }
+        if (operation === "storage.adapter.opaque.replace") {
+          assert.ok(params.data instanceof Uint8Array);
+          if (descriptor.nodeId === "provider-starlink") {
+            recordEvent({
+              kind: "starlink-storage",
+              invocation: activeStarlinkInvocation,
+              operation,
+              key: params?.key,
+              byteLength: params.data.byteLength,
+            });
+          }
+          opaqueValues.set(
+            opaqueKey(descriptor.nodeId, params),
+            params.data.slice(),
+          );
+          return { stored_bytes: params.data.byteLength };
+        }
+        if (operation === "storage.adapter.opaque.delete") {
+          if (descriptor.nodeId === "provider-starlink") {
+            recordEvent({
+              kind: "starlink-storage",
+              invocation: activeStarlinkInvocation,
+              operation,
+              key: params?.key,
+            });
+          }
+          opaqueValues.delete(opaqueKey(descriptor.nodeId, params));
+          return { deleted: true };
+        }
+        if (operation === "storage.adapter.opaque.sync") {
+          if (descriptor.nodeId === "provider-starlink") {
+            recordEvent({
+              kind: "starlink-storage",
+              invocation: activeStarlinkInvocation,
+              operation,
+              key: params?.key ?? "",
+            });
+          }
+          return { synced: true };
+        }
+        throw new Error(
+          `signed child ${descriptor.nodeId} requested unexpected host operation ${operation}`,
+        );
+      },
+    });
+  }
+
+  const host = await createIsomorphicFlowRuntimeHost({
+    wasmSource: published,
+    children,
+  });
+  t.after(() => host.destroy());
+  const childRecordFor = (nodeId) => {
+    const descriptor = artifact.nodeArtifacts.find(
+      (candidate) => candidate.nodeId === nodeId,
+    );
+    return (
+      host.children.get(nodeId) ?? host.children.get(descriptor?.pluginId)
+    );
+  };
+  for (const descriptor of artifact.nodeArtifacts) {
+    const childRecord = childRecordFor(descriptor.nodeId);
+    assert.ok(
+      childRecord?.harness,
+      `${descriptor.nodeId} browser instance was not created from its exact signed bundle entry`,
+    );
+    assert.equal(childRecord.sha256, expectedChildSha256[descriptor.nodeId]);
+  }
+
+  const starlinkInvocations = [];
+  const starlinkProgress = [];
+  const starlinkHarness = childRecordFor("provider-starlink")?.harness;
+  assert.ok(starlinkHarness, "Starlink child harness was not instantiated");
+  const invokeStarlink = starlinkHarness.invoke;
+  starlinkHarness.invoke = async (request) => {
+    const invocation = starlinkInvocations.length;
+    activeStarlinkInvocation = invocation;
+    let response;
+    try {
+      response = await invokeStarlink(request);
+    } finally {
+      activeStarlinkInvocation = null;
+    }
+    const summary = {
+      invocation,
+      inputCount: request.inputs?.length ?? 0,
+      inputPorts: (request.inputs ?? []).map(({ portId }) => portId),
+      statusCode: response.statusCode,
+      errorCode: response.errorCode,
+      errorMessage: response.errorMessage,
+      yielded: response.yielded,
+      backlogRemaining: response.backlogRemaining,
+      outputPorts: response.outputs.map(({ portId }) => portId),
+    };
+    starlinkInvocations.push(summary);
+    for (const output of response.outputs.filter(
+      ({ portId }) => portId === "progress",
+    )) {
+      const snapshot = decodeDssRoute(output);
+      const event = recordEvent({
+        kind: "starlink-progress",
+        invocation,
+        status: snapshot.status,
+        syncedRows: snapshot.syncedRows,
+        totalRows: snapshot.totalRows,
+      });
+      starlinkProgress.push({ ...snapshot, sequence: event.sequence, invocation });
+    }
+    return response;
+  };
+
+  const starlinkOdInvocations = [];
+  const odHarness = childRecordFor("od")?.harness;
+  assert.ok(odHarness, "OD child harness was not instantiated");
+  const invokeOd = odHarness.invoke;
+  odHarness.invoke = async (request) => {
+    const starlinkFrames = (request.inputs ?? [])
+      .filter(({ portId }) => portId === "starlink")
+      .map(({ payload }) => decodeProviderFsb(payload));
+    const inputEvent = starlinkFrames.length > 0
+      ? recordEvent({
+          kind: "od-starlink-input",
+          requestIds: starlinkFrames.map(({ requestId }) => requestId.toString()),
+        })
+      : null;
+    const response = await invokeOd(request);
+    if (starlinkFrames.length > 0) {
+      starlinkOdInvocations.push({
+        sequence: inputEvent.sequence,
+        frames: starlinkFrames,
+        statusCode: response.statusCode,
+        errorCode: response.errorCode,
+        errorMessage: response.errorMessage,
+        controlCount: response.outputs.filter(
+          ({ portId }) => portId === "control",
+        ).length,
+      });
+    }
+    return response;
+  };
+
+  const storeInvocations = [];
+  const storeHarness = childRecordFor("store")?.harness;
+  assert.ok(storeHarness, "FlatSQL child harness was not instantiated");
+  const invokeStore = storeHarness.invoke;
+  storeHarness.invoke = async (request) => {
+    const response = await invokeStore(request);
+    storeInvocations.push({
+      inputPorts: (request.inputs ?? []).map(({ portId }) => portId),
+      controlCount: (request.inputs ?? []).filter(
+        ({ portId }) => portId === "control",
+      ).length,
+      statusCode: response.statusCode,
+      errorCode: response.errorCode,
+      errorMessage: response.errorMessage,
+      statuses: response.outputs
+        .filter(({ portId }) => portId === "status")
+        .map(decodeFlatSqlStatus),
+    });
+    return response;
+  };
+
+  const starlinkStatusSnapshots = [];
+  const statusHarness = childRecordFor("status")?.harness;
+  assert.ok(statusHarness, "status child harness was not instantiated");
+  const invokeStatus = statusHarness.invoke;
+  statusHarness.invoke = async (request) => {
+    const response = await invokeStatus(request);
+    starlinkStatusSnapshots.push(
+      ...response.outputs
+        .filter(({ portId }) => portId === "provider-starlink.dss")
+        .map(decodeDssRoute),
+    );
+    return response;
+  };
+
+  host.enqueueTrigger(0);
+  const bootstrapped = await host.drain({
+    maxIterations: 20_000,
+    frameBudget: 64,
+  });
+  assert.ok(bootstrapped.nodesInvoked >= 1);
+  assert.equal(
+    executionEvents.filter(({ kind }) => kind === "starlink-http").length,
+    0,
+    "lifecycle bootstrap must not start the 130-file fetch before APP commit",
+  );
+
+  clockNowMs += 30_000;
+  host.enqueueTriggerFrame(0, {
+    portId: "wakeup",
+    bytes: new Uint8Array(),
+  });
+  const drained = await host.drain({
+    maxIterations: 100_000,
+    frameBudget: 64,
+  });
+
+  assert.ok(starlinkProgress.length > 0, "Starlink emitted no progress");
+  assert.ok(
+    starlinkProgress.every(({ totalRows }) => totalRows === 130n),
+    `Starlink reported a page size instead of the 130-file catalog total: ${JSON.stringify(starlinkProgress.map(({ syncedRows, totalRows }) => ({ syncedRows: syncedRows.toString(), totalRows: totalRows.toString() })))}`,
+  );
+  assert.equal(
+    starlinkProgress.some(({ totalRows }) => totalRows === 64n),
+    false,
+    "64 is fetch concurrency, never the Starlink catalog total",
+  );
+  assert.ok(
+    starlinkProgress.some(({ syncedRows }) => syncedRows > 64n),
+    "download progress never crossed the first 64-file wave",
+  );
+  const finalProgress = starlinkProgress.at(-1);
+  assert.equal(finalProgress.status, 2);
+  assert.equal(finalProgress.syncedRows, 130n);
+  assert.equal(finalProgress.totalRows, 130n);
+  assert.equal(finalProgress.missingRows, 0n);
+  const publishedStarlinkTotals = starlinkStatusSnapshots.filter(
+    ({ totalRows }) => totalRows > 0n,
+  );
+  assert.ok(
+    publishedStarlinkTotals.length > 0,
+    "status never published the absolute Starlink catalog snapshot",
+  );
+  assert.ok(
+    publishedStarlinkTotals.every(({ totalRows }) => totalRows === 130n),
+    "the status route exposed a 64-file page as the catalog total",
+  );
+  assert.ok(
+    publishedStarlinkTotals.some(
+      ({ status, syncedRows, totalRows, missingRows }) =>
+        status === 2 &&
+        syncedRows === 130n &&
+        totalRows === 130n &&
+        missingRows === 0n,
+    ),
+    "status never published the durably complete 130/130 Starlink snapshot",
+  );
+
+  const fileHttpEvents = executionEvents.filter(
+    ({ kind, url }) => kind === "starlink-http" && starlinkEphemerisUrls.has(url),
+  );
+  const sizeProbeEvents = fileHttpEvents.filter(
+    ({ range }) => range === "bytes=0-0",
+  );
+  const completeFetchEvents = fileHttpEvents.filter(({ range }) => !range);
+  assert.equal(sizeProbeEvents.length, 130);
+  assert.equal(completeFetchEvents.length, 130);
+  assert.equal(new Set(completeFetchEvents.map(({ url }) => url)).size, 130);
+  const fullFetchesByInvocation = new Map();
+  for (const event of completeFetchEvents) {
+    fullFetchesByInvocation.set(
+      event.invocation,
+      (fullFetchesByInvocation.get(event.invocation) ?? 0) + 1,
+    );
+  }
+  assert.deepEqual(
+    [...fullFetchesByInvocation.values()],
+    [64, 64, 2],
+    "the composed scheduler did not traverse all three bounded HTTP waves",
+  );
+  const fetchInvocationIds = [...fullFetchesByInvocation.keys()];
+  for (const invocation of fetchInvocationIds.slice(1)) {
+    assert.equal(
+      starlinkInvocations[invocation].inputCount,
+      0,
+      `HTTP wave ${invocation} was not reached through a zero-input continuation`,
+    );
+  }
+  assert.ok(
+    starlinkInvocations
+      .slice(1)
+      .some(({ inputCount, yielded }) => inputCount === 0 && yielded),
+    "the parent scheduler never executed a yielded zero-input Starlink continuation",
+  );
+
+  const durableChunkWrites = executionEvents.filter(
+    ({ kind, operation, key }) =>
+      kind === "starlink-storage" &&
+      operation === "storage.adapter.opaque.replace" &&
+      /^catalog\.[0-9a-f]{64}\.f\d+\.c\d+\.bin$/u.test(key ?? ""),
+  );
+  const durablyWrittenFiles = new Set(
+    durableChunkWrites.map(({ key }) => Number(/\.f(\d+)\.c/u.exec(key)[1])),
+  );
+  assert.equal(
+    durablyWrittenFiles.size,
+    130,
+    "the composed run did not durably write every fetched Starlink file",
+  );
+
+  const firstStarlinkOd = starlinkOdInvocations.at(0);
+  assert.ok(firstStarlinkOd, "no Starlink file reached OD");
+  assert.ok(
+    finalProgress.sequence < firstStarlinkOd.sequence,
+    "OD began before the provider reported its fully committed generation",
+  );
+  const committedStateEvents = executionEvents.filter(
+    ({ kind, operation, key, sequence }) =>
+      kind === "starlink-storage" &&
+      operation === "storage.adapter.opaque.replace" &&
+      key === "starlink.active.v1" &&
+      sequence < finalProgress.sequence,
+  );
+  assert.ok(committedStateEvents.length > 0);
+  const generationCommit = committedStateEvents.at(-1);
+  assert.ok(
+    completeFetchEvents.every(
+      ({ sequence }) => sequence < generationCommit.sequence,
+    ),
+    "Starlink committed its drain generation before all 130 complete files arrived",
+  );
+  const generationSync = executionEvents.find(
+    ({ kind, operation, sequence }) =>
+      kind === "starlink-storage" &&
+      operation === "storage.adapter.opaque.sync" &&
+      sequence > generationCommit.sequence &&
+      sequence < finalProgress.sequence,
+  );
+  assert.ok(
+    generationSync,
+    "Starlink reported 130/130 before syncing the final generation checkpoint",
+  );
+  assert.equal(
+    completeFetchEvents.filter(
+      ({ sequence }) => sequence > firstStarlinkOd.sequence,
+    ).length,
+    0,
+    "Starlink performed HTTP after storage-only OD drain began",
+  );
+
+  assert.equal(
+    starlinkOdInvocations.length,
+    130,
+    "the composed flow stopped at one 64-file wave instead of draining 130 files",
+  );
+  assert.ok(
+    starlinkOdInvocations.every(({ frames }) => frames.length === 1),
+    "OD received more than one Starlink object in one invocation",
+  );
+  assert.equal(
+    new Set(
+      starlinkOdInvocations.flatMap(({ frames }) =>
+        frames.map(({ requestId }) => requestId.toString()),
+      ),
+    ).size,
+    130,
+    "OD did not receive every Starlink object exactly once",
+  );
+  for (const invocation of starlinkOdInvocations) {
+    assert.equal(
+      invocation.statusCode,
+      0,
+      `Starlink OD invocation failed: ${invocation.errorCode ?? ""} ${invocation.errorMessage ?? ""}`,
+    );
+    assert.equal(
+      invocation.controlCount,
+      1,
+      `one fitted Starlink object must produce one FlatSQL control; request=${invocation.frames[0]?.requestId?.toString() ?? "unknown"}`,
+    );
+  }
+
+  assert.ok(storeInvocations.length >= 130, "FlatSQL was not invoked for the catalog");
+  assert.equal(
+    storeInvocations.some(({ controlCount }) => controlCount > 1),
+    false,
+    `the scheduler batched multiple controls into one FlatSQL invocation: ${JSON.stringify(storeInvocations.map(({ inputPorts, controlCount }) => ({ inputPorts, controlCount })))}`,
+  );
+  assert.ok(
+    storeInvocations.reduce(
+      (total, { controlCount }) => total + controlCount,
+      0,
+    ) >= 130,
+    "FlatSQL did not consume all 130 Starlink controls",
+  );
+  for (const invocation of storeInvocations) {
+    assert.equal(
+      invocation.statusCode,
+      0,
+      `FlatSQL invocation trapped: ${JSON.stringify(invocation)}`,
+    );
+    assert.ok(invocation.statuses.length > 0, "FlatSQL emitted no typed status");
+    for (const status of invocation.statuses) {
+      assert.equal(
+        status.status,
+        flatSqlNodeStatus.COMPLETE,
+        `${status.errorCode}: ${status.message}`,
+      );
+      assert.doesNotMatch(
+        `${status.errorCode} ${status.message}`,
+        /at most one configuration frame|multiple.*control/iu,
+      );
+    }
+  }
+
+  const finalStarlinkInvocation = starlinkInvocations.at(-1);
+  assert.equal(finalStarlinkInvocation.statusCode, 0);
+  assert.equal(finalStarlinkInvocation.yielded, false);
+  assert.equal(finalStarlinkInvocation.backlogRemaining, 0);
+  assert.deepEqual(finalStarlinkInvocation.outputPorts, []);
+  assert.equal(
+    [...opaqueValues.keys()].some(
+      (key) =>
+        key.startsWith("provider-starlink\0") &&
+        (key.endsWith("\0starlink.active.v1") || key.includes("\0catalog.")),
+    ),
+    false,
+    "the final yielded cleanup did not reclaim the drained Starlink generation",
+  );
+
+  for (let index = 0; index < host.nodeCount; index += 1) {
+    const descriptor = host.getNodeDispatchDescriptor(index);
+    const state = host.getNodeState(index);
+    assert.ok(state.invocationCount > 0n, `${descriptor.nodeId} was never invoked`);
+    assert.equal(state.lastStatus, 0, `${descriptor.nodeId} failed`);
+    assert.equal(state.ready, false, `${descriptor.nodeId} remained ready`);
+    assert.equal(state.queuedFrames, 0, `${descriptor.nodeId} retained frames`);
+    assert.equal(
+      state.backlogRemaining,
+      0,
+      `${descriptor.nodeId} retained yielded backlog`,
+    );
+  }
+  assert.equal(drained.handlersSkipped, 0);
+  assert.equal(host.getRoutingState().rejectedFrames, 0n);
 });
 
 test("fresh exact signed Starlink instances reload committed opaque waves without refetching", async (t) => {
