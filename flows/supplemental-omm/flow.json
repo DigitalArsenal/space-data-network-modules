@@ -10,12 +10,15 @@
       "methodId": "on_wakeup",
       "dispatchModel": "isomorphic",
       "kind": "trigger",
-      "capabilities": ["clock", "timers"],
+      "capabilities": [
+        "clock",
+        "timers"
+      ],
       "drainPolicy": "single-shot",
       "artifact": {
         "path": "./nodes/timer/dist/isomorphic/module.wasm",
         "publisher": "./nodes/timer/publisher.json",
-        "sha256": "c712e5714b80854d60334b198fe1e17c29e4e22e274e7339eba370f26fa1db56"
+        "sha256": "40a2717b9df4ff67d10ab66a28bb01e07ed23bf38a6d764b365d02f8af675333"
       }
     },
     {
@@ -24,12 +27,14 @@
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
-      "capabilities": ["http"],
+      "capabilities": [
+        "http"
+      ],
       "drainPolicy": "drain-until-yield",
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "79051ff42a6adc6be46758cb770aba523546f81aa85d906d4a4946c1a86a967d"
+        "sha256": "5ba646cfe77e4f51150ab27f408ee7b9f8643138d00838f2f7b3571728626647"
       }
     },
     {
@@ -38,12 +43,14 @@
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
-      "capabilities": ["http"],
+      "capabilities": [
+        "http"
+      ],
       "drainPolicy": "single-shot",
       "artifact": {
         "path": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/glonass/publisher.json",
-        "sha256": "b674a723bb2fc2e7e5600cc8a9f5b80e9327231a61b9d8f13291e1e685df14ca"
+        "sha256": "f82e56183149369395cedf4a19a22fa57ff9cbd534af412e38370e7896f16141"
       }
     },
     {
@@ -52,12 +59,14 @@
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
-      "capabilities": ["http"],
+      "capabilities": [
+        "http"
+      ],
       "drainPolicy": "single-shot",
       "artifact": {
         "path": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/intelsat/publisher.json",
-        "sha256": "e536bf0e92447edfc59c9f669d750dd03f0e23b05b2ee87cabb9163c4657f683"
+        "sha256": "92def949eff44120bb1c3aafebd74cbc55e7b8dbd0b66e61eb56bebebabf272c"
       }
     },
     {
@@ -66,12 +75,14 @@
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
-      "capabilities": ["http"],
+      "capabilities": [
+        "http"
+      ],
       "drainPolicy": "single-shot",
       "artifact": {
         "path": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/cpf/publisher.json",
-        "sha256": "e6490d06b020e465dc6fc8461f8d5b3de265c5bb7ac33dd20ef40931df0b43bc"
+        "sha256": "d7c3abbd5bf418b10645dc6d501922b20b15dc2a5e401068d34c0430846d65d1"
       }
     },
     {
@@ -80,12 +91,14 @@
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
-      "capabilities": ["http"],
+      "capabilities": [
+        "http"
+      ],
       "drainPolicy": "single-shot",
       "artifact": {
         "path": "./nodes/providers/iss/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/iss/publisher.json",
-        "sha256": "9fe7da6a04f6abc79771aefcecc1917982233f2b374a7ff1da6324441a5f3f17"
+        "sha256": "1067ba559c29e5d6f9f012f3975fc8b15c58c5e605c96368f5ff8a4add63bca0"
       }
     },
     {
@@ -99,7 +112,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "c7951ee0c929e273df01d1f33c30b759a62cbb8a9f5fd5886c115f8d0126869b"
+        "sha256": "86459062af3d2352409275c3f46e1b6a586f261fd84959b85f66c190289ecb90"
       }
     },
     {
@@ -108,12 +121,14 @@
       "methodId": "append_records",
       "dispatchModel": "isomorphic",
       "kind": "sink",
-      "capabilities": ["storage_adapter"],
+      "capabilities": [
+        "storage_adapter"
+      ],
       "drainPolicy": "drain-until-yield",
       "artifact": {
         "path": "../../../flatsql/wasm/node/dist/isomorphic/module.wasm",
         "publisher": "../../../flatsql/wasm/node/publisher.json",
-        "sha256": "07d7bcad89024e39029779583de8d6daa06f294d89fd4c746f056f0a62968e0e"
+        "sha256": "6929209a5b46e9bedb8e3bf5a5ab3ed71db64208d202d66f6fc61f959fa355f9"
       }
     },
     {
@@ -122,12 +137,14 @@
       "methodId": "publish_records",
       "dispatchModel": "isomorphic",
       "kind": "transform",
-      "capabilities": ["pubsub"],
+      "capabilities": [
+        "pubsub"
+      ],
       "drainPolicy": "drain-until-yield",
       "artifact": {
         "path": "./nodes/publication/dist/isomorphic/module.wasm",
         "publisher": "./nodes/publication/publisher.json",
-        "sha256": "9231337a2b715e74abd58662b900c6217a019c0d7961a8e1b5ed5f47751711aa"
+        "sha256": "81f3e78c88d512cd9ddf7417a1ca7ebce3ccf09188362c5840c433471a5d54fe"
       }
     },
     {
@@ -141,7 +158,7 @@
       "artifact": {
         "path": "./nodes/status/dist/isomorphic/module.wasm",
         "publisher": "./nodes/status/publisher.json",
-        "sha256": "091231053b026ce26e7cbdf8ebe7f3791e433a28f1a11403a38835f153eeeca9"
+        "sha256": "a77e4e1f6172a90e9cd28a0d55486ed292ce19a95e9cf29867ce8a79c25d24c3"
       }
     }
   ],
