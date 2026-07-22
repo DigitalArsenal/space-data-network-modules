@@ -5,7 +5,7 @@
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 10,
-  "edges": 23,
+  "edges": 24,
   "triggers": 1,
   "capabilities": [
     "clock",
@@ -95,7 +95,7 @@
       "dependencyId": "com.orbpro.spacex-starlink-source",
       "pluginId": "com.orbpro.spacex-starlink-source",
       "version": "2.0.0",
-      "sha256": "119590576d4a92857afbe595676eb501288211214bf88c127d51751a03fca4d5",
+      "sha256": "a9d9bfbb79039560fdd6785f5996f3d331741e9ce3d91b6bdc9cf49e691e2d8c",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
       "publisher": "./nodes/providers/starlink/publisher.json",
@@ -155,7 +155,7 @@
       "dependencyId": "org.sdn.flows.supplemental-omm.od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "version": "1.0.0",
-      "sha256": "9cb9d62b3652d0af088a7e9da350e4f2d0e4abaa539c1665dc43a6379aa6f48a",
+      "sha256": "7240955746f74dcb17eb91104fe4248e29f4f924f6d380ef4a18e4d6e883e898",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/od/dist/isomorphic/module.wasm",
       "publisher": "./nodes/od/publisher.json",
@@ -191,7 +191,7 @@
       "dependencyId": "org.sdn.flows.supplemental-omm.status",
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "version": "1.0.0",
-      "sha256": "1e8fc3234578902743a68d8da4be23151aa78bc81512d3b0144f5404a1ddb342",
+      "sha256": "532ad78f4376ce6e22f26ab29f0a4ca252f0c396fc51e02d34b478be343dedea",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/status/dist/isomorphic/module.wasm",
       "publisher": "./nodes/status/publisher.json",
@@ -217,7 +217,7 @@
       "pluginId": "com.orbpro.spacex-starlink-source",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
-      "sha256": "119590576d4a92857afbe595676eb501288211214bf88c127d51751a03fca4d5",
+      "sha256": "a9d9bfbb79039560fdd6785f5996f3d331741e9ce3d91b6bdc9cf49e691e2d8c",
       "entryId": "com.orbpro.spacex-starlink-source",
       "publisherEntryId": "nodes/provider-starlink.publisher.json",
       "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
@@ -272,7 +272,7 @@
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "methodId": "fit",
       "dispatchModel": "isomorphic",
-      "sha256": "9cb9d62b3652d0af088a7e9da350e4f2d0e4abaa539c1665dc43a6379aa6f48a",
+      "sha256": "7240955746f74dcb17eb91104fe4248e29f4f924f6d380ef4a18e4d6e883e898",
       "entryId": "org.sdn.flows.supplemental-omm.od",
       "publisherEntryId": "nodes/od.publisher.json",
       "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
@@ -305,7 +305,7 @@
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "methodId": "record_event",
       "dispatchModel": "isomorphic",
-      "sha256": "1e8fc3234578902743a68d8da4be23151aa78bc81512d3b0144f5404a1ddb342",
+      "sha256": "532ad78f4376ce6e22f26ab29f0a4ca252f0c396fc51e02d34b478be343dedea",
       "entryId": "org.sdn.flows.supplemental-omm.status",
       "publisherEntryId": "nodes/status.publisher.json",
       "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
@@ -313,6 +313,12 @@
     }
   ],
   "runtimeNodeRoutes": [
+    {
+      "key": "od.dss",
+      "nodeId": "status",
+      "portId": "od.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
     {
       "key": "provider-cpf.dss",
       "nodeId": "status",
@@ -352,9 +358,9 @@
   ],
   "bundle": {
     "version": 2,
-    "portableWasmSha256": "d84f07e136d6562c173ec10d2b1c055b7db6ddd90a111a79aa34de50177c06d6",
-    "flowPlgSha256": "65f347bc7e69ba13af5060d1891bdb629b093608115ddd349063cd28f8a5e39c",
-    "appSha256": "6ac4e217aee26702aa9edcad0f22d6d62431bd3ed6134cd6928f0af8a70e3ae7",
+    "portableWasmSha256": "b17910229bfe8af7bbd04d03be9c17a24977a2f3a0d574311d1e8b8cded83f06",
+    "flowPlgSha256": "2d00ace2fb0d82a5f8199f946aa812a03992a8944f08c5e25aff7c16367009a6",
+    "appSha256": "d8eb0f4cc9c7b656d2199b9f65da3dad99e2d7a2ead36138ac39aaba620015cf",
     "signatureHashAlgorithm": "sha256-sdn-module-bundle-v1",
     "requiredEntries": [
       "manifest",

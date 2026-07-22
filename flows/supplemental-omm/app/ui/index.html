@@ -73,6 +73,7 @@
     .state.live::before { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
     .state.stale::before { background: var(--warn); }
     .state.error::before { background: var(--bad); }
+    .error-message { color: var(--bad); font-family: var(--mono); font-size: 12px; max-width: 300px; overflow-wrap: anywhere; }
     .notice { margin-top: 14px; border-left: 3px solid var(--accent); background: var(--panel); color: var(--muted); padding: 12px 15px; }
     .notice code { color: var(--ink); font-family: var(--mono); }
     @media (max-width: 760px) {
@@ -98,40 +99,45 @@
     <div class="summary" aria-label="Node summary">
       <div class="metric"><span>Provider lanes</span><strong id="lane-count">5</strong></div>
       <div class="metric"><span>Active lanes</span><strong id="active-count">—</strong></div>
-      <div class="metric"><span>Stored frames</span><strong id="record-count">—</strong></div>
+      <div class="metric"><span>Stored records</span><strong id="record-count">—</strong></div>
     </div>
 
     <section aria-labelledby="lanes-title">
       <table>
         <thead>
           <tr>
-            <th id="lanes-title">Provider</th>
+            <th id="lanes-title">Lane</th>
             <th>Status</th>
-            <th>Processed frames</th>
-            <th>Total frames</th>
-            <th>Downloaded bytes</th>
+            <th>Completed units</th>
+            <th>Attempted units</th>
+            <th>Bytes</th>
+            <th>Last error</th>
           </tr>
         </thead>
         <tbody>
           <tr data-provider="starlink">
             <td class="provider">SpaceX Starlink<small>spacex-starlink</small></td>
-            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="error-message">—</td>
           </tr>
           <tr data-provider="glonass">
             <td class="provider">GLONASS<small>glonass</small></td>
-            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="error-message">—</td>
           </tr>
           <tr data-provider="intelsat">
             <td class="provider">Intelsat<small>intelsat</small></td>
-            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="error-message">—</td>
           </tr>
           <tr data-provider="cpf">
             <td class="provider">ILRS CPF<small>cpf</small></td>
-            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="error-message">—</td>
           </tr>
           <tr data-provider="iss">
             <td class="provider">ISS<small>iss</small></td>
-            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="error-message">—</td>
+          </tr>
+          <tr data-provider="od">
+            <td class="provider">Orbit determination<small>od</small></td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="error-message">—</td>
           </tr>
         </tbody>
       </table>
@@ -153,6 +159,7 @@
         intelsat: { nodeId: "provider-intelsat" },
         cpf: { nodeId: "provider-cpf" },
         iss: { nodeId: "provider-iss" },
+        od: { nodeId: "od" },
       };
       const number = new Intl.NumberFormat();
       const textDecoder = new TextDecoder();
@@ -308,6 +315,7 @@
         cells[2].textContent = number.format(lane.status.syncedRows);
         cells[3].textContent = number.format(lane.status.totalRows);
         cells[4].textContent = number.format(lane.status.downloadedBytes);
+        cells[5].textContent = lane.status.error || "—";
         return lane;
       }
 
@@ -325,6 +333,7 @@
           state.className = "state error";
           state.textContent = "unavailable";
           state.title = result.reason?.message ?? String(result.reason);
+          rows.get(key).querySelectorAll("td")[5].textContent = state.title;
         }
 
         const active = loaded.filter((lane) => lane.status.status === 1).length;
@@ -341,8 +350,8 @@
           ? `updated ${new Date().toLocaleTimeString()}`
           : "artifact status unavailable";
         notice.textContent = failed.length
-          ? `Loaded ${loaded.length} of ${Object.keys(providers).length} signed-node $FSB/$DSS provider records; ${failed.length} unavailable.`
-          : `Loaded ${loaded.length} signed-node $FSB/$DSS provider records from this artifact's runtime surface.`;
+          ? `Loaded ${loaded.length} of ${Object.keys(providers).length} signed-node $FSB/$DSS lane records; ${failed.length} unavailable.`
+          : `Loaded ${loaded.length} signed-node $FSB/$DSS lane records from this artifact's runtime surface.`;
       }
 
       document.querySelector("#refresh").addEventListener("click", refresh);

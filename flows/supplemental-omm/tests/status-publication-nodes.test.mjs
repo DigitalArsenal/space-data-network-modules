@@ -53,6 +53,7 @@ const statusRoutes = [
   ["provider-intelsat", "provider-intelsat.dss"],
   ["provider-cpf", "provider-cpf.dss"],
   ["provider-iss", "provider-iss.dss"],
+  ["od", "od.dss"],
   ["store", "store.dss"],
 ];
 
@@ -159,6 +160,7 @@ function makeFsoStatus({
   affectedRecords,
   resultBytes = 0,
   status = 4,
+  operation = 0,
   errorCode = "",
   message = new Uint8Array(),
 }) {
@@ -175,6 +177,7 @@ function makeFsoStatus({
     messageOffset = builder.endVector();
   }
   builder.startObject(21);
+  builder.addFieldInt8(0, operation, 0);
   builder.addFieldInt8(16, status, 0);
   builder.addFieldInt64(17, BigInt(affectedRecords), 0n);
   builder.addFieldInt64(18, BigInt(resultBytes), 0n);
@@ -185,12 +188,35 @@ function makeFsoStatus({
   return builder.asUint8Array();
 }
 
-function makeAlignedFsoStatus({ affectedRecords, resultBytes = 0, status = 4 }) {
+function makeAlignedFsoStatus({
+  affectedRecords,
+  resultBytes = 0,
+  status = 4,
+  operation = 0,
+  errorCode = "",
+  message = new Uint8Array(),
+}) {
   const payload = new Uint8Array(fsoAlignedByteLength);
   const view = new DataView(payload.buffer);
+  payload[2] = operation;
   payload[357_392] = status;
   view.setBigUint64(357_400, BigInt(affectedRecords), true);
   view.setBigUint64(357_408, BigInt(resultBytes), true);
+  if (errorCode) {
+    const encoded = new TextEncoder().encode(errorCode);
+    assert.ok(encoded.length <= 128, "aligned FSO error code exceeds schema capacity");
+    payload[1] |= 0b0000_0100;
+    payload[357_416] = encoded.length;
+    payload.set(encoded, 357_417);
+  }
+  const messageBytes =
+    message instanceof Uint8Array ? message : new TextEncoder().encode(message);
+  if (messageBytes.length > 0) {
+    assert.ok(messageBytes.length <= 4096, "aligned FSO message exceeds schema capacity");
+    payload[1] |= 0b0000_1000;
+    view.setUint32(357_548, messageBytes.length, true);
+    payload.set(messageBytes, 357_552);
+  }
   return payload;
 }
 
@@ -249,10 +275,10 @@ function inputFrame(payload, portId, wireFormat = "flatbuffer") {
   };
 }
 
-function fsoInputFrame(payload, wireFormat = "flatbuffer") {
+function fsoInputFrame(payload, wireFormat = "flatbuffer", portId = "store") {
   const aligned = wireFormat === "aligned-binary";
   return {
-    portId: "store",
+    portId,
     wireFormat,
     typeRef: {
       ...fsoType,
@@ -271,26 +297,33 @@ function fsoInputFrame(payload, wireFormat = "flatbuffer") {
 
 function decodeStatusDss(output) {
   let dssBytes;
+  let attempts;
   if (output.wireFormat === "aligned-binary") {
     const payload = new Uint8Array(output.payload);
-    const length = new DataView(
+    const view = new DataView(
       payload.buffer,
       payload.byteOffset,
       payload.byteLength,
-    ).getUint32(124, true);
+    );
+    attempts = view.getBigUint64(8, true);
+    const length = view.getUint32(124, true);
     dssBytes = payload.subarray(128, 128 + length);
   } else {
     const envelope = FSB.getRootAsFSB(
       new ByteBuffer(new Uint8Array(output.payload)),
     );
+    attempts = envelope.REQUEST_ID();
     dssBytes = new Uint8Array(envelope.dataArray() ?? []);
   }
   assert.equal(new TextDecoder().decode(dssBytes.subarray(8, 12)), "$DSS");
   const dss = DSS.getSizePrefixedRootAsDSS(new ByteBuffer(dssBytes));
   return {
+    attempts,
     status: dss.STATUS(),
     syncedRows: dss.SYNCED_ROWS(),
     totalRows: dss.TOTAL_ROWS(),
+    localRows: dss.LOCAL_ROWS(),
+    missingRows: dss.MISSING_ROWS(),
     downloadedBytes: dss.DOWNLOADED_BYTES(),
     error: dss.ERROR() ?? "",
   };
@@ -347,6 +380,12 @@ for (const spec of nodeSpecs) {
         storePort.acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
         "$FSO",
         "store status must consume FlatSQL's typed operation result",
+      );
+      const odPort = method.inputPorts.find((port) => port.portId === "od");
+      assert.equal(
+        odPort.acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
+        "$FSO",
+        "OD status must consume the fitter's typed operation result",
       );
     }
   });
@@ -480,6 +519,608 @@ for (const testCase of [
   });
 }
 
+for (const testCase of [
+  {
+    name: "canonical",
+    wireFormat: "flatbuffer",
+    makeStatus: makeFsoStatus,
+  },
+  {
+    name: "aligned",
+    wireFormat: "aligned-binary",
+    makeStatus: makeAlignedFsoStatus,
+  },
+]) {
+  test(`status node accepts ${testCase.name} FlatSQL APPEND_RECORDS COMPLETE outcomes`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const response = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            operation: 1,
+            status: 4,
+            affectedRecords: 7,
+            resultBytes: 91,
+          }),
+          testCase.wireFormat,
+        ),
+      ],
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.outputs[0].portId, "store.dss");
+    assert.deepEqual(decodeStatusDss(response.outputs[0]), {
+      attempts: 1n,
+      status: 2,
+      syncedRows: 7n,
+      totalRows: 7n,
+      localRows: 7n,
+      missingRows: 0n,
+      downloadedBytes: 91n,
+      error: "",
+    });
+  });
+
+  test(`status node rejects ${testCase.name} FlatSQL APPEND_RECORDS requests without losing store state`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const first = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            operation: 1,
+            status: 4,
+            affectedRecords: 2,
+            resultBytes: 13,
+          }),
+          testCase.wireFormat,
+        ),
+      ],
+    });
+    assert.equal(first.statusCode, 0, first.errorMessage);
+
+    const rejected = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            operation: 1,
+            status: 0,
+            affectedRecords: 99,
+            resultBytes: 999,
+          }),
+          testCase.wireFormat,
+        ),
+      ],
+    });
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.outputs.length, 0);
+
+    const second = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            operation: 1,
+            status: 4,
+            affectedRecords: 3,
+            resultBytes: 17,
+          }),
+          testCase.wireFormat,
+        ),
+      ],
+    });
+    assert.equal(second.statusCode, 0, second.errorMessage);
+    const status = decodeStatusDss(second.outputs[0]);
+    assert.equal(status.attempts, 2n);
+    assert.equal(status.syncedRows, 5n);
+    assert.equal(status.totalRows, 5n);
+    assert.equal(status.downloadedBytes, 30n);
+  });
+
+  test(`status node rejects out-of-range ${testCase.name} FlatSQL outcome enums without mutation`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    for (const invalid of [
+      { operation: 9, status: 4 },
+      { operation: 0, status: 11 },
+    ]) {
+      const rejected = await harness.invoke({
+        methodId: "record_event",
+        inputs: [
+          fsoInputFrame(
+            testCase.makeStatus({
+              ...invalid,
+              affectedRecords: 71,
+              resultBytes: 701,
+            }),
+            testCase.wireFormat,
+          ),
+        ],
+      });
+      assert.equal(rejected.statusCode, 400);
+      assert.equal(rejected.outputs.length, 0);
+    }
+    const accepted = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            operation: 8,
+            status: 4,
+            affectedRecords: 1,
+            resultBytes: 5,
+          }),
+          testCase.wireFormat,
+        ),
+      ],
+    });
+    assert.equal(accepted.statusCode, 0, accepted.errorMessage);
+    const status = decodeStatusDss(accepted.outputs[0]);
+    assert.equal(status.attempts, 1n);
+    assert.equal(status.syncedRows, 1n);
+    assert.equal(status.downloadedBytes, 5n);
+  });
+}
+
+for (const testCase of [
+  {
+    name: "canonical",
+    wireFormat: "flatbuffer",
+    makeStatus: makeFsoStatus,
+    successRecords: 7,
+    successBytes: 91,
+  },
+  {
+    name: "aligned",
+    wireFormat: "aligned-binary",
+    makeStatus: makeAlignedFsoStatus,
+    successRecords: 11,
+    successBytes: 123,
+  },
+]) {
+  test(`status node keeps ${testCase.name} OD failures visible while later fits succeed`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const firstErrorCode = `od-${testCase.name}-fit`;
+    const firstErrorMessage = `${testCase.name} object did not converge`;
+    const failed = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            affectedRecords: 37,
+            resultBytes: 4096,
+            status: 10,
+            errorCode: firstErrorCode,
+            message: firstErrorMessage,
+          }),
+          testCase.wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(failed.statusCode, 0, failed.errorMessage);
+    assert.equal(failed.outputs.length, 1);
+    assert.equal(failed.outputs[0].portId, "od.dss");
+    assert.equal(failed.outputs[0].wireFormat, testCase.wireFormat);
+    const failedStatus = decodeStatusDss(failed.outputs[0]);
+    assert.equal(failedStatus.attempts, 1n);
+    assert.equal(failedStatus.status, 4);
+    assert.equal(failedStatus.syncedRows, 0n, "failed objects are not successful fits");
+    assert.equal(failedStatus.totalRows, 1n, "OD total rows count logical attempts");
+    assert.equal(failedStatus.localRows, 0n);
+    assert.equal(failedStatus.missingRows, 1n);
+    assert.equal(failedStatus.downloadedBytes, 0n);
+    assert.match(failedStatus.error, /1 OD failure/);
+    assert.match(failedStatus.error, new RegExp(firstErrorCode));
+    assert.match(failedStatus.error, new RegExp(firstErrorMessage));
+
+    const succeeded = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            affectedRecords: testCase.successRecords,
+            resultBytes: testCase.successBytes,
+            status: 4,
+          }),
+          testCase.wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(succeeded.statusCode, 0, succeeded.errorMessage);
+    assert.equal(succeeded.outputs[0].portId, "od.dss");
+    const stickyStatus = decodeStatusDss(succeeded.outputs[0]);
+    assert.equal(stickyStatus.attempts, 2n);
+    assert.equal(stickyStatus.status, 4, "a later success must not hide an omitted object");
+    assert.equal(stickyStatus.syncedRows, 1n);
+    assert.equal(stickyStatus.totalRows, 2n);
+    assert.equal(stickyStatus.localRows, 1n);
+    assert.equal(stickyStatus.missingRows, 1n);
+    assert.equal(stickyStatus.downloadedBytes, BigInt(testCase.successBytes));
+    assert.equal(stickyStatus.error, failedStatus.error, "failure diagnostic must remain sticky");
+
+    const secondErrorCode = `od-${testCase.name}-parse`;
+    const failedAgain = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            affectedRecords: 19,
+            resultBytes: 2048,
+            status: 5,
+            errorCode: secondErrorCode,
+            message: "catalog object was malformed",
+          }),
+          testCase.wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(failedAgain.statusCode, 0, failedAgain.errorMessage);
+    const countedStatus = decodeStatusDss(failedAgain.outputs[0]);
+    assert.equal(countedStatus.attempts, 3n);
+    assert.equal(countedStatus.status, 4);
+    assert.equal(countedStatus.syncedRows, 1n);
+    assert.equal(countedStatus.totalRows, 3n);
+    assert.equal(countedStatus.localRows, 1n);
+    assert.equal(countedStatus.missingRows, 2n);
+    assert.equal(countedStatus.downloadedBytes, BigInt(testCase.successBytes));
+    assert.match(countedStatus.error, /2 OD failures/);
+    assert.match(countedStatus.error, new RegExp(secondErrorCode));
+  });
+}
+
+test("canonical and aligned OD status routes expose identical object-unit snapshots", async (t) => {
+  async function runSequence(wireFormat, makeStatus) {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const failed = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          makeStatus({
+            affectedRecords: 31,
+            resultBytes: 8192,
+            status: 10,
+            errorCode: "od-fit",
+            message: "fixture did not converge",
+          }),
+          wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(failed.statusCode, 0, failed.errorMessage);
+    const succeeded = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          makeStatus({ affectedRecords: 17, resultBytes: 233, status: 4 }),
+          wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(succeeded.statusCode, 0, succeeded.errorMessage);
+    return decodeStatusDss(succeeded.outputs[0]);
+  }
+
+  const canonical = await runSequence("flatbuffer", makeFsoStatus);
+  const aligned = await runSequence("aligned-binary", makeAlignedFsoStatus);
+  assert.deepEqual(aligned, canonical);
+  assert.deepEqual(canonical, {
+    attempts: 2n,
+    status: 4,
+    syncedRows: 1n,
+    totalRows: 2n,
+    localRows: 1n,
+    missingRows: 1n,
+    downloadedBytes: 233n,
+    error: "1 OD failure: od-fit: fixture did not converge",
+  });
+});
+
+for (const malformed of [
+  {
+    name: "ERROR_CODE",
+    status: () =>
+      makeFsoStatus({
+        affectedRecords: 0,
+        status: 10,
+        errorCode: "e".repeat(129),
+      }),
+  },
+  {
+    name: "MESSAGE",
+    status: () =>
+      makeFsoStatus({
+        affectedRecords: 0,
+        status: 10,
+        message: new Uint8Array(4097).fill(109),
+      }),
+  },
+]) {
+  test(`status node rejects oversized canonical OD ${malformed.name} without mutation`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const rejected = await harness.invoke({
+      methodId: "record_event",
+      inputs: [fsoInputFrame(malformed.status(), "flatbuffer", "od")],
+    });
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.outputs.length, 0);
+
+    const accepted = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          makeAlignedFsoStatus({ affectedRecords: 99, resultBytes: 23 }),
+          "aligned-binary",
+          "od",
+        ),
+      ],
+    });
+    assert.equal(accepted.statusCode, 0, accepted.errorMessage);
+    assert.deepEqual(decodeStatusDss(accepted.outputs[0]), {
+      attempts: 1n,
+      status: 2,
+      syncedRows: 1n,
+      totalRows: 1n,
+      localRows: 1n,
+      missingRows: 0n,
+      downloadedBytes: 23n,
+      error: "",
+    });
+  });
+}
+
+test("status node rolls back an earlier valid event when a later batch frame is malformed", async (t) => {
+  const harness = await createHarness(nodeSpecs[0]);
+  t.after(() => harness.destroy());
+  const malformed = makeAlignedFsoStatus({ affectedRecords: 0, status: 10 });
+  malformed[1] |= 0b0000_1000;
+  new DataView(malformed.buffer).setUint32(357_548, 4097, true);
+  const rejected = await harness.invoke({
+    methodId: "record_event",
+    inputs: [
+      fsoInputFrame(
+        makeFsoStatus({ affectedRecords: 7, resultBytes: 91 }),
+        "flatbuffer",
+        "od",
+      ),
+      fsoInputFrame(malformed, "aligned-binary", "od"),
+    ],
+  });
+  assert.equal(rejected.statusCode, 400);
+  assert.equal(rejected.outputs.length, 0);
+
+  const accepted = await harness.invoke({
+    methodId: "record_event",
+    inputs: [
+      fsoInputFrame(
+        makeFsoStatus({ affectedRecords: 3, resultBytes: 17 }),
+        "flatbuffer",
+        "od",
+      ),
+    ],
+  });
+  assert.equal(accepted.statusCode, 0, accepted.errorMessage);
+  const status = decodeStatusDss(accepted.outputs[0]);
+  assert.equal(status.attempts, 1n);
+  assert.equal(status.syncedRows, 1n);
+  assert.equal(status.totalRows, 1n);
+  assert.equal(status.missingRows, 0n);
+  assert.equal(status.downloadedBytes, 17n);
+});
+
+for (const testCase of [
+  {
+    name: "canonical",
+    wireFormat: "flatbuffer",
+    makeStatus: makeFsoStatus,
+  },
+  {
+    name: "aligned",
+    wireFormat: "aligned-binary",
+    makeStatus: makeAlignedFsoStatus,
+  },
+]) {
+  test(`status node rejects ${testCase.name} control FSO records without mutation`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const rejected = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            affectedRecords: 41,
+            resultBytes: 512,
+            status: 4,
+            operation: 1,
+          }),
+          testCase.wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.outputs.length, 0);
+
+    const accepted = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({ affectedRecords: 2, resultBytes: 29 }),
+          testCase.wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(accepted.statusCode, 0, accepted.errorMessage);
+    const status = decodeStatusDss(accepted.outputs[0]);
+    assert.equal(status.attempts, 1n);
+    assert.equal(status.syncedRows, 1n);
+    assert.equal(status.totalRows, 1n);
+    assert.equal(status.downloadedBytes, 29n);
+  });
+}
+
+for (const testCase of [
+  {
+    name: "canonical",
+    wireFormat: "flatbuffer",
+    makeStatus: makeFsoStatus,
+  },
+  {
+    name: "aligned",
+    wireFormat: "aligned-binary",
+    makeStatus: makeAlignedFsoStatus,
+  },
+]) {
+  test(`status node rejects ${testCase.name} OD statuses outside 1..10 without mutation`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    for (const status of [0, 11]) {
+      const rejected = await harness.invoke({
+        methodId: "record_event",
+        inputs: [
+          fsoInputFrame(
+            testCase.makeStatus({
+              operation: 0,
+              status,
+              affectedRecords: 83,
+              resultBytes: 803,
+            }),
+            testCase.wireFormat,
+            "od",
+          ),
+        ],
+      });
+      assert.equal(rejected.statusCode, 400);
+      assert.equal(rejected.outputs.length, 0);
+    }
+    const accepted = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          testCase.makeStatus({
+            operation: 0,
+            status: 4,
+            affectedRecords: 6,
+            resultBytes: 31,
+          }),
+          testCase.wireFormat,
+          "od",
+        ),
+      ],
+    });
+    assert.equal(accepted.statusCode, 0, accepted.errorMessage);
+    const snapshot = decodeStatusDss(accepted.outputs[0]);
+    assert.equal(snapshot.attempts, 1n);
+    assert.equal(snapshot.syncedRows, 1n);
+    assert.equal(snapshot.totalRows, 1n);
+    assert.equal(snapshot.downloadedBytes, 31n);
+  });
+}
+
+test("status source guards aligned DSS capacity before copying into FSB DATA", () => {
+  const source = fs.readFileSync(nodePath("status", "src/node.cpp"), "utf8");
+  const functionStart = source.indexOf("int push_aligned_status");
+  const functionEnd = source.indexOf("\n}\n\n}  // namespace", functionStart);
+  assert.ok(functionStart >= 0 && functionEnd > functionStart);
+  const body = source.slice(functionStart, functionEnd);
+  const guard = body.indexOf("dss.size() > kFsbDataCapacity");
+  const copy = body.indexOf("std::memcpy(g_aligned_status.DATA.values");
+  assert.ok(guard >= 0, "aligned status output needs an explicit FSB DATA bound");
+  assert.ok(copy >= 0);
+  assert.ok(guard < copy, "the FSB DATA capacity check must precede memcpy");
+});
+
+for (const malformed of [
+  {
+    name: "error-code length",
+    payload() {
+      const payload = makeAlignedFsoStatus({ affectedRecords: 0, status: 10 });
+      payload[1] |= 0b0000_0100;
+      payload[357_416] = 129;
+      return payload;
+    },
+  },
+  {
+    name: "message length",
+    payload() {
+      const payload = makeAlignedFsoStatus({ affectedRecords: 0, status: 10 });
+      payload[1] |= 0b0000_1000;
+      new DataView(payload.buffer).setUint32(357_548, 4097, true);
+      return payload;
+    },
+  },
+]) {
+  test(`status node rejects an out-of-bounds aligned OD ${malformed.name}`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const rejected = await harness.invoke({
+      methodId: "record_event",
+      inputs: [fsoInputFrame(malformed.payload(), "aligned-binary", "od")],
+    });
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.outputs.length, 0);
+
+    const accepted = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        fsoInputFrame(
+          makeAlignedFsoStatus({ affectedRecords: 1, resultBytes: 8 }),
+          "aligned-binary",
+          "od",
+        ),
+      ],
+    });
+    assert.equal(accepted.statusCode, 0, accepted.errorMessage);
+    assert.equal(
+      decodeStatusDss(accepted.outputs[0]).attempts,
+      1n,
+      "rejected frames must not mutate OD attempt counters",
+    );
+  });
+}
+
+test("status node keeps FlatSQL store failures non-sticky", async (t) => {
+  const harness = await createHarness(nodeSpecs[0]);
+  t.after(() => harness.destroy());
+  const failed = await harness.invoke({
+    methodId: "record_event",
+    inputs: [
+      fsoInputFrame(
+        makeFsoStatus({
+          affectedRecords: 0,
+          status: 10,
+          errorCode: "store-failed",
+          message: "write rejected",
+        }),
+      ),
+    ],
+  });
+  assert.equal(failed.statusCode, 0, failed.errorMessage);
+  assert.equal(decodeStatusDss(failed.outputs[0]).status, 4);
+
+  const succeeded = await harness.invoke({
+    methodId: "record_event",
+    inputs: [fsoInputFrame(makeFsoStatus({ affectedRecords: 3, resultBytes: 17 }))],
+  });
+  assert.equal(succeeded.statusCode, 0, succeeded.errorMessage);
+  const status = decodeStatusDss(succeeded.outputs[0]);
+  assert.equal(status.status, 2);
+  assert.equal(status.syncedRows, 3n);
+  assert.equal(status.downloadedBytes, 17n);
+  assert.equal(status.error, "");
+});
+
 test("flow routes FlatSQL status directly to the signed status node", () => {
   const flow = readJson(path.join(packageRoot, "flow.json"), "flow source");
   assert.ok(
@@ -498,7 +1139,7 @@ test("flow routes FlatSQL status directly to the signed status node", () => {
   );
 });
 
-test("signed status output keys exactly match every APP runtime node route", () => {
+test("every wired APP runtime route matches a signed status output key", () => {
   const manifest = readJson(
     nodePath("status", "plugin-manifest.json"),
     "status manifest",
@@ -507,12 +1148,17 @@ test("signed status output keys exactly match every APP runtime node route", () 
   const outputKeys = method.outputPorts.map((port) => port.portId).sort();
   const app = readJson(path.join(packageRoot, "app/app.json"), "APP manifest");
   const appKeys = app.dataflow.map((route) => path.basename(route.locator)).sort();
-  assert.deepEqual(outputKeys, appKeys);
+  assert.deepEqual(
+    outputKeys.filter((key) => !appKeys.includes(key)),
+    appKeys.includes("od.dss") ? [] : ["od.dss"],
+    "OD may remain manifest-only only until its separately owned flow/app wiring lands",
+  );
+  assert.equal(appKeys.every((key) => outputKeys.includes(key)), true);
 
   const flow = readJson(path.join(packageRoot, "flow.json"), "flow source");
   assert.deepEqual(
     flow.runtimeNodeRoutes,
-    outputKeys.map((key) => ({
+    appKeys.map((key) => ({
       key,
       nodeId: "status",
       portId: key,

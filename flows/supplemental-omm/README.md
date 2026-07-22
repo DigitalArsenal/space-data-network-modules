@@ -39,7 +39,10 @@ Those routes carry the signed status node's canonical, non-size-prefixed `$FSB`
 transport envelope. Its `DATA` vector contains one canonical size-prefixed
 `$DSS` record. Accordingly, APP dataflow entries declare the on-wire `FSB`
 schema while the application data catalog retains `DSS` as the inner status
-identity.
+identity. In addition to the five provider lanes and FlatSQL, the status node
+publishes `od.dss`; it advances successful-fit counters while retaining the
+last per-object OD diagnostic so one rejected catalog object cannot disappear
+behind later successful fits.
 
 Commands:
 

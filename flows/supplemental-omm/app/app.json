@@ -72,7 +72,7 @@
     {
       "id": "provider-status-board",
       "title": "Supplemental OMM — Provider Status Board",
-      "description": "Live progress and fitted-orbit quality for the five provider lanes.",
+      "description": "Live progress for five provider lanes plus the orbit-determination lane.",
       "mediaType": "text/html",
       "entry": true,
       "encoding": "utf8",
@@ -120,6 +120,14 @@
       "sdsSchema": "FSB",
       "transport": "gateway_route",
       "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-iss.dss",
+      "contentEncoding": "utf8"
+    },
+    {
+      "name": "od-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/od.dss",
       "contentEncoding": "utf8"
     },
     {
