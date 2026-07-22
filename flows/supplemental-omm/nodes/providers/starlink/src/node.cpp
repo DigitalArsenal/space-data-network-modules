@@ -1,4 +1,6 @@
 #include <atomic>
+#include <cerrno>
+#include <ctime>
 #include <pthread.h>
 #include <utility>
 
@@ -14,6 +16,7 @@ constexpr uint32_t kMaxFetchConcurrency = 64;
 constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
 constexpr uint32_t kMaxDownstreamObjectsPerInvocation = 1;
+constexpr time_t kFetchWorkerIdleTimeoutSeconds = 45;
 
 struct Config {
   std::string manifest_url = kDefaultManifestUrl;
@@ -126,15 +129,187 @@ struct FetchPageContext {
   std::vector<HttpResult>* results = nullptr;
 };
 
-void* fetch_page_worker(void* opaque) {
-  auto* context = static_cast<FetchPageContext*>(opaque);
+struct FetchWorker {
+  size_t index = 0;
+  uint64_t generation = 0;
+  pthread_t thread{};
+};
+
+struct FetchWorkerPool {
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+  pthread_cond_t work_ready{};
+  pthread_cond_t page_done = PTHREAD_COND_INITIALIZER;
+  FetchPageContext* context = nullptr;
+  uint64_t generation = 0;
+  size_t worker_count = 0;
+  size_t active_worker_count = 0;
+  size_t completed_worker_count = 0;
+  size_t exited_worker_count = 0;
+  bool retire_requested = false;
+  bool work_ready_initialized = false;
+  bool disabled = false;
+  bool disable_requested = false;
+  FetchWorker workers[kMaxFetchConcurrency - 1]{};
+};
+
+FetchWorkerPool g_fetch_pool;
+pthread_once_t g_fetch_pool_once = PTHREAD_ONCE_INIT;
+
+void initialize_fetch_worker_pool() {
+  pthread_condattr_t attributes{};
+  if (pthread_condattr_init(&attributes) != 0) return;
+  const bool initialized =
+      pthread_condattr_setclock(&attributes, CLOCK_MONOTONIC) == 0 &&
+      pthread_cond_init(&g_fetch_pool.work_ready, &attributes) == 0;
+  pthread_condattr_destroy(&attributes);
+  g_fetch_pool.work_ready_initialized = initialized;
+  g_fetch_pool.disabled = !initialized;
+}
+
+bool fetch_worker_pool_available() {
+  pthread_once(&g_fetch_pool_once, initialize_fetch_worker_pool);
+  return g_fetch_pool.work_ready_initialized && !g_fetch_pool.disabled;
+}
+
+void fetch_page_worker(FetchPageContext* context) {
   for (;;) {
     const size_t local = context->next.fetch_add(1, std::memory_order_relaxed);
     const size_t index = context->begin + local;
     if (index >= context->end) break;
     (*context->results)[local] = http_get((*context->units)[index].url);
   }
+}
+
+bool fetch_worker_idle_deadline(timespec* deadline) {
+  if (!deadline || clock_gettime(CLOCK_MONOTONIC, deadline) != 0) return false;
+  deadline->tv_sec += kFetchWorkerIdleTimeoutSeconds;
+  return true;
+}
+
+void* fetch_page_worker_loop(void* opaque) {
+  auto* worker = static_cast<FetchWorker*>(opaque);
+  for (;;) {
+    pthread_mutex_lock(&g_fetch_pool.mutex);
+    while (!g_fetch_pool.retire_requested &&
+           worker->generation == g_fetch_pool.generation) {
+      timespec deadline{};
+      if (!fetch_worker_idle_deadline(&deadline)) {
+        g_fetch_pool.disable_requested = true;
+        g_fetch_pool.retire_requested = true;
+        pthread_cond_broadcast(&g_fetch_pool.work_ready);
+        break;
+      }
+      const int wait_status = pthread_cond_timedwait(
+          &g_fetch_pool.work_ready, &g_fetch_pool.mutex, &deadline);
+      if (wait_status != 0 && wait_status != EINTR &&
+          worker->generation == g_fetch_pool.generation) {
+        // Retire the pool as one generation. The next page reaps every old
+        // pthread before creating replacements, so libc never sees a mixture
+        // of stale and live worker handles.
+        g_fetch_pool.retire_requested = true;
+        pthread_cond_broadcast(&g_fetch_pool.work_ready);
+      }
+    }
+    if (g_fetch_pool.retire_requested) {
+      ++g_fetch_pool.exited_worker_count;
+      pthread_cond_broadcast(&g_fetch_pool.page_done);
+      pthread_mutex_unlock(&g_fetch_pool.mutex);
+      return nullptr;
+    }
+    worker->generation = g_fetch_pool.generation;
+    FetchPageContext* context = g_fetch_pool.context;
+    const bool active = worker->index < g_fetch_pool.active_worker_count;
+    pthread_mutex_unlock(&g_fetch_pool.mutex);
+
+    if (active && context) fetch_page_worker(context);
+
+    pthread_mutex_lock(&g_fetch_pool.mutex);
+    ++g_fetch_pool.completed_worker_count;
+    if (g_fetch_pool.completed_worker_count == g_fetch_pool.worker_count) {
+      pthread_cond_signal(&g_fetch_pool.page_done);
+    }
+    pthread_mutex_unlock(&g_fetch_pool.mutex);
+  }
   return nullptr;
+}
+
+void retire_fetch_workers() {
+  if (!fetch_worker_pool_available()) return;
+  pthread_t threads[kMaxFetchConcurrency - 1]{};
+  size_t worker_count = 0;
+
+  pthread_mutex_lock(&g_fetch_pool.mutex);
+  worker_count = g_fetch_pool.worker_count;
+  if (worker_count == 0) {
+    g_fetch_pool.retire_requested = false;
+    g_fetch_pool.exited_worker_count = 0;
+    pthread_mutex_unlock(&g_fetch_pool.mutex);
+    return;
+  }
+  g_fetch_pool.retire_requested = true;
+  pthread_cond_broadcast(&g_fetch_pool.work_ready);
+  while (g_fetch_pool.exited_worker_count < worker_count) {
+    pthread_cond_wait(&g_fetch_pool.page_done, &g_fetch_pool.mutex);
+  }
+  for (size_t index = 0; index < worker_count; ++index) {
+    threads[index] = g_fetch_pool.workers[index].thread;
+  }
+  pthread_mutex_unlock(&g_fetch_pool.mutex);
+
+  bool joined = true;
+  for (size_t index = 0; index < worker_count; ++index) {
+    if (pthread_join(threads[index], nullptr) != 0) joined = false;
+  }
+
+  pthread_mutex_lock(&g_fetch_pool.mutex);
+  g_fetch_pool.context = nullptr;
+  g_fetch_pool.worker_count = 0;
+  g_fetch_pool.active_worker_count = 0;
+  g_fetch_pool.completed_worker_count = 0;
+  g_fetch_pool.exited_worker_count = 0;
+  g_fetch_pool.retire_requested = false;
+  if (!joined || g_fetch_pool.disable_requested) g_fetch_pool.disabled = true;
+  g_fetch_pool.disable_requested = false;
+  pthread_mutex_unlock(&g_fetch_pool.mutex);
+}
+
+void keep_fetch_workers_alive() {
+  if (!fetch_worker_pool_available()) return;
+  pthread_mutex_lock(&g_fetch_pool.mutex);
+  if (g_fetch_pool.worker_count > 0 && !g_fetch_pool.retire_requested) {
+    // A condition wake with the same page generation only renews each
+    // worker's bounded idle deadline; it cannot dispatch duplicate work.
+    pthread_cond_broadcast(&g_fetch_pool.work_ready);
+  }
+  pthread_mutex_unlock(&g_fetch_pool.mutex);
+}
+
+bool ensure_fetch_workers(size_t worker_count) {
+  if (!fetch_worker_pool_available()) return false;
+  const size_t desired = worker_count > 0 ? worker_count - 1 : 0;
+  for (;;) {
+    pthread_mutex_lock(&g_fetch_pool.mutex);
+    if (g_fetch_pool.retire_requested) {
+      pthread_mutex_unlock(&g_fetch_pool.mutex);
+      retire_fetch_workers();
+      if (!fetch_worker_pool_available()) return false;
+      continue;
+    }
+    while (g_fetch_pool.worker_count < desired) {
+      const size_t index = g_fetch_pool.worker_count;
+      FetchWorker& worker = g_fetch_pool.workers[index];
+      worker.index = index;
+      worker.generation = g_fetch_pool.generation;
+      if (pthread_create(&worker.thread, nullptr, fetch_page_worker_loop,
+                         &worker) != 0) {
+        break;
+      }
+      ++g_fetch_pool.worker_count;
+    }
+    const bool available = g_fetch_pool.worker_count > 0;
+    pthread_mutex_unlock(&g_fetch_pool.mutex);
+    return available;
+  }
 }
 
 std::vector<HttpResult> fetch_complete_page(
@@ -150,19 +325,43 @@ std::vector<HttpResult> fetch_complete_page(
   context.begin = begin;
   context.end = end;
   context.results = &results;
+  if (worker_count == 1) {
+    fetch_page_worker(&context);
+    return results;
+  }
 
-  std::vector<pthread_t> workers;
-  workers.reserve(worker_count > 0 ? worker_count - 1 : 0);
-  for (size_t index = 0; index + 1 < worker_count; ++index) {
-    pthread_t worker{};
-    if (pthread_create(&worker, nullptr, fetch_page_worker, &context) == 0) {
-      workers.push_back(worker);
+  for (;;) {
+    if (!ensure_fetch_workers(worker_count)) {
+      fetch_page_worker(&context);
+      return results;
     }
+    pthread_mutex_lock(&g_fetch_pool.mutex);
+    if (g_fetch_pool.retire_requested) {
+      pthread_mutex_unlock(&g_fetch_pool.mutex);
+      retire_fetch_workers();
+      continue;
+    }
+    // The final retirement check and page publication are one transaction.
+    // An idle worker therefore either retires before this lock is acquired or
+    // observes this new generation and participates in the page.
+    g_fetch_pool.context = &context;
+    g_fetch_pool.active_worker_count =
+        std::min(g_fetch_pool.worker_count, worker_count - 1);
+    g_fetch_pool.completed_worker_count = 0;
+    ++g_fetch_pool.generation;
+    pthread_cond_broadcast(&g_fetch_pool.work_ready);
+    pthread_mutex_unlock(&g_fetch_pool.mutex);
+    break;
   }
+
   fetch_page_worker(&context);
-  for (pthread_t worker : workers) {
-    pthread_join(worker, nullptr);
+
+  pthread_mutex_lock(&g_fetch_pool.mutex);
+  while (g_fetch_pool.completed_worker_count < g_fetch_pool.worker_count) {
+    pthread_cond_wait(&g_fetch_pool.page_done, &g_fetch_pool.mutex);
   }
+  g_fetch_pool.context = nullptr;
+  pthread_mutex_unlock(&g_fetch_pool.mutex);
   return results;
 }
 
@@ -182,6 +381,7 @@ uint64_t count_meme_epochs(const std::vector<uint8_t>& bytes) {
 }
 
 void reset_state() {
+  retire_fetch_workers();
   g_state.units.clear();
   g_state.pending.clear();
   g_state.next = 0;
@@ -194,8 +394,10 @@ void reset_state() {
 
 extern "C" int emit(void) {
   plugin_reset_output_state();
+  keep_fetch_workers_alive();
   std::string config_json;
   if (!provider_node::read_config_json(&config_json)) {
+    reset_state();
     plugin_set_error("invalid-config", "config must be a valid canonical or aligned FSB");
     return 400;
   }
@@ -203,6 +405,7 @@ extern "C" int emit(void) {
     g_state.config = parse_config(config_json);
     const HttpResult manifest = http_get(g_state.config.manifest_url);
     if (manifest.status != 200 || manifest.body.empty()) {
+      reset_state();
       plugin_set_error("manifest-fetch", "unable to fetch the complete Starlink manifest");
       return 502;
     }
@@ -213,6 +416,7 @@ extern "C" int emit(void) {
     g_state.pending_next = 0;
     g_state.active = !g_state.units.empty();
     if (!g_state.active) {
+      reset_state();
       plugin_set_error("manifest-empty", "Starlink manifest contained no fetch units");
       return 422;
     }

@@ -27,11 +27,11 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "a52df3c39dd4c5bf0a54afc0ce95066a4a7aa2633725b5b4017fc8b7ff563baa";
+  "2fa05e2018b86e57e7dce7f1071aefd24933ef7235ec9ca2e0c6c165ef96a94e";
 const expectedChildSha256 = Object.freeze({
   timer: "db8d7a3506a0c3188b006886ebea30cfda9e9c2c2b9c477baefb5c37a375d6bd",
   "provider-starlink":
-    "a9d9bfbb79039560fdd6785f5996f3d331741e9ce3d91b6bdc9cf49e691e2d8c",
+    "04ff5d8a52f340656e0b3150f9ee64ca8e7ffaf6e6dcf9870ccab5ad511f7f22",
   "provider-glonass":
     "321373d51d9eae4baa8dd11552a1711d7a6fe1a37f5d3391df483a4e691c5ad5",
   "provider-intelsat":

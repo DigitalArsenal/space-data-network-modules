@@ -539,11 +539,12 @@ test("Starlink exact artifact drains one full manifest across yielded continuati
   assert.equal(new Set(decoded.map((output) => output.schemaName)).size, units.length);
 });
 
-test("Starlink keeps 64-way fetch pages but emits at most one complete object per invocation", async (t) => {
+test("Starlink reuses a 64-way fetch pool across two complete pages and a second catalog", async (t) => {
+  const catalogCycles = 2;
   const manifestUrl = `${fixtureOrigin}/starlink-frame-bound/MANIFEST.txt`;
   const ephemerisBase = `${fixtureOrigin}/starlink-frame-bound/`;
   const filenames = Array.from(
-    { length: 65 },
+    { length: 128 },
     (_, index) =>
       `MEME_${30001 + index}_STARLINK-${index + 1}_${index + 1}_Operational_${index + 1}_UNCLASSIFIED.txt`,
   );
@@ -573,12 +574,13 @@ test("Starlink keeps 64-way fetch pages but emits at most one complete object pe
   let activeEphemerisCalls = 0;
   let maxConcurrentEphemerisCalls = 0;
   let ephemerisCallsStarted = 0;
-  let releaseFirstEphemerisPage = null;
-  let rejectFirstEphemerisPage = null;
-  let firstEphemerisPageGateTimer = null;
-  const firstEphemerisPageGate = new Promise((resolve, reject) => {
-    releaseFirstEphemerisPage = resolve;
-    rejectFirstEphemerisPage = reject;
+  const pageGates = Array.from({ length: 2 * catalogCycles }, () => {
+    const gate = { started: 0, timer: null, resolve: null, reject: null };
+    gate.promise = new Promise((resolve, reject) => {
+      gate.resolve = resolve;
+      gate.reject = reject;
+    });
+    return gate;
   });
   const harness = await createWorkerHarness("starlink", async (operation, params) => {
     assert.equal(operation, "http.request");
@@ -592,23 +594,24 @@ test("Starlink keeps 64-way fetch pages but emits at most one complete object pe
         activeEphemerisCalls,
       );
       try {
-        if (ephemerisCallsStarted === 1) {
-          firstEphemerisPageGateTimer = setTimeout(
-            () => rejectFirstEphemerisPage?.(
+        const pageIndex = Math.floor((ephemerisCallsStarted - 1) / 64);
+        const pageGate = pageGates[pageIndex];
+        pageGate.started += 1;
+        if (pageGate.started === 1) {
+          pageGate.timer = setTimeout(
+            () => pageGate.reject?.(
               new Error(
-                `only ${ephemerisCallsStarted} of 64 pthread HTTP requests started`,
+                `page ${pageIndex + 1} started only ${pageGate.started} of 64 pthread HTTP requests`,
               ),
             ),
             5_000,
           );
         }
-        if (ephemerisCallsStarted === 64) {
-          clearTimeout(firstEphemerisPageGateTimer);
-          releaseFirstEphemerisPage?.();
+        if (pageGate.started === 64) {
+          clearTimeout(pageGate.timer);
+          pageGate.resolve?.();
         }
-        if (ephemerisCallsStarted <= 64) {
-          await firstEphemerisPageGate;
-        }
+        await pageGate.promise;
       } finally {
         activeEphemerisCalls -= 1;
       }
@@ -618,97 +621,108 @@ test("Starlink keeps 64-way fetch pages but emits at most one complete object pe
       : { status: 404, body: new Uint8Array() };
   });
   t.after(() => harness.destroy());
-  t.after(() => clearTimeout(firstEphemerisPageGateTimer));
+  t.after(() => pageGates.forEach(({ timer }) => clearTimeout(timer)));
 
-  const invocations = [];
-  for (let index = 0; index < filenames.length; index += 1) {
-    const response = await harness.invoke({
-      methodId: "emit",
-      inputs:
-        index === 0
-          ? [configFrame({
-              manifestUrl,
-              ephemerisBase,
-              fetchConcurrency: 64,
-              batchSize: 64,
-            })]
-          : [],
-    });
-    assert.equal(response.statusCode, 0, response.errorMessage);
-    assert.ok(
-      response.outputs.length <= 64,
-      `invocation ${index} exceeded the signed raw-frame ceiling`,
-    );
-    assert.ok(
-      new Set(
-        response.outputs.map((output) => decodeFsb(output.payload).requestId.toString()),
-      ).size <= 1,
-      `invocation ${index} emitted more than one complete object`,
-    );
-    if (index === 0) {
-      assert.equal(
-        calls.filter((url) => url !== manifestUrl).length,
-        64,
-        "the first downstream batch must retain one complete 64-way download page",
+  const invocationsByCycle = [];
+  for (let cycle = 0; cycle < catalogCycles; cycle += 1) {
+    const invocations = [];
+    for (let index = 0; index < filenames.length; index += 1) {
+      const response = await harness.invoke({
+        methodId: "emit",
+        inputs:
+          index === 0
+            ? [configFrame({
+                manifestUrl,
+                ephemerisBase,
+                fetchConcurrency: 64,
+                batchSize: 64,
+              })]
+            : [],
+      });
+      assert.equal(response.statusCode, 0, response.errorMessage);
+      assert.ok(
+        response.outputs.length <= 64,
+        `cycle ${cycle} invocation ${index} exceeded the signed raw-frame ceiling`,
       );
+      assert.ok(
+        new Set(
+          response.outputs.map((output) => decodeFsb(output.payload).requestId.toString()),
+        ).size <= 1,
+        `cycle ${cycle} invocation ${index} emitted more than one complete object`,
+      );
+      if (index === 0) {
+        assert.equal(
+          calls.filter((url) => url !== manifestUrl).length,
+          cycle * filenames.length + 64,
+          `cycle ${cycle} must begin with one complete 64-way download page`,
+        );
+      }
+      invocations.push(response);
+      if (!response.yielded) break;
     }
-    invocations.push(response);
-    if (!response.yielded) break;
+    assert.equal(invocations.at(-1)?.yielded, false, `Starlink cycle ${cycle} did not drain`);
+    assert.equal(invocations.length, filenames.length);
+    assert.deepEqual(
+      invocations.map(({ backlogRemaining }) => backlogRemaining),
+      Array.from({ length: filenames.length }, (_, index) =>
+        filenames.length - index - 1
+      ),
+    );
+    invocationsByCycle.push(invocations);
   }
-  assert.equal(invocations.at(-1)?.yielded, false, "Starlink did not drain");
-  assert.equal(invocations.length, filenames.length);
-  assert.deepEqual(
-    invocations.map(({ backlogRemaining }) => backlogRemaining),
-    Array.from({ length: filenames.length }, (_, index) =>
-      filenames.length - index - 1
-    ),
-  );
   assert.equal(
     maxConcurrentEphemerisCalls,
     64,
     `expected one complete 64-way worker HTTP page, observed ${maxConcurrentEphemerisCalls}`,
   );
-  assert.equal(calls.filter((url) => url === manifestUrl).length, 1);
+  assert.deepEqual(
+    pageGates.map(({ started }) => started),
+    [64, 64, 64, 64],
+    "both pages in both catalogs must use the reusable 64-way worker pool",
+  );
+  assert.equal(calls.filter((url) => url === manifestUrl).length, catalogCycles);
   for (const filename of filenames) {
     assert.equal(
       calls.filter((url) => url === joinFixtureUrl(ephemerisBase, filename)).length,
-      1,
-      `${filename} must be fetched exactly once`,
+      catalogCycles,
+      `${filename} must be fetched exactly once per catalog`,
     );
   }
-  const decoded = invocations.flatMap(({ outputs }) =>
-    outputs.map((output) => decodeFsb(output.payload)),
-  );
-  assert.equal(
-    new Set(decoded.map((output) => output.requestId.toString())).size,
-    filenames.length,
-  );
-  const invocationByRequest = new Map();
-  for (const [invocationIndex, response] of invocations.entries()) {
-    for (const output of response.outputs.map((frame) => decodeFsb(frame.payload))) {
-      const requestId = output.requestId.toString();
-      const seen = invocationByRequest.get(requestId) ?? new Set();
-      seen.add(invocationIndex);
-      invocationByRequest.set(requestId, seen);
-    }
-  }
-  for (const [requestId, invocationIndexes] of invocationByRequest) {
+  for (const invocations of invocationsByCycle) {
+    const decoded = invocations.flatMap(({ outputs }) =>
+      outputs.map((output) => decodeFsb(output.payload)),
+    );
     assert.equal(
-      invocationIndexes.size,
-      1,
-      `complete response ${requestId} was split across downstream invocations`,
+      new Set(decoded.map((output) => output.requestId.toString())).size,
+      filenames.length,
     );
-  }
-  for (let index = 0; index < filenames.length; index += 1) {
-    const identity = `MEME:${30001 + index}:STARLINK-${index + 1}`;
-    const chunks = decoded
-      .filter((output) => output.schemaName === identity)
-      .sort((left, right) => left.chunkSequence - right.chunkSequence);
-    assert.deepEqual(
-      Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.data))),
-      Buffer.from(responseBodies[index]),
-      `${identity} received another pthread request's response bytes`,
-    );
+    const invocationByRequest = new Map();
+    for (const [invocationIndex, response] of invocations.entries()) {
+      for (const output of response.outputs.map((frame) => decodeFsb(frame.payload))) {
+        const requestId = output.requestId.toString();
+        const seen = invocationByRequest.get(requestId) ?? new Set();
+        seen.add(invocationIndex);
+        invocationByRequest.set(requestId, seen);
+      }
+    }
+    for (const [requestId, invocationIndexes] of invocationByRequest) {
+      assert.equal(
+        invocationIndexes.size,
+        1,
+        `complete response ${requestId} was split across downstream invocations`,
+      );
+    }
+    for (let index = 0; index < filenames.length; index += 1) {
+      const identity = `MEME:${30001 + index}:STARLINK-${index + 1}`;
+      const chunks = decoded
+        .filter((output) => output.schemaName === identity)
+        .sort((left, right) => left.chunkSequence - right.chunkSequence);
+      assert.deepEqual(
+        Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.data))),
+        Buffer.from(responseBodies[index]),
+        `${identity} received another pthread request's response bytes`,
+      );
+    }
   }
 });
 
@@ -913,11 +927,38 @@ test("Starlink bounded parallel planning is authored in the WASM node", () => {
   const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
   assert.match(source, /kMaxFetchConcurrency\s*=\s*64/);
   assert.match(source, /pthread_create\s*\(/);
-  assert.match(source, /pthread_join\s*\(/);
+  assert.match(source, /pthread_cond_wait\s*\(/);
   assert.match(source, /fetch_concurrency/);
   assert.match(source, /fetch_complete_page/);
   assert.match(source, /kMaxDownstreamObjectsPerInvocation\s*=\s*1/);
   assert.doesNotMatch(source, /Range\s*:/i);
+});
+
+test("Starlink reuses one WASM worker pool across complete fetch pages", () => {
+  const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
+  assert.match(source, /ensure_fetch_workers\s*\(/);
+  assert.match(source, /fetch_page_worker_loop\s*\(/);
+  assert.match(source, /pthread_cond_broadcast\s*\(/);
+  assert.match(source, /pthread_cond_timedwait\s*\(/);
+  assert.match(source, /pthread_condattr_setclock\s*\([^,]+,\s*CLOCK_MONOTONIC\s*\)/);
+  assert.match(source, /clock_gettime\s*\(CLOCK_MONOTONIC/);
+  assert.match(source, /keep_fetch_workers_alive\s*\(/);
+  assert.match(source, /retire_fetch_workers\s*\(/);
+  assert.match(source, /pthread_join\s*\(/);
+  const fetchPageBody = source.slice(
+    source.indexOf("std::vector<HttpResult> fetch_complete_page"),
+    source.indexOf("uint64_t count_meme_epochs"),
+  );
+  assert.doesNotMatch(
+    fetchPageBody,
+    /pthread_join\s*\(/,
+    "complete pages must reuse resident workers instead of joining and recreating them",
+  );
+  assert.match(
+    source,
+    /void reset_state\s*\(\)\s*\{[\s\S]*?retire_fetch_workers\s*\(\)/,
+    "normal completion and error reset must release resident WasmEdge workers",
+  );
 });
 
 test("production signing guard rejects development keys and accepts one release signer", async () => {
