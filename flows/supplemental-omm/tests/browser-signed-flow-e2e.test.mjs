@@ -11,6 +11,7 @@ import {
 } from "space-data-module-sdk";
 import { createIsomorphicFlowRuntimeHost } from "space-data-module-sdk/flow";
 import { ByteBuffer } from "../../../../spacedatastandards.org/node_modules/flatbuffers/js/flatbuffers.js";
+import { DSS } from "../../../../spacedatastandards.org/lib/js/DSS/DSS.js";
 import { FSB } from "../../../../spacedatastandards.org/lib/js/FSB/FSB.js";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -26,11 +27,11 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "95bfebfff875d637850546ced267a9765548c1bd905b3021b8c7f1573729ec26";
+  "a52df3c39dd4c5bf0a54afc0ce95066a4a7aa2633725b5b4017fc8b7ff563baa";
 const expectedChildSha256 = Object.freeze({
   timer: "db8d7a3506a0c3188b006886ebea30cfda9e9c2c2b9c477baefb5c37a375d6bd",
   "provider-starlink":
-    "119590576d4a92857afbe595676eb501288211214bf88c127d51751a03fca4d5",
+    "a9d9bfbb79039560fdd6785f5996f3d331741e9ce3d91b6bdc9cf49e691e2d8c",
   "provider-glonass":
     "321373d51d9eae4baa8dd11552a1711d7a6fe1a37f5d3391df483a4e691c5ad5",
   "provider-intelsat":
@@ -39,13 +40,13 @@ const expectedChildSha256 = Object.freeze({
     "684c822c77537a620c85bcf920ff678e5125553bf07a77600a47b7d96f74dc2a",
   "provider-iss":
     "e5a0c7070dbe7875c363d85ca2de220daa31dba747a6e550e0324e38a0a70ca8",
-  od: "9cb9d62b3652d0af088a7e9da350e4f2d0e4abaa539c1665dc43a6379aa6f48a",
+  od: "7240955746f74dcb17eb91104fe4248e29f4f924f6d380ef4a18e4d6e883e898",
   store:
     "593bd94c0964835c5077a60973cd1da42f5ccf1f5ca63dcd71a82e59df97a93e",
   publication:
     "18a8ef6baaef1b92e7f93940ced3233ab2fa83512fd808b48b6c34b49681ce61",
   status:
-    "1e8fc3234578902743a68d8da4be23151aa78bc81512d3b0144f5404a1ddb342",
+    "532ad78f4376ce6e22f26ab29f0a4ca252f0c396fc51e02d34b478be343dedea",
 });
 
 const defaultUrls = Object.freeze({
@@ -97,11 +98,16 @@ function minuteStamp(index, stepMinutes) {
 function fixtureResponses() {
   const starlinkFixtureFilename =
     "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt";
-  const starlinkFilenames = Array.from({ length: 5 }, (_, index) =>
-    index === 0
-      ? starlinkFixtureFilename
-      : `MEME_${67850 + index}_STARLINK-${36840 + index}_1340142_Operational_1463017380_UNCLASSIFIED.txt`,
-  );
+  const invalidStarlinkFilename =
+    "MEME_67849_STARLINK-36839_1340142_Operational_1463017380_UNCLASSIFIED.txt";
+  const starlinkFilenames = [
+    invalidStarlinkFilename,
+    ...Array.from({ length: 5 }, (_, index) =>
+      index === 0
+        ? starlinkFixtureFilename
+        : `MEME_${67850 + index}_STARLINK-${36840 + index}_1340142_Operational_1463017380_UNCLASSIFIED.txt`,
+    ),
+  ];
   const starlink = new Uint8Array(
     fs.readFileSync(
       path.resolve(
@@ -110,6 +116,9 @@ function fixtureResponses() {
         starlinkFixtureFilename,
       ),
     ),
+  );
+  const invalidStarlink = encode(
+    "CCSDS_OEM_VERS = 2.0\nOBJECT_NAME = deliberately-invalid-browser-fixture\n",
   );
 
   const glonass = ["#dP2026  7 21  0  0  0.00000000 ORBIT TEST"];
@@ -177,7 +186,7 @@ function fixtureResponses() {
     [defaultUrls.starlinkManifest, encode(`${starlinkFilenames.join("\n")}\n`)],
     ...starlinkFilenames.map((filename) => [
       `${defaultUrls.starlinkBase}${filename}`,
-      starlink,
+      filename === invalidStarlinkFilename ? invalidStarlink : starlink,
     ]),
     [defaultUrls.glonass, encode(`${glonass.join("\n")}\n`)],
     [defaultUrls.intelsatListing, encode(`${intelsatFilename}\n`)],
@@ -197,6 +206,39 @@ function fixtureResponses() {
 function parseJsonEntry(entry, label) {
   assert.ok(entry, `signed bundle is missing ${label}`);
   return JSON.parse(new TextDecoder().decode(entry.payloadBytes));
+}
+
+function decodeDssRoute(output) {
+  let dssBytes;
+  let attempts;
+  if (output.wireFormat === "aligned-binary") {
+    const payload = new Uint8Array(output.payload);
+    const view = new DataView(
+      payload.buffer,
+      payload.byteOffset,
+      payload.byteLength,
+    );
+    attempts = view.getBigUint64(8, true);
+    const length = view.getUint32(124, true);
+    dssBytes = payload.subarray(128, 128 + length);
+  } else {
+    const envelope = FSB.getRootAsFSB(
+      new ByteBuffer(new Uint8Array(output.payload)),
+    );
+    attempts = envelope.REQUEST_ID();
+    dssBytes = new Uint8Array(envelope.dataArray() ?? []);
+  }
+  assert.equal(new TextDecoder().decode(dssBytes.subarray(8, 12)), "$DSS");
+  const dss = DSS.getSizePrefixedRootAsDSS(new ByteBuffer(dssBytes));
+  return {
+    attempts,
+    status: dss.STATUS(),
+    syncedRows: dss.SYNCED_ROWS(),
+    totalRows: dss.TOTAL_ROWS(),
+    missingRows: dss.MISSING_ROWS(),
+    downloadedBytes: dss.DOWNLOADED_BYTES(),
+    error: dss.ERROR() ?? "",
+  };
 }
 
 test("exact release-signed Supplemental flow executes every signed child in the browser host", async (t) => {
@@ -320,6 +362,7 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     );
   }
   const odInvocations = [];
+  const odResponses = [];
   const odHarness = host.children.get("od")?.harness;
   assert.ok(odHarness, "OD child harness was not instantiated");
   const invokeOd = odHarness.invoke;
@@ -334,7 +377,14 @@ test("exact release-signed Supplemental flow executes every signed child in the 
         ),
     );
     odInvocations.push([...starlinkRequestIds]);
-    return invokeOd(request);
+    const response = await invokeOd(request);
+    odResponses.push({
+      statusCode: response.statusCode,
+      errorCode: response.errorCode,
+      errorMessage: response.errorMessage,
+      outputPorts: response.outputs.map((output) => output.portId),
+    });
+    return response;
   };
   const publicationInputs = [];
   const publicationResponses = [];
@@ -355,6 +405,33 @@ test("exact release-signed Supplemental flow executes every signed child in the 
       errorMessage: response.errorMessage,
       outputCount: response.outputs.length,
     });
+    return response;
+  };
+  const odStatusSnapshots = [];
+  const statusInvocationPorts = [];
+  const statusResponses = [];
+  const statusHarness = host.children.get("status")?.harness;
+  assert.ok(statusHarness, "status child harness was not instantiated");
+  const invokeStatus = statusHarness.invoke;
+  statusHarness.invoke = async (request) => {
+    statusInvocationPorts.push((request.inputs ?? []).map((input) => input.portId));
+    const response = await invokeStatus(request);
+    statusResponses.push({
+      statusCode: response.statusCode,
+      errorCode: response.errorCode,
+      errorMessage: response.errorMessage,
+      outputPorts: response.outputs.map((output) => output.portId),
+    });
+    odStatusSnapshots.push(
+      ...response.outputs
+        .filter((output) => output.portId === "od.dss")
+        .map((output) =>
+          decodeDssRoute({
+            ...output,
+            payload: new Uint8Array(output.payload),
+          }),
+        ),
+    );
     return response;
   };
 
@@ -412,18 +489,59 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   const starlinkOdInvocations = odInvocations.filter(
     (requestIds) => requestIds.length > 0,
   );
-  assert.ok(
-    starlinkOdInvocations.length >= 2,
-    `five Starlink objects were coalesced into one OD invocation: ${JSON.stringify(starlinkOdInvocations)}`,
+  assert.equal(
+    starlinkOdInvocations.length,
+    6,
+    `Starlink must admit exactly one complete object per OD invocation: ${JSON.stringify(starlinkOdInvocations)}`,
   );
   assert.ok(
-    starlinkOdInvocations.every((requestIds) => requestIds.length <= 4),
-    `OD received a Starlink wave above four objects: ${JSON.stringify(starlinkOdInvocations)}`,
+    starlinkOdInvocations.every((requestIds) => requestIds.length === 1),
+    `OD received a Starlink wave containing multiple objects: ${JSON.stringify(starlinkOdInvocations)}`,
   );
   assert.equal(
     new Set(starlinkOdInvocations.flat()).size,
-    5,
-    "OD did not receive all five complete Starlink objects exactly once",
+    6,
+    "OD did not receive all six complete Starlink objects exactly once",
+  );
+  assert.ok(
+    odStatusSnapshots.length > 0,
+    `the independently instantiated status node emitted no OD runtime snapshot; OD responses=${JSON.stringify(odResponses)} status inputs=${JSON.stringify(statusInvocationPorts)} status responses=${JSON.stringify(statusResponses)}`,
+  );
+  assert.ok(odResponses.length > 0, "OD node was never invoked");
+  for (const response of odResponses) {
+    assert.equal(
+      response.statusCode,
+      0,
+      `OD invocation failed instead of continuing: ${JSON.stringify(response)}`,
+    );
+  }
+  assert.ok(statusResponses.length > 0, "status node was never invoked");
+  for (const response of statusResponses) {
+    assert.equal(
+      response.statusCode,
+      0,
+      `status invocation failed: ${JSON.stringify(response)}`,
+    );
+  }
+  const finalOdStatus = odStatusSnapshots.at(-1);
+  assert.equal(finalOdStatus.status, 4, finalOdStatus.error);
+  assert.match(finalOdStatus.error, /od-native-parse/);
+  assert.equal(finalOdStatus.attempts, 10n);
+  assert.equal(finalOdStatus.syncedRows, 9n);
+  assert.equal(finalOdStatus.totalRows, 10n);
+  assert.equal(finalOdStatus.missingRows, 1n);
+  const firstFailureIndex = odStatusSnapshots.findIndex(
+    (snapshot) => snapshot.status === 4 && /od-native-parse/.test(snapshot.error),
+  );
+  assert.ok(firstFailureIndex >= 0, "OD parse failure never reached od.dss");
+  assert.ok(
+    odStatusSnapshots
+      .slice(firstFailureIndex + 1)
+      .some(
+        (snapshot) =>
+          snapshot.syncedRows > odStatusSnapshots[firstFailureIndex].syncedRows,
+      ),
+    "no valid OD object advanced after the sticky parse failure",
   );
   assert.ok(publicationResponses.length > 0);
   for (const summary of publicationInputSummary) {

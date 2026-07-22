@@ -213,6 +213,38 @@
           "description": "Idempotent FlatSQL CONFIGURE_INDEX control containing the complete canonical result schema and OMM/OCM/OBD table bindings."
         },
         {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "fso-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 361648,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "One typed OD outcome for each consumed complete provider response or fitted logical object."
+        },
+        {
           "portId": "omm",
           "acceptedTypeSets": [
             {

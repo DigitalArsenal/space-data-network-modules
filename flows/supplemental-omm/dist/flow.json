@@ -34,7 +34,7 @@
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "119590576d4a92857afbe595676eb501288211214bf88c127d51751a03fca4d5"
+        "sha256": "a9d9bfbb79039560fdd6785f5996f3d331741e9ce3d91b6bdc9cf49e691e2d8c"
       }
     },
     {
@@ -112,7 +112,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "9cb9d62b3652d0af088a7e9da350e4f2d0e4abaa539c1665dc43a6379aa6f48a"
+        "sha256": "7240955746f74dcb17eb91104fe4248e29f4f924f6d380ef4a18e4d6e883e898"
       }
     },
     {
@@ -158,7 +158,7 @@
       "artifact": {
         "path": "./nodes/status/dist/isomorphic/module.wasm",
         "publisher": "./nodes/status/publisher.json",
-        "sha256": "1e8fc3234578902743a68d8da4be23151aa78bc81512d3b0144f5404a1ddb342"
+        "sha256": "532ad78f4376ce6e22f26ab29f0a4ca252f0c396fc51e02d34b478be343dedea"
       }
     }
   ],
@@ -261,6 +261,15 @@
       "toPortId": "control",
       "backpressurePolicy": "queue",
       "queueDepth": 1
+    },
+    {
+      "edgeId": "od-status-to-status",
+      "fromNodeId": "od",
+      "fromPortId": "status",
+      "toNodeId": "status",
+      "toPortId": "od",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
     },
     {
       "edgeId": "od-omm-to-store",
@@ -372,6 +381,12 @@
     }
   ],
   "runtimeNodeRoutes": [
+    {
+      "key": "od.dss",
+      "nodeId": "status",
+      "portId": "od.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
     {
       "key": "provider-cpf.dss",
       "nodeId": "status",

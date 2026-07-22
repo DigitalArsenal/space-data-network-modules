@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <iterator>
 #include <map>
 #include <string>
@@ -30,7 +31,10 @@ constexpr const char* kFsbFileIdentifier = "$FSB";
 constexpr const char* kFsbRootType = "FSB";
 constexpr uint32_t kFsbAlignedSize = 1'048'744;
 constexpr uint16_t kFsbAlignment = 8;
+constexpr size_t kFsbSchemaNameCapacity = 64;
+constexpr size_t kFsbFileIdentifierCapacity = 4;
 constexpr size_t kFsbDataCapacity = 1'048'576;
+constexpr size_t kFsbSha256Capacity = 32;
 constexpr size_t kMaxOutputStreamBytes = 128u * 1024u * 1024u;
 constexpr const char* kFsoSchemaName = "FSO.fbs";
 constexpr const char* kFsoFileIdentifier = "$FSO";
@@ -41,6 +45,13 @@ constexpr uint32_t kAlignedFsoDatabaseOffset = 16;
 constexpr uint32_t kAlignedFsoSchemaOffset = 148;
 constexpr uint32_t kAlignedFsoBindingsOffset = 262'296;
 constexpr uint32_t kAlignedFsoBindingStride = 135;
+constexpr uint32_t kAlignedFsoStatusOffset = 357'392;
+constexpr uint32_t kAlignedFsoAffectedRecordsOffset = 357'400;
+constexpr uint32_t kAlignedFsoResultBytesOffset = 357'408;
+constexpr uint32_t kAlignedFsoErrorCodeOffset = 357'416;
+constexpr uint32_t kAlignedFsoMessageOffset = 357'548;
+constexpr size_t kFsoErrorCodeCapacity = 128;
+constexpr size_t kFsoMessageCapacity = 4'096;
 constexpr size_t kMaxNativeResponseBytes = 64u * 1024u * 1024u;
 
 enum class Provider : uint8_t {
@@ -120,12 +131,15 @@ struct NativeState {
   double vz = 0.0;
 };
 
-struct ParsedBatch {
-  std::vector<od::BatchObject> objects;
+struct PendingFitObject {
+  od::BatchObject object;
   uint32_t wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
+  uint64_t request_id = 0;
+  std::string identity;
 };
 
 std::map<AssemblyKey, Assembly> g_assemblies;
+std::deque<PendingFitObject> g_pending_fit_objects;
 alignas(8) Aligned::FSB g_aligned_output{};
 alignas(8) uint8_t g_aligned_control[kFsoAlignedSize]{};
 uint64_t g_output_request_id = 1;
@@ -520,6 +534,36 @@ std::vector<od::BatchObject> parse_native_response(
   return {};
 }
 
+std::string describe_batch_object(const od::BatchObject& object) {
+  if (object.oem.size() < 8 || !OEMBufferHasIdentifier(object.oem.data())) {
+    return {};
+  }
+  flatbuffers::Verifier verifier(object.oem.data(), object.oem.size());
+  if (!VerifyOEMBuffer(verifier)) return {};
+  const OEM* oem = GetOEM(object.oem.data());
+  const auto* blocks = oem ? oem->EPHEMERIS_DATA_BLOCK() : nullptr;
+  if (!blocks) return {};
+  for (flatbuffers::uoffset_t index = 0; index < blocks->size(); ++index) {
+    const ephemerisDataBlock* block = blocks->Get(index);
+    const CAT* identity = block ? block->OBJECT() : nullptr;
+    if (!identity) continue;
+    const std::string name = identity->OBJECT_NAME()
+                                 ? identity->OBJECT_NAME()->str()
+                                 : std::string{};
+    const std::string object_id = identity->OBJECT_ID()
+                                      ? identity->OBJECT_ID()->str()
+                                      : std::string{};
+    const uint32_t norad = identity->NORAD_CAT_ID();
+    const std::string label = !name.empty() ? name : object_id;
+    if (!label.empty() && norad > 0) {
+      return label + " (NORAD " + std::to_string(norad) + ")";
+    }
+    if (!label.empty()) return label;
+    if (norad > 0) return "NORAD " + std::to_string(norad);
+  }
+  return {};
+}
+
 bool decode_chunk(const plugin_input_frame_t* frame, Chunk* chunk,
                   std::string* error) {
   if (!frame || !chunk || !frame->payload || frame->payload_length == 0 ||
@@ -560,6 +604,16 @@ bool decode_chunk(const plugin_input_frame_t* frame, Chunk* chunk,
       return false;
     }
     const auto* stream = reinterpret_cast<const Aligned::FSB*>(frame->payload);
+    if ((stream->has_SCHEMA_NAME() &&
+         stream->SCHEMA_NAME.length > kFsbSchemaNameCapacity) ||
+        (stream->has_FILE_IDENTIFIER() &&
+         stream->FILE_IDENTIFIER.length > kFsbFileIdentifierCapacity) ||
+        (stream->has_DATA() && stream->DATA.length > kFsbDataCapacity) ||
+        (stream->has_SHA256() &&
+         stream->SHA256.length > kFsbSha256Capacity)) {
+      *error = "aligned FSB field length exceeds fixed capacity";
+      return false;
+    }
     chunk->request_id = stream->REQUEST_ID;
     chunk->sequence = stream->CHUNK_SEQUENCE;
     chunk->final = stream->FINAL;
@@ -801,6 +855,87 @@ bool write_aligned_binding(uint32_t index, const char* file_identifier,
          write_aligned_string(base + 6, 128, table_name);
 }
 
+int32_t push_canonical_status(uint64_t request_id,
+                              flatSqlNodeStatus status,
+                              uint64_t affected_records,
+                              uint64_t result_bytes,
+                              const std::string& error_code,
+                              const std::string& message) {
+  flatbuffers::FlatBufferBuilder builder(message.size() + 512);
+  const auto encoded_error = error_code.empty()
+                                 ? flatbuffers::Offset<flatbuffers::String>{}
+                                 : builder.CreateString(error_code);
+  const auto encoded_message = message.empty()
+                                   ? flatbuffers::Offset<
+                                         flatbuffers::Vector<uint8_t>>{}
+                                   : builder.CreateVector(
+                                         reinterpret_cast<const uint8_t*>(
+                                             message.data()),
+                                         message.size());
+  FSOBuilder status_builder(builder);
+  status_builder.add_REQUEST_ID(request_id);
+  status_builder.add_STATUS(status);
+  status_builder.add_AFFECTED_RECORDS(affected_records);
+  status_builder.add_RESULT_BYTES(result_bytes);
+  if (!error_code.empty()) status_builder.add_ERROR_CODE(encoded_error);
+  if (!message.empty()) status_builder.add_MESSAGE(encoded_message);
+  const auto root = status_builder.Finish();
+  FinishFSOBuffer(builder, root);
+  return plugin_push_output_typed(
+      "status", kFsoSchemaName, kFsoFileIdentifier,
+      PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, kFsoRootType, 0, 0, 0,
+      builder.GetBufferPointer(), static_cast<uint32_t>(builder.GetSize()));
+}
+
+int32_t push_aligned_status(uint64_t request_id, flatSqlNodeStatus status,
+                            uint64_t affected_records, uint64_t result_bytes,
+                            const std::string& error_code,
+                            const std::string& message) {
+  std::memset(g_aligned_control, 0, sizeof(g_aligned_control));
+  write_aligned_u64(8, request_id);
+  g_aligned_control[kAlignedFsoStatusOffset] =
+      static_cast<uint8_t>(status);
+  write_aligned_u64(kAlignedFsoAffectedRecordsOffset, affected_records);
+  write_aligned_u64(kAlignedFsoResultBytesOffset, result_bytes);
+  if (!error_code.empty()) {
+    g_aligned_control[1] |= 4;
+    if (!write_aligned_string(kAlignedFsoErrorCodeOffset,
+                              kFsoErrorCodeCapacity,
+                              error_code.c_str())) {
+      return -1;
+    }
+  }
+  if (!message.empty()) {
+    g_aligned_control[1] |= 8;
+    write_aligned_u32(kAlignedFsoMessageOffset,
+                      static_cast<uint32_t>(message.size()));
+    std::memcpy(g_aligned_control + kAlignedFsoMessageOffset + 4,
+                message.data(), message.size());
+  }
+  return plugin_push_output_typed(
+      "status", kFsoSchemaName, kFsoFileIdentifier,
+      PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, kFsoRootType, 0,
+      kFsoAlignedSize, kFsoAlignment, g_aligned_control, kFsoAlignedSize);
+}
+
+int32_t push_status(uint32_t wire_format, uint64_t request_id,
+                    flatSqlNodeStatus status, uint64_t affected_records,
+                    uint64_t result_bytes, std::string error_code,
+                    std::string message) {
+  if (error_code.size() > kFsoErrorCodeCapacity) {
+    error_code.resize(kFsoErrorCodeCapacity);
+  }
+  if (message.size() > kFsoMessageCapacity) {
+    message.resize(kFsoMessageCapacity);
+  }
+  if (wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
+    return push_aligned_status(request_id, status, affected_records,
+                               result_bytes, error_code, message);
+  }
+  return push_canonical_status(request_id, status, affected_records,
+                               result_bytes, error_code, message);
+}
+
 int32_t push_aligned_configuration(uint64_t request_id) {
   const size_t schema_length = std::strlen(kResultSchemaIdl);
   if (schema_length > 262'144) return -1;
@@ -870,12 +1005,17 @@ bool provider_for_port(const char* port_id, Provider* provider) {
   return false;
 }
 
+void publish_pending_fit_state() {
+  const uint32_t backlog =
+      static_cast<uint32_t>(g_pending_fit_objects.size());
+  plugin_set_backlog_remaining(backlog);
+  plugin_set_yielded(backlog > 0 ? 1 : 0);
+}
+
 }  // namespace
 
 extern "C" int fit(void) {
   plugin_reset_output_state();
-  std::vector<od::BatchObject> objects;
-  std::vector<uint32_t> output_wire_formats;
   std::string error;
 
   for (uint32_t index = 0; index < plugin_get_input_count(); ++index) {
@@ -885,27 +1025,53 @@ extern "C" int fit(void) {
     Chunk chunk;
     if (!decode_chunk(frame, &chunk, &error)) {
       plugin_set_error("od-chunk-invalid", error.c_str());
+      publish_pending_fit_state();
       return 400;
     }
     Assembly completed;
     if (!append_chunk(provider, chunk, &completed, &error)) {
       plugin_set_error("od-chunk-invalid", error.c_str());
+      publish_pending_fit_state();
       return 400;
     }
     if (!chunk.final) continue;
     std::vector<od::BatchObject> parsed =
         parse_native_response(provider, completed);
     if (parsed.empty()) {
-      plugin_set_error("od-native-parse", "complete provider response had fewer than three usable states");
-      return 422;
+      const std::string parse_error =
+          "complete provider response had fewer than three usable states";
+      plugin_set_error("od-native-parse", parse_error.c_str());
+      std::string message = parse_error;
+      if (!completed.schema_name.empty()) {
+        message += ": " + completed.schema_name;
+      }
+      if (push_status(completed.wire_format, chunk.request_id,
+                      flatSqlNodeStatus_INVALID_ARGUMENT, 0, 0,
+                      "od-native-parse", message) < 0) {
+        plugin_set_error("od-output", "unable to emit OD parse status");
+        publish_pending_fit_state();
+        return 500;
+      }
+      continue;
     }
     for (od::BatchObject& object : parsed) {
-      objects.push_back(std::move(object));
-      output_wire_formats.push_back(completed.wire_format);
+      std::string identity = describe_batch_object(object);
+      g_pending_fit_objects.push_back({std::move(object),
+                                       completed.wire_format,
+                                       chunk.request_id,
+                                       std::move(identity)});
     }
   }
 
-  if (objects.empty()) return 0;
+  if (g_pending_fit_objects.empty()) {
+    publish_pending_fit_state();
+    return 0;
+  }
+
+  PendingFitObject pending = std::move(g_pending_fit_objects.front());
+  g_pending_fit_objects.pop_front();
+  std::vector<od::BatchObject> objects;
+  objects.push_back(std::move(pending.object));
 
   od::BatchRunStats stats{};
   const std::vector<od::BatchResult> results =
@@ -913,41 +1079,80 @@ extern "C" int fit(void) {
   size_t emitted = 0;
   uint32_t configuration_wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
   std::vector<RecordStreamAccumulator> streams;
+  std::string first_fit_error_code;
   std::string first_fit_error;
   for (size_t index = 0; index < results.size(); ++index) {
     const od::BatchResult& result = results[index];
     if (!result.ok || result.omm.empty()) {
-      if (first_fit_error.empty()) first_fit_error = result.error_message;
+      if (first_fit_error_code.empty()) {
+        first_fit_error_code = result.error_code;
+      }
+      if (first_fit_error.empty()) {
+        first_fit_error = result.error_message.empty()
+                              ? "OD fit produced no complete record set"
+                              : result.error_message;
+      }
       continue;
     }
-    const uint32_t output_wire_format =
-        index < output_wire_formats.size()
-            ? output_wire_formats[index]
-            : PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
+    const uint32_t output_wire_format = pending.wire_format;
     if (emitted == 0) configuration_wire_format = output_wire_format;
     if (!append_result(&streams, result, output_wire_format)) {
       plugin_set_error("od-output-too-large",
                        "one fitted schema stream exceeds 128 MiB");
+      publish_pending_fit_state();
       return 413;
     }
     ++emitted;
   }
   if (emitted == 0) {
-    plugin_set_error(
-        "od-fit",
-        first_fit_error.empty() ? "OD produced no converged record set"
-                                : first_fit_error.c_str());
-    return 422;
+    const std::string fit_error =
+        first_fit_error.empty() ? "OD produced no complete record set"
+                                : first_fit_error;
+    plugin_set_error("od-fit", fit_error.c_str());
+    std::string message = "OD fit failed";
+    if (!pending.identity.empty()) message += ": " + pending.identity;
+    message += ": " + fit_error;
+    if (push_status(
+            pending.wire_format, pending.request_id,
+            flatSqlNodeStatus_INTERNAL_ERROR, 0, 0,
+            first_fit_error_code.empty() ? "od-fit" : first_fit_error_code,
+            message) < 0) {
+      plugin_set_error("od-output", "unable to emit OD fit failure status");
+      publish_pending_fit_state();
+      return 500;
+    }
+    publish_pending_fit_state();
+    return 0;
   }
   if (push_configuration(configuration_wire_format) < 0) {
     plugin_set_error("od-output", "unable to emit FlatSQL CONFIGURE_INDEX control");
+    publish_pending_fit_state();
     return 500;
   }
   for (const RecordStreamAccumulator& stream : streams) {
     if (push_record_stream(stream) < 0) {
       plugin_set_error("od-output", "unable to emit fitted FSB record stream");
+      publish_pending_fit_state();
       return 500;
     }
   }
+  uint64_t affected_records = 0;
+  uint64_t result_bytes = 0;
+  for (const RecordStreamAccumulator& stream : streams) {
+    result_bytes += static_cast<uint64_t>(stream.data.size());
+    if (std::strcmp(stream.port_id, "omm") == 0) {
+      affected_records = stream.record_count;
+    }
+  }
+  std::string message = "OD fit complete";
+  if (!pending.identity.empty()) message += ": " + pending.identity;
+  if (push_status(pending.wire_format, pending.request_id,
+                  flatSqlNodeStatus_COMPLETE, affected_records,
+                  result_bytes, "", message) < 0) {
+    plugin_set_error("od-output", "unable to emit OD completion status");
+    publish_pending_fit_state();
+    return 500;
+  }
+  publish_pending_fit_state();
   return 0;
 }

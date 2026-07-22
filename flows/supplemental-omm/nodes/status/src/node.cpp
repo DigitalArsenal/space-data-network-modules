@@ -13,41 +13,68 @@ constexpr const char* kFsbSchemaName = "FSB.fbs";
 constexpr const char* kFsbFileIdentifier = "$FSB";
 constexpr const char* kFsbRootType = "FSB";
 constexpr uint32_t kFsbAlignedSize = 1'048'744;
+constexpr uint32_t kFsbDataCapacity = 1'048'576;
 constexpr uint16_t kFsbAlignment = 8;
 constexpr const char* kFsoFileIdentifier = "$FSO";
 constexpr uint32_t kFsoAlignedSize = 361'648;
 
+enum class RouteKind {
+  kProvider,
+  kOd,
+  kStore,
+};
+
 struct RouteState {
   const char* input_port;
   const char* output_port;
+  RouteKind kind;
   uint64_t events = 0;
   uint64_t records = 0;
   uint64_t bytes = 0;
+  uint64_t successes = 0;
+  uint64_t failures = 0;
   int8_t status = 0;
   std::string error;
 };
 
 RouteState g_routes[] = {
-    {"provider-starlink", "provider-starlink.dss"},
-    {"provider-glonass", "provider-glonass.dss"},
-    {"provider-intelsat", "provider-intelsat.dss"},
-    {"provider-cpf", "provider-cpf.dss"},
-    {"provider-iss", "provider-iss.dss"},
-    {"store", "store.dss"},
+    {"provider-starlink", "provider-starlink.dss", RouteKind::kProvider},
+    {"provider-glonass", "provider-glonass.dss", RouteKind::kProvider},
+    {"provider-intelsat", "provider-intelsat.dss", RouteKind::kProvider},
+    {"provider-cpf", "provider-cpf.dss", RouteKind::kProvider},
+    {"provider-iss", "provider-iss.dss", RouteKind::kProvider},
+    {"od", "od.dss", RouteKind::kOd},
+    {"store", "store.dss", RouteKind::kStore},
 };
 constexpr size_t kRouteCount = sizeof(g_routes) / sizeof(g_routes[0]);
 alignas(8) Aligned::FSB g_aligned_status{};
 
+std::string visible_error(const RouteState& route) {
+  if (route.kind != RouteKind::kOd || route.failures == 0) {
+    return route.error;
+  }
+  std::string summary = std::to_string(route.failures);
+  summary.append(route.failures == 1 ? " OD failure: " : " OD failures: ");
+  summary.append(route.error);
+  return summary;
+}
+
 std::vector<uint8_t> build_dss(const RouteState& route) {
   flatbuffers::FlatBufferBuilder builder(256);
-  const auto error = route.error.empty()
+  const bool od_route = route.kind == RouteKind::kOd;
+  const uint64_t synced_rows = od_route ? route.successes : route.records;
+  const uint64_t total_rows = od_route ? route.events : route.records;
+  const uint64_t missing_rows = od_route ? route.failures : 0;
+  const std::string error_message = visible_error(route);
+  const auto error = error_message.empty()
                          ? flatbuffers::Offset<flatbuffers::String>()
-                         : builder.CreateString(route.error);
+                         : builder.CreateString(error_message);
   const auto table_start = builder.StartTable();
   builder.AddElement<int8_t>(4, route.status, 0);  // STATUS
-  builder.AddElement<uint64_t>(6, route.records, 0);  // SYNCED_ROWS
-  builder.AddElement<uint64_t>(8, route.records, 0);  // TOTAL_ROWS
-  builder.AddElement<uint64_t>(10, route.records, 0);  // LOCAL_ROWS
+  builder.AddElement<uint64_t>(6, synced_rows, 0);  // SYNCED_ROWS
+  builder.AddElement<uint64_t>(8, total_rows, 0);  // TOTAL_ROWS
+  builder.AddElement<uint64_t>(10, synced_rows, 0);  // LOCAL_ROWS
+  builder.AddElement<uint64_t>(14, missing_rows, 0);  // MISSING_ROWS
   builder.AddElement<uint64_t>(16, route.bytes, 0);  // CACHED_BYTES
   builder.AddElement<uint64_t>(20, route.bytes, 0);  // DOWNLOADED_BYTES
   if (!error.IsNull()) builder.AddOffset(70, error);  // ERROR
@@ -84,61 +111,128 @@ bool consume_provider_event(const plugin_input_frame_t* frame,
   return true;
 }
 
-void apply_store_status(RouteState* route, uint8_t status,
-                        const std::string& error_code,
-                        const std::string& message) {
-  if (status == 1 || status == 4) route->status = 2;
-  else if (status == 2 || status == 3) route->status = 1;
-  else route->status = 4;
-  route->error.clear();
-  if (route->status != 4) return;
-  route->error = error_code;
-  if (!message.empty()) {
-    if (!route->error.empty()) route->error.append(": ");
-    route->error.append(message);
-  }
-  if (route->error.empty()) route->error = "FlatSQL operation failed";
-}
+struct FsoEvent {
+  uint8_t operation = 0;
+  uint8_t status = 0;
+  uint64_t affected_records = 0;
+  uint64_t result_bytes = 0;
+  std::string error_code;
+  std::string message;
+};
 
-bool consume_store_event(const plugin_input_frame_t* frame, RouteState* route) {
-  if (!route || !frame || !frame->payload || frame->payload_length == 0 ||
+bool decode_fso_event(const plugin_input_frame_t* frame, FsoEvent* event) {
+  if (!event || !frame || !frame->payload || frame->payload_length == 0 ||
       !frame->file_identifier ||
       std::strcmp(frame->file_identifier, kFsoFileIdentifier) != 0) {
     return false;
   }
   if (frame->wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
-    if (frame->payload_length != kFsoAlignedSize) return false;
-    const auto* status =
+    if (frame->payload_length != kFsoAlignedSize ||
+        reinterpret_cast<uintptr_t>(frame->payload) % alignof(Aligned::FSO) !=
+            0) {
+      return false;
+    }
+    const auto* operation =
         reinterpret_cast<const Aligned::FSO*>(frame->payload);
-    ++route->events;
-    route->records += status->AFFECTED_RECORDS;
-    route->bytes += status->RESULT_BYTES;
-    const std::string error_code =
-        status->has_ERROR_CODE() ? status->ERROR_CODE.str() : std::string();
-    const std::string message = status->has_MESSAGE()
-                                    ? std::string(
-                                          reinterpret_cast<const char*>(
-                                              status->MESSAGE.values),
-                                          status->MESSAGE.size())
-                                    : std::string();
-    apply_store_status(route, status->STATUS, error_code, message);
+    if ((operation->has_ERROR_CODE() && operation->ERROR_CODE.length > 128) ||
+        (operation->has_MESSAGE() && operation->MESSAGE.length > 4096)) {
+      return false;
+    }
+    event->operation = static_cast<uint8_t>(operation->OPERATION);
+    event->status = operation->STATUS;
+    event->affected_records = operation->AFFECTED_RECORDS;
+    event->result_bytes = operation->RESULT_BYTES;
+    event->error_code = operation->has_ERROR_CODE()
+                            ? operation->ERROR_CODE.str()
+                            : std::string();
+    event->message =
+        operation->has_MESSAGE()
+            ? std::string(
+                  reinterpret_cast<const char*>(operation->MESSAGE.values),
+                  operation->MESSAGE.length)
+            : std::string();
     return true;
+  }
+  if (frame->wire_format != PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER) {
+    return false;
   }
   flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
   if (!VerifyFSOBuffer(verifier)) return false;
-  const FSO* status = GetFSO(frame->payload);
+  const FSO* operation = GetFSO(frame->payload);
+  if ((operation->ERROR_CODE() && operation->ERROR_CODE()->size() > 128) ||
+      (operation->MESSAGE() && operation->MESSAGE()->size() > 4096)) {
+    return false;
+  }
+  event->operation = static_cast<uint8_t>(operation->OPERATION());
+  event->status = operation->STATUS();
+  event->affected_records = operation->AFFECTED_RECORDS();
+  event->result_bytes = operation->RESULT_BYTES();
+  event->error_code = operation->ERROR_CODE()
+                          ? operation->ERROR_CODE()->str()
+                          : std::string();
+  event->message = operation->MESSAGE()
+                       ? std::string(reinterpret_cast<const char*>(
+                                         operation->MESSAGE()->data()),
+                                     operation->MESSAGE()->size())
+                       : std::string();
+  return true;
+}
+
+std::string operation_error(const FsoEvent& event, const char* fallback) {
+  std::string error = event.error_code;
+  if (!event.message.empty()) {
+    if (!error.empty()) error.append(": ");
+    error.append(event.message);
+  }
+  if (error.empty()) error = fallback;
+  return error;
+}
+
+void apply_store_status(RouteState* route, const FsoEvent& event) {
+  if (event.status == 1 || event.status == 4) route->status = 2;
+  else if (event.status == 2 || event.status == 3) route->status = 1;
+  else route->status = 4;
+  route->error.clear();
+  if (route->status != 4) return;
+  route->error = operation_error(event, "FlatSQL operation failed");
+}
+
+bool consume_store_event(const plugin_input_frame_t* frame, RouteState* route) {
+  if (!route) return false;
+  FsoEvent event;
+  if (!decode_fso_event(frame, &event)) return false;
+  if (event.operation > static_cast<uint8_t>(flatSqlNodeOperation_RELOAD) ||
+      event.status < 1 || event.status > 10) {
+    return false;
+  }
   ++route->events;
-  route->records += status->AFFECTED_RECORDS();
-  route->bytes += status->RESULT_BYTES();
-  const std::string error_code = status->ERROR_CODE()
-                                     ? status->ERROR_CODE()->str()
-                                     : std::string();
-  const std::string message =
-      status->MESSAGE()
-          ? std::string(reinterpret_cast<const char*>(status->MESSAGE()->data()),
-                        status->MESSAGE()->size())
-          : std::string();
-  apply_store_status(route, status->STATUS(), error_code, message);
+  route->records += event.affected_records;
+  route->bytes += event.result_bytes;
+  apply_store_status(route, event);
+  return true;
+}
+
+bool consume_od_event(const plugin_input_frame_t* frame, RouteState* route) {
+  if (!route) return false;
+  FsoEvent event;
+  if (!decode_fso_event(frame, &event)) return false;
+  if (event.operation != static_cast<uint8_t>(flatSqlNodeOperation_NONE) ||
+      event.status < 1 || event.status > 10) {
+    return false;
+  }
+  ++route->events;
+  if (event.status >= 1 && event.status <= 4) {
+    ++route->successes;
+    route->records += event.affected_records;
+    route->bytes += event.result_bytes;
+    if (route->failures == 0) {
+      route->status = event.status == 2 || event.status == 3 ? 1 : 2;
+    }
+    return true;
+  }
+  ++route->failures;
+  route->status = 4;
+  route->error = operation_error(event, "OD fit failed");
   return true;
 }
 
@@ -167,6 +261,7 @@ int push_canonical_status(const RouteState& route,
 
 int push_aligned_status(const RouteState& route,
                         const std::vector<uint8_t>& dss) {
+  if (dss.size() > kFsbDataCapacity) return -1;
   std::memset(&g_aligned_status, 0, sizeof(g_aligned_status));
   g_aligned_status.REQUEST_ID = route.events;
   g_aligned_status.KIND = flatSqlByteStreamKind_UNSPECIFIED;
@@ -191,6 +286,7 @@ int push_aligned_status(const RouteState& route,
 
 extern "C" int record_event(void) {
   plugin_reset_output_state();
+  std::vector<RouteState> staged_routes(g_routes, g_routes + kRouteCount);
   bool touched[kRouteCount] = {};
   bool aligned_output[kRouteCount] = {};
   for (uint32_t index = 0; index < plugin_get_input_count(); ++index) {
@@ -204,13 +300,22 @@ extern "C" int record_event(void) {
       }
     }
     if (route_index == kRouteCount) continue;
-    const bool accepted = route_index == kRouteCount - 1
-                              ? consume_store_event(frame, &g_routes[route_index])
-                              : consume_provider_event(frame, &g_routes[route_index]);
+    bool accepted = false;
+    switch (staged_routes[route_index].kind) {
+      case RouteKind::kProvider:
+        accepted = consume_provider_event(frame, &staged_routes[route_index]);
+        break;
+      case RouteKind::kOd:
+        accepted = consume_od_event(frame, &staged_routes[route_index]);
+        break;
+      case RouteKind::kStore:
+        accepted = consume_store_event(frame, &staged_routes[route_index]);
+        break;
+    }
     if (!accepted) {
       plugin_set_error(
           "status-event",
-          "status requires typed provider $FSB or FlatSQL $FSO events");
+          "status requires typed provider $FSB or operation $FSO events");
       return 400;
     }
     aligned_output[route_index] =
@@ -220,7 +325,7 @@ extern "C" int record_event(void) {
   bool emitted = false;
   for (size_t route_index = 0; route_index < kRouteCount; ++route_index) {
     if (!touched[route_index]) continue;
-    const RouteState& route = g_routes[route_index];
+    const RouteState& route = staged_routes[route_index];
     const std::vector<uint8_t> dss = build_dss(route);
     const int32_t output = aligned_output[route_index]
                                ? push_aligned_status(route, dss)
@@ -234,6 +339,9 @@ extern "C" int record_event(void) {
   if (!emitted) {
     plugin_set_error("status-empty", "no status event was supplied");
     return 400;
+  }
+  for (size_t route_index = 0; route_index < kRouteCount; ++route_index) {
+    if (touched[route_index]) g_routes[route_index] = staged_routes[route_index];
   }
   return 0;
 }

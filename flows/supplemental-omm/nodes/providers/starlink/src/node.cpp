@@ -13,7 +13,7 @@ constexpr const char* kDefaultEphemerisBase =
 constexpr uint32_t kMaxFetchConcurrency = 64;
 constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
-constexpr uint32_t kMaxDownstreamObjectsPerInvocation = 4;
+constexpr uint32_t kMaxDownstreamObjectsPerInvocation = 1;
 
 struct Config {
   std::string manifest_url = kDefaultManifestUrl;

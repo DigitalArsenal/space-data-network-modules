@@ -46,7 +46,11 @@ function fsbPort(portId, description, output = false) {
   };
 }
 
-function fsoPort(portId, description) {
+function fsoPort(
+  portId,
+  description,
+  { required = true, maxStreams = 1 } = {},
+) {
   return {
     portId,
     acceptedTypeSets: [
@@ -55,9 +59,9 @@ function fsoPort(portId, description) {
         allowedTypes: [{ ...fsoCanonical }, { ...fsoAligned }],
       },
     ],
-    minStreams: 1,
-    maxStreams: 1,
-    required: true,
+    minStreams: required ? 1 : 0,
+    maxStreams,
+    required,
     description,
   };
 }
@@ -88,6 +92,11 @@ export const manifest = {
         fsoPort(
           "control",
           "Idempotent FlatSQL CONFIGURE_INDEX control containing the complete canonical result schema and OMM/OCM/OBD table bindings.",
+        ),
+        fsoPort(
+          "status",
+          "One typed OD outcome for each consumed complete provider response or fitted logical object.",
+          { required: false, maxStreams: 4096 },
         ),
         fsbPort("omm", "Size-prefixed canonical OMM records in FSB record streams.", true),
         fsbPort("ocm", "Size-prefixed canonical OCM records in FSB record streams.", true),
