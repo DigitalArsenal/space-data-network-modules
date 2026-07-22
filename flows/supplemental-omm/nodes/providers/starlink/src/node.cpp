@@ -13,6 +13,7 @@ constexpr const char* kDefaultEphemerisBase =
 constexpr uint32_t kMaxFetchConcurrency = 64;
 constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
+constexpr uint32_t kMaxDownstreamObjectsPerInvocation = 4;
 
 struct Config {
   std::string manifest_url = kDefaultManifestUrl;
@@ -218,7 +219,9 @@ extern "C" int emit(void) {
   }
 
   uint32_t emitted_frames = 0;
-  while (emitted_frames < kMaxOutputFramesPerInvocation) {
+  uint32_t emitted_objects = 0;
+  while (emitted_frames < kMaxOutputFramesPerInvocation &&
+         emitted_objects < kMaxDownstreamObjectsPerInvocation) {
     if (g_state.pending_next >= g_state.pending.size()) {
       g_state.pending.clear();
       g_state.pending_next = 0;
@@ -269,6 +272,7 @@ extern "C" int emit(void) {
       return 500;
     }
     emitted_frames += response_frames;
+    ++emitted_objects;
     ++g_state.pending_next;
   }
 

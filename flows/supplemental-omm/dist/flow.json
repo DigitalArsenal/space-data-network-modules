@@ -18,7 +18,7 @@
       "artifact": {
         "path": "./nodes/timer/dist/isomorphic/module.wasm",
         "publisher": "./nodes/timer/publisher.json",
-        "sha256": "69758f88392ddb22fd357ef4a1dd7a3b44f75d8c3539f7739d6df406fbb18c55"
+        "sha256": "db8d7a3506a0c3188b006886ebea30cfda9e9c2c2b9c477baefb5c37a375d6bd"
       }
     },
     {
@@ -34,7 +34,7 @@
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "1c964c47401fd13a642372924c78bf06c005fdf054a7801b91fb52b1db8ff47e"
+        "sha256": "5a8de24eace879cd84c037fe0fcdfd2e53e561398ba2479e70c47b026f8cd64d"
       }
     },
     {
@@ -50,7 +50,7 @@
       "artifact": {
         "path": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/glonass/publisher.json",
-        "sha256": "321373d51d9eae4baa8dd11552a1711d7a6fe1a37f5d3391df483a4e691c5ad5"
+        "sha256": "4b815da1bd1c8cd5f8183486d75eb9ef264b7e211c83320035d415fdd6e4821c"
       }
     },
     {
@@ -66,7 +66,7 @@
       "artifact": {
         "path": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/intelsat/publisher.json",
-        "sha256": "1fd325db5d4e54bcf751c63a518052e653872a9a2d26a2f1d8cb92fd1416f551"
+        "sha256": "ccb61c6ff2ddce7a1fe3628fe8b829d75d414d4f51f31ebb8c03bcb68c9e2302"
       }
     },
     {
@@ -82,7 +82,7 @@
       "artifact": {
         "path": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/cpf/publisher.json",
-        "sha256": "684c822c77537a620c85bcf920ff678e5125553bf07a77600a47b7d96f74dc2a"
+        "sha256": "124833b31ebf4820e2a552e3fd5b66c2ef51bda05e3aa9dade6ec6c928e0f45e"
       }
     },
     {
@@ -98,7 +98,7 @@
       "artifact": {
         "path": "./nodes/providers/iss/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/iss/publisher.json",
-        "sha256": "e5a0c7070dbe7875c363d85ca2de220daa31dba747a6e550e0324e38a0a70ca8"
+        "sha256": "fed74e17eb1d24d0e85b0e9627be09029cea7c85d3340155e373a6ebb07dce1c"
       }
     },
     {

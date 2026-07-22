@@ -26,19 +26,19 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "efabf74cfcb29b92cb90e86a941a91fd381b0809f55a9ccc42cdeeb1d7c6faba";
+  "c77fe6bd7bc95c0ba42bfff86a99c22beea942c9cff15e8cabf8e77cc52f778b";
 const expectedChildSha256 = Object.freeze({
-  timer: "69758f88392ddb22fd357ef4a1dd7a3b44f75d8c3539f7739d6df406fbb18c55",
+  timer: "db8d7a3506a0c3188b006886ebea30cfda9e9c2c2b9c477baefb5c37a375d6bd",
   "provider-starlink":
-    "1c964c47401fd13a642372924c78bf06c005fdf054a7801b91fb52b1db8ff47e",
+    "5a8de24eace879cd84c037fe0fcdfd2e53e561398ba2479e70c47b026f8cd64d",
   "provider-glonass":
-    "321373d51d9eae4baa8dd11552a1711d7a6fe1a37f5d3391df483a4e691c5ad5",
+    "4b815da1bd1c8cd5f8183486d75eb9ef264b7e211c83320035d415fdd6e4821c",
   "provider-intelsat":
-    "1fd325db5d4e54bcf751c63a518052e653872a9a2d26a2f1d8cb92fd1416f551",
+    "ccb61c6ff2ddce7a1fe3628fe8b829d75d414d4f51f31ebb8c03bcb68c9e2302",
   "provider-cpf":
-    "684c822c77537a620c85bcf920ff678e5125553bf07a77600a47b7d96f74dc2a",
+    "124833b31ebf4820e2a552e3fd5b66c2ef51bda05e3aa9dade6ec6c928e0f45e",
   "provider-iss":
-    "e5a0c7070dbe7875c363d85ca2de220daa31dba747a6e550e0324e38a0a70ca8",
+    "fed74e17eb1d24d0e85b0e9627be09029cea7c85d3340155e373a6ebb07dce1c",
   od: "9cb9d62b3652d0af088a7e9da350e4f2d0e4abaa539c1665dc43a6379aa6f48a",
   store:
     "593bd94c0964835c5077a60973cd1da42f5ccf1f5ca63dcd71a82e59df97a93e",
@@ -95,14 +95,19 @@ function minuteStamp(index, stepMinutes) {
 }
 
 function fixtureResponses() {
-  const starlinkFilename =
+  const starlinkFixtureFilename =
     "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt";
+  const starlinkFilenames = Array.from({ length: 5 }, (_, index) =>
+    index === 0
+      ? starlinkFixtureFilename
+      : `MEME_${67850 + index}_STARLINK-${36840 + index}_1340142_Operational_1463017380_UNCLASSIFIED.txt`,
+  );
   const starlink = new Uint8Array(
     fs.readFileSync(
       path.resolve(
         packageRoot,
         "../../data-source/spacex-starlink-source/test/fixtures/meme",
-        starlinkFilename,
+        starlinkFixtureFilename,
       ),
     ),
   );
@@ -169,8 +174,11 @@ function fixtureResponses() {
     "i_aor_e_302.00_is-21_20260721_000000.txt";
   const cpfFilename = "lageos1_cpf_260721_0001.dgf";
   return new Map([
-    [defaultUrls.starlinkManifest, encode(`${starlinkFilename}\n`)],
-    [`${defaultUrls.starlinkBase}${starlinkFilename}`, starlink],
+    [defaultUrls.starlinkManifest, encode(`${starlinkFilenames.join("\n")}\n`)],
+    ...starlinkFilenames.map((filename) => [
+      `${defaultUrls.starlinkBase}${filename}`,
+      starlink,
+    ]),
     [defaultUrls.glonass, encode(`${glonass.join("\n")}\n`)],
     [defaultUrls.intelsatListing, encode(`${intelsatFilename}\n`)],
     [
@@ -216,7 +224,8 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   );
 
   const httpBodies = fixtureResponses();
-  const expectedRecordsPerStandard = 5;
+  const expectedRecordsPerStandard = 9;
+  let clockNowMs = Date.parse("2026-07-21T12:34:56Z");
   const hostcalls = [];
   const opaqueValues = new Map();
   const opaqueKey = (nodeId, params) =>
@@ -249,7 +258,7 @@ test("exact release-signed Supplemental flow executes every signed child in the 
               ? { ...params, records: new Uint8Array(params.records) }
               : structuredClone(params),
         });
-        if (operation === "clock.now") return Date.parse("2026-07-21T12:34:56Z");
+        if (operation === "clock.now") return clockNowMs;
         if (operation === "timers.arm" || operation === "timers.cancel") {
           return { accepted: true };
         }
@@ -310,6 +319,23 @@ test("exact release-signed Supplemental flow executes every signed child in the 
       `${descriptor.nodeId} browser instance did not retain the exact signed child hash`,
     );
   }
+  const odInvocations = [];
+  const odHarness = host.children.get("od")?.harness;
+  assert.ok(odHarness, "OD child harness was not instantiated");
+  const invokeOd = odHarness.invoke;
+  odHarness.invoke = async (request) => {
+    const starlinkRequestIds = new Set(
+      (request.inputs ?? [])
+        .filter((frame) => frame.portId === "starlink")
+        .map((frame) =>
+          FSB.getRootAsFSB(
+            new ByteBuffer(new Uint8Array(frame.payload)),
+          ).REQUEST_ID().toString(),
+        ),
+    );
+    odInvocations.push([...starlinkRequestIds]);
+    return invokeOd(request);
+  };
   const publicationInputs = [];
   const publicationResponses = [];
   const publicationHarness = host.children.get("publication")?.harness;
@@ -333,6 +359,24 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   };
 
   host.enqueueTrigger(0);
+  const bootstrapped = await host.drain({
+    maxIterations: 20_000,
+    frameBudget: 64,
+  });
+  assert.ok(bootstrapped.nodesInvoked >= 1);
+  assert.equal(
+    hostcalls.filter(({ operation }) => operation === "http.request").length,
+    0,
+    "lifecycle bootstrap must not start provider fetches before APP commit",
+  );
+  assert.equal(publicationInputs.length, 0);
+  assert.equal(publicationResponses.length, 0);
+
+  clockNowMs += 30_000;
+  host.enqueueTriggerFrame(0, {
+    portId: "wakeup",
+    bytes: new Uint8Array(),
+  });
   const drained = await host.drain({
     maxIterations: 20_000,
     frameBudget: 64,
@@ -360,17 +404,42 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     publicationInputSummary.length > 0,
     "no canonical records reached the independently instantiated publication node",
   );
-  assert.equal(publicationInputSummary.length, 3);
+  assert.equal(publicationInputSummary.length, 6);
+  const starlinkOdInvocations = odInvocations.filter(
+    (requestIds) => requestIds.length > 0,
+  );
+  assert.ok(
+    starlinkOdInvocations.length >= 2,
+    "five Starlink objects were coalesced into one OD invocation",
+  );
+  assert.ok(
+    starlinkOdInvocations.every((requestIds) => requestIds.length <= 4),
+    `OD received a Starlink wave above four objects: ${JSON.stringify(starlinkOdInvocations)}`,
+  );
+  assert.equal(
+    new Set(starlinkOdInvocations.flat()).size,
+    5,
+    "OD did not receive all five complete Starlink objects exactly once",
+  );
   assert.ok(publicationResponses.length > 0);
   for (const summary of publicationInputSummary) {
     assert.equal(summary.portId, "records");
     assert.equal(summary.kind, 1);
     assert.equal(summary.sequence, 0);
     assert.equal(summary.final, true);
-    assert.equal(summary.recordCount, String(expectedRecordsPerStandard));
+    assert.ok(Number(summary.recordCount) > 0);
     assert.ok(["OMM", "OCM", "OBD"].includes(summary.schemaName));
     assert.equal(summary.fileIdentifier, `$${summary.schemaName}`);
     assert.equal(summary.dataLength, Number(summary.totalBytes));
+  }
+  for (const standard of ["OMM", "OCM", "OBD"]) {
+    assert.equal(
+      publicationInputSummary
+        .filter((summary) => summary.schemaName === standard)
+        .reduce((total, summary) => total + Number(summary.recordCount), 0),
+      expectedRecordsPerStandard,
+      `${standard} aggregate batches did not preserve the full fitted catalog`,
+    );
   }
   for (const response of publicationResponses) {
     assert.equal(response.statusCode, 0);

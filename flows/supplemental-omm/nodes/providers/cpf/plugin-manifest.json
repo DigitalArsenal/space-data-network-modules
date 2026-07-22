@@ -14,7 +14,7 @@
     "inputPorts": [{"portId": "config", "acceptedTypeSets": [{"setId": "fsb-dual", "allowedTypes": [
       {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "flatbuffer"},
       {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "aligned-binary", "byteLength": 1048744, "requiredAlignment": 8}
-    ]}], "minStreams": 0, "maxStreams": 1, "required": false}],
+    ]}], "minStreams": 1, "maxStreams": 1, "required": true}],
     "outputPorts": [{"portId": "oem", "acceptedTypeSets": [{"setId": "fsb-dual", "allowedTypes": [
       {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "flatbuffer"},
       {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "aligned-binary", "byteLength": 1048744, "requiredAlignment": 8}

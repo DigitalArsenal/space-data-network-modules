@@ -27,6 +27,7 @@ int32_t sdm_host_last_status_code(void);
 namespace {
 
 constexpr uint64_t kHourMillis = 3'600'000;
+constexpr uint64_t kInitialWakeupDelayMillis = 30'000;
 constexpr const char* kTimerToken = "supplemental-omm-hourly";
 constexpr const char* kFsbSchemaName = "FSB.fbs";
 constexpr const char* kFsbFileIdentifier = "$FSB";
@@ -219,6 +220,25 @@ extern "C" int on_wakeup(void) {
   if (!json_u64(clock_response, "result", &now_ms)) {
     plugin_set_error("invalid-clock-response", "clock.now returned no integer result");
     return 502;
+  }
+
+  // The parent runtime represents both lifecycle activation and later generic
+  // wakeups with the same opaque wakeup port.  Treat the first invocation of a
+  // fresh signed timer instance as installation bootstrap regardless of frame
+  // shape, then let the host's generic timer delivery re-enter this node after
+  // the grace period.  Policy remains entirely inside this WASM node.
+  if (!g_initialized) {
+    g_initialized = true;
+    g_next_due_ms = now_ms + kInitialWakeupDelayMillis;
+    const std::string timer_request =
+        std::string("{\"at_unix_ms\":") + std::to_string(g_next_due_ms) +
+        ",\"token\":\"" + kTimerToken + "\"}";
+    std::string timer_response;
+    if (!hostcall("timers.arm", timer_request, &timer_response)) {
+      plugin_set_error("timer-unavailable", "timers.arm failed");
+      return 502;
+    }
+    return 0;
   }
 
   const bool fire = !g_initialized || now_ms >= g_next_due_ms;
