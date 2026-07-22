@@ -14,6 +14,7 @@ import {
   parseSingleFileBundle,
   verifyModuleArtifact,
 } from "../../../node_modules/space-data-module-sdk/src/index.js";
+import { createFlowRuntimeHost } from "../../../node_modules/space-data-module-sdk/src/flow/flowRuntimeHost.js";
 import { sha256Bytes } from "../../../node_modules/space-data-module-sdk/src/utils/crypto.js";
 import { bytesToHex } from "../../../node_modules/space-data-module-sdk/src/utils/encoding.js";
 
@@ -27,7 +28,7 @@ const expectedEntries = [
   "manifest",
   ...flowSource.nodes.flatMap((node) => [
     `nodes/${node.nodeId}.publisher.json`,
-    `nodes/${node.nodeId}.wasm`,
+    node.pluginId,
   ]),
   "signature",
 ].sort();
@@ -73,6 +74,40 @@ test("one bundle-scoped signature binds wasm, PLG, metadata, APP, and exact chil
     signatureEntry.decodedPayload.signedHashAlgorithm,
     BUNDLE_SIGNATURE_HASH_ALGORITHM,
   );
+  const runtime = await createFlowRuntimeHost({ wasmSource: artifactBytes });
+  const declaredChildren = Array.from(
+    { length: runtime.dependencyCount },
+    (_, index) => runtime.getDependencyDescriptor(index),
+  )
+    .map((descriptor) => ({
+      entryId: descriptor.dependencyId,
+      sha256: descriptor.sha256,
+    }))
+    .sort((left, right) => left.entryId.localeCompare(right.entryId));
+  const embeddedChildren = parsed.entries
+    .filter((entry) => entry.mediaType === "application/wasm")
+    .map((entry) => ({
+      entryId: entry.entryId,
+      sha256: createHash("sha256").update(entry.payloadBytes).digest("hex"),
+    }))
+    .sort((left, right) => left.entryId.localeCompare(right.entryId));
+  assert.deepEqual(
+    declaredChildren,
+    embeddedChildren,
+    "the parent runtime must bind exact independently signed child EntryIDs and hashes",
+  );
+  assert.deepEqual(
+    Array.from(
+      { length: runtime.nodeCount },
+      (_, index) => runtime.getNodeDispatchDescriptor(index),
+    )
+      .filter((descriptor) => descriptor.dispatchModel === "isomorphic")
+      .map((descriptor) => descriptor.dependencyId)
+      .sort(),
+    embeddedChildren.map(({ entryId }) => entryId).sort(),
+    "every signed child EntryID must be selected by an isomorphic node dispatch",
+  );
+
   const verified = await verifyModuleArtifact(artifactBytes, {
     trustedPublicKeys: [signatureEntry.decodedPayload.publicKeyHex],
     requireSignature: true,
@@ -102,8 +137,7 @@ test("one bundle-scoped signature binds wasm, PLG, metadata, APP, and exact chil
       node.artifact.sha256,
     );
     assert.deepEqual(
-      parsed.entries.find((entry) => entry.entryId === `nodes/${node.nodeId}.wasm`)
-        ?.payloadBytes,
+      parsed.entries.find((entry) => entry.entryId === node.pluginId)?.payloadBytes,
       childBytes,
     );
     assert.deepEqual(
