@@ -28,13 +28,14 @@
       "dispatchModel": "isomorphic",
       "kind": "transform",
       "capabilities": [
-        "http"
+        "http",
+        "storage_adapter"
       ],
       "drainPolicy": "drain-until-yield",
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "04ff5d8a52f340656e0b3150f9ee64ca8e7ffaf6e6dcf9870ccab5ad511f7f22"
+        "sha256": "eca46d33c7f6716a929426742e382d6c3c551763c3e4ffa767a3c46b164a7da6"
       }
     },
     {
@@ -50,7 +51,7 @@
       "artifact": {
         "path": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/glonass/publisher.json",
-        "sha256": "321373d51d9eae4baa8dd11552a1711d7a6fe1a37f5d3391df483a4e691c5ad5"
+        "sha256": "d8462af69d5fd2311bfdf279ebb665cb5a3fbc1e73d7eba303b0522ca43c4095"
       }
     },
     {
@@ -66,7 +67,7 @@
       "artifact": {
         "path": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/intelsat/publisher.json",
-        "sha256": "1fd325db5d4e54bcf751c63a518052e653872a9a2d26a2f1d8cb92fd1416f551"
+        "sha256": "e31d65c2bd3bca346f12044748102f662227f7f25ee042f9a0e83d07a09397f3"
       }
     },
     {
@@ -82,7 +83,7 @@
       "artifact": {
         "path": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/cpf/publisher.json",
-        "sha256": "684c822c77537a620c85bcf920ff678e5125553bf07a77600a47b7d96f74dc2a"
+        "sha256": "ffcaa7abe9533eeab795bf7e8452de6e79e6746c6d5d40226dbf50e5dd537fa1"
       }
     },
     {
@@ -98,7 +99,7 @@
       "artifact": {
         "path": "./nodes/providers/iss/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/iss/publisher.json",
-        "sha256": "e5a0c7070dbe7875c363d85ca2de220daa31dba747a6e550e0324e38a0a70ca8"
+        "sha256": "97e0f6231db85dd7dec479cc346cfb37b885c81fe90436d109423f04e9861d17"
       }
     },
     {
@@ -112,7 +113,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "7240955746f74dcb17eb91104fe4248e29f4f924f6d380ef4a18e4d6e883e898"
+        "sha256": "485d068641cf97961d44f33881f6082f734b6b68b3c92ecf9df4a9a6cd2c9e82"
       }
     },
     {
@@ -158,7 +159,7 @@
       "artifact": {
         "path": "./nodes/status/dist/isomorphic/module.wasm",
         "publisher": "./nodes/status/publisher.json",
-        "sha256": "532ad78f4376ce6e22f26ab29f0a4ca252f0c396fc51e02d34b478be343dedea"
+        "sha256": "a4b938be7d2012c2a9f46b7b6fedba4ac5d8659d89380f99132c48cfcb5e650e"
       }
     }
   ],
@@ -299,13 +300,13 @@
       "queueDepth": 65536
     },
     {
-      "edgeId": "starlink-to-status",
+      "edgeId": "starlink-progress-to-status",
       "fromNodeId": "provider-starlink",
-      "fromPortId": "oem",
+      "fromPortId": "progress",
       "toNodeId": "status",
-      "toPortId": "provider-starlink",
+      "toPortId": "provider-starlink-progress",
       "backpressurePolicy": "queue",
-      "queueDepth": 65536
+      "queueDepth": 1
     },
     {
       "edgeId": "glonass-to-status",

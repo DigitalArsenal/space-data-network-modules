@@ -21,6 +21,7 @@ import { FTB } from "../../../../spacedatastandards.org/lib/js/FSO/FTB.js";
 import { flatSqlNodeStatus } from "../../../../spacedatastandards.org/lib/js/FSO/flatSqlNodeStatus.js";
 import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OCM } from "../../../../spacedatastandards.org/lib/js/OCM/OCM.js";
+import { OBD } from "../../../../spacedatastandards.org/lib/js/OBD/OBD.js";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const nodeRoot = path.join(packageRoot, "nodes/od");
@@ -207,6 +208,43 @@ function makeLongMemeFixture() {
     const vz = radiusKm * meanMotion * Math.cos(angle) * Math.sin(inclination);
     lines.push(
       `${epoch} ${x.toFixed(10)} ${y.toFixed(10)} ${z.toFixed(10)} ${vx.toFixed(12)} ${vy.toFixed(12)} ${vz.toFixed(12)}`,
+    );
+  }
+  return new TextEncoder().encode(`${lines.join("\n")}\n`);
+}
+
+function makeProductionShapedMemeFixture() {
+  // Analytic, smooth three-day TEME arc at the production 60-second cadence.
+  // A bounded radial oscillation makes the source intentionally non-SGP4 so
+  // the regression exercises the optimizer's expensive rescue phases instead
+  // of a trivially converged two-body circle. Units are km and km/s in UTC.
+  const durationSeconds = 3 * 24 * 60 * 60;
+  const radiusKm = 7_000;
+  const inclination = (53 * Math.PI) / 180;
+  const meanMotion = Math.sqrt(398_600.4418 / radiusKm ** 3);
+  const radialFrequency = meanMotion * 3.25;
+  const lines = [
+    "created:2026-07-21 00:00:00 UTC",
+    "ephemeris_start:2026-07-21 00:00:00 UTC ephemeris_stop:2026-07-24 00:00:00 UTC step_size:60",
+    "ephemeris_source:closed-form-production-shaped-test",
+    "UVW",
+  ];
+  for (let seconds = 0; seconds <= durationSeconds; seconds += 60) {
+    const angle = meanMotion * seconds;
+    const radialPhase = radialFrequency * seconds;
+    const radius = radiusKm + 0.8 * Math.sin(radialPhase);
+    const radialVelocity = 0.8 * radialFrequency * Math.cos(radialPhase);
+    const planeX = radius * Math.cos(angle);
+    const planeY = radius * Math.sin(angle);
+    const planeVx = radialVelocity * Math.cos(angle) - radius * meanMotion * Math.sin(angle);
+    const planeVy = radialVelocity * Math.sin(angle) + radius * meanMotion * Math.cos(angle);
+    const dayOfYear = 202 + Math.floor(seconds / 86_400);
+    const secondsOfDay = seconds % 86_400;
+    const hour = Math.floor(secondsOfDay / 3_600);
+    const minute = Math.floor((secondsOfDay % 3_600) / 60);
+    const epoch = `2026${String(dayOfYear).padStart(3, "0")}${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}00.000`;
+    lines.push(
+      `${epoch} ${planeX.toFixed(10)} ${(planeY * Math.cos(inclination)).toFixed(10)} ${(planeY * Math.sin(inclination)).toFixed(10)} ${planeVx.toFixed(12)} ${(planeVy * Math.cos(inclination)).toFixed(12)} ${(planeVy * Math.sin(inclination)).toFixed(12)}`,
     );
   }
   return new TextEncoder().encode(`${lines.join("\n")}\n`);
@@ -566,6 +604,72 @@ test("OD source reassembles complete native chunks and owns every provider parse
     assert.match(source, new RegExp(marker), `missing ${marker}`);
   }
   assert.doesNotMatch(source, /128\s*\*\s*1024|131072|rangeBytes|celestrak/i);
+});
+
+test("OD passes a deterministic supported work bound to every complete-arc fit", () => {
+  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  const declaredBound = source.match(/kMaxFitIterations\s*=\s*(\d+)\s*;/);
+  assert.ok(declaredBound, "signed OD source must declare its solver-work bound");
+  const maxIterations = Number(declaredBound[1]);
+  assert.equal(maxIterations, 40);
+
+  const encodedBound = source.match(/"maxIterations"\s*:\s*(\d+)/);
+  assert.ok(encodedBound, "signed OD source must encode the supported maxIterations option");
+  assert.equal(Number(encodedBound[1]), maxIterations);
+  assert.match(
+    source,
+    /fit_ephemeris_epochs_fb\([^;]+kFitOptions/s,
+    "the complete-arc fitter must receive the nonempty deterministic options",
+  );
+  assert.doesNotMatch(
+    source,
+    /fit_ephemeris_epochs_fb\([^;]+std::string_view\s*\{\s*\}/s,
+  );
+});
+
+test("OD preflights every returned epoch before moving any result bytes", () => {
+  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  const helper = source.match(
+    /bool preflight_fit_epochs\([^]*?\n\}/,
+  )?.[0];
+  assert.ok(helper, "signed OD source must own an all-epoch preflight helper");
+  assert.match(helper, /for\s*\(const od::PluginFitFBResult& epoch : epochs\)/);
+  assert.match(
+    helper,
+    /!epoch\.ok\s*\|\|\s*epoch\.omm\.empty\(\)\s*\|\|\s*epoch\.ocm\.empty\(\)\s*\|\|\s*\n\s*epoch\.obd\.empty\(\)/,
+  );
+  assert.match(
+    helper,
+    /\*error_code = epoch\.error_code\.empty\(\)[^]*?: epoch\.error_code;/,
+  );
+  assert.match(
+    helper,
+    /\*error_message = epoch\.error_message\.empty\(\)[^]*?: epoch\.error_message;/,
+  );
+  assert.match(helper, /fit-incomplete-epoch/);
+
+  const boundedFit = source.match(
+    /od::BatchResult fit_one_bounded\([^]*?\n\}/,
+  )?.[0];
+  assert.ok(boundedFit);
+  const preflight = boundedFit.indexOf("preflight_fit_epochs");
+  const firstMove = boundedFit.indexOf("std::move");
+  const accepted = boundedFit.indexOf("result.ok = true");
+  assert.ok(preflight >= 0, "bounded fit must invoke all-epoch preflight");
+  assert.ok(firstMove >= 0);
+  assert.ok(accepted >= 0);
+  assert.ok(
+    preflight < firstMove,
+    "all epochs must pass preflight before any result bytes are moved",
+  );
+  assert.ok(
+    preflight < accepted,
+    "the object cannot become successful before all epochs pass preflight",
+  );
+  assert.doesNotMatch(
+    boundedFit,
+    /if\s*\(!epoch\.ok\s*\|\|\s*epoch\.omm\.empty\(\)\)\s*continue/,
+  );
 });
 
 test("OD signed-node build is self-contained inside the Supplemental package", () => {
@@ -1410,6 +1514,85 @@ test("OD fits one queued provider object per invocation and drains through zero-
     fittedIdentities,
     objects.map(({ norad, objectName }) => `${norad}:${objectName}`),
   );
+});
+
+test("OD bounds optimizer work across one complete production-shaped three-day arc", async (t) => {
+  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  const maxIterations = Number(
+    source.match(/kMaxFitIterations\s*=\s*(\d+)\s*;/)?.[1] ?? 0,
+  );
+  assert.equal(maxIterations, 40);
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  const fixture = makeProductionShapedMemeFixture();
+  const checksum = crypto.createHash("sha256").update(fixture).digest();
+  const response = await harness.invoke({
+    methodId: "fit",
+    inputs: [
+      inputFrame(
+        makeChunk({
+          data: fixture,
+          sequence: 0,
+          final: true,
+          totalBytes: fixture.byteLength,
+          checksum,
+          requestId: 79_001n,
+          schemaName: "MEME:79001:STARLINK-PRODUCTION-SHAPED",
+        }),
+      ),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.yielded, false);
+  assert.equal(response.backlogRemaining, 0);
+
+  const omm = reassembleRecordStream(response.outputs, "omm");
+  const ocm = reassembleRecordStream(response.outputs, "ocm");
+  const obd = reassembleRecordStream(response.outputs, "obd");
+  assert.ok(omm.recordCount >= 20n, "the complete three-day arc must retain multiple local epochs");
+  assert.equal(ocm.recordCount, omm.recordCount);
+  assert.equal(obd.recordCount, omm.recordCount);
+
+  const fittedEpochs = splitSizePrefixedRecords(omm.stream).map((record) =>
+    OMM.getSizePrefixedRootAsOMM(new ByteBuffer(record)).EPOCH(),
+  );
+  assert.equal(fittedEpochs.length, Number(omm.recordCount));
+  assert.equal(fittedEpochs[0], "2026-07-21T00:00:00.000000Z");
+  for (let index = 1; index < fittedEpochs.length; index += 1) {
+    assert.ok(
+      Date.parse(fittedEpochs[index]) > Date.parse(fittedEpochs[index - 1]),
+      "epoch-specific fits must remain strictly ordered",
+    );
+  }
+  assert.ok(
+    Date.parse(fittedEpochs.at(-1)) >= Date.parse("2026-07-23T20:00:00.000Z"),
+    "the final local fit must cover the three-day source's terminal window",
+  );
+
+  const records = splitSizePrefixedRecords(obd.stream).map((record) =>
+    OBD.getSizePrefixedRootAsOBD(new ByteBuffer(record)),
+  );
+  const reportedIterations = records.map((record) => record.NUM_ITERATIONS());
+  const reportedRmsKm = records.map((record) => record.WRMS());
+  t.diagnostic(
+    `maxIterations=${maxIterations} inputBytes=${fixture.byteLength} epochs=${records.length} maxReportedIterations=${Math.max(...reportedIterations)} maxRmsKm=${Math.max(...reportedRmsKm)}`,
+  );
+  for (const record of records) {
+    assert.ok(Number.isFinite(record.WRMS()), "every epoch must report finite RMS");
+    // The 12 km ceiling anchors the uncapped baseline's 11.59382193 km worst
+    // epoch with about 3.5% headroom and rejects cap 16's 25.2813 km regression.
+    assert.ok(record.WRMS() < 12, `three-day local-fit RMS ${record.WRMS()} km exceeded 12 km`);
+    assert.ok(
+      record.NUM_ITERATIONS() <= maxIterations,
+      `epoch used ${record.NUM_ITERATIONS()} optimizer iterations instead of the supported bound`,
+    );
+  }
 });
 
 test("OD reassembles native chunks, aggregates one object's epochs, and persists them independently", async (t) => {

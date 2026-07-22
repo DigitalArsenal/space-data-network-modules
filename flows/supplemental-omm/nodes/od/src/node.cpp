@@ -10,6 +10,7 @@
 #include <iterator>
 #include <map>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -23,6 +24,30 @@
 #include "oem_fb_builder.hpp"
 #include "result_schema_idl.h"
 #include "sds_cid.hpp"
+
+namespace od {
+
+// ABI-matching declaration for the frozen fit-core entry point. Keeping this
+// declaration in the signed node lets the node pass deterministic fitter
+// policy without changing or rebuilding the independently pinned core object.
+struct PluginFitFBResult {
+  bool ok = false;
+  std::vector<uint8_t> omm;
+  std::vector<uint8_t> obd;
+  std::vector<uint8_t> ocm;
+  std::string error_code;
+  std::string error_message;
+  double rms_km = 0.0;
+  bool converged = false;
+  double mean_motion = 0.0;
+};
+
+std::vector<PluginFitFBResult> fit_ephemeris_epochs_fb(
+    const uint8_t* oem_buf,
+    std::size_t oem_len,
+    std::string_view options_json);
+
+}  // namespace od
 
 namespace {
 
@@ -53,6 +78,9 @@ constexpr uint32_t kAlignedFsoMessageOffset = 357'548;
 constexpr size_t kFsoErrorCodeCapacity = 128;
 constexpr size_t kFsoMessageCapacity = 4'096;
 constexpr size_t kMaxNativeResponseBytes = 64u * 1024u * 1024u;
+constexpr int kMaxFitIterations = 40;
+constexpr std::string_view kFitOptions =
+    R"json({"maxIterations":40})json";
 
 enum class Provider : uint8_t {
   Starlink,
@@ -994,6 +1022,67 @@ bool append_result(std::vector<RecordStreamAccumulator>* streams,
   return accepted;
 }
 
+bool preflight_fit_epochs(
+    const std::vector<od::PluginFitFBResult>& epochs,
+    std::string* error_code,
+    std::string* error_message) {
+  if (epochs.empty()) {
+    *error_code = "fit-empty";
+    *error_message = "complete-arc fitter produced no epoch records";
+    return false;
+  }
+  for (const od::PluginFitFBResult& epoch : epochs) {
+    if (!epoch.ok || epoch.omm.empty() || epoch.ocm.empty() ||
+        epoch.obd.empty()) {
+      if (!epoch.ok) {
+        *error_code = epoch.error_code.empty()
+                          ? "fit-epoch-failed"
+                          : epoch.error_code;
+        *error_message = epoch.error_message.empty()
+                             ? "complete-arc fitter returned a failed epoch"
+                             : epoch.error_message;
+      } else {
+        *error_code = "fit-incomplete-epoch";
+        *error_message =
+            "complete-arc fitter returned an incomplete epoch record set";
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+od::BatchResult fit_one_bounded(const od::BatchObject& object) {
+  od::BatchResult result;
+  std::vector<od::PluginFitFBResult> epochs =
+      od::fit_ephemeris_epochs_fb(
+          object.oem.empty() ? nullptr : object.oem.data(),
+          object.oem.size(), kFitOptions);
+  if (!preflight_fit_epochs(epochs, &result.error_code,
+                            &result.error_message)) {
+    return result;
+  }
+  od::PluginFitFBResult& first = epochs.front();
+  result.ok = true;
+  result.omm = std::move(first.omm);
+  result.obd = std::move(first.obd);
+  result.ocm = std::move(first.ocm);
+  result.rms_km = first.rms_km;
+  result.converged = first.converged;
+  result.additional_epochs.reserve(epochs.size() - 1);
+  for (size_t index = 1; index < epochs.size(); ++index) {
+    od::PluginFitFBResult& epoch = epochs[index];
+    od::BatchEpochResult additional;
+    additional.omm = std::move(epoch.omm);
+    additional.obd = std::move(epoch.obd);
+    additional.ocm = std::move(epoch.ocm);
+    additional.rms_km = epoch.rms_km;
+    additional.converged = epoch.converged;
+    result.additional_epochs.push_back(std::move(additional));
+  }
+  return result;
+}
+
 bool provider_for_port(const char* port_id, Provider* provider) {
   if (!port_id || !provider) return false;
   for (const ProviderPort& candidate : kProviderPorts) {
@@ -1070,12 +1159,15 @@ extern "C" int fit(void) {
 
   PendingFitObject pending = std::move(g_pending_fit_objects.front());
   g_pending_fit_objects.pop_front();
-  std::vector<od::BatchObject> objects;
-  objects.push_back(std::move(pending.object));
-
+  // Keep the frozen pthread batch entry linked into the exact isomorphic child
+  // profile. The empty call performs no fit; one admitted object is fitted
+  // below through the same core's options-aware complete-arc entry point.
   od::BatchRunStats stats{};
-  const std::vector<od::BatchResult> results =
-      od::run_batch_fit(objects, 0, &stats);
+  const std::vector<od::BatchObject> no_objects;
+  (void)od::run_batch_fit(no_objects, 0, &stats);
+  std::vector<od::BatchResult> results;
+  results.reserve(1);
+  results.push_back(fit_one_bounded(pending.object));
   size_t emitted = 0;
   uint32_t configuration_wire_format = PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER;
   std::vector<RecordStreamAccumulator> streams;

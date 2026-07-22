@@ -1805,11 +1805,11 @@
       }
     },
     {
-      "edgeId": "starlink-to-status",
+      "edgeId": "starlink-progress-to-status",
       "fromNodeId": "provider-starlink",
-      "fromPortId": "oem",
+      "fromPortId": "progress",
       "toNodeId": "status",
-      "toPortId": "provider-starlink",
+      "toPortId": "provider-starlink-progress",
       "contract": {
         "canonicalType": {
           "schemaName": "FSB.fbs",

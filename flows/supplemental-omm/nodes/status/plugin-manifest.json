@@ -19,7 +19,7 @@
       "displayName": "Record Status Event",
       "inputPorts": [
         {
-          "portId": "provider-starlink",
+          "portId": "provider-starlink-progress",
           "acceptedTypeSets": [
             {
               "setId": "fsb-dual",
@@ -48,7 +48,7 @@
           "minStreams": 0,
           "maxStreams": 4096,
           "required": false,
-          "description": "Typed status event stream for provider-starlink."
+          "description": "Absolute DSS download-progress snapshot from the signed Starlink provider node, transported inside a dual-representation FSB envelope."
         },
         {
           "portId": "provider-glonass",

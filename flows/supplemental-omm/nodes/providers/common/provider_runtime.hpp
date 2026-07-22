@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <pthread.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,7 +39,6 @@ constexpr uint32_t kOutputChunkBytes = kFsbDataCapacity;
 constexpr uint32_t kMaxOutputFramesPerInvocation = 64;
 constexpr uint32_t kMaxResponseBytes =
     kMaxOutputFramesPerInvocation * kOutputChunkBytes;
-constexpr uint32_t kMinThreadedRecordCountBytes = 1024 * 1024;
 
 struct HttpResult {
   int64_t status = 0;
@@ -427,33 +425,10 @@ void sha256(const uint8_t* data, size_t length, uint8_t output[32]) {
 
 using RecordCounter = uint64_t (*)(const std::vector<uint8_t>&);
 
-struct RecordCountTask {
-  const std::vector<uint8_t>* bytes = nullptr;
-  RecordCounter counter = nullptr;
-  uint64_t result = 0;
-};
-
-void* count_records_worker(void* opaque) {
-  auto* task = static_cast<RecordCountTask*>(opaque);
-  if (task && task->bytes && task->counter) {
-    task->result = task->counter(*task->bytes);
-  }
-  return nullptr;
-}
-
 uint64_t count_records_isomorphic(const std::vector<uint8_t>& bytes,
                                   RecordCounter counter) {
   if (!counter) return 0;
-  if (bytes.size() < kMinThreadedRecordCountBytes) return counter(bytes);
-  RecordCountTask task{&bytes, counter, 0};
-  pthread_t worker{};
-  if (pthread_create(&worker, nullptr, count_records_worker, &task) != 0) {
-    return counter(bytes);
-  }
-  if (pthread_join(worker, nullptr) != 0) {
-    return counter(bytes);
-  }
-  return task.result;
+  return counter(bytes);
 }
 
 int emit_complete_response(const std::vector<uint8_t>& bytes,

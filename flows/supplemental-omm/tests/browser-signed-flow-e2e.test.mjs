@@ -10,7 +10,11 @@ import {
   verifyModuleArtifact,
 } from "space-data-module-sdk";
 import { createIsomorphicFlowRuntimeHost } from "space-data-module-sdk/flow";
-import { ByteBuffer } from "../../../../spacedatastandards.org/node_modules/flatbuffers/js/flatbuffers.js";
+import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+import {
+  Builder,
+  ByteBuffer,
+} from "../../../../spacedatastandards.org/node_modules/flatbuffers/js/flatbuffers.js";
 import { DSS } from "../../../../spacedatastandards.org/lib/js/DSS/DSS.js";
 import { FSB } from "../../../../spacedatastandards.org/lib/js/FSB/FSB.js";
 
@@ -27,26 +31,26 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "2fa05e2018b86e57e7dce7f1071aefd24933ef7235ec9ca2e0c6c165ef96a94e";
+  "ed649e974613cf365ab8eadc33df19785eef8f8d17cc6780c2995fbf899698e0";
 const expectedChildSha256 = Object.freeze({
   timer: "db8d7a3506a0c3188b006886ebea30cfda9e9c2c2b9c477baefb5c37a375d6bd",
   "provider-starlink":
-    "04ff5d8a52f340656e0b3150f9ee64ca8e7ffaf6e6dcf9870ccab5ad511f7f22",
+    "eca46d33c7f6716a929426742e382d6c3c551763c3e4ffa767a3c46b164a7da6",
   "provider-glonass":
-    "321373d51d9eae4baa8dd11552a1711d7a6fe1a37f5d3391df483a4e691c5ad5",
+    "d8462af69d5fd2311bfdf279ebb665cb5a3fbc1e73d7eba303b0522ca43c4095",
   "provider-intelsat":
-    "1fd325db5d4e54bcf751c63a518052e653872a9a2d26a2f1d8cb92fd1416f551",
+    "e31d65c2bd3bca346f12044748102f662227f7f25ee042f9a0e83d07a09397f3",
   "provider-cpf":
-    "684c822c77537a620c85bcf920ff678e5125553bf07a77600a47b7d96f74dc2a",
+    "ffcaa7abe9533eeab795bf7e8452de6e79e6746c6d5d40226dbf50e5dd537fa1",
   "provider-iss":
-    "e5a0c7070dbe7875c363d85ca2de220daa31dba747a6e550e0324e38a0a70ca8",
-  od: "7240955746f74dcb17eb91104fe4248e29f4f924f6d380ef4a18e4d6e883e898",
+    "97e0f6231db85dd7dec479cc346cfb37b885c81fe90436d109423f04e9861d17",
+  od: "485d068641cf97961d44f33881f6082f734b6b68b3c92ecf9df4a9a6cd2c9e82",
   store:
     "593bd94c0964835c5077a60973cd1da42f5ccf1f5ca63dcd71a82e59df97a93e",
   publication:
     "18a8ef6baaef1b92e7f93940ced3233ab2fa83512fd808b48b6c34b49681ce61",
   status:
-    "532ad78f4376ce6e22f26ab29f0a4ca252f0c396fc51e02d34b478be343dedea",
+    "a4b938be7d2012c2a9f46b7b6fedba4ac5d8659d89380f99132c48cfcb5e650e",
 });
 
 const defaultUrls = Object.freeze({
@@ -61,6 +65,14 @@ const defaultUrls = Object.freeze({
   iss:
     "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt",
 });
+const fsbType = Object.freeze({
+  schemaName: "FSB.fbs",
+  fileIdentifier: "$FSB",
+  schemaVersion: "1.158.1",
+  schemaHash:
+    "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+  rootTypeName: "FSB",
+});
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -68,6 +80,87 @@ function sha256(bytes) {
 
 function encode(text) {
   return new TextEncoder().encode(text);
+}
+
+function makeProviderConfigFrame(config) {
+  const data = encode(JSON.stringify(config));
+  const builder = new Builder(Math.max(256, data.byteLength + 256));
+  const schemaName = builder.createString(
+    "supplemental-omm.provider-config.v1",
+  );
+  const fileIdentifier = builder.createString("CONF");
+  FSB.startDataVector(builder, data.byteLength);
+  for (let index = data.byteLength - 1; index >= 0; index -= 1) {
+    builder.addInt8(data[index]);
+  }
+  const dataVector = builder.endVector();
+  FSB.startFSB(builder);
+  FSB.addRequestId(builder, 1n);
+  FSB.addKind(builder, 1);
+  FSB.addFinal(builder, true);
+  FSB.addTotalBytes(builder, BigInt(data.byteLength));
+  FSB.addRecordCount(builder, 1n);
+  FSB.addSchemaName(builder, schemaName);
+  FSB.addFileIdentifier(builder, fileIdentifier);
+  FSB.addData(builder, dataVector);
+  const root = FSB.endFSB(builder);
+  FSB.finishFSBBuffer(builder, root);
+  return {
+    portId: "config",
+    wireFormat: "flatbuffer",
+    typeRef: {
+      ...fsbType,
+      schemaHash: [...Buffer.from(fsbType.schemaHash, "hex")],
+      wireFormat: "flatbuffer",
+    },
+    payload: builder.asUint8Array(),
+  };
+}
+
+function decodeProviderFsb(payload) {
+  const envelope = FSB.getRootAsFSB(
+    new ByteBuffer(new Uint8Array(payload)),
+  );
+  return {
+    requestId: envelope.REQUEST_ID(),
+    schemaName: envelope.SCHEMA_NAME() ?? "",
+    fileIdentifier: envelope.FILE_IDENTIFIER() ?? "",
+    final: envelope.FINAL(),
+    data: new Uint8Array(envelope.dataArray() ?? []),
+  };
+}
+
+function createOpaqueStateAdapter() {
+  const values = new Map();
+  const calls = [];
+  const keyFor = (params) => `${params.namespace}\0${params.key}`;
+  return {
+    calls,
+    values,
+    dispatch(operation, params) {
+      calls.push({ operation, params: structuredClone(params) });
+      if (operation === "storage.adapter.opaque.read") {
+        const value = values.get(keyFor(params));
+        return {
+          found: value !== undefined,
+          bytes_b64: value?.slice() ?? new Uint8Array(),
+        };
+      }
+      if (operation === "storage.adapter.opaque.replace") {
+        assert.ok(params.data instanceof Uint8Array);
+        values.set(keyFor(params), params.data.slice());
+        return { stored_bytes: params.data.byteLength };
+      }
+      if (operation === "storage.adapter.opaque.delete") {
+        values.delete(keyFor(params));
+        return { deleted: true };
+      }
+      if (operation === "storage.adapter.opaque.sync") {
+        return { synced: true };
+      }
+      throw new Error(`unexpected opaque-state operation ${operation}`);
+    },
+  };
 }
 
 function circularStates({ radiusKm, stepSeconds, count, phase = 0 }) {
@@ -118,7 +211,15 @@ function fixtureResponses() {
     ),
   );
   const invalidStarlink = encode(
-    "CCSDS_OEM_VERS = 2.0\nOBJECT_NAME = deliberately-invalid-browser-fixture\n",
+    [
+      "created: 2026-07-21 00:00:00 UTC",
+      "ephemeris_start: 2026-07-21 00:00:00 UTC ephemeris_stop: 2026-07-21 00:01:00 UTC step_size: 60",
+      "ephemeris_source: deliberately-short-browser-fixture",
+      "UVW",
+      "2026202000000.000 7000 0 0 0 7.5 0",
+      "2026202000100.000 6999 450 0 -0.5 7.48 0",
+      "",
+    ].join("\n"),
   );
 
   const glonass = ["#dP2026  7 21  0  0  0.00000000 ORBIT TEST"];
@@ -203,6 +304,35 @@ function fixtureResponses() {
   ]);
 }
 
+function serveCompleteHttpFixture(params, body, description) {
+  assert.equal(params.method, "GET");
+  if (params.headers?.Range === "bytes=0-0") {
+    assert.ok(params.max_bytes >= 1, `${description} size probe cannot hold one byte`);
+    return {
+      status: 206,
+      headers: {
+        "Content-Range": `bytes 0-0/${body.byteLength}`,
+        "Content-Length": "1",
+      },
+      body: new Uint8Array(body.subarray(0, 1)),
+    };
+  }
+  assert.equal(
+    params.headers?.Range,
+    undefined,
+    `${description} complete fetch used an unexpected range`,
+  );
+  assert.ok(
+    params.max_bytes >= body.byteLength,
+    `${description} response ceiling cannot hold the complete fixture`,
+  );
+  return {
+    status: 200,
+    headers: { "Content-Length": String(body.byteLength) },
+    body: new Uint8Array(body),
+  };
+}
+
 function parseJsonEntry(entry, label) {
   assert.ok(entry, `signed bundle is missing ${label}`);
   return JSON.parse(new TextDecoder().decode(entry.payloadBytes));
@@ -241,7 +371,7 @@ function decodeDssRoute(output) {
   };
 }
 
-test("exact release-signed Supplemental flow executes every signed child in the browser host", async (t) => {
+test("exact release-signed Supplemental flow commits the Starlink catalog before OD while executing every signed child", async (t) => {
   const published = new Uint8Array(fs.readFileSync(releaseArtifactPath));
   assert.equal(sha256(published), expectedOuterSha256);
   const outerVerification = await verifyModuleArtifact(published, {
@@ -269,6 +399,12 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   const expectedRecordsPerStandard = 9;
   let clockNowMs = Date.parse("2026-07-21T12:34:56Z");
   const hostcalls = [];
+  const executionEvents = [];
+  const recordEvent = (event) => {
+    const recorded = { sequence: executionEvents.length, ...event };
+    executionEvents.push(recorded);
+    return recorded;
+  };
   const opaqueValues = new Map();
   const opaqueKey = (nodeId, params) =>
     `${nodeId}\0${params.namespace}\0${params.key}`;
@@ -292,13 +428,20 @@ test("exact release-signed Supplemental flow executes every signed child in the 
         requireSignature: true,
       },
       hostcallDispatch(operation, params) {
+        const recordedParams =
+          params?.records instanceof Uint8Array
+            ? { ...params, records: new Uint8Array(params.records) }
+            : structuredClone(params);
         hostcalls.push({
           nodeId: descriptor.nodeId,
           operation,
-          params:
-            params?.records instanceof Uint8Array
-              ? { ...params, records: new Uint8Array(params.records) }
-              : structuredClone(params),
+          params: recordedParams,
+        });
+        recordEvent({
+          kind: "hostcall",
+          nodeId: descriptor.nodeId,
+          operation,
+          params: recordedParams,
         });
         if (operation === "clock.now") return clockNowMs;
         if (operation === "timers.arm" || operation === "timers.cancel") {
@@ -307,17 +450,11 @@ test("exact release-signed Supplemental flow executes every signed child in the 
         if (operation === "http.request") {
           const body = httpBodies.get(params?.url);
           assert.ok(body, `no complete browser fixture for ${params?.url}`);
-          assert.equal(params.method, "GET");
-          assert.equal(
-            params.headers?.Range,
-            undefined,
-            "signed provider attempted a prefix/range sample",
+          return serveCompleteHttpFixture(
+            params,
+            body,
+            `signed provider ${params?.url}`,
           );
-          assert.ok(
-            params.max_bytes >= body.byteLength,
-            "signed provider response ceiling cannot hold the complete fixture",
-          );
-          return { status: 200, body: new Uint8Array(body) };
         }
         if (operation === "pubsub.publish") return true;
         if (operation === "storage.adapter.opaque.read") {
@@ -354,28 +491,68 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     children,
   });
   t.after(() => host.destroy());
+  const childRecordFor = (nodeId) => {
+    const descriptor = artifact.nodeArtifacts.find(
+      (candidate) => candidate.nodeId === nodeId,
+    );
+    return (
+      host.children.get(nodeId) ?? host.children.get(descriptor?.pluginId)
+    );
+  };
   for (const descriptor of artifact.nodeArtifacts) {
+    const childRecord = childRecordFor(descriptor.nodeId);
+    assert.ok(
+      childRecord?.harness,
+      `${descriptor.nodeId} browser instance was not created from the exact child entry`,
+    );
     assert.equal(
-      host.children.get(descriptor.nodeId)?.sha256,
+      childRecord.sha256,
       expectedChildSha256[descriptor.nodeId],
       `${descriptor.nodeId} browser instance did not retain the exact signed child hash`,
     );
   }
+  const starlinkProviderOutputs = [];
+  const starlinkHarness = childRecordFor("provider-starlink")?.harness;
+  assert.ok(starlinkHarness, "Starlink child harness was not instantiated");
+  const invokeStarlink = starlinkHarness.invoke;
+  starlinkHarness.invoke = async (request) => {
+    const response = await invokeStarlink(request);
+    for (const output of response.outputs) {
+      const recorded = {
+        portId: output.portId,
+        wireFormat: output.wireFormat,
+        payload: new Uint8Array(output.payload),
+      };
+      const event = recordEvent({
+        kind: "starlink-output",
+        portId: output.portId,
+      });
+      starlinkProviderOutputs.push({ ...recorded, sequence: event.sequence });
+    }
+    return response;
+  };
   const odInvocations = [];
+  const odStarlinkFrames = [];
   const odResponses = [];
-  const odHarness = host.children.get("od")?.harness;
+  const odHarness = childRecordFor("od")?.harness;
   assert.ok(odHarness, "OD child harness was not instantiated");
   const invokeOd = odHarness.invoke;
   odHarness.invoke = async (request) => {
+    const starlinkFrames = (request.inputs ?? [])
+      .filter((frame) => frame.portId === "starlink")
+      .map((frame) => decodeProviderFsb(frame.payload));
     const starlinkRequestIds = new Set(
-      (request.inputs ?? [])
-        .filter((frame) => frame.portId === "starlink")
-        .map((frame) =>
-          FSB.getRootAsFSB(
-            new ByteBuffer(new Uint8Array(frame.payload)),
-          ).REQUEST_ID().toString(),
-        ),
+      starlinkFrames.map(({ requestId }) => requestId.toString()),
     );
+    if (starlinkFrames.length > 0) {
+      const event = recordEvent({
+        kind: "od-starlink-input",
+        requestIds: [...starlinkRequestIds],
+      });
+      odStarlinkFrames.push(
+        ...starlinkFrames.map((frame) => ({ ...frame, sequence: event.sequence })),
+      );
+    }
     odInvocations.push([...starlinkRequestIds]);
     const response = await invokeOd(request);
     odResponses.push({
@@ -388,7 +565,7 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   };
   const publicationInputs = [];
   const publicationResponses = [];
-  const publicationHarness = host.children.get("publication")?.harness;
+  const publicationHarness = childRecordFor("publication")?.harness;
   assert.ok(publicationHarness, "publication child harness was not instantiated");
   const invokePublication = publicationHarness.invoke;
   publicationHarness.invoke = async (request) => {
@@ -408,13 +585,20 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     return response;
   };
   const odStatusSnapshots = [];
+  const starlinkStatusSnapshots = [];
   const statusInvocationPorts = [];
   const statusResponses = [];
-  const statusHarness = host.children.get("status")?.harness;
+  const statusHarness = childRecordFor("status")?.harness;
   assert.ok(statusHarness, "status child harness was not instantiated");
   const invokeStatus = statusHarness.invoke;
   statusHarness.invoke = async (request) => {
-    statusInvocationPorts.push((request.inputs ?? []).map((input) => input.portId));
+    const inputPorts = (request.inputs ?? []).map((input) => input.portId);
+    statusInvocationPorts.push(inputPorts);
+    for (const portId of inputPorts) {
+      if (portId === "provider-starlink-progress") {
+        recordEvent({ kind: "status-starlink-progress", portId });
+      }
+    }
     const response = await invokeStatus(request);
     statusResponses.push({
       statusCode: response.statusCode,
@@ -425,6 +609,16 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     odStatusSnapshots.push(
       ...response.outputs
         .filter((output) => output.portId === "od.dss")
+        .map((output) =>
+          decodeDssRoute({
+            ...output,
+            payload: new Uint8Array(output.payload),
+          }),
+        ),
+    );
+    starlinkStatusSnapshots.push(
+      ...response.outputs
+        .filter((output) => output.portId === "provider-starlink.dss")
         .map((output) =>
           decodeDssRoute({
             ...output,
@@ -488,6 +682,133 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   );
   const starlinkOdInvocations = odInvocations.filter(
     (requestIds) => requestIds.length > 0,
+  );
+  const firstStarlinkOdEvent = executionEvents.find(
+    ({ kind }) => kind === "od-starlink-input",
+  );
+  assert.ok(firstStarlinkOdEvent, "no Starlink input reached OD");
+  const expectedStarlinkEphemerisUrls = [...httpBodies.keys()].filter(
+    (url) =>
+      url.startsWith(defaultUrls.starlinkBase) &&
+      url !== defaultUrls.starlinkManifest,
+  );
+  const starlinkEphemerisFetchEvents = executionEvents.filter(
+    ({ kind, nodeId, operation, params }) =>
+      kind === "hostcall" &&
+      nodeId === "provider-starlink" &&
+      operation === "http.request" &&
+      expectedStarlinkEphemerisUrls.includes(params?.url),
+  );
+  assert.deepEqual(
+    new Set(starlinkEphemerisFetchEvents.map(({ params }) => params.url)),
+    new Set(expectedStarlinkEphemerisUrls),
+    "the exact signed Starlink child did not fetch every complete fixture file",
+  );
+  assert.ok(
+    starlinkEphemerisFetchEvents.every(
+      ({ sequence }) => sequence < firstStarlinkOdEvent.sequence,
+    ),
+    `Starlink reached OD before the complete fixture was fetched: ${JSON.stringify(executionEvents.map(({ sequence, kind, nodeId, operation, portId }) => ({ sequence, kind, nodeId, operation, portId })))}`,
+  );
+  const committedStateEvents = executionEvents.filter(
+    ({ kind, nodeId, operation, params, sequence }) =>
+      kind === "hostcall" &&
+      nodeId === "provider-starlink" &&
+      operation === "storage.adapter.opaque.replace" &&
+      params?.key === "starlink.active.v1" &&
+      sequence < firstStarlinkOdEvent.sequence,
+  );
+  assert.ok(
+    committedStateEvents.length > 0,
+    "Starlink reached OD without durably replacing starlink.active.v1",
+  );
+  const generationCommitEvent = committedStateEvents.at(-1);
+  assert.ok(
+    starlinkEphemerisFetchEvents.every(
+      ({ sequence }) => sequence < generationCommitEvent.sequence,
+    ),
+    "the generation checkpoint was committed before every complete file arrived",
+  );
+  const generationSyncEvent = executionEvents.find(
+    ({ kind, nodeId, operation, sequence }) =>
+      kind === "hostcall" &&
+      nodeId === "provider-starlink" &&
+      operation === "storage.adapter.opaque.sync" &&
+      sequence > generationCommitEvent.sequence &&
+      sequence < firstStarlinkOdEvent.sequence,
+  );
+  assert.ok(
+    generationSyncEvent,
+    "Starlink reached OD before syncing its complete generation checkpoint",
+  );
+  assert.equal(
+    executionEvents.filter(
+      ({ kind, nodeId, operation, sequence }) =>
+        kind === "hostcall" &&
+        nodeId === "provider-starlink" &&
+        operation === "http.request" &&
+        sequence > firstStarlinkOdEvent.sequence,
+    ).length,
+    0,
+    "Starlink refetched HTTP data after storage-only drain began",
+  );
+  const progressOutputs = starlinkProviderOutputs.filter(
+    ({ portId }) => portId === "progress",
+  );
+  assert.ok(progressOutputs.length > 0, "Starlink emitted no download progress");
+  assert.ok(
+    progressOutputs.every(
+      ({ sequence }) => sequence < firstStarlinkOdEvent.sequence,
+    ),
+    "Starlink emitted download progress after OD drain began",
+  );
+  const finalDownloadProgress = decodeDssRoute(progressOutputs.at(-1));
+  assert.equal(finalDownloadProgress.status, 2);
+  assert.equal(finalDownloadProgress.syncedRows, 6n);
+  assert.equal(finalDownloadProgress.totalRows, 6n);
+  assert.equal(finalDownloadProgress.missingRows, 0n);
+  const lastStarlinkFetchEvent = starlinkEphemerisFetchEvents.at(-1);
+  const completedDownloadSyncEvent = executionEvents.find(
+    ({ kind, nodeId, operation, sequence }) =>
+      kind === "hostcall" &&
+      nodeId === "provider-starlink" &&
+      operation === "storage.adapter.opaque.sync" &&
+      sequence > lastStarlinkFetchEvent.sequence &&
+      sequence < progressOutputs.at(-1).sequence,
+  );
+  assert.ok(
+    completedDownloadSyncEvent,
+    "Starlink reported a complete download before the durable sync returned",
+  );
+  const starlinkProgressInputCount = statusInvocationPorts
+    .flat()
+    .filter((portId) => portId === "provider-starlink-progress").length;
+  assert.equal(
+    starlinkProgressInputCount,
+    progressOutputs.length,
+    "every Starlink progress snapshot must route exactly once to status",
+  );
+  assert.equal(
+    statusInvocationPorts.flat().includes("provider-starlink"),
+    false,
+    "Starlink OEM must not retain the legacy status edge",
+  );
+  assert.ok(
+    odStarlinkFrames.every(
+      ({ schemaName, fileIdentifier }) =>
+        schemaName !== "DSS.fbs" && fileIdentifier !== "$DSS",
+    ),
+    "a Starlink progress DSS was routed into OD",
+  );
+  assert.ok(
+    starlinkStatusSnapshots.some(
+      ({ status, syncedRows, totalRows, missingRows }) =>
+        status === 2 &&
+        syncedRows === 6n &&
+        totalRows === 6n &&
+        missingRows === 0n,
+    ),
+    "status never published the complete absolute Starlink snapshot",
   );
   assert.equal(
     starlinkOdInvocations.length,
@@ -652,4 +973,212 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     [...opaqueValues.keys()].some((key) => key.endsWith("\0snapshot.manifest")),
     "FlatSQL did not retain a committed snapshot manifest",
   );
+});
+
+test("fresh exact signed Starlink instances reload committed opaque waves without refetching", async (t) => {
+  const published = new Uint8Array(fs.readFileSync(releaseArtifactPath));
+  assert.equal(sha256(published), expectedOuterSha256);
+
+  const parsed = await parseSingleFileBundle(published);
+  const entries = new Map(parsed.entries.map((entry) => [entry.entryId, entry]));
+  const artifact = parseJsonEntry(entries.get("artifact.json"), "artifact.json");
+  const descriptor = artifact.nodeArtifacts.find(
+    ({ nodeId }) => nodeId === "provider-starlink",
+  );
+  assert.ok(descriptor, "signed outer bundle has no Starlink child descriptor");
+  const childEntry = entries.get(descriptor.entryId);
+  assert.ok(childEntry, `signed bundle is missing ${descriptor.entryId}`);
+  const exactChildBytes = new Uint8Array(childEntry.payloadBytes);
+  assert.equal(sha256(exactChildBytes), descriptor.sha256);
+  assert.equal(descriptor.sha256, expectedChildSha256[descriptor.nodeId]);
+  const childPublisher = parseJsonEntry(
+    entries.get(descriptor.publisherEntryId),
+    descriptor.publisherEntryId,
+  );
+  assert.equal(childPublisher.publicKeyHex, trustedReleaseSigner);
+  assert.equal(childPublisher.developmentOnly, false);
+
+  const httpBodies = fixtureResponses();
+  const filenames = new TextDecoder()
+    .decode(httpBodies.get(defaultUrls.starlinkManifest))
+    .trim()
+    .split(/\r?\n/u);
+  const ephemerisUrls = filenames.map(
+    (filename) => `${defaultUrls.starlinkBase}${filename}`,
+  );
+  const opaque = createOpaqueStateAdapter();
+  const httpCalls = [];
+  const hostcallDispatch = (operation, params) => {
+    if (operation === "http.request") {
+      httpCalls.push(params.url);
+      const body = httpBodies.get(params.url);
+      assert.ok(body, `no exact-child fixture for ${params.url}`);
+      return serveCompleteHttpFixture(
+        params,
+        body,
+        `exact Starlink child ${params.url}`,
+      );
+    }
+    return opaque.dispatch(operation, params);
+  };
+  const liveHarnesses = new Set();
+  t.after(() => {
+    for (const harness of liveHarnesses) harness.destroy();
+  });
+  const createExactChild = async () => {
+    const harness = await createBrowserModuleHarness({
+      wasmSource: exactChildBytes,
+      surface: "direct",
+      hostcallDispatch,
+    });
+    liveHarnesses.add(harness);
+    return harness;
+  };
+  const destroy = (harness) => {
+    harness.destroy();
+    liveHarnesses.delete(harness);
+  };
+
+  const first = await createExactChild();
+  const signedManifest = new Uint8Array(first.readManifest());
+  const firstWave = await first.invoke({
+    methodId: "emit",
+    inputs: [
+      makeProviderConfigFrame({
+        manifestUrl: defaultUrls.starlinkManifest,
+        ephemerisBase: defaultUrls.starlinkBase,
+        fetchConcurrency: 4,
+        batchSize: 4,
+      }),
+    ],
+  });
+  assert.equal(firstWave.statusCode, 0, firstWave.errorMessage);
+  assert.deepEqual(firstWave.outputs.map(({ portId }) => portId), ["progress"]);
+  const firstProgress = decodeDssRoute(firstWave.outputs[0]);
+  assert.equal(firstProgress.status, 1);
+  assert.equal(firstProgress.syncedRows, 4n);
+  assert.equal(firstProgress.totalRows, BigInt(filenames.length));
+  assert.equal(firstProgress.missingRows, BigInt(filenames.length - 4));
+  assert.deepEqual(
+    new Set(httpCalls),
+    new Set([defaultUrls.starlinkManifest, ...ephemerisUrls.slice(0, 4)]),
+  );
+  const firstStateCommit = opaque.calls.findLastIndex(
+    ({ operation, params }) =>
+      operation === "storage.adapter.opaque.replace" &&
+      params.key === "starlink.active.v1",
+  );
+  assert.ok(firstStateCommit >= 0, "first wave never committed its state");
+  assert.ok(
+    opaque.calls.findIndex(
+      ({ operation }, index) =>
+        index > firstStateCommit &&
+        operation === "storage.adapter.opaque.sync",
+    ) > firstStateCommit,
+    "first wave state was not synced",
+  );
+  destroy(first);
+
+  const httpCountBeforeResume = httpCalls.length;
+  const opaqueCallCountBeforeResume = opaque.calls.length;
+  const resumed = await createExactChild();
+  assert.deepEqual(new Uint8Array(resumed.readManifest()), signedManifest);
+  const replayedWave = await resumed.invoke({
+    methodId: "emit",
+    inputs: [],
+  });
+  assert.equal(replayedWave.statusCode, 0, replayedWave.errorMessage);
+  assert.deepEqual(replayedWave.outputs.map(({ portId }) => portId), ["progress"]);
+  const replayedProgress = decodeDssRoute(replayedWave.outputs[0]);
+  assert.equal(replayedProgress.status, 1);
+  assert.equal(replayedProgress.syncedRows, 4n);
+  assert.equal(
+    httpCalls.length,
+    httpCountBeforeResume,
+    "fresh exact child performed HTTP before replaying committed progress",
+  );
+  const completedDownload = await resumed.invoke({
+    methodId: "emit",
+    inputs: [],
+  });
+  assert.equal(completedDownload.statusCode, 0, completedDownload.errorMessage);
+  assert.deepEqual(
+    completedDownload.outputs.map(({ portId }) => portId),
+    ["progress"],
+  );
+  const completedProgress = decodeDssRoute(completedDownload.outputs[0]);
+  assert.equal(completedProgress.status, 2);
+  assert.equal(completedProgress.syncedRows, BigInt(filenames.length));
+  assert.equal(completedProgress.totalRows, BigInt(filenames.length));
+  assert.equal(completedProgress.missingRows, 0n);
+  assert.deepEqual(
+    new Set(httpCalls.slice(httpCountBeforeResume)),
+    new Set(ephemerisUrls.slice(4)),
+    "fresh exact child refetched an already committed file or manifest",
+  );
+  const resumedCalls = opaque.calls.slice(opaqueCallCountBeforeResume);
+  const completeStateCommit = resumedCalls.findLastIndex(
+    ({ operation, params }) =>
+      operation === "storage.adapter.opaque.replace" &&
+      params.key === "starlink.active.v1",
+  );
+  assert.ok(completeStateCommit >= 0, "resumed wave never committed its state");
+  assert.ok(
+    resumedCalls.findIndex(
+      ({ operation }, index) =>
+        index > completeStateCommit &&
+        operation === "storage.adapter.opaque.sync",
+    ) > completeStateCommit,
+    "complete generation state was not synced",
+  );
+  destroy(resumed);
+
+  const httpCountBeforeDrain = httpCalls.length;
+  const draining = await createExactChild();
+  assert.deepEqual(new Uint8Array(draining.readManifest()), signedManifest);
+  const replayedCompletion = await draining.invoke({
+    methodId: "emit",
+    inputs: [],
+  });
+  assert.equal(
+    replayedCompletion.statusCode,
+    0,
+    replayedCompletion.errorMessage,
+  );
+  assert.deepEqual(
+    replayedCompletion.outputs.map(({ portId }) => portId),
+    ["progress"],
+  );
+  assert.equal(decodeDssRoute(replayedCompletion.outputs[0]).status, 2);
+  assert.equal(
+    httpCalls.length,
+    httpCountBeforeDrain,
+    "fresh fully committed child performed HTTP before replaying completion",
+  );
+  const firstDrainedFile = await draining.invoke({
+    methodId: "emit",
+    inputs: [],
+  });
+  assert.equal(firstDrainedFile.statusCode, 0, firstDrainedFile.errorMessage);
+  assert.ok(firstDrainedFile.yielded, "catalog drain stopped after one file");
+  assert.ok(firstDrainedFile.outputs.length > 0);
+  assert.ok(
+    firstDrainedFile.outputs.every(({ portId }) => portId === "oem"),
+    "storage-only drain emitted a non-OEM frame",
+  );
+  assert.equal(
+    httpCalls.length,
+    httpCountBeforeDrain,
+    "fresh fully committed child refetched instead of draining opaque state",
+  );
+  const drainedChunks = firstDrainedFile.outputs.map(({ payload }) =>
+    decodeProviderFsb(payload),
+  );
+  assert.ok(drainedChunks.at(-1).final);
+  assert.deepEqual(
+    Buffer.concat(drainedChunks.map(({ data }) => Buffer.from(data))),
+    Buffer.from(httpBodies.get(ephemerisUrls[0])),
+    "fresh exact child did not drain the first complete file in manifest order",
+  );
+  destroy(draining);
 });

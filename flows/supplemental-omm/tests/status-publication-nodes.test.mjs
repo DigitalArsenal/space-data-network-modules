@@ -48,7 +48,7 @@ const nodeSpecs = [
   },
 ];
 const statusRoutes = [
-  ["provider-starlink", "provider-starlink.dss"],
+  ["provider-starlink-progress", "provider-starlink.dss"],
   ["provider-glonass", "provider-glonass.dss"],
   ["provider-intelsat", "provider-intelsat.dss"],
   ["provider-cpf", "provider-cpf.dss"],
@@ -185,6 +185,29 @@ function makeFsoStatus({
   if (messageOffset) builder.addFieldOffset(20, messageOffset, 0);
   const root = builder.endObject();
   builder.finish(root, "$FSO");
+  return builder.asUint8Array();
+}
+
+function makeDssProgress({
+  status,
+  syncedRows,
+  totalRows,
+  downloadedBytes,
+  localRows = syncedRows,
+  missingRows = BigInt(totalRows) - BigInt(syncedRows),
+  cachedBytes = downloadedBytes,
+}) {
+  const builder = new Builder(256);
+  DSS.startDSS(builder);
+  DSS.addStatus(builder, status);
+  DSS.addSyncedRows(builder, BigInt(syncedRows));
+  DSS.addTotalRows(builder, BigInt(totalRows));
+  DSS.addLocalRows(builder, BigInt(localRows));
+  DSS.addMissingRows(builder, BigInt(missingRows));
+  DSS.addCachedBytes(builder, BigInt(cachedBytes));
+  DSS.addDownloadedBytes(builder, BigInt(downloadedBytes));
+  const root = DSS.endDSS(builder);
+  DSS.finishSizePrefixedDSSBuffer(builder, root);
   return builder.asUint8Array();
 }
 
@@ -411,11 +434,11 @@ test("status node owns application status aggregation and emits FSB-wrapped DSS"
   t.after(() => harness.destroy());
   const response = await harness.invoke({
     methodId: "record_event",
-    inputs: [inputFrame(makeFsb(), "provider-starlink")],
+    inputs: [inputFrame(makeFsb(), "provider-glonass")],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.equal(response.outputs.length, 1);
-  assert.equal(response.outputs[0].portId, "provider-starlink.dss");
+  assert.equal(response.outputs[0].portId, "provider-glonass.dss");
   assert.equal(response.outputs[0].typeRef?.fileIdentifier, "$FSB");
   assert.equal(
     new TextDecoder().decode(response.outputs[0].payload.subarray(4, 8)),
@@ -443,14 +466,14 @@ test("status node counts provider records and actual chunk bytes without multipl
           recordCount: 2,
           totalBytes: 10_000,
         }),
-        "provider-starlink",
+        "provider-glonass",
       ),
       inputFrame(
         makeFsb(new Uint8Array([4, 5, 6, 7, 8]), {
           recordCount: 3,
           totalBytes: 10_000,
         }),
-        "provider-starlink",
+        "provider-glonass",
       ),
     ],
   });
@@ -464,6 +487,204 @@ test("status node counts provider records and actual chunk bytes without multipl
     1,
     "FSB FINAL closes one native stream, not the provider's yielded backlog",
   );
+});
+
+for (const wireFormat of ["flatbuffer", "aligned-binary"]) {
+  test(`status node installs absolute ${wireFormat} Starlink DSS progress without cumulative double counting`, async (t) => {
+    const harness = await createHarness(nodeSpecs[0]);
+    t.after(() => harness.destroy());
+    const snapshots = [
+      makeDssProgress({
+        status: 1,
+        syncedRows: 64,
+        totalRows: 130,
+        downloadedBytes: 134_217_728,
+      }),
+      makeDssProgress({
+        status: 1,
+        syncedRows: 128,
+        totalRows: 130,
+        downloadedBytes: 268_435_456,
+      }),
+    ];
+    let response;
+    for (const snapshot of snapshots) {
+      const envelopeOptions = {
+        schemaName: "DSS.fbs",
+        fileIdentifier: "$DSS",
+        recordCount: 1,
+        totalBytes: snapshot.byteLength,
+        final: true,
+      };
+      const envelope =
+        wireFormat === "aligned-binary"
+          ? makeAlignedFsb(snapshot, envelopeOptions)
+          : makeFsb(snapshot, envelopeOptions);
+      response = await harness.invoke({
+        methodId: "record_event",
+        inputs: [
+          inputFrame(envelope, "provider-starlink-progress", wireFormat),
+        ],
+      });
+      assert.equal(response.statusCode, 0, response.errorMessage);
+    }
+    const status = decodeStatusDss(response.outputs[0]);
+    assert.equal(response.outputs[0].portId, "provider-starlink.dss");
+    assert.equal(status.attempts, 2n);
+    assert.equal(status.status, 1);
+    assert.equal(status.syncedRows, 128n, "absolute progress must replace 64");
+    assert.equal(status.totalRows, 130n);
+    assert.equal(status.localRows, 128n);
+    assert.equal(status.missingRows, 2n);
+    assert.equal(status.downloadedBytes, 268_435_456n);
+  });
+}
+
+test("status node rejects malformed Starlink progress DSS transactionally", async (t) => {
+  const harness = await createHarness(nodeSpecs[0]);
+  t.after(() => harness.destroy());
+  const progress = makeDssProgress({
+    status: 1,
+    syncedRows: 64,
+    totalRows: 130,
+    downloadedBytes: 134_217_728,
+  });
+  const trailing = new Uint8Array(progress.byteLength + 1);
+  trailing.set(progress);
+  trailing[trailing.byteLength - 1] = 0xa5;
+  for (const malformed of [
+    progress.subarray(0, progress.byteLength - 1),
+    trailing,
+  ]) {
+    const malformedResponse = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        inputFrame(
+          makeFsb(malformed, {
+            schemaName: "DSS.fbs",
+            fileIdentifier: "$DSS",
+            recordCount: 1,
+            totalBytes: malformed.byteLength,
+            final: true,
+          }),
+          "provider-starlink-progress",
+        ),
+      ],
+    });
+    assert.equal(malformedResponse.statusCode, 400);
+    assert.equal(malformedResponse.outputs.length, 0);
+  }
+
+  const validResponse = await harness.invoke({
+    methodId: "record_event",
+    inputs: [
+      inputFrame(
+        makeFsb(progress, {
+          schemaName: "DSS.fbs",
+          fileIdentifier: "$DSS",
+          recordCount: 1,
+          totalBytes: progress.byteLength,
+          final: true,
+        }),
+        "provider-starlink-progress",
+      ),
+    ],
+  });
+  assert.equal(validResponse.statusCode, 0, validResponse.errorMessage);
+  const status = decodeStatusDss(validResponse.outputs[0]);
+  assert.equal(status.attempts, 1n, "rejected progress must not mutate state");
+  assert.equal(status.syncedRows, 64n);
+  assert.equal(status.totalRows, 130n);
+});
+
+test("status node accepts only semantically consistent Starlink progress states", async (t) => {
+  const harness = await createHarness(nodeSpecs[0]);
+  t.after(() => harness.destroy());
+  const invalidSnapshots = [
+    makeDssProgress({ status: 0, syncedRows: 64, totalRows: 130, downloadedBytes: 1 }),
+    makeDssProgress({ status: 2, syncedRows: 64, totalRows: 130, downloadedBytes: 1 }),
+    makeDssProgress({ status: 1, syncedRows: 130, totalRows: 130, downloadedBytes: 1 }),
+    makeDssProgress({
+      status: 1,
+      syncedRows: 131,
+      totalRows: 130,
+      localRows: 131,
+      missingRows: 0,
+      downloadedBytes: 1,
+    }),
+    makeDssProgress({
+      status: 1,
+      syncedRows: 64,
+      totalRows: 130,
+      localRows: 63,
+      downloadedBytes: 1,
+    }),
+    makeDssProgress({
+      status: 1,
+      syncedRows: 64,
+      totalRows: 130,
+      missingRows: 65,
+      downloadedBytes: 1,
+    }),
+    makeDssProgress({
+      status: 1,
+      syncedRows: 64,
+      totalRows: 130,
+      downloadedBytes: 2,
+      cachedBytes: 1,
+    }),
+    makeDssProgress({ status: 2, syncedRows: 0, totalRows: 0, downloadedBytes: 0 }),
+  ];
+  for (const snapshot of invalidSnapshots) {
+    const response = await harness.invoke({
+      methodId: "record_event",
+      inputs: [
+        inputFrame(
+          makeFsb(snapshot, {
+            schemaName: "DSS.fbs",
+            fileIdentifier: "$DSS",
+            recordCount: 1,
+            totalBytes: snapshot.byteLength,
+            final: true,
+          }),
+          "provider-starlink-progress",
+        ),
+      ],
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.outputs.length, 0);
+  }
+
+  const maximum = (1n << 64n) - 1n;
+  const complete = makeDssProgress({
+    status: 2,
+    syncedRows: maximum,
+    totalRows: maximum,
+    downloadedBytes: maximum,
+  });
+  const completeResponse = await harness.invoke({
+    methodId: "record_event",
+    inputs: [
+      inputFrame(
+        makeFsb(complete, {
+          schemaName: "DSS.fbs",
+          fileIdentifier: "$DSS",
+          recordCount: 1,
+          totalBytes: complete.byteLength,
+          final: true,
+        }),
+        "provider-starlink-progress",
+      ),
+    ],
+  });
+  assert.equal(completeResponse.statusCode, 0, completeResponse.errorMessage);
+  const status = decodeStatusDss(completeResponse.outputs[0]);
+  assert.equal(status.attempts, 1n, "invalid snapshots must not mutate state");
+  assert.equal(status.status, 2);
+  assert.equal(status.syncedRows, maximum);
+  assert.equal(status.totalRows, maximum);
+  assert.equal(status.missingRows, 0n);
+  assert.equal(status.downloadedBytes, maximum);
 });
 
 test("status node surfaces FlatSQL operation failures instead of reporting a silent zero", async (t) => {

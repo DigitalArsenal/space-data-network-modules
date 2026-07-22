@@ -17,9 +17,12 @@ constexpr uint32_t kFsbDataCapacity = 1'048'576;
 constexpr uint16_t kFsbAlignment = 8;
 constexpr const char* kFsoFileIdentifier = "$FSO";
 constexpr uint32_t kFsoAlignedSize = 361'648;
+constexpr const char* kDssSchemaName = "DSS.fbs";
+constexpr const char* kDssFileIdentifier = "$DSS";
 
 enum class RouteKind {
   kProvider,
+  kProviderProgress,
   kOd,
   kStore,
 };
@@ -30,6 +33,7 @@ struct RouteState {
   RouteKind kind;
   uint64_t events = 0;
   uint64_t records = 0;
+  uint64_t total_records = 0;
   uint64_t bytes = 0;
   uint64_t successes = 0;
   uint64_t failures = 0;
@@ -38,7 +42,8 @@ struct RouteState {
 };
 
 RouteState g_routes[] = {
-    {"provider-starlink", "provider-starlink.dss", RouteKind::kProvider},
+    {"provider-starlink-progress", "provider-starlink.dss",
+     RouteKind::kProviderProgress},
     {"provider-glonass", "provider-glonass.dss", RouteKind::kProvider},
     {"provider-intelsat", "provider-intelsat.dss", RouteKind::kProvider},
     {"provider-cpf", "provider-cpf.dss", RouteKind::kProvider},
@@ -63,8 +68,16 @@ std::vector<uint8_t> build_dss(const RouteState& route) {
   flatbuffers::FlatBufferBuilder builder(256);
   const bool od_route = route.kind == RouteKind::kOd;
   const uint64_t synced_rows = od_route ? route.successes : route.records;
-  const uint64_t total_rows = od_route ? route.events : route.records;
-  const uint64_t missing_rows = od_route ? route.failures : 0;
+  const uint64_t total_rows =
+      od_route ? route.events
+               : (route.kind == RouteKind::kProviderProgress
+                      ? route.total_records
+                      : route.records);
+  const uint64_t missing_rows =
+      od_route ? route.failures
+               : (route.kind == RouteKind::kProviderProgress
+                      ? route.total_records - route.records
+                      : 0);
   const std::string error_message = visible_error(route);
   const auto error = error_message.empty()
                          ? flatbuffers::Offset<flatbuffers::String>()
@@ -108,6 +121,105 @@ bool consume_provider_event(const plugin_input_frame_t* frame,
   route->records += stream->RECORD_COUNT();
   route->bytes += stream->DATA() ? stream->DATA()->size() : 0;
   route->status = 1;
+  return true;
+}
+
+struct ProgressEvent {
+  int8_t status = 0;
+  uint64_t synced_rows = 0;
+  uint64_t total_rows = 0;
+  uint64_t downloaded_bytes = 0;
+};
+
+bool decode_progress_dss(const uint8_t* bytes, uint32_t length,
+                         ProgressEvent* event) {
+  if (!event || !bytes || length < sizeof(uint32_t)) return false;
+  const uint32_t declared_size =
+      static_cast<uint32_t>(bytes[0]) |
+      (static_cast<uint32_t>(bytes[1]) << 8) |
+      (static_cast<uint32_t>(bytes[2]) << 16) |
+      (static_cast<uint32_t>(bytes[3]) << 24);
+  if (declared_size != length - sizeof(uint32_t)) return false;
+  flatbuffers::Verifier verifier(bytes, length);
+  if (!VerifySizePrefixedDSSBuffer(verifier)) return false;
+  const DSS* progress = GetSizePrefixedDSS(bytes);
+  const int8_t status = static_cast<int8_t>(progress->STATUS());
+  const uint64_t synced_rows = progress->SYNCED_ROWS();
+  const uint64_t total_rows = progress->TOTAL_ROWS();
+  const uint64_t local_rows = progress->LOCAL_ROWS();
+  const uint64_t missing_rows = progress->MISSING_ROWS();
+  const uint64_t cached_bytes = progress->CACHED_BYTES();
+  const uint64_t downloaded_bytes = progress->DOWNLOADED_BYTES();
+  if ((status != dssSyncState_SYNCING && status != dssSyncState_SYNCED) ||
+      total_rows == 0 || synced_rows > total_rows ||
+      local_rows != synced_rows || missing_rows != total_rows - synced_rows ||
+      cached_bytes != downloaded_bytes ||
+      (status == dssSyncState_SYNCED && synced_rows != total_rows) ||
+      (status == dssSyncState_SYNCING && synced_rows == total_rows)) {
+    return false;
+  }
+  event->status = status;
+  event->synced_rows = synced_rows;
+  event->total_rows = total_rows;
+  event->downloaded_bytes = downloaded_bytes;
+  return true;
+}
+
+bool consume_provider_progress(const plugin_input_frame_t* frame,
+                               RouteState* route) {
+  if (!route || !frame || !frame->payload || frame->payload_length == 0 ||
+      !frame->file_identifier ||
+      std::strcmp(frame->file_identifier, kFsbFileIdentifier) != 0) {
+    return false;
+  }
+  const uint8_t* data = nullptr;
+  uint32_t data_length = 0;
+  if (frame->wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY) {
+    if (frame->payload_length != kFsbAlignedSize ||
+        reinterpret_cast<uintptr_t>(frame->payload) % alignof(Aligned::FSB) !=
+            0) {
+      return false;
+    }
+    const auto* stream = reinterpret_cast<const Aligned::FSB*>(frame->payload);
+    if (!stream->FINAL || stream->CHUNK_SEQUENCE != 0 ||
+        stream->RECORD_COUNT != 1 || !stream->has_SCHEMA_NAME() ||
+        stream->SCHEMA_NAME.str() != kDssSchemaName ||
+        !stream->has_FILE_IDENTIFIER() ||
+        stream->FILE_IDENTIFIER.str() != kDssFileIdentifier ||
+        !stream->has_DATA() || stream->DATA.length == 0 ||
+        stream->DATA.length > kFsbDataCapacity ||
+        stream->TOTAL_BYTES != stream->DATA.length) {
+      return false;
+    }
+    data = stream->DATA.values;
+    data_length = stream->DATA.length;
+  } else if (frame->wire_format == PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER) {
+    flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifyFSBBuffer(verifier)) return false;
+    const FSB* stream = GetFSB(frame->payload);
+    if (!stream->FINAL() || stream->CHUNK_SEQUENCE() != 0 ||
+        stream->RECORD_COUNT() != 1 || !stream->SCHEMA_NAME() ||
+        stream->SCHEMA_NAME()->str() != kDssSchemaName ||
+        !stream->FILE_IDENTIFIER() ||
+        stream->FILE_IDENTIFIER()->str() != kDssFileIdentifier ||
+        !stream->DATA() || stream->DATA()->empty() ||
+        stream->DATA()->size() > kFsbDataCapacity ||
+        stream->TOTAL_BYTES() != stream->DATA()->size()) {
+      return false;
+    }
+    data = stream->DATA()->data();
+    data_length = stream->DATA()->size();
+  } else {
+    return false;
+  }
+  ProgressEvent event;
+  if (!decode_progress_dss(data, data_length, &event)) return false;
+  ++route->events;
+  route->records = event.synced_rows;
+  route->total_records = event.total_rows;
+  route->bytes = event.downloaded_bytes;
+  route->status = event.status;
+  route->error.clear();
   return true;
 }
 
@@ -305,6 +417,10 @@ extern "C" int record_event(void) {
       case RouteKind::kProvider:
         accepted = consume_provider_event(frame, &staged_routes[route_index]);
         break;
+      case RouteKind::kProviderProgress:
+        accepted =
+            consume_provider_progress(frame, &staged_routes[route_index]);
+        break;
       case RouteKind::kOd:
         accepted = consume_od_event(frame, &staged_routes[route_index]);
         break;
@@ -315,7 +431,7 @@ extern "C" int record_event(void) {
     if (!accepted) {
       plugin_set_error(
           "status-event",
-          "status requires typed provider $FSB or operation $FSO events");
+          "status requires provider $FSB, Starlink $DSS-in-$FSB progress, or operation $FSO events");
       return 400;
     }
     aligned_output[route_index] =
