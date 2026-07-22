@@ -26,26 +26,26 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "95e441eeb5504f4e9e0f08aa1c2f4ab6da4b29cf1deb6d9381e4f270600fa0d1";
+  "d4a782a72ff04ca208c051c0dbf3b09fd798370a23fd22640c92a1ce4ff45e7b";
 const expectedChildSha256 = Object.freeze({
-  timer: "4a13cd6ad61a57c8dac40f69cb90c7192e8b2d0448072706050fec298fc01620",
+  timer: "aaa838cb69a6de1016d88a254862bf16f7aea5b994e98a0065d3c3db46635ded",
   "provider-starlink":
-    "88352f13f0e38c09d5b46aa5a0dd6bc1365e60e398f13010e9ab9baec61ca967",
+    "1189d0052dfb921ad0ea00f1f7ae023ab2658b596f08021b68223cce28da79c4",
   "provider-glonass":
-    "195b49ab4540133f6a4cbe00204eedfa76c326785cc080114ee0d877c21c3afe",
+    "13e9f7bedf360360b1cb52d0681548de423b2c9945e83e274181f1b12912ccdc",
   "provider-intelsat":
-    "0dfef8068d7c246d7b2c1ae431521e577d0590e4c19feac2948e0d4ff8b7bd4c",
+    "3a438b8893cd64ba5fc4f4f4a421d5fe34a07e13ba7db24c6cd96c04339e8a38",
   "provider-cpf":
-    "2ee663dd1e816d57a754c136e311bf9a241d3d599409ee06b70671d5eb4bafc8",
+    "7254672dfbe2109f7f72ff1ecfebe601edb3e532936c8e2a98e0c9bbe836cb39",
   "provider-iss":
-    "21b62d991bd69db7c05a9eb29bcdd05959d8b502da5bd6ae570405c0e945845e",
-  od: "6187e169f10207bb226563858e1e31263f1889683d83baa9caf1387b78bbdca9",
+    "f254591039eddaf46d01ca933d0765f9a08c12d562265994c5f9308a5f82d3c5",
+  od: "54f0bfb7fc6c81ab1e742fa218f9cdb0fddb1bfb715280ea3b610e624f1e3c5d",
   store:
-    "6fc0550228a1b37c9b9b0e825d4378c728215d5ebc92b287a7927bfe9e00415e",
+    "8e1887a46a62f13e409ed92096aa5183bac830407e2c109f6256b443f26a8414",
   publication:
-    "a8402bc0646fb1b8ae1cb51e1b4e13588f2edbd8045c96ec0d8d763f3623588a",
+    "57e8e2dbfb7f8783197c951f8394ff2aeee6f2d7ddda253f0a1332b820a10e3c",
   status:
-    "ef05829363fdb24460090e3de87df11665f13b584210c64db7707483b16918c8",
+    "11a0b1c3a8e8601e5c91ef11cae7f57b65b6f70a24168b9b1982effea2cffd64",
 });
 
 const defaultUrls = Object.freeze({

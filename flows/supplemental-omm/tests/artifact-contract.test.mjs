@@ -6,6 +6,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  extractPublicationRecordCollection,
+  listWasmCustomSections,
   parseSingleFileBundle,
   verifyModuleArtifact,
 } from "space-data-module-sdk";
@@ -99,6 +101,37 @@ test(
         },
       );
       assert.equal(verified.verified, true, `${node.nodeId} signature failed`);
+    }
+  },
+);
+
+test(
+  "the outer runtime and every exact signed child are browser-valid WasmEdge universal-AOT modules",
+  { skip: !artifactExists && "run npm run build before the artifact contract gate" },
+  async () => {
+    const published = new Uint8Array(fs.readFileSync(wasmPath));
+    const parsed = await parseSingleFileBundle(published);
+    const flow = JSON.parse(fs.readFileSync(flowPath, "utf8"));
+    const entries = new Map(parsed.entries.map((entry) => [entry.entryId, entry]));
+    const modules = [
+      ["outer runtime", extractPublicationRecordCollection(published)?.payloadBytes ?? published],
+      ...flow.nodes.map((node) => {
+        const child = entries.get(node.pluginId)?.payloadBytes;
+        assert.ok(child, `missing exact child ${node.nodeId}`);
+        return [
+          node.nodeId,
+          extractPublicationRecordCollection(child)?.payloadBytes ?? child,
+        ];
+      }),
+    ];
+
+    for (const [label, moduleBytes] of modules) {
+      assert.equal(WebAssembly.validate(moduleBytes), true, `${label} is not browser-valid WASM`);
+      const aotSections = listWasmCustomSections(moduleBytes).filter(
+        (section) => section.name === "wasmedge",
+      );
+      assert.equal(aotSections.length, 1, `${label} must carry exactly one WasmEdge AOT section`);
+      assert.ok(aotSections[0].dataBytes.byteLength > 0, `${label} has an empty WasmEdge AOT section`);
     }
   },
 );
