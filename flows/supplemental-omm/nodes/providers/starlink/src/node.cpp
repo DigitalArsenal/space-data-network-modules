@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <limits>
 #include <pthread.h>
+#include <sched.h>
+#include <time.h>
 #include <unordered_set>
 #include <utility>
 
@@ -19,6 +21,8 @@ constexpr const char* kDefaultEphemerisBase =
 constexpr uint32_t kMaxFetchConcurrency = 64;
 constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
+constexpr uint64_t kThreadBarrierTimeoutNanoseconds =
+    600ull * 1'000'000'000ull;
 // Keep 64 requests in flight to saturate the link, but bound parsing, opaque
 // writes, hashing, and checkpoint serialization in any one guest invocation.
 // WasmEdge grants each independently signed child a finite scheduled fuel
@@ -262,27 +266,127 @@ std::vector<PlannedUnit> plan_units(const std::vector<uint8_t>& manifest,
   return units;
 }
 
-struct FetchPageContext {
-  const std::vector<PlannedUnit>* units = nullptr;
-  size_t begin = 0;
-  size_t end = 0;
-  std::atomic<size_t> next{0};
-  const std::vector<uint64_t>* expected_sizes = nullptr;
-  std::vector<provider_node::HttpResult>* results = nullptr;
-};
-
 struct ProbeResult {
   uint64_t byte_length = 0;
   bool valid = false;
 };
 
-struct ProbePageContext {
+struct DownloadPageContext {
   const std::vector<PlannedUnit>* units = nullptr;
   size_t begin = 0;
   size_t end = 0;
-  std::atomic<size_t> next{0};
-  std::vector<ProbeResult>* results = nullptr;
+  std::atomic<size_t> probe_next{0};
+  std::atomic<size_t> fetch_next{0};
+  std::vector<ProbeResult>* probes = nullptr;
+  std::vector<provider_node::HttpResult>* responses = nullptr;
+  std::atomic<size_t> probes_completed{0};
+  size_t admitted_count = 0;
+  std::atomic<bool> admission_ready{false};
+  bool probe_invalid = false;
+  std::atomic<bool> synchronization_failed{false};
+  std::atomic<size_t> worker_ready_count{0};
+  std::atomic<size_t> release_worker_count{0};
+  std::atomic<bool> release_all_workers{false};
 };
+
+struct DownloadPageWorker {
+  DownloadPageContext* context = nullptr;
+  size_t index = 0;
+};
+
+struct DownloadPage {
+  std::vector<provider_node::HttpResult> responses;
+  bool probes_valid = false;
+  bool synchronization_valid = false;
+};
+
+bool monotonic_now_nanoseconds(uint64_t* value) {
+  if (!value) return false;
+  timespec now{};
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0 || now.tv_sec < 0 ||
+      now.tv_nsec < 0 || now.tv_nsec >= 1'000'000'000L) {
+    return false;
+  }
+  const uint64_t seconds = static_cast<uint64_t>(now.tv_sec);
+  const uint64_t nanoseconds = static_cast<uint64_t>(now.tv_nsec);
+  if (seconds >
+      (std::numeric_limits<uint64_t>::max() - nanoseconds) /
+          1'000'000'000ull) {
+    return false;
+  }
+  *value = seconds * 1'000'000'000ull + nanoseconds;
+  return true;
+}
+
+bool monotonic_deadline(uint64_t timeout_nanoseconds, uint64_t* deadline) {
+  uint64_t now = 0;
+  if (!deadline || !monotonic_now_nanoseconds(&now) ||
+      now > std::numeric_limits<uint64_t>::max() - timeout_nanoseconds) {
+    return false;
+  }
+  *deadline = now + timeout_nanoseconds;
+  return true;
+}
+
+bool deadline_expired(uint64_t deadline) {
+  uint64_t now = 0;
+  return !monotonic_now_nanoseconds(&now) || now >= deadline;
+}
+
+bool thread_poll_pause() {
+  return sched_yield() == 0;
+}
+
+void fail_download_synchronization(DownloadPageContext* context) {
+  context->synchronization_failed.store(true, std::memory_order_release);
+  context->release_all_workers.store(true, std::memory_order_release);
+}
+
+bool wait_for_flag(const std::atomic<bool>& flag,
+                   const std::atomic<bool>& cancelled) {
+  uint64_t deadline = 0;
+  if (!monotonic_deadline(kThreadBarrierTimeoutNanoseconds, &deadline)) {
+    return false;
+  }
+  for (;;) {
+    if (flag.load(std::memory_order_acquire)) return true;
+    if (cancelled.load(std::memory_order_acquire)) return false;
+    if (deadline_expired(deadline) || !thread_poll_pause()) return false;
+  }
+}
+
+bool wait_for_count(const std::atomic<size_t>& value, size_t expected,
+                    const std::atomic<bool>& cancelled) {
+  uint64_t deadline = 0;
+  if (!monotonic_deadline(kThreadBarrierTimeoutNanoseconds, &deadline)) {
+    return false;
+  }
+  for (;;) {
+    if (value.load(std::memory_order_acquire) >= expected) return true;
+    if (cancelled.load(std::memory_order_acquire)) return false;
+    if (deadline_expired(deadline) || !thread_poll_pause()) return false;
+  }
+}
+
+bool wait_for_worker_release(const DownloadPageContext* context,
+                             size_t worker_index) {
+  uint64_t deadline = 0;
+  if (!monotonic_deadline(kThreadBarrierTimeoutNanoseconds, &deadline)) {
+    return false;
+  }
+  for (;;) {
+    if (context->release_all_workers.load(std::memory_order_acquire) ||
+        context->release_worker_count.load(std::memory_order_acquire) >
+            worker_index) {
+      return true;
+    }
+    if (deadline_expired(deadline) || !thread_poll_pause()) return false;
+  }
+}
+
+bool join_worker(pthread_t worker) {
+  return pthread_join(worker, nullptr) == 0;
+}
 
 struct RawHttpResult {
   int64_t status = 0;
@@ -474,103 +578,147 @@ ProbeResult probe_complete_size(std::string_view url) {
   return result;
 }
 
-void fetch_page_tasks(FetchPageContext* context) {
-  for (;;) {
-    const size_t local = context->next.fetch_add(1, std::memory_order_relaxed);
-    const size_t index = context->begin + local;
-    if (index >= context->end) break;
-    (*context->results)[local] =
-        http_get_complete((*context->units)[index].url,
-                          static_cast<size_t>((*context->expected_sizes)[local]));
-  }
-}
-
-void* fetch_page_worker(void* opaque) {
-  fetch_page_tasks(static_cast<FetchPageContext*>(opaque));
-  return nullptr;
-}
-
-std::vector<provider_node::HttpResult> fetch_complete_page(
-    const std::vector<PlannedUnit>& units, size_t begin, size_t end,
-    uint32_t fetch_concurrency, const std::vector<uint64_t>& expected_sizes) {
-  const size_t count = end > begin ? end - begin : 0;
-  std::vector<provider_node::HttpResult> results(count);
-  if (count == 0 || expected_sizes.size() != count) return results;
-  const size_t worker_count = std::min<size_t>(
-      count,
-      std::max<uint32_t>(
-          1, std::min(fetch_concurrency, kMaxFetchConcurrency)));
-  FetchPageContext context;
-  context.units = &units;
-  context.begin = begin;
-  context.end = end;
-  context.expected_sizes = &expected_sizes;
-  context.results = &results;
-
-  // Workers are scoped to this one complete-file page. No pthread remains
-  // resident while the flow schedules progress, OD, or another node.
-  std::vector<pthread_t> workers;
-  workers.reserve(worker_count > 0 ? worker_count - 1 : 0);
-  for (size_t index = 0; index + 1 < worker_count; ++index) {
-    pthread_t worker{};
-    if (pthread_create(&worker, nullptr, fetch_page_worker, &context) == 0) {
-      workers.push_back(worker);
+void finalize_download_admission(DownloadPageContext* context) {
+  const size_t count = context->end - context->begin;
+  uint64_t retained_bytes = 0;
+  bool accepting = true;
+  for (size_t local = 0; local < count; ++local) {
+    const ProbeResult& probe = (*context->probes)[local];
+    if (!probe.valid) {
+      context->probe_invalid = true;
+      accepting = false;
+      continue;
+    }
+    if (accepting &&
+        probe.byte_length <= kMaxRetainedWaveBytes - retained_bytes) {
+      retained_bytes += probe.byte_length;
+      ++context->admitted_count;
+    } else {
+      accepting = false;
     }
   }
-  fetch_page_tasks(&context);
-  for (pthread_t worker : workers) {
-    if (pthread_join(worker, nullptr) != 0) {
-      // Returning would release a page context that a worker may still use.
-      __builtin_trap();
-    }
+  if (context->probe_invalid) {
+    context->admitted_count = 0;
   }
-  return results;
+  context->admission_ready.store(true, std::memory_order_release);
 }
 
-void probe_page_tasks(ProbePageContext* context) {
+void download_page_tasks(DownloadPageContext* context) {
+  const size_t count = context->end - context->begin;
   for (;;) {
-    const size_t local = context->next.fetch_add(1, std::memory_order_relaxed);
+    const size_t local =
+        context->probe_next.fetch_add(1, std::memory_order_relaxed);
     const size_t index = context->begin + local;
     if (index >= context->end) break;
-    (*context->results)[local] =
+    const ProbeResult probe =
         probe_complete_size((*context->units)[index].url);
+
+    (*context->probes)[local] = probe;
+    if (context->probes_completed.fetch_add(1, std::memory_order_acq_rel) + 1 ==
+        count) {
+      finalize_download_admission(context);
+    }
+  }
+
+  if (!wait_for_flag(context->admission_ready,
+                     context->synchronization_failed)) {
+    fail_download_synchronization(context);
+    return;
+  }
+  const bool synchronized =
+      !context->synchronization_failed.load(std::memory_order_acquire);
+  const size_t admitted_count = context->admitted_count;
+  if (!synchronized) return;
+
+  for (;;) {
+    const size_t local =
+        context->fetch_next.fetch_add(1, std::memory_order_relaxed);
+    if (local >= admitted_count) break;
+    const size_t index = context->begin + local;
+    (*context->responses)[local] = http_get_complete(
+        (*context->units)[index].url,
+        static_cast<size_t>((*context->probes)[local].byte_length));
   }
 }
 
-void* probe_page_worker(void* opaque) {
-  probe_page_tasks(static_cast<ProbePageContext*>(opaque));
+void* download_page_worker(void* opaque) {
+  auto* worker = static_cast<DownloadPageWorker*>(opaque);
+  DownloadPageContext* context = worker->context;
+  download_page_tasks(context);
+  context->worker_ready_count.fetch_add(1, std::memory_order_release);
+  if (!wait_for_worker_release(context, worker->index)) {
+    fail_download_synchronization(context);
+  }
   return nullptr;
 }
 
-std::vector<ProbeResult> probe_complete_page(
+DownloadPage download_complete_page(
     const std::vector<PlannedUnit>& units, size_t begin, size_t end,
     uint32_t fetch_concurrency) {
+  DownloadPage page;
   const size_t count = end > begin ? end - begin : 0;
-  std::vector<ProbeResult> results(count);
-  if (count == 0) return results;
+  if (count == 0) return page;
+  std::vector<ProbeResult> probes(count);
+  std::vector<provider_node::HttpResult> responses(count);
   const size_t worker_count = std::min<size_t>(
       count,
       std::max<uint32_t>(
           1, std::min(fetch_concurrency, kMaxFetchConcurrency)));
-  ProbePageContext context;
+  DownloadPageContext context;
   context.units = &units;
   context.begin = begin;
   context.end = end;
-  context.results = &results;
+  context.probes = &probes;
+  context.responses = &responses;
 
+  // One page-scoped cohort owns both phases. Every probe completes before the
+  // cohort crosses the in-page admission barrier, so the same workers can
+  // immediately issue the bounded complete GET wave without an exit/recreate
+  // cycle. Atomic polling deliberately avoids WasmEdge's shared-executor
+  // futex wake queue: the prior condition-variable protocol lost wakeups in
+  // the exact runtime. Completed workers remain alive until the main lane
+  // releases and joins them one at a time. No pthread survives this page or
+  // depends on an atomic-wait notification to retire.
+  std::array<DownloadPageWorker, kMaxFetchConcurrency - 1> worker_arguments{};
   std::vector<pthread_t> workers;
   workers.reserve(worker_count > 0 ? worker_count - 1 : 0);
   for (size_t index = 0; index + 1 < worker_count; ++index) {
+    const size_t worker_index = workers.size();
+    worker_arguments[worker_index].context = &context;
+    worker_arguments[worker_index].index = worker_index;
     pthread_t worker{};
-    if (pthread_create(&worker, nullptr, probe_page_worker, &context) == 0) {
+    if (pthread_create(&worker, nullptr, download_page_worker,
+                       &worker_arguments[worker_index]) == 0) {
       workers.push_back(worker);
     }
   }
-  probe_page_tasks(&context);
-  for (pthread_t worker : workers) {
-    if (pthread_join(worker, nullptr) != 0) __builtin_trap();
+  download_page_tasks(&context);
+
+  if (!wait_for_count(context.worker_ready_count, workers.size(),
+                      context.release_all_workers)) {
+    fail_download_synchronization(&context);
   }
-  return results;
+
+  bool all_workers_joined = true;
+  for (size_t index = 0; index < workers.size(); ++index) {
+    context.release_worker_count.store(index + 1, std::memory_order_release);
+    if (!join_worker(workers[index])) {
+      // Release every later worker and continue attempting to join the whole
+      // cohort before trapping. Returning from the page while even one worker
+      // may retain its stack context would expose page-local storage.
+      fail_download_synchronization(&context);
+      all_workers_joined = false;
+    }
+  }
+  if (!all_workers_joined) {
+    __builtin_trap();
+  }
+  page.probes_valid = !context.probe_invalid;
+  page.synchronization_valid =
+      !context.synchronization_failed.load(std::memory_order_acquire);
+  responses.resize(context.admitted_count);
+  page.responses = std::move(responses);
+  return page;
 }
 
 bool meme_whitespace(char value) {
@@ -1667,32 +1815,22 @@ int run_download_phase() {
     return fail_invocation("checkpoint-invalid",
                            "Starlink download cursor cannot advance", 422);
   }
-  const std::vector<ProbeResult> probes = probe_complete_page(
+  DownloadPage page = download_complete_page(
       g_state.units, begin, candidate_end, g_state.config.fetch_concurrency);
-  if (probes.size() != candidate_end - begin ||
-      std::any_of(probes.begin(), probes.end(),
-                  [](const ProbeResult& probe) { return !probe.valid; })) {
+  if (!page.synchronization_valid) {
+    return fail_invocation(
+        "thread-sync", "Starlink page-scoped download cohort failed", 503);
+  }
+  if (!page.probes_valid) {
     return fail_invocation(
         "size-probe", "Starlink complete-file size preflight failed", 502);
   }
-  uint64_t retained_bytes = 0;
-  size_t end = begin;
-  std::vector<uint64_t> expected_sizes;
-  expected_sizes.reserve(probes.size());
-  for (const ProbeResult& probe : probes) {
-    if (retained_bytes > kMaxRetainedWaveBytes - probe.byte_length) break;
-    retained_bytes += probe.byte_length;
-    expected_sizes.push_back(probe.byte_length);
-    ++end;
-  }
-  if (end == begin || expected_sizes.empty()) {
+  if (page.responses.empty()) {
     return fail_invocation(
         "memory-bound", "Starlink retained download wave cannot fit", 413);
   }
   g_pending_wave_begin = static_cast<uint32_t>(begin);
-  g_pending_wave = fetch_complete_page(
-      g_state.units, begin, end, g_state.config.fetch_concurrency,
-      expected_sizes);
+  g_pending_wave = std::move(page.responses);
   return commit_pending_downloads();
 }
 

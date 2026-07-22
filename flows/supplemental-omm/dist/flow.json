@@ -35,7 +35,7 @@
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "8eb401458c2cf1f890f1ac3da36bf78c899e3df79e84dcf585538a135503713d"
+        "sha256": "21784e3d63e72804617bb3955c1c222f9d7d6a623ef73cafb6ad466d04b82aad"
       }
     },
     {
