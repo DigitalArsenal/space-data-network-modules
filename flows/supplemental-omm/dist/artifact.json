@@ -352,9 +352,9 @@
   ],
   "bundle": {
     "version": 2,
-    "portableWasmSha256": "1bda870b8ca0e117cbebcde4c5b028fb88dfbfcd0b66f75265d21472017d8102",
+    "portableWasmSha256": "2df28bfda9cce7eb84a0e0d5718c2e3d1569ea5d418055d0eed33d5f53bfc33c",
     "flowPlgSha256": "65f347bc7e69ba13af5060d1891bdb629b093608115ddd349063cd28f8a5e39c",
-    "appSha256": "07f8671a0d56cfe63a139f70c5d404a4d9a20623c96b4a2fda67874babe47fa5",
+    "appSha256": "27112db1abafbd564a4c2cc532fbf00b3c4cd6dae2b59374fd367052eba6bd9a",
     "signatureHashAlgorithm": "sha256-sdn-module-bundle-v1",
     "requiredEntries": [
       "manifest",

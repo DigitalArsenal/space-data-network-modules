@@ -7,11 +7,15 @@ publication, and status. The exact same signed child artifacts are embedded in
 the browser/WasmEdge flow bundle at `dist/isomorphic/module.wasm`.
 
 Production release artifacts use WasmEdge universal AOT custom sections built
-with optimization, interruptibility, and gas measurement enabled. Browsers
-ignore that custom section and execute the portable WASM in the same signed
-file; WasmEdge executes its native AOT payload. The artifact contract rejects a
-release unless the outer runtime and every exact signed child are browser-valid
-and contain one nonempty universal-AOT section.
+with optimization and interruptibility using
+`scripts/compile-universal-aot.sh`. Its `parent` profile omits statistics
+instrumentation because the flow host has no WasmEdge statistics context; its
+`child` profile enables gas measurement because child hosts enforce cost
+limits. Browsers ignore the AOT custom section and execute the portable WASM in
+the same signed file; WasmEdge executes its native payload. The artifact
+contract rejects a release unless the outer runtime and every exact signed
+child are browser-valid, contain one nonempty universal-AOT section, and retain
+these host-compatible profiles.
 
 The timer node owns hourly policy and asks hosts only for a clock reading and a
 generic wakeup. Its typed tick fans out to the five provider nodes. Providers
