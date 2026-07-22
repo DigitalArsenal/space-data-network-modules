@@ -18,6 +18,10 @@ const manifestPath = path.join(packageRoot, "dist/plugin-manifest.json");
 const artifactPath = path.join(packageRoot, "dist/artifact.json");
 const publisherPath = path.join(packageRoot, "dist/publisher.json");
 const flowPath = path.join(packageRoot, "flow.json");
+const universalAotCompilerPath = path.join(
+  packageRoot,
+  "scripts/compile-universal-aot.sh",
+);
 const artifactExists = [wasmPath, manifestPath, artifactPath, publisherPath].every(
   (candidate) => fs.existsSync(candidate),
 );
@@ -25,6 +29,24 @@ const artifactExists = [wasmPath, manifestPath, artifactPath, publisherPath].eve
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
+
+test("the universal-AOT build profile is compatible with the production host", () => {
+  const compiler = fs.readFileSync(universalAotCompilerPath, "utf8");
+  assert.match(compiler, /WasmEdge-0\.14\.1/);
+  const parentProfile = compiler.match(/compile_parent\(\) \{([\s\S]*?)\n\}/)?.[1];
+  const childProfile = compiler.match(/compile_child\(\) \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(parentProfile, "missing explicit parent AOT profile");
+  assert.ok(childProfile, "missing explicit child AOT profile");
+  for (const profile of [parentProfile, childProfile]) {
+    assert.match(profile, /--optimize 3/);
+    assert.match(profile, /--interruptible/);
+  }
+  assert.doesNotMatch(
+    parentProfile,
+    /--enable-(?:gas-measuring|instruction-count|time-measuring|all-statistics)/,
+  );
+  assert.match(childProfile, /--enable-gas-measuring/);
+});
 
 test(
   "the outer bundle is a signed browser/WasmEdge isomorphic flow host",
