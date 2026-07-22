@@ -6,6 +6,13 @@ policy, five complete native-data providers, orbit determination, FlatSQL,
 publication, and status. The exact same signed child artifacts are embedded in
 the browser/WasmEdge flow bundle at `dist/isomorphic/module.wasm`.
 
+Production release artifacts use WasmEdge universal AOT custom sections built
+with optimization, interruptibility, and gas measurement enabled. Browsers
+ignore that custom section and execute the portable WASM in the same signed
+file; WasmEdge executes its native AOT payload. The artifact contract rejects a
+release unless the outer runtime and every exact signed child are browser-valid
+and contain one nonempty universal-AOT section.
+
 The timer node owns hourly policy and asks hosts only for a clock reading and a
 generic wakeup. Its typed tick fans out to the five provider nodes. Providers
 fetch complete provider-native responses and emit bounded paired canonical or
