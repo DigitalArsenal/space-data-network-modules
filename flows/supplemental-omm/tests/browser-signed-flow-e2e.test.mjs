@@ -26,42 +26,27 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "2c6a82201e32631ddaa8a4f2cdc19cf15d4c90cd5c14d59a9c75266992580623";
+  "95e441eeb5504f4e9e0f08aa1c2f4ab6da4b29cf1deb6d9381e4f270600fa0d1";
 const expectedChildSha256 = Object.freeze({
-  timer: "40a2717b9df4ff67d10ab66a28bb01e07ed23bf38a6d764b365d02f8af675333",
+  timer: "4a13cd6ad61a57c8dac40f69cb90c7192e8b2d0448072706050fec298fc01620",
   "provider-starlink":
-    "5ba646cfe77e4f51150ab27f408ee7b9f8643138d00838f2f7b3571728626647",
+    "88352f13f0e38c09d5b46aa5a0dd6bc1365e60e398f13010e9ab9baec61ca967",
   "provider-glonass":
-    "f82e56183149369395cedf4a19a22fa57ff9cbd534af412e38370e7896f16141",
+    "195b49ab4540133f6a4cbe00204eedfa76c326785cc080114ee0d877c21c3afe",
   "provider-intelsat":
-    "92def949eff44120bb1c3aafebd74cbc55e7b8dbd0b66e61eb56bebebabf272c",
+    "0dfef8068d7c246d7b2c1ae431521e577d0590e4c19feac2948e0d4ff8b7bd4c",
   "provider-cpf":
-    "d7c3abbd5bf418b10645dc6d501922b20b15dc2a5e401068d34c0430846d65d1",
+    "2ee663dd1e816d57a754c136e311bf9a241d3d599409ee06b70671d5eb4bafc8",
   "provider-iss":
-    "1067ba559c29e5d6f9f012f3975fc8b15c58c5e605c96368f5ff8a4add63bca0",
-  od: "86459062af3d2352409275c3f46e1b6a586f261fd84959b85f66c190289ecb90",
+    "21b62d991bd69db7c05a9eb29bcdd05959d8b502da5bd6ae570405c0e945845e",
+  od: "6187e169f10207bb226563858e1e31263f1889683d83baa9caf1387b78bbdca9",
   store:
-    "6929209a5b46e9bedb8e3bf5a5ab3ed71db64208d202d66f6fc61f959fa355f9",
+    "6fc0550228a1b37c9b9b0e825d4378c728215d5ebc92b287a7927bfe9e00415e",
   publication:
-    "81f3e78c88d512cd9ddf7417a1ca7ebce3ccf09188362c5840c433471a5d54fe",
+    "a8402bc0646fb1b8ae1cb51e1b4e13588f2edbd8045c96ec0d8d763f3623588a",
   status:
-    "a77e4e1f6172a90e9cd28a0d55486ed292ce19a95e9cf29867ce8a79c25d24c3",
+    "ef05829363fdb24460090e3de87df11665f13b584210c64db7707483b16918c8",
 });
-
-const fsoIdentity = Object.freeze({
-  schemaName: "FSO.fbs",
-  fileIdentifier: "$FSO",
-  schemaVersion: "1.158.2",
-  schemaHash:
-    "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
-  rootTypeName: "FSO",
-});
-const emptyFso = new Uint8Array([
-  12, 0, 0, 0,
-  36, 70, 83, 79,
-  4, 0, 4, 0,
-  4, 0, 0, 0,
-]);
 
 const defaultUrls = Object.freeze({
   starlinkManifest:
@@ -346,19 +331,7 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     return response;
   };
 
-  host.enqueueTriggerFrame(0, {
-    portId: "wakeup",
-    bytes: emptyFso,
-    typeRef: {
-      ...fsoIdentity,
-      schemaHash: [...Buffer.from(fsoIdentity.schemaHash, "hex")],
-      wireFormat: "flatbuffer",
-    },
-    wireFormat: "flatbuffer",
-    ownership: "host-owned",
-    mutability: "immutable",
-    endOfStream: true,
-  });
+  host.enqueueTrigger(0);
   const drained = await host.drain({
     maxIterations: 20_000,
     frameBudget: 64,

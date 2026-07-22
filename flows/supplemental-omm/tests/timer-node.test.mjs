@@ -54,6 +54,20 @@ function wakeupInput(wireFormat = "flatbuffer") {
   };
 }
 
+function productionCanonicalWakeupInput() {
+  const input = wakeupInput();
+  return {
+    ...input,
+    payload: new Uint8Array(0),
+    typeRef: {
+      ...input.typeRef,
+      fixedStringLength: 0,
+      byteLength: 361_648,
+      requiredAlignment: 8,
+    },
+  };
+}
+
 function tickBytes(output) {
   if (output.wireFormat === "aligned-binary") {
     const view = new DataView(
@@ -197,6 +211,32 @@ test("timer node artifact is independently bundle-signed", async () => {
   assert.equal(verified.verified, true);
   assert.equal(verified.signed, true);
   assert.equal(verified.signatureScope, "bundle");
+});
+
+test("timer accepts a canonical production wakeup carrying paired aligned-layout hints", async (t) => {
+  const manifest = readJson(manifestPath, "timer manifest");
+  const signed = new Uint8Array(fs.readFileSync(artifactPath));
+  const portable = extractPublicationRecordCollection(signed)?.payloadBytes ?? signed;
+  const harness = await createBrowserModuleHarness({
+    wasmSource: portable,
+    manifest,
+    surface: "direct",
+    hostcallDispatch(operation) {
+      if (operation === "clock.now") return 1_800_001_234_567;
+      if (operation === "timers.arm") return { accepted: true };
+      throw new Error(`timer called forbidden host operation ${operation}`);
+    },
+  });
+  t.after(() => harness.destroy());
+
+  const response = await harness.invoke({
+    methodId: "on_wakeup",
+    inputs: [productionCanonicalWakeupInput()],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1);
+  assert.equal(response.outputs[0].portId, "tick");
+  assert.equal(response.outputs[0].wireFormat, "flatbuffer");
 });
 
 test("timer owns hourly UTC policy and arms only a generic timer token", async (t) => {
