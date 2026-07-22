@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>Supplemental OMM — Provider Status Board</title>
+  <style>
+    :root {
+      --bg: #090d11;
+      --panel: #111820;
+      --panel-2: #17212b;
+      --edge: #2b3946;
+      --ink: #e4edf5;
+      --muted: #8fa0af;
+      --accent: #61c3db;
+      --ok: #53d59a;
+      --warn: #ffbb55;
+      --bad: #ff7474;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 var(--sans);
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: 28px auto 60px; }
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      border: 1px solid var(--edge);
+      background: var(--panel);
+      padding: 22px;
+    }
+    h1 { margin: 0; font: 600 24px/1.2 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+    header p { margin: 8px 0 0; color: var(--muted); }
+    .refresh { text-align: right; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+    button {
+      margin-top: 8px;
+      border: 1px solid var(--accent);
+      background: transparent;
+      color: var(--ink);
+      padding: 8px 14px;
+      font: 600 13px var(--mono);
+      cursor: pointer;
+    }
+    button:hover { background: var(--panel-2); }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 14px 0;
+    }
+    .metric { border: 1px solid var(--edge); background: var(--panel); padding: 15px; }
+    .metric span { display: block; color: var(--muted); font: 12px var(--mono); text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 5px; font: 600 22px var(--mono); }
+    section { border: 1px solid var(--edge); background: var(--panel); overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { border-bottom: 1px solid var(--edge); padding: 14px; text-align: left; }
+    th { color: var(--muted); font: 12px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .provider { font-weight: 650; }
+    .provider small { display: block; margin-top: 3px; color: var(--muted); font: 12px var(--mono); }
+    .num { font-family: var(--mono); }
+    .state { display: inline-flex; align-items: center; gap: 7px; font: 12px var(--mono); text-transform: uppercase; }
+    .state::before { content: ""; width: 8px; height: 8px; background: var(--muted); border-radius: 50%; }
+    .state.live::before { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+    .state.stale::before { background: var(--warn); }
+    .state.error::before { background: var(--bad); }
+    .notice { margin-top: 14px; border-left: 3px solid var(--accent); background: var(--panel); color: var(--muted); padding: 12px 15px; }
+    .notice code { color: var(--ink); font-family: var(--mono); }
+    @media (max-width: 760px) {
+      header { grid-template-columns: 1fr; }
+      .refresh { text-align: left; }
+      .summary { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Supplemental OMM</h1>
+        <p>One WASM composition · five provider ephemerides → OD fit → FlatSQL results</p>
+      </div>
+      <div class="refresh">
+        <div id="updated">waiting for node data</div>
+        <button id="refresh" type="button">Refresh now</button>
+      </div>
+    </header>
+
+    <div class="summary" aria-label="Node summary">
+      <div class="metric"><span>Provider lanes</span><strong id="lane-count">5</strong></div>
+      <div class="metric"><span>Active lanes</span><strong id="active-count">—</strong></div>
+      <div class="metric"><span>Stored frames</span><strong id="record-count">—</strong></div>
+    </div>
+
+    <section aria-labelledby="lanes-title">
+      <table>
+        <thead>
+          <tr>
+            <th id="lanes-title">Provider</th>
+            <th>Status</th>
+            <th>Processed frames</th>
+            <th>Total frames</th>
+            <th>Downloaded bytes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-provider="starlink">
+            <td class="provider">SpaceX Starlink<small>spacex-starlink</small></td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+          <tr data-provider="glonass">
+            <td class="provider">GLONASS<small>glonass</small></td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+          <tr data-provider="intelsat">
+            <td class="provider">Intelsat<small>intelsat</small></td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+          <tr data-provider="cpf">
+            <td class="provider">ILRS CPF<small>cpf</small></td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+          <tr data-provider="iss">
+            <td class="provider">ISS<small>iss</small></td>
+            <td><span class="state">waiting</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="notice" id="notice" role="status">
+      Waiting for this artifact's canonical <code>$FSB</code> runtime envelopes containing <code>$DSS</code> status records. The board does not fetch provider ephemerides or start runs.
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const artifactBase = "/sdn/v1/artifacts/__MODULE_CONTENT_HASH__";
+      const providers = {
+        starlink: { nodeId: "provider-starlink" },
+        glonass: { nodeId: "provider-glonass" },
+        intelsat: { nodeId: "provider-intelsat" },
+        cpf: { nodeId: "provider-cpf" },
+        iss: { nodeId: "provider-iss" },
+      };
+      const number = new Intl.NumberFormat();
+      const textDecoder = new TextDecoder();
+      const rows = new Map(
+        [...document.querySelectorAll("tbody tr[data-provider]")].map((row) => [row.dataset.provider, row]),
+      );
+
+      function flatbuffer(bytes, identifier, sizePrefixed = false) {
+        const rootAt = sizePrefixed ? 4 : 0;
+        const identifierAt = sizePrefixed ? 8 : 4;
+        const framing = sizePrefixed ? "size-prefixed" : "canonical";
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength < identifierAt + 4) {
+          throw new Error(`expected a ${framing} ${identifier} record`);
+        }
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        if (sizePrefixed && view.getUint32(0, true) !== bytes.byteLength - 4) {
+          throw new Error(`${identifier} size prefix does not match the route payload`);
+        }
+        if (
+          textDecoder.decode(bytes.subarray(identifierAt, identifierAt + 4)) !==
+          identifier
+        ) {
+          throw new Error(`expected a ${framing} ${identifier} record`);
+        }
+        const table = rootAt + view.getUint32(rootAt, true);
+        if (table < identifierAt + 4 || table + 4 > bytes.byteLength) {
+          throw new Error(`${identifier} root is out of bounds`);
+        }
+        return { view, table };
+      }
+
+      function field(record, index) {
+        const { view, table } = record;
+        const vtable = table - view.getInt32(table, true);
+        if (vtable < 0 || vtable + 4 > view.byteLength) {
+          throw new Error("FlatBuffer vtable is out of bounds");
+        }
+        const vtableBytes = view.getUint16(vtable, true);
+        if (vtableBytes < 4 || vtable + vtableBytes > view.byteLength) {
+          throw new Error("FlatBuffer vtable length is out of bounds");
+        }
+        const slot = 4 + index * 2;
+        if (slot + 2 > vtableBytes) return 0;
+        const offset = view.getUint16(vtable + slot, true);
+        const at = offset ? table + offset : 0;
+        if (at >= view.byteLength) throw new Error("FlatBuffer field is out of bounds");
+        return at;
+      }
+
+      function uint64(record, index) {
+        const at = field(record, index);
+        if (at && at + 8 > record.view.byteLength) {
+          throw new Error("FlatBuffer uint64 field is out of bounds");
+        }
+        return at ? Number(record.view.getBigUint64(at, true)) : 0;
+      }
+
+      function string(record, index) {
+        const at = field(record, index);
+        if (!at) return "";
+        if (at + 4 > record.view.byteLength) {
+          throw new Error("FlatBuffer string offset is out of bounds");
+        }
+        const start = at + record.view.getUint32(at, true);
+        if (start + 4 > record.view.byteLength) {
+          throw new Error("FlatBuffer string is out of bounds");
+        }
+        const length = record.view.getUint32(start, true);
+        if (start + 4 + length > record.view.byteLength) {
+          throw new Error("FlatBuffer string length is out of bounds");
+        }
+        return textDecoder.decode(
+          new Uint8Array(record.view.buffer, record.view.byteOffset + start + 4, length),
+        );
+      }
+
+      function byteVector(record, index) {
+        const at = field(record, index);
+        if (!at || at + 4 > record.view.byteLength) {
+          throw new Error("FlatBuffer byte vector is missing or out of bounds");
+        }
+        const start = at + record.view.getUint32(at, true);
+        if (start + 4 > record.view.byteLength) {
+          throw new Error("FlatBuffer byte vector is out of bounds");
+        }
+        const length = record.view.getUint32(start, true);
+        if (start + 4 + length > record.view.byteLength) {
+          throw new Error("FlatBuffer byte vector length is out of bounds");
+        }
+        return new Uint8Array(
+          record.view.buffer,
+          record.view.byteOffset + start + 4,
+          length,
+        );
+      }
+
+      function unwrapDSS(bytes) {
+        const stream = flatbuffer(bytes, "$FSB");
+        if (string(stream, 7) !== "DSS.fbs" || string(stream, 8) !== "$DSS") {
+          throw new Error("$FSB route does not declare a DSS.fbs/$DSS payload");
+        }
+        const data = byteVector(stream, 9);
+        if (uint64(stream, 4) !== data.byteLength) {
+          throw new Error("$FSB TOTAL_BYTES does not match its DATA payload");
+        }
+        if (uint64(stream, 5) !== 1) {
+          throw new Error("$FSB status route must contain exactly one DSS record");
+        }
+        const finalAt = field(stream, 3);
+        if (!finalAt || stream.view.getUint8(finalAt) !== 1) {
+          throw new Error("$FSB status route must be a final frame");
+        }
+        return data;
+      }
+
+      function parseDSS(bytes) {
+        const record = flatbuffer(bytes, "$DSS", true);
+        const statusAt = field(record, 0);
+        return {
+          status: statusAt ? record.view.getInt8(statusAt) : 0,
+          syncedRows: uint64(record, 1),
+          totalRows: uint64(record, 2),
+          downloadedBytes: uint64(record, 8),
+          error: string(record, 33),
+        };
+      }
+
+      async function getStatusRoute(url) {
+        const response = await fetch(url, {
+          headers: { Accept: "application/vnd.sds.fsb+flatbuffer" },
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`$FSB status endpoint returned ${response.status}`);
+        return new Uint8Array(await response.arrayBuffer());
+      }
+
+      async function loadLane(key, spec) {
+        const statusBytes = await getStatusRoute(
+          `${artifactBase}/runtime/nodes/${encodeURIComponent(spec.nodeId)}.dss`,
+        );
+        return { key, status: parseDSS(unwrapDSS(statusBytes)) };
+      }
+
+      function renderLane(lane) {
+        const cells = rows.get(lane.key).querySelectorAll("td");
+        const state = cells[1].querySelector(".state");
+        const states = ["idle", "syncing", "synced", "capped", "error"];
+        const stateName = states[lane.status.status] ?? "error";
+        state.className = `state ${stateName === "syncing" || stateName === "synced" ? "live" : stateName === "error" ? "error" : "stale"}`;
+        state.textContent = stateName;
+        state.title = lane.status.error || "";
+        cells[2].textContent = number.format(lane.status.syncedRows);
+        cells[3].textContent = number.format(lane.status.totalRows);
+        cells[4].textContent = number.format(lane.status.downloadedBytes);
+        return lane;
+      }
+
+      async function refresh() {
+        const notice = document.querySelector("#notice");
+        const settled = await Promise.allSettled(
+          Object.entries(providers).map(([key, spec]) => loadLane(key, spec)),
+        );
+        const loaded = settled.filter((result) => result.status === "fulfilled").map((result) => renderLane(result.value));
+        const failed = settled.filter((result) => result.status === "rejected");
+        for (const result of failed) {
+          const index = settled.indexOf(result);
+          const key = Object.keys(providers)[index];
+          const state = rows.get(key).querySelector(".state");
+          state.className = "state error";
+          state.textContent = "unavailable";
+          state.title = result.reason?.message ?? String(result.reason);
+        }
+
+        const active = loaded.filter((lane) => lane.status.status === 1).length;
+        document.querySelector("#active-count").textContent = loaded.length ? number.format(active) : "—";
+        try {
+          const store = parseDSS(
+            unwrapDSS(await getStatusRoute(`${artifactBase}/runtime/nodes/store.dss`)),
+          );
+          document.querySelector("#record-count").textContent = number.format(store.syncedRows);
+        } catch {
+          document.querySelector("#record-count").textContent = "—";
+        }
+        document.querySelector("#updated").textContent = loaded.length
+          ? `updated ${new Date().toLocaleTimeString()}`
+          : "artifact status unavailable";
+        notice.textContent = failed.length
+          ? `Loaded ${loaded.length} of ${Object.keys(providers).length} signed-node $FSB/$DSS provider records; ${failed.length} unavailable.`
+          : `Loaded ${loaded.length} signed-node $FSB/$DSS provider records from this artifact's runtime surface.`;
+      }
+
+      document.querySelector("#refresh").addEventListener("click", refresh);
+      refresh();
+      setInterval(refresh, 5_000);
+    })();
+  </script>
+</body>
+</html>

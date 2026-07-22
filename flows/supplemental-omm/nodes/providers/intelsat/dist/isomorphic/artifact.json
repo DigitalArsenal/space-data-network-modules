@@ -1,0 +1,8 @@
+{
+  "sha256": "e536bf0e92447edfc59c9f669d750dd03f0e23b05b2ee87cabb9163c4657f683",
+  "canonicalModuleHash": "2f99cfaac863f0bb7a76f3182e79850f40b683680f48c6276706c4e04409d11f",
+  "signedHash": "9804a7284e0340aa87a36d6794fd3a883223a6501138cfba1d5994dc4b7d0acc",
+  "signatureScope": "bundle",
+  "keyId": "spaceaware-sdn-isomorphic-2026-07-21",
+  "threadModel": "wasi-threads"
+}

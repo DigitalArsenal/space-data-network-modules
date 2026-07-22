@@ -1,0 +1,386 @@
+{
+  "programId": "org.sdn.flows.od-supplemental-omm",
+  "name": "Supplemental OMM Orbit Determination",
+  "version": "1.0.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 10,
+  "edges": 23,
+  "triggers": 1,
+  "capabilities": [
+    "clock",
+    "http",
+    "pubsub",
+    "timers"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "timer",
+      "pluginId": "org.sdn.flows.supplemental-omm.timer",
+      "methodId": "on_wakeup",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "provider-starlink",
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "provider-glonass",
+      "pluginId": "com.orbpro.glonass-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "provider-intelsat",
+      "pluginId": "com.orbpro.intelsat-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "provider-cpf",
+      "pluginId": "com.orbpro.cpf-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "provider-iss",
+      "pluginId": "com.orbpro.iss-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "od",
+      "pluginId": "org.sdn.flows.supplemental-omm.od",
+      "methodId": "fit",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "store",
+      "pluginId": "com.digitalarsenal.flatsql.store",
+      "methodId": "append_records",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "publication",
+      "pluginId": "org.sdn.flows.supplemental-omm.publication",
+      "methodId": "publish_records",
+      "dispatchModel": "isomorphic"
+    },
+    {
+      "nodeId": "status",
+      "pluginId": "org.sdn.flows.supplemental-omm.status",
+      "methodId": "record_event",
+      "dispatchModel": "isomorphic"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "org.sdn.flows.supplemental-omm.timer",
+      "pluginId": "org.sdn.flows.supplemental-omm.timer",
+      "version": "1.0.0",
+      "sha256": "c712e5714b80854d60334b198fe1e17c29e4e22e274e7339eba370f26fa1db56",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/timer/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/timer/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.orbpro.spacex-starlink-source",
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "version": "2.0.0",
+      "sha256": "79051ff42a6adc6be46758cb770aba523546f81aa85d906d4a4946c1a86a967d",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/providers/starlink/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.orbpro.glonass-source",
+      "pluginId": "com.orbpro.glonass-source",
+      "version": "2.0.0",
+      "sha256": "b674a723bb2fc2e7e5600cc8a9f5b80e9327231a61b9d8f13291e1e685df14ca",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/providers/glonass/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.orbpro.intelsat-source",
+      "pluginId": "com.orbpro.intelsat-source",
+      "version": "2.0.0",
+      "sha256": "e536bf0e92447edfc59c9f669d750dd03f0e23b05b2ee87cabb9163c4657f683",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/providers/intelsat/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.orbpro.cpf-source",
+      "pluginId": "com.orbpro.cpf-source",
+      "version": "2.0.0",
+      "sha256": "e6490d06b020e465dc6fc8461f8d5b3de265c5bb7ac33dd20ef40931df0b43bc",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/providers/cpf/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.orbpro.iss-source",
+      "pluginId": "com.orbpro.iss-source",
+      "version": "2.0.0",
+      "sha256": "9fe7da6a04f6abc79771aefcecc1917982233f2b374a7ff1da6324441a5f3f17",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/providers/iss/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/providers/iss/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "org.sdn.flows.supplemental-omm.od",
+      "pluginId": "org.sdn.flows.supplemental-omm.od",
+      "version": "1.0.0",
+      "sha256": "c7951ee0c929e273df01d1f33c30b759a62cbb8a9f5fd5886c115f8d0126869b",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/od/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/od/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.flatsql.store",
+      "pluginId": "com.digitalarsenal.flatsql.store",
+      "version": "2.0.0",
+      "sha256": "63001a3eefa9cb287e4fc04efea012793cb90424a85f2013b7192cb7f95c2204",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "../../../flatsql/wasm/node/dist/isomorphic/module.wasm",
+      "publisher": "../../../flatsql/wasm/node/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "org.sdn.flows.supplemental-omm.publication",
+      "pluginId": "org.sdn.flows.supplemental-omm.publication",
+      "version": "1.0.0",
+      "sha256": "9231337a2b715e74abd58662b900c6217a019c0d7961a8e1b5ed5f47751711aa",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/publication/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/publication/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    },
+    {
+      "kind": "node",
+      "dependencyId": "org.sdn.flows.supplemental-omm.status",
+      "pluginId": "org.sdn.flows.supplemental-omm.status",
+      "version": "1.0.0",
+      "sha256": "091231053b026ce26e7cbdf8ebe7f3791e433a28f1a11403a38835f153eeeca9",
+      "dispatchModel": "isomorphic",
+      "artifactPath": "./nodes/status/dist/isomorphic/module.wasm",
+      "publisher": "./nodes/status/publisher.json",
+      "symbolPrefix": null,
+      "methodSymbols": {}
+    }
+  ],
+  "dispatchModel": "isomorphic",
+  "nodeArtifacts": [
+    {
+      "nodeId": "timer",
+      "pluginId": "org.sdn.flows.supplemental-omm.timer",
+      "methodId": "on_wakeup",
+      "dispatchModel": "isomorphic",
+      "sha256": "c712e5714b80854d60334b198fe1e17c29e4e22e274e7339eba370f26fa1db56",
+      "entryId": "nodes/timer.wasm",
+      "publisherEntryId": "nodes/timer.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "provider-starlink",
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "sha256": "79051ff42a6adc6be46758cb770aba523546f81aa85d906d4a4946c1a86a967d",
+      "entryId": "nodes/provider-starlink.wasm",
+      "publisherEntryId": "nodes/provider-starlink.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "provider-glonass",
+      "pluginId": "com.orbpro.glonass-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "sha256": "b674a723bb2fc2e7e5600cc8a9f5b80e9327231a61b9d8f13291e1e685df14ca",
+      "entryId": "nodes/provider-glonass.wasm",
+      "publisherEntryId": "nodes/provider-glonass.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "provider-intelsat",
+      "pluginId": "com.orbpro.intelsat-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "sha256": "e536bf0e92447edfc59c9f669d750dd03f0e23b05b2ee87cabb9163c4657f683",
+      "entryId": "nodes/provider-intelsat.wasm",
+      "publisherEntryId": "nodes/provider-intelsat.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "provider-cpf",
+      "pluginId": "com.orbpro.cpf-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "sha256": "e6490d06b020e465dc6fc8461f8d5b3de265c5bb7ac33dd20ef40931df0b43bc",
+      "entryId": "nodes/provider-cpf.wasm",
+      "publisherEntryId": "nodes/provider-cpf.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "provider-iss",
+      "pluginId": "com.orbpro.iss-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "sha256": "9fe7da6a04f6abc79771aefcecc1917982233f2b374a7ff1da6324441a5f3f17",
+      "entryId": "nodes/provider-iss.wasm",
+      "publisherEntryId": "nodes/provider-iss.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "od",
+      "pluginId": "org.sdn.flows.supplemental-omm.od",
+      "methodId": "fit",
+      "dispatchModel": "isomorphic",
+      "sha256": "c7951ee0c929e273df01d1f33c30b759a62cbb8a9f5fd5886c115f8d0126869b",
+      "entryId": "nodes/od.wasm",
+      "publisherEntryId": "nodes/od.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "store",
+      "pluginId": "com.digitalarsenal.flatsql.store",
+      "methodId": "append_records",
+      "dispatchModel": "isomorphic",
+      "sha256": "63001a3eefa9cb287e4fc04efea012793cb90424a85f2013b7192cb7f95c2204",
+      "entryId": "nodes/store.wasm",
+      "publisherEntryId": "nodes/store.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "publication",
+      "pluginId": "org.sdn.flows.supplemental-omm.publication",
+      "methodId": "publish_records",
+      "dispatchModel": "isomorphic",
+      "sha256": "9231337a2b715e74abd58662b900c6217a019c0d7961a8e1b5ed5f47751711aa",
+      "entryId": "nodes/publication.wasm",
+      "publisherEntryId": "nodes/publication.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    },
+    {
+      "nodeId": "status",
+      "pluginId": "org.sdn.flows.supplemental-omm.status",
+      "methodId": "record_event",
+      "dispatchModel": "isomorphic",
+      "sha256": "091231053b026ce26e7cbdf8ebe7f3791e433a28f1a11403a38835f153eeeca9",
+      "entryId": "nodes/status.wasm",
+      "publisherEntryId": "nodes/status.publisher.json",
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
+      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+    }
+  ],
+  "runtimeNodeRoutes": [
+    {
+      "key": "provider-cpf.dss",
+      "nodeId": "status",
+      "portId": "provider-cpf.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-glonass.dss",
+      "nodeId": "status",
+      "portId": "provider-glonass.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-intelsat.dss",
+      "nodeId": "status",
+      "portId": "provider-intelsat.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-iss.dss",
+      "nodeId": "status",
+      "portId": "provider-iss.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-starlink.dss",
+      "nodeId": "status",
+      "portId": "provider-starlink.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "store.dss",
+      "nodeId": "status",
+      "portId": "store.dss",
+      "mediaType": "application/x-flatbuffers"
+    }
+  ],
+  "bundle": {
+    "version": 2,
+    "portableWasmSha256": "9830c6fbf8b975d820ba356ccc2b65eb67051d90af9cd8f2229f8cd2d69fa3a3",
+    "flowPlgSha256": "d1db20f99f09ac4c1e35bd592d6a50861f9437c6e2a338bd0d3115bdd38f4ba9",
+    "appSha256": "2332af5f8b298578eda25e3a3f770b241735b99ba8d7902ce8fee8e8cf10dbe1",
+    "signatureHashAlgorithm": "sha256-sdn-module-bundle-v1",
+    "requiredEntries": [
+      "manifest",
+      "flow.plg",
+      "artifact.json",
+      "app.app",
+      "nodes/timer.wasm",
+      "nodes/timer.publisher.json",
+      "nodes/provider-starlink.wasm",
+      "nodes/provider-starlink.publisher.json",
+      "nodes/provider-glonass.wasm",
+      "nodes/provider-glonass.publisher.json",
+      "nodes/provider-intelsat.wasm",
+      "nodes/provider-intelsat.publisher.json",
+      "nodes/provider-cpf.wasm",
+      "nodes/provider-cpf.publisher.json",
+      "nodes/provider-iss.wasm",
+      "nodes/provider-iss.publisher.json",
+      "nodes/od.wasm",
+      "nodes/od.publisher.json",
+      "nodes/store.wasm",
+      "nodes/store.publisher.json",
+      "nodes/publication.wasm",
+      "nodes/publication.publisher.json",
+      "nodes/status.wasm",
+      "nodes/status.publisher.json",
+      "signature"
+    ]
+  }
+}

@@ -1,0 +1,455 @@
+{
+  "pluginId": "org.sdn.flows.od-supplemental-omm",
+  "name": "Supplemental OMM Orbit Determination",
+  "version": "1.0.0",
+  "pluginFamily": "flow",
+  "description": "Signed isomorphic graph: one WASM timer policy fans typed ticks to five independent provider nodes; provider FSB ephemerides feed an independent OD node; fitted FSB records reach independently signed FlatSQL, publication, and status nodes. Hosts expose only application-blind capabilities and never own schedule, storage, status, or publication policy.",
+  "capabilities": [
+    "clock",
+    "http",
+    "pubsub",
+    "timers"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "org.sdn.flows.supplemental-omm.timer",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
+    },
+    {
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "minVersion": "2.0.0",
+      "maxVersion": "2.0.0"
+    },
+    {
+      "pluginId": "com.orbpro.glonass-source",
+      "minVersion": "2.0.0",
+      "maxVersion": "2.0.0"
+    },
+    {
+      "pluginId": "com.orbpro.intelsat-source",
+      "minVersion": "2.0.0",
+      "maxVersion": "2.0.0"
+    },
+    {
+      "pluginId": "com.orbpro.cpf-source",
+      "minVersion": "2.0.0",
+      "maxVersion": "2.0.0"
+    },
+    {
+      "pluginId": "com.orbpro.iss-source",
+      "minVersion": "2.0.0",
+      "maxVersion": "2.0.0"
+    },
+    {
+      "pluginId": "org.sdn.flows.supplemental-omm.od",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.flatsql.store",
+      "minVersion": "2.0.0",
+      "maxVersion": "2.0.0"
+    },
+    {
+      "pluginId": "org.sdn.flows.supplemental-omm.publication",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
+    },
+    {
+      "pluginId": "org.sdn.flows.supplemental-omm.status",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "generic-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "properties": {
+        "hostOps": [
+          "clock.now"
+        ]
+      }
+    },
+    {
+      "interfaceId": "generic-timers",
+      "kind": "host-service",
+      "direction": "output",
+      "capability": "timers",
+      "resource": "host://timers",
+      "properties": {
+        "hostOps": [
+          "timers.arm",
+          "timers.cancel"
+        ]
+      }
+    },
+    {
+      "interfaceId": "generic-pubsub",
+      "kind": "host-service",
+      "direction": "output",
+      "capability": "pubsub",
+      "resource": "host://pubsub",
+      "properties": {
+        "hostOps": [
+          "pubsub.publish"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "startup",
+      "displayName": "Flow trigger startup",
+      "description": "Compiled-flow ingress for trigger \"startup\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "wakeup",
+          "acceptedTypeSets": [
+            {
+              "setId": "fso-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 361648,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional typed control/wakeup envelope. Generic wakeup delivery may invoke the method without a body."
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "FSO.fbs",
+      "fileIdentifier": "$FSO",
+      "schemaVersion": "1.158.2",
+      "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+      "rootTypeName": "FSO"
+    },
+    {
+      "schemaName": "FSB.fbs",
+      "fileIdentifier": "$FSB",
+      "schemaVersion": "1.158.1",
+      "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+      "rootTypeName": "FSB"
+    },
+    {
+      "schemaName": "DSS.fbs",
+      "fileIdentifier": "$DSS",
+      "schemaVersion": "1.99.0",
+      "schemaHash": "819a40979c746d4e712fb62c1af54592b0067a6e8166afad9d83ed494bff7a37",
+      "rootTypeName": "DSS"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "org_sdn_flows_od_supplemental_omm-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "timer",
+      "pluginId": "org.sdn.flows.supplemental-omm.timer",
+      "methodId": "on_wakeup",
+      "kind": "trigger",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "provider-starlink",
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "methodId": "emit",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "provider-glonass",
+      "pluginId": "com.orbpro.glonass-source",
+      "methodId": "emit",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "provider-intelsat",
+      "pluginId": "com.orbpro.intelsat-source",
+      "methodId": "emit",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "provider-cpf",
+      "pluginId": "com.orbpro.cpf-source",
+      "methodId": "emit",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "provider-iss",
+      "pluginId": "com.orbpro.iss-source",
+      "methodId": "emit",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "od",
+      "pluginId": "org.sdn.flows.supplemental-omm.od",
+      "methodId": "fit",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "store",
+      "pluginId": "com.digitalarsenal.flatsql.store",
+      "methodId": "append_records",
+      "kind": "sink",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publication",
+      "pluginId": "org.sdn.flows.supplemental-omm.publication",
+      "methodId": "publish_records",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "status",
+      "pluginId": "org.sdn.flows.supplemental-omm.status",
+      "methodId": "record_event",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "timer-to-starlink",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-starlink",
+      "toPortId": "config"
+    },
+    {
+      "edgeId": "timer-to-glonass",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-glonass",
+      "toPortId": "config"
+    },
+    {
+      "edgeId": "timer-to-intelsat",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-intelsat",
+      "toPortId": "config"
+    },
+    {
+      "edgeId": "timer-to-cpf",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-cpf",
+      "toPortId": "config"
+    },
+    {
+      "edgeId": "timer-to-iss",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-iss",
+      "toPortId": "config"
+    },
+    {
+      "edgeId": "starlink-native-to-od",
+      "fromNodeId": "provider-starlink",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "starlink"
+    },
+    {
+      "edgeId": "glonass-native-to-od",
+      "fromNodeId": "provider-glonass",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "glonass"
+    },
+    {
+      "edgeId": "intelsat-native-to-od",
+      "fromNodeId": "provider-intelsat",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "intelsat"
+    },
+    {
+      "edgeId": "cpf-native-to-od",
+      "fromNodeId": "provider-cpf",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "cpf"
+    },
+    {
+      "edgeId": "iss-native-to-od",
+      "fromNodeId": "provider-iss",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "iss"
+    },
+    {
+      "edgeId": "od-control-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "control",
+      "toNodeId": "store",
+      "toPortId": "control"
+    },
+    {
+      "edgeId": "od-omm-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "omm",
+      "toNodeId": "store",
+      "toPortId": "records"
+    },
+    {
+      "edgeId": "od-ocm-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "ocm",
+      "toNodeId": "store",
+      "toPortId": "records"
+    },
+    {
+      "edgeId": "od-obd-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "obd",
+      "toNodeId": "store",
+      "toPortId": "records"
+    },
+    {
+      "edgeId": "starlink-to-status",
+      "fromNodeId": "provider-starlink",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-starlink"
+    },
+    {
+      "edgeId": "glonass-to-status",
+      "fromNodeId": "provider-glonass",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-glonass"
+    },
+    {
+      "edgeId": "intelsat-to-status",
+      "fromNodeId": "provider-intelsat",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-intelsat"
+    },
+    {
+      "edgeId": "cpf-to-status",
+      "fromNodeId": "provider-cpf",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-cpf"
+    },
+    {
+      "edgeId": "iss-to-status",
+      "fromNodeId": "provider-iss",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-iss"
+    },
+    {
+      "edgeId": "od-omm-to-publication",
+      "fromNodeId": "od",
+      "fromPortId": "omm",
+      "toNodeId": "publication",
+      "toPortId": "records"
+    },
+    {
+      "edgeId": "od-ocm-to-publication",
+      "fromNodeId": "od",
+      "fromPortId": "ocm",
+      "toNodeId": "publication",
+      "toPortId": "records"
+    },
+    {
+      "edgeId": "od-obd-to-publication",
+      "fromNodeId": "od",
+      "fromPortId": "obd",
+      "toNodeId": "publication",
+      "toPortId": "records"
+    },
+    {
+      "edgeId": "store-status-to-status",
+      "fromNodeId": "store",
+      "fromPortId": "status",
+      "toNodeId": "status",
+      "toPortId": "store"
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "startup",
+      "kind": "manual",
+      "source": "generic-lifecycle",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "startup",
+      "targetNodeId": "timer",
+      "targetPortId": "wakeup"
+    }
+  ],
+  "abiVersion": 1
+}

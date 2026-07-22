@@ -1,0 +1,444 @@
+{
+  "programId": "org.sdn.flows.od-supplemental-omm",
+  "name": "Supplemental OMM Orbit Determination",
+  "version": "1.0.0",
+  "description": "Signed isomorphic graph: one WASM timer policy fans typed ticks to five independent provider nodes; provider FSB ephemerides feed an independent OD node; fitted FSB records reach independently signed FlatSQL, publication, and status nodes. Hosts expose only application-blind capabilities and never own schedule, storage, status, or publication policy.",
+  "nodes": [
+    {
+      "nodeId": "timer",
+      "pluginId": "org.sdn.flows.supplemental-omm.timer",
+      "methodId": "on_wakeup",
+      "dispatchModel": "isomorphic",
+      "kind": "trigger",
+      "capabilities": ["clock", "timers"],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./nodes/timer/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/timer/publisher.json",
+        "sha256": "c712e5714b80854d60334b198fe1e17c29e4e22e274e7339eba370f26fa1db56"
+      }
+    },
+    {
+      "nodeId": "provider-starlink",
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": ["http"],
+      "drainPolicy": "drain-until-yield",
+      "artifact": {
+        "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/providers/starlink/publisher.json",
+        "sha256": "79051ff42a6adc6be46758cb770aba523546f81aa85d906d4a4946c1a86a967d"
+      }
+    },
+    {
+      "nodeId": "provider-glonass",
+      "pluginId": "com.orbpro.glonass-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": ["http"],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/providers/glonass/publisher.json",
+        "sha256": "b674a723bb2fc2e7e5600cc8a9f5b80e9327231a61b9d8f13291e1e685df14ca"
+      }
+    },
+    {
+      "nodeId": "provider-intelsat",
+      "pluginId": "com.orbpro.intelsat-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": ["http"],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/providers/intelsat/publisher.json",
+        "sha256": "e536bf0e92447edfc59c9f669d750dd03f0e23b05b2ee87cabb9163c4657f683"
+      }
+    },
+    {
+      "nodeId": "provider-cpf",
+      "pluginId": "com.orbpro.cpf-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": ["http"],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/providers/cpf/publisher.json",
+        "sha256": "e6490d06b020e465dc6fc8461f8d5b3de265c5bb7ac33dd20ef40931df0b43bc"
+      }
+    },
+    {
+      "nodeId": "provider-iss",
+      "pluginId": "com.orbpro.iss-source",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": ["http"],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./nodes/providers/iss/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/providers/iss/publisher.json",
+        "sha256": "9fe7da6a04f6abc79771aefcecc1917982233f2b374a7ff1da6324441a5f3f17"
+      }
+    },
+    {
+      "nodeId": "od",
+      "pluginId": "org.sdn.flows.supplemental-omm.od",
+      "methodId": "fit",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "drain-until-yield",
+      "artifact": {
+        "path": "./nodes/od/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/od/publisher.json",
+        "sha256": "c7951ee0c929e273df01d1f33c30b759a62cbb8a9f5fd5886c115f8d0126869b"
+      }
+    },
+    {
+      "nodeId": "store",
+      "pluginId": "com.digitalarsenal.flatsql.store",
+      "methodId": "append_records",
+      "dispatchModel": "isomorphic",
+      "kind": "sink",
+      "capabilities": [],
+      "drainPolicy": "drain-until-yield",
+      "artifact": {
+        "path": "../../../flatsql/wasm/node/dist/isomorphic/module.wasm",
+        "publisher": "../../../flatsql/wasm/node/publisher.json",
+        "sha256": "63001a3eefa9cb287e4fc04efea012793cb90424a85f2013b7192cb7f95c2204"
+      }
+    },
+    {
+      "nodeId": "publication",
+      "pluginId": "org.sdn.flows.supplemental-omm.publication",
+      "methodId": "publish_records",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": ["pubsub"],
+      "drainPolicy": "drain-until-yield",
+      "artifact": {
+        "path": "./nodes/publication/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/publication/publisher.json",
+        "sha256": "9231337a2b715e74abd58662b900c6217a019c0d7961a8e1b5ed5f47751711aa"
+      }
+    },
+    {
+      "nodeId": "status",
+      "pluginId": "org.sdn.flows.supplemental-omm.status",
+      "methodId": "record_event",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "drain-until-yield",
+      "artifact": {
+        "path": "./nodes/status/dist/isomorphic/module.wasm",
+        "publisher": "./nodes/status/publisher.json",
+        "sha256": "091231053b026ce26e7cbdf8ebe7f3791e433a28f1a11403a38835f153eeeca9"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "timer-to-starlink",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-starlink",
+      "toPortId": "config",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "timer-to-glonass",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-glonass",
+      "toPortId": "config",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "timer-to-intelsat",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-intelsat",
+      "toPortId": "config",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "timer-to-cpf",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-cpf",
+      "toPortId": "config",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "timer-to-iss",
+      "fromNodeId": "timer",
+      "fromPortId": "tick",
+      "toNodeId": "provider-iss",
+      "toPortId": "config",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "starlink-native-to-od",
+      "fromNodeId": "provider-starlink",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "starlink",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "glonass-native-to-od",
+      "fromNodeId": "provider-glonass",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "glonass",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "intelsat-native-to-od",
+      "fromNodeId": "provider-intelsat",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "intelsat",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "cpf-native-to-od",
+      "fromNodeId": "provider-cpf",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "cpf",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "iss-native-to-od",
+      "fromNodeId": "provider-iss",
+      "fromPortId": "oem",
+      "toNodeId": "od",
+      "toPortId": "iss",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "od-control-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "control",
+      "toNodeId": "store",
+      "toPortId": "control",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "od-omm-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "omm",
+      "toNodeId": "store",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "od-ocm-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "ocm",
+      "toNodeId": "store",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "od-obd-to-store",
+      "fromNodeId": "od",
+      "fromPortId": "obd",
+      "toNodeId": "store",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "starlink-to-status",
+      "fromNodeId": "provider-starlink",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-starlink",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "glonass-to-status",
+      "fromNodeId": "provider-glonass",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-glonass",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "intelsat-to-status",
+      "fromNodeId": "provider-intelsat",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-intelsat",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "cpf-to-status",
+      "fromNodeId": "provider-cpf",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-cpf",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "iss-to-status",
+      "fromNodeId": "provider-iss",
+      "fromPortId": "oem",
+      "toNodeId": "status",
+      "toPortId": "provider-iss",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "od-omm-to-publication",
+      "fromNodeId": "od",
+      "fromPortId": "omm",
+      "toNodeId": "publication",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "od-ocm-to-publication",
+      "fromNodeId": "od",
+      "fromPortId": "ocm",
+      "toNodeId": "publication",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "od-obd-to-publication",
+      "fromNodeId": "od",
+      "fromPortId": "obd",
+      "toNodeId": "publication",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "store-status-to-status",
+      "fromNodeId": "store",
+      "fromPortId": "status",
+      "toNodeId": "status",
+      "toPortId": "store",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    }
+  ],
+  "runtimeNodeRoutes": [
+    {
+      "key": "provider-cpf.dss",
+      "nodeId": "status",
+      "portId": "provider-cpf.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-glonass.dss",
+      "nodeId": "status",
+      "portId": "provider-glonass.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-intelsat.dss",
+      "nodeId": "status",
+      "portId": "provider-intelsat.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-iss.dss",
+      "nodeId": "status",
+      "portId": "provider-iss.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "provider-starlink.dss",
+      "nodeId": "status",
+      "portId": "provider-starlink.dss",
+      "mediaType": "application/x-flatbuffers"
+    },
+    {
+      "key": "store.dss",
+      "nodeId": "status",
+      "portId": "store.dss",
+      "mediaType": "application/x-flatbuffers"
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "startup",
+      "kind": "manual",
+      "source": "generic-lifecycle",
+      "acceptedTypes": [
+        {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": "1.158.2",
+          "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+          "rootTypeName": "FSO",
+          "wireFormat": "flatbuffer"
+        },
+        {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": "1.158.2",
+          "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+          "rootTypeName": "FSO",
+          "wireFormat": "aligned-binary",
+          "byteLength": 361648,
+          "requiredAlignment": 8
+        }
+      ],
+      "description": "Generic lifecycle ingress for the timer policy node."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "startup",
+      "targetNodeId": "timer",
+      "targetPortId": "wakeup",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "org.sdn.flows.supplemental-omm.timer",
+    "com.orbpro.spacex-starlink-source",
+    "com.orbpro.glonass-source",
+    "com.orbpro.intelsat-source",
+    "com.orbpro.cpf-source",
+    "com.orbpro.iss-source",
+    "org.sdn.flows.supplemental-omm.od",
+    "com.digitalarsenal.flatsql.store",
+    "org.sdn.flows.supplemental-omm.publication",
+    "org.sdn.flows.supplemental-omm.status"
+  ]
+}

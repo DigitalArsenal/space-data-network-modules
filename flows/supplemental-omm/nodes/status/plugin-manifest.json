@@ -1,0 +1,444 @@
+{
+  "pluginId": "org.sdn.flows.supplemental-omm.status",
+  "name": "Supplemental OMM Status",
+  "version": "1.0.0",
+  "description": "Signed Supplemental OMM status node. It owns per-lane application progress aggregation and emits canonical DSS records inside dual-representation FSB transport envelopes on exact opaque APP route keys.",
+  "pluginFamily": "transform",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "record_event",
+      "displayName": "Record Status Event",
+      "inputPorts": [
+        {
+          "portId": "provider-starlink",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Typed status event stream for provider-starlink."
+        },
+        {
+          "portId": "provider-glonass",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Typed status event stream for provider-glonass."
+        },
+        {
+          "portId": "provider-intelsat",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Typed status event stream for provider-intelsat."
+        },
+        {
+          "portId": "provider-cpf",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Typed status event stream for provider-cpf."
+        },
+        {
+          "portId": "provider-iss",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Typed status event stream for provider-iss."
+        },
+        {
+          "portId": "store",
+          "acceptedTypeSets": [
+            {
+              "setId": "fso-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 361648,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Typed FlatSQL operation result from the independently instantiated store node."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "provider-starlink.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Canonical DSS snapshot for opaque runtime key provider-starlink.dss."
+        },
+        {
+          "portId": "provider-glonass.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Canonical DSS snapshot for opaque runtime key provider-glonass.dss."
+        },
+        {
+          "portId": "provider-intelsat.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Canonical DSS snapshot for opaque runtime key provider-intelsat.dss."
+        },
+        {
+          "portId": "provider-cpf.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Canonical DSS snapshot for opaque runtime key provider-cpf.dss."
+        },
+        {
+          "portId": "provider-iss.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Canonical DSS snapshot for opaque runtime key provider-iss.dss."
+        },
+        {
+          "portId": "store.dss",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Canonical DSS snapshot for opaque runtime key store.dss."
+        }
+      ],
+      "maxBatch": 4096,
+      "drainPolicy": "drain-until-yield"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "FSB.fbs",
+      "fileIdentifier": "$FSB",
+      "schemaVersion": "1.158.1",
+      "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+      "rootTypeName": "FSB"
+    },
+    {
+      "schemaName": "FSO.fbs",
+      "fileIdentifier": "$FSO",
+      "schemaVersion": "1.158.2",
+      "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+      "rootTypeName": "FSO"
+    },
+    {
+      "schemaName": "DSS.fbs",
+      "fileIdentifier": "$DSS",
+      "schemaVersion": "1.99.0",
+      "schemaHash": "819a40979c746d4e712fb62c1af54592b0067a6e8166afad9d83ed494bff7a37",
+      "rootTypeName": "DSS"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "supplemental-omm-status-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
