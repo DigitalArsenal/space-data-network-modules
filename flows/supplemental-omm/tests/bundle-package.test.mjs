@@ -43,7 +43,7 @@ test("the publishable output carries canonical flow.plg and size-prefixed app.ap
   const app = decodeAppManifest(appBytes);
 
   assert.equal(flow.pluginId, "org.sdn.flows.od-supplemental-omm");
-  assert.equal(app.id, "io.spaceaware.supplemental-omm");
+  assert.equal(app.id, "supplemental-omm");
   assert.equal(app.modules.length, 1);
   assert.equal(app.modules[0].pluginId, flow.pluginId);
   assert.match(app.modules[0].contentHash, /^[a-f0-9]{64}$/);

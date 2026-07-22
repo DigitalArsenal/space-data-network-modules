@@ -1,5 +1,5 @@
 {
-  "id": "io.spaceaware.supplemental-omm",
+  "id": "supplemental-omm",
   "name": "Supplemental OMM",
   "version": "1.0.0",
   "description": "Five independent ephemeris providers fitted into supplemental OMM, OCM, and OBD records by one composed isomorphic module.",

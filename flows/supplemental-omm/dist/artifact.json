@@ -353,7 +353,7 @@
     "version": 2,
     "portableWasmSha256": "9830c6fbf8b975d820ba356ccc2b65eb67051d90af9cd8f2229f8cd2d69fa3a3",
     "flowPlgSha256": "d1db20f99f09ac4c1e35bd592d6a50861f9437c6e2a338bd0d3115bdd38f4ba9",
-    "appSha256": "2332af5f8b298578eda25e3a3f770b241735b99ba8d7902ce8fee8e8cf10dbe1",
+    "appSha256": "755b4b546ced7346e745af076fea18bb867595c8e5b381910356b83bff1b3674",
     "signatureHashAlgorithm": "sha256-sdn-module-bundle-v1",
     "requiredEntries": [
       "manifest",
