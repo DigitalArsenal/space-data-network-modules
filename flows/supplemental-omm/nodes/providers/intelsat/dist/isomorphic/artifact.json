@@ -1,7 +1,7 @@
 {
-  "sha256": "3a438b8893cd64ba5fc4f4f4a421d5fe34a07e13ba7db24c6cd96c04339e8a38",
+  "sha256": "1fd325db5d4e54bcf751c63a518052e653872a9a2d26a2f1d8cb92fd1416f551",
   "canonicalModuleHash": "b8b8cc59ff93da8cbe0860366fb3365162dedfb44505fb72087afc387534db3e",
-  "signedHash": "4582ef7df1966f7f85ed9dd18ce25d2134437fc2fe2a931d4b08bdcdc43d938f",
+  "signedHash": "615845761e9a0ac0d8e053b2c08c5f56c53a10e0af8b3a54133bb13471961f1e",
   "signatureScope": "bundle",
   "keyId": "spaceaware-sdn-isomorphic-2026-07-21"
 }
