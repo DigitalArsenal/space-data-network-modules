@@ -41,6 +41,11 @@ test("the universal-AOT build profile is compatible with the production host", (
   for (const profile of [parentProfile, childProfile]) {
     assert.match(profile, /--optimize 3/);
     assert.match(profile, /--interruptible/);
+    assert.match(
+      profile,
+      /--generic-binary/,
+      "universal AOT must target the production runtime's generic architecture profile",
+    );
   }
   assert.doesNotMatch(
     parentProfile,

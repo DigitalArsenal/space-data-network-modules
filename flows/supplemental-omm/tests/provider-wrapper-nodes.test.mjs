@@ -17,6 +17,10 @@ import {
   createWorkerModuleHarness,
 } from "../../../node_modules/space-data-module-sdk/src/testing/index.js";
 import {
+  decodePluginInvokeResponse,
+  encodePluginInvokeRequest,
+} from "../../../node_modules/space-data-module-sdk/src/invoke/codec.js";
+import {
   Builder,
   ByteBuffer,
 } from "../../../../spacedatastandards.org/node_modules/flatbuffers/js/flatbuffers.js";
@@ -661,7 +665,7 @@ async function createWorkerHarness(key, hostcallDispatch, harnessOptions = {}) {
   const signed = new Uint8Array(
     fs.readFileSync(nodePath(key, "dist/isomorphic/module.wasm")),
   );
-  return createWorkerModuleHarness({
+  const worker = await createWorkerModuleHarness({
     wasmSource: signed,
     dispatchHost: hostcallDispatch,
     harnessOptions: {
@@ -671,6 +675,15 @@ async function createWorkerHarness(key, hostcallDispatch, harnessOptions = {}) {
       ...harnessOptions,
     },
   });
+  return {
+    ...worker,
+    // Keep the worker boundary byte-only. Decoded PIV responses intentionally
+    // carry an arena lease with methods, which structured clone cannot copy.
+    invoke: async (request) =>
+      decodePluginInvokeResponse(
+        await worker.invokeRaw(encodePluginInvokeRequest(request)),
+      ),
+  };
 }
 
 test("GLONASS defaults to CODE's production HTTPS ultra-rapid SP3 alias", () => {
@@ -782,9 +795,8 @@ test("Starlink bounds 64-way size preflight and retained download subwaves below
     source,
     /static_assert\s*\(\s*2\s*\*\s*kMaxRetainedWaveBytes\s*\+\s*kReservedTransientBytes\s*</,
   );
-  assert.match(source, /retained_bytes\s*>\s*kMaxRetainedWaveBytes\s*-\s*probe\.byte_length/);
-  assert.match(source, /probe_complete_page\s*\(/);
-  assert.match(source, /fetch_complete_page\s*\(/);
+  assert.match(source, /probe\.byte_length\s*<=\s*kMaxRetainedWaveBytes\s*-\s*retained_bytes/);
+  assert.match(source, /download_complete_page\s*\(/);
   assert.match(source, /kMaxStorageSegments\s*=\s*1/);
   assert.match(source, /segment_count\s*>\s*kMaxStorageSegments/);
 
@@ -840,6 +852,51 @@ test("Starlink bounds 64-way size preflight and retained download subwaves below
     "an oversized advertised file must fail before a full GET or durable chunk",
   );
   assert.ok(harness.memory.buffer.byteLength < 1024 * 1024 * 1024);
+});
+
+test("Starlink rejects any invalid size probe before every complete GET", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-invalid-late-probe/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-invalid-late-probe/`;
+  const filenames = [
+    "MEME_18011_STARLINK-VALID-PROBE_1_Operational_1_UNCLASSIFIED.txt",
+    "MEME_18012_STARLINK-INVALID-PROBE_1_Operational_1_UNCLASSIFIED.txt",
+  ];
+  const opaque = createOpaqueStateAdapter();
+  let fullFetchCalls = 0;
+  const harness = await createHarness("starlink", (operation, params) => {
+    if (operation !== "http.request") {
+      return opaque.dispatch(operation, params);
+    }
+    if (params.url === manifestUrl) {
+      return {
+        status: 200,
+        body: new TextEncoder().encode(`${filenames.join("\n")}\n`),
+      };
+    }
+    if (isStarlinkSizeProbe(params)) {
+      if (params.url.endsWith(filenames[1])) {
+        return { status: 206, headers: {}, body: new Uint8Array([0]) };
+      }
+      return {
+        status: 206,
+        headers: {
+          "Content-Range": `bytes 0-0/${fixtureBodies.starlinkA.byteLength}`,
+        },
+        body: fixtureBodies.starlinkA.subarray(0, 1),
+      };
+    }
+    fullFetchCalls += 1;
+    return { status: 200, body: fixtureBodies.starlinkA };
+  });
+  t.after(() => harness.destroy());
+
+  const response = await harness.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase, fetchConcurrency: 2 })],
+  });
+  assert.notEqual(response.statusCode, 0);
+  assert.equal(fullFetchCalls, 0);
+  assert.equal(response.outputs.length, 0);
 });
 
 test("Starlink shrinks full-GET width when 64 MiB files exceed the retained wave", async (t) => {
@@ -2802,7 +2859,7 @@ test("Starlink emits progress-only download waves before ordered yielded drain",
   assert.equal(new Set(decoded.map((output) => output.schemaName)).size, units.length);
 });
 
-test("Starlink exact artifact downloads one page with 64 concurrent complete-file fetches", async (t) => {
+test("Starlink exact artifact downloads a complete 64-file page before the remainder", async (t) => {
   const manifestUrl = `${fixtureOrigin}/starlink-default-width/MANIFEST.txt`;
   const ephemerisBase = `${fixtureOrigin}/starlink-default-width/`;
   const filenames = Array.from(
@@ -2827,15 +2884,9 @@ test("Starlink exact artifact downloads one page with 64 concurrent complete-fil
   ]);
   const calls = [];
   const opaque = createOpaqueStateAdapter();
-  const firstPageGate = { resolve: null, timer: null };
-  firstPageGate.promise = new Promise((resolve) => {
-    firstPageGate.resolve = resolve;
-  });
   let probeCalls = 0;
   let fullFetchCalls = 0;
-  let activeFullFetchCalls = 0;
-  let maxConcurrentFullFetchCalls = 0;
-  const harness = await createWorkerHarness("starlink", async (operation, params) => {
+  const harness = await createWorkerHarness("starlink", (operation, params) => {
     if (operation === "http.request") {
       calls.push({ url: params.url, probe: isStarlinkSizeProbe(params) });
       if (params.url === manifestUrl) {
@@ -2846,38 +2897,11 @@ test("Starlink exact artifact downloads one page with 64 concurrent complete-fil
         return serveFixtureHttp(params, responses);
       }
       fullFetchCalls += 1;
-      activeFullFetchCalls += 1;
-      maxConcurrentFullFetchCalls = Math.max(
-        maxConcurrentFullFetchCalls,
-        activeFullFetchCalls,
-      );
-      try {
-        if (fullFetchCalls <= 64) {
-          if (fullFetchCalls === 1) {
-            firstPageGate.timer = setTimeout(
-              () => firstPageGate.resolve?.(false),
-              20_000,
-            );
-          }
-          if (fullFetchCalls === 64) {
-            clearTimeout(firstPageGate.timer);
-            firstPageGate.resolve(true);
-          }
-          if (!(await firstPageGate.promise)) {
-            throw new Error(
-              `first page started only ${fullFetchCalls} of 64 pthread HTTP requests`,
-            );
-          }
-        }
-      } finally {
-        activeFullFetchCalls -= 1;
-      }
       return serveFixtureHttp(params, responses);
     }
     return opaque.dispatch(operation, params);
   });
   t.after(() => harness.destroy());
-  t.after(() => clearTimeout(firstPageGate.timer));
 
   const first = await harness.invoke({
     methodId: "emit",
@@ -2886,7 +2910,6 @@ test("Starlink exact artifact downloads one page with 64 concurrent complete-fil
   assert.equal(first.statusCode, 0, first.errorMessage);
   assert.deepEqual(first.outputs.map(({ portId }) => portId), ["progress"]);
   assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 16n);
-  assert.equal(maxConcurrentFullFetchCalls, 64);
   assert.equal(probeCalls, 64);
   assert.equal(fullFetchCalls, 64);
 
@@ -2919,6 +2942,69 @@ test("Starlink exact artifact downloads one page with 64 concurrent complete-fil
       `${filename} must be fetched exactly once`,
     );
   }
+});
+
+test("Starlink crosses one size-preflight barrier before its complete GET wave", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-one-cohort/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-one-cohort/`;
+  const filenames = Array.from(
+    { length: 8 },
+    (_, index) =>
+      `MEME_${30501 + index}_STARLINK-ONE-COHORT-${index + 1}_1_Operational_${index + 1}_UNCLASSIFIED.txt`,
+  );
+  const body = new TextEncoder().encode([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: one-cohort-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "1.0e-4 0 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ].join("\n"));
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filenames.join("\n")}\n`)],
+    ...filenames.map((filename) => [joinFixtureUrl(ephemerisBase, filename), body]),
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  let fullFetchStartedBeforeAllProbesFinished = false;
+  let probeCalls = 0;
+  let fullFetchCalls = 0;
+  const harness = await createWorkerHarness("starlink", (operation, params) => {
+    if (operation === "http.request") {
+      if (params.url === manifestUrl) return serveFixtureHttp(params, responses);
+      if (isStarlinkSizeProbe(params)) {
+        probeCalls += 1;
+      } else {
+        fullFetchCalls += 1;
+        if (probeCalls < filenames.length) {
+          fullFetchStartedBeforeAllProbesFinished = true;
+        }
+      }
+      return serveFixtureHttp(params, responses);
+    }
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => harness.destroy());
+
+  const response = await harness.invoke({
+    methodId: "emit",
+    inputs: [
+      configFrame({
+        manifestUrl,
+        ephemerisBase,
+        fetchConcurrency: 8,
+        batchSize: 8,
+      }),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(probeCalls, 8);
+  assert.equal(fullFetchCalls, 8);
+  assert.equal(
+    fullFetchStartedBeforeAllProbesFinished,
+    false,
+    "the retained-byte ceiling must be resolved before any complete GET starts",
+  );
 });
 
 test("Starlink advances across every 64-file wave instead of truncating the catalog", async (t) => {
@@ -3002,48 +3088,18 @@ test("Starlink completes a 64-file production-shaped wave below the one-GiB memo
   const opaque = createOpaqueStateAdapter();
   let probeCalls = 0;
   let fullFetchCalls = 0;
-  let activeFullFetchCalls = 0;
-  let maxConcurrentFullFetchCalls = 0;
-  const fullFetchGate = { resolve: null, timer: null };
-  fullFetchGate.promise = new Promise((resolve) => {
-    fullFetchGate.resolve = resolve;
-  });
   const wasmMemory = new WebAssembly.Memory({
     initial: 18,
     maximum: 16_384,
     shared: true,
   });
-  const harness = await createWorkerHarness("starlink", async (operation, params) => {
+  const harness = await createWorkerHarness("starlink", (operation, params) => {
     if (operation === "http.request") {
       if (params.url !== manifestUrl) {
         if (isStarlinkSizeProbe(params)) {
           probeCalls += 1;
         } else {
           fullFetchCalls += 1;
-          activeFullFetchCalls += 1;
-          maxConcurrentFullFetchCalls = Math.max(
-            maxConcurrentFullFetchCalls,
-            activeFullFetchCalls,
-          );
-          try {
-            if (fullFetchCalls === 1) {
-              fullFetchGate.timer = setTimeout(
-                () => fullFetchGate.resolve?.(false),
-                20_000,
-              );
-            }
-            if (fullFetchCalls === 64) {
-              clearTimeout(fullFetchGate.timer);
-              fullFetchGate.resolve(true);
-            }
-            if (!(await fullFetchGate.promise)) {
-              throw new Error(
-                `production wave started only ${fullFetchCalls} of 64 pthread requests`,
-              );
-            }
-          } finally {
-            activeFullFetchCalls -= 1;
-          }
         }
       }
       return serveFixtureHttp(params, responses);
@@ -3051,7 +3107,6 @@ test("Starlink completes a 64-file production-shaped wave below the one-GiB memo
     return opaque.dispatch(operation, params);
   }, { memory: wasmMemory });
   t.after(() => harness.destroy());
-  t.after(() => clearTimeout(fullFetchGate.timer));
 
   const startedAt = performance.now();
   let response = await harness.invoke({
@@ -3066,7 +3121,6 @@ test("Starlink completes a 64-file production-shaped wave below the one-GiB memo
   assert.equal(progress.totalRows, 64n);
   assert.equal(probeCalls, 64);
   assert.equal(fullFetchCalls, 64);
-  assert.equal(maxConcurrentFullFetchCalls, 64);
   for (const expected of [32n, 48n, 64n]) {
     response = await harness.invoke({ methodId: "emit", inputs: [] });
     assert.equal(response.statusCode, 0, response.errorMessage);
@@ -3576,12 +3630,12 @@ test("Starlink bounded parallel planning is authored in the WASM node", () => {
   assert.match(source, /pthread_join\s*\(/);
   assert.match(source, /std::atomic\s*<\s*size_t\s*>/);
   assert.match(source, /fetch_concurrency/);
-  assert.match(source, /probe_complete_page/);
-  assert.match(source, /fetch_complete_page/);
+  assert.match(source, /download_complete_page/);
+  assert.match(source, /finalize_download_admission/);
   assert.match(source, /kMaxDownstreamObjectsPerInvocation\s*=\s*1/);
   assert.match(
     source,
-    /g_pending_wave_begin\s*=\s*static_cast<uint32_t>\(begin\);\s*g_pending_wave\s*=\s*fetch_complete_page/,
+    /g_pending_wave_begin\s*=\s*static_cast<uint32_t>\(begin\);\s*g_pending_wave\s*=\s*std::move\(page\.responses\)/,
     "the durable wave marker must publish before the retained response vector",
   );
   assert.doesNotMatch(
@@ -3598,31 +3652,71 @@ test("Starlink bounded parallel planning is authored in the WASM node", () => {
   assert.match(source, /\\"headers\\":\{\\"Range\\":\\"bytes=0-0\\"\}/);
 });
 
-test("Starlink confines every pthread to one bounded download page", () => {
+test("Starlink confines one probe-and-GET pthread cohort to one bounded download page", () => {
   const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
   assert.match(source, /std::vector\s*<\s*pthread_t\s*>\s+workers/);
   assert.match(source, /pthread_create\s*\(/);
   assert.match(source, /pthread_join\s*\(/);
   assert.doesNotMatch(source, /FetchWorkerPool/);
   assert.doesNotMatch(source, /pthread_cond_/);
-  assert.doesNotMatch(source, /pthread_cond_timedwait\s*\(/);
+  assert.doesNotMatch(source, /pthread_mutex_/);
+  assert.doesNotMatch(source, /pthread_(?:try|timed)join_np\s*\(/);
+  assert.match(
+    source,
+    /kThreadBarrierTimeoutNanoseconds\s*=\s*600ull\s*\*\s*1'000'000'000ull/,
+  );
+  assert.doesNotMatch(source, /kThreadJoinTimeoutNanoseconds/);
+  assert.match(source, /clock_gettime\s*\(\s*CLOCK_MONOTONIC/);
+  assert.match(source, /sched_yield\s*\(/);
+  assert.doesNotMatch(source, /nanosleep\s*\(/);
   assert.doesNotMatch(source, /kFetchWorkerIdleTimeoutSeconds/);
   assert.doesNotMatch(source, /retire_fetch_workers\s*\(/);
-  const fetchPage = source.slice(
-    source.indexOf("std::vector<provider_node::HttpResult> fetch_complete_page"),
+  const downloadPage = source.slice(
+    source.indexOf("DownloadPage download_complete_page"),
     source.indexOf("bool meme_whitespace"),
   );
-  assert.ok(fetchPage.length > 0, "missing bounded Starlink page fetch");
+  assert.ok(downloadPage.length > 0, "missing bounded Starlink page download");
+  assert.equal(
+    [...downloadPage.matchAll(/pthread_create\s*\(/g)].length,
+    1,
+    "one page must create only one pthread cohort for probes and complete GETs",
+  );
+  assert.equal(
+    [...source.matchAll(/pthread_join\s*\(/g)].length,
+    1,
+    "one page must join its single pthread cohort exactly once",
+  );
+  assert.match(downloadPage, /DownloadPageContext\s+context/);
   assert.match(
-    fetchPage,
-    /for\s*\(\s*pthread_t\s+worker\s*:\s*workers\s*\)\s*\{[\s\S]*?pthread_join\s*\(/,
+    downloadPage,
+    /wait_for_count\s*\(context\.worker_ready_count,\s*workers\.size\(\)/,
+    "the main lane must wait until every worker is parked before retirement",
+  );
+  assert.match(
+    downloadPage,
+    /context\.release_worker_count\.store\s*\(\s*index\s*\+\s*1,[\s\S]*?join_worker\s*\(workers\[index\]\)/,
+    "workers must be released and joined one at a time",
+  );
+  assert.match(
+    downloadPage,
+    /for\s*\(\s*size_t\s+index\s*=\s*0;\s*index\s*<\s*workers\.size\(\);[\s\S]*?join_worker\s*\(workers\[index\]\)/,
     "every created pthread must be joined before the page invocation returns",
   );
   assert.match(
-    fetchPage,
-    /if\s*\(\s*pthread_join\s*\([^)]*\)\s*!=\s*0\s*\)\s*\{[\s\S]*?__builtin_trap\s*\(\s*\)/,
-    "a failed join must trap instead of releasing a live worker's stack context",
+    downloadPage,
+    /if\s*\(\s*!join_worker\s*\([^)]*\)\s*\)\s*\{[\s\S]*?fail_download_synchronization\s*\(\s*&context\s*\)[\s\S]*?all_workers_joined\s*=\s*false/,
+    "a failed join must release the whole cohort while retaining the failure",
   );
+  assert.match(
+    downloadPage,
+    /for\s*\([\s\S]*?join_worker\s*\(workers\[index\]\)[\s\S]*?\}\s*if\s*\(\s*!all_workers_joined\s*\)\s*\{\s*__builtin_trap\s*\(\s*\)/,
+    "join failure may trap only after every created worker has been released and joined",
+  );
+  const tasks = source.slice(
+    source.indexOf("void download_page_tasks"),
+    source.indexOf("void* download_page_worker"),
+  );
+  assert.ok(tasks.indexOf("probe_complete_size") < tasks.indexOf("http_get_complete"));
 });
 
 test("provider record counting cannot strand a one-worker pthread join", () => {

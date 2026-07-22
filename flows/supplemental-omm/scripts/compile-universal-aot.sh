@@ -24,6 +24,7 @@ compile_parent() {
     --enable-all \
     --optimize 3 \
     --interruptible \
+    --generic-binary \
     "$1" \
     "$2"
 }
@@ -34,6 +35,7 @@ compile_child() {
     --optimize 3 \
     --interruptible \
     --enable-gas-measuring \
+    --generic-binary \
     "$1" \
     "$2"
 }
