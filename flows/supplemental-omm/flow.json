@@ -108,12 +108,12 @@
       "methodId": "append_records",
       "dispatchModel": "isomorphic",
       "kind": "sink",
-      "capabilities": [],
+      "capabilities": ["storage_adapter"],
       "drainPolicy": "drain-until-yield",
       "artifact": {
         "path": "../../../flatsql/wasm/node/dist/isomorphic/module.wasm",
         "publisher": "../../../flatsql/wasm/node/publisher.json",
-        "sha256": "63001a3eefa9cb287e4fc04efea012793cb90424a85f2013b7192cb7f95c2204"
+        "sha256": "07d7bcad89024e39029779583de8d6daa06f294d89fd4c746f056f0a62968e0e"
       }
     },
     {
