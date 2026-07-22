@@ -93,6 +93,11 @@ test(
       const child = entries.get(node.pluginId);
       assert.ok(child, `missing exact child ${node.nodeId}`);
       assert.equal(sha256(child.payloadBytes), node.artifact.sha256);
+      const childBundle = await parseSingleFileBundle(child.payloadBytes);
+      assert.ok(
+        childBundle.entries.some((entry) => entry.sectionName === "sds.manifest"),
+        `${node.nodeId} is missing its canonical sds.manifest entry`,
+      );
       assert.ok(entries.has(`nodes/${node.nodeId}.publisher.json`));
     }
   },
