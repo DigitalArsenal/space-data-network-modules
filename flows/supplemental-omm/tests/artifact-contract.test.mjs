@@ -11,6 +11,7 @@ import {
   parseSingleFileBundle,
   verifyModuleArtifact,
 } from "space-data-module-sdk";
+import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const wasmPath = path.join(packageRoot, "dist/isomorphic/module.wasm");
@@ -99,6 +100,42 @@ test(
         `${node.nodeId} is missing its canonical sds.manifest entry`,
       );
       assert.ok(entries.has(`nodes/${node.nodeId}.publisher.json`));
+    }
+  },
+);
+
+test(
+  "every signed child exports the same manifest bytes that its bundle authenticates",
+  { skip: !artifactExists && "run npm run build before the artifact contract gate" },
+  async (t) => {
+    const outer = await parseSingleFileBundle(
+      new Uint8Array(fs.readFileSync(wasmPath)),
+    );
+    const entries = new Map(outer.entries.map((entry) => [entry.entryId, entry]));
+    const flow = JSON.parse(fs.readFileSync(flowPath, "utf8"));
+
+    for (const node of flow.nodes) {
+      const child = entries.get(node.pluginId);
+      assert.ok(child, `missing exact child ${node.nodeId}`);
+      const childBundle = await parseSingleFileBundle(child.payloadBytes);
+      const authenticatedManifest = childBundle.entries.find(
+        (entry) => entry.sectionName === "sds.manifest",
+      )?.payloadBytes;
+      assert.ok(authenticatedManifest, `${node.nodeId} has no signed manifest payload`);
+
+      const harness = await createBrowserModuleHarness({
+        wasmSource: child.payloadBytes,
+        surface: "direct",
+        hostcallDispatch() {
+          return {};
+        },
+      });
+      t.after(() => harness.destroy());
+      assert.deepEqual(
+        harness.readManifest(),
+        authenticatedManifest,
+        `${node.nodeId} guest-exported manifest differs from its signed bundle`,
+      );
     }
   },
 );

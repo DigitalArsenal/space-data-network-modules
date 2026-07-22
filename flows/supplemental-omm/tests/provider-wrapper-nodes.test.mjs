@@ -700,8 +700,12 @@ for (const [key, pluginId] of providers) {
     assert.ok(method, `${key} provider must expose emit`);
     assert.deepEqual(method.inputPorts.map((port) => port.portId), ["config"]);
     assert.deepEqual(method.outputPorts.map((port) => port.portId), ["oem"]);
-    assert.equal(method.inputPorts[0].required, true);
-    assert.equal(method.inputPorts[0].minStreams, 1);
+    assert.equal(
+      method.inputPorts[0].required,
+      false,
+      `${key}.config must permit a yielded zero-input continuation`,
+    );
+    assert.equal(method.inputPorts[0].minStreams, 0);
     assertFsbPair(method.inputPorts[0], `${key}.config`);
     assertFsbPair(method.outputPorts[0], `${key}.oem`);
     assert.doesNotMatch(JSON.stringify(manifest), /acceptsAnyFlatbuffer/i);
