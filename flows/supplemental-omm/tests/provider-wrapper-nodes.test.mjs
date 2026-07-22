@@ -12,7 +12,10 @@ import {
   analyzeWasmThreadFeatures,
   assertPthreadArtifact,
 } from "../../../node_modules/space-data-module-sdk/src/compiler/pthreadArtifactGuard.js";
-import { createBrowserModuleHarness } from "../../../node_modules/space-data-module-sdk/src/testing/index.js";
+import {
+  createBrowserModuleHarness,
+  createWorkerModuleHarness,
+} from "../../../node_modules/space-data-module-sdk/src/testing/index.js";
 import {
   Builder,
   ByteBuffer,
@@ -352,6 +355,22 @@ async function createHarness(key, hostcallDispatch) {
   });
 }
 
+async function createWorkerHarness(key, hostcallDispatch) {
+  const manifest = readJson(nodePath(key, "plugin-manifest.json"), `${key} manifest`);
+  const signed = new Uint8Array(
+    fs.readFileSync(nodePath(key, "dist/isomorphic/module.wasm")),
+  );
+  return createWorkerModuleHarness({
+    wasmSource: signed,
+    dispatchHost: hostcallDispatch,
+    harnessOptions: {
+      manifest,
+      surface: "direct",
+      maxThreads: 64,
+    },
+  });
+}
+
 test("GLONASS defaults to CODE's production HTTPS ultra-rapid SP3 alias", () => {
   const source = fs.readFileSync(nodePath("glonass", "src/node.cpp"), "utf8");
   assert.match(source, new RegExp(codeGlonassSource.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -531,20 +550,53 @@ test("Starlink keeps 64-way fetch pages but emits at most 64 FSB frames per invo
     "1.0e-4 0 0",
     "2026202000100.000 6999 450 0 -0.5 7.48 0",
   ];
-  const large = repeatToSize(seedLines, 1024 * 1024 + 8192);
-  const small = new TextEncoder().encode(`${seedLines.join("\n")}\n`);
+  const responseBodies = filenames.map((_, index) => {
+    const uniqueLines = [...seedLines, `object-index: ${index}`];
+    return index < 4
+      ? repeatToSize(uniqueLines, 1024 * 1024 + 8192)
+      : new TextEncoder().encode(`${uniqueLines.join("\n")}\n`);
+  });
   const responses = new Map([
     [manifestUrl, new TextEncoder().encode(`${filenames.join("\n")}\n`)],
     ...filenames.map((filename, index) => [
       joinFixtureUrl(ephemerisBase, filename),
-      index < 4 ? large : small,
+      responseBodies[index],
     ]),
   ]);
   const calls = [];
-  const harness = await createHarness("starlink", (operation, params) => {
+  let activeEphemerisCalls = 0;
+  let maxConcurrentEphemerisCalls = 0;
+  let ephemerisCallsStarted = 0;
+  let releaseFirstEphemerisCall = null;
+  let firstEphemerisGateTimer = null;
+  const harness = await createWorkerHarness("starlink", async (operation, params) => {
     assert.equal(operation, "http.request");
     calls.push(params.url);
     const body = responses.get(params.url);
+    if (params.url !== manifestUrl) {
+      activeEphemerisCalls += 1;
+      ephemerisCallsStarted += 1;
+      maxConcurrentEphemerisCalls = Math.max(
+        maxConcurrentEphemerisCalls,
+        activeEphemerisCalls,
+      );
+      try {
+        if (ephemerisCallsStarted === 1) {
+          await new Promise((resolve, reject) => {
+            releaseFirstEphemerisCall = resolve;
+            firstEphemerisGateTimer = setTimeout(
+              () => reject(new Error("no concurrent pthread HTTP request arrived")),
+              2_000,
+            );
+          });
+        } else if (ephemerisCallsStarted === 2) {
+          clearTimeout(firstEphemerisGateTimer);
+          releaseFirstEphemerisCall?.();
+        }
+      } finally {
+        activeEphemerisCalls -= 1;
+      }
+    }
     return body
       ? { status: 200, body: new Uint8Array(body) }
       : { status: 404, body: new Uint8Array() };
@@ -571,6 +623,10 @@ test("Starlink keeps 64-way fetch pages but emits at most 64 FSB frames per invo
     if (!response.yielded) break;
   }
   assert.equal(invocations.at(-1)?.yielded, false, "Starlink did not drain");
+  assert.ok(
+    maxConcurrentEphemerisCalls > 1,
+    `expected overlapping worker HTTP requests, observed ${maxConcurrentEphemerisCalls}`,
+  );
   assert.equal(calls.filter((url) => url === manifestUrl).length, 1);
   for (const filename of filenames) {
     assert.equal(
@@ -586,6 +642,17 @@ test("Starlink keeps 64-way fetch pages but emits at most 64 FSB frames per invo
     new Set(decoded.map((output) => output.requestId.toString())).size,
     filenames.length,
   );
+  for (let index = 0; index < filenames.length; index += 1) {
+    const identity = `MEME:${30001 + index}:STARLINK-${index + 1}`;
+    const chunks = decoded
+      .filter((output) => output.schemaName === identity)
+      .sort((left, right) => left.chunkSequence - right.chunkSequence);
+    assert.deepEqual(
+      Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.data))),
+      Buffer.from(responseBodies[index]),
+      `${identity} received another pthread request's response bytes`,
+    );
+  }
 });
 
 for (const [key, pluginId] of providers) {
@@ -653,7 +720,7 @@ for (const [key, pluginId] of providers) {
     assert.equal(
       harness.threadHost.spawnCount(),
       0,
-      "hostcall-importing pthread modules must use their non-hanging sequential fallback",
+      "the direct harness must select the deterministic sequential path without an owning worker broker",
     );
     assert.equal(calls.length, fixture.units.length + fixture.discoveryCalls);
     for (const { params } of calls) {

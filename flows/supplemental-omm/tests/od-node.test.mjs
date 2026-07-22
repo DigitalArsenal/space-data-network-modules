@@ -351,10 +351,43 @@ test("OD retains native chunks across invocations and fits only the complete res
   );
   const flatSqlPortable =
     extractPublicationRecordCollection(flatSqlSigned)?.payloadBytes ?? flatSqlSigned;
+  const opaqueValues = new Map();
+  const opaqueKey = (params) => `${params.namespace}\0${params.key}`;
   const flatSql = await createBrowserModuleHarness({
     wasmSource: flatSqlPortable,
     manifest: flatSqlManifest,
     surface: "direct",
+    hostcallDispatch(operation, params) {
+      if (operation === "storage.adapter.opaque.read") {
+        const value = opaqueValues.get(opaqueKey(params));
+        return {
+          found: value !== undefined,
+          bytes_b64: value?.slice() ?? new Uint8Array(),
+        };
+      }
+      if (operation === "storage.adapter.opaque.replace") {
+        assert.ok(params.data instanceof Uint8Array);
+        opaqueValues.set(opaqueKey(params), params.data.slice());
+        return { stored_bytes: params.data.byteLength };
+      }
+      if (operation === "storage.adapter.opaque.list") {
+        const prefix = `${params.namespace}\0`;
+        return {
+          keys: [...opaqueValues.keys()]
+            .filter((key) => key.startsWith(prefix))
+            .map((key) => key.slice(prefix.length))
+            .sort(),
+        };
+      }
+      if (operation === "storage.adapter.opaque.delete") {
+        opaqueValues.delete(opaqueKey(params));
+        return { deleted: true };
+      }
+      if (operation === "storage.adapter.opaque.sync") {
+        return { synced: true };
+      }
+      throw new Error(`unexpected FlatSQL host operation ${operation}`);
+    },
   });
   t.after(() => flatSql.destroy());
   const append = await flatSql.invoke({

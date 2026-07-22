@@ -26,7 +26,7 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "538a7a612ce1de441f0154082d054c1c95b514168a9f7039e9db69dd2490bfef";
+  "a032c9535cfc43ad1671492ec00a621ad7f495dae0e4c4e713812bf61d3b20d5";
 const expectedChildSha256 = Object.freeze({
   timer: "c712e5714b80854d60334b198fe1e17c29e4e22e274e7339eba370f26fa1db56",
   "provider-starlink":
@@ -41,7 +41,7 @@ const expectedChildSha256 = Object.freeze({
     "9fe7da6a04f6abc79771aefcecc1917982233f2b374a7ff1da6324441a5f3f17",
   od: "c7951ee0c929e273df01d1f33c30b759a62cbb8a9f5fd5886c115f8d0126869b",
   store:
-    "63001a3eefa9cb287e4fc04efea012793cb90424a85f2013b7192cb7f95c2204",
+    "07d7bcad89024e39029779583de8d6daa06f294d89fd4c746f056f0a62968e0e",
   publication:
     "9231337a2b715e74abd58662b900c6217a019c0d7961a8e1b5ed5f47751711aa",
   status:
@@ -232,6 +232,9 @@ test("exact release-signed Supplemental flow executes every signed child in the 
 
   const httpBodies = fixtureResponses();
   const hostcalls = [];
+  const opaqueValues = new Map();
+  const opaqueKey = (nodeId, params) =>
+    `${nodeId}\0${params.namespace}\0${params.key}`;
   const children = [];
   for (const descriptor of artifact.nodeArtifacts) {
     const childEntry = entries.get(descriptor.entryId);
@@ -280,6 +283,28 @@ test("exact release-signed Supplemental flow executes every signed child in the 
           return { status: 200, body: new Uint8Array(body) };
         }
         if (operation === "pubsub.publish") return true;
+        if (operation === "storage.adapter.opaque.read") {
+          const value = opaqueValues.get(opaqueKey(descriptor.nodeId, params));
+          return {
+            found: value !== undefined,
+            bytes_b64: value?.slice() ?? new Uint8Array(),
+          };
+        }
+        if (operation === "storage.adapter.opaque.replace") {
+          assert.ok(params.data instanceof Uint8Array);
+          opaqueValues.set(
+            opaqueKey(descriptor.nodeId, params),
+            params.data.slice(),
+          );
+          return { stored_bytes: params.data.byteLength };
+        }
+        if (operation === "storage.adapter.opaque.delete") {
+          opaqueValues.delete(opaqueKey(descriptor.nodeId, params));
+          return { deleted: true };
+        }
+        if (operation === "storage.adapter.opaque.sync") {
+          return { synced: true };
+        }
         throw new Error(
           `signed child ${descriptor.nodeId} requested unexpected host operation ${operation}`,
         );
@@ -294,16 +319,14 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   t.after(() => host.destroy());
   for (const descriptor of artifact.nodeArtifacts) {
     assert.equal(
-      host.children.get(descriptor.pluginId)?.sha256,
+      host.children.get(descriptor.nodeId)?.sha256,
       expectedChildSha256[descriptor.nodeId],
       `${descriptor.nodeId} browser instance did not retain the exact signed child hash`,
     );
   }
   const publicationInputs = [];
   const publicationResponses = [];
-  const publicationHarness = host.children.get(
-    "org.sdn.flows.supplemental-omm.publication",
-  )?.harness;
+  const publicationHarness = host.children.get("publication")?.harness;
   assert.ok(publicationHarness, "publication child harness was not instantiated");
   const invokePublication = publicationHarness.invoke;
   publicationHarness.invoke = async (request) => {
@@ -441,4 +464,19 @@ test("exact release-signed Supplemental flow executes every signed child in the 
       `pubsub payload is not the inner canonical ${expectedIdentifier} record`,
     );
   }
+  const opaqueCalls = hostcalls.filter(({ nodeId, operation }) =>
+    nodeId === "store" && operation.startsWith("storage.adapter.opaque."),
+  );
+  assert.ok(
+    opaqueCalls.some(({ operation }) => operation === "storage.adapter.opaque.replace"),
+    "FlatSQL never persisted its node-owned snapshot",
+  );
+  assert.ok(
+    opaqueCalls.some(({ operation }) => operation === "storage.adapter.opaque.sync"),
+    "FlatSQL never committed its node-owned snapshot",
+  );
+  assert.ok(
+    [...opaqueValues.keys()].some((key) => key.endsWith("\0snapshot.manifest")),
+    "FlatSQL did not retain a committed snapshot manifest",
+  );
 });
