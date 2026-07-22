@@ -18,7 +18,7 @@
       "artifact": {
         "path": "./nodes/timer/dist/isomorphic/module.wasm",
         "publisher": "./nodes/timer/publisher.json",
-        "sha256": "40a2717b9df4ff67d10ab66a28bb01e07ed23bf38a6d764b365d02f8af675333"
+        "sha256": "4a13cd6ad61a57c8dac40f69cb90c7192e8b2d0448072706050fec298fc01620"
       }
     },
     {
@@ -34,7 +34,7 @@
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "5ba646cfe77e4f51150ab27f408ee7b9f8643138d00838f2f7b3571728626647"
+        "sha256": "88352f13f0e38c09d5b46aa5a0dd6bc1365e60e398f13010e9ab9baec61ca967"
       }
     },
     {
@@ -50,7 +50,7 @@
       "artifact": {
         "path": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/glonass/publisher.json",
-        "sha256": "f82e56183149369395cedf4a19a22fa57ff9cbd534af412e38370e7896f16141"
+        "sha256": "195b49ab4540133f6a4cbe00204eedfa76c326785cc080114ee0d877c21c3afe"
       }
     },
     {
@@ -66,7 +66,7 @@
       "artifact": {
         "path": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/intelsat/publisher.json",
-        "sha256": "92def949eff44120bb1c3aafebd74cbc55e7b8dbd0b66e61eb56bebebabf272c"
+        "sha256": "0dfef8068d7c246d7b2c1ae431521e577d0590e4c19feac2948e0d4ff8b7bd4c"
       }
     },
     {
@@ -82,7 +82,7 @@
       "artifact": {
         "path": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/cpf/publisher.json",
-        "sha256": "d7c3abbd5bf418b10645dc6d501922b20b15dc2a5e401068d34c0430846d65d1"
+        "sha256": "2ee663dd1e816d57a754c136e311bf9a241d3d599409ee06b70671d5eb4bafc8"
       }
     },
     {
@@ -98,7 +98,7 @@
       "artifact": {
         "path": "./nodes/providers/iss/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/iss/publisher.json",
-        "sha256": "1067ba559c29e5d6f9f012f3975fc8b15c58c5e605c96368f5ff8a4add63bca0"
+        "sha256": "21b62d991bd69db7c05a9eb29bcdd05959d8b502da5bd6ae570405c0e945845e"
       }
     },
     {
@@ -112,7 +112,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "86459062af3d2352409275c3f46e1b6a586f261fd84959b85f66c190289ecb90"
+        "sha256": "6187e169f10207bb226563858e1e31263f1889683d83baa9caf1387b78bbdca9"
       }
     },
     {
@@ -128,7 +128,7 @@
       "artifact": {
         "path": "../../../flatsql/wasm/node/dist/isomorphic/module.wasm",
         "publisher": "../../../flatsql/wasm/node/publisher.json",
-        "sha256": "6929209a5b46e9bedb8e3bf5a5ab3ed71db64208d202d66f6fc61f959fa355f9"
+        "sha256": "6fc0550228a1b37c9b9b0e825d4378c728215d5ebc92b287a7927bfe9e00415e"
       }
     },
     {
@@ -144,7 +144,7 @@
       "artifact": {
         "path": "./nodes/publication/dist/isomorphic/module.wasm",
         "publisher": "./nodes/publication/publisher.json",
-        "sha256": "81f3e78c88d512cd9ddf7417a1ca7ebce3ccf09188362c5840c433471a5d54fe"
+        "sha256": "a8402bc0646fb1b8ae1cb51e1b4e13588f2edbd8045c96ec0d8d763f3623588a"
       }
     },
     {
@@ -158,7 +158,7 @@
       "artifact": {
         "path": "./nodes/status/dist/isomorphic/module.wasm",
         "publisher": "./nodes/status/publisher.json",
-        "sha256": "a77e4e1f6172a90e9cd28a0d55486ed292ce19a95e9cf29867ce8a79c25d24c3"
+        "sha256": "ef05829363fdb24460090e3de87df11665f13b584210c64db7707483b16918c8"
       }
     }
   ],
