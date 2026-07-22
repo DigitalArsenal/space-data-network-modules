@@ -40,9 +40,9 @@
               ]
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true
+          "required": false
         }
       ],
       "outputPorts": [
