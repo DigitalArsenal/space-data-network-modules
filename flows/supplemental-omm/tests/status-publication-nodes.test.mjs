@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -97,6 +98,10 @@ function makeFsb(
     fileIdentifier = "$OMM",
     recordCount = 1,
     totalBytes = data.length,
+    requestId = 1n,
+    sequence = 0,
+    final = true,
+    checksum,
   } = {},
 ) {
   const builder = new Builder(256);
@@ -107,18 +112,47 @@ function makeFsb(
     builder.addInt8(data[index]);
   }
   const dataVector = builder.endVector();
+  let checksumVector = 0;
+  if (checksum) {
+    builder.startVector(1, checksum.length, 1);
+    for (let index = checksum.length - 1; index >= 0; index -= 1) {
+      builder.addInt8(checksum[index]);
+    }
+    checksumVector = builder.endVector();
+  }
   builder.startObject(11);
-  builder.addFieldInt64(0, 1n, 0n);
+  builder.addFieldInt64(0, requestId, 0n);
   builder.addFieldInt8(1, 1, 0);
-  builder.addFieldInt8(3, 1, 0);
+  builder.addFieldInt32(2, sequence, 0);
+  builder.addFieldInt8(3, final ? 1 : 0, 0);
   builder.addFieldInt64(4, BigInt(totalBytes), 0n);
   builder.addFieldInt64(5, BigInt(recordCount), 0n);
   builder.addFieldOffset(7, schemaName, 0);
   builder.addFieldOffset(8, identifier, 0);
   builder.addFieldOffset(9, dataVector, 0);
+  if (checksumVector) builder.addFieldOffset(10, checksumVector, 0);
   const root = builder.endObject();
   builder.finish(root, "$FSB");
   return builder.asUint8Array();
+}
+
+function sizePrefixedRecord(payload) {
+  const record = new Uint8Array(payload.byteLength + 4);
+  new DataView(record.buffer).setUint32(0, payload.byteLength, true);
+  record.set(payload, 4);
+  return record;
+}
+
+function concatenate(parts) {
+  const combined = new Uint8Array(
+    parts.reduce((total, part) => total + part.byteLength, 0),
+  );
+  let offset = 0;
+  for (const part of parts) {
+    combined.set(part, offset);
+    offset += part.byteLength;
+  }
+  return combined;
 }
 
 function makeFsoStatus({
@@ -162,23 +196,36 @@ function makeAlignedFsoStatus({ affectedRecords, resultBytes = 0, status = 4 }) 
 
 function makeAlignedFsb(
   data,
-  { schemaName = "OCM", fileIdentifier = "$OCM" } = {},
+  {
+    schemaName = "OCM",
+    fileIdentifier = "$OCM",
+    requestId = 1n,
+    sequence = 0,
+    final = true,
+    totalBytes = data.length,
+    recordCount = 1,
+    checksum,
+  } = {},
 ) {
   const payload = new Uint8Array(fsbAlignedByteLength);
   const view = new DataView(payload.buffer);
-  payload[0] = 0b0000_0111;
-  view.setBigUint64(8, 1n, true);
+  payload[0] = checksum ? 0b0000_1111 : 0b0000_0111;
+  view.setBigUint64(8, requestId, true);
   payload[16] = 1;
-  view.setUint32(20, 0, true);
-  payload[24] = 1;
-  view.setBigUint64(32, BigInt(data.length), true);
-  view.setBigUint64(40, 1n, true);
+  view.setUint32(20, sequence, true);
+  payload[24] = final ? 1 : 0;
+  view.setBigUint64(32, BigInt(totalBytes), true);
+  view.setBigUint64(40, BigInt(recordCount), true);
   payload[52] = schemaName.length;
   payload.set(new TextEncoder().encode(schemaName), 53);
   payload[117] = fileIdentifier.length;
   payload.set(new TextEncoder().encode(fileIdentifier), 118);
   view.setUint32(124, data.length, true);
   payload.set(data, 128);
+  if (checksum) {
+    view.setUint32(1_048_704, checksum.length, true);
+    payload.set(checksum, 1_048_708);
+  }
   return payload;
 }
 
@@ -503,6 +550,252 @@ test("publication node publishes the exact inner SDS record through generic pubs
   assert.deepEqual(calls[0].params.data, record);
 });
 
+test("publication node expands one aggregated FSB stream into exact SDS records", async (t) => {
+  const records = [
+    sizePrefixedRecord(new Uint8Array([8, 6, 7, 5, 3, 0, 9])),
+    sizePrefixedRecord(new Uint8Array([1, 1, 2, 3, 5, 8])),
+  ];
+  const stream = concatenate(records);
+  const checksum = new Uint8Array(createHash("sha256").update(stream).digest());
+  const payload = makeFsb(stream, { recordCount: records.length, checksum });
+  const calls = [];
+  const harness = await createHarness(nodeSpecs[1], (operation, params) => {
+    calls.push({
+      operation,
+      params: { ...params, data: new Uint8Array(params.data) },
+    });
+    return true;
+  });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [inputFrame(payload, "records")],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1);
+  assert.deepEqual(response.outputs[0].payload, payload);
+  assert.deepEqual(calls.map(({ operation }) => operation), [
+    "pubsub.publish",
+    "pubsub.publish",
+  ]);
+  assert.ok(calls.every(({ params }) => params.standard === "OMM"));
+  assert.deepEqual(calls.map(({ params }) => params.data), records);
+});
+
+test("publication node requires SHA-256 for an aggregated record stream", async (t) => {
+  const records = [
+    sizePrefixedRecord(new Uint8Array([1, 2, 3])),
+    sizePrefixedRecord(new Uint8Array([4, 5, 6])),
+  ];
+  const stream = concatenate(records);
+  const payload = makeFsb(stream, { recordCount: records.length });
+  const calls = [];
+  const harness = await createHarness(nodeSpecs[1], (operation, params) => {
+    calls.push({ operation, params });
+    return true;
+  });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [inputFrame(payload, "records")],
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.errorMessage, /SHA256|checksum/i);
+  assert.equal(calls.length, 0);
+});
+
+test("publication node rejects malformed aggregate ordering, integrity, and record framing", async (t) => {
+  const validRecord = sizePrefixedRecord(new Uint8Array([1, 2, 3]));
+  const validChecksum = new Uint8Array(
+    createHash("sha256").update(validRecord).digest(),
+  );
+  const oversized = new Uint8Array(1_048_577);
+  const cases = [
+    {
+      name: "missing sequence zero",
+      payload: makeFsb(validRecord, {
+        requestId: 101n,
+        sequence: 1,
+        recordCount: 2,
+        checksum: validChecksum,
+      }),
+    },
+    {
+      name: "incorrect checksum",
+      payload: makeFsb(validRecord, {
+        requestId: 102n,
+        recordCount: 2,
+        checksum: new Uint8Array(32),
+      }),
+    },
+    {
+      name: "early final marker",
+      payload: makeFsb(validRecord, {
+        requestId: 103n,
+        recordCount: 2,
+        totalBytes: validRecord.byteLength + 1,
+        checksum: validChecksum,
+      }),
+    },
+    {
+      name: "record count mismatch",
+      payload: makeFsb(validRecord, {
+        requestId: 104n,
+        recordCount: 2,
+        checksum: validChecksum,
+      }),
+    },
+    {
+      name: "checksummed count-one stream without a size prefix",
+      payload: makeFsb(new Uint8Array([1, 2, 3]), {
+        requestId: 107n,
+        recordCount: 1,
+        checksum: new Uint8Array(
+          createHash("sha256").update(new Uint8Array([1, 2, 3])).digest(),
+        ),
+      }),
+    },
+    {
+      name: "invalid size prefix",
+      payload: makeFsb(new Uint8Array([5, 0, 0, 0, 1]), {
+        requestId: 105n,
+        recordCount: 2,
+        checksum: new Uint8Array(
+          createHash("sha256").update(new Uint8Array([5, 0, 0, 0, 1])).digest(),
+        ),
+      }),
+    },
+    {
+      name: "oversized canonical chunk",
+      payload: makeFsb(oversized, {
+        requestId: 106n,
+        recordCount: 2,
+        checksum: new Uint8Array(createHash("sha256").update(oversized).digest()),
+      }),
+    },
+  ];
+  const calls = [];
+  const harness = await createHarness(nodeSpecs[1], (operation, params) => {
+    calls.push({ operation, params });
+    return true;
+  });
+  t.after(() => harness.destroy());
+
+  for (const malformed of cases) {
+    const response = await harness.invoke({
+      methodId: "publish_records",
+      inputs: [inputFrame(malformed.payload, "records")],
+    });
+    assert.equal(response.statusCode, 400, malformed.name);
+  }
+  assert.equal(calls.length, 0);
+});
+
+test("publication node reassembles checksummed FSB chunks across invocations", async (t) => {
+  const records = [
+    sizePrefixedRecord(new Uint8Array([8, 6, 7, 5, 3, 0, 9])),
+    sizePrefixedRecord(new Uint8Array([1, 1, 2, 3, 5, 8])),
+  ];
+  const stream = concatenate(records);
+  const checksum = new Uint8Array(createHash("sha256").update(stream).digest());
+  const split = 6;
+  const chunks = [stream.subarray(0, split), stream.subarray(split)];
+  const payloads = chunks.map((chunk, sequence) =>
+    makeFsb(chunk, {
+      requestId: 42n,
+      sequence,
+      final: sequence + 1 === chunks.length,
+      totalBytes: stream.byteLength,
+      recordCount: records.length,
+      checksum,
+    }),
+  );
+  const calls = [];
+  const harness = await createHarness(nodeSpecs[1], (operation, params) => {
+    calls.push({
+      operation,
+      params: { ...params, data: new Uint8Array(params.data) },
+    });
+    return true;
+  });
+  t.after(() => harness.destroy());
+
+  const partial = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [inputFrame(payloads[0], "records")],
+  });
+  assert.equal(partial.statusCode, 0, partial.errorMessage);
+  assert.equal(partial.outputs.length, 0);
+  assert.equal(calls.length, 0);
+
+  const completed = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [inputFrame(payloads[1], "records")],
+  });
+  assert.equal(completed.statusCode, 0, completed.errorMessage);
+  assert.deepEqual(
+    completed.outputs.map((output) => output.payload),
+    payloads,
+  );
+  assert.deepEqual(calls.map(({ operation }) => operation), [
+    "pubsub.publish",
+    "pubsub.publish",
+  ]);
+  assert.deepEqual(calls.map(({ params }) => params.data), records);
+});
+
+test("publication node reassembles aligned FSB chunks across invocations", async (t) => {
+  const records = [
+    sizePrefixedRecord(new Uint8Array([2, 7, 1, 8])),
+    sizePrefixedRecord(new Uint8Array([2, 8, 1, 8, 2, 8])),
+  ];
+  const stream = concatenate(records);
+  const checksum = new Uint8Array(createHash("sha256").update(stream).digest());
+  const split = 5;
+  const chunks = [stream.subarray(0, split), stream.subarray(split)];
+  const payloads = chunks.map((chunk, sequence) =>
+    makeAlignedFsb(chunk, {
+      schemaName: "OMM",
+      fileIdentifier: "$OMM",
+      requestId: 84n,
+      sequence,
+      final: sequence + 1 === chunks.length,
+      totalBytes: stream.byteLength,
+      recordCount: records.length,
+      checksum,
+    }),
+  );
+  const calls = [];
+  const harness = await createHarness(nodeSpecs[1], (operation, params) => {
+    calls.push({
+      operation,
+      params: { ...params, data: new Uint8Array(params.data) },
+    });
+    return true;
+  });
+  t.after(() => harness.destroy());
+
+  const partial = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [inputFrame(payloads[0], "records", "aligned-binary")],
+  });
+  assert.equal(partial.statusCode, 0, partial.errorMessage);
+  assert.equal(partial.outputs.length, 0);
+  assert.equal(calls.length, 0);
+
+  const completed = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [inputFrame(payloads[1], "records", "aligned-binary")],
+  });
+  assert.equal(completed.statusCode, 0, completed.errorMessage);
+  assert.deepEqual(
+    completed.outputs.map((output) => output.payload),
+    payloads,
+  );
+  assert.ok(completed.outputs.every((output) => output.wireFormat === "aligned-binary"));
+  assert.deepEqual(calls.map(({ params }) => params.data), records);
+});
+
 test("publication node preserves aligned FSB receipts while publishing only the exact inner record", async (t) => {
   const record = new Uint8Array([4, 2, 4, 2]);
   const payload = makeAlignedFsb(record);
@@ -524,4 +817,79 @@ test("publication node preserves aligned FSB receipts while publishing only the 
   assert.equal(calls[0].params.source, "supplemental-omm");
   assert.equal(calls[0].params.standard, "OCM");
   assert.deepEqual(calls[0].params.data, record);
+});
+
+test("publication node rejects an over-capacity aligned vector length before publication", async (t) => {
+  const payload = makeAlignedFsb(new Uint8Array());
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  view.setBigUint64(32, 1_048_576n, true);
+  view.setUint32(124, 0xffff_ffff, true);
+  const calls = [];
+  const harness = await createHarness(nodeSpecs[1], (operation, params) => {
+    calls.push({ operation, params });
+    return true;
+  });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [inputFrame(payload, "records", "aligned-binary")],
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.errorMessage, /bounds|capacity|length/i);
+  assert.equal(calls.length, 0);
+});
+
+test("publication node evicts the lowest request-ID stream at its active limit", async (t) => {
+  const checksum = new Uint8Array(32);
+  const harness = await createHarness(nodeSpecs[1], () => {
+    throw new Error("an incomplete stream must not publish");
+  });
+  t.after(() => harness.destroy());
+  const inputs = Array.from({ length: 4096 }, (_, index) =>
+    inputFrame(
+      makeFsb(new Uint8Array([index & 0xff]), {
+        requestId: BigInt(index + 1),
+        final: false,
+        totalBytes: 2,
+        checksum,
+      }),
+      "records",
+    ),
+  );
+  const accepted = await harness.invoke({ methodId: "publish_records", inputs });
+  assert.equal(accepted.statusCode, 0, accepted.errorMessage);
+
+  const recovered = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [
+      inputFrame(
+        makeFsb(new Uint8Array([0]), {
+          requestId: 4097n,
+          final: false,
+          totalBytes: 2,
+          checksum,
+        }),
+        "records",
+      ),
+    ],
+  });
+  assert.equal(recovered.statusCode, 0, recovered.errorMessage);
+
+  const evicted = await harness.invoke({
+    methodId: "publish_records",
+    inputs: [
+      inputFrame(
+        makeFsb(new Uint8Array([1]), {
+          requestId: 1n,
+          sequence: 1,
+          final: true,
+          totalBytes: 2,
+          checksum,
+        }),
+        "records",
+      ),
+    ],
+  });
+  assert.equal(evicted.statusCode, 400);
+  assert.match(evicted.errorMessage, /without sequence zero/i);
 });

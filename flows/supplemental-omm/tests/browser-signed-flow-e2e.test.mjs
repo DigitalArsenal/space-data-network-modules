@@ -26,7 +26,7 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "d40e77c05d5d7bf792e1a083a9f7dbf81d9a42513abd759a4026537b4a9f6436";
+  "efabf74cfcb29b92cb90e86a941a91fd381b0809f55a9ccc42cdeeb1d7c6faba";
 const expectedChildSha256 = Object.freeze({
   timer: "69758f88392ddb22fd357ef4a1dd7a3b44f75d8c3539f7739d6df406fbb18c55",
   "provider-starlink":
@@ -39,11 +39,11 @@ const expectedChildSha256 = Object.freeze({
     "684c822c77537a620c85bcf920ff678e5125553bf07a77600a47b7d96f74dc2a",
   "provider-iss":
     "e5a0c7070dbe7875c363d85ca2de220daa31dba747a6e550e0324e38a0a70ca8",
-  od: "fa110dd8686558a2cfb93614c97a77df63be9e86aeb5e7ca81167ce04cab885d",
+  od: "9cb9d62b3652d0af088a7e9da350e4f2d0e4abaa539c1665dc43a6379aa6f48a",
   store:
     "593bd94c0964835c5077a60973cd1da42f5ccf1f5ca63dcd71a82e59df97a93e",
   publication:
-    "dee1af1064802354c19e7ede0eb9d9232adb9b00259abee08d40ecb5645330f3",
+    "18a8ef6baaef1b92e7f93940ced3233ab2fa83512fd808b48b6c34b49681ce61",
   status:
     "1e8fc3234578902743a68d8da4be23151aa78bc81512d3b0144f5404a1ddb342",
 });
@@ -216,6 +216,7 @@ test("exact release-signed Supplemental flow executes every signed child in the 
   );
 
   const httpBodies = fixtureResponses();
+  const expectedRecordsPerStandard = 5;
   const hostcalls = [];
   const opaqueValues = new Map();
   const opaqueKey = (nodeId, params) =>
@@ -359,13 +360,14 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     publicationInputSummary.length > 0,
     "no canonical records reached the independently instantiated publication node",
   );
+  assert.equal(publicationInputSummary.length, 3);
   assert.ok(publicationResponses.length > 0);
   for (const summary of publicationInputSummary) {
     assert.equal(summary.portId, "records");
     assert.equal(summary.kind, 1);
     assert.equal(summary.sequence, 0);
     assert.equal(summary.final, true);
-    assert.equal(summary.recordCount, "1");
+    assert.equal(summary.recordCount, String(expectedRecordsPerStandard));
     assert.ok(["OMM", "OCM", "OBD"].includes(summary.schemaName));
     assert.equal(summary.fileIdentifier, `$${summary.schemaName}`);
     assert.equal(summary.dataLength, Number(summary.totalBytes));
@@ -423,6 +425,13 @@ test("exact release-signed Supplemental flow executes every signed child in the 
     publications.length > 0,
     "fitted records never reached the independently instantiated publication node",
   );
+  assert.equal(publications.length, expectedRecordsPerStandard * 3);
+  for (const standard of ["OMM", "OCM", "OBD"]) {
+    assert.equal(
+      publications.filter(({ params }) => params.standard === standard).length,
+      expectedRecordsPerStandard,
+    );
+  }
   for (const { params } of publications) {
     assert.equal(params.source, "supplemental-omm");
     assert.ok(["OMM", "OCM", "OBD"].includes(params.standard));

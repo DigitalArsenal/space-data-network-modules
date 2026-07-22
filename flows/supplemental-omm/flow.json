@@ -112,7 +112,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "fa110dd8686558a2cfb93614c97a77df63be9e86aeb5e7ca81167ce04cab885d"
+        "sha256": "9cb9d62b3652d0af088a7e9da350e4f2d0e4abaa539c1665dc43a6379aa6f48a"
       }
     },
     {
@@ -144,7 +144,7 @@
       "artifact": {
         "path": "./nodes/publication/dist/isomorphic/module.wasm",
         "publisher": "./nodes/publication/publisher.json",
-        "sha256": "dee1af1064802354c19e7ede0eb9d9232adb9b00259abee08d40ecb5645330f3"
+        "sha256": "18a8ef6baaef1b92e7f93940ced3233ab2fa83512fd808b48b6c34b49681ce61"
       }
     },
     {
