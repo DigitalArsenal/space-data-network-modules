@@ -66,7 +66,7 @@ test(
       assert.equal(descriptor.pluginId, node.pluginId);
       assert.equal(descriptor.methodId, node.methodId);
       assert.equal(descriptor.sha256, node.artifact.sha256);
-      const child = entries.get(`nodes/${node.nodeId}.wasm`);
+      const child = entries.get(node.pluginId);
       assert.ok(child, `missing exact child ${node.nodeId}`);
       assert.equal(sha256(child.payloadBytes), node.artifact.sha256);
       assert.ok(entries.has(`nodes/${node.nodeId}.publisher.json`));
@@ -92,7 +92,7 @@ test(
       assert.equal(publisher.developmentOnly, false);
       assert.equal(publisher.publicKeyHex, outerPublisher.publicKeyHex);
       const verified = await verifyModuleArtifact(
-        entries.get(`nodes/${node.nodeId}.wasm`).payloadBytes,
+        entries.get(node.pluginId).payloadBytes,
         {
           trustedPublicKeys: [outerPublisher.publicKeyHex],
           requireSignature: true,

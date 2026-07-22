@@ -304,7 +304,7 @@ test("the outer signed bundle contains exact independently signed child artifact
   for (const pluginId of independentlyPackagedPluginIds) {
     const node = findNode(flow, pluginId);
     const descriptor = resolveArtifactDescriptor(node, pluginId);
-    const entryId = `nodes/${node.nodeId}.wasm`;
+    const entryId = node.pluginId;
     const entry = entries.get(entryId);
     assert.ok(entry, `bundle is missing child artifact entry ${entryId}`);
     const expected = fs.readFileSync(descriptor.artifactPath);

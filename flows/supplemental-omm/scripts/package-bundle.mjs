@@ -15,6 +15,7 @@ import {
   signModuleArtifact,
   verifyModuleArtifact,
 } from "../../../node_modules/space-data-module-sdk/src/index.js";
+import { createFlowRuntimeHost } from "../../../node_modules/space-data-module-sdk/src/flow/flowRuntimeHost.js";
 import { sha256Bytes } from "../../../node_modules/space-data-module-sdk/src/utils/crypto.js";
 import { bytesToHex } from "../../../node_modules/space-data-module-sdk/src/utils/encoding.js";
 import { resolveSupplementalSigning } from "../nodes/signing.mjs";
@@ -112,13 +113,36 @@ async function materializeApp(portableWasmSha256) {
   return bytes;
 }
 
-async function loadSignedChildren(flow) {
+async function loadParentDependencies(rawWasm) {
+  const runtime = await createFlowRuntimeHost({ wasmSource: rawWasm });
+  const dependencies = new Map();
+  for (let index = 0; index < runtime.dependencyCount; index += 1) {
+    const descriptor = runtime.getDependencyDescriptor(index);
+    if (
+      typeof descriptor.pluginId !== "string" ||
+      descriptor.pluginId.length === 0 ||
+      typeof descriptor.dependencyId !== "string" ||
+      descriptor.dependencyId.length === 0 ||
+      !/^[0-9a-f]{64}$/.test(descriptor.sha256 ?? "") ||
+      dependencies.has(descriptor.pluginId)
+    ) {
+      throw new Error(
+        `Parent runtime dependency descriptor ${index} is incomplete or duplicated.`,
+      );
+    }
+    dependencies.set(descriptor.pluginId, descriptor);
+  }
+  return dependencies;
+}
+
+async function loadSignedChildren(flow, parentDependencies) {
   const nodes = flow.nodes ?? [];
   if (nodes.length === 0) {
     throw new Error("The Supplemental OMM flow must contain independently packaged nodes.");
   }
 
   const childArtifacts = [];
+  const childEntryIds = new Set();
   for (const node of nodes) {
     if (node.dispatchModel !== "isomorphic") {
       throw new Error(
@@ -161,19 +185,43 @@ async function loadSignedChildren(flow) {
       );
     }
 
+    const parentDependency = parentDependencies.get(node.pluginId);
+    if (!parentDependency || parentDependency.sha256 !== actualSha256) {
+      throw new Error(
+        `Node ${node.nodeId} is not bound by an exact parent runtime dependency descriptor.`,
+      );
+    }
+    const entryId = parentDependency.dependencyId;
+    if (
+      typeof entryId !== "string" ||
+      entryId.length === 0 ||
+      entryId !== entryId.trim() ||
+      childEntryIds.has(entryId)
+    ) {
+      throw new Error(
+        `Node ${node.nodeId} requires a unique exact plugin ID for its signed dependency entry; received ${JSON.stringify(entryId)}.`,
+      );
+    }
+    childEntryIds.add(entryId);
+
     childArtifacts.push({
       nodeId: node.nodeId,
       pluginId: node.pluginId,
       methodId: node.methodId,
       dispatchModel: node.dispatchModel,
       sha256: actualSha256,
-      entryId: `nodes/${node.nodeId}.wasm`,
+      entryId,
       publisherEntryId: `nodes/${node.nodeId}.publisher.json`,
       publisherKeyId: publisher.keyId ?? null,
       publisherPublicKeyHex: publisher.publicKeyHex,
       wasmBytes,
       publisherBytes,
     });
+  }
+  if (childArtifacts.length !== parentDependencies.size) {
+    throw new Error(
+      `Parent runtime declares ${parentDependencies.size} dependencies but the signed flow carries ${childArtifacts.length} children.`,
+    );
   }
   return childArtifacts;
 }
@@ -205,7 +253,8 @@ const rawWasm = readBuildBytes("isomorphic/module.wasm");
 const flowManifest = readBuildJson("plugin-manifest.json");
 const flowSource = readPackageJson("flow.json");
 const flowPLG = encodePluginManifest(flowManifest);
-const children = await loadSignedChildren(flowSource);
+const parentDependencies = await loadParentDependencies(rawWasm);
+const children = await loadSignedChildren(flowSource, parentDependencies);
 const canonical = await computeCanonicalModuleHash(rawWasm);
 const portableWasmSha256 = canonical.hashHex;
 const appAPP = await materializeApp(portableWasmSha256);
