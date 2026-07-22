@@ -24,6 +24,7 @@ const publisherPath = path.join(timerRoot, "publisher.json");
 const standardsRoot = path.resolve(packageRoot, "../../../spacedatastandards.org");
 const flatcPath = path.resolve(packageRoot, "../../../flatbuffers/build/flatc");
 const hourMs = 3_600_000;
+const initialWakeupDelayMs = 30_000;
 const fsoIdentity = {
   schemaName: "FSO.fbs",
   fileIdentifier: "$FSO",
@@ -213,22 +214,83 @@ test("timer node artifact is independently bundle-signed", async () => {
   assert.equal(verified.signatureScope, "bundle");
 });
 
+test("timer bootstraps installation before its first generic wakeup", async (t) => {
+  const manifest = readJson(manifestPath, "timer manifest");
+  const signed = new Uint8Array(fs.readFileSync(artifactPath));
+  const portable = extractPublicationRecordCollection(signed)?.payloadBytes ?? signed;
+  let nowMs = 1_800_001_234_567;
+  const arms = [];
+  const harness = await createBrowserModuleHarness({
+    wasmSource: portable,
+    manifest,
+    surface: "direct",
+    hostcallDispatch(operation, params) {
+      if (operation === "clock.now") return nowMs;
+      if (operation === "timers.arm") {
+        arms.push({ ...params });
+        return { accepted: true };
+      }
+      throw new Error(`timer called forbidden host operation ${operation}`);
+    },
+  });
+  t.after(() => harness.destroy());
+
+  const bootstrap = await harness.invoke({
+    methodId: "on_wakeup",
+    inputs: [wakeupInput()],
+  });
+  assert.equal(bootstrap.statusCode, 0, bootstrap.errorMessage);
+  assert.equal(
+    bootstrap.outputs.length,
+    0,
+    "a lifecycle-only startup must commit the APP before starting the catalog run",
+  );
+  assert.equal(arms.length, 1);
+  assert.equal(arms[0].at_unix_ms, nowMs + initialWakeupDelayMs);
+  assert.equal(arms[0].token, "supplemental-omm-hourly");
+
+  nowMs += initialWakeupDelayMs;
+  const firstWakeup = await harness.invoke({
+    methodId: "on_wakeup",
+    inputs: [wakeupInput()],
+  });
+  assert.equal(firstWakeup.statusCode, 0, firstWakeup.errorMessage);
+  assert.equal(firstWakeup.outputs.length, 1);
+  const nextDue = (Math.floor(nowMs / hourMs) + 1) * hourMs;
+  assert.deepEqual(decodeTick(firstWakeup.outputs[0]), {
+    nowMs,
+    scheduledMs: nowMs,
+    nextMs: nextDue,
+    sequence: 1,
+    missedCount: 0,
+  });
+});
+
 test("timer accepts a canonical production wakeup carrying paired aligned-layout hints", async (t) => {
   const manifest = readJson(manifestPath, "timer manifest");
   const signed = new Uint8Array(fs.readFileSync(artifactPath));
   const portable = extractPublicationRecordCollection(signed)?.payloadBytes ?? signed;
+  let nowMs = 1_800_001_234_567;
   const harness = await createBrowserModuleHarness({
     wasmSource: portable,
     manifest,
     surface: "direct",
     hostcallDispatch(operation) {
-      if (operation === "clock.now") return 1_800_001_234_567;
+      if (operation === "clock.now") return nowMs;
       if (operation === "timers.arm") return { accepted: true };
       throw new Error(`timer called forbidden host operation ${operation}`);
     },
   });
   t.after(() => harness.destroy());
 
+  const bootstrap = await harness.invoke({
+    methodId: "on_wakeup",
+    inputs: [productionCanonicalWakeupInput()],
+  });
+  assert.equal(bootstrap.statusCode, 0, bootstrap.errorMessage);
+  assert.equal(bootstrap.outputs.length, 0);
+
+  nowMs += initialWakeupDelayMs;
   const response = await harness.invoke({
     methodId: "on_wakeup",
     inputs: [productionCanonicalWakeupInput()],
@@ -245,8 +307,7 @@ test("timer owns hourly UTC policy and arms only a generic timer token", async (
   const signed = new Uint8Array(fs.readFileSync(artifactPath));
   const portable = extractPublicationRecordCollection(signed)?.payloadBytes ?? signed;
   const calls = [];
-  const nowMs = 1_800_001_234_567;
-  const expectedNextMs = (Math.floor(nowMs / 3_600_000) + 1) * 3_600_000;
+  let nowMs = 1_800_001_234_567;
   const harness = await createBrowserModuleHarness({
     wasmSource: portable,
     manifest,
@@ -264,12 +325,27 @@ test("timer owns hourly UTC policy and arms only a generic timer token", async (
   // direct-surface outputs. A generic wakeup may omit the body in production;
   // this empty canonical FSO supplies that arena without moving policy to the
   // harness or host.
+  const bootstrap = await harness.invoke({
+    methodId: "on_wakeup",
+    inputs: [wakeupInput()],
+  });
+  assert.equal(bootstrap.statusCode, 0, bootstrap.errorMessage);
+  assert.equal(bootstrap.outputs.length, 0);
+  assert.equal(calls[1].params.at_unix_ms, nowMs + initialWakeupDelayMs);
+
+  calls.length = 0;
+  nowMs += initialWakeupDelayMs;
+  const expectedNextMs = (Math.floor(nowMs / hourMs) + 1) * hourMs;
   const response = await harness.invoke({
     methodId: "on_wakeup",
     inputs: [wakeupInput()],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.outputs.length, 1, "startup wakeup emits exactly one tick");
+  assert.equal(
+    response.outputs.length,
+    1,
+    "the first generic wakeup after installation emits exactly one tick",
+  );
   assert.equal(response.outputs[0].portId, "tick");
   assert.equal(response.outputs[0].wireFormat, "flatbuffer");
   assert.equal(response.outputs[0].typeRef?.schemaName, "FSB.fbs");
@@ -308,6 +384,14 @@ test("timer coalesces late wakeups, ignores early wakeups, and re-establishes po
 
   const firstHarness = await makeHarness();
   t.after(() => firstHarness.destroy());
+  const bootstrap = await firstHarness.invoke({
+    methodId: "on_wakeup",
+    inputs: [wakeupInput()],
+  });
+  assert.equal(bootstrap.statusCode, 0, bootstrap.errorMessage);
+  assert.equal(bootstrap.outputs.length, 0);
+
+  nowMs += initialWakeupDelayMs;
   const first = await firstHarness.invoke({
     methodId: "on_wakeup",
     inputs: [wakeupInput()],
@@ -351,16 +435,25 @@ test("timer coalesces late wakeups, ignores early wakeups, and re-establishes po
 
   const restartedHarness = await makeHarness();
   t.after(() => restartedHarness.destroy());
+  const restartBootstrap = await restartedHarness.invoke({
+    methodId: "on_wakeup",
+    inputs: [wakeupInput()],
+  });
+  assert.equal(restartBootstrap.statusCode, 0, restartBootstrap.errorMessage);
+  assert.equal(restartBootstrap.outputs.length, 0);
+
+  nowMs += initialWakeupDelayMs;
   const restarted = await restartedHarness.invoke({
     methodId: "on_wakeup",
     inputs: [wakeupInput()],
   });
   assert.equal(restarted.statusCode, 0, restarted.errorMessage);
-  assert.equal(restarted.outputs.length, 1, "fresh signed instance re-establishes policy immediately");
+  assert.equal(restarted.outputs.length, 1, "fresh signed instance re-establishes policy after bootstrap");
+  const restartedNextDue = (Math.floor(nowMs / hourMs) + 1) * hourMs;
   assert.deepEqual(decodeTick(restarted.outputs[0]), {
     nowMs,
     scheduledMs: nowMs,
-    nextMs: nextDue,
+    nextMs: restartedNextDue,
     sequence: 1,
     missedCount: 0,
   });
@@ -371,7 +464,7 @@ test("timer emits the declared aligned FSB when the incoming generic wakeup is a
   const manifest = readJson(manifestPath, "timer manifest");
   const signed = new Uint8Array(fs.readFileSync(artifactPath));
   const portable = extractPublicationRecordCollection(signed)?.payloadBytes ?? signed;
-  const nowMs = 1_800_001_234_567;
+  let nowMs = 1_800_001_234_567;
   const harness = await createBrowserModuleHarness({
     wasmSource: portable,
     manifest,
@@ -384,6 +477,14 @@ test("timer emits the declared aligned FSB when the incoming generic wakeup is a
   });
   t.after(() => harness.destroy());
 
+  const bootstrap = await harness.invoke({
+    methodId: "on_wakeup",
+    inputs: [wakeupInput("aligned-binary")],
+  });
+  assert.equal(bootstrap.statusCode, 0, bootstrap.errorMessage);
+  assert.equal(bootstrap.outputs.length, 0);
+
+  nowMs += initialWakeupDelayMs;
   const response = await harness.invoke({
     methodId: "on_wakeup",
     inputs: [wakeupInput("aligned-binary")],

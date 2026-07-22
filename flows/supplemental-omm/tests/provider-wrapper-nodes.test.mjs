@@ -533,7 +533,7 @@ test("Starlink exact artifact drains one full manifest across yielded continuati
   assert.equal(new Set(decoded.map((output) => output.schemaName)).size, units.length);
 });
 
-test("Starlink keeps 64-way fetch pages but emits at most 64 FSB frames per invocation", async (t) => {
+test("Starlink keeps 64-way fetch pages but emits at most four complete objects per invocation", async (t) => {
   const manifestUrl = `${fixtureOrigin}/starlink-frame-bound/MANIFEST.txt`;
   const ephemerisBase = `${fixtureOrigin}/starlink-frame-bound/`;
   const filenames = Array.from(
@@ -604,7 +604,7 @@ test("Starlink keeps 64-way fetch pages but emits at most 64 FSB frames per invo
   t.after(() => harness.destroy());
 
   const invocations = [];
-  for (let index = 0; index < 10; index += 1) {
+  for (let index = 0; index < 20; index += 1) {
     const response = await harness.invoke({
       methodId: "emit",
       inputs: [configFrame({
@@ -617,12 +617,27 @@ test("Starlink keeps 64-way fetch pages but emits at most 64 FSB frames per invo
     assert.equal(response.statusCode, 0, response.errorMessage);
     assert.ok(
       response.outputs.length <= 64,
-      `invocation ${index} emitted ${response.outputs.length} frames`,
+      `invocation ${index} exceeded the signed raw-frame ceiling`,
     );
+    assert.ok(
+      new Set(
+        response.outputs.map((output) => decodeFsb(output.payload).requestId.toString()),
+      ).size <= 4,
+      `invocation ${index} emitted more than four complete objects`,
+    );
+    if (index === 0) {
+      assert.equal(
+        calls.filter((url) => url !== manifestUrl).length,
+        64,
+        "the first downstream batch must retain one complete 64-way download page",
+      );
+    }
     invocations.push(response);
     if (!response.yielded) break;
   }
   assert.equal(invocations.at(-1)?.yielded, false, "Starlink did not drain");
+  assert.equal(invocations.length, 17);
+  assert.equal(invocations[0].backlogRemaining, 61);
   assert.ok(
     maxConcurrentEphemerisCalls > 1,
     `expected overlapping worker HTTP requests, observed ${maxConcurrentEphemerisCalls}`,
@@ -642,6 +657,22 @@ test("Starlink keeps 64-way fetch pages but emits at most 64 FSB frames per invo
     new Set(decoded.map((output) => output.requestId.toString())).size,
     filenames.length,
   );
+  const invocationByRequest = new Map();
+  for (const [invocationIndex, response] of invocations.entries()) {
+    for (const output of response.outputs.map((frame) => decodeFsb(frame.payload))) {
+      const requestId = output.requestId.toString();
+      const seen = invocationByRequest.get(requestId) ?? new Set();
+      seen.add(invocationIndex);
+      invocationByRequest.set(requestId, seen);
+    }
+  }
+  for (const [requestId, invocationIndexes] of invocationByRequest) {
+    assert.equal(
+      invocationIndexes.size,
+      1,
+      `complete response ${requestId} was split across downstream invocations`,
+    );
+  }
   for (let index = 0; index < filenames.length; index += 1) {
     const identity = `MEME:${30001 + index}:STARLINK-${index + 1}`;
     const chunks = decoded
@@ -669,6 +700,8 @@ for (const [key, pluginId] of providers) {
     assert.ok(method, `${key} provider must expose emit`);
     assert.deepEqual(method.inputPorts.map((port) => port.portId), ["config"]);
     assert.deepEqual(method.outputPorts.map((port) => port.portId), ["oem"]);
+    assert.equal(method.inputPorts[0].required, true);
+    assert.equal(method.inputPorts[0].minStreams, 1);
     assertFsbPair(method.inputPorts[0], `${key}.config`);
     assertFsbPair(method.outputPorts[0], `${key}.oem`);
     assert.doesNotMatch(JSON.stringify(manifest), /acceptsAnyFlatbuffer/i);
@@ -807,6 +840,7 @@ test("Starlink bounded parallel planning is authored in the WASM node", () => {
   assert.match(source, /pthread_join\s*\(/);
   assert.match(source, /fetch_concurrency/);
   assert.match(source, /fetch_complete_page/);
+  assert.match(source, /kMaxDownstreamObjectsPerInvocation\s*=\s*4/);
   assert.doesNotMatch(source, /Range\s*:/i);
 });
 
