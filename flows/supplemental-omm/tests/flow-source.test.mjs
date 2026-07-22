@@ -65,8 +65,44 @@ test("timer, native provider, OD, FlatSQL, publication, and status lanes are exp
   for (const [provider] of providers) {
     assert.ok(actual.has(`timer.tick->provider-${provider}.config`));
     assert.ok(actual.has(`provider-${provider}.oem->od.${provider}`));
-    assert.ok(actual.has(`provider-${provider}.oem->status.provider-${provider}`));
+    if (provider === "starlink") {
+      assert.ok(
+        actual.has(
+          "provider-starlink.progress->status.provider-starlink-progress",
+        ),
+      );
+      assert.ok(
+        !actual.has("provider-starlink.oem->status.provider-starlink"),
+        "Starlink OEM data must feed OD only",
+      );
+      assert.ok(
+        !actual.has("provider-starlink.progress->od.starlink"),
+        "Starlink progress must feed status only",
+      );
+    } else {
+      assert.ok(actual.has(`provider-${provider}.oem->status.provider-${provider}`));
+    }
   }
+  const starlink = flow.nodes.find((node) => node.nodeId === "provider-starlink");
+  const starlinkManifest = readJson(
+    "nodes/providers/starlink/plugin-manifest.json",
+  );
+  assert.deepEqual(
+    [...(starlink?.capabilities ?? [])].sort(),
+    [...(starlinkManifest.capabilities ?? [])].sort(),
+    "the flow grants exactly the signed Starlink node's declared capabilities",
+  );
+  assert.deepEqual(
+    flow.edges
+      .filter((edge) => edge.fromNodeId === "provider-starlink")
+      .map(
+        (edge) =>
+          `${edge.fromPortId}->${edge.toNodeId}.${edge.toPortId}`,
+      )
+      .sort(),
+    ["oem->od.starlink", "progress->status.provider-starlink-progress"],
+    "Starlink has exactly one data edge to OD and one progress edge to status",
+  );
   assert.ok(actual.has("od.control->store.control"));
   assert.ok(actual.has("od.status->status.od"));
   for (const record of ["omm", "ocm", "obd"]) {
@@ -151,8 +187,12 @@ test("the bundle owns one self-contained APP status board", () => {
   for (const [provider] of providers) {
     assert.match(ui, new RegExp(`data-provider=["']${provider}["']`));
   }
-  assert.match(ui, /data-provider=["']od["']/);
-  assert.match(ui, /class=["']error-message["']/);
+  assert.deepEqual(
+    [...ui.matchAll(/<tr\s+data-provider=["']([^"']+)["']/g)].map((match) => match[1]),
+    providers.map(([provider]) => provider),
+    "the status board renders exactly the original five provider rows",
+  );
+  assert.doesNotMatch(ui, /data-provider=["']od["']|Orbit determination/i);
   assert.match(ui, /\/sdn\/v1\/artifacts\/__MODULE_CONTENT_HASH__/);
   assert.match(ui, /\/runtime\/nodes\//);
   assert.doesNotMatch(ui, /\/api\/v1\/stats|https?:\/\/|celestrak/i);

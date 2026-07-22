@@ -28,14 +28,14 @@ async function run(command, args, cwd) {
   });
 }
 
-async function fsbCatalogEntry() {
+async function schemaCatalogEntry(schemaCode) {
   const idl = await readFile(
-    path.join(standardsRoot, "schema/FSB/main.fbs"),
+    path.join(standardsRoot, `schema/${schemaCode}/main.fbs`),
     "utf8",
   );
   return {
-    schemaCode: "FSB",
-    schemaName: "FSB.fbs",
+    schemaCode,
+    schemaName: `${schemaCode}.fbs`,
     fileIdentifier: idl.match(/file_identifier\s+"([^"]+)"/)?.[1],
     rootTypeName: idl.match(/root_type\s+([A-Za-z0-9_]+)/)?.[1],
     version: idl.match(/\/\/ Version:\s*([^\n]+)/)?.[1]?.trim(),
@@ -45,10 +45,26 @@ async function fsbCatalogEntry() {
   };
 }
 
+async function generatedSchemaHeader(schemaCode) {
+  const source = await readFile(
+    path.join(standardsRoot, `lib/cpp/${schemaCode}/main_generated.h`),
+    "utf8",
+  );
+  // Canonical SDS schemas are all named main.fbs, so flatc gives every
+  // generated header the same include guard. The compile unit embeds multiple
+  // canonical headers and must make only that mechanical guard unique.
+  return source.replaceAll(
+    "FLATBUFFERS_GENERATED_MAIN_H_",
+    `FLATBUFFERS_GENERATED_${schemaCode}_MAIN_H_`,
+  );
+}
+
 export async function buildProviderNode({
   nodeRoot,
   defaultSigningByte,
   defaultSigningKeyId,
+  threadModel = "single-thread",
+  schemaCodes = ["FSB"],
 }) {
   const buildRoot = path.join(nodeRoot, ".build");
   const unsignedRoot = path.join(nodeRoot, "dist/.unsigned");
@@ -84,7 +100,7 @@ export async function buildProviderNode({
   );
   const sourceCode = (
     await Promise.all([
-      readFile(path.join(standardsRoot, "lib/cpp/FSB/main_generated.h"), "utf8"),
+      ...schemaCodes.map(generatedSchemaHeader),
       readFile(path.join(buildRoot, "main_aligned.h"), "utf8"),
       readFile(path.join(providersRoot, "common/provider_runtime.hpp"), "utf8"),
       readFile(path.join(nodeRoot, "src/node.cpp"), "utf8"),
@@ -95,12 +111,12 @@ export async function buildProviderNode({
   const unsignedPath = path.join(unsignedRoot, "module.wasm");
   const compilation = await compileModuleFromSource({
     manifest,
-    catalog: [await fsbCatalogEntry()],
+    catalog: await Promise.all(schemaCodes.map(schemaCatalogEntry)),
     sourceCode,
     language: "c++",
     outputPath: unsignedPath,
     allowUndefinedImports: true,
-    threadModel: "emscripten-pthreads",
+    threadModel,
   });
   if (!compilation.report?.ok) {
     throw new Error(
@@ -127,7 +143,10 @@ export async function buildProviderNode({
         signedHash: signed.signedHashHex,
         signatureScope: "bundle",
         keyId: signingKeyId,
-        threadModel: "wasi-threads",
+        threadModel:
+          threadModel === "emscripten-pthreads"
+            ? "wasi-threads"
+            : "single-thread",
       },
       null,
       2,

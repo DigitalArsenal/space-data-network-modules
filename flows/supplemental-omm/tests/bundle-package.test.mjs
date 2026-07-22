@@ -51,6 +51,17 @@ test("the publishable output carries canonical flow.plg and size-prefixed app.ap
   assert.equal(app.pages.length, 1);
   assert.equal(app.pages[0].entry, true);
   assert.match(app.pages[0].content, /data-provider=["']starlink["']/);
+  assert.equal(
+    (app.pages[0].content.match(/data-provider=/g) ?? []).length,
+    5,
+    "the public status table must contain only the five external providers",
+  );
+  assert.doesNotMatch(app.pages[0].content, /data-provider=["']od["']/);
+  assert.doesNotMatch(app.pages[0].content, />Orbit determination</i);
+  assert.match(app.pages[0].content, />Provider</);
+  assert.match(app.pages[0].content, />Processed frames</);
+  assert.match(app.pages[0].content, />Total frames</);
+  assert.match(app.pages[0].content, />Downloaded bytes</);
   assert.doesNotMatch(app.pages[0].content, /\/api\/v1\/stats/);
   assert.doesNotMatch(app.pages[0].content, /celestrak/i);
   assert.match(

@@ -7,4 +7,6 @@ await buildProviderNode({
   nodeRoot: path.dirname(fileURLToPath(import.meta.url)),
   defaultSigningByte: "51",
   defaultSigningKeyId: "supplemental-omm-starlink-provider-development",
+  threadModel: "emscripten-pthreads",
+  schemaCodes: ["FSB", "DSS"],
 });
