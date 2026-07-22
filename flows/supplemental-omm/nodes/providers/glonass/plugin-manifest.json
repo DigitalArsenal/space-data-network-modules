@@ -1,0 +1,46 @@
+{
+  "pluginId": "com.orbpro.glonass-source",
+  "name": "GLONASS Complete Ephemeris Provider",
+  "version": "2.0.0",
+  "description": "Fetches the complete configured GLONASS SP3 response and emits byte-exact provider-native data as paired canonical or aligned FSB chunks.",
+  "pluginFamily": "data_source",
+  "capabilities": ["http"],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "emit",
+      "displayName": "Fetch Complete GLONASS Ephemeris",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [{"setId": "fsb-dual", "allowedTypes": [
+            {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "flatbuffer"},
+            {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "aligned-binary", "byteLength": 1048744, "requiredAlignment": 8}
+          ]}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [{"setId": "fsb-dual", "allowedTypes": [
+            {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "flatbuffer"},
+            {"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB", "wireFormat": "aligned-binary", "byteLength": 1048744, "requiredAlignment": 8}
+          ]}],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true
+        }
+      ],
+      "maxBatch": 4096,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [{"schemaName": "FSB.fbs", "fileIdentifier": "$FSB", "schemaVersion": "1.158.1", "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945", "rootTypeName": "FSB"}],
+  "buildArtifacts": [{"artifactId": "supplemental-omm-provider-glonass-isomorphic", "kind": "wasm", "path": "dist/isomorphic/module.wasm", "target": "browser,wasmedge"}],
+  "abiVersion": 1
+}

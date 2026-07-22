@@ -1,0 +1,146 @@
+{
+  "pluginId": "org.sdn.flows.supplemental-omm.timer",
+  "name": "Supplemental OMM Hourly Timer Policy",
+  "version": "1.0.0",
+  "description": "Signed Supplemental OMM timer policy node. It owns the hourly UTC schedule, coalescing misfire policy, wakeup correlation token, and typed tick emission. The host supplies only wall-clock readings and generic wakeups at requested instants.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "clock",
+    "timers"
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "generic-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "properties": {
+        "hostOps": [
+          "clock.now"
+        ]
+      }
+    },
+    {
+      "interfaceId": "generic-timers",
+      "kind": "host-service",
+      "direction": "output",
+      "capability": "timers",
+      "resource": "host://timers",
+      "properties": {
+        "hostOps": [
+          "timers.arm",
+          "timers.cancel"
+        ]
+      }
+    }
+  ],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "on_wakeup",
+      "displayName": "Apply Hourly Wakeup Policy",
+      "inputPorts": [
+        {
+          "portId": "wakeup",
+          "acceptedTypeSets": [
+            {
+              "setId": "fso-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 361648,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional typed control/wakeup envelope. Generic wakeup delivery may invoke the method without a body."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "fsb-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "schemaVersion": "1.158.1",
+                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 1048744,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One bounded FSB tick frame when the signed policy decides this wakeup is due."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "FSO.fbs",
+      "fileIdentifier": "$FSO",
+      "schemaVersion": "1.158.2",
+      "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+      "rootTypeName": "FSO"
+    },
+    {
+      "schemaName": "FSB.fbs",
+      "fileIdentifier": "$FSB",
+      "schemaVersion": "1.158.1",
+      "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
+      "rootTypeName": "FSB"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "supplemental-omm-timer-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

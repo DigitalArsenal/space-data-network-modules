@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/supplemental-omm-timer-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test ../../tests/timer-node.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../../../ancillary-packages/space-data-module-sdk"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@sdn/supplemental-omm-od",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test ../../tests/od-node.test.mjs"
+  }
+}
