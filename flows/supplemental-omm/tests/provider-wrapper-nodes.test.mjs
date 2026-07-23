@@ -936,6 +936,18 @@ test("Starlink validates finite decimal ranges without libc numeric conversion",
     /std::(?:string\b|vector\s*<)/,
     "finite-decimal validation must not allocate",
   );
+  const commonCaseReturn = implementation.indexOf(
+    "if (normalized_exponent > -308 && normalized_exponent < 308)",
+  );
+  assert.ok(
+    commonCaseReturn > 0,
+    "finite-decimal validation must retain the exact fast range gate",
+  );
+  assert.doesNotMatch(
+    implementation.slice(0, commonCaseReturn),
+    /for\s*\(\s*size_t\s+index\s*=\s*significand_begin/,
+    "ordinary MEME fields must collect significand bounds during their grammar scan instead of rescanning every token",
+  );
 });
 
 test("Starlink finite-decimal grammar preserves normal/scientific values and rejects non-finite or out-of-range fields", async (t) => {
@@ -5103,7 +5115,7 @@ test("Starlink confines one probe-and-GET pthread cohort to one bounded download
   );
   assert.doesNotMatch(source, /kThreadJoinTimeoutNanoseconds/);
   assert.match(source, /clock_gettime\s*\(\s*CLOCK_MONOTONIC/);
-  assert.match(source, /sched_yield\s*\(/);
+  assert.doesNotMatch(source, /sched_yield\s*\(/);
   assert.doesNotMatch(source, /nanosleep\s*\(/);
   assert.doesNotMatch(source, /kFetchWorkerIdleTimeoutSeconds/);
   assert.doesNotMatch(source, /retire_fetch_workers\s*\(/);
@@ -5158,6 +5170,40 @@ test("Starlink confines one probe-and-GET pthread cohort to one bounded download
     source.indexOf("void* download_page_worker"),
   );
   assert.ok(tasks.indexOf("probe_complete_size") < tasks.indexOf("http_get_complete"));
+});
+
+test("Starlink parks barrier waiters with bounded timed atomic waits", () => {
+  const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
+  assert.match(
+    source,
+    /kThreadPollParkNanoseconds\s*=\s*1'000'000ll/,
+    "barrier parking must use a finite one-millisecond polling bound",
+  );
+  const pause = source.slice(
+    source.indexOf("bool thread_poll_pause()"),
+    source.indexOf("\nvoid fail_download_synchronization"),
+  );
+  assert.ok(pause.length > 0, "missing bounded barrier parking helper");
+  assert.match(pause, /__builtin_wasm_memory_atomic_wait32\s*\(/);
+  assert.match(
+    pause,
+    /kThreadPollParkNanoseconds/,
+    "the wait32 call must use the bounded timeout",
+  );
+  assert.doesNotMatch(pause, /sched_yield|nanosleep|pthread_cond|pthread_mutex/);
+  assert.doesNotMatch(
+    pause,
+    /__builtin_wasm_memory_atomic_wait32\s*\([^)]*,\s*-1(?:ll)?\s*\)/,
+    "barrier parking may never wait indefinitely",
+  );
+  for (const helper of ["wait_for_flag", "wait_for_count", "wait_for_worker_release"]) {
+    const begin = source.indexOf(`bool ${helper}(`);
+    const end = source.indexOf("\n}", begin);
+    const implementation = source.slice(begin, end + 2);
+    assert.ok(implementation.length > 0, `missing ${helper}`);
+    assert.match(implementation, /deadline_expired\s*\(/);
+    assert.match(implementation, /thread_poll_pause\s*\(\s*\)/);
+  }
 });
 
 test("provider record counting cannot strand a one-worker pthread join", () => {
