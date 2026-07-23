@@ -37,11 +37,11 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "16848a62031ce8f2a8f2ddda6edb5ba1b243a72ede17477c4f9c67934839e914";
+  "f300a900e1ecf190a260e37704770741b7ace9abff8ec261ca312e4098c4dac5";
 const expectedChildSha256 = Object.freeze({
   timer: "ef67e56165444a164994d22f5d496d732667f1f7fcc4e22f660445547e550379",
   "provider-starlink":
-    "f194140dcbd6bb1d2cb3f7c96923c677e7c70ac39ae6af727572d88e321130f4",
+    "aa33ed4b116919cd5fdfeddb90d9ade1c3b42ffc281d88e17e28796afa201305",
   "provider-glonass":
     "337a5e408161f3745395aac23881bdbdabfe4b77c89f0077bd4dcb72a320375a",
   "provider-intelsat":
@@ -351,15 +351,28 @@ function multiWaveFixtureResponses(fileCount = 130) {
 
 function serveCompleteHttpFixture(params, body, description) {
   assert.equal(params.method, "GET");
-  if (params.headers?.Range === "bytes=0-0") {
-    assert.ok(params.max_bytes >= 1, `${description} size probe cannot hold one byte`);
+  const range = params.headers?.Range;
+  const rangeMatch =
+    typeof range === "string" ? /^bytes=0-([0-9]+)$/u.exec(range) : null;
+  if (rangeMatch) {
+    const requestedEnd = Number(rangeMatch[1]);
+    assert.ok(
+      Number.isSafeInteger(requestedEnd) && requestedEnd >= 0,
+      `${description} initial data range is invalid`,
+    );
+    assert.ok(
+      params.max_bytes >= requestedEnd + 1,
+      `${description} initial data range exceeds its response ceiling`,
+    );
+    const responseEnd = Math.min(requestedEnd, body.byteLength - 1);
+    const responseBody = new Uint8Array(body.subarray(0, responseEnd + 1));
     return {
       status: 206,
       headers: {
-        "Content-Range": `bytes 0-0/${body.byteLength}`,
-        "Content-Length": "1",
+        "Content-Range": `bytes 0-${responseEnd}/${body.byteLength}`,
+        "Content-Length": String(responseBody.byteLength),
       },
-      body: new Uint8Array(body.subarray(0, 1)),
+      body: responseBody,
     };
   }
   assert.equal(
@@ -1439,26 +1452,26 @@ test("exact signed composed flow drains 130 Starlink files across 64-file waves"
   const fileHttpEvents = executionEvents.filter(
     ({ kind, url }) => kind === "starlink-http" && starlinkEphemerisUrls.has(url),
   );
-  const sizeProbeEvents = fileHttpEvents.filter(
-    ({ range }) => range === "bytes=0-0",
+  const initialRangeEvents = fileHttpEvents.filter(
+    ({ range }) => range === `bytes=0-${2 * 1024 * 1024 - 1}`,
   );
-  const completeFetchEvents = fileHttpEvents.filter(({ range }) => !range);
-  assert.equal(sizeProbeEvents.length, 130);
-  assert.equal(completeFetchEvents.length, 130);
-  assert.equal(new Set(completeFetchEvents.map(({ url }) => url)).size, 130);
-  const fullFetchesByInvocation = new Map();
-  for (const event of completeFetchEvents) {
-    fullFetchesByInvocation.set(
+  const fallbackFetchEvents = fileHttpEvents.filter(({ range }) => !range);
+  assert.equal(initialRangeEvents.length, 130);
+  assert.equal(fallbackFetchEvents.length, 0);
+  assert.equal(new Set(initialRangeEvents.map(({ url }) => url)).size, 130);
+  const rangeFetchesByInvocation = new Map();
+  for (const event of initialRangeEvents) {
+    rangeFetchesByInvocation.set(
       event.invocation,
-      (fullFetchesByInvocation.get(event.invocation) ?? 0) + 1,
+      (rangeFetchesByInvocation.get(event.invocation) ?? 0) + 1,
     );
   }
   assert.deepEqual(
-    [...fullFetchesByInvocation.values()],
+    [...rangeFetchesByInvocation.values()],
     [64, 64, 2],
     "the composed scheduler did not traverse all three bounded HTTP waves",
   );
-  const fetchInvocationIds = [...fullFetchesByInvocation.keys()];
+  const fetchInvocationIds = [...rangeFetchesByInvocation.keys()];
   for (const invocation of fetchInvocationIds.slice(1)) {
     assert.equal(
       starlinkInvocations[invocation].inputCount,
@@ -1504,7 +1517,7 @@ test("exact signed composed flow drains 130 Starlink files across 64-file waves"
   assert.ok(committedStateEvents.length > 0);
   const generationCommit = committedStateEvents.at(-1);
   assert.ok(
-    completeFetchEvents.every(
+    fileHttpEvents.every(
       ({ sequence }) => sequence < generationCommit.sequence,
     ),
     "Starlink committed its drain generation before all 130 complete files arrived",
@@ -1521,7 +1534,7 @@ test("exact signed composed flow drains 130 Starlink files across 64-file waves"
     "Starlink reported 130/130 before syncing the final generation checkpoint",
   );
   assert.equal(
-    completeFetchEvents.filter(
+    fileHttpEvents.filter(
       ({ sequence }) => sequence > firstStarlinkOd.sequence,
     ).length,
     0,
