@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { signModuleArtifact } from "space-data-module-sdk";
 
+import { compileUniversalAot } from "../universal-aot.mjs";
+
 const providersRoot = path.dirname(fileURLToPath(import.meta.url));
 const standardsRoot = path.resolve(
   providersRoot,
@@ -65,7 +67,14 @@ export async function buildProviderNode({
   defaultSigningKeyId,
   threadModel = "single-thread",
   schemaCodes = ["FSB"],
+  sourceFragments = [],
 }) {
+  if (
+    !Array.isArray(sourceFragments) ||
+    sourceFragments.some((fragment) => typeof fragment !== "string")
+  ) {
+    throw new TypeError("sourceFragments must be an array of source strings");
+  }
   const buildRoot = path.join(nodeRoot, ".build");
   const unsignedRoot = path.join(nodeRoot, "dist/.unsigned");
   const distRoot = path.join(nodeRoot, "dist/isomorphic");
@@ -102,6 +111,7 @@ export async function buildProviderNode({
     await Promise.all([
       ...schemaCodes.map(generatedSchemaHeader),
       readFile(path.join(buildRoot, "main_aligned.h"), "utf8"),
+      ...sourceFragments,
       readFile(path.join(providersRoot, "common/provider_runtime.hpp"), "utf8"),
       readFile(path.join(nodeRoot, "src/node.cpp"), "utf8"),
     ])
@@ -124,7 +134,17 @@ export async function buildProviderNode({
     );
   }
 
-  const signed = await signModuleArtifact(compilation.wasmBytes, {
+  const productionMode =
+    process.env.NODE_ENV === "production" ||
+    process.env.SUPPLEMENTAL_OMM_PROVIDER_BUILD_MODE === "production" ||
+    !developmentOnly;
+  const executableBytes = await compileUniversalAot({
+    wasmBytes: compilation.wasmBytes,
+    stagingDirectory: unsignedRoot,
+    mode: "child",
+    productionMode,
+  });
+  const signed = await signModuleArtifact(executableBytes, {
     privateKeySeedHex: signingSeed,
     keyId: signingKeyId,
     signatureScope: "bundle",

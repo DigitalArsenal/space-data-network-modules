@@ -6,6 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  decodeUnsignedLeb128,
   extractPublicationRecordCollection,
   listWasmCustomSections,
   parseSingleFileBundle,
@@ -201,6 +202,18 @@ test(
       );
       assert.equal(aotSections.length, 1, `${label} must carry exactly one WasmEdge AOT section`);
       assert.ok(aotSections[0].dataBytes.byteLength > 0, `${label} has an empty WasmEdge AOT section`);
+      const aotHeader = aotSections[0].dataBytes;
+      const { value: binaryVersion, nextOffset } = decodeUnsignedLeb128(
+        aotHeader,
+        0,
+      );
+      assert.ok(nextOffset + 2 <= aotHeader.byteLength, `${label} has a truncated AOT target header`);
+      assert.equal(binaryVersion, 1, `${label} must use WasmEdge AOT binary version 1`);
+      assert.deepEqual(
+        [...aotHeader.subarray(nextOffset, nextOffset + 2)],
+        [1, 1],
+        `${label} AOT must target Linux x86_64`,
+      );
     }
   },
 );

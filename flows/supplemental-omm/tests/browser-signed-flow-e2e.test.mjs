@@ -37,26 +37,26 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "3476af1450fe9a7e9188e3ade739f50c60c14c7b552cdc491976b45eaa71a8b8";
+  "16848a62031ce8f2a8f2ddda6edb5ba1b243a72ede17477c4f9c67934839e914";
 const expectedChildSha256 = Object.freeze({
-  timer: "db8d7a3506a0c3188b006886ebea30cfda9e9c2c2b9c477baefb5c37a375d6bd",
+  timer: "ef67e56165444a164994d22f5d496d732667f1f7fcc4e22f660445547e550379",
   "provider-starlink":
-    "21784e3d63e72804617bb3955c1c222f9d7d6a623ef73cafb6ad466d04b82aad",
+    "f194140dcbd6bb1d2cb3f7c96923c677e7c70ac39ae6af727572d88e321130f4",
   "provider-glonass":
-    "d8462af69d5fd2311bfdf279ebb665cb5a3fbc1e73d7eba303b0522ca43c4095",
+    "337a5e408161f3745395aac23881bdbdabfe4b77c89f0077bd4dcb72a320375a",
   "provider-intelsat":
-    "e31d65c2bd3bca346f12044748102f662227f7f25ee042f9a0e83d07a09397f3",
+    "100550e29a77fb24c1c4be6026190f7ce92dc732d24ec8c3e67ca3195f12779b",
   "provider-cpf":
-    "ffcaa7abe9533eeab795bf7e8452de6e79e6746c6d5d40226dbf50e5dd537fa1",
+    "e950098721ae74e6d47be7842db848820804a5e6bc5e115ba38b9bdfd9da90ae",
   "provider-iss":
-    "97e0f6231db85dd7dec479cc346cfb37b885c81fe90436d109423f04e9861d17",
-  od: "7b760e34ff6a4c3dad440e4c040de25e457a944ed37284abcb77c2ae10f17577",
+    "cfd39ab3c98511d06120c401171f38270cf591369f21a4183b367b0b26b1ece8",
+  od: "3d20add1211c79012e31fa48b046ba04aa4cbd4e648637db8037793938f5796b",
   store:
-    "399cbe6796f3804de70a1c5d23af1423701c8963e16bef562f72af1ce9be2a60",
+    "9413cbc137efb46b63e0d7b398c5a8b5a8e91c23bd501ba2e16fb6220b8f5991",
   publication:
-    "18a8ef6baaef1b92e7f93940ced3233ab2fa83512fd808b48b6c34b49681ce61",
+    "091cd16f2c0054b6445e930db749ebb92309af6c8ea3afd2796222184b67ebbe",
   status:
-    "a4b938be7d2012c2a9f46b7b6fedba4ac5d8659d89380f99132c48cfcb5e650e",
+    "53bf69a807b84b08e3d45d0008f74d14e6c3735c32665fd3bd63f7700c4d9229",
 });
 
 const defaultUrls = Object.freeze({
@@ -718,10 +718,7 @@ test("exact release-signed Supplemental flow commits the Starlink catalog before
   assert.equal(publicationResponses.length, 0);
 
   clockNowMs += 30_000;
-  host.enqueueTriggerFrame(0, {
-    portId: "wakeup",
-    bytes: new Uint8Array(),
-  });
+  host.enqueueTrigger(0);
   const drained = await host.drain({
     maxIterations: 20_000,
     frameBudget: 64,
@@ -747,7 +744,16 @@ test("exact release-signed Supplemental flow commits the Starlink catalog before
   });
   assert.ok(
     publicationInputSummary.length > 0,
-    "no canonical records reached the independently instantiated publication node",
+    `no canonical records reached the independently instantiated publication node: ${JSON.stringify({
+      starlinkOutputPorts: starlinkProviderOutputs.map(({ portId }) => portId),
+      odResponses,
+      publicationResponses,
+      statusResponses,
+      hostcallOperations: hostcalls.map(({ nodeId, operation }) => ({
+        nodeId,
+        operation,
+      })),
+    })}`,
   );
   assert.ok(
     publicationInputSummary.length >= 3 &&
@@ -1369,16 +1375,27 @@ test("exact signed composed flow drains 130 Starlink files across 64-file waves"
   );
 
   clockNowMs += 30_000;
-  host.enqueueTriggerFrame(0, {
-    portId: "wakeup",
-    bytes: new Uint8Array(),
-  });
+  host.enqueueTrigger(0);
   const drained = await host.drain({
     maxIterations: 100_000,
     frameBudget: 64,
   });
 
-  assert.ok(starlinkProgress.length > 0, "Starlink emitted no progress");
+  assert.ok(
+    starlinkProgress.length > 0,
+    `Starlink emitted no progress: ${JSON.stringify({
+      starlinkInvocations,
+      starlinkEventKinds: executionEvents.map(
+        ({ kind, invocation, operation, key, url }) => ({
+          kind,
+          invocation,
+          operation,
+          key,
+          url,
+        }),
+      ),
+    })}`,
+  );
   assert.ok(
     starlinkProgress.every(({ totalRows }) => totalRows === 130n),
     `Starlink reported a page size instead of the 130-file catalog total: ${JSON.stringify(starlinkProgress.map(({ syncedRows, totalRows }) => ({ syncedRows: syncedRows.toString(), totalRows: totalRows.toString() })))}`,

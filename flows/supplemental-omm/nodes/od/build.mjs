@@ -29,6 +29,7 @@ import { resolveWasiThreadsToolchain } from "../../../../node_modules/space-data
 
 import { manifest } from "./manifest.mjs";
 import { resolveSupplementalSigning } from "../signing.mjs";
+import { compileUniversalAot } from "../universal-aot.mjs";
 
 const execFileAsync = promisify(execFile);
 const nodeRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -49,7 +50,7 @@ const fitCoreObject = path.join(nodeRoot, "vendor/od-fit-core.o");
 const fitCoreObjectSha256 =
   "7ebc7409148e085759c976ae07f01c378b2f4f5a3662bd21a7c9b6ed6608782e";
 const developmentSigningSeed = "55".repeat(32);
-const { signingSeed, signingKeyId, developmentOnly } =
+const { signingSeed, signingKeyId, developmentOnly, productionMode } =
   resolveSupplementalSigning({
     environment: process.env,
     environmentPrefix: "SUPPLEMENTAL_OD",
@@ -269,7 +270,14 @@ try {
     );
   }
 
-  const signed = await signModuleArtifact(wasmBytes, {
+  const executableBytes = await compileUniversalAot({
+    wasmBytes,
+    stagingDirectory: unsignedRoot,
+    mode: "child",
+    productionMode: productionMode || !developmentOnly,
+  });
+  assertPthreadArtifact(executableBytes, { source: "WasmEdge universal-AOT OD" });
+  const signed = await signModuleArtifact(executableBytes, {
     privateKeySeedHex: signingSeed,
     keyId: signingKeyId,
     signatureScope: "bundle",
