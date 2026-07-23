@@ -1,5 +1,6 @@
 #include <array>
 #include <atomic>
+#include <iterator>
 #include <limits>
 #include <pthread.h>
 #include <sched.h>
@@ -20,21 +21,26 @@ constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
 constexpr uint64_t kThreadBarrierTimeoutNanoseconds =
     600ull * 1'000'000'000ull;
-// Probe 64 files in parallel and admit as many complete GETs as fit the signed
-// per-activation byte ceiling. This still saturates the link for small files,
-// while bounding parsing and hashing below WasmEdge's scheduled fuel ceiling.
+// Read the first two MiB of 64 files in parallel and admit as many complete
+// bodies as fit the signed per-activation byte ceiling. A 128-MiB wave admits
+// 64 production-shaped Starlink files while retaining the smaller fuel-safe
+// durable commit slices.
 constexpr size_t kMaxDurableFilesPerInvocation = 16;
 constexpr uint64_t kMaxDurableBytesPerInvocation = 32ull * 1024 * 1024;
 constexpr uint32_t kMaxDownstreamObjectsPerInvocation = 1;
+constexpr size_t kInitialRangeBytes = 2 * 1024 * 1024;
 constexpr size_t kMaxStarlinkFileBytes = 64 * 1024 * 1024;
 constexpr uint64_t kMaxFetchWaveBytesPerInvocation =
-    64ull * 1024 * 1024;
+    128ull * 1024 * 1024;
 constexpr uint64_t kMaxRetainedWaveBytes = 288ull * 1024 * 1024;
 constexpr uint64_t kReservedTransientBytes = 384ull * 1024 * 1024;
 constexpr uint64_t kWasmMemoryCeilingBytes = 1024ull * 1024 * 1024;
 constexpr size_t kMaxManifestBytes = 8 * 1024 * 1024;
 static_assert(kMaxStarlinkFileBytes <= kMaxRetainedWaveBytes);
 static_assert(kMaxFetchWaveBytesPerInvocation <= kMaxRetainedWaveBytes);
+static_assert(kInitialRangeBytes * kMaxFetchConcurrency +
+                  kMaxFetchWaveBytesPerInvocation <=
+              kMaxRetainedWaveBytes);
 static_assert(2 * kMaxRetainedWaveBytes + kReservedTransientBytes <
               kWasmMemoryCeilingBytes);
 
@@ -286,6 +292,8 @@ std::vector<PlannedUnit> plan_units(const std::vector<uint8_t>& manifest,
 
 struct ProbeResult {
   uint64_t byte_length = 0;
+  std::vector<uint8_t> body;
+  bool complete = false;
   bool valid = false;
 };
 
@@ -489,13 +497,16 @@ bool validate_http_envelope_layout(const std::vector<uint8_t>& envelope,
 }
 
 RawHttpResult http_request(std::string_view url, size_t max_body_bytes,
-                           bool size_probe) {
+                           bool initial_range) {
   RawHttpResult result;
   if (max_body_bytes == 0 || max_body_bytes > kMaxResponseBytes) return result;
   const std::string params =
       "{\"method\":\"GET\",\"url\":\"" + json_escape(url) +
       "\",\"responseType\":\"bytes\"" +
-      (size_probe ? ",\"headers\":{\"Range\":\"bytes=0-0\"}" : "") +
+      (initial_range
+           ? ",\"headers\":{\"Range\":\"bytes=0-" +
+                 std::to_string(kInitialRangeBytes - 1) + "\"}"
+           : "") +
       ",\"max_bytes\":" +
       std::to_string(max_body_bytes) + "}";
   std::vector<uint8_t> request;
@@ -572,10 +583,42 @@ provider_node::HttpResult http_get_complete(std::string_view url,
   return result;
 }
 
+bool parse_range_uint64(std::string_view value, size_t begin, size_t end,
+                        uint64_t* parsed) {
+  if (!parsed || begin >= end || end > value.size()) return false;
+  uint64_t number = 0;
+  for (size_t index = begin; index < end; ++index) {
+    const char digit = value[index];
+    if (digit < '0' || digit > '9' ||
+        number > (std::numeric_limits<uint64_t>::max() -
+                  static_cast<uint64_t>(digit - '0')) /
+                     10) {
+      return false;
+    }
+    number = number * 10 + static_cast<uint64_t>(digit - '0');
+  }
+  *parsed = number;
+  return true;
+}
+
+bool parse_content_range(std::string_view value, uint64_t* start,
+                         uint64_t* end, uint64_t* total) {
+  constexpr std::string_view prefix = "bytes ";
+  if (!start || !end || !total || value.rfind(prefix, 0) != 0) return false;
+  const size_t dash = value.find('-', prefix.size());
+  const size_t slash =
+      dash == std::string_view::npos ? dash : value.find('/', dash + 1);
+  return dash != std::string_view::npos &&
+         slash != std::string_view::npos &&
+         parse_range_uint64(value, prefix.size(), dash, start) &&
+         parse_range_uint64(value, dash + 1, slash, end) &&
+         parse_range_uint64(value, slash + 1, value.size(), total);
+}
+
 ProbeResult probe_complete_size(std::string_view url) {
-  RawHttpResult raw = http_request(url, 1, true);
+  RawHttpResult raw = http_request(url, kInitialRangeBytes, true);
   ProbeResult result;
-  if (raw.status != 206 || raw.body.size() != 1) return result;
+  if (raw.status != 206 || raw.body.empty()) return result;
   std::string_view result_object;
   std::string_view headers_object;
   if (!json_object_field(raw.meta, "result", &result_object) ||
@@ -587,24 +630,19 @@ ProbeResult probe_complete_size(std::string_view url) {
       !json_string(headers_object, "content-range", &content_range)) {
     return result;
   }
-  constexpr std::string_view prefix = "bytes 0-0/";
-  if (content_range.rfind(prefix, 0) != 0 ||
-      content_range.size() == prefix.size()) {
+  uint64_t start = 0;
+  uint64_t end = 0;
+  uint64_t total = 0;
+  if (!parse_content_range(content_range, &start, &end, &total) ||
+      start != 0 || total == 0 || total > kMaxStarlinkFileBytes ||
+      end >= total ||
+      end + 1 != std::min<uint64_t>(total, kInitialRangeBytes) ||
+      raw.body.size() != end - start + 1) {
     return result;
   }
-  uint64_t value = 0;
-  for (size_t index = prefix.size(); index < content_range.size(); ++index) {
-    const char digit = content_range[index];
-    if (digit < '0' || digit > '9' ||
-        value > (std::numeric_limits<uint64_t>::max() -
-                 static_cast<uint64_t>(digit - '0')) /
-                    10) {
-      return result;
-    }
-    value = value * 10 + static_cast<uint64_t>(digit - '0');
-  }
-  if (value == 0 || value > kMaxStarlinkFileBytes) return result;
-  result.byte_length = value;
+  result.complete = end + 1 == total;
+  if (result.complete) result.body = std::move(raw.body);
+  result.byte_length = total;
   result.valid = true;
   return result;
 }
@@ -641,10 +679,9 @@ void download_page_tasks(DownloadPageContext* context) {
         context->probe_next.fetch_add(1, std::memory_order_relaxed);
     const size_t index = context->begin + local;
     if (index >= context->end) break;
-    const ProbeResult probe =
-        probe_complete_size((*context->units)[index].url);
+    ProbeResult probe = probe_complete_size((*context->units)[index].url);
 
-    (*context->probes)[local] = probe;
+    (*context->probes)[local] = std::move(probe);
     if (context->probes_completed.fetch_add(1, std::memory_order_acq_rel) + 1 ==
         count) {
       finalize_download_admission(context);
@@ -667,9 +704,15 @@ void download_page_tasks(DownloadPageContext* context) {
     if (local >= admitted_count) break;
     const size_t index = context->begin + local;
     ValidatedDownload download;
-    download.response = http_get_complete(
-        (*context->units)[index].url,
-        static_cast<size_t>((*context->probes)[local].byte_length));
+    ProbeResult& probe = (*context->probes)[local];
+    if (probe.complete) {
+      download.response.status = 200;
+      download.response.body = std::move(probe.body);
+    } else {
+      download.response = http_get_complete(
+          (*context->units)[index].url,
+          static_cast<size_t>(probe.byte_length));
+    }
     if (download.response.status == 200 && !download.response.body.empty() &&
         download.response.body.size() <= kMaxStarlinkFileBytes) {
       uint64_t epoch_count = 0;
@@ -699,7 +742,7 @@ void* download_page_worker(void* opaque) {
 DownloadPage download_complete_page(
     const std::vector<PlannedUnit>& units, size_t begin, size_t end,
     uint32_t fetch_concurrency,
-    const std::vector<ProbeResult>* carried_probes) {
+    std::vector<ProbeResult>* carried_probes) {
   DownloadPage page;
   const size_t count = end > begin ? end - begin : 0;
   if (count == 0) return page;
@@ -716,7 +759,10 @@ DownloadPage download_complete_page(
       std::all_of(carried_probes->begin(), carried_probes->end(),
                   [](const ProbeResult& probe) { return probe.valid; })) {
     carried_count = carried_probes->size();
-    std::copy(carried_probes->begin(), carried_probes->end(), probes.begin());
+    for (size_t index = 0; index < carried_count; ++index) {
+      probes[index] = std::move((*carried_probes)[index]);
+    }
+    carried_probes->clear();
     context.probe_next.store(carried_count, std::memory_order_relaxed);
     context.probes_completed.store(carried_count, std::memory_order_relaxed);
     if (carried_count == count) {
@@ -777,8 +823,9 @@ DownloadPage download_complete_page(
       !context.synchronization_failed.load(std::memory_order_acquire);
   if (page.probes_valid && context.admitted_count <= probes.size()) {
     page.next_probe_begin = begin + context.admitted_count;
-    page.carried_probes.assign(probes.begin() + context.admitted_count,
-                               probes.end());
+    page.carried_probes.assign(
+        std::make_move_iterator(probes.begin() + context.admitted_count),
+        std::make_move_iterator(probes.end()));
   }
   responses.resize(context.admitted_count);
   page.responses_valid =
@@ -2220,7 +2267,7 @@ int run_download_phase() {
     return fail_invocation("checkpoint-invalid",
                            "Starlink download cursor cannot advance", 422);
   }
-  const std::vector<ProbeResult>* carried_probes = nullptr;
+  std::vector<ProbeResult>* carried_probes = nullptr;
   if (!g_probe_carry.probes.empty()) {
     if (g_probe_carry.begin == begin) {
       carried_probes = &g_probe_carry.probes;
