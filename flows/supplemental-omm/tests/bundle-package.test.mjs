@@ -44,6 +44,31 @@ test("the publishable output carries canonical flow.plg and size-prefixed app.ap
   const app = decodeAppManifest(appBytes);
 
   assert.equal(flow.pluginId, "org.sdn.flows.od-supplemental-omm");
+  assert.equal(flow.flowNodes.length, flowSource.nodes.length);
+  assert.ok(
+    flow.flowNodes.every((node) => node.dispatchModel === "isomorphic"),
+    "the canonical signed flow graph must retain every independent isomorphic dispatch",
+  );
+  assert.equal(flow.flowEdges.length, flowSource.edges.length);
+  for (const edge of flow.flowEdges) {
+    assert.equal(edge.contract.canonicalType.wireFormat, "flatbuffer");
+    assert.equal(edge.contract.alignedType.wireFormat, "aligned-binary");
+    assert.equal(
+      edge.contract.canonicalType.schemaName,
+      edge.contract.alignedType.schemaName,
+    );
+    assert.equal(
+      edge.contract.canonicalType.fileIdentifier,
+      edge.contract.alignedType.fileIdentifier,
+    );
+    assert.equal(
+      edge.contract.canonicalType.rootTypeName,
+      edge.contract.alignedType.rootTypeName,
+    );
+    assert.equal(edge.contract.canonicalFallbackAvailable, true);
+    assert.equal(edge.contract.alignedEligible, false);
+    assert.equal(edge.contract.routePolicy, "canonical-only");
+  }
   assert.equal(app.id, "supplemental-omm");
   assert.equal(app.modules.length, 1);
   assert.equal(app.modules[0].pluginId, flow.pluginId);

@@ -3,7 +3,6 @@
 #include <iterator>
 #include <limits>
 #include <pthread.h>
-#include <sched.h>
 #include <time.h>
 #include <unordered_set>
 #include <utility>
@@ -21,6 +20,7 @@ constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
 constexpr uint64_t kThreadBarrierTimeoutNanoseconds =
     600ull * 1'000'000'000ull;
+constexpr int64_t kThreadPollParkNanoseconds = 1'000'000ll;
 // Read the first two MiB of 64 files in parallel and admit as many complete
 // bodies as fit the signed per-activation byte ceiling. A 128-MiB wave admits
 // 64 production-shaped Starlink files while retaining the smaller fuel-safe
@@ -127,6 +127,7 @@ uint32_t g_pending_wave_begin = 0;
 bool g_emitted_transient = false;
 bool g_progress_emitted_transient = false;
 uint64_t g_trusted_emission_epoch_count = 0;
+alignas(4) int32_t g_thread_poll_sentinel = 0;
 
 Config parse_config(std::string_view json) {
   Config config;
@@ -373,7 +374,12 @@ bool deadline_expired(uint64_t deadline) {
 }
 
 bool thread_poll_pause() {
-  return sched_yield() == 0;
+  constexpr int32_t kAtomicWaitTimedOut = 2;
+  return g_thread_poll_sentinel == 0 &&
+         __builtin_wasm_memory_atomic_wait32(
+             &g_thread_poll_sentinel, 0, kThreadPollParkNanoseconds) ==
+             kAtomicWaitTimedOut &&
+         g_thread_poll_sentinel == 0;
 }
 
 void fail_download_synchronization(DownloadPageContext* context) {
@@ -888,10 +894,17 @@ bool strict_finite_decimal(std::string_view token) {
   if (token[cursor] == '+' || token[cursor] == '-') {
     if (++cursor == token.size()) return false;
   }
+  size_t digit_ordinal = 0;
+  size_t first_nonzero_ordinal = std::numeric_limits<size_t>::max();
   size_t integer_digits = 0;
   while (cursor < token.size() && token[cursor] >= '0' &&
          token[cursor] <= '9') {
+    if (first_nonzero_ordinal == std::numeric_limits<size_t>::max() &&
+        token[cursor] != '0') {
+      first_nonzero_ordinal = digit_ordinal;
+    }
     ++cursor;
+    ++digit_ordinal;
     ++integer_digits;
   }
   size_t fractional_digits = 0;
@@ -899,7 +912,12 @@ bool strict_finite_decimal(std::string_view token) {
     ++cursor;
     while (cursor < token.size() && token[cursor] >= '0' &&
            token[cursor] <= '9') {
+      if (first_nonzero_ordinal == std::numeric_limits<size_t>::max() &&
+          token[cursor] != '0') {
+        first_nonzero_ordinal = digit_ordinal;
+      }
       ++cursor;
+      ++digit_ordinal;
       ++fractional_digits;
     }
   }
@@ -930,18 +948,8 @@ bool strict_finite_decimal(std::string_view token) {
   }
   if (cursor != token.size()) return false;
 
-  size_t digit_ordinal = 0;
-  size_t first_nonzero_ordinal = std::numeric_limits<size_t>::max();
   const size_t significand_begin =
       token.front() == '+' || token.front() == '-' ? 1 : 0;
-  for (size_t index = significand_begin; index < significand_end; ++index) {
-    if (token[index] == '.') continue;
-    if (first_nonzero_ordinal == std::numeric_limits<size_t>::max() &&
-        token[index] != '0') {
-      first_nonzero_ordinal = digit_ordinal;
-    }
-    ++digit_ordinal;
-  }
   if (first_nonzero_ordinal == std::numeric_limits<size_t>::max()) {
     return true;
   }
