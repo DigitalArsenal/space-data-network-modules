@@ -11,6 +11,7 @@ import {
   encodeAppManifest,
   encodePluginManifest,
   extractPublicationRecordCollection,
+  listWasmCustomSections,
   parseSingleFileBundle,
   signModuleArtifact,
   verifyModuleArtifact,
@@ -19,6 +20,7 @@ import { createFlowRuntimeHost } from "../../../node_modules/space-data-module-s
 import { sha256Bytes } from "../../../node_modules/space-data-module-sdk/src/utils/crypto.js";
 import { bytesToHex } from "../../../node_modules/space-data-module-sdk/src/utils/encoding.js";
 import { resolveSupplementalSigning } from "../nodes/signing.mjs";
+import { compileUniversalAot } from "../nodes/universal-aot.mjs";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distRoot = path.join(packageRoot, "dist");
@@ -28,13 +30,14 @@ const {
   signingSeed,
   signingKeyId,
   developmentOnly,
-  productionMode,
+  productionMode: configuredProductionMode,
 } = resolveSupplementalSigning({
   environment: process.env,
   environmentPrefix: "SDM_BUNDLE",
   developmentSigningSeed: "",
   defaultSigningKeyId: "",
 });
+const productionMode = configuredProductionMode || !developmentOnly;
 
 if (process.argv.includes("--prepare")) {
   fs.rmSync(unsignedRoot, { recursive: true, force: true });
@@ -61,6 +64,22 @@ function readPackageJson(relativePath) {
 
 async function sha256Hex(bytes) {
   return bytesToHex(await sha256Bytes(bytes));
+}
+
+function assertUniversalAotArtifact(label, signedBytes) {
+  const executable =
+    extractPublicationRecordCollection(signedBytes)?.payloadBytes ?? signedBytes;
+  if (!WebAssembly.validate(executable)) {
+    throw new Error(`${label} is not browser-valid WASM.`);
+  }
+  const aotSections = listWasmCustomSections(executable).filter(
+    (section) => section.name === "wasmedge",
+  );
+  if (aotSections.length !== 1 || aotSections[0].dataBytes.byteLength === 0) {
+    throw new Error(
+      `${label} must contain exactly one non-empty WasmEdge universal-AOT section.`,
+    );
+  }
 }
 
 function sha256HexSync(bytes) {
@@ -179,6 +198,9 @@ async function loadSignedChildren(flow, parentDependencies) {
     if (!verified.verified || verified.signatureScope !== "bundle") {
       throw new Error(`Node ${node.nodeId} failed whole-artifact signature verification.`);
     }
+    if (productionMode) {
+      assertUniversalAotArtifact(`Node ${node.nodeId}`, wasmBytes);
+    }
     if (productionMode && publisher.developmentOnly !== false) {
       throw new Error(
         `Production bundle rejects development publisher for node ${node.nodeId}.`,
@@ -249,7 +271,13 @@ function childBundleEntries(children) {
   ]);
 }
 
-const rawWasm = readBuildBytes("isomorphic/module.wasm");
+let rawWasm = readBuildBytes("isomorphic/module.wasm");
+rawWasm = await compileUniversalAot({
+  wasmBytes: rawWasm,
+  stagingDirectory: unsignedRoot,
+  mode: "parent",
+  productionMode,
+});
 const flowManifest = readBuildJson("plugin-manifest.json");
 const flowSource = readPackageJson("flow.json");
 const flowPLG = encodePluginManifest(flowManifest);

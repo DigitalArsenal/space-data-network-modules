@@ -8,6 +8,7 @@ import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { signModuleArtifact } from "space-data-module-sdk";
 
 import { resolveSupplementalSigning } from "../signing.mjs";
+import { compileUniversalAot } from "../universal-aot.mjs";
 
 const timerRoot = path.dirname(fileURLToPath(import.meta.url));
 const standardsRoot = path.resolve(timerRoot, "../../../../../spacedatastandards.org");
@@ -18,7 +19,7 @@ const distRoot = path.join(timerRoot, "dist/isomorphic");
 const manifestPath = path.join(timerRoot, "plugin-manifest.json");
 const sourcePath = path.join(timerRoot, "src/timer_node.cpp");
 const developmentSigningSeed = "43".repeat(32);
-const { signingSeed, signingKeyId, developmentOnly } =
+const { signingSeed, signingKeyId, developmentOnly, productionMode } =
   resolveSupplementalSigning({
     environment: process.env,
     environmentPrefix: "SUPPLEMENTAL_TIMER",
@@ -99,7 +100,13 @@ if (!compilation.report?.ok) {
   );
 }
 
-const signed = await signModuleArtifact(compilation.wasmBytes, {
+const executableBytes = await compileUniversalAot({
+  wasmBytes: compilation.wasmBytes,
+  stagingDirectory: unsignedRoot,
+  mode: "child",
+  productionMode: productionMode || !developmentOnly,
+});
+const signed = await signModuleArtifact(executableBytes, {
   privateKeySeedHex: signingSeed,
   keyId: signingKeyId,
   signatureScope: "bundle",

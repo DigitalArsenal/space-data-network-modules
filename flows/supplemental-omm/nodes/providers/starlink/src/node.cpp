@@ -1,8 +1,5 @@
 #include <array>
 #include <atomic>
-#include <cerrno>
-#include <cmath>
-#include <cstdlib>
 #include <limits>
 #include <pthread.h>
 #include <sched.h>
@@ -23,27 +20,31 @@ constexpr uint32_t kDefaultFetchConcurrency = 64;
 constexpr uint32_t kDefaultBatchSize = 64;
 constexpr uint64_t kThreadBarrierTimeoutNanoseconds =
     600ull * 1'000'000'000ull;
-// Keep 64 requests in flight to saturate the link, but bound parsing, opaque
-// writes, hashing, and checkpoint serialization in any one guest invocation.
-// WasmEdge grants each independently signed child a finite scheduled fuel
-// budget; retaining the rest of the fetched wave in this node's own memory
-// lets the flow yield and resume without downloading those files twice.
+// Probe 64 files in parallel and admit as many complete GETs as fit the signed
+// per-activation byte ceiling. This still saturates the link for small files,
+// while bounding parsing and hashing below WasmEdge's scheduled fuel ceiling.
 constexpr size_t kMaxDurableFilesPerInvocation = 16;
 constexpr uint64_t kMaxDurableBytesPerInvocation = 32ull * 1024 * 1024;
 constexpr uint32_t kMaxDownstreamObjectsPerInvocation = 1;
 constexpr size_t kMaxStarlinkFileBytes = 64 * 1024 * 1024;
+constexpr uint64_t kMaxFetchWaveBytesPerInvocation =
+    64ull * 1024 * 1024;
 constexpr uint64_t kMaxRetainedWaveBytes = 288ull * 1024 * 1024;
 constexpr uint64_t kReservedTransientBytes = 384ull * 1024 * 1024;
 constexpr uint64_t kWasmMemoryCeilingBytes = 1024ull * 1024 * 1024;
 constexpr size_t kMaxManifestBytes = 8 * 1024 * 1024;
 static_assert(kMaxStarlinkFileBytes <= kMaxRetainedWaveBytes);
+static_assert(kMaxFetchWaveBytesPerInvocation <= kMaxRetainedWaveBytes);
 static_assert(2 * kMaxRetainedWaveBytes + kReservedTransientBytes <
               kWasmMemoryCeilingBytes);
 
-constexpr const char* kOpaqueNamespace = "primary";
+constexpr const char* kCheckpointNamespace = "primary";
 constexpr const char* kCheckpointKey = "starlink.active.v1";
 constexpr size_t kOpaqueChunkBytes = 1024 * 1024;
-constexpr size_t kMaxCheckpointBytes = 8 * 1024 * 1024;
+constexpr uint8_t kCompressedChunkMagic[8] = {
+    'S', 'L', 'C', 'M', 'P', '0', '0', '1'};
+constexpr size_t kCompressedChunkHeaderBytes = 16;
+constexpr size_t kMaxCheckpointBytes = 1024 * 1024;
 constexpr uint32_t kMaxStorageSegments = 1;
 constexpr size_t kMaxHttpMetaBytes = 64 * 1024;
 constexpr size_t kMaxStorageJsonOverheadBytes = 64 * 1024;
@@ -52,15 +53,20 @@ constexpr size_t kMaxBase64CheckpointBytes =
 constexpr size_t kMaxStorageMetaBytes =
     kMaxBase64CheckpointBytes + kMaxStorageJsonOverheadBytes;
 constexpr size_t kMaxStorageResponseBytes = kMaxStorageMetaBytes + 8;
+constexpr size_t kMaxStorageErrorMessageBytes = 512;
 static_assert(kMaxStorageResponseBytes <=
               static_cast<size_t>(std::numeric_limits<int32_t>::max()));
 constexpr uint32_t kMaxManifestEntries = 100'000;
 constexpr uint32_t kMaxCatalogUnits = 100'000;
+// The live Starlink manifest produces thousands of selected identities. Keep
+// manifest fetch/selection/checkpointing in its own scheduled activation so a
+// complete parallel file wave starts with a fresh WasmEdge fuel allowance.
+constexpr size_t kManifestPlanYieldThreshold = 4'096;
 constexpr size_t kMaxEndpointBytes = 2048;
 constexpr size_t kMaxFilenameBytes = 512;
 constexpr size_t kMaxIdentityBytes = 64;
 constexpr uint8_t kCheckpointMagic[8] = {'S', 'L', 'S', 'P', 'O', 'O', 'L', '1'};
-constexpr uint16_t kCheckpointVersion = 2;
+constexpr uint16_t kCheckpointVersion = 4;
 
 enum class Phase : uint8_t {
   kDownloading = 1,
@@ -97,8 +103,20 @@ struct State {
   bool active = false;
 };
 
+struct DownloadMetadata {
+  uint64_t byte_length = 0;
+  uint64_t epoch_count = 0;
+  std::array<uint8_t, 32> digest{};
+  bool valid = false;
+};
+
+struct ValidatedDownload {
+  provider_node::HttpResult response;
+  DownloadMetadata metadata;
+};
+
 State g_state;
-std::vector<provider_node::HttpResult> g_pending_wave;
+std::vector<ValidatedDownload> g_pending_wave;
 uint32_t g_pending_wave_begin = 0;
 bool g_emitted_transient = false;
 bool g_progress_emitted_transient = false;
@@ -271,6 +289,13 @@ struct ProbeResult {
   bool valid = false;
 };
 
+struct ProbeCarry {
+  size_t begin = 0;
+  std::vector<ProbeResult> probes;
+};
+
+ProbeCarry g_probe_carry;
+
 struct DownloadPageContext {
   const std::vector<PlannedUnit>* units = nullptr;
   size_t begin = 0;
@@ -278,7 +303,7 @@ struct DownloadPageContext {
   std::atomic<size_t> probe_next{0};
   std::atomic<size_t> fetch_next{0};
   std::vector<ProbeResult>* probes = nullptr;
-  std::vector<provider_node::HttpResult>* responses = nullptr;
+  std::vector<ValidatedDownload>* responses = nullptr;
   std::atomic<size_t> probes_completed{0};
   size_t admitted_count = 0;
   std::atomic<bool> admission_ready{false};
@@ -295,10 +320,16 @@ struct DownloadPageWorker {
 };
 
 struct DownloadPage {
-  std::vector<provider_node::HttpResult> responses;
+  std::vector<ValidatedDownload> responses;
+  size_t next_probe_begin = 0;
+  std::vector<ProbeResult> carried_probes;
   bool probes_valid = false;
+  bool responses_valid = false;
   bool synchronization_valid = false;
 };
+
+bool validate_meme_file(const std::vector<uint8_t>& bytes,
+                        uint64_t* epoch_count);
 
 bool monotonic_now_nanoseconds(uint64_t* value) {
   if (!value) return false;
@@ -589,8 +620,8 @@ void finalize_download_admission(DownloadPageContext* context) {
       accepting = false;
       continue;
     }
-    if (accepting &&
-        probe.byte_length <= kMaxRetainedWaveBytes - retained_bytes) {
+    if (accepting && probe.byte_length <=
+                         kMaxFetchWaveBytesPerInvocation - retained_bytes) {
       retained_bytes += probe.byte_length;
       ++context->admitted_count;
     } else {
@@ -635,9 +666,22 @@ void download_page_tasks(DownloadPageContext* context) {
         context->fetch_next.fetch_add(1, std::memory_order_relaxed);
     if (local >= admitted_count) break;
     const size_t index = context->begin + local;
-    (*context->responses)[local] = http_get_complete(
+    ValidatedDownload download;
+    download.response = http_get_complete(
         (*context->units)[index].url,
         static_cast<size_t>((*context->probes)[local].byte_length));
+    if (download.response.status == 200 && !download.response.body.empty() &&
+        download.response.body.size() <= kMaxStarlinkFileBytes) {
+      uint64_t epoch_count = 0;
+      if (validate_meme_file(download.response.body, &epoch_count)) {
+        download.metadata.byte_length = download.response.body.size();
+        download.metadata.epoch_count = epoch_count;
+        sha256(download.response.body.data(), download.response.body.size(),
+               download.metadata.digest.data());
+        download.metadata.valid = true;
+      }
+    }
+    (*context->responses)[local] = std::move(download);
   }
 }
 
@@ -654,22 +698,37 @@ void* download_page_worker(void* opaque) {
 
 DownloadPage download_complete_page(
     const std::vector<PlannedUnit>& units, size_t begin, size_t end,
-    uint32_t fetch_concurrency) {
+    uint32_t fetch_concurrency,
+    const std::vector<ProbeResult>* carried_probes) {
   DownloadPage page;
   const size_t count = end > begin ? end - begin : 0;
   if (count == 0) return page;
   std::vector<ProbeResult> probes(count);
-  std::vector<provider_node::HttpResult> responses(count);
-  const size_t worker_count = std::min<size_t>(
-      count,
-      std::max<uint32_t>(
-          1, std::min(fetch_concurrency, kMaxFetchConcurrency)));
+  std::vector<ValidatedDownload> responses(count);
   DownloadPageContext context;
   context.units = &units;
   context.begin = begin;
   context.end = end;
   context.probes = &probes;
   context.responses = &responses;
+  size_t carried_count = 0;
+  if (carried_probes && carried_probes->size() <= count &&
+      std::all_of(carried_probes->begin(), carried_probes->end(),
+                  [](const ProbeResult& probe) { return probe.valid; })) {
+    carried_count = carried_probes->size();
+    std::copy(carried_probes->begin(), carried_probes->end(), probes.begin());
+    context.probe_next.store(carried_count, std::memory_order_relaxed);
+    context.probes_completed.store(carried_count, std::memory_order_relaxed);
+    if (carried_count == count) {
+      finalize_download_admission(&context);
+    }
+  }
+  const size_t actionable_worker_count =
+      std::max(carried_count, count - carried_count);
+  const size_t worker_count = std::min<size_t>(
+      actionable_worker_count,
+      std::max<uint32_t>(
+          1, std::min(fetch_concurrency, kMaxFetchConcurrency)));
 
   // One page-scoped cohort owns both phases. Every probe completes before the
   // cohort crosses the in-page admission barrier, so the same workers can
@@ -716,7 +775,18 @@ DownloadPage download_complete_page(
   page.probes_valid = !context.probe_invalid;
   page.synchronization_valid =
       !context.synchronization_failed.load(std::memory_order_acquire);
+  if (page.probes_valid && context.admitted_count <= probes.size()) {
+    page.next_probe_begin = begin + context.admitted_count;
+    page.carried_probes.assign(probes.begin() + context.admitted_count,
+                               probes.end());
+  }
   responses.resize(context.admitted_count);
+  page.responses_valid =
+      !responses.empty() &&
+      std::all_of(responses.begin(), responses.end(),
+                  [](const ValidatedDownload& download) {
+                    return download.metadata.valid;
+                  });
   page.responses = std::move(responses);
   return page;
 }
@@ -787,29 +857,94 @@ bool strict_finite_decimal(std::string_view token) {
     }
   }
   if (integer_digits == 0 && fractional_digits == 0) return false;
+  const size_t significand_end = cursor;
+  bool exponent_negative = false;
+  uint32_t exponent_magnitude = 0;
   if (cursor < token.size() &&
       (token[cursor] == 'e' || token[cursor] == 'E')) {
     ++cursor;
     if (cursor < token.size() &&
         (token[cursor] == '+' || token[cursor] == '-')) {
+      exponent_negative = token[cursor] == '-';
       ++cursor;
     }
     const size_t exponent_begin = cursor;
     while (cursor < token.size() && token[cursor] >= '0' &&
            token[cursor] <= '9') {
+      constexpr uint32_t kExponentSaturation = 10'000;
+      if (exponent_magnitude < kExponentSaturation) {
+        const uint32_t digit = static_cast<uint32_t>(token[cursor] - '0');
+        exponent_magnitude = std::min(
+            kExponentSaturation, exponent_magnitude * 10 + digit);
+      }
       ++cursor;
     }
     if (cursor == exponent_begin) return false;
   }
   if (cursor != token.size()) return false;
-  char owned[kMaxNumericTokenBytes + 1];
-  std::memcpy(owned, token.data(), token.size());
-  owned[token.size()] = '\0';
-  char* parsed_end = nullptr;
-  errno = 0;
-  const double value = std::strtod(owned, &parsed_end);
-  return errno != ERANGE && parsed_end == owned + token.size() &&
-         std::isfinite(value);
+
+  size_t digit_ordinal = 0;
+  size_t first_nonzero_ordinal = std::numeric_limits<size_t>::max();
+  const size_t significand_begin =
+      token.front() == '+' || token.front() == '-' ? 1 : 0;
+  for (size_t index = significand_begin; index < significand_end; ++index) {
+    if (token[index] == '.') continue;
+    if (first_nonzero_ordinal == std::numeric_limits<size_t>::max() &&
+        token[index] != '0') {
+      first_nonzero_ordinal = digit_ordinal;
+    }
+    ++digit_ordinal;
+  }
+  if (first_nonzero_ordinal == std::numeric_limits<size_t>::max()) {
+    return true;
+  }
+
+  const int64_t explicit_exponent =
+      exponent_negative ? -static_cast<int64_t>(exponent_magnitude)
+                        : static_cast<int64_t>(exponent_magnitude);
+  const int64_t normalized_exponent =
+      explicit_exponent + static_cast<int64_t>(integer_digits) -
+      static_cast<int64_t>(first_nonzero_ordinal) - 1;
+  if (normalized_exponent > -308 && normalized_exponent < 308) return true;
+  if (normalized_exponent < -308 || normalized_exponent > 308) return false;
+
+  // These prefixes cover every significant digit possible under the token
+  // bound and identify the round-to-nearest boundaries between the smallest
+  // normal value and the largest subnormal, and between DBL_MAX and overflow.
+  // A field at or above the first boundary avoids ERANGE underflow; a field
+  // below the second avoids ERANGE overflow. Only decimal digit comparison is
+  // needed because this provider forwards the byte-exact MEME record.
+  constexpr std::string_view kMinimumNormalRoundingBoundary =
+      "2225073858507201136057409796709131975934819546351645648023426109"
+      "7248222220210769455165295239081350879141491589130396211068700864";
+  constexpr std::string_view kOverflowRoundingBoundary =
+      "1797693134862315807937289714053034150799341327100378269361737789"
+      "8044496829276475094664901797758720709633028641669288791094655554";
+  const auto compare_significand =
+      [&](std::string_view boundary) {
+        size_t boundary_index = 0;
+        bool started = false;
+        for (size_t index = significand_begin; index < significand_end;
+             ++index) {
+          const char digit = token[index];
+          if (digit == '.') continue;
+          if (!started && digit == '0') continue;
+          started = true;
+          const char expected =
+              boundary_index < boundary.size() ? boundary[boundary_index] : '0';
+          if (digit < expected) return -1;
+          if (digit > expected) return 1;
+          ++boundary_index;
+        }
+        while (boundary_index < boundary.size()) {
+          if (boundary[boundary_index++] != '0') return -1;
+        }
+        return 0;
+      };
+  if (normalized_exponent == -308) {
+    return compare_significand(kMinimumNormalRoundingBoundary) >= 0;
+  }
+  return compare_significand(kOverflowRoundingBoundary) < 0;
 }
 
 uint32_t meme_timestamp_component(std::string_view token, size_t begin,
@@ -964,6 +1099,32 @@ struct StorageResponse {
   std::vector<std::vector<uint8_t>> segments;
 };
 
+void capture_storage_error_message(std::string_view meta,
+                                   std::string* error_message) {
+  if (!error_message) return;
+  error_message->clear();
+  std::string message;
+  if (!json_string(meta, "message", &message) || message.empty()) return;
+  if (message.size() > kMaxStorageErrorMessageBytes) {
+    message.resize(kMaxStorageErrorMessageBytes);
+  }
+  for (char& value : message) {
+    const unsigned char byte = static_cast<unsigned char>(value);
+    if (byte < 0x20 || byte == 0x7f) value = ' ';
+  }
+  *error_message = std::move(message);
+}
+
+void set_storage_error(std::string* output, std::string_view context,
+                       std::string_view host_detail) {
+  if (!output) return;
+  output->assign(context);
+  if (!host_detail.empty()) {
+    output->append(": ");
+    output->append(host_detail);
+  }
+}
+
 bool validate_storage_envelope_layout(
     const std::vector<uint8_t>& envelope) {
   if (envelope.size() < 8) return false;
@@ -993,21 +1154,27 @@ bool validate_storage_envelope_layout(
   return cursor == envelope.size();
 }
 
-bool call_storage(std::string_view operation, const std::string& meta,
-                  const std::vector<uint8_t>* segment,
-                  StorageResponse* response) {
-  if (!response || meta.size() > static_cast<size_t>(INT32_MAX) ||
-      (segment && segment->size() > static_cast<size_t>(INT32_MAX))) {
+bool call_storage_bytes(std::string_view operation, const std::string& meta,
+                        const uint8_t* segment_data, size_t segment_size,
+                        bool has_segment, StorageResponse* response,
+                        std::string* error_message = nullptr) {
+  if (error_message) error_message->clear();
+  if (!response || operation.size() > static_cast<size_t>(INT32_MAX) ||
+      meta.size() > static_cast<size_t>(INT32_MAX) ||
+      segment_size > static_cast<size_t>(INT32_MAX) ||
+      (has_segment && !segment_data) ||
+      segment_size > static_cast<size_t>(INT32_MAX) - 12 ||
+      meta.size() > static_cast<size_t>(INT32_MAX) - 12 - segment_size) {
     return false;
   }
   std::vector<uint8_t> request;
-  request.reserve(8 + meta.size() + (segment ? 4 + segment->size() : 0));
+  request.reserve(8 + meta.size() + (has_segment ? 4 + segment_size : 0));
   append_u32le(&request, static_cast<uint32_t>(meta.size()));
   request.insert(request.end(), meta.begin(), meta.end());
-  append_u32le(&request, segment ? 1 : 0);
-  if (segment) {
-    append_u32le(&request, static_cast<uint32_t>(segment->size()));
-    request.insert(request.end(), segment->begin(), segment->end());
+  append_u32le(&request, has_segment ? 1 : 0);
+  if (has_segment) {
+    append_u32le(&request, static_cast<uint32_t>(segment_size));
+    request.insert(request.end(), segment_data, segment_data + segment_size);
   }
 
   sdm_host_clear_response();
@@ -1017,7 +1184,7 @@ bool call_storage(std::string_view operation, const std::string& meta,
       static_cast<int32_t>(request.size()));
   const int32_t status_code = sdm_host_last_status_code();
   const int32_t response_length = sdm_host_response_len();
-  if (call_result != 0 || status_code != 0 || response_length < 8 ||
+  if (response_length < 8 ||
       static_cast<size_t>(response_length) > kMaxStorageResponseBytes) {
     sdm_host_clear_response();
     return false;
@@ -1027,15 +1194,33 @@ bool call_storage(std::string_view operation, const std::string& meta,
       reinterpret_cast<char*>(response_bytes.data()), response_length);
   sdm_host_clear_response();
   bool ok = false;
-  return copied == response_length &&
-         validate_storage_envelope_layout(response_bytes) &&
-         parse_envelope(response_bytes, &response->meta, &response->segments) &&
-         json_bool(response->meta, "ok", &ok) && ok;
+  if (copied != response_length ||
+      !validate_storage_envelope_layout(response_bytes) ||
+      !parse_envelope(response_bytes, &response->meta, &response->segments)) {
+    return false;
+  }
+  if (call_result != 0 || status_code != 0 ||
+      !json_bool(response->meta, "ok", &ok) || !ok) {
+    capture_storage_error_message(response->meta, error_message);
+    return false;
+  }
+  return true;
 }
 
-std::string storage_meta(std::string_view key, bool has_data = false) {
+bool call_storage(std::string_view operation, const std::string& meta,
+                  const std::vector<uint8_t>* segment,
+                  StorageResponse* response,
+                  std::string* error_message = nullptr) {
+  return call_storage_bytes(operation, meta,
+                            segment ? segment->data() : nullptr,
+                            segment ? segment->size() : 0, segment != nullptr,
+                            response, error_message);
+}
+
+std::string storage_meta(std::string_view namespace_name,
+                         std::string_view key, bool has_data = false) {
   std::string meta = "{\"namespace\":\"";
-  meta += kOpaqueNamespace;
+  meta += namespace_name;
   meta += "\"";
   if (!key.empty()) {
     meta += ",\"key\":\"";
@@ -1047,12 +1232,15 @@ std::string storage_meta(std::string_view key, bool has_data = false) {
   return meta;
 }
 
-bool read_opaque_value(const std::string& key, size_t max_bytes,
-                       std::vector<uint8_t>* value, bool* found) {
+bool read_opaque_value(std::string_view namespace_name,
+                       const std::string& key, size_t max_bytes,
+                       std::vector<uint8_t>* value, bool* found,
+                       std::string* error_message = nullptr) {
   if (!value || !found) return false;
   StorageResponse response;
-  if (!call_storage("storage.adapter.opaque.read", storage_meta(key), nullptr,
-                    &response) ||
+  if (!call_storage("storage.adapter.opaque.read",
+                    storage_meta(namespace_name, key), nullptr, &response,
+                    error_message) ||
       !json_bool(response.meta, "found", found)) {
     return false;
   }
@@ -1076,29 +1264,119 @@ bool read_opaque_value(const std::string& key, size_t max_bytes,
   return value->size() <= max_bytes;
 }
 
-bool replace_opaque_value(const std::string& key,
-                          const std::vector<uint8_t>& value) {
+bool replace_opaque_value(std::string_view namespace_name,
+                          const std::string& key,
+                          const std::vector<uint8_t>& value,
+                          std::string* error_message = nullptr) {
   StorageResponse response;
   int64_t stored_bytes = -1;
   return call_storage("storage.adapter.opaque.replace",
-                      storage_meta(key, true), &value, &response) &&
+                      storage_meta(namespace_name, key, true), &value, &response,
+                      error_message) &&
          json_int64(response.meta, "stored_bytes", &stored_bytes) &&
          stored_bytes == static_cast<int64_t>(value.size());
 }
 
-bool delete_opaque_value(const std::string& key) {
+bool replace_opaque_bytes(std::string_view namespace_name,
+                          const std::string& key, const uint8_t* data,
+                          size_t byte_length,
+                          std::string* error_message = nullptr) {
+  if (!data || byte_length == 0 || byte_length > kOpaqueChunkBytes) {
+    return false;
+  }
+  StorageResponse response;
+  int64_t stored_bytes = -1;
+  return call_storage_bytes("storage.adapter.opaque.replace",
+                            storage_meta(namespace_name, key, true), data,
+                            byte_length, true, &response, error_message) &&
+         json_int64(response.meta, "stored_bytes", &stored_bytes) &&
+         stored_bytes == static_cast<int64_t>(byte_length);
+}
+
+void write_u32le(uint8_t* output, uint32_t value) {
+  output[0] = static_cast<uint8_t>(value);
+  output[1] = static_cast<uint8_t>(value >> 8);
+  output[2] = static_cast<uint8_t>(value >> 16);
+  output[3] = static_cast<uint8_t>(value >> 24);
+}
+
+bool encode_opaque_chunk(const uint8_t* raw, size_t raw_length,
+                         std::vector<uint8_t>* stored) {
+  if (!raw || !stored || raw_length == 0 ||
+      raw_length > kOpaqueChunkBytes) {
+    return false;
+  }
+  if (raw_length > kCompressedChunkHeaderBytes) {
+    std::vector<uint8_t> candidate(raw_length);
+    const int flags = static_cast<int>(
+        tdefl_create_comp_flags_from_zip_params(
+            MZ_BEST_SPEED, 15, MZ_DEFAULT_STRATEGY));
+    const size_t compressed_length = tdefl_compress_mem_to_mem(
+        candidate.data() + kCompressedChunkHeaderBytes,
+        candidate.size() - kCompressedChunkHeaderBytes, raw, raw_length,
+        flags);
+    if (compressed_length > 0 &&
+        compressed_length + kCompressedChunkHeaderBytes < raw_length) {
+      std::copy(std::begin(kCompressedChunkMagic),
+                std::end(kCompressedChunkMagic), candidate.begin());
+      write_u32le(candidate.data() + 8,
+                  static_cast<uint32_t>(raw_length));
+      write_u32le(candidate.data() + 12,
+                  static_cast<uint32_t>(compressed_length));
+      candidate.resize(kCompressedChunkHeaderBytes + compressed_length);
+      *stored = std::move(candidate);
+      return true;
+    }
+  }
+  stored->assign(raw, raw + raw_length);
+  return true;
+}
+
+bool decode_opaque_chunk(const std::vector<uint8_t>& stored,
+                         size_t expected_raw_length, uint8_t* raw) {
+  if (!raw || expected_raw_length == 0 ||
+      expected_raw_length > kOpaqueChunkBytes ||
+      stored.size() > expected_raw_length) {
+    return false;
+  }
+  if (stored.size() == expected_raw_length) {
+    std::memcpy(raw, stored.data(), stored.size());
+    return true;
+  }
+  if (stored.size() <= kCompressedChunkHeaderBytes ||
+      !std::equal(std::begin(kCompressedChunkMagic),
+                  std::end(kCompressedChunkMagic), stored.begin()) ||
+      read_u32le(stored.data() + 8) != expected_raw_length ||
+      read_u32le(stored.data() + 12) !=
+          stored.size() - kCompressedChunkHeaderBytes) {
+    return false;
+  }
+  const size_t decoded_length = tinfl_decompress_mem_to_mem(
+      raw, expected_raw_length,
+      stored.data() + kCompressedChunkHeaderBytes,
+      stored.size() - kCompressedChunkHeaderBytes,
+      TINFL_FLAG_PARSE_ZLIB_HEADER);
+  return decoded_length == expected_raw_length;
+}
+
+bool delete_opaque_value(std::string_view namespace_name,
+                         const std::string& key,
+                         std::string* error_message = nullptr) {
   StorageResponse response;
   bool deleted = false;
-  return call_storage("storage.adapter.opaque.delete", storage_meta(key),
-                      nullptr, &response) &&
+  return call_storage("storage.adapter.opaque.delete",
+                      storage_meta(namespace_name, key), nullptr, &response,
+                      error_message) &&
          json_bool(response.meta, "deleted", &deleted) && deleted;
 }
 
-bool sync_opaque_state() {
+bool sync_opaque_state(std::string_view namespace_name,
+                       std::string* error_message = nullptr) {
   StorageResponse response;
   bool synced = false;
-  return call_storage("storage.adapter.opaque.sync", storage_meta({}), nullptr,
-                      &response) &&
+  return call_storage("storage.adapter.opaque.sync",
+                      storage_meta(namespace_name, {}), nullptr, &response,
+                      error_message) &&
          json_bool(response.meta, "synced", &synced) && synced;
 }
 
@@ -1111,6 +1389,11 @@ std::string hex_digest(const std::array<uint8_t, 32>& digest) {
     output[index * 2 + 1] = alphabet[digest[index] & 0x0f];
   }
   return output;
+}
+
+std::string chunk_namespace(const State& state, uint32_t unit_index) {
+  return "starlink." + hex_digest(state.generation) + ".f" +
+         std::to_string(unit_index);
 }
 
 std::string chunk_key(const State& state, uint32_t unit_index,
@@ -1133,18 +1416,99 @@ bool add_without_overflow(uint64_t left, uint64_t right, uint64_t* output) {
   return true;
 }
 
+bool filename_core(std::string_view filename, std::string_view* core) {
+  constexpr std::string_view prefix = "MEME_";
+  constexpr std::string_view suffix = "_UNCLASSIFIED.txt";
+  if (!core || filename.size() > kMaxFilenameBytes ||
+      filename.size() <= prefix.size() + suffix.size() ||
+      filename.substr(0, prefix.size()) != prefix ||
+      filename.substr(filename.size() - suffix.size()) != suffix) {
+    return false;
+  }
+  const std::string_view candidate = filename.substr(
+      prefix.size(), filename.size() - prefix.size() - suffix.size());
+  if (candidate.empty() ||
+      candidate.size() > std::numeric_limits<uint16_t>::max() ||
+      candidate.find('/') != std::string_view::npos ||
+      candidate.find('\\') != std::string_view::npos) {
+    return false;
+  }
+  *core = candidate;
+  return true;
+}
+
+uint32_t expected_chunk_count(uint64_t byte_length) {
+  if (byte_length == 0 || byte_length > kMaxStarlinkFileBytes) return 0;
+  return static_cast<uint32_t>(
+      ((byte_length - 1) / kOpaqueChunkBytes) + 1);
+}
+
 std::vector<uint8_t> encode_checkpoint(const State& state) {
   if (state.config.manifest_url.empty() ||
       state.config.manifest_url.size() > kMaxEndpointBytes ||
       state.config.ephemeris_base.empty() ||
       state.config.ephemeris_base.size() > kMaxEndpointBytes ||
-      state.units.empty() || state.units.size() > kMaxCatalogUnits) {
+      state.config.fetch_concurrency == 0 ||
+      state.config.fetch_concurrency > kMaxFetchConcurrency ||
+      state.config.batch_size == 0 ||
+      state.config.batch_size > kMaxFetchConcurrency ||
+      state.config.object_cap > kMaxCatalogUnits || state.units.empty() ||
+      state.units.size() > kMaxCatalogUnits ||
+      state.downloaded_count > state.units.size() ||
+      state.drain_index > state.units.size() || all_zero(state.generation) ||
+      (state.phase != Phase::kDownloading && state.phase != Phase::kDraining) ||
+      (state.phase == Phase::kDownloading &&
+       (state.drain_index != 0 || state.cleanup_pending)) ||
+      (state.cleanup_pending && state.drain_index == 0) ||
+      (state.phase == Phase::kDraining &&
+       state.downloaded_count != state.units.size())) {
     return {};
   }
+
+  constexpr size_t fixed_header_bytes = 76;
+  constexpr size_t fixed_unit_bytes = 42;
+  constexpr size_t checksum_bytes = 32;
+  constexpr size_t payload_limit = kMaxCheckpointBytes - checksum_bytes;
+  size_t payload_size = fixed_header_bytes + state.config.manifest_url.size() +
+                        state.config.ephemeris_base.size();
+  uint64_t observed_bytes = 0;
+  for (size_t index = 0; index < state.units.size(); ++index) {
+    const PlannedUnit& unit = state.units[index];
+    std::string_view core;
+    uint64_t generation = 0;
+    if (!filename_core(unit.filename, &core) ||
+        !meme_generation(unit.filename, &generation) ||
+        meme_identity(unit.filename) != unit.identity ||
+        join_url(state.config.ephemeris_base, unit.filename) != unit.url ||
+        payload_size > payload_limit ||
+        fixed_unit_bytes > payload_limit - payload_size ||
+        core.size() > payload_limit - payload_size - fixed_unit_bytes) {
+      return {};
+    }
+    payload_size += fixed_unit_bytes + core.size();
+    if (index < state.downloaded_count) {
+      if (unit.byte_length == 0 || unit.byte_length > kMaxStarlinkFileBytes ||
+          unit.byte_length > std::numeric_limits<uint32_t>::max() ||
+          unit.chunk_count != expected_chunk_count(unit.byte_length) ||
+          unit.epoch_count == 0 ||
+          unit.epoch_count > std::numeric_limits<uint32_t>::max() ||
+          all_zero(unit.digest) ||
+          !add_without_overflow(observed_bytes, unit.byte_length,
+                                &observed_bytes)) {
+        return {};
+      }
+    } else if (unit.byte_length != 0 || unit.chunk_count != 0 ||
+               unit.epoch_count != 0 || !all_zero(unit.digest)) {
+      return {};
+    }
+  }
+  if (payload_size > payload_limit ||
+      observed_bytes != state.downloaded_bytes) {
+    return {};
+  }
+
   std::vector<uint8_t> bytes;
-  bytes.reserve(108 + state.config.manifest_url.size() +
-                state.config.ephemeris_base.size() +
-                state.units.size() * 136);
+  bytes.reserve(payload_size + checksum_bytes);
   bytes.insert(bytes.end(), std::begin(kCheckpointMagic),
                std::end(kCheckpointMagic));
   append_u16le(&bytes, kCheckpointVersion);
@@ -1167,20 +1531,15 @@ std::vector<uint8_t> encode_checkpoint(const State& state) {
   bytes.insert(bytes.end(), state.config.ephemeris_base.begin(),
                state.config.ephemeris_base.end());
   for (const PlannedUnit& unit : state.units) {
-    if (unit.filename.empty() || unit.filename.size() > kMaxFilenameBytes ||
-        unit.identity.empty() || unit.identity.size() > kMaxIdentityBytes) {
-      return {};
-    }
-    append_u16le(&bytes, static_cast<uint16_t>(unit.filename.size()));
-    append_u16le(&bytes, static_cast<uint16_t>(unit.identity.size()));
-    append_u64le(&bytes, unit.byte_length);
-    append_u32le(&bytes, unit.chunk_count);
-    append_u64le(&bytes, unit.epoch_count);
+    std::string_view core;
+    if (!filename_core(unit.filename, &core)) return {};
+    append_u16le(&bytes, static_cast<uint16_t>(core.size()));
+    append_u32le(&bytes, static_cast<uint32_t>(unit.byte_length));
+    append_u32le(&bytes, static_cast<uint32_t>(unit.epoch_count));
     bytes.insert(bytes.end(), unit.digest.begin(), unit.digest.end());
-    bytes.insert(bytes.end(), unit.filename.begin(), unit.filename.end());
-    bytes.insert(bytes.end(), unit.identity.begin(), unit.identity.end());
+    bytes.insert(bytes.end(), core.begin(), core.end());
   }
-  if (bytes.size() > kMaxCheckpointBytes - 32) return {};
+  if (bytes.size() != payload_size) return {};
   uint8_t digest[32];
   sha256(bytes.data(), bytes.size(), digest);
   bytes.insert(bytes.end(), digest, digest + sizeof(digest));
@@ -1203,7 +1562,7 @@ bool parse_checkpoint(const std::vector<uint8_t>& bytes, State* state,
     if (error) *error = message;
     return false;
   };
-  if (!state || bytes.size() < 166 || bytes.size() > kMaxCheckpointBytes) {
+  if (!state || bytes.size() < 153 || bytes.size() > kMaxCheckpointBytes) {
     return fail("opaque Starlink checkpoint violates size bounds");
   }
   const size_t payload_end = bytes.size() - 32;
@@ -1300,56 +1659,55 @@ bool parse_checkpoint(const std::vector<uint8_t>& bytes, State* state,
   identities.reserve(unit_count);
   uint64_t observed_bytes = 0;
   for (uint32_t index = 0; index < unit_count; ++index) {
-    if (!consume_bytes(bytes, payload_end, &cursor, 2, &value)) return fail("checkpoint filename length is truncated");
-    const uint16_t filename_length = read_u16le(value);
-    if (!consume_bytes(bytes, payload_end, &cursor, 2, &value)) return fail("checkpoint identity length is truncated");
-    const uint16_t identity_length = read_u16le(value);
-    if (!consume_bytes(bytes, payload_end, &cursor, 8, &value)) return fail("checkpoint object size is truncated");
-    const uint64_t byte_length = read_u64le(value);
-    if (!consume_bytes(bytes, payload_end, &cursor, 4, &value)) return fail("checkpoint chunk count is truncated");
-    const uint32_t chunk_count = read_u32le(value);
-    if (!consume_bytes(bytes, payload_end, &cursor, 8, &value)) return fail("checkpoint epoch count is truncated");
-    const uint64_t epoch_count = read_u64le(value);
+    if (!consume_bytes(bytes, payload_end, &cursor, 2, &value)) return fail("checkpoint filename core length is truncated");
+    const uint16_t core_length = read_u16le(value);
+    if (!consume_bytes(bytes, payload_end, &cursor, 4, &value)) return fail("checkpoint object size is truncated");
+    const uint32_t byte_length = read_u32le(value);
+    if (!consume_bytes(bytes, payload_end, &cursor, 4, &value)) return fail("checkpoint epoch count is truncated");
+    const uint32_t epoch_count = read_u32le(value);
     PlannedUnit unit;
     unit.byte_length = byte_length;
-    unit.chunk_count = chunk_count;
     unit.epoch_count = epoch_count;
     if (!consume_bytes(bytes, payload_end, &cursor, unit.digest.size(),
                        &value)) {
       return fail("checkpoint object hash is truncated");
     }
     std::copy(value, value + unit.digest.size(), unit.digest.begin());
-    if (filename_length == 0 || filename_length > kMaxFilenameBytes ||
-        identity_length == 0 || identity_length > kMaxIdentityBytes ||
-        !consume_bytes(bytes, payload_end, &cursor, filename_length, &value)) {
-      return fail("opaque Starlink checkpoint filename is invalid");
+    constexpr std::string_view prefix = "MEME_";
+    constexpr std::string_view suffix = "_UNCLASSIFIED.txt";
+    if (core_length == 0 ||
+        core_length > kMaxFilenameBytes - prefix.size() - suffix.size() ||
+        !consume_bytes(bytes, payload_end, &cursor, core_length, &value)) {
+      return fail("opaque Starlink checkpoint filename core is invalid");
     }
-    unit.filename.assign(reinterpret_cast<const char*>(value), filename_length);
-    if (!consume_bytes(bytes, payload_end, &cursor, identity_length, &value)) {
-      return fail("opaque Starlink checkpoint identity is truncated");
+    const std::string_view core(reinterpret_cast<const char*>(value),
+                                core_length);
+    if (core.find('/') != std::string_view::npos ||
+        core.find('\\') != std::string_view::npos) {
+      return fail("opaque Starlink checkpoint filename core is invalid");
     }
-    unit.identity.assign(reinterpret_cast<const char*>(value), identity_length);
+    unit.filename.reserve(prefix.size() + core.size() + suffix.size());
+    unit.filename.append(prefix);
+    unit.filename.append(core);
+    unit.filename.append(suffix);
+    unit.identity = meme_identity(unit.filename);
     uint64_t filename_generation = 0;
-    if (unit.filename.find('/') != std::string::npos ||
-        unit.filename.find('\\') != std::string::npos ||
+    if (unit.identity.empty() ||
         !meme_generation(unit.filename, &filename_generation) ||
-        meme_identity(unit.filename) != unit.identity ||
         !identities.insert(unit.identity).second) {
       return fail("opaque Starlink checkpoint object identity is invalid");
     }
     unit.url = join_url(parsed.config.ephemeris_base, unit.filename);
     if (index < downloaded_count) {
-      const uint64_t expected_chunks =
-          byte_length == 0 ? 0 : ((byte_length - 1) / kOpaqueChunkBytes) + 1;
+      const uint32_t expected_chunks = expected_chunk_count(byte_length);
       if (byte_length == 0 || byte_length > kMaxStarlinkFileBytes ||
-          expected_chunks > std::numeric_limits<uint32_t>::max() ||
-          chunk_count != expected_chunks || epoch_count == 0 ||
+          expected_chunks == 0 || epoch_count == 0 ||
           all_zero(unit.digest) ||
           !add_without_overflow(observed_bytes, byte_length, &observed_bytes)) {
         return fail("opaque Starlink checkpoint object layout is invalid");
       }
-    } else if (byte_length != 0 || chunk_count != 0 || epoch_count != 0 ||
-               !all_zero(unit.digest)) {
+      unit.chunk_count = expected_chunks;
+    } else if (byte_length != 0 || epoch_count != 0 || !all_zero(unit.digest)) {
       return fail("opaque Starlink checkpoint contains uncommitted object metadata");
     }
     parsed.units.push_back(std::move(unit));
@@ -1362,11 +1720,13 @@ bool parse_checkpoint(const std::vector<uint8_t>& bytes, State* state,
   return true;
 }
 
-bool persist_checkpoint() {
+bool persist_checkpoint(std::string* error_message = nullptr) {
+  if (error_message) error_message->clear();
   const std::vector<uint8_t> checkpoint = encode_checkpoint(g_state);
   return !checkpoint.empty() &&
-         replace_opaque_value(kCheckpointKey, checkpoint) &&
-         sync_opaque_state();
+         replace_opaque_value(kCheckpointNamespace, kCheckpointKey,
+                              checkpoint, error_message) &&
+         sync_opaque_state(kCheckpointNamespace, error_message);
 }
 
 enum class CheckpointLoadResult {
@@ -1378,8 +1738,11 @@ enum class CheckpointLoadResult {
 CheckpointLoadResult load_checkpoint(std::string* error) {
   std::vector<uint8_t> bytes;
   bool found = false;
-  if (!read_opaque_value(kCheckpointKey, kMaxCheckpointBytes, &bytes, &found)) {
-    if (error) *error = "opaque Starlink checkpoint read failed";
+  std::string host_error;
+  if (!read_opaque_value(kCheckpointNamespace, kCheckpointKey,
+                         kMaxCheckpointBytes, &bytes, &found, &host_error)) {
+    set_storage_error(error, "opaque Starlink checkpoint read failed",
+                      host_error);
     return CheckpointLoadResult::kError;
   }
   if (!found) return CheckpointLoadResult::kNotFound;
@@ -1387,8 +1750,9 @@ CheckpointLoadResult load_checkpoint(std::string* error) {
   if (!parse_checkpoint(bytes, &loaded, error)) {
     return CheckpointLoadResult::kError;
   }
-  if (!sync_opaque_state()) {
-    if (error) *error = "opaque Starlink checkpoint reload sync failed";
+  if (!sync_opaque_state(kCheckpointNamespace, &host_error)) {
+    set_storage_error(error, "opaque Starlink checkpoint reload sync failed",
+                      host_error);
     return CheckpointLoadResult::kError;
   }
   g_state = std::move(loaded);
@@ -1484,6 +1848,7 @@ void reset_state() {
   g_state = State{};
   g_pending_wave.clear();
   g_pending_wave_begin = 0;
+  g_probe_carry = ProbeCarry{};
   g_emitted_transient = false;
   g_progress_emitted_transient = false;
   g_trusted_emission_epoch_count = 0;
@@ -1541,6 +1906,7 @@ bool begin_catalog(const Config& config, std::string* error) {
   g_state = State{};
   g_state.config = config;
   g_state.units = std::move(units);
+  g_probe_carry = ProbeCarry{};
   std::copy(generation, generation + sizeof(generation),
             g_state.generation.begin());
   if (encode_checkpoint(g_state).empty()) {
@@ -1553,11 +1919,12 @@ bool begin_catalog(const Config& config, std::string* error) {
   g_state.active = true;
   g_emitted_transient = false;
   g_progress_emitted_transient = false;
-  if (!persist_checkpoint()) {
+  std::string host_error;
+  if (!persist_checkpoint(&host_error)) {
     g_state = State{};
-    if (error) {
-      *error = "opaque Starlink zero-download checkpoint commit failed";
-    }
+    set_storage_error(
+        error, "opaque Starlink zero-download checkpoint commit failed",
+        host_error);
     return false;
   }
   return true;
@@ -1565,9 +1932,10 @@ bool begin_catalog(const Config& config, std::string* error) {
 
 bool stage_download_page(
     size_t begin,
-    const std::vector<provider_node::HttpResult>& responses,
+    const std::vector<ValidatedDownload>& responses,
     size_t response_offset,
     size_t response_count,
+    bool sync_wave_chunks,
     std::string* error) {
   if (response_count == 0 ||
       response_count > kMaxDurableFilesPerInvocation ||
@@ -1580,28 +1948,23 @@ bool stage_download_page(
     return false;
   }
   uint64_t page_bytes = 0;
-  std::vector<uint64_t> epoch_counts;
-  epoch_counts.reserve(response_count);
   for (size_t local = 0; local < response_count; ++local) {
-    const provider_node::HttpResult& response =
-        responses[response_offset + local];
-    if (response.status != 200 || response.body.empty() ||
-        response.body.size() > kMaxStarlinkFileBytes) {
-      if (error) *error = "a complete Starlink ephemeris fetch failed";
+    const ValidatedDownload& download = responses[response_offset + local];
+    const provider_node::HttpResult& response = download.response;
+    const DownloadMetadata& metadata = download.metadata;
+    if (!metadata.valid || response.status != 200 || response.body.empty() ||
+        response.body.size() > kMaxStarlinkFileBytes ||
+        metadata.byte_length != response.body.size() ||
+        metadata.epoch_count == 0) {
+      if (error) *error = "Starlink worker metadata is invalid";
       return false;
     }
-    uint64_t epochs = 0;
-    if (!validate_meme_file(response.body, &epochs)) {
-      if (error) *error = "a Starlink ephemeris response is not valid MEME";
-      return false;
-    }
-    if (response.body.size() > kMaxRetainedWaveBytes ||
-        page_bytes > kMaxRetainedWaveBytes - response.body.size() ||
-        !add_without_overflow(page_bytes, response.body.size(), &page_bytes)) {
+    if (metadata.byte_length > kMaxRetainedWaveBytes ||
+        page_bytes > kMaxRetainedWaveBytes - metadata.byte_length ||
+        !add_without_overflow(page_bytes, metadata.byte_length, &page_bytes)) {
       if (error) *error = "Starlink page byte count overflowed";
       return false;
     }
-    epoch_counts.push_back(epochs);
   }
   if (response_count > 1 && page_bytes > kMaxDurableBytesPerInvocation) {
     if (error) *error = "Starlink durable slice exceeds its byte bound";
@@ -1609,32 +1972,52 @@ bool stage_download_page(
   }
 
   for (size_t local = 0; local < response_count; ++local) {
-    const provider_node::HttpResult& response =
-        responses[response_offset + local];
+    const ValidatedDownload& download = responses[response_offset + local];
+    const provider_node::HttpResult& response = download.response;
+    const DownloadMetadata& metadata = download.metadata;
     PlannedUnit& unit = g_state.units[begin + local];
-    unit.byte_length = response.body.size();
+    unit.byte_length = metadata.byte_length;
     unit.chunk_count = static_cast<uint32_t>(
-        (response.body.size() + kOpaqueChunkBytes - 1) / kOpaqueChunkBytes);
-    unit.epoch_count = epoch_counts[local];
-    sha256(response.body.data(), response.body.size(), unit.digest.data());
+        (metadata.byte_length + kOpaqueChunkBytes - 1) / kOpaqueChunkBytes);
+    unit.epoch_count = metadata.epoch_count;
+    unit.digest = metadata.digest;
     for (uint32_t chunk = 0; chunk < unit.chunk_count; ++chunk) {
       const size_t offset = static_cast<size_t>(chunk) * kOpaqueChunkBytes;
       const size_t length =
           std::min(kOpaqueChunkBytes, response.body.size() - offset);
-      const std::vector<uint8_t> bytes(
-          response.body.begin() + static_cast<std::ptrdiff_t>(offset),
-          response.body.begin() + static_cast<std::ptrdiff_t>(offset + length));
-      if (!replace_opaque_value(
+      std::vector<uint8_t> stored;
+      if (!encode_opaque_chunk(response.body.data() + offset, length,
+                               &stored)) {
+        if (error) *error = "opaque Starlink chunk encoding failed";
+        return false;
+      }
+      std::string host_error;
+      if (!replace_opaque_bytes(
+              chunk_namespace(g_state,
+                              static_cast<uint32_t>(begin + local)),
               chunk_key(g_state, static_cast<uint32_t>(begin + local), chunk),
-              bytes)) {
-        if (error) *error = "opaque Starlink chunk write failed";
+              stored.data(), stored.size(), &host_error)) {
+        set_storage_error(error, "opaque Starlink chunk write failed",
+                          host_error);
         return false;
       }
     }
   }
-  if (!sync_opaque_state()) {
-    if (error) *error = "opaque Starlink chunk sync failed";
-    return false;
+  if (sync_wave_chunks) {
+    const size_t wave_end = begin + response_count;
+    if (g_pending_wave_begin > begin || wave_end > g_state.units.size()) {
+      if (error) *error = "opaque Starlink wave scope bounds are invalid";
+      return false;
+    }
+    for (size_t index = g_pending_wave_begin; index < wave_end; ++index) {
+      std::string host_error;
+      if (!sync_opaque_state(chunk_namespace(
+              g_state, static_cast<uint32_t>(index)), &host_error)) {
+        set_storage_error(error, "opaque Starlink wave chunk sync failed",
+                          host_error);
+        return false;
+      }
+    }
   }
   uint64_t next_bytes = 0;
   if (!add_without_overflow(g_state.downloaded_bytes, page_bytes, &next_bytes)) {
@@ -1643,10 +2026,6 @@ bool stage_download_page(
   }
   g_state.downloaded_bytes = next_bytes;
   g_state.downloaded_count = static_cast<uint32_t>(begin + response_count);
-  if (!persist_checkpoint()) {
-    if (error) *error = "opaque Starlink checkpoint commit failed";
-    return false;
-  }
   return true;
 }
 
@@ -1657,13 +2036,19 @@ bool delete_unit_chunks(uint32_t unit_index, std::string* error) {
   }
   const PlannedUnit& unit = g_state.units[unit_index];
   for (uint32_t chunk = 0; chunk < unit.chunk_count; ++chunk) {
-    if (!delete_opaque_value(chunk_key(g_state, unit_index, chunk))) {
-      if (error) *error = "opaque Starlink chunk cleanup failed";
+    std::string host_error;
+    if (!delete_opaque_value(chunk_namespace(g_state, unit_index),
+                             chunk_key(g_state, unit_index, chunk),
+                             &host_error)) {
+      set_storage_error(error, "opaque Starlink chunk cleanup failed",
+                        host_error);
       return false;
     }
   }
-  if (!sync_opaque_state()) {
-    if (error) *error = "opaque Starlink cleanup sync failed";
+  std::string host_error;
+  if (!sync_opaque_state(chunk_namespace(g_state, unit_index), &host_error)) {
+    set_storage_error(error, "opaque Starlink cleanup sync failed",
+                      host_error);
     return false;
   }
   return true;
@@ -1687,15 +2072,26 @@ bool read_unit_body(uint32_t unit_index, std::vector<uint8_t>* body,
   for (uint32_t chunk = 0; chunk < unit.chunk_count; ++chunk) {
     std::vector<uint8_t> bytes;
     bool found = false;
+    std::string host_error;
     const size_t expected = static_cast<size_t>(std::min<uint64_t>(
         kOpaqueChunkBytes, unit.byte_length - body->size()));
-    if (!read_opaque_value(chunk_key(g_state, unit_index, chunk),
-                           kOpaqueChunkBytes, &bytes, &found) ||
-        !found || bytes.size() != expected) {
-      if (error) *error = "opaque Starlink object is missing or truncated";
+    if (!read_opaque_value(chunk_namespace(g_state, unit_index),
+                           chunk_key(g_state, unit_index, chunk),
+                           kOpaqueChunkBytes, &bytes, &found, &host_error) ||
+        !found) {
+      set_storage_error(error,
+                        "opaque Starlink object is missing or truncated",
+                        host_error);
       return false;
     }
-    body->insert(body->end(), bytes.begin(), bytes.end());
+    const size_t output_offset = body->size();
+    body->resize(output_offset + expected);
+    if (!decode_opaque_chunk(bytes, expected,
+                             body->data() + output_offset)) {
+      body->resize(output_offset);
+      if (error) *error = "opaque Starlink object chunk is invalid";
+      return false;
+    }
   }
   if (body->size() != unit.byte_length) {
     if (error) *error = "opaque Starlink object length is invalid";
@@ -1705,12 +2101,6 @@ bool read_unit_body(uint32_t unit_index, std::vector<uint8_t>* body,
   sha256(body->data(), body->size(), digest);
   if (std::memcmp(digest, unit.digest.data(), sizeof(digest)) != 0) {
     if (error) *error = "opaque Starlink object hash is invalid";
-    return false;
-  }
-  uint64_t observed_epochs = 0;
-  if (!validate_meme_file(*body, &observed_epochs) ||
-      observed_epochs != unit.epoch_count) {
-    if (error) *error = "opaque Starlink object epoch count is invalid";
     return false;
   }
   return true;
@@ -1739,16 +2129,14 @@ int commit_pending_downloads() {
         422);
   }
   const size_t response_offset = begin - wave_begin;
-  if (response_offset == g_pending_wave.size()) {
-    g_pending_wave.clear();
-    g_pending_wave_begin = 0;
-  } else {
+  bool wave_complete = response_offset == g_pending_wave.size();
+  if (!wave_complete) {
     size_t count = 0;
     uint64_t slice_bytes = 0;
     while (count < kMaxDurableFilesPerInvocation &&
            response_offset + count < g_pending_wave.size()) {
       const size_t body_bytes =
-          g_pending_wave[response_offset + count].body.size();
+          g_pending_wave[response_offset + count].metadata.byte_length;
       if (count > 0 &&
           (body_bytes > kMaxDurableBytesPerInvocation ||
            slice_bytes > kMaxDurableBytesPerInvocation - body_bytes)) {
@@ -1763,15 +2151,27 @@ int commit_pending_downloads() {
     }
 
     std::string error;
-    if (!stage_download_page(
-            begin, g_pending_wave, response_offset, count, &error)) {
+    wave_complete = response_offset + count == g_pending_wave.size();
+    if (!stage_download_page(begin, g_pending_wave, response_offset, count,
+                             wave_complete, &error)) {
       return fail_invocation("spool-write", error, 503);
     }
-    if (response_offset + count == g_pending_wave.size()) {
-      g_pending_wave.clear();
-      g_pending_wave_begin = 0;
-    }
   }
+  if (!wave_complete) {
+    plugin_set_backlog_remaining(work_remaining());
+    plugin_set_yielded(1);
+    return 0;
+  }
+  std::string host_error;
+  if (!persist_checkpoint(&host_error)) {
+    std::string error;
+    set_storage_error(&error,
+                      "opaque Starlink wave checkpoint commit failed",
+                      host_error);
+    return fail_invocation("checkpoint-write", error, 503);
+  }
+  g_pending_wave.clear();
+  g_pending_wave_begin = 0;
   if (!emit_progress()) {
     return fail_invocation("progress-output",
                            "unable to emit Starlink progress snapshot", 500);
@@ -1784,7 +2184,8 @@ int commit_pending_downloads() {
 
 int run_download_phase() {
   const size_t begin = g_state.downloaded_count;
-  if (begin > 0 && !g_progress_emitted_transient) {
+  if (begin > 0 && g_pending_wave.empty() &&
+      !g_progress_emitted_transient) {
     if (!emit_progress()) {
       return fail_invocation(
           "progress-output", "unable to replay Starlink progress snapshot",
@@ -1800,11 +2201,15 @@ int run_download_phase() {
   }
   if (!g_pending_wave.empty()) return commit_pending_downloads();
   if (begin == g_state.units.size()) {
+    g_probe_carry = ProbeCarry{};
     g_state.phase = Phase::kDraining;
-    if (!persist_checkpoint()) {
-      return fail_invocation(
-          "checkpoint-write",
-          "opaque Starlink drain-transition checkpoint failed", 503);
+    std::string host_error;
+    if (!persist_checkpoint(&host_error)) {
+      std::string error;
+      set_storage_error(
+          &error, "opaque Starlink drain-transition checkpoint failed",
+          host_error);
+      return fail_invocation("checkpoint-write", error, 503);
     }
     return run_drain_phase();
   }
@@ -1815,8 +2220,17 @@ int run_download_phase() {
     return fail_invocation("checkpoint-invalid",
                            "Starlink download cursor cannot advance", 422);
   }
+  const std::vector<ProbeResult>* carried_probes = nullptr;
+  if (!g_probe_carry.probes.empty()) {
+    if (g_probe_carry.begin == begin) {
+      carried_probes = &g_probe_carry.probes;
+    } else {
+      g_probe_carry = ProbeCarry{};
+    }
+  }
   DownloadPage page = download_complete_page(
-      g_state.units, begin, candidate_end, g_state.config.fetch_concurrency);
+      g_state.units, begin, candidate_end, g_state.config.fetch_concurrency,
+      carried_probes);
   if (!page.synchronization_valid) {
     return fail_invocation(
         "thread-sync", "Starlink page-scoped download cohort failed", 503);
@@ -1829,6 +2243,13 @@ int run_download_phase() {
     return fail_invocation(
         "memory-bound", "Starlink retained download wave cannot fit", 413);
   }
+  if (!page.responses_valid) {
+    return fail_invocation(
+        "ephemeris-validate",
+        "a complete Starlink ephemeris response is not valid MEME", 502);
+  }
+  g_probe_carry.begin = page.next_probe_begin;
+  g_probe_carry.probes = std::move(page.carried_probes);
   g_pending_wave_begin = static_cast<uint32_t>(begin);
   g_pending_wave = std::move(page.responses);
   return commit_pending_downloads();
@@ -1845,10 +2266,12 @@ int run_drain_phase() {
     }
     ++g_state.drain_index;
     g_state.cleanup_pending = true;
-    if (!persist_checkpoint()) {
-      return fail_invocation(
-          "checkpoint-write",
-          "opaque Starlink cleanup-pending checkpoint failed", 503);
+    std::string host_error;
+    if (!persist_checkpoint(&host_error)) {
+      set_storage_error(
+          &error, "opaque Starlink cleanup-pending checkpoint failed",
+          host_error);
+      return fail_invocation("checkpoint-write", error, 503);
     }
     g_emitted_transient = false;
   }
@@ -1858,18 +2281,21 @@ int run_drain_phase() {
         !delete_unit_chunks(g_state.drain_index - 1, &error)) {
       return fail_invocation("spool-cleanup", error, 503);
     }
+    // The cleanup-pending checkpoint already durably advances the acknowledged
+    // output cursor. Chunk deletion is idempotent, so retaining that durable
+    // flag until the next cursor checkpoint makes a crash repeat only cleanup
+    // instead of requiring a second full checkpoint transaction per object.
     g_state.cleanup_pending = false;
-    if (!persist_checkpoint()) {
-      return fail_invocation(
-          "checkpoint-write",
-          "opaque Starlink cleanup-complete checkpoint failed", 503);
-    }
   }
 
   if (g_state.drain_index == g_state.units.size()) {
-    if (!delete_opaque_value(kCheckpointKey) || !sync_opaque_state()) {
-      return fail_invocation(
-          "spool-cleanup", "opaque Starlink checkpoint cleanup failed", 503);
+    std::string host_error;
+    if (!delete_opaque_value(kCheckpointNamespace, kCheckpointKey,
+                             &host_error) ||
+        !sync_opaque_state(kCheckpointNamespace, &host_error)) {
+      set_storage_error(&error, "opaque Starlink checkpoint cleanup failed",
+                        host_error);
+      return fail_invocation("spool-cleanup", error, 503);
     }
     reset_state();
     plugin_set_backlog_remaining(0);
@@ -1892,7 +2318,8 @@ int run_drain_phase() {
   }
   g_trusted_emission_epoch_count = unit.epoch_count;
   const int emitted = emit_complete_response(
-      body, unit.identity, "MEME", trusted_meme_epoch_count);
+      body, unit.identity, "MEME", trusted_meme_epoch_count,
+      unit.digest.data());
   g_trusted_emission_epoch_count = 0;
   if (emitted < 0 || static_cast<uint32_t>(emitted) != response_frames) {
     return fail_invocation(
@@ -1935,6 +2362,11 @@ extern "C" int emit(void) {
       }
       if (!begin_catalog(parse_config(config_json), &error)) {
         return fail_invocation("manifest-fetch", error, 502);
+      }
+      if (g_state.units.size() > kManifestPlanYieldThreshold) {
+        plugin_set_backlog_remaining(work_remaining());
+        plugin_set_yielded(1);
+        return 0;
       }
     }
   }

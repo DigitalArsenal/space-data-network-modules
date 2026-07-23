@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -117,13 +118,29 @@ bool json_int64(std::string_view json, std::string_view key, int64_t* output) {
   if (cursor >= json.size() || !std::isdigit(static_cast<unsigned char>(json[cursor]))) {
     return false;
   }
-  int64_t value = 0;
+  const uint64_t limit = negative
+      ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1
+      : static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+  uint64_t value = 0;
   while (cursor < json.size() &&
          std::isdigit(static_cast<unsigned char>(json[cursor]))) {
-    value = value * 10 + static_cast<int64_t>(json[cursor] - '0');
+    const uint64_t digit = static_cast<uint64_t>(json[cursor] - '0');
+    if (value > (limit - digit) / 10) return false;
+    value = value * 10 + digit;
     ++cursor;
   }
-  *output = negative ? -value : value;
+  const size_t delimiter = skip_ws(json, cursor);
+  if (delimiter >= json.size() ||
+      (json[delimiter] != ',' && json[delimiter] != '}' &&
+       json[delimiter] != ']')) {
+    return false;
+  }
+  if (negative && value == limit) {
+    *output = std::numeric_limits<int64_t>::min();
+  } else {
+    const int64_t signed_value = static_cast<int64_t>(value);
+    *output = negative ? -signed_value : signed_value;
+  }
   return true;
 }
 
@@ -240,8 +257,12 @@ bool binary_field_index(std::string_view meta, std::string_view key,
       meta[cursor] != '{') {
     return false;
   }
+  const size_t object_end = meta.find('}', cursor + 1);
   const size_t bin = meta.find("\"$bin\"", cursor + 1);
-  if (bin == std::string_view::npos) return false;
+  if (object_end == std::string_view::npos ||
+      bin == std::string_view::npos || bin >= object_end) {
+    return false;
+  }
   cursor = meta.find(':', bin + 6);
   if (cursor == std::string_view::npos) return false;
   cursor = skip_ws(meta, cursor + 1);
@@ -251,9 +272,15 @@ bool binary_field_index(std::string_view meta, std::string_view key,
   size_t value = 0;
   while (cursor < meta.size() &&
          std::isdigit(static_cast<unsigned char>(meta[cursor]))) {
-    value = value * 10 + static_cast<size_t>(meta[cursor] - '0');
+    const size_t digit = static_cast<size_t>(meta[cursor] - '0');
+    if (value > (std::numeric_limits<size_t>::max() - digit) / 10) {
+      return false;
+    }
+    value = value * 10 + digit;
     ++cursor;
   }
+  cursor = skip_ws(meta, cursor);
+  if (cursor != object_end) return false;
   *output = value;
   return true;
 }
@@ -373,24 +400,17 @@ void sha256(const uint8_t* data, size_t length, uint8_t output[32]) {
       0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u};
   uint32_t hash[8] = {0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,
                       0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u};
-  std::vector<uint8_t> message(data, data + length);
-  const uint64_t bit_length = static_cast<uint64_t>(length) * 8;
-  message.push_back(0x80);
-  while (message.size() % 64 != 56) message.push_back(0);
-  for (int index = 7; index >= 0; --index) {
-    message.push_back(static_cast<uint8_t>(bit_length >> (index * 8)));
-  }
   const auto rotate = [](uint32_t value, uint32_t amount) {
     return (value >> amount) | (value << (32 - amount));
   };
-  for (size_t offset = 0; offset < message.size(); offset += 64) {
+  const auto compress = [&](const uint8_t* block) {
     uint32_t words[64];
     for (int index = 0; index < 16; ++index) {
       words[index] =
-          (static_cast<uint32_t>(message[offset + index * 4]) << 24) |
-          (static_cast<uint32_t>(message[offset + index * 4 + 1]) << 16) |
-          (static_cast<uint32_t>(message[offset + index * 4 + 2]) << 8) |
-          static_cast<uint32_t>(message[offset + index * 4 + 3]);
+          (static_cast<uint32_t>(block[index * 4]) << 24) |
+          (static_cast<uint32_t>(block[index * 4 + 1]) << 16) |
+          (static_cast<uint32_t>(block[index * 4 + 2]) << 8) |
+          static_cast<uint32_t>(block[index * 4 + 3]);
     }
     for (int index = 16; index < 64; ++index) {
       const uint32_t s0 = rotate(words[index - 15], 7) ^
@@ -414,6 +434,29 @@ void sha256(const uint8_t* data, size_t length, uint8_t output[32]) {
     }
     hash[0] += a; hash[1] += b; hash[2] += c; hash[3] += d;
     hash[4] += e; hash[5] += f; hash[6] += g; hash[7] += h;
+  };
+
+  size_t offset = 0;
+  while (length - offset >= 64) {
+    compress(data + offset);
+    offset += 64;
+  }
+
+  uint8_t tail[128] = {};
+  const size_t tail_length = length - offset;
+  if (tail_length != 0) {
+    std::memcpy(tail, data + offset, tail_length);
+  }
+  tail[tail_length] = 0x80;
+  const size_t padded_length = tail_length < 56 ? 64 : 128;
+  const uint64_t bit_length = static_cast<uint64_t>(length) * 8;
+  for (int index = 0; index < 8; ++index) {
+    tail[padded_length - 1 - static_cast<size_t>(index)] =
+        static_cast<uint8_t>(bit_length >> (index * 8));
+  }
+  compress(tail);
+  if (padded_length == 128) {
+    compress(tail + 64);
   }
   for (int index = 0; index < 8; ++index) {
     output[index * 4] = static_cast<uint8_t>(hash[index] >> 24);
@@ -434,14 +477,19 @@ uint64_t count_records_isomorphic(const std::vector<uint8_t>& bytes,
 int emit_complete_response(const std::vector<uint8_t>& bytes,
                            std::string_view native_schema,
                            std::string_view native_identifier,
-                           RecordCounter count_records) {
+                           RecordCounter count_records,
+                           const uint8_t* preverified_digest = nullptr) {
   if (bytes.empty()) return -1;
   if (g_aligned_output_requested &&
       (native_schema.size() > 64 || native_identifier.size() > 4)) {
     return -1;
   }
   uint8_t digest[32];
-  sha256(bytes.data(), bytes.size(), digest);
+  if (preverified_digest) {
+    std::memcpy(digest, preverified_digest, sizeof(digest));
+  } else {
+    sha256(bytes.data(), bytes.size(), digest);
+  }
   const uint64_t request_id = ++g_next_request_id;
   const uint64_t records = count_records_isomorphic(bytes, count_records);
   uint32_t sequence = 0;

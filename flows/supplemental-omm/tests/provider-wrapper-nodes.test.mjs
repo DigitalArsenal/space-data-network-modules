@@ -160,8 +160,8 @@ function makeAlignedFsb(data) {
   return bytes;
 }
 
-function configFrame(config, wireFormat = "flatbuffer") {
-  const encoded = new TextEncoder().encode(JSON.stringify(config));
+function configJsonFrame(json, wireFormat = "flatbuffer") {
+  const encoded = new TextEncoder().encode(json);
   const aligned = wireFormat === "aligned-binary";
   return {
     portId: "config",
@@ -176,6 +176,10 @@ function configFrame(config, wireFormat = "flatbuffer") {
     },
     payload: aligned ? makeAlignedFsb(encoded) : makeFsb(encoded),
   };
+}
+
+function configFrame(config, wireFormat = "flatbuffer") {
+  return configJsonFrame(JSON.stringify(config), wireFormat);
 }
 
 function text(value) {
@@ -231,7 +235,10 @@ function decodeProgressDss(frame) {
   };
 }
 
-function createOpaqueStateAdapter() {
+function createOpaqueStateAdapter({
+  maxScopeBytes = Number.POSITIVE_INFINITY,
+  maxScopeKeys = Number.POSITIVE_INFINITY,
+} = {}) {
   let values = new Map();
   let durableValues = new Map();
   const calls = [];
@@ -241,6 +248,17 @@ function createOpaqueStateAdapter() {
     new Map([...source].map(([key, value]) => [key, value.slice()]));
   const keysFrom = (source) =>
     [...source.keys()].map((key) => key.split("\0").at(-1)).sort();
+  const scopeStatsFrom = (source, namespace) => {
+    const prefix = `${namespace}\0`;
+    let bytes = 0;
+    let keys = 0;
+    for (const [key, value] of source) {
+      if (!key.startsWith(prefix)) continue;
+      keys += 1;
+      bytes += value.byteLength;
+    }
+    return { bytes, keys };
+  };
   return {
     calls,
     keys() {
@@ -248,6 +266,13 @@ function createOpaqueStateAdapter() {
     },
     durableKeys() {
       return keysFrom(durableValues);
+    },
+    namespaces() {
+      return [...new Set([...values.keys()].map((key) => key.split("\0")[0]))]
+        .sort();
+    },
+    scopeStats(namespace) {
+      return scopeStatsFrom(values, namespace);
     },
     get(key, namespace = "primary") {
       return values.get(`${namespace}\0${key}`)?.slice();
@@ -311,6 +336,17 @@ function createOpaqueStateAdapter() {
       }
       if (operation === "storage.adapter.opaque.replace") {
         assert.ok(params.data instanceof Uint8Array);
+        const scoped = scopeStatsFrom(values, params.namespace);
+        const existing = values.get(keyFor(params));
+        const projectedBytes = scoped.bytes - (existing?.byteLength ?? 0) +
+          params.data.byteLength;
+        const projectedKeys = scoped.keys + (existing === undefined ? 1 : 0);
+        if (projectedBytes > maxScopeBytes || projectedKeys > maxScopeKeys) {
+          throw new Error(
+            `opaque state scope quota exceeded: ${projectedBytes} bytes, ` +
+              `${projectedKeys} keys`,
+          );
+        }
         values.set(keyFor(params), params.data.slice());
         return { stored_bytes: params.data.byteLength };
       }
@@ -319,7 +355,13 @@ function createOpaqueStateAdapter() {
         return { deleted: true };
       }
       if (operation === "storage.adapter.opaque.sync") {
-        durableValues = cloneValues(values);
+        const prefix = `${params.namespace}\0`;
+        for (const key of durableValues.keys()) {
+          if (key.startsWith(prefix)) durableValues.delete(key);
+        }
+        for (const [key, value] of values) {
+          if (key.startsWith(prefix)) durableValues.set(key, value.slice());
+        }
         return { synced: true };
       }
       if (operation === "storage.adapter.opaque.list") {
@@ -347,7 +389,7 @@ function dispatchOpaqueAsGoBase64(opaque, operation, params) {
 
 function decodeStarlinkCheckpoint(bytesLike) {
   const bytes = new Uint8Array(bytesLike ?? []);
-  assert.ok(bytes.byteLength >= 164, "checkpoint is too short");
+  assert.ok(bytes.byteLength >= 153, "checkpoint is too short");
   const payloadEnd = bytes.byteLength - 32;
   assert.deepEqual(
     bytes.subarray(payloadEnd),
@@ -356,7 +398,8 @@ function decodeStarlinkCheckpoint(bytesLike) {
   );
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   assert.equal(new TextDecoder().decode(bytes.subarray(0, 8)), "SLSPOOL1");
-  assert.equal(view.getUint16(8, true), 2);
+  const version = view.getUint16(8, true);
+  assert.equal(version, 4);
   const phase = bytes[10];
   const flags = bytes[11];
   const unitCount = view.getUint32(12, true);
@@ -383,30 +426,33 @@ function decodeStarlinkCheckpoint(bytesLike) {
     const headerOffset = cursor;
     const filenameLength = view.getUint16(cursor, true);
     cursor += 2;
-    const identityLength = view.getUint16(cursor, true);
-    cursor += 2;
-    const byteLength = view.getBigUint64(cursor, true);
-    cursor += 8;
-    const chunkCount = view.getUint32(cursor, true);
+    const byteLengthOffset = cursor;
+    const byteLength = BigInt(view.getUint32(cursor, true));
     cursor += 4;
-    const epochCount = view.getBigUint64(cursor, true);
-    cursor += 8;
+    const epochCountOffset = cursor;
+    const epochCount = BigInt(view.getUint32(cursor, true));
+    cursor += 4;
+    const digestOffset = cursor;
     const digest = bytes.subarray(cursor, cursor + 32).slice();
     cursor += 32;
     const filenameOffset = cursor;
-    const filename = new TextDecoder().decode(
+    const filenameCore = new TextDecoder().decode(
       bytes.subarray(cursor, cursor + filenameLength),
     );
     cursor += filenameLength;
-    const identityOffset = cursor;
-    const identity = new TextDecoder().decode(
-      bytes.subarray(cursor, cursor + identityLength),
+    const filename = `MEME_${filenameCore}_UNCLASSIFIED.txt`;
+    const fields = filename.split("_");
+    const identity = `MEME:${fields[1]}:${fields[2]}`;
+    const chunkCount = Number(
+      (byteLength + BigInt(1024 * 1024) - 1n) / BigInt(1024 * 1024),
     );
-    cursor += identityLength;
     units.push({
       headerOffset,
+      byteLengthOffset,
+      epochCountOffset,
+      digestOffset,
       filenameOffset,
-      identityOffset,
+      filenameLength,
       filename,
       identity,
       byteLength,
@@ -418,6 +464,7 @@ function decodeStarlinkCheckpoint(bytesLike) {
   assert.equal(cursor, payloadEnd, "checkpoint has trailing or truncated fields");
   return {
     bytes,
+    version,
     phase,
     flags,
     cleanupPending: (flags & 1) !== 0,
@@ -446,6 +493,12 @@ function mutateCheckpoint(checkpoint, mutate) {
     payloadEnd,
   );
   return bytes;
+}
+
+function starlinkChunkNamespaceFromKey(key) {
+  const match = /^catalog\.([0-9a-f]{64})\.f(\d+)\.c\d+\.bin$/.exec(key);
+  assert.ok(match, `invalid Starlink chunk key ${key}`);
+  return `starlink.${match[1]}.f${match[2]}`;
 }
 
 function readAlignedVector(bytes, offset) {
@@ -649,8 +702,12 @@ const behaviorCases = {
 
 async function createHarness(key, hostcallDispatch) {
   const manifest = readJson(nodePath(key, "plugin-manifest.json"), `${key} manifest`);
+  const wasmPath =
+    key === "starlink" && process.env.SUPPLEMENTAL_OMM_STARLINK_TEST_WASM
+      ? path.resolve(process.env.SUPPLEMENTAL_OMM_STARLINK_TEST_WASM)
+      : nodePath(key, "dist/isomorphic/module.wasm");
   const signed = new Uint8Array(
-    fs.readFileSync(nodePath(key, "dist/isomorphic/module.wasm")),
+    fs.readFileSync(wasmPath),
   );
   return createBrowserModuleHarness({
     wasmSource: signed,
@@ -662,8 +719,12 @@ async function createHarness(key, hostcallDispatch) {
 
 async function createWorkerHarness(key, hostcallDispatch, harnessOptions = {}) {
   const manifest = readJson(nodePath(key, "plugin-manifest.json"), `${key} manifest`);
+  const wasmPath =
+    key === "starlink" && process.env.SUPPLEMENTAL_OMM_STARLINK_TEST_WASM
+      ? path.resolve(process.env.SUPPLEMENTAL_OMM_STARLINK_TEST_WASM)
+      : nodePath(key, "dist/isomorphic/module.wasm");
   const signed = new Uint8Array(
-    fs.readFileSync(nodePath(key, "dist/isomorphic/module.wasm")),
+    fs.readFileSync(wasmPath),
   );
   const worker = await createWorkerModuleHarness({
     wasmSource: signed,
@@ -750,6 +811,61 @@ test("GLONASS no-input invocation retains canonical FSB fallback", async (t) => 
   }
 });
 
+test("provider SHA-256 streams full blocks and matches padding-boundary vectors", async (t) => {
+  const runtime = fs.readFileSync(
+    path.join(packageRoot, "nodes/providers/common/provider_runtime.hpp"),
+    "utf8",
+  );
+  const implementation = runtime.slice(
+    runtime.indexOf("void sha256("),
+    runtime.indexOf("using RecordCounter"),
+  );
+  assert.ok(implementation.length > 0, "missing provider SHA-256 implementation");
+  assert.doesNotMatch(
+    implementation,
+    /std::vector\s*<\s*uint8_t\s*>/,
+    "SHA-256 must not allocate a whole-message copy",
+  );
+  assert.match(implementation, /uint8_t\s+tail\s*\[\s*128\s*\]/);
+  assert.match(implementation, /data\s*\+\s*offset/);
+
+  let body = new Uint8Array();
+  const harness = await createHarness("glonass", (operation, params) => {
+    assert.equal(operation, "http.request");
+    assert.equal(params.url, codeGlonassSource);
+    return { status: 200, body: body.slice() };
+  });
+  t.after(() => harness.destroy());
+
+  const vectors = [
+    new TextEncoder().encode("abc"),
+    ...[1, 55, 56, 63, 64, 65, 119, 120, 127, 128, 129, 4097].map(
+      (length) => Uint8Array.from(
+        { length },
+        (_, index) => (index * 131 + length * 17 + (index >>> 2)) & 0xff,
+      ),
+    ),
+  ];
+  for (const [index, value] of vectors.entries()) {
+    body = value;
+    const response = await harness.invoke({ methodId: "emit", inputs: [] });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.outputs.length, 1);
+    const fsb = decodeFsb(response.outputs[0].payload);
+    const expected = new Uint8Array(
+      crypto.createHash("sha256").update(value).digest(),
+    );
+    assert.deepEqual(
+      fsb.sha256,
+      expected,
+      index === 0
+        ? "the SHA-256 abc known vector must match"
+        : `SHA-256 differential mismatch at ${value.byteLength} bytes`,
+    );
+    assert.deepEqual(fsb.data, value, "hashing cannot change provider bytes");
+  }
+});
+
 test("Starlink declares the signed 64-way opaque-spool and progress contract", () => {
   const manifest = readJson(
     nodePath("starlink", "plugin-manifest.json"),
@@ -785,9 +901,130 @@ test("Starlink declares the signed 64-way opaque-spool and progress contract", (
   assert.doesNotMatch(source, /storage_engine_link|hostcap/i);
 });
 
-test("Starlink bounds 64-way size preflight and retained download subwaves below one GiB", async (t) => {
+test("Starlink validates finite decimal ranges without libc numeric conversion", () => {
+  const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
+  const begin = source.indexOf("bool strict_finite_decimal(");
+  const end = source.indexOf("\nuint32_t meme_timestamp_component(", begin);
+  assert.ok(begin >= 0 && end > begin, "missing finite-decimal validator");
+  const implementation = source.slice(begin, end);
+  assert.doesNotMatch(
+    implementation,
+    /\b(?:strtod|strtof|strtold)\s*\(/,
+    "MEME validation must not convert every numeric field through libc",
+  );
+  assert.doesNotMatch(
+    implementation,
+    /\b(?:double|float|long double)\b/,
+    "the forwarding-only provider needs lexical range validation, not a value",
+  );
+  assert.doesNotMatch(
+    implementation,
+    /std::(?:string\b|vector\s*<)/,
+    "finite-decimal validation must not allocate",
+  );
+});
+
+test("Starlink finite-decimal grammar preserves normal/scientific values and rejects non-finite or out-of-range fields", async (t) => {
+  const accepted = [
+    "0",
+    "-0.0e+9999",
+    "1",
+    "+1.",
+    ".5",
+    "-6.02214076e23",
+    "2.2250738585072014e-308",
+    "2.2250738585072012e-308",
+    "1.7976931348623157e308",
+    "1.7976931348623158e308",
+  ];
+  const rejected = [
+    "NaN",
+    "-Inf",
+    ".",
+    "1e",
+    "1e+",
+    "1.2.3",
+    "--1",
+    "1e-309",
+    "1e309",
+    "2.225073858507201e-308",
+    "2.2250738585072011e-308",
+    "1.797693134862316e308",
+    "1.7976931348623159e308",
+  ];
+  for (const [index, token] of [...accepted, ...rejected].entries()) {
+    const shouldAccept = index < accepted.length;
+    await t.test(
+      `${shouldAccept ? "accepts" : "rejects"} ${token}`,
+      async (subtest) => {
+        const manifestUrl =
+          `${fixtureOrigin}/starlink-decimal-${index}/MANIFEST.txt`;
+        const ephemerisBase =
+          `${fixtureOrigin}/starlink-decimal-${index}/`;
+        const filename =
+          `MEME_${43000 + index}_STARLINK-DECIMAL-${index}_1_Operational_${index + 1}_UNCLASSIFIED.txt`;
+        const body = new TextEncoder().encode([
+          "created: 2026-07-22 00:00:00 UTC",
+          "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+          "ephemeris_source: finite-decimal-test",
+          "UVW",
+          `2026203000000.000 ${token} 0 0 0 7.5 0`,
+          "2026203000100.000 6999 450 0 -0.5 7.48 0",
+        ].join("\n"));
+        const responses = new Map([
+          [manifestUrl, new TextEncoder().encode(`${filename}\n`)],
+          [joinFixtureUrl(ephemerisBase, filename), body],
+        ]);
+        const opaque = createOpaqueStateAdapter();
+        const harness = await createHarness("starlink", (operation, params) =>
+          operation === "http.request"
+            ? serveFixtureHttp(params, responses)
+            : opaque.dispatch(operation, params)
+        );
+        subtest.after(() => harness.destroy());
+        const response = await harness.invoke({
+          methodId: "emit",
+          inputs: [configFrame({ manifestUrl, ephemerisBase })],
+        });
+        assert.equal(
+          response.statusCode === 0,
+          shouldAccept,
+          response.errorMessage,
+        );
+        if (!shouldAccept) {
+          assert.deepEqual(response.outputs, []);
+          assert.equal(
+            decodeStarlinkCheckpoint(
+              opaque.getDurable("starlink.active.v1"),
+            ).downloadedCount,
+            0,
+            "a rejected field cannot advance the durable catalog cursor",
+          );
+        }
+      },
+    );
+  }
+});
+
+test("Starlink drain trusts only SHA-identical bytes from the already validated durable catalog", () => {
+  const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
+  const begin = source.indexOf("bool read_unit_body(");
+  const end = source.indexOf("\nint fail_invocation(", begin);
+  assert.ok(begin >= 0 && end > begin, "missing durable Starlink body reader");
+  const implementation = source.slice(begin, end);
+  assert.match(implementation, /\bsha256\s*\(/);
+  assert.match(implementation, /std::memcmp\s*\(/);
+  assert.doesNotMatch(
+    implementation,
+    /\bvalidate_meme_file\s*\(/,
+    "a matching committed digest already establishes the exact validated bytes",
+  );
+});
+
+test("Starlink bounds 64-way size preflight and fuel-safe retained download subwaves", async (t) => {
   const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
   assert.match(source, /kMaxStarlinkFileBytes\s*=\s*64\s*\*\s*1024\s*\*\s*1024/);
+  assert.match(source, /kMaxFetchWaveBytesPerInvocation\s*=\s*64ull\s*\*\s*1024\s*\*\s*1024/);
   assert.match(source, /kMaxRetainedWaveBytes\s*=\s*288ull\s*\*\s*1024\s*\*\s*1024/);
   assert.match(source, /kReservedTransientBytes\s*=\s*384ull\s*\*\s*1024\s*\*\s*1024/);
   assert.match(source, /kWasmMemoryCeilingBytes\s*=\s*1024ull\s*\*\s*1024\s*\*\s*1024/);
@@ -795,7 +1032,7 @@ test("Starlink bounds 64-way size preflight and retained download subwaves below
     source,
     /static_assert\s*\(\s*2\s*\*\s*kMaxRetainedWaveBytes\s*\+\s*kReservedTransientBytes\s*</,
   );
-  assert.match(source, /probe\.byte_length\s*<=\s*kMaxRetainedWaveBytes\s*-\s*retained_bytes/);
+  assert.match(source, /probe\.byte_length\s*<=\s*kMaxFetchWaveBytesPerInvocation\s*-\s*retained_bytes/);
   assert.match(source, /download_complete_page\s*\(/);
   assert.match(source, /kMaxStorageSegments\s*=\s*1/);
   assert.match(source, /segment_count\s*>\s*kMaxStorageSegments/);
@@ -854,6 +1091,72 @@ test("Starlink bounds 64-way size preflight and retained download subwaves below
   assert.ok(harness.memory.buffer.byteLength < 1024 * 1024 * 1024);
 });
 
+test("Starlink owns the compact v4 per-file checkpoint and one-MiB opaque layout", () => {
+  const source = fs.readFileSync(nodePath("starlink", "src/node.cpp"), "utf8");
+  assert.match(source, /kCheckpointVersion\s*=\s*4/);
+  assert.match(source, /kMaxCheckpointBytes\s*=\s*(?:1\s*\*\s*)?1024\s*\*\s*1024/);
+  assert.match(source, /kOpaqueChunkBytes\s*=\s*1024\s*\*\s*1024/);
+  assert.match(source, /kCompressedChunkMagic/);
+  assert.match(source, /encode_opaque_chunk\s*\(/);
+  assert.match(source, /decode_opaque_chunk\s*\(/);
+  assert.match(source, /tdefl_compress_mem_to_mem\s*\(/);
+  assert.match(source, /tinfl_decompress_mem_to_mem\s*\(/);
+  assert.match(source, /chunk_namespace\s*\(/);
+  assert.match(
+    source,
+    /catalog\."\s*\+\s*hex_digest\(state\.generation\)\s*\+\s*"\.f/,
+  );
+  assert.match(source, /filename_core\s*\(/);
+  assert.match(source, /append_u32le\(&bytes,\s*static_cast<uint32_t>\(unit\.byte_length\)\)/);
+  assert.match(source, /append_u32le\(&bytes,\s*static_cast<uint32_t>\(unit\.epoch_count\)\)/);
+  assert.doesNotMatch(source, /append_u(?:32|64)le\(&bytes,\s*unit\.chunk_count\)/);
+  assert.doesNotMatch(source, /starlink\.cursor|pack_begin|pack_offset/);
+});
+
+test("Starlink rejects overflowing or unterminated numeric config fields", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-numeric-config/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-numeric-config/`;
+  const filename =
+    "MEME_17001_STARLINK-NUMERIC-CONFIG_1_Operational_1_UNCLASSIFIED.txt";
+  const body = new TextEncoder().encode([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: numeric-config-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ].join("\n"));
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filename}\n`)],
+    [joinFixtureUrl(ephemerisBase, filename), body],
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  const harness = await createHarness("starlink", (operation, params) =>
+    operation === "http.request"
+      ? serveFixtureHttp(params, responses)
+      : opaque.dispatch(operation, params)
+  );
+  t.after(() => harness.destroy());
+
+  const malformedConfig =
+    `{"manifestUrl":${JSON.stringify(manifestUrl)},` +
+    `"ephemerisBase":${JSON.stringify(ephemerisBase)},` +
+    '"fetchConcurrency":18446744073709551617,' +
+    '"batchSize":7oops,' +
+    '"objectCap":18446744073709551617}';
+  const response = await harness.invoke({
+    methodId: "emit",
+    inputs: [configJsonFrame(malformedConfig)],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const checkpoint = decodeStarlinkCheckpoint(
+    opaque.getDurable("starlink.active.v1"),
+  );
+  assert.equal(checkpoint.fetchConcurrency, 64);
+  assert.equal(checkpoint.batchSize, 64);
+  assert.equal(checkpoint.objectCap, 0);
+});
+
 test("Starlink rejects any invalid size probe before every complete GET", async (t) => {
   const manifestUrl = `${fixtureOrigin}/starlink-invalid-late-probe/MANIFEST.txt`;
   const ephemerisBase = `${fixtureOrigin}/starlink-invalid-late-probe/`;
@@ -899,7 +1202,7 @@ test("Starlink rejects any invalid size probe before every complete GET", async 
   assert.equal(response.outputs.length, 0);
 });
 
-test("Starlink shrinks full-GET width when 64 MiB files exceed the retained wave", async (t) => {
+test("Starlink admits only one 64 MiB full GET per fuel-safe byte wave", async (t) => {
   const manifestUrl = `${fixtureOrigin}/starlink-large-subwave/MANIFEST.txt`;
   const ephemerisBase = `${fixtureOrigin}/starlink-large-subwave/`;
   const filenames = Array.from(
@@ -942,8 +1245,8 @@ test("Starlink shrinks full-GET width when 64 MiB files exceed the retained wave
   assert.equal(probeUrls.length, 5, "the cheap size page retains 64-way policy");
   assert.deepEqual(
     fullUrls,
-    filenames.slice(0, 4).map((filename) => joinFixtureUrl(ephemerisBase, filename)),
-    "288 MiB retains only four advertised 64 MiB bodies in one full-GET subwave",
+    filenames.slice(0, 1).map((filename) => joinFixtureUrl(ephemerisBase, filename)),
+    "the 64 MiB fuel ceiling admits exactly one maximum-sized body",
   );
   assert.equal(
     decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
@@ -1096,11 +1399,14 @@ test("Starlink checkpoint uses the exact approved durable codec and primary name
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.ok(
-    opaque.calls.every(({ params }) => params.namespace === "primary"),
-    "every opaque operation must use the approved primary namespace",
+    opaque.calls
+      .filter(({ params }) => params.key === "starlink.active.v1")
+      .every(({ params }) => params.namespace === "primary"),
+    "the active checkpoint must remain in the approved primary namespace",
   );
   const checkpointBytes = opaque.get("starlink.active.v1");
   const checkpoint = decodeStarlinkCheckpoint(checkpointBytes);
+  assert.equal(checkpoint.version, 4);
   assert.equal(
     checkpoint.phase,
     1,
@@ -1141,6 +1447,248 @@ test("Starlink checkpoint uses the exact approved durable codec and primary name
     opaque.keys().filter((key) => key.startsWith("catalog.")),
     [`catalog.${Buffer.from(checkpoint.generation).toString("hex")}.f0.c0.bin`],
   );
+  assert.ok(
+    opaque.calls.some(
+      ({ params }) =>
+        params.key?.startsWith("catalog.") &&
+        params.namespace ===
+          `starlink.${Buffer.from(checkpoint.generation).toString("hex")}.f0`,
+    ),
+  );
+});
+
+test("Starlink v4 checkpoint keeps the exact 8,825-object live plan below one MiB", async (t) => {
+  const manifestUrl =
+    "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
+  const ephemerisBase =
+    "https://api.starlink.com/public-files/ephemerides/";
+  // The 2026-07-22 production plan selected exactly 8,825 identities with
+  // filename lengths {72: 2,605, 73: 6,140, 77: 80}. Recreate that exact
+  // encoded-size profile without making the deterministic test network-bound.
+  const filenames = Array.from({ length: 8_825 }, (_, index) => {
+    const catalogId = 67_850 + index;
+    const starlinkId = 36_840 + index;
+    const finalGeneration = index < 2_605
+      ? 463_017_380 + index
+      : index < 8_745
+        ? 1_463_017_380 + index
+        : 14_630_173_800_000 + index;
+    return `MEME_${catalogId}_STARLINK-${starlinkId}_${1_340_142 + index}_Operational_${finalGeneration}_UNCLASSIFIED.txt`;
+  });
+  const manifest = new TextEncoder().encode(`${filenames.join("\n")}\n`);
+  const legacyV2Estimate =
+    108 + manifestUrl.length + ephemerisBase.length +
+    filenames.reduce((sum, filename) => {
+      const fields = filename.split("_");
+      const identity = `MEME:${fields[1]}:${fields[2]}`;
+      return sum + 56 + filename.length + identity.length;
+    }, 0);
+  assert.ok(
+    legacyV2Estimate > 1024 * 1024,
+    "the exact live-shape test must exceed the retired v2 opaque-value limit",
+  );
+
+  const opaque = createOpaqueStateAdapter();
+  let fileHttpCalls = 0;
+  const dispatch = (operation, params) => {
+    if (operation === "http.request") {
+      if (params.url === manifestUrl) {
+        return { status: 200, body: manifest.slice() };
+      }
+      fileHttpCalls += 1;
+      return { status: 503, body: new Uint8Array() };
+    }
+    return opaque.dispatch(operation, params);
+  };
+  const harness = await createHarness("starlink", dispatch);
+  const attempted = await harness.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase })],
+  });
+  harness.destroy();
+  assert.equal(attempted.statusCode, 0, attempted.errorMessage);
+  assert.equal(attempted.yielded, true);
+  assert.equal(attempted.outputs.length, 0);
+  assert.equal(
+    fileHttpCalls,
+    0,
+    "a production-sized manifest must durably checkpoint and yield before file probes",
+  );
+
+  const checkpointBytes = opaque.getDurable("starlink.active.v1");
+  const expectedCheckpointBytes =
+    76 + manifestUrl.length + ephemerisBase.length + 32 +
+    filenames.reduce(
+      (sum, filename) =>
+        sum + 42 + filename.length - "MEME_".length - "_UNCLASSIFIED.txt".length,
+      0,
+    );
+  assert.equal(expectedCheckpointBytes, 818_660);
+  assert.equal(checkpointBytes.byteLength, expectedCheckpointBytes);
+  assert.ok(checkpointBytes.byteLength <= 1024 * 1024);
+  const checkpoint = decodeStarlinkCheckpoint(checkpointBytes);
+  assert.equal(checkpoint.version, 4);
+  assert.equal(checkpoint.unitCount, 8_825);
+  assert.equal(checkpoint.downloadedCount, 0);
+  assert.deepEqual(checkpoint.units.map(({ filename }) => filename), filenames);
+  assert.ok(
+    opaque.calls
+      .filter(({ operation }) => operation === "storage.adapter.opaque.replace")
+      .every(({ params }) => params.data.byteLength <= 1024 * 1024),
+    "every generic opaque value must remain at or below one MiB",
+  );
+
+  const exactFileBytes = 2_045_241;
+  const exactEpochCount = 4_305;
+  const finalLike = mutateCheckpoint(checkpointBytes, (bytes, view) => {
+    bytes[10] = 2;
+    view.setUint32(16, checkpoint.unitCount, true);
+    view.setUint32(20, 0, true);
+    view.setBigUint64(
+      24,
+      BigInt(exactFileBytes) * BigInt(checkpoint.unitCount),
+      true,
+    );
+    for (const [index, unit] of checkpoint.units.entries()) {
+      view.setUint32(unit.byteLengthOffset, exactFileBytes, true);
+      view.setUint32(unit.epochCountOffset, exactEpochCount, true);
+      bytes.fill((index % 251) + 1, unit.digestOffset, unit.digestOffset + 32);
+    }
+  });
+  assert.equal(finalLike.byteLength, checkpointBytes.byteLength);
+  assert.ok(finalLike.byteLength <= 1024 * 1024);
+  opaque.set("starlink.active.v1", finalLike);
+
+  const resumed = await createHarness("starlink", (operation, params) => {
+    assert.notEqual(operation, "http.request", "durable drain cannot refetch");
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => resumed.destroy());
+  const missingChunk = await resumed.invoke({ methodId: "emit", inputs: [] });
+  assert.notEqual(missingChunk.statusCode, 0);
+  assert.deepEqual(missingChunk.outputs, []);
+});
+
+test("Starlink checkpoints the full 17,650-candidate live manifest before a fuel-safe resumed wave", async (t) => {
+  const manifestUrl =
+    "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
+  const ephemerisBase =
+    "https://api.starlink.com/public-files/ephemerides/";
+  const candidates = Array.from({ length: 8_825 }, (_, index) => {
+    const catalogId = 67_850 + index;
+    const starlinkId = 36_840 + index;
+    const latestGeneration = 1_463_017_380 + index;
+    return {
+      old: `MEME_${catalogId}_STARLINK-${starlinkId}_${1_340_141 + index}_Operational_${latestGeneration - 1}_UNCLASSIFIED.txt`,
+      latest: `MEME_${catalogId}_STARLINK-${starlinkId}_${1_340_142 + index}_Operational_${latestGeneration}_UNCLASSIFIED.txt`,
+    };
+  });
+  const manifestLines = candidates.flatMap(({ old, latest }) => [old, latest]);
+  assert.equal(manifestLines.length, 17_650);
+  const manifest = new TextEncoder().encode(`${manifestLines.join("\n")}\n`);
+  assert.ok(manifest.byteLength < 8 * 1024 * 1024);
+
+  const opaque = createOpaqueStateAdapter();
+  let manifestCalls = 0;
+  let probeCalls = 0;
+  let fullFetchCalls = 0;
+  const initial = await createHarness("starlink", (operation, params) => {
+    if (operation === "http.request") {
+      if (params.url === manifestUrl) {
+        manifestCalls += 1;
+        return { status: 200, body: manifest.slice() };
+      }
+      probeCalls += 1;
+      return { status: 503, body: new Uint8Array() };
+    }
+    return opaque.dispatch(operation, params);
+  });
+  const planned = await initial.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase })],
+  });
+  initial.destroy();
+  assert.equal(planned.statusCode, 0, planned.errorMessage);
+  assert.equal(planned.yielded, true);
+  assert.equal(planned.backlogRemaining, 17_651);
+  assert.deepEqual(planned.outputs, []);
+  assert.equal(manifestCalls, 1);
+  assert.equal(probeCalls, 0);
+  assert.equal(fullFetchCalls, 0);
+
+  const checkpointBytes = opaque.getDurable("starlink.active.v1");
+  const checkpoint = decodeStarlinkCheckpoint(checkpointBytes);
+  assert.equal(checkpoint.version, 4);
+  assert.equal(checkpoint.unitCount, 8_825);
+  assert.equal(checkpoint.downloadedCount, 0);
+  assert.deepEqual(
+    checkpoint.units.map(({ filename }) => filename),
+    candidates.map(({ latest }) => latest),
+    "each identity must retain its latest generation in latest-manifest order",
+  );
+  assert.deepEqual(
+    checkpoint.generation,
+    new Uint8Array(
+      crypto
+        .createHash("sha256")
+        .update(manifest)
+        .update(ephemerisBase)
+        .digest(),
+    ),
+    "generation must cover every old and latest candidate byte",
+  );
+
+  const body = memeToExactSize([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: full-live-manifest-test",
+    "UVW",
+    "2026203000000.000 -2877.5130811997 4075.0989745008 -4706.3410523462 -3.4551274033 -6.0345187465 -3.1147385352",
+    "4.5959389250e-07 -3.6857237948e-07 7.5138447296e-07 -7.6290988105e-12 1.6674071715e-10 1.1925957340e-06 8.0142362965e-10",
+    "-8.7543694295e-10 -1.1494065075e-12 1.9048025297e-12 -4.5364226733e-10 3.9287303459e-10 1.4986973206e-12 -8.0112176320e-13",
+    "4.9612561854e-13 1.4860258884e-13 -4.4812419975e-13 1.6101140992e-09 -2.9504360232e-16 1.6453353042e-15 5.4869916033e-12",
+  ], 2_045_241);
+  const resumed = await createWorkerHarness("starlink", (operation, params) => {
+    if (operation === "http.request") {
+      assert.notEqual(params.url, manifestUrl, "durable resume cannot refetch the manifest");
+      if (isStarlinkSizeProbe(params)) {
+        probeCalls += 1;
+        return {
+          status: 206,
+          headers: { "Content-Range": `bytes 0-0/${body.byteLength}` },
+          body: body.subarray(0, 1),
+        };
+      }
+      fullFetchCalls += 1;
+      return { status: 200, body };
+    }
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => resumed.destroy());
+
+  const staged = await resumed.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(staged.statusCode, 0, staged.errorMessage);
+  assert.equal(staged.yielded, true);
+  assert.deepEqual(staged.outputs, []);
+  assert.equal(manifestCalls, 1);
+  assert.equal(probeCalls, 64);
+  assert.equal(fullFetchCalls, 32);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+  );
+
+  const committed = await resumed.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(committed.statusCode, 0, committed.errorMessage);
+  assert.deepEqual(committed.outputs.map(({ portId }) => portId), ["progress"]);
+  const progress = decodeProgressDss(committed.outputs[0]);
+  assert.equal(progress.status, 1);
+  assert.equal(progress.syncedRows, 32n);
+  assert.equal(progress.totalRows, 8_825n);
+  assert.equal(manifestCalls, 1);
+  assert.equal(probeCalls, 64);
+  assert.equal(fullFetchCalls, 32);
 });
 
 test("Starlink reads Go-shaped base64 checkpoints and chunks at production sizes", async (t) => {
@@ -1262,6 +1810,53 @@ test("Starlink reads Go-shaped base64 checkpoints and chunks at production sizes
       Buffer.from(body),
     );
   });
+});
+
+test("Starlink rejects a wrapped binary segment index in opaque metadata", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-bin-index/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-bin-index/`;
+  const filename =
+    "MEME_17101_STARLINK-BIN-INDEX_1_Operational_1_UNCLASSIFIED.txt";
+  const body = new TextEncoder().encode([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: bin-index-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ].join("\n"));
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filename}\n`)],
+    [joinFixtureUrl(ephemerisBase, filename), body],
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  const source = await createHarness("starlink", (operation, params) =>
+    operation === "http.request"
+      ? serveFixtureHttp(params, responses)
+      : opaque.dispatch(operation, params)
+  );
+  const committed = await source.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase })],
+  });
+  assert.equal(committed.statusCode, 0, committed.errorMessage);
+  source.destroy();
+  const checkpoint = opaque.getDurable("starlink.active.v1");
+
+  const corrupted = await createHarness("starlink", (operation, params) => {
+    if (operation === "storage.adapter.opaque.read") {
+      return {
+        found: true,
+        bytes_b64: { $bin: 4_294_967_296 },
+        decoy: checkpoint,
+      };
+    }
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => corrupted.destroy());
+  const rejected = await corrupted.invoke({ methodId: "emit", inputs: [] });
+  assert.notEqual(rejected.statusCode, 0);
+  assert.deepEqual(rejected.outputs, []);
 });
 
 test("Starlink rejects malformed HTTP 200 MEME bodies before durable writes", async (t) => {
@@ -1834,7 +2429,8 @@ test("Starlink fresh instance replays the last emitted file before advancing the
         opaque.getDurable("starlink.active.v1"),
       ).cleanupPending,
     },
-    { drainIndex: 1, cleanupPending: false },
+    { drainIndex: 1, cleanupPending: true },
+    "the acknowledged cursor is durable while idempotent cleanup remains replayable",
   );
 });
 
@@ -1917,7 +2513,8 @@ test("Starlink resumes idempotently after a partially durable cleanup", async (t
   );
   assert.deepEqual(
     { drainIndex: reconciled.drainIndex, cleanupPending: reconciled.cleanupPending },
-    { drainIndex: 1, cleanupPending: false },
+    { drainIndex: 1, cleanupPending: true },
+    "restart cleanup stays durably replayable until the next acknowledged cursor",
   );
 });
 
@@ -2139,7 +2736,7 @@ test("Starlink chunks deterministically and retains each emitted file until the 
     "MEME_19602_STARLINK-CLEANUP-2_2_Operational_2_UNCLASSIFIED.txt",
   ];
   const bodies = filenames.map((_, index) =>
-    repeatToSize([
+    memeToExactSize([
       "created: 2026-07-22 00:00:00 UTC",
       "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
       "ephemeris_source: cleanup-test",
@@ -2181,8 +2778,41 @@ test("Starlink chunks deterministically and retains each emitted file until the 
     ),
   );
   for (const key of chunkKeys) {
-    assert.ok(opaque.get(key).byteLength <= 1024 * 1024);
+    const stored = opaque.get(key, starlinkChunkNamespaceFromKey(key));
+    assert.ok(
+      stored.byteLength <= 1024 * 1024,
+    );
+    if (/\.c0\.bin$/.test(key)) {
+      assert.equal(
+        new TextDecoder().decode(stored.subarray(0, 8)),
+        "SLCMP001",
+        "compressible full-size chunks must use the versioned WASM-owned frame",
+      );
+      assert.equal(
+        new DataView(stored.buffer, stored.byteOffset).getUint32(8, true),
+        1024 * 1024,
+      );
+      assert.equal(
+        new DataView(stored.buffer, stored.byteOffset).getUint32(12, true),
+        stored.byteLength - 16,
+      );
+      assert.ok(stored.byteLength < 1024 * 1024);
+    } else {
+      assert.equal(
+        stored.byteLength,
+        17,
+        "a non-beneficial tiny chunk must retain the exact raw fallback",
+      );
+    }
   }
+  assert.ok(
+    chunkKeys.reduce(
+      (sum, key) =>
+        sum + opaque.get(key, starlinkChunkNamespaceFromKey(key)).byteLength,
+      0,
+    ) < bodies.reduce((sum, body) => sum + body.byteLength, 0) / 2,
+    "WASM-owned compression must materially reduce opaque payload bytes",
+  );
   const commitOperations = opaque.calls.map(({ operation, params }) => [
     operation,
     params.key ?? null,
@@ -2201,9 +2831,25 @@ test("Starlink chunks deterministically and retains each emitted file until the 
     2,
     "object zero remains durable until the next invocation",
   );
+  const checkpointWritesBeforeAcknowledgement = opaque.calls.filter(
+    ({ operation, params }) =>
+      operation === "storage.adapter.opaque.replace" &&
+      params.namespace === "primary" &&
+      params.key === "starlink.active.v1",
+  ).length;
 
   const second = await harness.invoke({ methodId: "emit", inputs: [] });
   assert.equal(second.statusCode, 0, second.errorMessage);
+  assert.equal(
+    opaque.calls.filter(
+      ({ operation, params }) =>
+        operation === "storage.adapter.opaque.replace" &&
+        params.namespace === "primary" &&
+        params.key === "starlink.active.v1",
+    ).length - checkpointWritesBeforeAcknowledgement,
+    1,
+    "one acknowledgement must write one checkpoint, not a redundant cleanup-complete checkpoint",
+  );
   assert.equal(
     opaque.keys().filter((key) => /\.f0\./.test(key)).length,
     0,
@@ -2265,12 +2911,13 @@ test("Starlink rejects checkpoint corruption, chunk truncation, and chunk hash c
         opaque.set("starlink.active.v1", checkpoint);
       } else {
         const key = opaque.keys().find((candidate) => /\.f0\.c0\.bin$/.test(candidate));
-        const chunk = opaque.get(key);
+        const namespace = starlinkChunkNamespaceFromKey(key);
+        const chunk = opaque.get(key, namespace);
         if (corruption === "truncated-chunk") {
-          opaque.set(key, chunk.subarray(0, chunk.byteLength - 1));
+          opaque.set(key, chunk.subarray(0, chunk.byteLength - 1), namespace);
         } else {
           chunk[0] ^= 0xff;
-          opaque.set(key, chunk);
+          opaque.set(key, chunk, namespace);
         }
       }
       const callsBeforeRead = httpCalls;
@@ -2416,15 +3063,31 @@ test("Starlink rejects checksum-valid structural checkpoint mutations", async (t
       view.setUint16(40, 0, true);
     }],
     ["zero epoch count", (_bytes, view) => {
-      view.setBigUint64(decoded.units[0].headerOffset + 16, 0n, true);
+      view.setUint32(decoded.units[0].epochCountOffset, 0, true);
+    }],
+    ["non-reconstructable chunk layout", (_bytes, view) => {
+      view.setUint32(
+        decoded.units[0].byteLengthOffset,
+        64 * 1024 * 1024 + 1,
+        true,
+      );
+    }],
+    ["truncated filename core", (_bytes, view) => {
+      view.setUint16(decoded.units[0].headerOffset, 0xffff, true);
+    }],
+    ["path-bearing filename core", (bytes) => {
+      bytes[decoded.units[0].filenameOffset] = "/".charCodeAt(0);
     }],
     ["duplicate identity", (bytes) => {
-      const filename = new TextEncoder().encode(decoded.units[0].filename);
-      const identity = new TextEncoder().encode(decoded.units[0].identity);
-      assert.equal(filename.byteLength, decoded.units[1].filename.length);
-      assert.equal(identity.byteLength, decoded.units[1].identity.length);
-      bytes.set(filename, decoded.units[1].filenameOffset);
-      bytes.set(identity, decoded.units[1].identityOffset);
+      assert.equal(
+        decoded.units[0].filenameLength,
+        decoded.units[1].filenameLength,
+      );
+      bytes.copyWithin(
+        decoded.units[1].filenameOffset,
+        decoded.units[0].filenameOffset,
+        decoded.units[0].filenameOffset + decoded.units[0].filenameLength,
+      );
     }],
   ];
   for (const [name, mutate] of cases) {
@@ -2670,6 +3333,53 @@ test("Starlink fails closed for opaque read, replace, sync, and delete failures"
   }
 });
 
+test("Starlink preserves bounded sanitized host storage failure details", async (t) => {
+  for (const failedOperation of [
+    "storage.adapter.opaque.read",
+    "storage.adapter.opaque.replace",
+    "storage.adapter.opaque.sync",
+  ]) {
+    await t.test(failedOperation, async () => {
+      const manifestUrl = `${fixtureOrigin}/starlink-storage-detail-${failedOperation}/MANIFEST.txt`;
+      const ephemerisBase = `${fixtureOrigin}/starlink-storage-detail-${failedOperation}/`;
+      const filename =
+        "MEME_19851_STARLINK-STORAGE-DETAIL_1_Operational_1_UNCLASSIFIED.txt";
+      const body = new TextEncoder().encode([
+        "created: 2026-07-22 00:00:00 UTC",
+        "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+        "ephemeris_source: storage-detail-test",
+        "UVW",
+        "2026203000000.000 7000 0 0 0 7.5 0",
+        "2026203000100.000 6999 450 0 -0.5 7.48 0",
+      ].join("\n"));
+      const responses = new Map([
+        [manifestUrl, new TextEncoder().encode(`${filename}\n`)],
+        [joinFixtureUrl(ephemerisBase, filename), body],
+      ]);
+      const opaque = createOpaqueStateAdapter();
+      const marker = `host quota exceeded for ${failedOperation}`;
+      opaque.failNext(
+        failedOperation,
+        `${marker}\n\u007f${"x".repeat(800)}`,
+      );
+      const harness = await createHarness("starlink", (operation, params) =>
+        operation === "http.request"
+          ? serveFixtureHttp(params, responses)
+          : opaque.dispatch(operation, params)
+      );
+      const failed = await harness.invoke({
+        methodId: "emit",
+        inputs: [configFrame({ manifestUrl, ephemerisBase })],
+      });
+      harness.destroy();
+      assert.notEqual(failed.statusCode, 0);
+      assert.match(failed.errorMessage, new RegExp(marker.replaceAll(".", "\\.")));
+      assert.doesNotMatch(failed.errorMessage, /[\u0000-\u001f\u007f]/);
+      assert.ok(failed.errorMessage.length <= 640);
+    });
+  }
+});
+
 test("Starlink drain checkpoint failure permits only the current object to replay", async (t) => {
   const manifestUrl = `${fixtureOrigin}/starlink-replay/MANIFEST.txt`;
   const ephemerisBase = `${fixtureOrigin}/starlink-replay/`;
@@ -2908,24 +3618,48 @@ test("Starlink exact artifact downloads a complete 64-file page before the remai
     inputs: [configFrame({ manifestUrl, ephemerisBase })],
   });
   assert.equal(first.statusCode, 0, first.errorMessage);
-  assert.deepEqual(first.outputs.map(({ portId }) => portId), ["progress"]);
-  assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 16n);
+  assert.deepEqual(first.outputs, []);
+  assert.equal(first.yielded, true);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+  );
   assert.equal(probeCalls, 64);
   assert.equal(fullFetchCalls, 64);
 
-  for (const expected of [32n, 48n, 64n]) {
+  for (const provisionalCount of [32, 48]) {
     const continuation = await harness.invoke({ methodId: "emit", inputs: [] });
     assert.equal(continuation.statusCode, 0, continuation.errorMessage);
-    assert.deepEqual(continuation.outputs.map(({ portId }) => portId), ["progress"]);
-    assert.equal(decodeProgressDss(continuation.outputs[0]).syncedRows, expected);
+    assert.deepEqual(continuation.outputs, []);
+    assert.equal(continuation.yielded, true);
+    assert.equal(
+      decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+        .downloadedCount,
+      0,
+      `${provisionalCount} staged files cannot advance the durable cursor`,
+    );
     assert.equal(probeCalls, 64);
     assert.equal(fullFetchCalls, 64);
   }
+
+  const committedWave = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(committedWave.statusCode, 0, committedWave.errorMessage);
+  assert.deepEqual(committedWave.outputs.map(({ portId }) => portId), ["progress"]);
+  assert.equal(decodeProgressDss(committedWave.outputs[0]).syncedRows, 64n);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    64,
+  );
+  assert.equal(probeCalls, 64);
+  assert.equal(fullFetchCalls, 64);
 
   const final = await harness.invoke({ methodId: "emit", inputs: [] });
   assert.equal(final.statusCode, 0, final.errorMessage);
   assert.deepEqual(final.outputs.map(({ portId }) => portId), ["progress"]);
   assert.equal(decodeProgressDss(final.outputs[0]).status, 2);
+  assert.equal(decodeProgressDss(final.outputs[0]).syncedRows, 65n);
   assert.equal(probeCalls, 65);
   assert.equal(fullFetchCalls, 65);
   assert.deepEqual(calls.filter(({ url }) => url === manifestUrl), [
@@ -3047,21 +3781,185 @@ test("Starlink advances across every 64-file wave instead of truncating the cata
     methodId: "emit",
     inputs: [configFrame({ manifestUrl, ephemerisBase })],
   });
-  for (const expected of [16n, 32n, 48n, 64n, 80n, 96n, 112n, 128n, 130n]) {
+  const expectedInvocations = [
+    { progress: null, durable: 0 },
+    { progress: null, durable: 0 },
+    { progress: null, durable: 0 },
+    { progress: 64n, durable: 64 },
+    { progress: null, durable: 64 },
+    { progress: null, durable: 64 },
+    { progress: null, durable: 64 },
+    { progress: 128n, durable: 128 },
+    { progress: 130n, durable: 130 },
+  ];
+  const progressRows = [];
+  for (const [index, expected] of expectedInvocations.entries()) {
     assert.equal(response.statusCode, 0, response.errorMessage);
-    assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
-    const progress = decodeProgressDss(response.outputs[0]);
-    assert.equal(progress.syncedRows, expected);
-    assert.equal(progress.totalRows, 130n);
-    if (expected < 130n) {
+    if (expected.progress === null) {
+      assert.deepEqual(response.outputs, []);
+      assert.equal(response.yielded, true);
+    } else {
+      assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
+      const progress = decodeProgressDss(response.outputs[0]);
+      assert.equal(progress.syncedRows, expected.progress);
+      assert.equal(progress.totalRows, 130n);
+      progressRows.push(progress.syncedRows);
+    }
+    assert.equal(
+      decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+        .downloadedCount,
+      expected.durable,
+    );
+    if (index + 1 < expectedInvocations.length) {
       response = await harness.invoke({ methodId: "emit", inputs: [] });
     }
   }
+  assert.deepEqual(progressRows, [64n, 128n, 130n]);
   assert.equal(probeCalls, 130);
   assert.equal(fullFetchCalls, 130);
 });
 
-test("Starlink completes a 64-file production-shaped wave below the one-GiB memory ceiling", async (t) => {
+test("Starlink shards catalog files across WASM-owned opaque namespaces below host scope quotas", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-opaque-quota/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-opaque-quota/`;
+  const filenames = Array.from(
+    { length: 12 },
+    (_, index) =>
+      `MEME_${31701 + index}_STARLINK-QUOTA-${index + 1}_1_Operational_${index + 1}_UNCLASSIFIED.txt`,
+  );
+  const body = repeatToSize([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: opaque-quota-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ], 64 * 1024);
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filenames.join("\n")}\n`)],
+    ...filenames.map((filename) => [joinFixtureUrl(ephemerisBase, filename), body]),
+  ]);
+  const maxScopeBytes = 128 * 1024;
+  const maxScopeKeys = 4;
+  assert.ok(body.byteLength * filenames.length > maxScopeBytes);
+  const opaque = createOpaqueStateAdapter({ maxScopeBytes, maxScopeKeys });
+  const harness = await createHarness("starlink", (operation, params) => {
+    if (operation === "http.request") return serveFixtureHttp(params, responses);
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => harness.destroy());
+
+  const committed = await harness.invoke({
+    methodId: "emit",
+    inputs: [configFrame({
+      manifestUrl,
+      ephemerisBase,
+      fetchConcurrency: filenames.length,
+      batchSize: filenames.length,
+    })],
+  });
+  assert.equal(committed.statusCode, 0, committed.errorMessage);
+  assert.deepEqual(committed.outputs.map(({ portId }) => portId), ["progress"]);
+  assert.equal(decodeProgressDss(committed.outputs[0]).syncedRows, 12n);
+
+  const catalogWrites = opaque.calls.filter(
+    ({ operation, params }) =>
+      operation === "storage.adapter.opaque.replace" &&
+      params.key?.startsWith("catalog."),
+  );
+  assert.equal(catalogWrites.length, filenames.length);
+  const catalogNamespaces = [...new Set(
+    catalogWrites.map(({ params }) => params.namespace),
+  )].sort();
+  assert.equal(catalogNamespaces.length, filenames.length);
+  for (const namespace of catalogNamespaces) {
+    assert.match(namespace, /^starlink\.[a-f0-9]{64}\.f\d+$/);
+    const stats = opaque.scopeStats(namespace);
+    assert.ok(stats.bytes <= maxScopeBytes, `${namespace} exceeds byte quota`);
+    assert.ok(stats.keys <= maxScopeKeys, `${namespace} exceeds key quota`);
+    assert.equal(
+      opaque.calls.filter(
+        ({ operation, params }) =>
+          operation === "storage.adapter.opaque.sync" &&
+          params.namespace === namespace,
+      ).length,
+      1,
+      `${namespace} must sync before the primary checkpoint advances`,
+    );
+  }
+  assert.equal(opaque.scopeStats("primary").keys, 1);
+  assert.ok(opaque.scopeStats("primary").bytes <= maxScopeBytes);
+  assert.equal(
+    catalogWrites.some(({ params }) => params.namespace === "primary"),
+    false,
+    "catalog bytes must never consume the checkpoint namespace quota",
+  );
+});
+
+test("Starlink validates all 64 worker results before writing any catalog chunk", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-wave-validation/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-wave-validation/`;
+  const filenames = Array.from(
+    { length: 64 },
+    (_, index) =>
+      `MEME_${31801 + index}_STARLINK-WAVE-VALIDATION-${index + 1}_1_Operational_${index + 1}_UNCLASSIFIED.txt`,
+  );
+  const validBody = new TextEncoder().encode([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: full-wave-validation-test",
+    "UVW",
+    "2026203000000.000 7000 0 0 0 7.5 0",
+    "2026203000100.000 6999 450 0 -0.5 7.48 0",
+  ].join("\n"));
+  const invalidBody = new TextEncoder().encode("not a MEME file\n");
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filenames.join("\n")}\n`)],
+    ...filenames.map((filename, index) => [
+      joinFixtureUrl(ephemerisBase, filename),
+      index === filenames.length - 1 ? invalidBody : validBody,
+    ]),
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  let probeCalls = 0;
+  let fullFetchCalls = 0;
+  const harness = await createWorkerHarness("starlink", (operation, params) => {
+    if (operation === "http.request") {
+      if (params.url !== manifestUrl) {
+        if (isStarlinkSizeProbe(params)) probeCalls += 1;
+        else fullFetchCalls += 1;
+      }
+      return serveFixtureHttp(params, responses);
+    }
+    return opaque.dispatch(operation, params);
+  });
+  t.after(() => harness.destroy());
+
+  const response = await harness.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase })],
+  });
+  assert.notEqual(response.statusCode, 0);
+  assert.deepEqual(response.outputs, []);
+  assert.equal(probeCalls, 64);
+  assert.equal(fullFetchCalls, 64);
+  assert.deepEqual(
+    opaque.calls.filter(
+      ({ operation, params }) =>
+        operation === "storage.adapter.opaque.replace" &&
+        params.key?.startsWith("catalog."),
+    ),
+    [],
+    "a malformed final response must prevent every provisional chunk write",
+  );
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+  );
+});
+
+test("Starlink completes production-shaped files in parallel fuel-safe byte waves", async (t) => {
   const manifestUrl = `${fixtureOrigin}/starlink-production-memory/MANIFEST.txt`;
   const ephemerisBase = `${fixtureOrigin}/starlink-production-memory/`;
   const filenames = Array.from(
@@ -3114,33 +4012,116 @@ test("Starlink completes a 64-file production-shaped wave below the one-GiB memo
     inputs: [configFrame({ manifestUrl, ephemerisBase })],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.deepEqual(response.outputs, []);
+  assert.equal(response.yielded, true);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+    "a provisional half-wave cannot advance the durable catalog cursor",
+  );
+  assert.equal(probeCalls, 64);
+  assert.equal(fullFetchCalls, 32);
+  response = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
   assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
   let progress = decodeProgressDss(response.outputs[0]);
   assert.equal(progress.status, 1);
-  assert.equal(progress.syncedRows, 16n);
+  assert.equal(progress.syncedRows, 32n);
   assert.equal(progress.totalRows, 64n);
-  assert.equal(probeCalls, 64);
+  assert.equal(probeCalls, 64, "a retained wave must not be probed twice");
+  assert.equal(fullFetchCalls, 32, "a retained wave must not be downloaded twice");
+
+  response = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.deepEqual(response.outputs, []);
+  assert.equal(response.yielded, true);
+  assert.equal(
+    probeCalls,
+    64,
+    "valid unadmitted size probes must carry into the next retained wave",
+  );
   assert.equal(fullFetchCalls, 64);
-  for (const expected of [32n, 48n, 64n]) {
-    response = await harness.invoke({ methodId: "emit", inputs: [] });
-    assert.equal(response.statusCode, 0, response.errorMessage);
-    assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
-    progress = decodeProgressDss(response.outputs[0]);
-    assert.equal(progress.status, expected === 64n ? 2 : 1);
-    assert.equal(progress.syncedRows, expected);
-    assert.equal(progress.totalRows, 64n);
-    assert.equal(probeCalls, 64, "a retained wave must not be probed twice");
-    assert.equal(fullFetchCalls, 64, "a retained wave must not be downloaded twice");
-  }
+
+  response = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.deepEqual(response.outputs.map(({ portId }) => portId), ["progress"]);
+  progress = decodeProgressDss(response.outputs[0]);
+  assert.equal(progress.status, 2);
+  assert.equal(progress.syncedRows, 64n);
+  assert.equal(progress.totalRows, 64n);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    64,
+  );
   const wasmMemoryBytes = wasmMemory.buffer.byteLength;
   assert.ok(
     wasmMemoryBytes < 1024 * 1024 * 1024,
     `monotonic WASM memory reached ${wasmMemoryBytes} bytes`,
   );
   t.diagnostic(
-    `64 x ${body.byteLength} bytes (${epochCount("starlink", body)} epochs/file): ` +
+    `64 x ${body.byteLength} bytes in two parallel byte waves ` +
+      `(${epochCount("starlink", body)} epochs/file): ` +
       `${(performance.now() - startedAt).toFixed(1)} ms, ` +
       `${wasmMemoryBytes} bytes monotonic WASM memory`,
+  );
+});
+
+test("Starlink drains a production-shaped SHA-verified body byte-exactly", async (t) => {
+  const manifestUrl = `${fixtureOrigin}/starlink-production-drain/MANIFEST.txt`;
+  const ephemerisBase = `${fixtureOrigin}/starlink-production-drain/`;
+  const filename =
+    "MEME_28000_STARLINK-PRODUCTION-DRAIN_1_Operational_1_UNCLASSIFIED.txt";
+  const body = memeToExactSize([
+    "created: 2026-07-22 00:00:00 UTC",
+    "ephemeris_start: 2026-07-22 00:00:00 UTC ephemeris_stop: 2026-07-23 00:00:00 UTC step_size: 60",
+    "ephemeris_source: production-drain-test",
+    "UVW",
+    "2026203000000.000 -2877.5130811997 4075.0989745008 -4706.3410523462 -3.4551274033 -6.0345187465 -3.1147385352",
+    "4.5959389250e-07 -3.6857237948e-07 7.5138447296e-07 -7.6290988105e-12 1.6674071715e-10 1.1925957340e-06 8.0142362965e-10",
+    "-8.7543694295e-10 -1.1494065075e-12 1.9048025297e-12 -4.5364226733e-10 3.9287303459e-10 1.4986973206e-12 -8.0112176320e-13",
+    "4.9612561854e-13 1.4860258884e-13 -4.4812419975e-13 1.6101140992e-09 -2.9504360232e-16 1.6453353042e-15 5.4869916033e-12",
+  ], 2_045_241);
+  const responses = new Map([
+    [manifestUrl, new TextEncoder().encode(`${filename}\n`)],
+    [joinFixtureUrl(ephemerisBase, filename), body],
+  ]);
+  const opaque = createOpaqueStateAdapter();
+  const harness = await createWorkerHarness("starlink", (operation, params) =>
+    operation === "http.request"
+      ? serveFixtureHttp(params, responses)
+      : opaque.dispatch(operation, params)
+  );
+  t.after(() => harness.destroy());
+
+  const committed = await harness.invoke({
+    methodId: "emit",
+    inputs: [configFrame({ manifestUrl, ephemerisBase })],
+  });
+  assert.equal(committed.statusCode, 0, committed.errorMessage);
+  assert.deepEqual(committed.outputs.map(({ portId }) => portId), ["progress"]);
+
+  const startedAt = performance.now();
+  const drained = await harness.invoke({ methodId: "emit", inputs: [] });
+  const elapsed = performance.now() - startedAt;
+  assert.equal(drained.statusCode, 0, drained.errorMessage);
+  assert.ok(drained.outputs.every(({ portId }) => portId === "oem"));
+  const frames = drained.outputs.map(({ payload }) => decodeFsb(payload));
+  assert.deepEqual(
+    Buffer.concat(frames.map(({ data }) => Buffer.from(data))),
+    Buffer.from(body),
+  );
+  assert.deepEqual(
+    frames.map(({ sha256 }) => Buffer.from(sha256).toString("hex")),
+    Array.from(
+      { length: frames.length },
+      () => crypto.createHash("sha256").update(body).digest("hex"),
+    ),
+  );
+  t.diagnostic(
+    `${body.byteLength}-byte, ${epochCount("starlink", body)}-epoch ` +
+      `SHA-verified drain: ${elapsed.toFixed(1)} ms`,
   );
 });
 
@@ -3184,13 +4165,25 @@ test("Starlink bounds each durable slice by bytes without refetching its retaine
     inputs: [configFrame({ manifestUrl, ephemerisBase, batchSize: 2 })],
   });
   assert.equal(first.statusCode, 0, first.errorMessage);
-  assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 1n);
+  assert.deepEqual(first.outputs, []);
+  assert.equal(first.yielded, true);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+  );
   assert.equal(probeCalls, 2);
   assert.equal(fullFetchCalls, 2);
 
   const second = await harness.invoke({ methodId: "emit", inputs: [] });
   assert.equal(second.statusCode, 0, second.errorMessage);
+  assert.deepEqual(second.outputs.map(({ portId }) => portId), ["progress"]);
   assert.equal(decodeProgressDss(second.outputs[0]).syncedRows, 2n);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    2,
+  );
   assert.equal(probeCalls, 2, "the retained wave must not be probed twice");
   assert.equal(fullFetchCalls, 2, "the retained wave must not be downloaded twice");
 });
@@ -3232,31 +4225,56 @@ test("Starlink restarts from the durable slice when an in-memory 64-file wave is
     inputs: [configFrame({ manifestUrl, ephemerisBase })],
   });
   assert.equal(first.statusCode, 0, first.errorMessage);
-  assert.equal(decodeProgressDss(first.outputs[0]).syncedRows, 16n);
+  assert.deepEqual(first.outputs, []);
+  assert.equal(first.yielded, true);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+  );
+  opaque.crash();
   firstInstance.destroy();
   const callsBeforeRestart = calls.length;
 
   const resumed = await createHarness("starlink", dispatch);
   t.after(() => resumed.destroy());
-  const replay = await resumed.invoke({ methodId: "emit", inputs: [] });
-  assert.equal(replay.statusCode, 0, replay.errorMessage);
-  assert.equal(decodeProgressDss(replay.outputs[0]).syncedRows, 16n);
-  assert.equal(calls.length, callsBeforeRestart, "restart must replay durable progress first");
+  const restartedStage = await resumed.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(restartedStage.statusCode, 0, restartedStage.errorMessage);
+  assert.deepEqual(restartedStage.outputs, []);
+  assert.equal(restartedStage.yielded, true);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+  );
+  assert.equal(
+    calls.length,
+    callsBeforeRestart + 40,
+    "restart must probe and refetch all 20 files from the uncommitted wave",
+  );
+  const callsBeforeCommit = calls.length;
 
   const completed = await resumed.invoke({ methodId: "emit", inputs: [] });
   assert.equal(completed.statusCode, 0, completed.errorMessage);
+  assert.deepEqual(completed.outputs.map(({ portId }) => portId), ["progress"]);
   assert.equal(decodeProgressDss(completed.outputs[0]).status, 2);
   assert.equal(decodeProgressDss(completed.outputs[0]).syncedRows, 20n);
+  assert.equal(calls.length, callsBeforeCommit, "committing the retained wave must not refetch");
   assert.equal(
     calls.filter(({ url, probe }) => url !== manifestUrl && !probe).length,
-    24,
-    "only the four fetched-but-uncommitted bodies may be downloaded again",
+    40,
+    "every body from the uncommitted wave must be downloaded again",
   );
-  for (const [index, filename] of filenames.entries()) {
+  for (const filename of filenames) {
     const url = joinFixtureUrl(ephemerisBase, filename);
-    assert.equal(
-      calls.filter((call) => call.url === url && !call.probe).length,
-      index < 16 ? 1 : 2,
+    assert.deepEqual(
+      calls.filter((call) => call.url === url),
+      [
+        { url, probe: true },
+        { url, probe: false },
+        { url, probe: true },
+        { url, probe: false },
+      ],
       `${filename} restart fetch count`,
     );
   }
@@ -3310,20 +4328,13 @@ test("Starlink clamps oversized wave requests to 64 complete files", async (t) =
     })],
   });
   assert.equal(first.statusCode, 0, first.errorMessage);
-  assert.deepEqual(first.outputs.map(({ portId }) => portId), ["progress"]);
-  assert.deepEqual(decodeProgressDss(first.outputs[0]), {
-    status: 1,
-    syncedRows: 16n,
-    totalRows: 65n,
-    localRows: 16n,
-    missingRows: 49n,
-    cachedBytes: BigInt(
-      responseBodies.slice(0, 16).reduce((sum, body) => sum + body.byteLength, 0),
-    ),
-    downloadedBytes: BigInt(
-      responseBodies.slice(0, 16).reduce((sum, body) => sum + body.byteLength, 0),
-    ),
-  });
+  assert.deepEqual(first.outputs, []);
+  assert.equal(first.yielded, true);
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    0,
+  );
   assert.equal(
     calls.filter(({ url, probe }) => url !== manifestUrl && probe).length,
     64,
@@ -3333,11 +4344,17 @@ test("Starlink clamps oversized wave requests to 64 complete files", async (t) =
     64,
   );
 
-  for (const expected of [32n, 48n, 64n]) {
+  for (const provisionalCount of [32, 48]) {
     const continuation = await harness.invoke({ methodId: "emit", inputs: [] });
     assert.equal(continuation.statusCode, 0, continuation.errorMessage);
-    assert.deepEqual(continuation.outputs.map(({ portId }) => portId), ["progress"]);
-    assert.equal(decodeProgressDss(continuation.outputs[0]).syncedRows, expected);
+    assert.deepEqual(continuation.outputs, []);
+    assert.equal(continuation.yielded, true);
+    assert.equal(
+      decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+        .downloadedCount,
+      0,
+      `${provisionalCount} staged files cannot advance the durable cursor`,
+    );
     assert.equal(
       calls.filter(({ url, probe }) => url !== manifestUrl && probe).length,
       64,
@@ -3348,10 +4365,41 @@ test("Starlink clamps oversized wave requests to 64 complete files", async (t) =
     );
   }
 
+  const committedWave = await harness.invoke({ methodId: "emit", inputs: [] });
+  assert.equal(committedWave.statusCode, 0, committedWave.errorMessage);
+  assert.deepEqual(committedWave.outputs.map(({ portId }) => portId), ["progress"]);
+  assert.deepEqual(decodeProgressDss(committedWave.outputs[0]), {
+    status: 1,
+    syncedRows: 64n,
+    totalRows: 65n,
+    localRows: 64n,
+    missingRows: 1n,
+    cachedBytes: BigInt(
+      responseBodies.slice(0, 64).reduce((sum, body) => sum + body.byteLength, 0),
+    ),
+    downloadedBytes: BigInt(
+      responseBodies.slice(0, 64).reduce((sum, body) => sum + body.byteLength, 0),
+    ),
+  });
+  assert.equal(
+    decodeStarlinkCheckpoint(opaque.getDurable("starlink.active.v1"))
+      .downloadedCount,
+    64,
+  );
+  assert.equal(
+    calls.filter(({ url, probe }) => url !== manifestUrl && probe).length,
+    64,
+  );
+  assert.equal(
+    calls.filter(({ url, probe }) => url !== manifestUrl && !probe).length,
+    64,
+  );
+
   const final = await harness.invoke({ methodId: "emit", inputs: [] });
   assert.equal(final.statusCode, 0, final.errorMessage);
   assert.deepEqual(final.outputs.map(({ portId }) => portId), ["progress"]);
   assert.equal(decodeProgressDss(final.outputs[0]).status, 2);
+  assert.equal(decodeProgressDss(final.outputs[0]).syncedRows, 65n);
   assert.deepEqual(calls.filter(({ url }) => url === manifestUrl), [
     { url: manifestUrl, probe: false },
   ]);
@@ -3711,6 +4759,11 @@ test("Starlink confines one probe-and-GET pthread cohort to one bounded download
     downloadPage,
     /for\s*\([\s\S]*?join_worker\s*\(workers\[index\]\)[\s\S]*?\}\s*if\s*\(\s*!all_workers_joined\s*\)\s*\{\s*__builtin_trap\s*\(\s*\)/,
     "join failure may trap only after every created worker has been released and joined",
+  );
+  assert.match(
+    downloadPage,
+    /actionable_worker_count\s*=\s*std::max\s*\(\s*carried_count,\s*count\s*-\s*carried_count\s*\)/,
+    "carried probes must reduce the steady-state runnable pthread cohort",
   );
   const tasks = source.slice(
     source.indexOf("void download_page_tasks"),

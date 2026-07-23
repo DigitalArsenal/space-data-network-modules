@@ -12,6 +12,8 @@ import {
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { compileUniversalAot } from "../universal-aot.mjs";
+
 const nodeDirectory = path.dirname(fileURLToPath(import.meta.url));
 const modulesDirectory = path.resolve(nodeDirectory, "../../../..");
 const mainPackagesDirectory = path.resolve(modulesDirectory, "..");
@@ -346,7 +348,13 @@ async function main() {
     bundle.SDS_MANIFEST_SECTION_NAME,
     manifestBytes,
   );
-  const signed = await bundle.signModuleArtifact(withManifest, {
+  const executableBytes = await compileUniversalAot({
+    wasmBytes: withManifest,
+    stagingDirectory: buildDirectory,
+    mode: "child",
+    productionMode: buildMode === "production",
+  });
+  const signed = await bundle.signModuleArtifact(executableBytes, {
     privateKeySeedHex: signingSeed,
     keyId: signingKeyId,
     signatureScope: "bundle",
