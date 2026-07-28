@@ -1,0 +1,149 @@
+{
+  "pluginId": "com.digitalarsenal.codec.ccsds124-pocketplus",
+  "name": "CCSDS 124.0-B-1 POCKET+ Codec",
+  "version": "0.1.0",
+  "description": "Lossless POCKET+ compression and decompression of fixed-length CCSDS housekeeping packets (CCSDS 124.0-B-1). Wraps the tanagraspace/ccsds124 MIT reference C implementation, vendored verbatim and executed unmodified. Pure transform: no host capabilities.",
+  "pluginFamily": "codec",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "attribution": {
+    "upstream": "https://github.com/tanagraspace/ccsds124",
+    "upstreamCommit": "b832360013a2b46e35f40f7f21a854e023cc1c0a",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2025 Tanagra Space",
+    "licenseFile": "vendor/ccsds124/LICENSE",
+    "standard": "CCSDS 124.0-B-1 Robust Compression of Fixed-Length Housekeeping Data",
+    "crossValidationCredit": "Cross-validation vector suite by Universitat Autonoma de Barcelona (Miguel Hernandez-Cabronero, Ian Blanes, Joan Serra-Sagrista) under technical supervision of Mickael Bruno, CNES"
+  },
+  "methods": [
+    {
+      "methodId": "compress_stream",
+      "displayName": "Compress Packet Stream",
+      "inputPorts": [
+        {
+          "portId": "packets",
+          "acceptedTypeSets": [
+            {
+              "setId": "pocketplus-raw-octets",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "16-byte POCKET+ parameter header (magic \"P+C1\", F in bits, robustness, pt/ft/rt periods) followed by a whole number of fixed-length uncompressed packets. Opaque octets: the SDS $CPS record that will carry these parameters is not yet ratified."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Uncompressed fixed-length packet run."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "compressed",
+          "acceptedTypeSets": [
+            {
+              "setId": "pocketplus-raw-octets",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Octet-aligned POCKET+ compressed bitstream, byte-identical to the ESA reference encoder."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Compressed bitstream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Compresses a run of fixed-length packets as one stateful POCKET+ stream."
+    },
+    {
+      "methodId": "decompress_stream",
+      "displayName": "Decompress Packet Stream",
+      "inputPorts": [
+        {
+          "portId": "compressed",
+          "acceptedTypeSets": [
+            {
+              "setId": "pocketplus-raw-octets",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "16-byte POCKET+ parameter header (magic \"P+D1\") followed by the compressed bitstream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Compressed bitstream."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decompressed",
+          "acceptedTypeSets": [
+            {
+              "setId": "pocketplus-raw-octets",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Reconstructed fixed-length packets, bit-exact with the encoder input."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Reconstructed packet run."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Reconstructs the fixed-length packet run from a POCKET+ stream."
+    },
+    {
+      "methodId": "discover_packet_length",
+      "displayName": "Discover Packet Length",
+      "inputPorts": [
+        {
+          "portId": "compressed",
+          "acceptedTypeSets": [
+            {
+              "setId": "pocketplus-raw-octets",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "A POCKET+ compressed segment, with no parameter header."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Compressed segment to probe."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "length",
+          "acceptedTypeSets": [
+            {
+              "setId": "pocketplus-raw-octets",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "8 bytes LE: u32 packet length in bits (0 = not discoverable from this segment), u32 status (0 = exact, 2 = truncated reference packet)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Discovered packet length."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Recovers the packet length F from a compressed segment, when the segment contains a reference packet. Used to test whether a segment is self-synchronizing."
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "ccsds124-pocketplus-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
