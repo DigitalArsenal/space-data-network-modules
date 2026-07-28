@@ -21,10 +21,12 @@ import process from "node:process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
+import { buildLaneDriver, LANE_DRIVER_WASM } from "./build-probe.mjs";
+
 const execFileAsync = promisify(execFile);
 const here = fileURLToPath(new URL(".", import.meta.url));
 const packageRoot = path.resolve(here, "..", "..");
-const CLI_WASM = path.join(here, "build", "codec-cli.wasm");
+const CLI_WASM = LANE_DRIVER_WASM;
 
 async function readPin() {
   // The pin is read from the SDK, never copied here: host and container
@@ -149,6 +151,9 @@ async function verifyPinnedVersion(pin, nativeBinary) {
 /* ---------------- driver ---------------- */
 
 export async function runAllLanes({ vectorRoot, quiet = false } = {}) {
+  // Build from source rather than trusting a stale artifact: the parity claim
+  // is about THESE vendored bytes under THESE flags.
+  await buildLaneDriver({ quiet: true });
   const pin = await readPin();
   const nativeBinary = process.env.SDM_WASMEDGE_BINARY ?? null;
   const versions = await verifyPinnedVersion(pin, nativeBinary);

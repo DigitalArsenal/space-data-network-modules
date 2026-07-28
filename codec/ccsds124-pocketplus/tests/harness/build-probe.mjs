@@ -22,6 +22,7 @@ const packageRoot = path.resolve(here, "..", "..");
 const vendorRoot = path.join(packageRoot, "vendor", "ccsds124");
 const outDir = path.join(here, "build");
 const outWasm = path.join(outDir, "codec-probe.wasm");
+export const LANE_DRIVER_WASM = path.join(outDir, "codec-cli.wasm");
 
 // 4 MiB: ~6.5x the measured 631 KB worst-case call chain. See the link step.
 export const STACK_SIZE_BYTES = 4 * 1024 * 1024;
@@ -44,6 +45,28 @@ const VENDOR_SOURCES = [
   "src/decompress.c",
 ];
 
+function compile({ toolchain, file, object, extraArgs, quiet }) {
+  execFileSync(
+    toolchain.clang,
+    [
+      ...toolchain.toolchainArgs,
+      "-c",
+      file,
+      `-I${path.join(vendorRoot, "include")}`,
+      "-std=c99",
+      // Mirrors the SDK's buildSourceCompilerArgs.
+      "-O3",
+      "-mbulk-memory",
+      "-DNDEBUG",
+      ...extraArgs,
+      "-o",
+      object,
+    ],
+    { stdio: quiet ? "pipe" : "inherit" },
+  );
+  return object;
+}
+
 export async function buildProbe({ quiet = true } = {}) {
   const toolchain = resolveWasiThreadsToolchain();
   await fs.mkdir(outDir, { recursive: true });
@@ -58,27 +81,15 @@ export async function buildProbe({ quiet = true } = {}) {
   ];
 
   for (const { file, name } of sources) {
-    const object = path.join(outDir, `${name}.o`);
-    execFileSync(
-      toolchain.clang,
-      [
-        ...toolchain.toolchainArgs,
-        "-c",
+    objects.push(
+      compile({
+        toolchain,
         file,
-        `-I${path.join(vendorRoot, "include")}`,
-        "-std=c99",
-        // Mirrors the SDK's buildSourceCompilerArgs for the pthreads model.
-        "-O3",
-        "-mbulk-memory",
-        "-DNDEBUG",
-        "-matomics",
-        "-pthread",
-        "-o",
-        object,
-      ],
-      { stdio: quiet ? "pipe" : "inherit" },
+        object: path.join(outDir, `${name}.o`),
+        extraArgs: ["-matomics", "-pthread"],
+        quiet,
+      }),
     );
-    objects.push(object);
   }
 
   execFileSync(
@@ -108,8 +119,69 @@ export async function buildProbe({ quiet = true } = {}) {
   return outWasm;
 }
 
+/**
+ * Build the WASI-command lane driver: the SAME vendored codec bytes, but as a
+ * self-contained WASI preview1 command so the identical artifact runs under
+ * Node's WASI, native WasmEdge, and Docker WasmEdge.
+ *
+ * It links WITHOUT --import-memory/--shared-memory on purpose. The codec never
+ * spawns a thread, so it never pulls in the wasi-threads startup path; an
+ * artifact that imports env.memory without exporting wasi_thread_start is an
+ * INCOMPLETE wasi-threads contract and WasmEdge refuses it at instantiation
+ * ("unknown import: env.memory"). A sequential codec must therefore own its
+ * memory. This is the concrete gap recorded in the graph task
+ * module-sdk-wasi-sequential-model.
+ */
+export async function buildLaneDriver({ quiet = true } = {}) {
+  const toolchain = resolveWasiThreadsToolchain();
+  await fs.mkdir(outDir, { recursive: true });
+
+  const objects = [
+    ...VENDOR_SOURCES.map((relative) =>
+      compile({
+        toolchain,
+        file: path.join(vendorRoot, relative),
+        object: path.join(outDir, `seq_${path.basename(relative, ".c")}.o`),
+        extraArgs: [],
+        quiet,
+      }),
+    ),
+    compile({
+      toolchain,
+      file: path.join(here, "codec_cli.c"),
+      object: path.join(outDir, "seq_codec_cli.o"),
+      extraArgs: [],
+      quiet,
+    }),
+  ];
+
+  execFileSync(
+    toolchain.clang,
+    [
+      ...toolchain.toolchainArgs,
+      ...objects,
+      "-mbulk-memory",
+      `-Wl,-z,stack-size=${STACK_SIZE_BYTES}`,
+      "-o",
+      LANE_DRIVER_WASM,
+    ],
+    { stdio: quiet ? "pipe" : "inherit" },
+  );
+
+  return LANE_DRIVER_WASM;
+}
+
+export async function buildAll(options = {}) {
+  return {
+    probe: await buildProbe(options),
+    laneDriver: await buildLaneDriver(options),
+  };
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const wasm = await buildProbe({ quiet: false });
-  const { size } = await fs.stat(wasm);
-  console.log(`built ${path.relative(packageRoot, wasm)} (${size} bytes)`);
+  const built = await buildAll({ quiet: false });
+  for (const wasm of Object.values(built)) {
+    const { size } = await fs.stat(wasm);
+    console.log(`built ${path.relative(packageRoot, wasm)} (${size} bytes)`);
+  }
 }
