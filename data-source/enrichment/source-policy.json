@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "HERMES (sdn-oracle) sdn-catalog-enrichment-retrievers",
+  "determinedAt": "2026-07-29",
+  "note": "Per-source access + licence determinations for the catalog-enrichment retriever family (owner program: query the catalog by manufacturer, size, launch date, mission, object type, payload frequencies). Same discipline as asset-models/data/roster/source-policy.json, which is the precedent: a source is crawled ONLY after its robots.txt AND its published terms have been read and recorded here, and a source that has said no stays no until it says otherwise in writing. Determinations are re-checked before each ingest iteration. LICENCE IS PART OF THE RULING, not an afterthought: these records are republished through the SDN dataset-publication pipeline, so an incompatible licence is a blocking defect, not a footnote.",
+  "fetchDiscipline": {
+    "//": "Inherited from the celestrak-fetch-policy owner ruling. Applies to EVERY source below.",
+    "serialOnly": true,
+    "minDelaySeconds": 2.5,
+    "userAgent": "SDN-CatalogEnrichmentBot/0.1 (+https://spacedatanetwork.org; contact tjkoury@gmail.com)",
+    "identifyYourself": "The UA carries a project URL and a human contact. Never fetch anonymously or with a browser-impersonating UA.",
+    "cacheFirst": "Every response is cached to disk with its sha256, ETag and Last-Modified. A cached body is never re-fetched inside the debounce window.",
+    "cadence": "These sources change on the order of days to weeks. Timers are daily or weekly, NEVER the 3h GP cadence. Aggressive polling of a volunteer-run catalogue is abuse regardless of what robots.txt permits.",
+    "conditionalRequests": "If-None-Match / If-Modified-Since on every re-fetch; a 304 costs the operator almost nothing and is the polite default."
+  },
+  "sources": [
+    {
+      "id": "gcat",
+      "name": "GCAT — General Catalog of Artificial Space Objects (Jonathan C. McDowell)",
+      "url": "https://planet4589.org/space/gcat/",
+      "robotsTxtUrl": "https://planet4589.org/robots.txt",
+      "robotsTxtVerdict": "ALLOWED",
+      "robotsTxtVerifiedAt": "2026-07-29",
+      "robotsTxtEvidence": "Re-fetched 2026-07-29 and byte-compared against the determination asset-models recorded on 2026-07-28: unchanged. `User-agent: *` with Disallow for /alt/, /db/, /soft/exo/, /zzz_home/, /astro/tmp/, /astro/reu/dir/, /jcm/trips/, /jcm/pics/, /jcm/move, /space/elements/, /space/images/, /space/work/, /home/chandra/. The GCAT tree under /space/gcat/ is NOT disallowed and no AI-specific user-agent is excluded.",
+      "termsUrl": "https://planet4589.org/space/gcat/index.html",
+      "licenseName": "CC-BY-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0",
+      "licenseEvidence": "The GCAT front page states the catalogue is released under a Creative Commons CC-BY licence and asks that users cite it. Verified live 2026-07-29.",
+      "citationText": "McDowell, Jonathan C., 2020. General Catalog of Artificial Space Objects, https://planet4589.org/space/gcat",
+      "access": "PERMITTED",
+      "shareAlike": false,
+      "commercialUseOk": true,
+      "provides": [
+        "manufacturer / prime contractor",
+        "physical dimensions (length x diameter x height)",
+        "dry mass and total mass",
+        "launch date, launch site, launch vehicle",
+        "object type and operational status",
+        "mission / payload purpose"
+      ],
+      "crawlPolicy": {
+        "scopeRestriction": "requests confined to /space/gcat/",
+        "cadence": "weekly",
+        "bulkNotCrawl": "GCAT publishes whole-catalogue TSV tables. Fetch the TABLES, never walk per-object HTML pages: a handful of large requests per week instead of tens of thousands of small ones."
+      },
+      "precedent": "asset-models/data/roster/source-policy.json ruled this source PERMITTED on 2026-07-28 for the model roster. This is the same operator, same scope, same UA discipline, independently re-verified."
+    },
+    {
+      "id": "satnogs-db",
+      "name": "SatNOGS DB (Libre Space Foundation)",
+      "url": "https://db.satnogs.org/",
+      "apiBase": "https://db.satnogs.org/api/",
+      "robotsTxtUrl": "https://db.satnogs.org/robots.txt",
+      "robotsTxtVerdict": "ALLOWED",
+      "robotsTxtVerifiedAt": "2026-07-29",
+      "robotsTxtEvidence": "Fetched live 2026-07-29: `user-agent: *` with a single `Disallow: /admin/`. The public API under /api/ is not disallowed and no AI-specific agent is excluded.",
+      "termsUrl": "https://db.satnogs.org/about/",
+      "licenseName": "CC-BY-SA-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "licenseEvidence": "The /about/ page states the data is licensed under Creative Commons Attribution-ShareAlike v4.0. Verified live 2026-07-29.",
+      "citationText": "SatNOGS DB, Libre Space Foundation, https://db.satnogs.org/ (CC BY-SA 4.0)",
+      "access": "PERMITTED",
+      "shareAlike": true,
+      "shareAlikeRuling": "OWNER DECISION REQUIRED BEFORE PUBLICATION, not before ingest. CC-BY-SA is a copyleft licence: a database that incorporates SatNOGS transmitter records and is then republished must itself be offered under CC-BY-SA-4.0 (or the adaptation must be separable). Two lawful shapes: (a) publish the RF/transmitter records as their OWN dataset publication carrying licence CC-BY-SA-4.0, keeping them separable from the CC-BY and public-domain catalogue fields; (b) place the whole enriched catalogue under CC-BY-SA. Shape (a) is what the retriever is built for, because it keeps the share-alike obligation contained to the records that actually derive from SatNOGS and leaves the CelesTrak/GCAT-derived fields unencumbered. This is EXACTLY why DPMSourceBatch needs a LICENSE field (escalated to Themis 2026-07-29 as upstream-spacedatastandards-1) — without machine-readable per-batch licence carriage there is no way to honour the obligation downstream.",
+      "commercialUseOk": true,
+      "provides": [
+        "per-transmitter downlink/uplink frequencies (Hz)",
+        "modulation mode, uplink mode, baud rate, spectrum inversion",
+        "service designation and transmitter status",
+        "IARU coordination status and ITU notification URLs",
+        "per-satellite operator, countries, launch/deploy/decay dates, alternate names",
+        "per-record citation strings supplied by SatNOGS contributors"
+      ],
+      "crawlPolicy": {
+        "cadence": "daily",
+        "bulkNotCrawl": "Two whole-table API calls — GET /api/satellites/?format=json (~1.3 MB) and GET /api/transmitters/?format=json. No pagination walk, no per-object requests.",
+        "authRequired": false,
+        "note": "Anonymous GET is sufficient for satellites and transmitters; verified live 2026-07-29 (HTTP 200, `allow: GET, POST, HEAD, OPTIONS`). Do not POST. Do not touch /admin/."
+      },
+      "unitsTrap": "SatNOGS reports frequencies in HERTZ (downlink_low: 136658500). The SDS IDM standard uses MEGAHERTZ and the embedding-search corpus field is `frequenciesMhz`. Every conversion must be explicit and unit-declared; a silent Hz/MHz mix is a 10^6 error that will look plausible."
+    },
+    {
+      "id": "launch-library-2",
+      "name": "Launch Library 2 (The Space Devs)",
+      "url": "https://ll.thespacedevs.com/",
+      "robotsTxtUrl": "https://ll.thespacedevs.com/robots.txt",
+      "robotsTxtVerdict": "NO DIRECTIVES — NEITHER GRANTED NOR RESTRICTED",
+      "robotsTxtVerifiedAt": "2026-07-29",
+      "robotsTxtEvidence": "Fetched live 2026-07-29 (1248 bytes). The file is ENTIRELY comments: the Cloudflare content-signals preamble explaining search / ai-input / ai-train signals, followed by an EU DSM Article 4 reservation-of-rights notice. It contains NO User-agent group, NO Disallow, NO Allow and NO Content-Signal line. Per RFC 9309 a robots.txt with no groups imposes no restriction; and by the preamble's own wording, 'if the website operator does not include a content signal for a corresponding use, the website operator neither grants nor restricts permission via content signal'.",
+      "access": "DEFERRED",
+      "deferredReason": "Not blocked, but not cleared either, and it is the LOWEST-VALUE of the candidates: launch date, launch site and launch vehicle are already obtainable from CelesTrak SATCAT and GCAT, both of which have explicit, permissive, verified licences. LL2 adds mission descriptions and agency detail, which is real but marginal, in exchange for (a) an unresolved licence question and (b) a hard rate limit — the API exposes its own /api-throttle/ endpoint and the free tier is throttled to a level incompatible with whole-catalogue enrichment. Taking marginal data from a throttled endpoint under an unclear licence is a bad trade while GCAT covers the same ground under CC-BY.",
+      "ownerDecisionRequired": true,
+      "ownerDecisionNote": "If mission narrative text is wanted, the lawful route is an API key + a read of the published terms, not opportunistic anonymous polling. Re-open this ruling only with a key and a recorded licence determination.",
+      "apiEvidence": "GET https://ll.thespacedevs.com/2.3.0/ returned HTTP 200 with an endpoint index including /api-throttle/, /agencies/, /astronauts/, /launches/. Single probe only; no data collected."
+    },
+    {
+      "id": "ucs-satellite-database",
+      "name": "UCS Satellite Database (Union of Concerned Scientists)",
+      "url": "https://www.ucsusa.org/resources/satellite-database",
+      "access": "BLOCKED — LICENCE INCOMPATIBLE",
+      "blockedReason": "The UCS Satellite Database is published under Creative Commons Attribution-NonCommercial-ShareAlike. The NON-COMMERCIAL clause is disqualifying: the SDN catalogue is republished through a pipeline that feeds a commercial product surface (the SpaceAware store / paid module program), so incorporating NC-licensed data into it would breach the licence. This is a legal blocker, not a technical one, and it is NOT to be routed around. Additionally the database has not been maintained since its final 2023 release, so its operator/mission columns are stale relative to GCAT and SatNOGS, which are both actively updated.",
+      "ownerDecisionRequired": true,
+      "ownerDecisionNote": "Only a written licence grant from UCS for commercial use would change this. Do not ingest UCS data into any published dataset in the meantime — including 'just for internal enrichment', because the enrichment is what gets published.",
+      "substitutes": [
+        "GCAT (operator, manufacturer, mission) — CC-BY-4.0",
+        "SatNOGS DB (operator, countries) — CC-BY-SA-4.0",
+        "CelesTrak SATCAT (owner as launching-country code) — already ingested"
+      ]
+    },
+    {
+      "id": "space-track",
+      "name": "Space-Track.org (18th Space Defense Squadron / USSF)",
+      "url": "https://www.space-track.org/",
+      "robotsTxtUrl": "https://www.space-track.org/robots.txt",
+      "robotsTxtVerdict": "ALLOWED FOR THE API PATHS",
+      "robotsTxtVerifiedAt": "2026-07-29",
+      "robotsTxtEvidence": "Fetched live 2026-07-29: `User-agent: *` with Disallow for /cgi-bin/, /tmp/, /arrowchat/, /assets/, /system/. The /basicspacedata/ API tree is not disallowed.",
+      "access": "PERMITTED FOR INGEST, RESTRICTED FOR REDISTRIBUTION",
+      "credentials": "~/.spacedatanetwork/spacetrack.env (mode 600), owner-approved. Already in use by the existing supplemental-OMM lane.",
+      "redistributionRuling": "Space-Track's user agreement restricts onward bulk redistribution of its data to third parties. This is the one source in this policy where INGEST and PUBLICATION diverge, and the retriever family must respect that divergence: Space-Track-derived fields may enrich internally and may back derived products the owner has already approved, but a Space-Track batch must NOT be emitted as an open dataset publication alongside the CC-BY/CC-BY-SA batches without an explicit owner ruling. The per-batch LICENSE field escalated to Themis is what makes this enforceable rather than aspirational.",
+      "provides": ["authoritative catalogue identity, decay and SATCAT-class metadata"],
+      "cadence": "unchanged from the existing lane; this program adds no new Space-Track polling",
+      "ownerDecisionRequired": false,
+      "note": "Listed for completeness because it is already wired. The enrichment program deliberately does NOT add new Space-Track calls — the metadata classes the owner asked for are better served by GCAT and SatNOGS, under licences that permit republication."
+    },
+    {
+      "id": "gunter-space-page",
+      "name": "Gunter's Space Page (Gunter Krebs)",
+      "url": "https://space.skyrocket.de/",
+      "access": "PERMITTED BY OWNER RULING — CONSTRAINED",
+      "priorDetermination": "BLOCKED (asset-models/data/roster/source-policy.json, Galatea, 2026-07-15 and 2026-07-28), on two signals: the site's robots.txt names Anthropic agents (anthropic-ai, Claude-Web, ClaudeBot) with Disallow: /, and its Terms of Use forbid systematic extraction and AI dataset creation without prior written permission.",
+      "ownerRulingDate": "2026-07-29",
+      "ownerRulingVerbatim": "Look in Google cache for Gunter's stuff, I have an account so it is ok.",
+      "ownerRulingEffect": "The owner holds an account with the source and accepts the access basis. This SUPERSEDES the prior BLOCKED determination for both the catalog-enrichment retrievers and the asset-models model roster. Recorded rather than paraphrased because the authorisation rests on the owner's own relationship with the source, not on anything this program independently established.",
+      "access_constraints": {
+        "//": "These constraints are not decoration — they are the terms on which the ruling was given, and they are what keeps the access narrow. A retriever that ignores them is out of compliance with the owner's own ruling.",
+        "primarySource": "Wayback Machine (https://web.archive.org). Google's cache service was discontinued in 2024, so the cached route the owner named no longer exists; the Wayback Machine is the equivalent, has extensive skyrocket.de coverage, and its API is explicitly crawl-friendly. Cached snapshots are the DEFAULT path.",
+        "directFetchPolicy": "Fallback only, for public pages with no usable snapshot. Standing celestrak-fetch-policy discipline applies without exception: serial only, minimum 2.5s spacing, identify-yourself UA, permanent local cache, NEVER re-fetch a page already cached.",
+        "extractFactsOnly": "Extract FACTS: bus/platform, manufacturer, mass, dimensions, launch, mission, frequencies where present. Facts go into SDS records with per-page citation provenance.",
+        "neverRepublishText": "Page text is NEVER republished wholesale. No fact is ever presented without its citation. This is the line between using a reference work and copying one.",
+        "permanentCache": "Every retrieved page is cached permanently with its sha256 and snapshot timestamp, so the source is fetched at most once per page for the life of the program."
+      },
+      "licenseName": "NOT OPENLY LICENSED — access is by owner authorisation, not by public licence",
+      "licenseRuling": "Unlike GCAT (CC-BY-4.0) and SatNOGS (CC-BY-SA-4.0), this source carries no open licence. Extracted FACTS are not themselves copyrightable, which is why fact-extraction-with-citation is the permitted shape and text reproduction is not. Batches derived from this source MUST carry their own DPMSourceBatch LICENSE marking so the distinction survives downstream — this is an additional reason the LICENSE field escalated to Themis is load-bearing.",
+      "citationText": "Krebs, Gunter D., Gunter's Space Page, https://space.skyrocket.de/ (accessed via Wayback Machine snapshot; per-page citation recorded per record)",
+      "provides": [
+        "satellite bus / platform family — the single best structured taxonomy in existence",
+        "manufacturer / prime contractor",
+        "mass and physical dimensions",
+        "launch and mission detail",
+        "payload frequencies where documented"
+      ],
+      "priority": "PROMOTED to first-tier alongside GCAT and SatNOGS, per the owner's ruling: it is the richest source for exactly the field set the owner named, and it fills the manufacturer/bus gap where GCAT ships only short codes.",
+      "graphTask": "am-gunter-permission — reopened from `waiting` to `open` on 2026-07-29 with the ruling recorded; Galatea's model-roster crawl proceeds under identical discipline."
+    },
+    {
+      "id": "esa-discos",
+      "name": "ESA DISCOS (Database and Information System Characterising Objects in Space)",
+      "url": "https://discosweb.esoc.esa.int/",
+      "access": "DEFERRED — ACCOUNT AND TERMS REVIEW REQUIRED",
+      "deferredReason": "Surfaced while reviewing the embedding-search corpus builder, which already models mass / shape / span / cross-section / objectClass as DISCOS-sourced fields. DISCOS is genuinely the best structured source for physical characteristics. It requires a registered ESA account and an API token, and its terms restrict redistribution — so it CANNOT be cleared by reading robots.txt alone and must not be treated as open data merely because the embedding spike references its field names.",
+      "ownerDecisionRequired": true,
+      "ownerDecisionNote": "Requires an ESA account plus a recorded reading of the DISCOS terms of use, specifically on redistribution of derived physical-characteristics data. Until that exists, physical size/mass comes from GCAT under CC-BY.",
+      "warning": "The embedding-search corpus builder (search/tools/lib/sources.mjs, discosSource) declares DISCOS-sourced fields. If that adapter is ever pointed at live DISCOS data before this ruling is resolved, the corpus inherits an unresolved redistribution obligation. Flagged to the embedding-search program."
+    },
+    {
+      "id": "celestrak",
+      "name": "CelesTrak (Dr. T.S. Kelso)",
+      "url": "https://celestrak.org/",
+      "access": "PERMITTED — ALREADY INGESTED",
+      "note": "SATCAT, GP and space-weather ingest flows already exist and run on the celestrak producer. This program adds NO new CelesTrak load. NOTE: celestrak.org did not respond to a robots.txt probe from this workstation on 2026-07-29 (connection timed out after 20s) — this is the known upstream firewall condition recorded in the celestrak-fetch-policy ruling, NOT a change of permission, and the Tor recovery path exists for exactly this. No re-probing, no retry storm.",
+      "cadence": "unchanged (GP 3h, SATCAT 24h, space weather 3h)"
+    }
+  ],
+  "rulingSummary": {
+    "permitted": [
+      "gcat (CC-BY-4.0)",
+      "satnogs-db (CC-BY-SA-4.0, share-alike containable)",
+      "gunter-space-page (owner ruling 2026-07-29, constrained: Wayback-first, facts-only, cited)",
+      "space-track (ingest only, redistribution restricted)",
+      "celestrak (already ingested)"
+    ],
+    "blocked": ["ucs-satellite-database (NonCommercial clause — legal blocker, not routable)"],
+    "deferred": ["launch-library-2 (licence unclear + throttled)", "esa-discos (account + terms review)"],
+    "buildOrder": [
+      "1. GCAT — 69,367 NORAD-keyed objects, MEASURED coverage 2026-07-29: object type/launch date/owner 100%, manufacturer 65.9%, bus 54.1%, mass 53.8%, dimensions 53.5%, mission category 39.4%. Two bulk TSV tables. CC-BY, no share-alike complication. Highest coverage by an order of magnitude.",
+      "2. SatNOGS DB — the ONLY source of payload frequencies in the stack (4,994 transmitters over 2,620 objects, 3.8% coverage but 100% of what exists anywhere). Two bulk JSON calls, no auth.",
+      "3. Gunter's Space Page — promoted by owner ruling. Fills the two gaps the measurements exposed: GCAT ships short CODES (SPXS, KHRR) not names, and its bus/manufacturer coverage stops at ~55%. Wayback-first, facts-only, per-page citation."
+    ],
+    "measuredGap": "GCAT's manufacturer/bus/type columns are SHORT CODES, not human-readable names ('SPXS', 'KHRR', object type 'PPTH-MU'). A query surface exposing raw codes would look broken to the owner, who asked to query by 'manufacturers'. GCAT publishes tsv/tables/orgs.tsv (Code, ShortName, Name, StateCode, Parent) which resolves them, and it is therefore a MANDATORY third GCAT table, not an optional one."
+  }
+}
