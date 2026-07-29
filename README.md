@@ -6,8 +6,9 @@ including migrated module families and Basilisk-derived module families.
 
 ## Structure
 
-- `foundation/`, `analysis/`, `propagator/`, `shaders/`, `licensing/`,
-  `delivery/`: migrated and parity-oriented SDK-compliant module families
+- `foundation/`, `analysis/`, `propagator/`, `maneuver/`, `shaders/`,
+  `licensing/`, `delivery/`: migrated and parity-oriented SDK-compliant module
+  families
 - `basilisk/`: Basilisk-derived module plans and runtime seed modules
 - `packages/<domain>`: pending legacy migration targets when a package has not
   yet been moved into a family folder
@@ -74,6 +75,7 @@ including migrated module families and Basilisk-derived module families.
 | `packages/numerical-propagator` | `DigitalArsenal/space-data-network-plugin-numerical-propagator` | `Friends-Of-Lobsternaut/numerical-propagator-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/nws` | `DigitalArsenal/space-data-network-plugin-nws` | `Friends-Of-Lobsternaut/nws-sdn-plugin` | Pending | Not migrated yet. |
 | `analysis/od` | `DigitalArsenal/space-data-network-plugin-od` | `Friends-Of-Lobsternaut/od-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, command-surface OD MEME fit bridge. |
+| `maneuver/star-search` | new family (not a migration) | Port of `UzTak/star-search` (MIT, `5c66706`) | In progress | Star patched-conic interplanetary broad search (Landau et al. 2022). Threaded isomorphic-pthreads C++ port. Ephemeris is a typed `$OEM` INPUT, never fetched. Parity oracle committed (reproduces upstream's published 33 / 5,952 solution counts). Manifest BLOCKED: the problem-definition and Pareto-solution-set ports need two new SDS codes pending owner ratification (`sds-star-search-mission-design-records`). |
 | `packages/ofac` | `DigitalArsenal/space-data-network-plugin-ofac` | `Friends-Of-Lobsternaut/ofac-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/opensanctions` | `DigitalArsenal/space-data-network-plugin-opensanctions` | `Friends-Of-Lobsternaut/opensanctions-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/patents` | `DigitalArsenal/space-data-network-plugin-patents` | `Friends-Of-Lobsternaut/patents-sdn-plugin` | Pending | Not migrated yet. |
@@ -112,6 +114,10 @@ including migrated module families and Basilisk-derived module families.
   - `propagator/` — `sgp4`, `hpop`, `atmosphere`, `cislunar`
   - `analysis/` — `conjunction-assessment`, `maneuver`, `od`, `sensor-coverage`,
     `sensor-model`
+  - `maneuver/` — `star-search` (interplanetary patched-conic broad search;
+    threaded isomorphic-pthreads, C++ port of the MIT UzTak/star-search
+    reference). Distinct from the legacy `analysis/maneuver`, which is
+    near-Earth classical/ROE targeting.
   - `basilisk/` — runtime seed package plus generated Basilisk module plan
   - `shaders/` — `sensor-shaders`, `viewshed-shader`
   - `licensing/` — `core`, `client-decrypt`, `protection-key-server`, `protection-license-client`
