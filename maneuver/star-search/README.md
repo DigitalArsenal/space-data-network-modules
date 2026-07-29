@@ -80,9 +80,9 @@ wasm32 caps at **2 GiB** here (`--max-memory=2147483648`). Upstream's databases
 reach 52.6M leg rows / 735.1M flyby rows on its largest problem, so this must be
 designed for, not discovered.
 
-The port inherits upstream's own solution: `_ComboStageRows` keeps **6 fixed
-columns plus a `parent_row` pointer** into the previous stage's append-only
-spool — O(1) row width, each prefix stored once, peak RAM of one stage's
+The port inherits upstream's own solution: `_ComboStageRows` keeps **six fixed
+columns total, including a `parent_row` pointer** into the previous stage's
+append-only spool — O(1) row width, each prefix stored once, peak RAM of one stage's
 frontier — instead of `SegmentDB` rows that carry full history and force the
 cross-product into RAM. Full paths are rebuilt once, for survivors only. An
 explicit row cap **fails closed with a status code** rather than trapping.
@@ -98,6 +98,38 @@ recorded too, because they localize a bug far faster than the final rows.
 See [`tests/vectors/reference/README.md`](tests/vectors/reference/README.md) for
 the parity criterion, the pinned NAIF kernel hashes, and `generate-reference.sh`
 to reproduce the whole oracle from scratch.
+
+Native Phase 1 build and parity run:
+
+```sh
+make -C tests/harness test
+make -C tests/harness all
+tests/harness/build/star_search_native \
+  --problem tests/vectors/test2_EMEJ.problem \
+  --ephemeris tests/vectors/test2_EMEJ.ephem \
+  --output tests/vectors/test2_EMEJ.cpp.jsonl \
+  --threads 1
+scripts/compare_output.py \
+  tests/vectors/reference/test2_EMEJ.jsonl \
+  tests/vectors/test2_EMEJ.cpp.jsonl
+```
+
+`STAR_SEARCH_THREADS` is used when `--threads` is omitted. The harness also
+accepts `--force-spawn-failure` to exercise the mandatory inline fallback.
+The fixture generator takes the upstream checkout explicitly and writes the
+two independent inputs:
+
+```sh
+scripts/dump_ephemeris.py \
+  --upstream-root /path/to/upstream/star-search \
+  --problem test2_EMEJ \
+  --metakernel star/METAKERN.tm \
+  --output tests/vectors/test2_EMEJ.ephem \
+  --problem-output tests/vectors/test2_EMEJ.problem
+```
+
+The binary layout, interface judgments, stage counts, and measured deviations
+are recorded in [`PORTING_NOTES.md`](PORTING_NOTES.md).
 
 ## Status — what is NOT done
 

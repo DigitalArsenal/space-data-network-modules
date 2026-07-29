@@ -1,0 +1,18 @@
+reference_rows=33
+candidate_rows=33
+traj_id: exact_mismatches=0
+body_ids: exact_mismatches=0
+t_et_s: exact_mismatches=0
+leg_ils: exact_mismatches=0
+flyby_ifs: exact_mismatches=0
+t_et_s: max_abs=0 (none), max_rel=0 (none), shape_mismatches=0, tolerance_failures=0
+vinfD_km_s: max_abs=2.4868995751603507e-14 (row=0 vinfD_km_s[0][0]), max_rel=6.5760614947210457e-15 (row=0 vinfD_km_s[0][0]), shape_mismatches=0, tolerance_failures=0
+vinfA_km_s: max_abs=2.1316282072803006e-14 (row=2 vinfA_km_s[1][0]), max_rel=9.9984832788791922e-13 (row=7 vinfA_km_s[1][0]), shape_mismatches=0, tolerance_failures=0
+dv_lev_km_s: max_abs=0 (none), max_rel=0 (none), shape_mismatches=0, tolerance_failures=0
+eta_lev: max_abs=0 (none), max_rel=0 (none), shape_mismatches=0, tolerance_failures=0
+dv_patch_km_s: max_abs=4.0856207306205761e-14 (row=2 dv_patch_km_s[0]), max_rel=7.111128220422399e-12 (row=8 dv_patch_km_s[1]), shape_mismatches=0, tolerance_failures=0
+dv_total_km_s: max_abs=4.9737991503207013e-14 (row=4 dv_total_km_s), max_rel=2.939830809868499e-12 (row=8 dv_total_km_s), shape_mismatches=0, tolerance_failures=0
+tof_total_days: max_abs=0 (none), max_rel=0 (none), shape_mismatches=0, tolerance_failures=0
+dv_escape_km_s: max_abs=7.1054273576010019e-15 (row=0 dv_escape_km_s), max_rel=3.9807302206984388e-15 (row=0 dv_escape_km_s), shape_mismatches=0, tolerance_failures=0
+dv_insertion_km_s: max_abs=3.5527136788005009e-15 (row=31 dv_insertion_km_s), max_rel=2.6933663686990533e-15 (row=31 dv_insertion_km_s), shape_mismatches=0, tolerance_failures=0
+result=PASS

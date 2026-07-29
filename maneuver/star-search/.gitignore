@@ -1,0 +1,10 @@
+# Native harness build output (regenerate with: make -C tests/harness all)
+tests/harness/build/
+
+# Port output produced by a parity run; the ORACLE
+# (tests/vectors/reference/test2_EMEJ.jsonl) is committed, this is not.
+tests/vectors/*.cpp.jsonl
+
+# WASM build output
+dist/
+node_modules/

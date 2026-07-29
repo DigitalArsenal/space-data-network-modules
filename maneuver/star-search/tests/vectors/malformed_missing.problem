@@ -1,0 +1,6 @@
+STAR_PROBLEM 1
+stage_count = 4
+leg_count = 3
+row_cap = 100
+memory_cap_bytes = 1000000
+work_chunk_rows = 10
