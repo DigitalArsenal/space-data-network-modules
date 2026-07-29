@@ -34,17 +34,19 @@ A gather, a weighted sum, a normalise. No attention, no layers, no runtime. It i
 dot-producted directly against the catalog table the teacher produced.
 
 It does not lose to its teacher. Measured on 292 graded queries over 33,814 real objects, the
-1.45 MB student scores nDCG@10 **0.417** against the teacher's **0.414** — because it was
+1.45 MB student scores nDCG@10 **0.417** against the teacher's **0.410** — because it was
 distilled on OUR domain, and the teacher was not.
 
 ## Why hybrid
 
 Semantics alone is not enough, and neither is filtering.
 
+All four systems on the SAME 292 queries and the same graded judgements:
+
 | system | recall@10 | nDCG@10 | MRR | top-1 |
 |---|---|---|---|---|
 | substring index (what /beta ships today) | 0.006 | 0.007 | 0.007 | 0.007 |
-| teacher, full MiniLM query encoding | 0.483 | 0.414 | 0.582 | 0.398 |
+| teacher, full MiniLM query encoding | 0.474 | 0.410 | 0.577 | 0.391 |
 | student, 1.45 MB static encoder | 0.495 | 0.417 | 0.573 | 0.388 |
 | **hybrid — student + query planner** | **0.882** | **0.857** | **0.901** | **0.830** |
 
