@@ -84,7 +84,8 @@
       "toNodeId": "http",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "req-parse-job",
@@ -93,7 +94,8 @@
       "toNodeId": "parse",
       "toPortId": "job",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "http-parse",
@@ -102,7 +104,8 @@
       "toNodeId": "parse",
       "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "parse-omm-meta",
@@ -111,7 +114,8 @@
       "toNodeId": "ingest_omm",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "parse-omm-records",
@@ -120,7 +124,8 @@
       "toNodeId": "ingest_omm",
       "toPortId": "records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "parse-omm-raw",
@@ -129,7 +134,8 @@
       "toNodeId": "ingest_omm",
       "toPortId": "raw",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "parse-mpe-meta",
@@ -138,7 +144,8 @@
       "toNodeId": "ingest_mpe",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "parse-mpe-records",
@@ -147,7 +154,8 @@
       "toNodeId": "ingest_mpe",
       "toPortId": "records",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "ingest-omm-egress",
@@ -156,7 +164,8 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "ingest-mpe-egress",
@@ -165,7 +174,8 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "ingest-omm-publish",
@@ -174,7 +184,8 @@
       "toNodeId": "publish_omm",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "parse-omm-meta-publish",
@@ -183,7 +194,8 @@
       "toNodeId": "publish_omm",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "ingest-mpe-publish",
@@ -192,7 +204,8 @@
       "toNodeId": "publish_mpe",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "parse-mpe-meta-publish",
@@ -201,7 +214,8 @@
       "toNodeId": "publish_mpe",
       "toPortId": "meta",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "publish-omm-http",
@@ -210,7 +224,8 @@
       "toNodeId": "publish_http_omm",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "publish-mpe-http",
@@ -219,7 +234,8 @@
       "toNodeId": "publish_http_mpe",
       "toPortId": "request",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "publish-omm-egress",
@@ -228,7 +244,8 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     },
     {
       "edgeId": "publish-mpe-egress",
@@ -237,7 +254,8 @@
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
-      "queueDepth": 4
+      "queueDepth": 4,
+      "opaque": true
     }
   ],
   "triggers": [
