@@ -3,7 +3,7 @@
   "name": "CelesTrak Space Weather Ingest Flow",
   "version": "0.1.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow (loop C.8a), space weather: a module cron TIMER tick enters at celestrak-request:spw, hostcap/http-request fetches SW-All.csv, celestrak-parser:parse_spw normalizes it into an SPW record stream (batch = sha256 of the payload; the runner's 7-day stale-source gate fails the batch in-wasm), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow (loop C.8a), space weather: a module cron TIMER tick enters at celestrak-request:spw, hostcap/http-request fetches SW-All.csv, celestrak-parser:parse_spw normalizes it into an SPW record stream (batch = sha256 of the payload; the runner's 7-day stale-source gate fails the batch in-wasm), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. After the store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. All decisions live in-wasm.",
   "nodes": [
     {
       "nodeId": "req",
@@ -30,6 +30,20 @@
       "nodeId": "ingest_spw",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_spw",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_spw",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -100,6 +114,42 @@
       "edgeId": "ingest-spw-egress",
       "fromNodeId": "ingest_spw",
       "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-spw-publish",
+      "fromNodeId": "ingest_spw",
+      "fromPortId": "result",
+      "toNodeId": "publish_spw",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-spw-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "spw_meta",
+      "toNodeId": "publish_spw",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "publish-spw-http",
+      "fromNodeId": "publish_spw",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_spw",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "publish-spw-egress",
+      "fromNodeId": "publish_http_spw",
+      "fromPortId": "response",
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",

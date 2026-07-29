@@ -3,7 +3,7 @@
   "name": "CelesTrak SATCAT Ingest Flow",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Per-provider ingest flow (loop C.8a), SATCAT snapshot: a module cron TIMER tick enters at celestrak-request:satcat which emits BOTH source fetches (legacy fixed-width satcat.txt and satcat.csv — runner dual-source parity); two hostcap/http-request nodes fetch, two celestrak-parser:parse_satcat nodes normalize into CAT record streams (batch = sha256 of each payload, reconcile mode 'current' since only the newest snapshot batch is meaningful), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow (loop C.8a), SATCAT snapshot: a module cron TIMER tick enters at celestrak-request:satcat which emits BOTH source fetches (legacy fixed-width satcat.txt and satcat.csv — runner dual-source parity); two hostcap/http-request nodes fetch, two celestrak-parser:parse_satcat nodes normalize into CAT record streams (batch = sha256 of each payload, reconcile mode 'current' since only the newest snapshot batch is meaningful), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives per lane; the publication responses also land on the egress sink. All decisions live in-wasm.",
   "capabilities": [
     "http",
     "storage_ingest"

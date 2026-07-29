@@ -3,7 +3,7 @@
   "name": "CelesTrak Space Weather Ingest Flow",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Per-provider ingest flow (loop C.8a), space weather: a module cron TIMER tick enters at celestrak-request:spw, hostcap/http-request fetches SW-All.csv, celestrak-parser:parse_spw normalizes it into an SPW record stream (batch = sha256 of the payload; the runner's 7-day stale-source gate fails the batch in-wasm), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow (loop C.8a), space weather: a module cron TIMER tick enters at celestrak-request:spw, hostcap/http-request fetches SW-All.csv, celestrak-parser:parse_spw normalizes it into an SPW record stream (batch = sha256 of the payload; the runner's 7-day stale-source gate fails the batch in-wasm), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. After the store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. All decisions live in-wasm.",
   "capabilities": [
     "http",
     "storage_ingest"

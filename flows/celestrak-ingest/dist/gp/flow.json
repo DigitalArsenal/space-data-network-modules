@@ -3,7 +3,7 @@
   "name": "CelesTrak GP Ingest Flow",
   "version": "0.1.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
+  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
   "nodes": [
     {
       "nodeId": "req",
@@ -37,6 +37,34 @@
       "nodeId": "ingest_mpe",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_omm",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_mpe",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_omm",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_mpe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -134,6 +162,78 @@
       "edgeId": "ingest-mpe-egress",
       "fromNodeId": "ingest_mpe",
       "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-omm-publish",
+      "fromNodeId": "ingest_omm",
+      "fromPortId": "result",
+      "toNodeId": "publish_omm",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-omm-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "omm_meta",
+      "toNodeId": "publish_omm",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "ingest-mpe-publish",
+      "fromNodeId": "ingest_mpe",
+      "fromPortId": "result",
+      "toNodeId": "publish_mpe",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "parse-mpe-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "mpe_meta",
+      "toNodeId": "publish_mpe",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "publish-omm-http",
+      "fromNodeId": "publish_omm",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_omm",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "publish-mpe-http",
+      "fromNodeId": "publish_mpe",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_mpe",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "publish-omm-egress",
+      "fromNodeId": "publish_http_omm",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "publish-mpe-egress",
+      "fromNodeId": "publish_http_mpe",
+      "fromPortId": "response",
       "toNodeId": "egress",
       "toPortId": "result",
       "backpressurePolicy": "queue",
