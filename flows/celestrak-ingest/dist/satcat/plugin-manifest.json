@@ -120,5 +120,463 @@
       "target": "browser,wasmedge"
     }
   ],
+  "flowNodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "satcat",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_txt",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_csv",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse_txt",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_satcat",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse_csv",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_satcat",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest_txt",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest_csv",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_txt",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_csv",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_http_txt",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_http_csv",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "req-http-txt",
+      "fromNodeId": "req",
+      "fromPortId": "request_txt",
+      "toNodeId": "http_txt",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-http-csv",
+      "fromNodeId": "req",
+      "fromPortId": "request_csv",
+      "toNodeId": "http_csv",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-parse-txt-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_txt",
+      "toNodeId": "parse_txt",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-parse-csv-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_csv",
+      "toNodeId": "parse_csv",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse-txt",
+      "fromNodeId": "http_txt",
+      "fromPortId": "response",
+      "toNodeId": "parse_txt",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse-csv",
+      "fromNodeId": "http_csv",
+      "fromPortId": "response",
+      "toNodeId": "parse_csv",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-txt-meta",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "cat_meta",
+      "toNodeId": "ingest_txt",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-txt-records",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "cat_records",
+      "toNodeId": "ingest_txt",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-txt-raw",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_txt",
+      "toPortId": "raw",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-csv-meta",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "cat_meta",
+      "toNodeId": "ingest_csv",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-csv-records",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "cat_records",
+      "toNodeId": "ingest_csv",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-csv-raw",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_csv",
+      "toPortId": "raw",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-txt-egress",
+      "fromNodeId": "ingest_txt",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-csv-egress",
+      "fromNodeId": "ingest_csv",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-txt-publish",
+      "fromNodeId": "ingest_txt",
+      "fromPortId": "result",
+      "toNodeId": "publish_txt",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-txt-meta-publish",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "cat_meta",
+      "toNodeId": "publish_txt",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-csv-publish",
+      "fromNodeId": "ingest_csv",
+      "fromPortId": "result",
+      "toNodeId": "publish_csv",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-csv-meta-publish",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "cat_meta",
+      "toNodeId": "publish_csv",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-txt-http",
+      "fromNodeId": "publish_txt",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_txt",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-csv-http",
+      "fromNodeId": "publish_csv",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_csv",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-txt-egress",
+      "fromNodeId": "publish_http_txt",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-csv-egress",
+      "fromNodeId": "publish_http_csv",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "timer-satcat",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "timer-satcat",
+      "targetNodeId": "req",
+      "targetPortId": "tick"
+    }
+  ],
   "abiVersion": 1
 }

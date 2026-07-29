@@ -2,7 +2,8 @@
   "programId": "com.digitalarsenal.flows.celestrak-gp-ingest",
   "name": "CelesTrak GP Ingest Flow",
   "version": "0.1.0",
-  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
   "nodes": 10,
   "edges": 18,
   "triggers": 1,
@@ -80,6 +81,9 @@
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
       "version": "0.1.0",
       "sha256": "60e87e280cdb30883ba3942bcaf16d1381b1992eab20264332e01d2e9ce6043a",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_",
       "methodSymbols": {
         "gp": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_gp",
@@ -94,6 +98,9 @@
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "version": "0.1.0",
       "sha256": "f4077d1660745473b49d0accde178d0573c2bd1b4b69439da5b741ba14667adb",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "request": "sdm_guest_636f6d2e6469676974616c61_request"
@@ -105,6 +112,9 @@
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
       "version": "0.1.0",
       "sha256": "9b61dc9c90c24ffb5cd047a9823b6bf33a3cec89db58a37b6f3a12667182ae49",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "parse_gp": "sdm_guest_636f6d2e6469676974616c61_parse_gp",
@@ -118,6 +128,9 @@
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "version": "0.1.0",
       "sha256": "bc808cd24571bf26758f68446eb8b6701cd2550d8e8a867fb430e579c0b61783",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "ingest": "sdm_guest_636f6d2e6469676974616c61_ingest"

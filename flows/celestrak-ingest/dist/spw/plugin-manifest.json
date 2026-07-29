@@ -120,5 +120,253 @@
       "target": "browser,wasmedge"
     }
   ],
+  "flowNodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "spw",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_spw",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest_spw",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_spw",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_http_spw",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-spw-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "spw_meta",
+      "toNodeId": "ingest_spw",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-spw-records",
+      "fromNodeId": "parse",
+      "fromPortId": "spw_records",
+      "toNodeId": "ingest_spw",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-spw-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_spw",
+      "toPortId": "raw",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-spw-egress",
+      "fromNodeId": "ingest_spw",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-spw-publish",
+      "fromNodeId": "ingest_spw",
+      "fromPortId": "result",
+      "toNodeId": "publish_spw",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-spw-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "spw_meta",
+      "toNodeId": "publish_spw",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-spw-http",
+      "fromNodeId": "publish_spw",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_spw",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-spw-egress",
+      "fromNodeId": "publish_http_spw",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "timer-spw",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 10800000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "timer-spw",
+      "targetNodeId": "req",
+      "targetPortId": "tick"
+    }
+  ],
   "abiVersion": 1
 }
