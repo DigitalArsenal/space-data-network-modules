@@ -5,3 +5,5 @@
 # reviewer can verify exactly which bytes a measurement was taken from without
 # the repo redistributing anyone's catalogue.
 cache/*.body
+cache/gunter/*.html
+cache/gunter/*.json
