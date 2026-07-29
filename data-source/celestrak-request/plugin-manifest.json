@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.celestrak-request",
   "name": "CelesTrak Request Builder Nodes",
   "version": "0.1.0",
-  "description": "Request-builder flow nodes for CelesTrak ingest (loop C.8a): a module cron TIMER tick enters on 'tick'; each method emits the hostcap/http-request request JSON plus the parser 'job' JSON (source attribution + archive naming). URLs/timeout/provider default to the in-daemon ingest runner values and are overridable via node CONFIG through the builtin plugin.getConfig hostcall (keys: celestrak_gp_url, celestrak_satcat_url, celestrak_satcat_csv_url, celestrak_space_weather_url, celestrak_http_timeout_ms, celestrak_provider_id) — never via host code. No capabilities: plugin.getConfig is a builtin.",
+  "description": "Request-builder flow nodes for CelesTrak ingest (loop C.8a): a module cron TIMER tick enters on 'tick'; each method emits the hostcap/http-request request JSON plus the parser 'job' JSON (source attribution + archive naming). publish_request additionally turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint (§19), emitting nothing when celestrak_publish_url is unset. URLs/timeout/provider default to the in-daemon ingest runner values and are overridable via node CONFIG through the builtin plugin.getConfig hostcall (keys: celestrak_gp_url, celestrak_satcat_url, celestrak_satcat_csv_url, celestrak_space_weather_url, celestrak_http_timeout_ms, celestrak_provider_id, celestrak_publish_url) — never via host code. No capabilities: plugin.getConfig is a builtin.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": ["direct", "command"],
@@ -194,6 +194,59 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Builds the space-weather fetch request + parse job from a timer tick."
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Dataset Publication Request",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON hostcap/storage-ingest result: {\"schema\",\"inserted\",\"batch_id\",...}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Completed storage-ingest result for the batch that was just stored."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON parser ingest meta — the ONLY carrier of provider_id and source_name."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Parser ingest meta for the same batch."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON for hostcap/http-request: POST {\"schema\",\"providerId\",\"sourceName\",\"batchId\"} as bodyB64."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Dataset-publication POST request; ABSENT when no celestrak_publish_url is configured (fail-closed)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Turns a completed ingest (storage-ingest result + parser meta) into the loopback dataset-publication POST for hostcap/http-request. Emits nothing unless node CONFIG carries celestrak_publish_url — absence of configuration is not permission to publish."
     }
   ],
   "buildArtifacts": [

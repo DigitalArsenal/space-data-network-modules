@@ -3,8 +3,8 @@
   "name": "CelesTrak GP Ingest Flow",
   "version": "0.1.0",
   "compiler": "space-data-module flow compile (linked-direct, emception)",
-  "nodes": 6,
-  "edges": 10,
+  "nodes": 10,
+  "edges": 18,
   "triggers": 1,
   "capabilities": [
     "http",
@@ -43,6 +43,30 @@
       "dispatchModel": "linked-direct"
     },
     {
+      "nodeId": "publish_omm",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "publish_mpe",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "publish_http_omm",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "publish_http_mpe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct"
+    },
+    {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
@@ -55,12 +79,13 @@
       "dependencyId": "com.digitalarsenal.data-source.celestrak-request",
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
       "version": "0.1.0",
-      "sha256": "1a4ce00c8775afeb3649da711dfef431958630c1edc66598dec7cf3a81aec093",
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "sha256": "60e87e280cdb30883ba3942bcaf16d1381b1992eab20264332e01d2e9ce6043a",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_",
       "methodSymbols": {
-        "gp": "sdm_guest_636f6d2e6469676974616c61_gp",
-        "satcat": "sdm_guest_636f6d2e6469676974616c61_satcat",
-        "spw": "sdm_guest_636f6d2e6469676974616c61_spw"
+        "gp": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_gp",
+        "satcat": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_satcat",
+        "spw": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_spw",
+        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_publish_request"
       }
     },
     {

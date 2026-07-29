@@ -138,6 +138,136 @@ test("spw emits the space-weather fetch + job", async (t) => {
   assert.equal(outputs.get("job").archive_name, "SW-All.csv");
 });
 
+// --------------------------------------------------------------------------
+// publish_request (§19 dataset-publication trigger).
+// --------------------------------------------------------------------------
+
+const PUBLISH_URL = "http://127.0.0.1:5003/api/v1/admin/dataset-updates/publish";
+
+function jsonInput(portId, value) {
+  return {
+    portId,
+    typeRef: { wireFormat: "aligned-binary" },
+    payload: encoder.encode(JSON.stringify(value)),
+  };
+}
+
+// What storage.ingest_with_source returns: schema/inserted/batch_id and the
+// reconcile counters — NO provider_id, NO source_name.
+function ingestResultInput({ schema = "CAT.fbs", batch_id = "b".repeat(64) } = {}) {
+  return jsonInput("result", {
+    schema,
+    inserted: 2,
+    batch_id,
+    reconciled_duplicates: 0,
+    archived: true,
+  });
+}
+
+// What the parser's *_meta port carries: the ONLY place provider_id and
+// source_name exist.
+function ingestMetaInput({
+  schema = "CAT.fbs",
+  batch_id = "b".repeat(64),
+  provider_id = "space-data-network-02",
+  source_name = "celestrak-satcat",
+} = {}) {
+  return jsonInput("meta", { schema, batch_id, provider_id, source_name });
+}
+
+test("publish_request emits NOTHING when no celestrak_publish_url is configured", async (t) => {
+  const stub = createConfigStub();
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "publish_request",
+    inputs: [ingestResultInput(), ingestMetaInput()],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 0, "absence of config is not permission to publish");
+});
+
+test("publish_request builds the camelCase DatasetPublicationRequest POST", async (t) => {
+  const stub = createConfigStub({ celestrak_publish_url: PUBLISH_URL });
+  const harness = await createHarness(t, stub);
+  const outputs = outputsByPort(
+    await harness.invoke({
+      methodId: "publish_request",
+      inputs: [ingestResultInput(), ingestMetaInput()],
+    }),
+  );
+  const request = outputs.get("request");
+  assert.equal(request.method, "POST");
+  assert.equal(request.url, PUBLISH_URL);
+  assert.equal(request.headers["content-type"], "application/json");
+  assert.equal(request.timeoutMs, 90000);
+  const body = JSON.parse(Buffer.from(request.bodyB64, "base64").toString("utf8"));
+  // DatasetPublicationRequest decodes with DisallowUnknownFields: these four
+  // camelCase keys and nothing else.
+  assert.deepEqual(Object.keys(body).sort(), ["batchId", "providerId", "schema", "sourceName"]);
+  assert.deepEqual(body, {
+    schema: "CAT.fbs",
+    providerId: "space-data-network-02",
+    sourceName: "celestrak-satcat",
+    batchId: "b".repeat(64),
+  });
+});
+
+test("publish_request takes provider/source from the meta, schema+batch from the result", async (t) => {
+  const stub = createConfigStub({ celestrak_publish_url: PUBLISH_URL });
+  const harness = await createHarness(t, stub);
+  const outputs = outputsByPort(
+    await harness.invoke({
+      methodId: "publish_request",
+      inputs: [
+        ingestResultInput({ schema: "OMM.fbs", batch_id: "c".repeat(64) }),
+        ingestMetaInput({
+          schema: "OMM.fbs",
+          batch_id: "c".repeat(64),
+          provider_id: "prov-test",
+          source_name: "celestrak-gp",
+        }),
+      ],
+    }),
+  );
+  const body = JSON.parse(
+    Buffer.from(outputs.get("request").bodyB64, "base64").toString("utf8"),
+  );
+  assert.deepEqual(body, {
+    schema: "OMM.fbs",
+    providerId: "prov-test",
+    sourceName: "celestrak-gp",
+    batchId: "c".repeat(64),
+  });
+});
+
+test("publish_request requires BOTH the result and the meta frame", async (t) => {
+  const stub = createConfigStub({ celestrak_publish_url: PUBLISH_URL });
+  const harness = await createHarness(t, stub);
+  const noMeta = await harness.invoke({
+    methodId: "publish_request",
+    inputs: [ingestResultInput()],
+  });
+  assert.equal(noMeta.statusCode, 400);
+  const noResult = await harness.invoke({
+    methodId: "publish_request",
+    inputs: [ingestMetaInput()],
+  });
+  assert.equal(noResult.statusCode, 400);
+});
+
+test("publish_request refuses to publish an incomplete identity", async (t) => {
+  const stub = createConfigStub({ celestrak_publish_url: PUBLISH_URL });
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "publish_request",
+    inputs: [
+      ingestResultInput(),
+      jsonInput("meta", { schema: "CAT.fbs", batch_id: "b".repeat(64), provider_id: "" }),
+    ],
+  });
+  assert.equal(response.statusCode, 400, "no source_name -> nothing is announced");
+});
+
 test("celestrak-request imports only WASI + the sync hostcall bridge", async () => {
   const inspection = await inspectModule(readWasm());
   const importedModuleNames = Array.from(

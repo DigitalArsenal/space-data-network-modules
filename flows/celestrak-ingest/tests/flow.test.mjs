@@ -113,7 +113,7 @@ function createIngestHostStub({ fetches, config = {} }) {
           response = encodeHostcallEnvelope({
             ok: true,
             result: {
-              status: 200,
+              status: fetchSpec.status ?? 200,
               headers: fetchSpec.headers ?? {},
               body: Buffer.from(fetchSpec.body).toString("base64"),
               body_encoding: "base64",
@@ -182,6 +182,135 @@ async function runFlowOnce(wasmURL, stub) {
 function ingestCalls(stub) {
   return stub.calls.filter((call) => call.operation === "storage.ingest_with_source");
 }
+
+// §19 dataset-publication trigger. The node cannot be discovered by the flow —
+// there is no hostcall for the admin port — so the loopback URL arrives as node
+// CONFIG, and with no URL configured the flow publishes NOTHING (fail-closed).
+const PUBLISH_URL = "http://127.0.0.1:5003/api/v1/admin/dataset-updates/publish";
+const PUBLISH_FETCH = {
+  status: 202,
+  body: JSON.stringify({
+    standardCode: "OMM",
+    recordCount: 2,
+    shardCid: "bafkreitestshard",
+    indexCid: "bafkreitestindex",
+    manifestCid: "bafkreitestmanifest",
+    pnmCid: "bafkreitestpnm",
+  }),
+};
+
+// The POST bodies the flow drove through hostcap/http-request at the publish
+// URL. The http cap detaches the request body into a binary envelope segment
+// and references it as {"$bin":N} in the meta, exactly as it does for a fetch.
+function publishBodies(stub) {
+  return stub.calls
+    .filter((call) => call.operation === "http.request" && call.meta.url === PUBLISH_URL)
+    .map((call) => {
+      const bodyRef = call.meta.body?.$bin ?? 0;
+      return JSON.parse(Buffer.from(call.segments[bodyRef]).toString("utf8"));
+    });
+}
+
+test("celestrak-gp-ingest: NO publish POST is made without celestrak_publish_url", async () => {
+  const gpURL = "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv";
+  const stub = createIngestHostStub({ fetches: { [gpURL]: { body: GP_CSV } } });
+  await runFlowOnce(GP_WASM, stub);
+
+  assert.equal(ingestCalls(stub).length, 2, "the stores still happen");
+  assert.deepEqual(publishBodies(stub), [], "absence of config is not permission to publish");
+});
+
+test("celestrak-gp-ingest: each stored batch triggers its own dataset publication", async () => {
+  const gpURL = "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv";
+  const stub = createIngestHostStub({
+    config: { celestrak_publish_url: PUBLISH_URL },
+    fetches: { [gpURL]: { body: GP_CSV }, [PUBLISH_URL]: PUBLISH_FETCH },
+  });
+  const results = await runFlowOnce(GP_WASM, stub);
+
+  const bodies = publishBodies(stub).sort((a, b) => a.schema.localeCompare(b.schema));
+  assert.equal(bodies.length, 2, "OMM + MPE batches each publish");
+  assert.deepEqual(
+    bodies.map((body) => body.schema),
+    ["MPE.fbs", "OMM.fbs"],
+  );
+  for (const body of bodies) {
+    assert.deepEqual(Object.keys(body).sort(), ["batchId", "providerId", "schema", "sourceName"]);
+    assert.equal(body.providerId, "space-data-network-02");
+    assert.equal(body.sourceName, "celestrak-gp");
+    assert.equal(body.batchId, sha256Hex(GP_CSV));
+  }
+  // 2 ingest results + 2 publication responses reach the egress sink.
+  assert.equal(results.length, 4);
+  assert.equal(results.filter((entry) => entry.status === 202).length, 2);
+});
+
+test("celestrak-satcat-ingest: both snapshot lanes publish their own batch", async () => {
+  const stub = createIngestHostStub({
+    config: { celestrak_publish_url: PUBLISH_URL },
+    fetches: {
+      "https://celestrak.org/pub/satcat.txt": { body: SATCAT_TXT },
+      "https://celestrak.org/pub/satcat.csv": { body: SATCAT_CSV },
+      [PUBLISH_URL]: PUBLISH_FETCH,
+    },
+  });
+  await runFlowOnce(SATCAT_WASM, stub);
+
+  const bodies = publishBodies(stub);
+  assert.equal(bodies.length, 2);
+  assert.deepEqual(
+    bodies.map((body) => body.sourceName).sort(),
+    ["celestrak-satcat", "celestrak-satcat-csv"],
+  );
+  for (const body of bodies) assert.equal(body.schema, "CAT.fbs");
+  assert.equal(
+    bodies.find((body) => body.sourceName === "celestrak-satcat").batchId,
+    sha256Hex(SATCAT_TXT),
+  );
+  assert.equal(
+    bodies.find((body) => body.sourceName === "celestrak-satcat-csv").batchId,
+    sha256Hex(SATCAT_CSV),
+  );
+});
+
+test("celestrak-spw-ingest: the stored space-weather batch publishes", async () => {
+  const overrideURL = "https://fixtures.test/SW-All.csv";
+  const stub = createIngestHostStub({
+    config: { celestrak_space_weather_url: overrideURL, celestrak_publish_url: PUBLISH_URL },
+    fetches: {
+      [overrideURL]: {
+        body: SW_CSV,
+        headers: { "last-modified": "Fri, 02 Jan 2026 12:00:00 GMT" },
+      },
+      [PUBLISH_URL]: PUBLISH_FETCH,
+    },
+  });
+  await runFlowOnce(SPW_WASM, stub);
+
+  const bodies = publishBodies(stub);
+  assert.equal(bodies.length, 1);
+  assert.deepEqual(bodies[0], {
+    schema: "SPW.fbs",
+    providerId: "space-data-network-02",
+    sourceName: "celestrak-space-weather",
+    batchId: sha256Hex(SW_CSV),
+  });
+});
+
+test("celestrak-spw-ingest: the stale-source gate also stops the publication", async () => {
+  const spwURL = "https://celestrak.org/SpaceData/SW-All.csv";
+  const stub = createIngestHostStub({
+    config: { celestrak_publish_url: PUBLISH_URL },
+    fetches: { [spwURL]: { body: SW_CSV }, [PUBLISH_URL]: PUBLISH_FETCH },
+  });
+  try {
+    await runFlowOnce(SPW_WASM, stub);
+  } catch {
+    // the parse node errors on the stale gate; either way nothing may publish
+  }
+  assert.equal(ingestCalls(stub).length, 0, "no ingest hostcall after the stale gate");
+  assert.deepEqual(publishBodies(stub), [], "nothing stored, nothing published");
+});
 
 test("celestrak-gp-ingest: timer tick -> fetch -> parse -> two attributed ingests", async () => {
   const gpURL = "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv";

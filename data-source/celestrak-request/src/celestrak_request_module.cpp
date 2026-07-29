@@ -13,6 +13,16 @@
  *   satcat -> request_txt/job_txt +
  *             request_csv/job_csv         (legacy fixed-width + CSV snapshot)
  *   spw    -> request/job                 (SW-All.csv space weather)
+ *
+ *   publish_request -> request            (§19 dataset-publication trigger)
+ *     Joins the hostcap/storage-ingest "result" with the parser's ingest
+ *     "meta" (the ONLY carrier of provider_id/source_name) and emits the
+ *     hostcap/http-request JSON that POSTs a DatasetPublicationRequest to
+ *     the node's loopback admin endpoint. The DECISION to publish after a
+ *     store is application policy and therefore lives here, in the flow,
+ *     never in the host. Fail-closed: with no celestrak_publish_url in node
+ *     CONFIG the method emits NOTHING — absence of configuration is not
+ *     permission to publish.
  */
 
 #include <cstdint>
@@ -101,6 +111,45 @@ std::string json_escape(const std::string& s) {
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// Base64 (standard alphabet, padded). The http cap takes its body as bodyB64,
+// never as a raw string; copied from hostcap/http-request.
+// ---------------------------------------------------------------------------
+
+const char kB64Alphabet[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+std::string base64_encode(const uint8_t* data, size_t length) {
+    std::string out;
+    out.reserve(((length + 2) / 3) * 4);
+    size_t i = 0;
+    while (i + 3 <= length) {
+        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
+                           (static_cast<uint32_t>(data[i + 1]) << 8) | data[i + 2];
+        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
+        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
+        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
+        out.push_back(kB64Alphabet[v & 0x3f]);
+        i += 3;
+    }
+    const size_t remain = length - i;
+    if (remain == 1) {
+        const uint32_t v = static_cast<uint32_t>(data[i]) << 16;
+        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
+        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
+        out.push_back('=');
+        out.push_back('=');
+    } else if (remain == 2) {
+        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
+                           (static_cast<uint32_t>(data[i + 1]) << 8);
+        out.push_back(kB64Alphabet[(v >> 18) & 0x3f]);
+        out.push_back(kB64Alphabet[(v >> 12) & 0x3f]);
+        out.push_back(kB64Alphabet[(v >> 6) & 0x3f]);
+        out.push_back('=');
+    }
+    return out;
+}
+
 // plugin.getConfig builtin hostcall: returns the node-config JSON for this
 // flow service, or "{}" when the host provides none.
 std::string load_config() {
@@ -147,6 +196,13 @@ std::string provider_id(const std::string& config) {
     std::string value;
     if (json_string_field(config, "celestrak_provider_id", &value) && !value.empty()) return value;
     return "space-data-network-02";
+}
+
+// The input frame on a named port, or nullptr when the port carries none.
+const plugin_input_frame_t* frame_for(const char* port_id) {
+    const int32_t index = plugin_find_input_index(port_id, 0);
+    if (index < 0) return nullptr;
+    return plugin_get_input_frame(static_cast<uint32_t>(index));
 }
 
 int push_json(const char* port, const std::string& json) {
@@ -216,6 +272,80 @@ int satcat(void) {
 int spw(void) {
     return emit_single("request", "job", "celestrak_space_weather_url", kDefaultSpaceWeatherURL,
                        "celestrak-space-weather", "SW-All.csv");
+}
+
+// publish_request: (storage-ingest result, parser ingest meta) -> the
+// hostcap/http-request JSON that POSTs a DatasetPublicationRequest to the
+// node's loopback admin endpoint
+// (POST /api/v1/admin/dataset-updates/publish, gated by isLoopbackRemoteAddr).
+//
+// BOTH inputs are required: the storage-ingest result carries only
+// schema/inserted/batch_id/reconciled_*/archived, while provider_id and
+// source_name exist ONLY on the parser's meta.
+//
+// The body keys are camelCase because DatasetPublicationRequest is an
+// API-synthesized shape (internal/api/dataset_publication.go), NOT an SDS
+// record — and the handler decodes with DisallowUnknownFields, so no other
+// key may appear.
+int publish_request(void) {
+    const plugin_input_frame_t* result_frame = frame_for("result");
+    if (!result_frame || !result_frame->payload || result_frame->payload_length == 0) {
+        plugin_set_error("missing-result-frame",
+                         "publish_request requires the storage-ingest result frame.");
+        return 400;
+    }
+    const plugin_input_frame_t* meta_frame = frame_for("meta");
+    if (!meta_frame || !meta_frame->payload || meta_frame->payload_length == 0) {
+        plugin_set_error("missing-meta-frame",
+                         "publish_request requires the parser ingest meta frame.");
+        return 400;
+    }
+
+    const std::string config = load_config();
+    std::string url;
+    if (!json_string_field(config, "celestrak_publish_url", &url) || url.empty()) {
+        // Fail-closed. Absence of configuration is NOT permission to publish,
+        // so no request frame is emitted and the downstream http node never
+        // becomes ready.
+        return 0;
+    }
+
+    const std::string result(reinterpret_cast<const char*>(result_frame->payload),
+                             result_frame->payload_length);
+    const std::string meta(reinterpret_cast<const char*>(meta_frame->payload),
+                           meta_frame->payload_length);
+
+    std::string schema;
+    if (!json_string_field(result, "schema", &schema) || schema.empty()) {
+        json_string_field(meta, "schema", &schema);
+    }
+    std::string batch_id;
+    if (!json_string_field(result, "batch_id", &batch_id) || batch_id.empty()) {
+        json_string_field(meta, "batch_id", &batch_id);
+    }
+    std::string provider;
+    std::string source;
+    json_string_field(meta, "provider_id", &provider);
+    json_string_field(meta, "source_name", &source);
+    if (schema.empty() || batch_id.empty() || provider.empty() || source.empty()) {
+        plugin_set_error("incomplete-publication-identity",
+                         "publish_request needs schema, batchId, providerId and sourceName.");
+        return 400;
+    }
+
+    const std::string body = std::string("{\"schema\":\"") + json_escape(schema) + "\"" +
+                             ",\"providerId\":\"" + json_escape(provider) + "\"" +
+                             ",\"sourceName\":\"" + json_escape(source) + "\"" +
+                             ",\"batchId\":\"" + json_escape(batch_id) + "\"}";
+
+    char timeout_buf[24];
+    std::snprintf(timeout_buf, sizeof(timeout_buf), "%ld", config_timeout_ms(config));
+    const std::string request =
+        std::string("{\"method\":\"POST\",\"url\":\"") + json_escape(url) + "\"" +
+        ",\"headers\":{\"content-type\":\"application/json\"}" + ",\"bodyB64\":\"" +
+        base64_encode(reinterpret_cast<const uint8_t*>(body.data()), body.size()) + "\"" +
+        ",\"timeoutMs\":" + timeout_buf + "}";
+    return push_json("request", request) < 0 ? 500 : 0;
 }
 
 }  // extern "C"
