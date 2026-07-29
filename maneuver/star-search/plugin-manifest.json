@@ -1,0 +1,119 @@
+{
+  "pluginId": "com.digitalarsenal.maneuver.star-search",
+  "name": "Star Interplanetary Broad Search",
+  "version": "0.1.0",
+  "description": "Patched-conic interplanetary mission design by the Star broad-search algorithm (Landau, Campagnola & Pellegrini 2022): pre-generated Arora-Russell Lambert arcs across a discretized encounter grid, patched by powered flybys, with primer-vector mid-arc deep-space-maneuver placement, returning a Pareto set of trajectories. C++ port of the MIT Python reference UzTak/star-search. Threaded (isomorphic wasi-threads); planetary ephemeris is supplied as data on a typed $OEM port, never fetched.",
+  "pluginFamily": "maneuver",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "attribution": {
+    "upstream": "https://github.com/UzTak/star-search",
+    "upstreamCommit": "5c667064e8fc5816a94fc1124906997560fd6c55",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2026 Yuji Takubo",
+    "licenseFile": "vendor/star-search/LICENSE",
+    "provenanceFile": "vendor/star-search/PROVENANCE.md",
+    "relationship": "port",
+    "algorithmOrigin": "The Star algorithm is originally due to Damon Landau. The vendored upstream is an independent open re-implementation; this module is a C++ port of that re-implementation.",
+    "algorithmCitations": [
+      "Landau, D., Campagnola, S., & Pellegrini, E. (2022). Star searches for patched-conic trajectories. The Journal of the Astronautical Sciences, 69(6), 1613-1648. https://doi.org/10.1007/s40295-022-00350-y",
+      "Landau, D. (2018). Efficient maneuver placement for automated trajectory design. Journal of Guidance, Control, and Dynamics, 41(7), 1531-1541.",
+      "Arora, N., & Russell, R. P. (2013). A fast and robust multiple revolution Lambert algorithm using a cosine transformation. AAS/AIAA Astrodynamics Specialist Conference, AAS 13-728, Hilton Head, SC."
+    ]
+  },
+  "threading": {
+    "model": "wasi-threads",
+    "parallelism": "row-range over Lambert batch solves and leg/flyby database construction",
+    "determinism": "Output is bit-identical at every thread count: fixed row-range partitioning, preallocated output slots (never completion-order append), fixed-index-order reductions.",
+    "spawnFailurePolicy": "wasi.thread-spawn may return -1 (browser lane without cross-origin isolation). The inline single-threaded fallback is mandatory and produces identical output.",
+    "threadCountSource": "explicit parameter / environment — never hardware-concurrency detection in guest code (no SDK discovery hook exists)"
+  },
+  "methods": [
+    {
+      "methodId": "search_trajectories",
+      "displayName": "Search Patched-Conic Trajectories",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "star-search-body-ephemeris",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM/main.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OEM/main.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Planetary body states covering the encounter epoch grid: one EPHEMERIS_DATA_BLOCK per body, CENTER_NAME = SUN, REFERENCE_FRAME = ECLIPJ2000. Themis-ruled carrier (2026-07-29). The module never fetches ephemeris; SPICE kernels are a host/app concern."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Required planetary ephemeris table. Sampled on the encounter grid, lookups are exact and no interpolation is used."
+        },
+        {
+          "portId": "problem",
+          "acceptedTypeSets": [
+            {
+              "setId": "star-search-problem-definition-UNRATIFIED",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "HELD — NOT A SHIPPABLE PORT. The broad-search problem definition (body sequence constraints, epoch/TOF grid discretization, delta-V / flyby / C3 caps, optional propulsion limits) has NO existing SDS record: Themis returned LACK against pin 1.165.0 on 2026-07-29. A new standard code is required and is an OWNER-RATIFICATION stop, tracked in graph task sds-star-search-mission-design-records. This wildcard is a placeholder that the SDK compliance gate WILL reject (wildcard-port-type, pluginCompliance.js:536-544) — it is recorded rather than hidden so the intent is legible; it is replaced by the typed declaration the moment the code is ratified."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Search problem definition. PORT SURFACE HELD pending SDS ratification."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "solutions",
+          "acceptedTypeSets": [
+            {
+              "setId": "star-search-pareto-solution-set-UNRATIFIED",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "HELD — NOT A SHIPPABLE PORT. The Pareto trajectory-solution set (repeated candidate: ordered encounter list with body/epoch/v-infinity in-out/turn angle/powered-flyby delta-V/periapsis radius; repeated DSM list; per-candidate totals) has NO existing SDS record: Themis returned LACK against pin 1.165.0 on 2026-07-29 (OCM.Maneuver is the closest legal carrier for a SINGLE planned burn but its payload is untyped DATA:[string] and there is no multi-solution container anywhere in SDS). New standard code required — OWNER-RATIFICATION stop, tracked in sds-star-search-mission-design-records."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Pareto-optimal trajectory set. PORT SURFACE HELD pending SDS ratification."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Runs the full EncounterDB -> LegDatabase -> FlybyDB -> streaming combo fold -> tfilter pipeline and returns the Pareto-filtered trajectory set."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM/main.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "star-search-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
