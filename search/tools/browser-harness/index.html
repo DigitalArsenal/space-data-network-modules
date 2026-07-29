@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SDN catalog semantic search — feasibility harness</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b0f14; color:#d7e2ec; margin:0; padding:24px; }
+  h1 { font-size:16px; letter-spacing:.08em; text-transform:uppercase; color:#7fd1ff; margin:0 0 16px; }
+  #metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; margin-bottom:18px; }
+  .m { background:#121a24; border:1px solid #1e2c3a; border-radius:6px; padding:10px 12px; }
+  .m b { display:block; color:#8aa0b4; font-weight:400; font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+  .m span { font-size:19px; color:#eaf3fa; }
+  input { width:100%; padding:10px 12px; background:#121a24; border:1px solid #2a3d50; border-radius:6px; color:#eaf3fa; font:inherit; }
+  table { border-collapse:collapse; width:100%; margin-top:14px; }
+  th,td { text-align:left; padding:4px 10px 4px 0; border-bottom:1px solid #172431; white-space:nowrap; }
+  th { color:#8aa0b4; font-weight:400; font-size:11px; text-transform:uppercase; }
+  #plan { margin-top:10px; color:#9fb3c6; font-size:12px; word-break:break-all; }
+  .ok { color:#7ee787; } .bad { color:#ff7b72; }
+</style>
+</head>
+<body>
+<h1>SDN catalog semantic search — in-browser feasibility harness</h1>
+<div id="metrics"></div>
+<input id="q" placeholder="japanese space station" autocomplete="off" spellcheck="false">
+<div id="plan"></div>
+<table><thead><tr><th>#</th><th>score</th><th>norad</th><th>name</th><th>owner</th><th>class</th></tr></thead><tbody id="rows"></tbody></table>
+
+<script type="module">
+import { loadEncoder, encode } from "/lib/encoder.mjs";
+import { planQuery, applyPlan } from "/lib/queryplan.mjs";
+
+const metrics = document.getElementById("metrics");
+const put = (label, value, cls = "") => {
+  const d = document.createElement("div");
+  d.className = "m";
+  d.innerHTML = `<b>${label}</b><span class="${cls}">${value}</span>`;
+  metrics.appendChild(d);
+  return d;
+};
+
+const t = () => performance.now();
+const state = {};
+
+async function fetchTimed(url) {
+  const t0 = t();
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  return { buf, ms: t() - t0, bytes: buf.byteLength };
+}
+
+(async () => {
+  // ---- LOAD
+  const tAll = t();
+  const [encRaw, catRaw, lexRaw, facRaw, labRaw] = await Promise.all([
+    fetchTimed("./assets/query-encoder.sdnemb"),
+    fetchTimed("./assets/catalog-vectors.sdnvec"),
+    fetchTimed("./assets/lexicon.json"),
+    fetchTimed("./assets/facets.json"),
+    fetchTimed("./assets/labels.json"),
+  ]);
+
+  const tParse0 = t();
+  const model = loadEncoder(new Uint8Array(encRaw.buf));
+  const dec = new TextDecoder();
+  const lexicon = JSON.parse(dec.decode(lexRaw.buf));
+  lexicon.aliasIndex = new Map(Object.entries(lexicon.aliasIndex));
+  const facets = JSON.parse(dec.decode(facRaw.buf));
+  const labels = JSON.parse(dec.decode(labRaw.buf));
+
+  // catalog container: magic|dim|count|scale[]|int8[]|norads[]
+  const u8 = new Uint8Array(catRaw.buf);
+  const dv = new DataView(catRaw.buf);
+  const DIM = dv.getUint32(8, true);
+  const N = dv.getUint32(12, true);
+  let off = 16;
+  const scale = new Float32Array(catRaw.buf.slice(off, off + N * 4));
+  off += N * 4;
+  const vectors = new Int8Array(catRaw.buf, off, N * DIM);
+  off += N * DIM;
+  const norads = new Uint32Array(catRaw.buf.slice(off, off + N * 4));
+  const tParse = t() - tParse0;
+  const tTotal = t() - tAll;
+
+  state.model = model; state.lexicon = lexicon; state.facets = facets;
+  state.labels = labels; state.DIM = DIM; state.N = N;
+  state.scale = scale; state.vectors = vectors; state.norads = norads;
+
+  const mb = (b) => `${(b / 1048576).toFixed(2)} MB`;
+  put("encoder model", mb(encRaw.bytes));
+  put("catalog table", `${mb(catRaw.bytes)} <small>(${N}×${DIM})</small>`);
+  put("bundle total", mb(encRaw.bytes + catRaw.bytes + lexRaw.bytes + facRaw.bytes + labRaw.bytes));
+  put("fetch (parallel)", `${Math.max(encRaw.ms, catRaw.ms, lexRaw.ms, facRaw.ms, labRaw.ms).toFixed(0)} ms`);
+  put("parse / init", `${tParse.toFixed(1)} ms`);
+  put("total ready", `${tTotal.toFixed(0)} ms`, "ok");
+  put("encoder vocab", `${model.count} tokens`);
+
+  const encodeMs = put("encode latency", "—");
+  const searchMs = put("search latency", "—");
+
+  // ---- SEARCH
+  const qvec = new Float32Array(DIM);
+  function run(text) {
+    const plan = planQuery(text, lexicon);
+    const cand = applyPlan(plan, facets);
+
+    const e0 = t();
+    encode(model, plan.semantic, qvec);
+    const eMs = t() - e0;
+
+    const s0 = t();
+    const pool = cand && cand.length ? cand : null;
+    const k = 15;
+    const best = [];
+    const consider = (i) => {
+      let dot = 0;
+      const base = i * DIM;
+      for (let d = 0; d < DIM; d += 1) dot += qvec[d] * vectors[base + d];
+      dot *= scale[i];
+      if (plan.prefer && facets.dicts.objectClass[facets.cols.objectClass[i]] === plan.prefer.value) {
+        dot += plan.prefer.weight;
+      }
+      if (best.length < k) { best.push([dot, i]); best.sort((a, b) => b[0] - a[0]); }
+      else if (dot > best[k - 1][0]) { best[k - 1] = [dot, i]; best.sort((a, b) => b[0] - a[0]); }
+    };
+    if (pool) for (const i of pool) consider(i);
+    else for (let i = 0; i < N; i += 1) consider(i);
+    const sMs = t() - s0;
+
+    encodeMs.querySelector("span").textContent = `${eMs.toFixed(2)} ms`;
+    searchMs.querySelector("span").textContent = `${sMs.toFixed(2)} ms`;
+    document.getElementById("plan").textContent =
+      `semantic="${plan.semantic}"  predicates=${JSON.stringify(plan.predicates)}  candidates=${pool ? pool.length : N}`;
+
+    const rows = document.getElementById("rows");
+    rows.innerHTML = "";
+    best.forEach(([s, i], n) => {
+      const [nor, name, owner, cls] = labels[i];
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${n + 1}</td><td>${s.toFixed(3)}</td><td>${nor}</td><td>${name}</td><td>${owner}</td><td>${cls}</td>`;
+      rows.appendChild(tr);
+    });
+    return { eMs, sMs, top: best.map(([s, i]) => ({ norad: labels[i][0], name: labels[i][1], score: +s.toFixed(4) })) };
+  }
+
+  window.SDN_SEARCH = { run, ready: true, N, DIM,
+    sizes: { encoder: encRaw.bytes, catalog: catRaw.bytes,
+             total: encRaw.bytes + catRaw.bytes + lexRaw.bytes + facRaw.bytes + labRaw.bytes },
+    load: { fetchMs: Math.max(encRaw.ms, catRaw.ms), parseMs: tParse, totalMs: tTotal } };
+
+  const input = document.getElementById("q");
+  input.addEventListener("input", () => run(input.value));
+  input.value = "japanese space station";
+  run(input.value);
+  document.title = "READY — SDN semantic search harness";
+})();
+</script>
+</body>
+</html>
