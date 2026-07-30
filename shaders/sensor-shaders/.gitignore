@@ -1,7 +1,0 @@
-node_modules/
-.build/
-*.log
-.emcache/
-deps/
-src/cpp/build-isomorphic/
-src/cpp/generated/sensor_shaders_plugin_manifest_bytes.h

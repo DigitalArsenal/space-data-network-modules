@@ -23,8 +23,6 @@ PACKAGES=(
     analysis/launch-ascent
     analysis/maneuver
     analysis/od
-    analysis/sensor-model
-    analysis/sensor-coverage
     basilisk/runtime
 )
 

@@ -16,7 +16,20 @@ function defaultPackageList(scriptPath) {
     .filter((line) => line && !line.startsWith("#"));
 }
 
-test("default module build and SDK compatibility scripts include sensor WASM modules", () => {
+// analysis/sensor-model, analysis/sensor-coverage and shaders/sensor-shaders
+// moved to space-data-network-closed-modules. They must not reappear in the
+// default package lists here, alongside the older retired paths.
+const RELOCATED_OR_RETIRED_PACKAGES = [
+  "analysis/coverage",
+  "analysis/fastest-path",
+  "analysis/sensor-coverage",
+  "analysis/sensor-model",
+  "analysis/swath",
+  "shaders/sensor-shaders",
+  "shaders/viewshed-shader",
+];
+
+test("default module build and SDK compatibility scripts hold only in-repo modules", () => {
   for (const scriptPath of [
     "scripts/build-migrated-packages.sh",
     "scripts/test-sdk-compat.sh",
@@ -24,23 +37,26 @@ test("default module build and SDK compatibility scripts include sensor WASM mod
   ]) {
     const packages = defaultPackageList(scriptPath);
     assert.ok(
-      packages.includes("analysis/sensor-model"),
-      `${scriptPath} default packages must include analysis/sensor-model`,
+      packages.length > 0,
+      `${scriptPath} default packages must not be empty`,
     );
     assert.ok(
-      packages.includes("analysis/sensor-coverage"),
-      `${scriptPath} default packages must include analysis/sensor-coverage`,
+      packages.includes("analysis/od"),
+      `${scriptPath} default packages must include analysis/od`,
     );
-    assert.equal(
-      packages.includes("analysis/coverage"),
-      false,
-      `${scriptPath} default packages must not include retired analysis/coverage`,
-    );
-    assert.equal(
-      packages.includes("analysis/swath"),
-      false,
-      `${scriptPath} default packages must not include retired analysis/swath`,
-    );
+    for (const retired of RELOCATED_OR_RETIRED_PACKAGES) {
+      assert.equal(
+        packages.includes(retired),
+        false,
+        `${scriptPath} default packages must not include relocated/retired ${retired}`,
+      );
+    }
+    for (const modulePath of packages) {
+      assert.ok(
+        fs.existsSync(path.join(repoRoot, modulePath)),
+        `${scriptPath} default package ${modulePath} does not exist in this repo`,
+      );
+    }
   }
 });
 

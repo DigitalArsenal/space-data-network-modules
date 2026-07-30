@@ -1156,7 +1156,9 @@ Basilisk parity suite.
   footprint path.
 - [ ] Update `analysis/sensor-coverage` after active sensor-coverage lock
   clears, preserving sensor-owned time-dynamic swath behavior and importing
-  shared access/swath/FOV modules.
+  shared access/swath/FOV modules. The module is now closed-tier and lives at
+  `packages/sensor-coverage` in `space-data-network-closed-modules`; this item
+  is tracked there.
 
 ## Phase 4: GNSS Modules
 

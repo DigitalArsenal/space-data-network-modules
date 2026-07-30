@@ -1,8 +1,0 @@
-node_modules/
-.build/
-*.log
-deps/
-dist/
-!dist/browser/
-!dist/isomorphic/
-src/cpp/build-isomorphic/

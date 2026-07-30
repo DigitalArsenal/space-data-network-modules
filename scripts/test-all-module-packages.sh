@@ -17,14 +17,11 @@ PACKAGES=(
     analysis/conjunction-assessment
     analysis/maneuver
     analysis/od
-    analysis/sensor-model
-    analysis/sensor-coverage
     basilisk/runtime
     licensing/core
     licensing/client-decrypt
     licensing/protection-key-server
     licensing/protection-license-client
-    shaders/sensor-shaders
 )
 
 if [ "$#" -gt 0 ]; then
