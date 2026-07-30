@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T19:00:15.840Z",
+  "generatedAt": "2026-07-30T19:09:20.444Z",
   "moduleCount": 64,
   "parityScopeModuleCount": 28,
   "isomorphicWasmCount": 62,
@@ -139,7 +139,7 @@
       ],
       "cxxSourceFileCount": 26,
       "cSourceFileCount": 0,
-      "testFileCount": 100,
+      "testFileCount": 101,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -187,6 +187,7 @@
         "tests/aerospaceReplayHarness.test.mjs",
         "tests/aerospaceScreenCatalogParity.test.mjs",
         "tests/archiveStreamingSmoke.test.mjs",
+        "tests/buildTreeHygiene.test.mjs",
         "tests/celestrakFetchCache.test.mjs",
         "tests/data/README.md",
         "tests/direct-entry.test.mjs",
