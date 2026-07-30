@@ -1,5 +1,0 @@
-/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles/sgp4_lib.dir
-/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles/conjunction_assessment.dir
-/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles/conjunction_assessment_wasm.dir
-/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles/edit_cache.dir
-/Users/tj/software/orbpro-stack/repos/main-packages/OrbPro/packages/space-data-network-modules/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread/CMakeFiles/rebuild_cache.dir
