@@ -1,28 +1,27 @@
 {
-  "generatedAt": "2026-07-11T16:42:09.878Z",
-  "moduleCount": 57,
-  "parityScopeModuleCount": 29,
-  "isomorphicWasmCount": 57,
-  "missingIsomorphicWasm": [],
-  "browserWasmEdgeTargetCount": 42,
-  "parityScopeMissingCxx": [],
-  "parityScopeTargetGaps": [
-    "analysis/sensor-coverage",
-    "analysis/sensor-model"
+  "generatedAt": "2026-07-30T19:00:15.840Z",
+  "moduleCount": 64,
+  "parityScopeModuleCount": 28,
+  "isomorphicWasmCount": 62,
+  "missingIsomorphicWasm": [
+    "hostcap/flatsql-store",
+    "maneuver/star-search"
   ],
+  "browserWasmEdgeTargetCount": 62,
+  "parityScopeMissingCxx": [],
+  "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
     "analysis/access",
+    "analysis/catalog-synthesis",
     "analysis/conjunction-assessment",
     "analysis/covariance",
     "analysis/dop",
-    "analysis/fastest-path",
     "analysis/lambert-izzo",
     "analysis/launch-ascent",
     "analysis/maneuver",
+    "analysis/od/fit-pipeline",
     "analysis/od",
     "analysis/reentry",
-    "analysis/sensor-coverage",
-    "analysis/sensor-model",
     "basilisk/runtime",
     "foundation/attitude-math",
     "foundation/decision-gate",
@@ -75,6 +74,39 @@
       ]
     },
     {
+      "modulePath": "analysis/catalog-synthesis",
+      "pluginId": "com.orbpro.catalog-synthesis",
+      "name": "Supplemental Catalog Synthesis",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "synthesize_catalog"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/catalog_synthesis.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/spacetrack-gp-current-sample.json",
+        "test/module.test.mjs"
+      ]
+    },
+    {
       "modulePath": "analysis/conjunction-assessment",
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
@@ -107,7 +139,7 @@
       ],
       "cxxSourceFileCount": 26,
       "cSourceFileCount": 0,
-      "testFileCount": 41,
+      "testFileCount": 100,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -151,13 +183,69 @@
         "src/cpp/tests/test_socrates.cpp",
         "src/cpp/tests/test_socrates_bulk.cpp",
         "tests/aerospaceDatasetValidation.test.mjs",
+        "tests/aerospaceRealWindowParity.test.mjs",
         "tests/aerospaceReplayHarness.test.mjs",
+        "tests/aerospaceScreenCatalogParity.test.mjs",
         "tests/archiveStreamingSmoke.test.mjs",
         "tests/celestrakFetchCache.test.mjs",
-        "tests/data/.celestrak-cache/3d064973fb7154c9101b0dd808b6fe8b3b3bda5c445167b9a9f5311f48f71ac6.csv",
-        "tests/data/.celestrak-cache/gp_49107,47079.json",
         "tests/data/README.md",
         "tests/direct-entry.test.mjs",
+        "tests/fixtures/aerospace-real-window/README.md",
+        "tests/fixtures/aerospace-real-window/answer_key_spherical.csv",
+        "tests/fixtures/aerospace-real-window/ocm/04208.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/09848.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/09903.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/14965.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/26069.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/32464.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/38264.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/39417.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/39919.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/40044.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/41158.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/41347.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/41915.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/43255.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/45024.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/45411.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/47401.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/49071.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/49072.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/53079.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/53223.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/55953.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/56112.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/56155.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/56156.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/56347.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/58199.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/58201.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/58265.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/58410.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/59172.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/59458.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/60085.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/60094.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/60263.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/60603.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/60626.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/60849.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/62021.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/62254.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/90124.ocm",
+        "tests/fixtures/aerospace-real-window/ocm/95025.ocm",
+        "tests/fixtures/aerospace-synthetic/README.md",
+        "tests/fixtures/aerospace-synthetic/answer_key_spherical.csv",
+        "tests/fixtures/aerospace-synthetic/ocm/90001.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90002.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90003.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90004.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90005.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90006.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90007.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90008.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90009.ocm",
+        "tests/fixtures/aerospace-synthetic/ocm/90010.ocm",
         "tests/fixtures/hosted-runtime/conjunction.single-plugin.flow.json",
         "tests/fixtures/request.assess.json",
         "tests/fixtures/socrates/gp_47935,49179.json",
@@ -168,7 +256,9 @@
         "tests/lib/aerospaceOcm.mjs",
         "tests/lib/aerospaceReplayHarness.mjs",
         "tests/lib/archiveDataset.mjs",
+        "tests/lib/caParityTolerances.mjs",
         "tests/lib/conjunctionCommandHarness.mjs",
+        "tests/lib/screenCatalogParityHarness.mjs",
         "tests/lib/sgp4TrackHarness.mjs",
         "tests/lib/wasmedgePthreadRunner.mjs",
         "tests/ocmOemTrackAdapter.test.mjs",
@@ -178,6 +268,7 @@
         "tests/sdnOmmPartitionedRunner.test.mjs",
         "tests/signedCdmOutput.test.mjs",
         "tests/socratesReplayHarness.test.mjs",
+        "tests/socratesScreenCatalogParity.test.mjs",
         "tests/sourceSelectionContract.test.mjs",
         "tests/wasmedgeStandaloneHarness.test.mjs"
       ]
@@ -243,45 +334,6 @@
       ],
       "testFiles": [
         "test/nativeArtifact.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "analysis/fastest-path",
-      "pluginId": "com.orbpro.fastest-path",
-      "name": "Fastest Path (SSSP)",
-      "pluginFamily": "analysis",
-      "version": "1.0.0",
-      "methodIds": [
-        "compute_shortest_paths",
-        "create_graph",
-        "ingest_csr",
-        "ingest_edges",
-        "reconstruct_path"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasi",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 4,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/cpp/src/fastest_path_core.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/wasm_api.cpp",
-        "src/fastest_path_plugin.cpp"
-      ],
-      "testFiles": [
-        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -370,9 +422,9 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 18,
+      "cxxSourceFileCount": 20,
       "cSourceFileCount": 0,
-      "testFileCount": 10,
+      "testFileCount": 12,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -384,12 +436,14 @@
         "src/cpp/src/plugin_invoke_bridge.cpp",
         "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/propagation.cpp",
+        "src/cpp/src/rendezvous.cpp",
         "src/cpp/src/stm.cpp",
         "src/cpp/src/targeting.cpp",
         "src/cpp/src/transforms.cpp",
         "src/cpp/tests/test_approach.cpp",
         "src/cpp/tests/test_classical.cpp",
         "src/cpp/tests/test_math.cpp",
+        "src/cpp/tests/test_rendezvous.cpp",
         "src/cpp/tests/test_sixdof.cpp",
         "src/cpp/tests/test_stm.cpp",
         "src/cpp/tests/test_targeting.cpp",
@@ -399,13 +453,46 @@
         "src/cpp/tests/test_approach.cpp",
         "src/cpp/tests/test_classical.cpp",
         "src/cpp/tests/test_math.cpp",
+        "src/cpp/tests/test_rendezvous.cpp",
         "src/cpp/tests/test_sixdof.cpp",
         "src/cpp/tests/test_stm.cpp",
         "src/cpp/tests/test_targeting.cpp",
         "tests/behavior.test.mjs",
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
         "tests/fixtures/request.hohmann.json",
+        "tests/fixtures/request.rendezvous.json",
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/od/fit-pipeline",
+      "pluginId": "com.orbpro.od-fit-pipeline",
+      "name": "OD Fit Pipeline",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "fit_pipeline"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/fit_pipeline.cpp"
+      ],
+      "testFiles": [
+        "test/module.test.mjs"
       ]
     },
     {
@@ -428,13 +515,25 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 11,
+      "cxxSourceFileCount": 27,
       "cSourceFileCount": 0,
-      "testFileCount": 22,
+      "testFileCount": 73,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
+        "fit-pipeline/src/fit_pipeline.cpp",
+        "src/cpp/guest-link/od_batch_fit_entry.cpp",
+        "src/cpp/guest-link/od_fit_entry.cpp",
+        "src/cpp/src/frame_transform.cpp",
         "src/cpp/src/meme_parser.cpp",
+        "src/cpp/src/noexcept_stubs.cpp",
+        "src/cpp/src/obd_fb_builder.cpp",
+        "src/cpp/src/ocm_fb_builder.cpp",
+        "src/cpp/src/od_batch_fit.cpp",
+        "src/cpp/src/od_isomorphic_main.cpp",
+        "src/cpp/src/oem_fb_reader.cpp",
+        "src/cpp/src/oem_parser.cpp",
+        "src/cpp/src/omm_fb_builder.cpp",
         "src/cpp/src/orbit_determination.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
@@ -443,32 +542,87 @@
         "src/cpp/src/wasm_api.cpp",
         "src/cpp/tests/analyze_outliers.cpp",
         "src/cpp/tests/bench_supgp.cpp",
+        "src/cpp/tests/test_downsample_accuracy.cpp",
+        "src/cpp/tests/test_frame_time_fit.cpp",
         "src/cpp/tests/test_od.cpp",
-        "src/cpp/tests/test_supgp.cpp"
+        "src/cpp/tests/test_oem_fb_parity.cpp",
+        "src/cpp/tests/test_supgp.cpp",
+        "tests/gen_oem_fixtures.cpp"
       ],
       "testFiles": [
+        "fit-pipeline/test/module.test.mjs",
         "src/cpp/tests/analyze_outliers.cpp",
         "src/cpp/tests/bench_supgp.cpp",
         "src/cpp/tests/data/test_meme.txt",
+        "src/cpp/tests/test_downsample_accuracy.cpp",
+        "src/cpp/tests/test_frame_time_fit.cpp",
         "src/cpp/tests/test_od.cpp",
+        "src/cpp/tests/test_oem_fb_parity.cpp",
         "src/cpp/tests/test_supgp.cpp",
+        "tests/data/glonass/PROVENANCE.md",
+        "tests/data/glonass/iac_glonass.sp3.glo",
         "tests/data/manifest.txt",
         "tests/data/meme/MANIFEST.txt",
-        "tests/data/supgp-reference/celestrak_supgp_2026-034.csv",
-        "tests/data/supgp-reference/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67851_STARLINK-36348_1340149_Operational_1463017800_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67852_STARLINK-36276_1340141_Operational_1463017320_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67853_STARLINK-36785_1340147_Operational_1463017680_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67854_STARLINK-36608_1340145_Operational_1463017560_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67855_STARLINK-36838_1340149_Operational_1463017800_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67856_STARLINK-36843_1340142_Operational_1463017380_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67857_STARLINK-36828_1340150_Operational_1463017860_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67858_STARLINK-36837_1340140_Operational_1463017260_UNCLASSIFIED.txt",
-        "tests/data/supgp-reference/meme/MEME_67859_STARLINK-36393_1340146_Operational_1463017620_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/cpf/PROVENANCE.md",
+        "tests/data/supgp-reference/cpf/celestrak_supgp_cpf_2026-07-13.csv",
+        "tests/data/supgp-reference/cpf/lageos1.oem_itrf_utc.kvn",
+        "tests/data/supgp-reference/cpf/provider.json",
+        "tests/data/supgp-reference/glonass/PROVENANCE.md",
+        "tests/data/supgp-reference/glonass/R03.oem_igs20_gps.kvn",
+        "tests/data/supgp-reference/glonass/celestrak_supgp_glonass-re_2026-07-13.csv",
+        "tests/data/supgp-reference/glonass/provider.json",
+        "tests/data/supgp-reference/gps/PROVENANCE.md",
+        "tests/data/supgp-reference/gps/celestrak_supgp_gps-a_2026-07-13.csv",
+        "tests/data/supgp-reference/gps/prn-norad-registry.json",
+        "tests/data/supgp-reference/gps/provider.json",
+        "tests/data/supgp-reference/intelsat/PROVENANCE.md",
+        "tests/data/supgp-reference/intelsat/celestrak_supgp_intelsat-11p_2026-07-13.csv",
+        "tests/data/supgp-reference/intelsat/is-21.oem_ecef_utc.kvn",
+        "tests/data/supgp-reference/intelsat/provider.json",
+        "tests/data/supgp-reference/iss-live-20260714/ISS.OEM_J2K_EPH.trimmed.txt",
+        "tests/data/supgp-reference/iss-live-20260714/PROVENANCE.md",
+        "tests/data/supgp-reference/iss-live-20260714/celestrak_supgp_iss-e_2026-07-14.csv",
+        "tests/data/supgp-reference/iss-live-20260714/provider.json",
+        "tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt",
+        "tests/data/supgp-reference/iss/PROVENANCE.md",
+        "tests/data/supgp-reference/iss/celestrak_supgp_iss-e_2026-07-13.csv",
+        "tests/data/supgp-reference/iss/provider.json",
+        "tests/data/supgp-reference/oneweb/PROVENANCE.md",
+        "tests/data/supgp-reference/oneweb/celestrak_supgp_oneweb-e_2026-07-13.csv",
+        "tests/data/supgp-reference/oneweb/provider.json",
+        "tests/data/supgp-reference/starlink-live-20260714/PROVENANCE.md",
+        "tests/data/supgp-reference/starlink-live-20260714/celestrak_supgp_live.csv",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67850_STARLINK-36840_1950953_Operational_1468317240_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67851_STARLINK-36348_1950957_Operational_1468317480_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67852_STARLINK-36276_1950958_Operational_1468317540_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67853_STARLINK-36785_1951001_Operational_1468317720_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67854_STARLINK-36608_1950956_Operational_1468317420_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67855_STARLINK-36838_1950948_Operational_1468316940_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67856_STARLINK-36843_1950954_Operational_1468317300_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67857_STARLINK-36828_1951002_Operational_1468317780_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67858_STARLINK-36837_1950943_Operational_1468316640_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67859_STARLINK-36393_1951004_Operational_1468317900_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink-live-20260714/provider.json",
+        "tests/data/supgp-reference/starlink/celestrak_supgp_2026-034.csv",
+        "tests/data/supgp-reference/starlink/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67851_STARLINK-36348_1340149_Operational_1463017800_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67852_STARLINK-36276_1340141_Operational_1463017320_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67853_STARLINK-36785_1340147_Operational_1463017680_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67854_STARLINK-36608_1340145_Operational_1463017560_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67855_STARLINK-36838_1340149_Operational_1463017800_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67856_STARLINK-36843_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67857_STARLINK-36828_1340150_Operational_1463017860_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67858_STARLINK-36837_1340140_Operational_1463017260_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/meme/MEME_67859_STARLINK-36393_1340146_Operational_1463017620_UNCLASSIFIED.txt",
+        "tests/data/supgp-reference/starlink/provider.json",
         "tests/fixtures/hosted-runtime/od.single-plugin.flow.json",
         "tests/fixtures/request.fit.meme",
+        "tests/gen_oem_fixtures.cpp",
+        "tests/ocm_emission.test.mjs",
         "tests/sdk_compat.test.mjs",
-        "tests/test_wasm.mjs"
+        "tests/test_wasm.mjs",
+        "tests/wasi_threads_flow_harness.mjs",
+        "tests/wasi_threads_harness.mjs"
       ]
     },
     {
@@ -497,71 +651,6 @@
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/cpp/module.cpp"
-      ],
-      "testFiles": [
-        "tests/behavior.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "analysis/sensor-coverage",
-      "pluginId": "sensor-coverage-analysis",
-      "name": "Sensor Coverage Analysis",
-      "pluginFamily": "analysis",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_sensor_coverage"
-      ],
-      "runtimeTargets": [
-        "browser"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": true,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 4,
-      "parityScope": true,
-      "action": "update-for-parity",
-      "sourceFiles": [
-        "src/cpp/module.cpp"
-      ],
-      "testFiles": [
-        "tests/behavior.test.mjs",
-        "tests/benchmark_harness.test.mjs",
-        "tests/grid_candidates.test.mjs",
-        "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "analysis/sensor-model",
-      "pluginId": "sensor-model",
-      "name": "Sensor Model",
-      "pluginFamily": "analysis",
-      "version": "0.1.0",
-      "methodIds": [
-        "evaluate_sensor_shape"
-      ],
-      "runtimeTargets": [
-        "browser"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": true,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 2,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": true,
-      "action": "review-before-parity-use",
-      "sourceFiles": [
-        "src/cpp/module.cpp",
-        "src/cpp/sensor_shape_model.cpp.inc"
       ],
       "testFiles": [
         "tests/behavior.test.mjs",
@@ -601,371 +690,6 @@
         "tests/manifest.test.mjs",
         "tests/pointing_power.test.mjs",
         "tests/sdk_compat.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-antenna-pattern",
-      "pluginId": "com.orbpro.rf-antenna-pattern",
-      "name": "RF Antenna Pattern Evaluator",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "evaluate_gain"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_antenna_pattern_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/fixtures.json",
-        "test/rf-antenna-pattern.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-atmospheric-gaseous",
-      "pluginId": "com.orbpro.rf-atmospheric-gaseous",
-      "name": "RF Atmospheric (Gaseous) Absorption",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_oxygen_db_per_km",
-        "compute_saturation_vapor_pressure",
-        "compute_total_atmospheric_db",
-        "compute_water_vapor_db_per_km"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_atmospheric_gaseous_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/rf-atmospheric-gaseous-p676.test.mjs",
-        "test/rf-atmospheric-gaseous.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-ber-modulation",
-      "pluginId": "com.orbpro.rf-ber-modulation",
-      "name": "RF BER per Modulation",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_ber_from_ebno",
-        "compute_erfc"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_ber_modulation_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/rf-ber-modulation.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-cloud-fog",
-      "pluginId": "com.orbpro.rf-cloud-fog",
-      "name": "RF Cloud / Fog Attenuation",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_attenuation",
-        "compute_specific_coefficient"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_cloud_fog_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/rf-cloud-fog.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-diffraction",
-      "pluginId": "com.orbpro.rf-diffraction",
-      "name": "RF Diffraction (ITU-R P.526)",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_curvature_drop",
-        "compute_fresnel_kirchhoff_v",
-        "compute_knife_edge_loss",
-        "compute_knife_edge_parameter_v"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_diffraction_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/rf-diffraction.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-doppler-fresnel",
-      "pluginId": "com.orbpro.rf-doppler-fresnel",
-      "name": "RF Doppler / Fresnel Primitives",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_doppler",
-        "compute_fresnel"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 3,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_doppler_fresnel_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/fixtures/doppler.json",
-        "test/fixtures/fresnel_p526.json",
-        "test/rf-doppler-fresnel.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-empirical",
-      "pluginId": "com.orbpro.rf-empirical",
-      "name": "RF Empirical Path-Loss Models",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_cost231",
-        "compute_hata_rural",
-        "compute_hata_suburban",
-        "compute_hata_urban",
-        "compute_two_ray_ground"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 4,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_empirical_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/fixtures/cost231.json",
-        "test/fixtures/hata.json",
-        "test/fixtures/two_ray_rappaport.json",
-        "test/rf-empirical.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-fspl",
-      "pluginId": "com.orbpro.rf-fspl",
-      "name": "RF Free-Space Path Loss",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_fspl"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 2,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_fspl_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/fixtures/fspl_p525.json",
-        "test/rf-fspl.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-link-budget",
-      "pluginId": "com.orbpro.rf-link-budget",
-      "name": "RF Link-Budget Orchestrator",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_link_budget"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_link_budget_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/rf-link-budget.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-longley-rice",
-      "pluginId": "com.orbpro.rf-longley-rice",
-      "name": "RF Longley-Rice (ITM)",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_path_loss",
-        "is_stub"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_longley_rice_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/rf-longley-rice.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "comms/rf-rain",
-      "pluginId": "com.orbpro.rf-rain",
-      "name": "RF Rain Attenuation",
-      "pluginFamily": "comms",
-      "version": "0.1.0",
-      "methodIds": [
-        "compute_attenuation_crane",
-        "compute_attenuation_p530",
-        "compute_specific_attenuation"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "node"
-      ],
-      "hasBrowserWasmEdgeTargets": false,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c++"
-      ],
-      "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/rf_rain_plugin.cpp"
-      ],
-      "testFiles": [
-        "test/rf-rain.test.mjs"
       ]
     },
     {
@@ -1013,6 +737,7 @@
       "version": "0.1.0",
       "methodIds": [
         "gp",
+        "publish_request",
         "satcat",
         "spw"
       ],
@@ -1036,6 +761,297 @@
       ],
       "testFiles": [
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/celestrak-supgp",
+      "pluginId": "com.orbpro.celestrak-supgp",
+      "name": "CelesTrak SupGP (multi-provider supplemental OMM) Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 10,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/celestrak_supgp.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/AST.trimmed.json",
+        "test/fixtures/CSS-E.trimmed.json",
+        "test/fixtures/Iridium.trimmed.json",
+        "test/fixtures/Kuiper-E.trimmed.json",
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/Planet.trimmed.json",
+        "test/fixtures/SES-E.csv.trimmed.csv",
+        "test/fixtures/SES-E.trimmed.json",
+        "test/fixtures/Telesat.trimmed.json",
+        "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/cpf-source",
+      "pluginId": "com.orbpro.cpf-source",
+      "name": "CPF (ILRS predictions) Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "emit",
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "guest-link/emit_entry.cpp",
+        "src/cpf_source.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/lageos1_cpf_260713_19402.sample.dgf",
+        "test/fixtures/listing.sample.html",
+        "test/fixtures/supgp-reference-draft/README.md",
+        "test/fixtures/supgp-reference-draft/provider.json",
+        "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/glonass-source",
+      "pluginId": "com.orbpro.glonass-source",
+      "name": "GLONASS Precise Ephemeris (IAC SP3) Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "emit",
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "guest-link/emit_entry.cpp",
+        "src/glonass_source.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/iac_glonass.sp3.glo",
+        "test/fixtures/supgp-reference-draft/README.md",
+        "test/fixtures/supgp-reference-draft/provider.json",
+        "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/gps-source",
+      "pluginId": "com.orbpro.gps-source",
+      "name": "GPS Almanac (NAVCEN SEM/YUMA) Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/gps_source.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/current_sem.al3",
+        "test/fixtures/current_yuma.alm",
+        "test/fixtures/supgp-reference-draft/README.md",
+        "test/fixtures/supgp-reference-draft/provider.json",
+        "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/intelsat-source",
+      "pluginId": "com.orbpro.intelsat-source",
+      "name": "Intelsat (public ephemeris) Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "emit",
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "guest-link/emit_entry.cpp",
+        "src/intelsat_source.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/ephemeris_public.sample.html",
+        "test/fixtures/i_aor_e_302.00_is-21_20260710_235300.sample.txt",
+        "test/fixtures/supgp-reference-draft/README.md",
+        "test/fixtures/supgp-reference-draft/provider.json",
+        "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/iss-source",
+      "pluginId": "com.orbpro.iss-source",
+      "name": "ISS (NASA public OEM) Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "emit",
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "guest-link/emit_entry.cpp",
+        "src/iss_source.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/ISS.OEM_J2K_EPH.sample.txt",
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/supgp-reference-draft/README.md",
+        "test/fixtures/supgp-reference-draft/provider.json",
+        "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/oem-source-iss",
+      "pluginId": "com.digitalarsenal.data-source.oem-source-iss",
+      "name": "ISS $OEM Source Node",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "emit",
+        "emit_compact"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/oem_source_iss_module.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/oneweb-source",
+      "pluginId": "com.orbpro.oneweb-source",
+      "name": "OneWeb (Eutelsat) LTEF Data Source",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/oneweb_source.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/ltef.sample.csv",
+        "test/fixtures/supgp-reference-draft/README.md",
+        "test/fixtures/supgp-reference-draft/provider.json",
+        "test/module.test.mjs"
       ]
     },
     {
@@ -1077,7 +1093,53 @@
       "pluginFamily": "data_source",
       "version": "1.0.0",
       "methodIds": [
+        "emit",
         "pull"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 3,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "guest-link/emit_entry.cpp",
+        "src/spacex_starlink_source.cpp",
+        "test/meme_oem_test.cpp"
+      ],
+      "testFiles": [
+        "test/fixtures/MANIFEST.sample.txt",
+        "test/fixtures/PROVENANCE.md",
+        "test/fixtures/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+        "test/fixtures/meme/MEME_67851_STARLINK-36348_1340149_Operational_1463017800_UNCLASSIFIED.txt",
+        "test/meme_oem_test.cpp",
+        "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/flatsql",
+      "pluginId": "com.digitalarsenal.flatsql.store",
+      "name": "FlatSQL Store",
+      "pluginFamily": "storage",
+      "version": "2.0.2",
+      "methodIds": [
+        "append_records",
+        "compact",
+        "configure_index",
+        "configure_retention",
+        "query_records",
+        "reload",
+        "snapshot",
+        "upsert_view"
       ],
       "runtimeTargets": [
         "browser",
@@ -1091,15 +1153,276 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 0,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "src/spacex_starlink_source.cpp"
+        "src/sdn_node.cpp"
       ],
-      "testFiles": [
-        "test/module.test.mjs"
-      ]
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/od",
+      "pluginId": "org.sdn.flows.supplemental-omm.od",
+      "name": "Supplemental OMM Native Orbit Determination",
+      "pluginFamily": "analysis",
+      "version": "1.0.0",
+      "methodIds": [
+        "fit"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/providers/cpf",
+      "pluginId": "com.orbpro.cpf-source",
+      "name": "CPF Complete Ephemeris Provider",
+      "pluginFamily": "data_source",
+      "version": "2.0.0",
+      "methodIds": [
+        "emit"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/providers/glonass",
+      "pluginId": "com.orbpro.glonass-source",
+      "name": "GLONASS Complete Ephemeris Provider",
+      "pluginFamily": "data_source",
+      "version": "2.0.0",
+      "methodIds": [
+        "emit"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/providers/intelsat",
+      "pluginId": "com.orbpro.intelsat-source",
+      "name": "Intelsat Complete Ephemeris Provider",
+      "pluginFamily": "data_source",
+      "version": "2.0.0",
+      "methodIds": [
+        "emit"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/providers/iss",
+      "pluginId": "com.orbpro.iss-source",
+      "name": "ISS Complete Ephemeris Provider",
+      "pluginFamily": "data_source",
+      "version": "2.0.0",
+      "methodIds": [
+        "emit"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/providers/starlink",
+      "pluginId": "com.orbpro.spacex-starlink-source",
+      "name": "Starlink Complete Ephemeris Provider",
+      "pluginFamily": "data_source",
+      "version": "2.0.0",
+      "methodIds": [
+        "emit"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c",
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 1,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp",
+        "vendor/miniz-3.1.2/miniz.c"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/publication",
+      "pluginId": "org.sdn.flows.supplemental-omm.publication",
+      "name": "Supplemental OMM Publication",
+      "pluginFamily": "publication",
+      "version": "1.0.0",
+      "methodIds": [
+        "publish_records"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/status",
+      "pluginId": "org.sdn.flows.supplemental-omm.status",
+      "name": "Supplemental OMM Status",
+      "pluginFamily": "transform",
+      "version": "1.0.0",
+      "methodIds": [
+        "record_event"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/timer",
+      "pluginId": "org.sdn.flows.supplemental-omm.timer",
+      "name": "Supplemental OMM Hourly Timer Policy",
+      "pluginFamily": "infrastructure",
+      "version": "1.0.0",
+      "methodIds": [
+        "on_wakeup"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/timer_node.cpp"
+      ],
+      "testFiles": []
     },
     {
       "modulePath": "foundation/attitude-math",
@@ -1583,6 +1906,35 @@
       ]
     },
     {
+      "modulePath": "hostcap/flatsql-store",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-store",
+      "name": "FlatSQL Store (in-wasm OD-flow write lane)",
+      "pluginFamily": "hostcap",
+      "version": "0.1.0",
+      "methodIds": [
+        "store"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/flatsql_store_module.cpp"
+      ],
+      "testFiles": []
+    },
+    {
       "modulePath": "hostcap/http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "name": "SDN Host HTTP Request Node",
@@ -1892,6 +2244,69 @@
       ]
     },
     {
+      "modulePath": "maneuver/star-search",
+      "pluginId": "com.digitalarsenal.maneuver.star-search",
+      "name": "Star Interplanetary Broad Search",
+      "pluginFamily": "maneuver",
+      "version": "0.1.0",
+      "methodIds": [
+        "search_trajectories"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 16,
+      "cSourceFileCount": 0,
+      "testFileCount": 18,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/combo.cpp",
+        "src/constants.cpp",
+        "src/encounter.cpp",
+        "src/ephemeris.cpp",
+        "src/filter.cpp",
+        "src/flyby.cpp",
+        "src/lambert.cpp",
+        "src/leg.cpp",
+        "src/pipeline.cpp",
+        "src/status.cpp",
+        "src/threading.cpp",
+        "tests/harness/main.cpp",
+        "tests/harness/problem_text.cpp",
+        "tests/harness/test_core.cpp",
+        "tests/harness/test_lambert.cpp",
+        "tests/harness/test_pipeline.cpp"
+      ],
+      "testFiles": [
+        "tests/harness/.gitignore",
+        "tests/harness/Makefile",
+        "tests/harness/main.cpp",
+        "tests/harness/problem_text.cpp",
+        "tests/harness/problem_text.hpp",
+        "tests/harness/test_core.cpp",
+        "tests/harness/test_lambert.cpp",
+        "tests/harness/test_pipeline.cpp",
+        "tests/vectors/lambert_reference.tsv",
+        "tests/vectors/malformed_missing.problem",
+        "tests/vectors/reference/README.md",
+        "tests/vectors/reference/generate-reference.sh",
+        "tests/vectors/reference/test1_DVEGA.summary.json",
+        "tests/vectors/reference/test2_EMEJ.jsonl",
+        "tests/vectors/reference/test2_EMEJ.summary.json",
+        "tests/vectors/test2_EMEJ.ephem",
+        "tests/vectors/test2_EMEJ.parity.txt",
+        "tests/vectors/test2_EMEJ.problem"
+      ]
+    },
+    {
       "modulePath": "propagator/atmosphere",
       "pluginId": "atmosphere-model",
       "name": "Atmosphere Plugin",
@@ -2186,42 +2601,6 @@
         "tests/pivInvokeContract.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/tudat_wasm_derived.test.mjs"
-      ]
-    },
-    {
-      "modulePath": "shaders/sensor-shaders",
-      "pluginId": "com.orbpro.sensor-shaders",
-      "name": "OrbPro Sensor Shaders",
-      "pluginFamily": "shader",
-      "version": "1.0.0",
-      "methodIds": [
-        "get_shader_bundle",
-        "load_shader_bundle"
-      ],
-      "runtimeTargets": [
-        "browser",
-        "wasmedge"
-      ],
-      "hasBrowserWasmEdgeTargets": true,
-      "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
-      "sourceLanguages": [
-        "c",
-        "c++"
-      ],
-      "cxxSourceFileCount": 3,
-      "cSourceFileCount": 1,
-      "testFileCount": 1,
-      "parityScope": false,
-      "action": "outside-orekit-basilisk-parity",
-      "sourceFiles": [
-        "src/cpp/src/plugin_entrypoints.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/sensor_shaders_plugin.c",
-        "src/sensor_shaders_stream_bridge.cpp"
-      ],
-      "testFiles": [
-        "tests/sdk_compat.test.mjs"
       ]
     }
   ]

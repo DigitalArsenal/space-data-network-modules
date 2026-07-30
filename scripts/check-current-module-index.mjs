@@ -12,10 +12,10 @@ assert.ok(fs.existsSync(indexPath), "missing current module parity index");
 
 const checked = JSON.parse(fs.readFileSync(indexPath, "utf8"));
 const current = createCurrentModuleIndex(repoRoot);
-const expectedParityScopeTargetGaps = [
-  "analysis/sensor-coverage",
-  "analysis/sensor-model",
-];
+// analysis/sensor-coverage and analysis/sensor-model were the only remaining
+// parity-scope modules without both browser and WasmEdge runtime targets; both
+// moved to space-data-network-closed-modules, so this list is now empty.
+const expectedParityScopeTargetGaps = [];
 
 assert.equal(checked.moduleCount, current.moduleCount, "module count drifted");
 assert.equal(checked.parityScopeModuleCount, current.parityScopeModuleCount, "parity module count drifted");
@@ -40,7 +40,6 @@ for (const requiredModule of [
   "analysis/lambert-izzo",
   "analysis/maneuver",
   "analysis/od",
-  "analysis/sensor-coverage",
   "basilisk/runtime",
   "propagator/atmosphere",
   "propagator/cislunar",

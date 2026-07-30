@@ -18,12 +18,24 @@ test("current module parity index records SDK and implementation readiness", () 
   }
 });
 
-test("current module parity index excludes retired local coverage and swath modules", () => {
+test("current module parity index excludes retired and relocated modules", () => {
   const index = createCurrentModuleIndex(fileURLToPath(new URL("..", import.meta.url)));
   const modulePaths = new Set(index.modules.map((entry) => entry.modulePath));
   assert.equal(modulePaths.has("analysis/coverage"), false);
   assert.equal(modulePaths.has("analysis/swath"), false);
-  assert.equal(modulePaths.has("analysis/sensor-coverage"), true);
+  // Moved to space-data-network-closed-modules.
+  for (const relocated of [
+    "analysis/fastest-path",
+    "analysis/sensor-coverage",
+    "analysis/sensor-model",
+    "shaders/sensor-shaders",
+    "shaders/viewshed-shader",
+    "comms/rf-fspl",
+    "comms/rf-link-budget",
+  ]) {
+    assert.equal(modulePaths.has(relocated), false, `${relocated} must not be inventoried`);
+  }
+  assert.equal(modulePaths.has("analysis/od"), true);
 });
 
 test("current module parity index does not count browser-only shared direct modules as WasmEdge-ready", () => {

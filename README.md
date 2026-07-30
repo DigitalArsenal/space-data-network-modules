@@ -6,9 +6,8 @@ including migrated module families and Basilisk-derived module families.
 
 ## Structure
 
-- `foundation/`, `analysis/`, `propagator/`, `maneuver/`, `shaders/`,
-  `licensing/`, `delivery/`: migrated and parity-oriented SDK-compliant module
-  families
+- `foundation/`, `analysis/`, `propagator/`, `maneuver/`, `licensing/`,
+  `delivery/`: migrated and parity-oriented SDK-compliant module families
 - `basilisk/`: Basilisk-derived module plans and runtime seed modules
 - `packages/<domain>`: pending legacy migration targets when a package has not
   yet been moved into a family folder
@@ -112,16 +111,23 @@ including migrated module families and Basilisk-derived module families.
   - `foundation/` — `time`, `math-bspline`, `numerics`, `attitude-math`,
     `frames`, `orbits`
   - `propagator/` — `sgp4`, `hpop`, `atmosphere`, `cislunar`
-  - `analysis/` — `conjunction-assessment`, `maneuver`, `od`, `sensor-coverage`,
-    `sensor-model`
+  - `analysis/` — `access`, `catalog-synthesis`, `conjunction-assessment`,
+    `covariance`, `dop`, `lambert-izzo`, `launch-ascent`, `maneuver`, `od`,
+    `reentry`
   - `maneuver/` — `star-search` (interplanetary patched-conic broad search;
     threaded isomorphic-pthreads, C++ port of the MIT UzTak/star-search
     reference). Distinct from the legacy `analysis/maneuver`, which is
     near-Earth classical/ROE targeting.
   - `basilisk/` — runtime seed package plus generated Basilisk module plan
-  - `shaders/` — `sensor-shaders`, `viewshed-shader`
   - `licensing/` — `core`, `client-decrypt`, `protection-key-server`, `protection-license-client`
   - `delivery/` — legacy `plugin-delivery` compatibility fixture
+- Closed-tier modules live in the private `space-data-network-closed-modules`
+  repo under `packages/<name>`, not here. The `comms/` RF family
+  (`rf-antenna-pattern`, `rf-atmospheric-gaseous`, `rf-ber-modulation`,
+  `rf-cloud-fog`, `rf-diffraction`, `rf-doppler-fresnel`, `rf-empirical`,
+  `rf-fspl`, `rf-link-budget`, `rf-longley-rice`, `rf-rain`), the `shaders/`
+  family (`sensor-shaders`, `viewshed-shader`), and `analysis/fastest-path`,
+  `analysis/sensor-coverage`, `analysis/sensor-model` moved there.
 - Completed packages publish the shared isomorphic SDK artifact at
   `dist/isomorphic/module.wasm`.
 - Optional browser adapters may live under `dist/browser/`, but they are not the

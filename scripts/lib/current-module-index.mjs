@@ -23,7 +23,6 @@ const PARITY_UPDATE_MODULES = new Set([
   "analysis/lambert-izzo",
   "analysis/maneuver",
   "analysis/od",
-  "analysis/sensor-coverage",
   "basilisk/runtime",
   "foundation/attitude-math",
   "foundation/math-bspline",
@@ -39,7 +38,6 @@ const OUT_OF_PARITY_SCOPE_PREFIXES = [
   "comms/",
   "delivery/",
   "licensing/",
-  "shaders/",
 ];
 
 export function createCurrentModuleIndex(repoRoot) {
