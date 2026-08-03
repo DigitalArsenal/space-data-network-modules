@@ -1,0 +1,311 @@
+{
+  "pluginId": "com.digitalarsenal.flows.satnogs-rf-ingest",
+  "name": "SatNOGS RF Ingest Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Per-provider ingest flow, RF spectrum: a cron TIMER tick enters at satnogs-source:request, which emits ONE whole-table hostcap/http-request GET of the SatNOGS DB transmitters API (bulk, never a pagination walk) carrying the identifying User-Agent the source-policy.json fetch discipline mandates. satnogs-source:parse joins that job with the response, decodes ~4,994 transmitter rows into a size-prefixed $RFB record stream (batch = sha256 of the payload; Hz -> MHz per the normative RFB units rule; one record per LINK_DIRECTION so a Transceiver/Transponder becomes an UPLINK+DOWNLINK pair sharing ID_TRANSMITTER), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. SatNOGS DB is CC-BY-SA-4.0: every record carries the attribution in CITATION and the batch meta carries license/license_url/citation, keeping the share-alike obligation contained to its own licence-marked batch. Results land on the egress sink. All decisions live in-wasm; the host supplies only the http and storage connectors.",
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "timer_satnogs_rf",
+      "displayName": "Flow trigger timer-satnogs-rf",
+      "description": "Compiled-flow ingress for trigger \"timer-satnogs-rf\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload at all, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON host result: {\"schema\",\"inserted\",\"batch_id\",\"reconciled_duplicates\"?,\"reconciled_old_batches\"?,\"archived\"?,\"provenance\"?}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Ingest result summary."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "RFB.fbs",
+      "fileIdentifier": "$RFB",
+      "rootTypeName": "RFB"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_satnogs_rf_ingest-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "methodId": "parse",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest_rfb",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-rfb-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "rfb_meta",
+      "toNodeId": "ingest_rfb",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-rfb-records",
+      "fromNodeId": "parse",
+      "fromPortId": "rfb_records",
+      "toNodeId": "ingest_rfb",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "RFB.fbs",
+          "fileIdentifier": "$RFB",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "RFB",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-rfb-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_rfb",
+      "toPortId": "raw",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-rfb-egress",
+      "fromNodeId": "ingest_rfb",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "timer-satnogs-rf",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "timer-satnogs-rf",
+      "targetNodeId": "req",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}
