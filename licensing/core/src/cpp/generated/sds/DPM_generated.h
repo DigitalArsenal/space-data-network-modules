@@ -62,33 +62,41 @@ enum class publicationAssetKind : int8_t {
   QUERY_INDEX = 1,
   MANIFEST = 2,
   OTHER = 3,
+  /// A $CES catalog embedding shard (dense per-object vector table).
+  EMBEDDING_SHARD = 4,
+  /// A $QEM query encoder model (pruned static token-embedding table).
+  QUERY_ENCODER_MODEL = 5,
   MIN = DATA_SHARD,
-  MAX = OTHER
+  MAX = QUERY_ENCODER_MODEL
 };
 
-inline const publicationAssetKind (&EnumValuespublicationAssetKind())[4] {
+inline const publicationAssetKind (&EnumValuespublicationAssetKind())[6] {
   static const publicationAssetKind values[] = {
     publicationAssetKind::DATA_SHARD,
     publicationAssetKind::QUERY_INDEX,
     publicationAssetKind::MANIFEST,
-    publicationAssetKind::OTHER
+    publicationAssetKind::OTHER,
+    publicationAssetKind::EMBEDDING_SHARD,
+    publicationAssetKind::QUERY_ENCODER_MODEL
   };
   return values;
 }
 
 inline const char * const *EnumNamespublicationAssetKind() {
-  static const char * const names[5] = {
+  static const char * const names[7] = {
     "DATA_SHARD",
     "QUERY_INDEX",
     "MANIFEST",
     "OTHER",
+    "EMBEDDING_SHARD",
+    "QUERY_ENCODER_MODEL",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamepublicationAssetKind(publicationAssetKind e) {
-  if (::flatbuffers::IsOutRange(e, publicationAssetKind::DATA_SHARD, publicationAssetKind::OTHER)) return "";
+  if (::flatbuffers::IsOutRange(e, publicationAssetKind::DATA_SHARD, publicationAssetKind::QUERY_ENCODER_MODEL)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamespublicationAssetKind()[index];
 }
@@ -571,6 +579,9 @@ struct DPMSourceBatchT : public ::flatbuffers::NativeTable {
   std::string PARSER_VERSION{};
   uint64_t RECORD_COUNT = 0;
   std::vector<std::string> WARNINGS{};
+  std::string LICENSE{};
+  std::string LICENSE_URL{};
+  std::string CITATION{};
 };
 
 /// Source batch metadata bound into the dataset publication.
@@ -587,7 +598,10 @@ struct DPMSourceBatch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_RETRIEVED_AT = 14,
     VT_PARSER_VERSION = 16,
     VT_RECORD_COUNT = 18,
-    VT_WARNINGS = 20
+    VT_WARNINGS = 20,
+    VT_LICENSE = 22,
+    VT_LICENSE_URL = 24,
+    VT_CITATION = 26
   };
   /// Provider-controlled source name.
   const ::flatbuffers::String *SOURCE_NAME() const {
@@ -625,6 +639,22 @@ struct DPMSourceBatch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *WARNINGS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_WARNINGS);
   }
+  /// SPDX license identifier governing the source data, e.g. CC-BY-4.0 or
+  /// CC-BY-SA-4.0. Machine-readable license provenance is REQUIRED before any
+  /// record derived from this batch may be republished; share-alike terms
+  /// propagate from this batch to every derived record.
+  const ::flatbuffers::String *LICENSE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LICENSE);
+  }
+  /// Canonical URL of the license text.
+  const ::flatbuffers::String *LICENSE_URL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LICENSE_URL);
+  }
+  /// Attribution/citation string the source license requires downstream
+  /// republication to carry.
+  const ::flatbuffers::String *CITATION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CITATION);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -646,6 +676,12 @@ struct DPMSourceBatch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_WARNINGS) &&
            verifier.VerifyVector(WARNINGS()) &&
            verifier.VerifyVectorOfStrings(WARNINGS()) &&
+           VerifyOffset(verifier, VT_LICENSE) &&
+           verifier.VerifyString(LICENSE()) &&
+           VerifyOffset(verifier, VT_LICENSE_URL) &&
+           verifier.VerifyString(LICENSE_URL()) &&
+           VerifyOffset(verifier, VT_CITATION) &&
+           verifier.VerifyString(CITATION()) &&
            verifier.EndTable();
   }
   DPMSourceBatchT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -684,6 +720,15 @@ struct DPMSourceBatchBuilder {
   void add_WARNINGS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> WARNINGS) {
     fbb_.AddOffset(DPMSourceBatch::VT_WARNINGS, WARNINGS);
   }
+  void add_LICENSE(::flatbuffers::Offset<::flatbuffers::String> LICENSE) {
+    fbb_.AddOffset(DPMSourceBatch::VT_LICENSE, LICENSE);
+  }
+  void add_LICENSE_URL(::flatbuffers::Offset<::flatbuffers::String> LICENSE_URL) {
+    fbb_.AddOffset(DPMSourceBatch::VT_LICENSE_URL, LICENSE_URL);
+  }
+  void add_CITATION(::flatbuffers::Offset<::flatbuffers::String> CITATION) {
+    fbb_.AddOffset(DPMSourceBatch::VT_CITATION, CITATION);
+  }
   explicit DPMSourceBatchBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -705,9 +750,15 @@ inline ::flatbuffers::Offset<DPMSourceBatch> CreateDPMSourceBatch(
     ::flatbuffers::Offset<::flatbuffers::String> RETRIEVED_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PARSER_VERSION = 0,
     uint64_t RECORD_COUNT = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> WARNINGS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> WARNINGS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LICENSE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LICENSE_URL = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CITATION = 0) {
   DPMSourceBatchBuilder builder_(_fbb);
   builder_.add_RECORD_COUNT(RECORD_COUNT);
+  builder_.add_CITATION(CITATION);
+  builder_.add_LICENSE_URL(LICENSE_URL);
+  builder_.add_LICENSE(LICENSE);
   builder_.add_WARNINGS(WARNINGS);
   builder_.add_PARSER_VERSION(PARSER_VERSION);
   builder_.add_RETRIEVED_AT(RETRIEVED_AT);
@@ -734,7 +785,10 @@ inline ::flatbuffers::Offset<DPMSourceBatch> CreateDPMSourceBatchDirect(
     const char *RETRIEVED_AT = nullptr,
     const char *PARSER_VERSION = nullptr,
     uint64_t RECORD_COUNT = 0,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *WARNINGS = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *WARNINGS = nullptr,
+    const char *LICENSE = nullptr,
+    const char *LICENSE_URL = nullptr,
+    const char *CITATION = nullptr) {
   auto SOURCE_NAME__ = SOURCE_NAME ? _fbb.CreateString(SOURCE_NAME) : 0;
   auto SOURCE_URL__ = SOURCE_URL ? _fbb.CreateString(SOURCE_URL) : 0;
   auto SOURCE_SHA256__ = SOURCE_SHA256 ? _fbb.CreateString(SOURCE_SHA256) : 0;
@@ -743,6 +797,9 @@ inline ::flatbuffers::Offset<DPMSourceBatch> CreateDPMSourceBatchDirect(
   auto RETRIEVED_AT__ = RETRIEVED_AT ? _fbb.CreateString(RETRIEVED_AT) : 0;
   auto PARSER_VERSION__ = PARSER_VERSION ? _fbb.CreateString(PARSER_VERSION) : 0;
   auto WARNINGS__ = WARNINGS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*WARNINGS) : 0;
+  auto LICENSE__ = LICENSE ? _fbb.CreateString(LICENSE) : 0;
+  auto LICENSE_URL__ = LICENSE_URL ? _fbb.CreateString(LICENSE_URL) : 0;
+  auto CITATION__ = CITATION ? _fbb.CreateString(CITATION) : 0;
   return CreateDPMSourceBatch(
       _fbb,
       SOURCE_NAME__,
@@ -753,7 +810,10 @@ inline ::flatbuffers::Offset<DPMSourceBatch> CreateDPMSourceBatchDirect(
       RETRIEVED_AT__,
       PARSER_VERSION__,
       RECORD_COUNT,
-      WARNINGS__);
+      WARNINGS__,
+      LICENSE__,
+      LICENSE_URL__,
+      CITATION__);
 }
 
 ::flatbuffers::Offset<DPMSourceBatch> CreateDPMSourceBatch(::flatbuffers::FlatBufferBuilder &_fbb, const DPMSourceBatchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1610,6 +1670,9 @@ inline void DPMSourceBatch::UnPackTo(DPMSourceBatchT *_o, const ::flatbuffers::r
   { auto _e = PARSER_VERSION(); if (_e) _o->PARSER_VERSION = _e->str(); }
   { auto _e = RECORD_COUNT(); _o->RECORD_COUNT = _e; }
   { auto _e = WARNINGS(); if (_e) { _o->WARNINGS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->WARNINGS[_i] = _e->Get(_i)->str(); } } else { _o->WARNINGS.resize(0); } }
+  { auto _e = LICENSE(); if (_e) _o->LICENSE = _e->str(); }
+  { auto _e = LICENSE_URL(); if (_e) _o->LICENSE_URL = _e->str(); }
+  { auto _e = CITATION(); if (_e) _o->CITATION = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<DPMSourceBatch> CreateDPMSourceBatch(::flatbuffers::FlatBufferBuilder &_fbb, const DPMSourceBatchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1629,6 +1692,9 @@ inline ::flatbuffers::Offset<DPMSourceBatch> DPMSourceBatch::Pack(::flatbuffers:
   auto _PARSER_VERSION = _o->PARSER_VERSION.empty() ? 0 : _fbb.CreateString(_o->PARSER_VERSION);
   auto _RECORD_COUNT = _o->RECORD_COUNT;
   auto _WARNINGS = _o->WARNINGS.size() ? _fbb.CreateVectorOfStrings(_o->WARNINGS) : 0;
+  auto _LICENSE = _o->LICENSE.empty() ? 0 : _fbb.CreateString(_o->LICENSE);
+  auto _LICENSE_URL = _o->LICENSE_URL.empty() ? 0 : _fbb.CreateString(_o->LICENSE_URL);
+  auto _CITATION = _o->CITATION.empty() ? 0 : _fbb.CreateString(_o->CITATION);
   return CreateDPMSourceBatch(
       _fbb,
       _SOURCE_NAME,
@@ -1639,7 +1705,10 @@ inline ::flatbuffers::Offset<DPMSourceBatch> DPMSourceBatch::Pack(::flatbuffers:
       _RETRIEVED_AT,
       _PARSER_VERSION,
       _RECORD_COUNT,
-      _WARNINGS);
+      _WARNINGS,
+      _LICENSE,
+      _LICENSE_URL,
+      _CITATION);
 }
 
 inline DPMQueryBindingT *DPMQueryBinding::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
