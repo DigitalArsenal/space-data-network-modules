@@ -255,6 +255,7 @@ struct CATT : public ::flatbuffers::NativeTable {
   double MASS = 0.0;
   massCategory MASS_TYPE = massCategory::DRY;
   std::vector<std::unique_ptr<PLDT>> PAYLOADS{};
+  std::string BUS_ID{};
   CATT() = default;
   CATT(const CATT &o);
   CATT(CATT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -289,7 +290,8 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_SIZE = 42,
     VT_MASS = 44,
     VT_MASS_TYPE = 46,
-    VT_PAYLOADS = 48
+    VT_PAYLOADS = 48,
+    VT_BUS_ID = 50
   };
   /// Satellite Name(s)
   const ::flatbuffers::String *OBJECT_NAME() const {
@@ -383,6 +385,13 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<PLD>> *PAYLOADS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PLD>> *>(VT_PAYLOADS);
   }
+  /// Join key to the BUS record describing this object's satellite bus; holds
+  /// that record's BUS.ID verbatim. MANUFACTURER, DIM_X/DIM_Y/DIM_Z, DRY_MASS
+  /// and WET_MASS are properties of the bus design and live on BUS — they are
+  /// NOT duplicated here. Empty when the bus is unknown.
+  const ::flatbuffers::String *BUS_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_BUS_ID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -418,6 +427,8 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_PAYLOADS) &&
            verifier.VerifyVector(PAYLOADS()) &&
            verifier.VerifyVectorOfTables(PAYLOADS()) &&
+           VerifyOffset(verifier, VT_BUS_ID) &&
+           verifier.VerifyString(BUS_ID()) &&
            verifier.EndTable();
   }
   CATT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -498,6 +509,9 @@ struct CATBuilder {
   void add_PAYLOADS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLD>>> PAYLOADS) {
     fbb_.AddOffset(CAT::VT_PAYLOADS, PAYLOADS);
   }
+  void add_BUS_ID(::flatbuffers::Offset<::flatbuffers::String> BUS_ID) {
+    fbb_.AddOffset(CAT::VT_BUS_ID, BUS_ID);
+  }
   explicit CATBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -533,7 +547,8 @@ inline ::flatbuffers::Offset<CAT> CreateCAT(
     double SIZE = 0.0,
     double MASS = 0.0,
     massCategory MASS_TYPE = massCategory::DRY,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLD>>> PAYLOADS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLD>>> PAYLOADS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> BUS_ID = 0) {
   CATBuilder builder_(_fbb);
   builder_.add_MASS(MASS);
   builder_.add_SIZE(SIZE);
@@ -542,6 +557,7 @@ inline ::flatbuffers::Offset<CAT> CreateCAT(
   builder_.add_APOGEE(APOGEE);
   builder_.add_INCLINATION(INCLINATION);
   builder_.add_PERIOD(PERIOD);
+  builder_.add_BUS_ID(BUS_ID);
   builder_.add_PAYLOADS(PAYLOADS);
   builder_.add_DEPLOYMENT_DATE(DEPLOYMENT_DATE);
   builder_.add_ORBIT_CENTER(ORBIT_CENTER);
@@ -590,7 +606,8 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
     double SIZE = 0.0,
     double MASS = 0.0,
     massCategory MASS_TYPE = massCategory::DRY,
-    const std::vector<::flatbuffers::Offset<PLD>> *PAYLOADS = nullptr) {
+    const std::vector<::flatbuffers::Offset<PLD>> *PAYLOADS = nullptr,
+    const char *BUS_ID = nullptr) {
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   auto LAUNCH_DATE__ = LAUNCH_DATE ? _fbb.CreateString(LAUNCH_DATE) : 0;
@@ -599,6 +616,7 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
   auto ORBIT_CENTER__ = ORBIT_CENTER ? _fbb.CreateString(ORBIT_CENTER) : 0;
   auto DEPLOYMENT_DATE__ = DEPLOYMENT_DATE ? _fbb.CreateString(DEPLOYMENT_DATE) : 0;
   auto PAYLOADS__ = PAYLOADS ? _fbb.CreateVector<::flatbuffers::Offset<PLD>>(*PAYLOADS) : 0;
+  auto BUS_ID__ = BUS_ID ? _fbb.CreateString(BUS_ID) : 0;
   return CreateCAT(
       _fbb,
       OBJECT_NAME__,
@@ -623,7 +641,8 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
       SIZE,
       MASS,
       MASS_TYPE,
-      PAYLOADS__);
+      PAYLOADS__,
+      BUS_ID__);
 }
 
 ::flatbuffers::Offset<CAT> CreateCAT(::flatbuffers::FlatBufferBuilder &_fbb, const CATT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -650,7 +669,8 @@ inline CATT::CATT(const CATT &o)
         MANEUVERABLE(o.MANEUVERABLE),
         SIZE(o.SIZE),
         MASS(o.MASS),
-        MASS_TYPE(o.MASS_TYPE) {
+        MASS_TYPE(o.MASS_TYPE),
+        BUS_ID(o.BUS_ID) {
   PAYLOADS.reserve(o.PAYLOADS.size());
   for (const auto &PAYLOADS_ : o.PAYLOADS) { PAYLOADS.emplace_back((PAYLOADS_) ? new PLDT(*PAYLOADS_) : nullptr); }
 }
@@ -679,6 +699,7 @@ inline CATT &CATT::operator=(CATT o) FLATBUFFERS_NOEXCEPT {
   std::swap(MASS, o.MASS);
   std::swap(MASS_TYPE, o.MASS_TYPE);
   std::swap(PAYLOADS, o.PAYLOADS);
+  std::swap(BUS_ID, o.BUS_ID);
   return *this;
 }
 
@@ -714,6 +735,7 @@ inline void CAT::UnPackTo(CATT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = MASS(); _o->MASS = _e; }
   { auto _e = MASS_TYPE(); _o->MASS_TYPE = _e; }
   { auto _e = PAYLOADS(); if (_e) { _o->PAYLOADS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->PAYLOADS[_i]) { _e->Get(_i)->UnPackTo(_o->PAYLOADS[_i].get(), _resolver); } else { _o->PAYLOADS[_i] = std::unique_ptr<PLDT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->PAYLOADS.resize(0); } }
+  { auto _e = BUS_ID(); if (_e) _o->BUS_ID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<CAT> CreateCAT(::flatbuffers::FlatBufferBuilder &_fbb, const CATT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -747,6 +769,7 @@ inline ::flatbuffers::Offset<CAT> CAT::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _MASS = _o->MASS;
   auto _MASS_TYPE = _o->MASS_TYPE;
   auto _PAYLOADS = _o->PAYLOADS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLD>> (_o->PAYLOADS.size(), [](size_t i, _VectorArgs *__va) { return CreatePLD(*__va->__fbb, __va->__o->PAYLOADS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _BUS_ID = _o->BUS_ID.empty() ? 0 : _fbb.CreateString(_o->BUS_ID);
   return CreateCAT(
       _fbb,
       _OBJECT_NAME,
@@ -771,7 +794,8 @@ inline ::flatbuffers::Offset<CAT> CAT::Pack(::flatbuffers::FlatBufferBuilder &_f
       _SIZE,
       _MASS,
       _MASS_TYPE,
-      _PAYLOADS);
+      _PAYLOADS,
+      _BUS_ID);
 }
 
 inline const CAT *GetCAT(const void *buf) {

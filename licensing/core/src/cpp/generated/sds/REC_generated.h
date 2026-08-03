@@ -21,6 +21,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "ANI_generated.h"
 #include "AOF_generated.h"
 #include "APM_generated.h"
+#include "APP_generated.h"
 #include "ARM_generated.h"
 #include "AST_generated.h"
 #include "ATD_generated.h"
@@ -34,16 +35,20 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "CAQ_generated.h"
 #include "CAT_generated.h"
 #include "CDM_generated.h"
+#include "CES_generated.h"
 #include "CFP_generated.h"
 #include "CHN_generated.h"
 #include "CLT_generated.h"
 #include "CMS_generated.h"
+#include "CMT_generated.h"
 #include "COM_generated.h"
 #include "COT_generated.h"
+#include "CPS_generated.h"
 #include "CRD_generated.h"
 #include "CRM_generated.h"
 #include "CSM_generated.h"
 #include "CTR_generated.h"
+#include "CVG_generated.h"
 #include "CZM_generated.h"
 #include "DFH_generated.h"
 #include "DMG_generated.h"
@@ -63,7 +68,9 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "FCS_generated.h"
 #include "FPC_generated.h"
 #include "FRM_generated.h"
+#include "FSB_generated.h"
 #include "FSM_generated.h"
+#include "FSO_generated.h"
 #include "FSP_generated.h"
 #include "GDI_generated.h"
 #include "GEO_generated.h"
@@ -71,6 +78,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "GNO_generated.h"
 #include "GPX_generated.h"
 #include "GRV_generated.h"
+#include "GST_generated.h"
 #include "GVH_generated.h"
 #include "HEL_generated.h"
 #include "HFC_generated.h"
@@ -96,6 +104,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "LPF_generated.h"
 #include "LWK_generated.h"
 #include "MBL_generated.h"
+#include "MDP_generated.h"
+#include "MDS_generated.h"
 #include "MET_generated.h"
 #include "MFE_generated.h"
 #include "MNF_generated.h"
@@ -121,20 +131,25 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "OOS_generated.h"
 #include "OOT_generated.h"
 #include "OPM_generated.h"
+#include "OPP_generated.h"
 #include "OSM_generated.h"
 #include "PCF_generated.h"
 #include "PGM_generated.h"
 #include "PHY_generated.h"
 #include "PIV_generated.h"
+#include "PKB_generated.h"
 #include "PLD_generated.h"
 #include "PLG_generated.h"
 #include "PLK_generated.h"
+#include "PMM_generated.h"
+#include "PNL_generated.h"
 #include "PNM_generated.h"
 #include "PPE_generated.h"
 #include "PRG_generated.h"
 #include "PRR_generated.h"
 #include "PRW_generated.h"
 #include "PUR_generated.h"
+#include "QEM_generated.h"
 #include "RAF_generated.h"
 #include "RBK_generated.h"
 #include "RCF_generated.h"
@@ -147,17 +162,21 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "RFM_generated.h"
 #include "RFO_generated.h"
 #include "ROC_generated.h"
+#include "RPT_generated.h"
 #include "SAR_generated.h"
+#include "SBM_generated.h"
 #include "SCC_generated.h"
 #include "SCM_generated.h"
 #include "SCN_generated.h"
 #include "SCV_generated.h"
+#include "SCX_generated.h"
 #include "SDF_generated.h"
 #include "SDL_generated.h"
 #include "SDR_generated.h"
 #include "SEN_generated.h"
 #include "SEO_generated.h"
 #include "SEV_generated.h"
+#include "SHC_generated.h"
 #include "SHW_generated.h"
 #include "SIT_generated.h"
 #include "SKI_generated.h"
@@ -169,8 +188,10 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "SPW_generated.h"
 #include "SRI_generated.h"
 #include "STF_generated.h"
+#include "STO_generated.h"
 #include "STR_generated.h"
 #include "STV_generated.h"
+#include "SUB_generated.h"
 #include "SWR_generated.h"
 #include "TAB_generated.h"
 #include "TCF_generated.h"
@@ -184,8 +205,10 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "TRE_generated.h"
 #include "TRK_generated.h"
 #include "TRN_generated.h"
+#include "VAM_generated.h"
 #include "VCM_generated.h"
 #include "VST_generated.h"
+#include "WKS_generated.h"
 #include "WPN_generated.h"
 #include "WTH_generated.h"
 #include "XTC_generated.h"
@@ -376,11 +399,34 @@ enum class RecordType : uint8_t {
   SCN = 174,
   VST = 175,
   ENT = 176,
+  VAM = 177,
+  APP = 178,
+  CMT = 179,
+  SCX = 180,
+  CVG = 181,
+  PKB = 182,
+  RPT = 183,
+  STO = 184,
+  SUB = 185,
+  WKS = 186,
+  CPS = 187,
+  FSB = 188,
+  FSO = 189,
+  GST = 190,
+  MDP = 191,
+  MDS = 192,
+  PNL = 193,
+  SHC = 194,
+  CES = 195,
+  QEM = 196,
+  SBM = 197,
+  PMM = 198,
+  OPP = 199,
   MIN = NONE,
-  MAX = ENT
+  MAX = OPP
 };
 
-inline const RecordType (&EnumValuesRecordType())[177] {
+inline const RecordType (&EnumValuesRecordType())[200] {
   static const RecordType values[] = {
     RecordType::NONE,
     RecordType::ACL,
@@ -558,13 +604,36 @@ inline const RecordType (&EnumValuesRecordType())[177] {
     RecordType::SCC,
     RecordType::SCN,
     RecordType::VST,
-    RecordType::ENT
+    RecordType::ENT,
+    RecordType::VAM,
+    RecordType::APP,
+    RecordType::CMT,
+    RecordType::SCX,
+    RecordType::CVG,
+    RecordType::PKB,
+    RecordType::RPT,
+    RecordType::STO,
+    RecordType::SUB,
+    RecordType::WKS,
+    RecordType::CPS,
+    RecordType::FSB,
+    RecordType::FSO,
+    RecordType::GST,
+    RecordType::MDP,
+    RecordType::MDS,
+    RecordType::PNL,
+    RecordType::SHC,
+    RecordType::CES,
+    RecordType::QEM,
+    RecordType::SBM,
+    RecordType::PMM,
+    RecordType::OPP
   };
   return values;
 }
 
 inline const char * const *EnumNamesRecordType() {
-  static const char * const names[178] = {
+  static const char * const names[201] = {
     "NONE",
     "ACL",
     "ACM",
@@ -742,13 +811,36 @@ inline const char * const *EnumNamesRecordType() {
     "SCN",
     "VST",
     "ENT",
+    "VAM",
+    "APP",
+    "CMT",
+    "SCX",
+    "CVG",
+    "PKB",
+    "RPT",
+    "STO",
+    "SUB",
+    "WKS",
+    "CPS",
+    "FSB",
+    "FSO",
+    "GST",
+    "MDP",
+    "MDS",
+    "PNL",
+    "SHC",
+    "CES",
+    "QEM",
+    "SBM",
+    "PMM",
+    "OPP",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameRecordType(RecordType e) {
-  if (::flatbuffers::IsOutRange(e, RecordType::NONE, RecordType::ENT)) return "";
+  if (::flatbuffers::IsOutRange(e, RecordType::NONE, RecordType::OPP)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesRecordType()[index];
 }
@@ -1461,6 +1553,98 @@ template<> struct RecordTypeTraits<ENT> {
   static const RecordType enum_value = RecordType::ENT;
 };
 
+template<> struct RecordTypeTraits<VAM> {
+  static const RecordType enum_value = RecordType::VAM;
+};
+
+template<> struct RecordTypeTraits<APP> {
+  static const RecordType enum_value = RecordType::APP;
+};
+
+template<> struct RecordTypeTraits<CMT> {
+  static const RecordType enum_value = RecordType::CMT;
+};
+
+template<> struct RecordTypeTraits<SCX> {
+  static const RecordType enum_value = RecordType::SCX;
+};
+
+template<> struct RecordTypeTraits<CVG> {
+  static const RecordType enum_value = RecordType::CVG;
+};
+
+template<> struct RecordTypeTraits<PKB> {
+  static const RecordType enum_value = RecordType::PKB;
+};
+
+template<> struct RecordTypeTraits<RPT> {
+  static const RecordType enum_value = RecordType::RPT;
+};
+
+template<> struct RecordTypeTraits<STO> {
+  static const RecordType enum_value = RecordType::STO;
+};
+
+template<> struct RecordTypeTraits<SUB> {
+  static const RecordType enum_value = RecordType::SUB;
+};
+
+template<> struct RecordTypeTraits<WKS> {
+  static const RecordType enum_value = RecordType::WKS;
+};
+
+template<> struct RecordTypeTraits<CPS> {
+  static const RecordType enum_value = RecordType::CPS;
+};
+
+template<> struct RecordTypeTraits<FSB> {
+  static const RecordType enum_value = RecordType::FSB;
+};
+
+template<> struct RecordTypeTraits<FSO> {
+  static const RecordType enum_value = RecordType::FSO;
+};
+
+template<> struct RecordTypeTraits<GST> {
+  static const RecordType enum_value = RecordType::GST;
+};
+
+template<> struct RecordTypeTraits<MDP> {
+  static const RecordType enum_value = RecordType::MDP;
+};
+
+template<> struct RecordTypeTraits<MDS> {
+  static const RecordType enum_value = RecordType::MDS;
+};
+
+template<> struct RecordTypeTraits<PNL> {
+  static const RecordType enum_value = RecordType::PNL;
+};
+
+template<> struct RecordTypeTraits<SHC> {
+  static const RecordType enum_value = RecordType::SHC;
+};
+
+template<> struct RecordTypeTraits<CES> {
+  static const RecordType enum_value = RecordType::CES;
+};
+
+template<> struct RecordTypeTraits<QEM> {
+  static const RecordType enum_value = RecordType::QEM;
+};
+
+template<> struct RecordTypeTraits<SBM> {
+  static const RecordType enum_value = RecordType::SBM;
+};
+
+template<> struct RecordTypeTraits<PMM> {
+  static const RecordType enum_value = RecordType::PMM;
+};
+
+template<> struct RecordTypeTraits<OPP> {
+  static const RecordType enum_value = RecordType::OPP;
+};
+
 template<typename T> struct RecordTypeUnionTraits {
   static const RecordType enum_value = RecordType::NONE;
 };
@@ -2167,6 +2351,98 @@ template<> struct RecordTypeUnionTraits<VSTT> {
 
 template<> struct RecordTypeUnionTraits<ENTT> {
   static const RecordType enum_value = RecordType::ENT;
+};
+
+template<> struct RecordTypeUnionTraits<VAMT> {
+  static const RecordType enum_value = RecordType::VAM;
+};
+
+template<> struct RecordTypeUnionTraits<APPT> {
+  static const RecordType enum_value = RecordType::APP;
+};
+
+template<> struct RecordTypeUnionTraits<CMTT> {
+  static const RecordType enum_value = RecordType::CMT;
+};
+
+template<> struct RecordTypeUnionTraits<SCXT> {
+  static const RecordType enum_value = RecordType::SCX;
+};
+
+template<> struct RecordTypeUnionTraits<CVGT> {
+  static const RecordType enum_value = RecordType::CVG;
+};
+
+template<> struct RecordTypeUnionTraits<PKBT> {
+  static const RecordType enum_value = RecordType::PKB;
+};
+
+template<> struct RecordTypeUnionTraits<RPTT> {
+  static const RecordType enum_value = RecordType::RPT;
+};
+
+template<> struct RecordTypeUnionTraits<STOT> {
+  static const RecordType enum_value = RecordType::STO;
+};
+
+template<> struct RecordTypeUnionTraits<SUBT> {
+  static const RecordType enum_value = RecordType::SUB;
+};
+
+template<> struct RecordTypeUnionTraits<WKST> {
+  static const RecordType enum_value = RecordType::WKS;
+};
+
+template<> struct RecordTypeUnionTraits<CPST> {
+  static const RecordType enum_value = RecordType::CPS;
+};
+
+template<> struct RecordTypeUnionTraits<FSBT> {
+  static const RecordType enum_value = RecordType::FSB;
+};
+
+template<> struct RecordTypeUnionTraits<FSOT> {
+  static const RecordType enum_value = RecordType::FSO;
+};
+
+template<> struct RecordTypeUnionTraits<GSTT> {
+  static const RecordType enum_value = RecordType::GST;
+};
+
+template<> struct RecordTypeUnionTraits<MDPT> {
+  static const RecordType enum_value = RecordType::MDP;
+};
+
+template<> struct RecordTypeUnionTraits<MDST> {
+  static const RecordType enum_value = RecordType::MDS;
+};
+
+template<> struct RecordTypeUnionTraits<PNLT> {
+  static const RecordType enum_value = RecordType::PNL;
+};
+
+template<> struct RecordTypeUnionTraits<SHCT> {
+  static const RecordType enum_value = RecordType::SHC;
+};
+
+template<> struct RecordTypeUnionTraits<CEST> {
+  static const RecordType enum_value = RecordType::CES;
+};
+
+template<> struct RecordTypeUnionTraits<QEMT> {
+  static const RecordType enum_value = RecordType::QEM;
+};
+
+template<> struct RecordTypeUnionTraits<SBMT> {
+  static const RecordType enum_value = RecordType::SBM;
+};
+
+template<> struct RecordTypeUnionTraits<PMMT> {
+  static const RecordType enum_value = RecordType::PMM;
+};
+
+template<> struct RecordTypeUnionTraits<OPPT> {
+  static const RecordType enum_value = RecordType::OPP;
 };
 
 struct RecordTypeUnion {
@@ -3607,6 +3883,190 @@ struct RecordTypeUnion {
     return type == RecordType::ENT ?
       reinterpret_cast<const ENTT *>(value) : nullptr;
   }
+  VAMT *AsVAM() {
+    return type == RecordType::VAM ?
+      reinterpret_cast<VAMT *>(value) : nullptr;
+  }
+  const VAMT *AsVAM() const {
+    return type == RecordType::VAM ?
+      reinterpret_cast<const VAMT *>(value) : nullptr;
+  }
+  APPT *AsAPP() {
+    return type == RecordType::APP ?
+      reinterpret_cast<APPT *>(value) : nullptr;
+  }
+  const APPT *AsAPP() const {
+    return type == RecordType::APP ?
+      reinterpret_cast<const APPT *>(value) : nullptr;
+  }
+  CMTT *AsCMT() {
+    return type == RecordType::CMT ?
+      reinterpret_cast<CMTT *>(value) : nullptr;
+  }
+  const CMTT *AsCMT() const {
+    return type == RecordType::CMT ?
+      reinterpret_cast<const CMTT *>(value) : nullptr;
+  }
+  SCXT *AsSCX() {
+    return type == RecordType::SCX ?
+      reinterpret_cast<SCXT *>(value) : nullptr;
+  }
+  const SCXT *AsSCX() const {
+    return type == RecordType::SCX ?
+      reinterpret_cast<const SCXT *>(value) : nullptr;
+  }
+  CVGT *AsCVG() {
+    return type == RecordType::CVG ?
+      reinterpret_cast<CVGT *>(value) : nullptr;
+  }
+  const CVGT *AsCVG() const {
+    return type == RecordType::CVG ?
+      reinterpret_cast<const CVGT *>(value) : nullptr;
+  }
+  PKBT *AsPKB() {
+    return type == RecordType::PKB ?
+      reinterpret_cast<PKBT *>(value) : nullptr;
+  }
+  const PKBT *AsPKB() const {
+    return type == RecordType::PKB ?
+      reinterpret_cast<const PKBT *>(value) : nullptr;
+  }
+  RPTT *AsRPT() {
+    return type == RecordType::RPT ?
+      reinterpret_cast<RPTT *>(value) : nullptr;
+  }
+  const RPTT *AsRPT() const {
+    return type == RecordType::RPT ?
+      reinterpret_cast<const RPTT *>(value) : nullptr;
+  }
+  STOT *AsSTO() {
+    return type == RecordType::STO ?
+      reinterpret_cast<STOT *>(value) : nullptr;
+  }
+  const STOT *AsSTO() const {
+    return type == RecordType::STO ?
+      reinterpret_cast<const STOT *>(value) : nullptr;
+  }
+  SUBT *AsSUB() {
+    return type == RecordType::SUB ?
+      reinterpret_cast<SUBT *>(value) : nullptr;
+  }
+  const SUBT *AsSUB() const {
+    return type == RecordType::SUB ?
+      reinterpret_cast<const SUBT *>(value) : nullptr;
+  }
+  WKST *AsWKS() {
+    return type == RecordType::WKS ?
+      reinterpret_cast<WKST *>(value) : nullptr;
+  }
+  const WKST *AsWKS() const {
+    return type == RecordType::WKS ?
+      reinterpret_cast<const WKST *>(value) : nullptr;
+  }
+  CPST *AsCPS() {
+    return type == RecordType::CPS ?
+      reinterpret_cast<CPST *>(value) : nullptr;
+  }
+  const CPST *AsCPS() const {
+    return type == RecordType::CPS ?
+      reinterpret_cast<const CPST *>(value) : nullptr;
+  }
+  FSBT *AsFSB() {
+    return type == RecordType::FSB ?
+      reinterpret_cast<FSBT *>(value) : nullptr;
+  }
+  const FSBT *AsFSB() const {
+    return type == RecordType::FSB ?
+      reinterpret_cast<const FSBT *>(value) : nullptr;
+  }
+  FSOT *AsFSO() {
+    return type == RecordType::FSO ?
+      reinterpret_cast<FSOT *>(value) : nullptr;
+  }
+  const FSOT *AsFSO() const {
+    return type == RecordType::FSO ?
+      reinterpret_cast<const FSOT *>(value) : nullptr;
+  }
+  GSTT *AsGST() {
+    return type == RecordType::GST ?
+      reinterpret_cast<GSTT *>(value) : nullptr;
+  }
+  const GSTT *AsGST() const {
+    return type == RecordType::GST ?
+      reinterpret_cast<const GSTT *>(value) : nullptr;
+  }
+  MDPT *AsMDP() {
+    return type == RecordType::MDP ?
+      reinterpret_cast<MDPT *>(value) : nullptr;
+  }
+  const MDPT *AsMDP() const {
+    return type == RecordType::MDP ?
+      reinterpret_cast<const MDPT *>(value) : nullptr;
+  }
+  MDST *AsMDS() {
+    return type == RecordType::MDS ?
+      reinterpret_cast<MDST *>(value) : nullptr;
+  }
+  const MDST *AsMDS() const {
+    return type == RecordType::MDS ?
+      reinterpret_cast<const MDST *>(value) : nullptr;
+  }
+  PNLT *AsPNL() {
+    return type == RecordType::PNL ?
+      reinterpret_cast<PNLT *>(value) : nullptr;
+  }
+  const PNLT *AsPNL() const {
+    return type == RecordType::PNL ?
+      reinterpret_cast<const PNLT *>(value) : nullptr;
+  }
+  SHCT *AsSHC() {
+    return type == RecordType::SHC ?
+      reinterpret_cast<SHCT *>(value) : nullptr;
+  }
+  const SHCT *AsSHC() const {
+    return type == RecordType::SHC ?
+      reinterpret_cast<const SHCT *>(value) : nullptr;
+  }
+  CEST *AsCES() {
+    return type == RecordType::CES ?
+      reinterpret_cast<CEST *>(value) : nullptr;
+  }
+  const CEST *AsCES() const {
+    return type == RecordType::CES ?
+      reinterpret_cast<const CEST *>(value) : nullptr;
+  }
+  QEMT *AsQEM() {
+    return type == RecordType::QEM ?
+      reinterpret_cast<QEMT *>(value) : nullptr;
+  }
+  const QEMT *AsQEM() const {
+    return type == RecordType::QEM ?
+      reinterpret_cast<const QEMT *>(value) : nullptr;
+  }
+  SBMT *AsSBM() {
+    return type == RecordType::SBM ?
+      reinterpret_cast<SBMT *>(value) : nullptr;
+  }
+  const SBMT *AsSBM() const {
+    return type == RecordType::SBM ?
+      reinterpret_cast<const SBMT *>(value) : nullptr;
+  }
+  PMMT *AsPMM() {
+    return type == RecordType::PMM ?
+      reinterpret_cast<PMMT *>(value) : nullptr;
+  }
+  const PMMT *AsPMM() const {
+    return type == RecordType::PMM ?
+      reinterpret_cast<const PMMT *>(value) : nullptr;
+  }
+  OPPT *AsOPP() {
+    return type == RecordType::OPP ?
+      reinterpret_cast<OPPT *>(value) : nullptr;
+  }
+  const OPPT *AsOPP() const {
+    return type == RecordType::OPP ?
+      reinterpret_cast<const OPPT *>(value) : nullptr;
+  }
 };
 
 template <bool B = false>
@@ -4165,6 +4625,75 @@ struct Record FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   const ENT *value_as_ENT() const {
     return value_type() == RecordType::ENT ? static_cast<const ENT *>(value()) : nullptr;
+  }
+  const VAM *value_as_VAM() const {
+    return value_type() == RecordType::VAM ? static_cast<const VAM *>(value()) : nullptr;
+  }
+  const APP *value_as_APP() const {
+    return value_type() == RecordType::APP ? static_cast<const APP *>(value()) : nullptr;
+  }
+  const CMT *value_as_CMT() const {
+    return value_type() == RecordType::CMT ? static_cast<const CMT *>(value()) : nullptr;
+  }
+  const SCX *value_as_SCX() const {
+    return value_type() == RecordType::SCX ? static_cast<const SCX *>(value()) : nullptr;
+  }
+  const CVG *value_as_CVG() const {
+    return value_type() == RecordType::CVG ? static_cast<const CVG *>(value()) : nullptr;
+  }
+  const PKB *value_as_PKB() const {
+    return value_type() == RecordType::PKB ? static_cast<const PKB *>(value()) : nullptr;
+  }
+  const RPT *value_as_RPT() const {
+    return value_type() == RecordType::RPT ? static_cast<const RPT *>(value()) : nullptr;
+  }
+  const STO *value_as_STO() const {
+    return value_type() == RecordType::STO ? static_cast<const STO *>(value()) : nullptr;
+  }
+  const SUB *value_as_SUB() const {
+    return value_type() == RecordType::SUB ? static_cast<const SUB *>(value()) : nullptr;
+  }
+  const WKS *value_as_WKS() const {
+    return value_type() == RecordType::WKS ? static_cast<const WKS *>(value()) : nullptr;
+  }
+  const CPS *value_as_CPS() const {
+    return value_type() == RecordType::CPS ? static_cast<const CPS *>(value()) : nullptr;
+  }
+  const FSB *value_as_FSB() const {
+    return value_type() == RecordType::FSB ? static_cast<const FSB *>(value()) : nullptr;
+  }
+  const FSO *value_as_FSO() const {
+    return value_type() == RecordType::FSO ? static_cast<const FSO *>(value()) : nullptr;
+  }
+  const GST *value_as_GST() const {
+    return value_type() == RecordType::GST ? static_cast<const GST *>(value()) : nullptr;
+  }
+  const MDP *value_as_MDP() const {
+    return value_type() == RecordType::MDP ? static_cast<const MDP *>(value()) : nullptr;
+  }
+  const MDS *value_as_MDS() const {
+    return value_type() == RecordType::MDS ? static_cast<const MDS *>(value()) : nullptr;
+  }
+  const PNL *value_as_PNL() const {
+    return value_type() == RecordType::PNL ? static_cast<const PNL *>(value()) : nullptr;
+  }
+  const SHC *value_as_SHC() const {
+    return value_type() == RecordType::SHC ? static_cast<const SHC *>(value()) : nullptr;
+  }
+  const CES *value_as_CES() const {
+    return value_type() == RecordType::CES ? static_cast<const CES *>(value()) : nullptr;
+  }
+  const QEM *value_as_QEM() const {
+    return value_type() == RecordType::QEM ? static_cast<const QEM *>(value()) : nullptr;
+  }
+  const SBM *value_as_SBM() const {
+    return value_type() == RecordType::SBM ? static_cast<const SBM *>(value()) : nullptr;
+  }
+  const PMM *value_as_PMM() const {
+    return value_type() == RecordType::PMM ? static_cast<const PMM *>(value()) : nullptr;
+  }
+  const OPP *value_as_OPP() const {
+    return value_type() == RecordType::OPP ? static_cast<const OPP *>(value()) : nullptr;
   }
   /// Standard identifier (e.g., "OMM", "CDM", "CAT")
   const ::flatbuffers::String *standard() const {
@@ -4887,6 +5416,98 @@ template<> inline const VST *Record::value_as<VST>() const {
 
 template<> inline const ENT *Record::value_as<ENT>() const {
   return value_as_ENT();
+}
+
+template<> inline const VAM *Record::value_as<VAM>() const {
+  return value_as_VAM();
+}
+
+template<> inline const APP *Record::value_as<APP>() const {
+  return value_as_APP();
+}
+
+template<> inline const CMT *Record::value_as<CMT>() const {
+  return value_as_CMT();
+}
+
+template<> inline const SCX *Record::value_as<SCX>() const {
+  return value_as_SCX();
+}
+
+template<> inline const CVG *Record::value_as<CVG>() const {
+  return value_as_CVG();
+}
+
+template<> inline const PKB *Record::value_as<PKB>() const {
+  return value_as_PKB();
+}
+
+template<> inline const RPT *Record::value_as<RPT>() const {
+  return value_as_RPT();
+}
+
+template<> inline const STO *Record::value_as<STO>() const {
+  return value_as_STO();
+}
+
+template<> inline const SUB *Record::value_as<SUB>() const {
+  return value_as_SUB();
+}
+
+template<> inline const WKS *Record::value_as<WKS>() const {
+  return value_as_WKS();
+}
+
+template<> inline const CPS *Record::value_as<CPS>() const {
+  return value_as_CPS();
+}
+
+template<> inline const FSB *Record::value_as<FSB>() const {
+  return value_as_FSB();
+}
+
+template<> inline const FSO *Record::value_as<FSO>() const {
+  return value_as_FSO();
+}
+
+template<> inline const GST *Record::value_as<GST>() const {
+  return value_as_GST();
+}
+
+template<> inline const MDP *Record::value_as<MDP>() const {
+  return value_as_MDP();
+}
+
+template<> inline const MDS *Record::value_as<MDS>() const {
+  return value_as_MDS();
+}
+
+template<> inline const PNL *Record::value_as<PNL>() const {
+  return value_as_PNL();
+}
+
+template<> inline const SHC *Record::value_as<SHC>() const {
+  return value_as_SHC();
+}
+
+template<> inline const CES *Record::value_as<CES>() const {
+  return value_as_CES();
+}
+
+template<> inline const QEM *Record::value_as<QEM>() const {
+  return value_as_QEM();
+}
+
+template<> inline const SBM *Record::value_as<SBM>() const {
+  return value_as_SBM();
+}
+
+template<> inline const PMM *Record::value_as<PMM>() const {
+  return value_as_PMM();
+}
+
+template<> inline const OPP *Record::value_as<OPP>() const {
+  return value_as_OPP();
 }
 
 struct RecordBuilder {
@@ -5820,6 +6441,98 @@ inline bool VerifyRecordType(::flatbuffers::VerifierTemplate<B> &verifier, const
       auto ptr = reinterpret_cast<const ENT *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case RecordType::VAM: {
+      auto ptr = reinterpret_cast<const VAM *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::APP: {
+      auto ptr = reinterpret_cast<const APP *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::CMT: {
+      auto ptr = reinterpret_cast<const CMT *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::SCX: {
+      auto ptr = reinterpret_cast<const SCX *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::CVG: {
+      auto ptr = reinterpret_cast<const CVG *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::PKB: {
+      auto ptr = reinterpret_cast<const PKB *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::RPT: {
+      auto ptr = reinterpret_cast<const RPT *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::STO: {
+      auto ptr = reinterpret_cast<const STO *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::SUB: {
+      auto ptr = reinterpret_cast<const SUB *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::WKS: {
+      auto ptr = reinterpret_cast<const WKS *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::CPS: {
+      auto ptr = reinterpret_cast<const CPS *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::FSB: {
+      auto ptr = reinterpret_cast<const FSB *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::FSO: {
+      auto ptr = reinterpret_cast<const FSO *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::GST: {
+      auto ptr = reinterpret_cast<const GST *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::MDP: {
+      auto ptr = reinterpret_cast<const MDP *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::MDS: {
+      auto ptr = reinterpret_cast<const MDS *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::PNL: {
+      auto ptr = reinterpret_cast<const PNL *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::SHC: {
+      auto ptr = reinterpret_cast<const SHC *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::CES: {
+      auto ptr = reinterpret_cast<const CES *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::QEM: {
+      auto ptr = reinterpret_cast<const QEM *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::SBM: {
+      auto ptr = reinterpret_cast<const SBM *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::PMM: {
+      auto ptr = reinterpret_cast<const PMM *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::OPP: {
+      auto ptr = reinterpret_cast<const OPP *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     default: return true;
   }
 }
@@ -6544,6 +7257,98 @@ inline void *RecordTypeUnion::UnPack(const void *obj, RecordType type, const ::f
       auto ptr = reinterpret_cast<const ENT *>(obj);
       return ptr->UnPack(resolver);
     }
+    case RecordType::VAM: {
+      auto ptr = reinterpret_cast<const VAM *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::APP: {
+      auto ptr = reinterpret_cast<const APP *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::CMT: {
+      auto ptr = reinterpret_cast<const CMT *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::SCX: {
+      auto ptr = reinterpret_cast<const SCX *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::CVG: {
+      auto ptr = reinterpret_cast<const CVG *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::PKB: {
+      auto ptr = reinterpret_cast<const PKB *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::RPT: {
+      auto ptr = reinterpret_cast<const RPT *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::STO: {
+      auto ptr = reinterpret_cast<const STO *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::SUB: {
+      auto ptr = reinterpret_cast<const SUB *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::WKS: {
+      auto ptr = reinterpret_cast<const WKS *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::CPS: {
+      auto ptr = reinterpret_cast<const CPS *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::FSB: {
+      auto ptr = reinterpret_cast<const FSB *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::FSO: {
+      auto ptr = reinterpret_cast<const FSO *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::GST: {
+      auto ptr = reinterpret_cast<const GST *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::MDP: {
+      auto ptr = reinterpret_cast<const MDP *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::MDS: {
+      auto ptr = reinterpret_cast<const MDS *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::PNL: {
+      auto ptr = reinterpret_cast<const PNL *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::SHC: {
+      auto ptr = reinterpret_cast<const SHC *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::CES: {
+      auto ptr = reinterpret_cast<const CES *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::QEM: {
+      auto ptr = reinterpret_cast<const QEM *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::SBM: {
+      auto ptr = reinterpret_cast<const SBM *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::PMM: {
+      auto ptr = reinterpret_cast<const PMM *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::OPP: {
+      auto ptr = reinterpret_cast<const OPP *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -7255,6 +8060,98 @@ inline ::flatbuffers::Offset<void> RecordTypeUnion::Pack(::flatbuffers::FlatBuff
       auto ptr = reinterpret_cast<const ENTT *>(value);
       return CreateENT(_fbb, ptr, _rehasher).Union();
     }
+    case RecordType::VAM: {
+      auto ptr = reinterpret_cast<const VAMT *>(value);
+      return CreateVAM(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::APP: {
+      auto ptr = reinterpret_cast<const APPT *>(value);
+      return CreateAPP(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::CMT: {
+      auto ptr = reinterpret_cast<const CMTT *>(value);
+      return CreateCMT(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::SCX: {
+      auto ptr = reinterpret_cast<const SCXT *>(value);
+      return CreateSCX(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::CVG: {
+      auto ptr = reinterpret_cast<const CVGT *>(value);
+      return CreateCVG(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::PKB: {
+      auto ptr = reinterpret_cast<const PKBT *>(value);
+      return CreatePKB(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::RPT: {
+      auto ptr = reinterpret_cast<const RPTT *>(value);
+      return CreateRPT(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::STO: {
+      auto ptr = reinterpret_cast<const STOT *>(value);
+      return CreateSTO(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::SUB: {
+      auto ptr = reinterpret_cast<const SUBT *>(value);
+      return CreateSUB(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::WKS: {
+      auto ptr = reinterpret_cast<const WKST *>(value);
+      return CreateWKS(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::CPS: {
+      auto ptr = reinterpret_cast<const CPST *>(value);
+      return CreateCPS(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::FSB: {
+      auto ptr = reinterpret_cast<const FSBT *>(value);
+      return CreateFSB(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::FSO: {
+      auto ptr = reinterpret_cast<const FSOT *>(value);
+      return CreateFSO(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::GST: {
+      auto ptr = reinterpret_cast<const GSTT *>(value);
+      return CreateGST(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::MDP: {
+      auto ptr = reinterpret_cast<const MDPT *>(value);
+      return CreateMDP(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::MDS: {
+      auto ptr = reinterpret_cast<const MDST *>(value);
+      return CreateMDS(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::PNL: {
+      auto ptr = reinterpret_cast<const PNLT *>(value);
+      return CreatePNL(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::SHC: {
+      auto ptr = reinterpret_cast<const SHCT *>(value);
+      return CreateSHC(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::CES: {
+      auto ptr = reinterpret_cast<const CEST *>(value);
+      return CreateCES(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::QEM: {
+      auto ptr = reinterpret_cast<const QEMT *>(value);
+      return CreateQEM(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::SBM: {
+      auto ptr = reinterpret_cast<const SBMT *>(value);
+      return CreateSBM(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::PMM: {
+      auto ptr = reinterpret_cast<const PMMT *>(value);
+      return CreatePMM(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::OPP: {
+      auto ptr = reinterpret_cast<const OPPT *>(value);
+      return CreateOPP(_fbb, ptr, _rehasher).Union();
+    }
     default: return 0;
   }
 }
@@ -7963,6 +8860,98 @@ inline RecordTypeUnion::RecordTypeUnion(const RecordTypeUnion &u) : type(u.type)
     }
     case RecordType::ENT: {
       value = new ENTT(*reinterpret_cast<ENTT *>(u.value));
+      break;
+    }
+    case RecordType::VAM: {
+      value = new VAMT(*reinterpret_cast<VAMT *>(u.value));
+      break;
+    }
+    case RecordType::APP: {
+      value = new APPT(*reinterpret_cast<APPT *>(u.value));
+      break;
+    }
+    case RecordType::CMT: {
+      value = new CMTT(*reinterpret_cast<CMTT *>(u.value));
+      break;
+    }
+    case RecordType::SCX: {
+      value = new SCXT(*reinterpret_cast<SCXT *>(u.value));
+      break;
+    }
+    case RecordType::CVG: {
+      value = new CVGT(*reinterpret_cast<CVGT *>(u.value));
+      break;
+    }
+    case RecordType::PKB: {
+      value = new PKBT(*reinterpret_cast<PKBT *>(u.value));
+      break;
+    }
+    case RecordType::RPT: {
+      value = new RPTT(*reinterpret_cast<RPTT *>(u.value));
+      break;
+    }
+    case RecordType::STO: {
+      value = new STOT(*reinterpret_cast<STOT *>(u.value));
+      break;
+    }
+    case RecordType::SUB: {
+      value = new SUBT(*reinterpret_cast<SUBT *>(u.value));
+      break;
+    }
+    case RecordType::WKS: {
+      value = new WKST(*reinterpret_cast<WKST *>(u.value));
+      break;
+    }
+    case RecordType::CPS: {
+      value = new CPST(*reinterpret_cast<CPST *>(u.value));
+      break;
+    }
+    case RecordType::FSB: {
+      value = new FSBT(*reinterpret_cast<FSBT *>(u.value));
+      break;
+    }
+    case RecordType::FSO: {
+      value = new FSOT(*reinterpret_cast<FSOT *>(u.value));
+      break;
+    }
+    case RecordType::GST: {
+      value = new GSTT(*reinterpret_cast<GSTT *>(u.value));
+      break;
+    }
+    case RecordType::MDP: {
+      value = new MDPT(*reinterpret_cast<MDPT *>(u.value));
+      break;
+    }
+    case RecordType::MDS: {
+      value = new MDST(*reinterpret_cast<MDST *>(u.value));
+      break;
+    }
+    case RecordType::PNL: {
+      value = new PNLT(*reinterpret_cast<PNLT *>(u.value));
+      break;
+    }
+    case RecordType::SHC: {
+      value = new SHCT(*reinterpret_cast<SHCT *>(u.value));
+      break;
+    }
+    case RecordType::CES: {
+      value = new CEST(*reinterpret_cast<CEST *>(u.value));
+      break;
+    }
+    case RecordType::QEM: {
+      value = new QEMT(*reinterpret_cast<QEMT *>(u.value));
+      break;
+    }
+    case RecordType::SBM: {
+      value = new SBMT(*reinterpret_cast<SBMT *>(u.value));
+      break;
+    }
+    case RecordType::PMM: {
+      value = new PMMT(*reinterpret_cast<PMMT *>(u.value));
+      break;
+    }
+    case RecordType::OPP: {
+      value = new OPPT(*reinterpret_cast<OPPT *>(u.value));
       break;
     }
     default:
@@ -8849,6 +9838,121 @@ inline void RecordTypeUnion::Reset() {
     }
     case RecordType::ENT: {
       auto ptr = reinterpret_cast<ENTT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::VAM: {
+      auto ptr = reinterpret_cast<VAMT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::APP: {
+      auto ptr = reinterpret_cast<APPT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::CMT: {
+      auto ptr = reinterpret_cast<CMTT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::SCX: {
+      auto ptr = reinterpret_cast<SCXT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::CVG: {
+      auto ptr = reinterpret_cast<CVGT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::PKB: {
+      auto ptr = reinterpret_cast<PKBT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::RPT: {
+      auto ptr = reinterpret_cast<RPTT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::STO: {
+      auto ptr = reinterpret_cast<STOT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::SUB: {
+      auto ptr = reinterpret_cast<SUBT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::WKS: {
+      auto ptr = reinterpret_cast<WKST *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::CPS: {
+      auto ptr = reinterpret_cast<CPST *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::FSB: {
+      auto ptr = reinterpret_cast<FSBT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::FSO: {
+      auto ptr = reinterpret_cast<FSOT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::GST: {
+      auto ptr = reinterpret_cast<GSTT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::MDP: {
+      auto ptr = reinterpret_cast<MDPT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::MDS: {
+      auto ptr = reinterpret_cast<MDST *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::PNL: {
+      auto ptr = reinterpret_cast<PNLT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::SHC: {
+      auto ptr = reinterpret_cast<SHCT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::CES: {
+      auto ptr = reinterpret_cast<CEST *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::QEM: {
+      auto ptr = reinterpret_cast<QEMT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::SBM: {
+      auto ptr = reinterpret_cast<SBMT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::PMM: {
+      auto ptr = reinterpret_cast<PMMT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::OPP: {
+      auto ptr = reinterpret_cast<OPPT *>(value);
       delete ptr;
       break;
     }
