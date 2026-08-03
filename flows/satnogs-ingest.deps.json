@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.data-source.satnogs-source": "../data-source/satnogs-source",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}

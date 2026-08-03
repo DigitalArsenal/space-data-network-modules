@@ -1,0 +1,92 @@
+{
+  "programId": "com.digitalarsenal.flows.satnogs-rf-ingest",
+  "name": "SatNOGS RF Ingest Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 5,
+  "edges": 7,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "methodId": "request",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "methodId": "parse",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "ingest_rfb",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host"
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.satnogs-source",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "version": "0.1.0",
+      "sha256": "b564c1dba1ad8fc58b4a384f4048798d14ad602128931a09cacafcc177a3ea6a",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7361746e6f67732d736f75726365_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7361746e6f67732d736f75726365_request",
+        "parse": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7361746e6f67732d736f75726365_parse"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.1.0",
+      "sha256": "f4077d1660745473b49d0accde178d0573c2bd1b4b69439da5b741ba14667adb",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c61_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.1.0",
+      "sha256": "bc808cd24571bf26758f68446eb8b6701cd2550d8e8a867fb430e579c0b61783",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c61_ingest"
+      }
+    }
+  ]
+}
