@@ -69,11 +69,20 @@ enum class GravityModelName : int8_t {
   GOCO06S = 6,
   XGM2019E = 7,
   CUSTOM_MODEL = 8,
+  GGM02C = 9,
+  GGM02S = 10,
+  GOCO05C = 11,
+  GLGM3150 = 12,
+  LPE200 = 13,
+  GGGRX1200 = 14,
+  JGMRO120D = 15,
+  JGMESS160A = 16,
+  SHGJ180U = 17,
   MIN = WGS84,
-  MAX = CUSTOM_MODEL
+  MAX = SHGJ180U
 };
 
-inline const GravityModelName (&EnumValuesGravityModelName())[9] {
+inline const GravityModelName (&EnumValuesGravityModelName())[18] {
   static const GravityModelName values[] = {
     GravityModelName::WGS84,
     GravityModelName::EGM96,
@@ -83,13 +92,22 @@ inline const GravityModelName (&EnumValuesGravityModelName())[9] {
     GravityModelName::EIGEN_6C4,
     GravityModelName::GOCO06S,
     GravityModelName::XGM2019E,
-    GravityModelName::CUSTOM_MODEL
+    GravityModelName::CUSTOM_MODEL,
+    GravityModelName::GGM02C,
+    GravityModelName::GGM02S,
+    GravityModelName::GOCO05C,
+    GravityModelName::GLGM3150,
+    GravityModelName::LPE200,
+    GravityModelName::GGGRX1200,
+    GravityModelName::JGMRO120D,
+    GravityModelName::JGMESS160A,
+    GravityModelName::SHGJ180U
   };
   return values;
 }
 
 inline const char * const *EnumNamesGravityModelName() {
-  static const char * const names[10] = {
+  static const char * const names[19] = {
     "WGS84",
     "EGM96",
     "EGM2008",
@@ -99,13 +117,22 @@ inline const char * const *EnumNamesGravityModelName() {
     "GOCO06S",
     "XGM2019E",
     "CUSTOM_MODEL",
+    "GGM02C",
+    "GGM02S",
+    "GOCO05C",
+    "GLGM3150",
+    "LPE200",
+    "GGGRX1200",
+    "JGMRO120D",
+    "JGMESS160A",
+    "SHGJ180U",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameGravityModelName(GravityModelName e) {
-  if (::flatbuffers::IsOutRange(e, GravityModelName::WGS84, GravityModelName::CUSTOM_MODEL)) return "";
+  if (::flatbuffers::IsOutRange(e, GravityModelName::WGS84, GravityModelName::SHGJ180U)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesGravityModelName()[index];
 }

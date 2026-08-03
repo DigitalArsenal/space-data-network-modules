@@ -1,0 +1,243 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+  "name": "SatNOGS DB RF Transmitter Source Nodes",
+  "version": "0.1.0",
+  "description": "SatNOGS DB (Libre Space Foundation) -> SDS $RFB transmitter records. Two pure flow nodes: `request` turns a cron timer tick into ONE whole-table hostcap/http-request GET of https://db.satnogs.org/api/transmitters/?format=json (bulk, never a pagination walk \u2014 the source-policy.json crawl ruling) plus the parser attribution job; `parse` joins that job with the http response, decodes ~4,994 transmitter rows and emits a size-prefixed $RFB record stream for hostcap/storage-ingest. One $RFB record carries exactly one LINK_DIRECTION, so a Transceiver/Transponder becomes an UPLINK + DOWNLINK pair sharing ID_TRANSMITTER (the SatNOGS uuid). SatNOGS publishes HERTZ; every frequency field written is MHz per the normative RFB units rule. Licence is CC-BY-SA-4.0: every record carries CITATION verbatim and the batch provenance carries license/license_url/citation so the share-alike obligation survives republication. No capabilities: this node performs no I/O \u2014 http and storage are the generic hostcap connector nodes.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Both methods are pure single-pass transforms over one fetched JSON table: `request` formats a fetch descriptor from node CONFIG, and `parse` walks the SatNOGS transmitter rows once, emitting one or two $RFB records per row into a single append-only stream. There is no shared mutable state, no worker pool, no fan-out and nothing for a second thread to do; the whole cost is one linear scan of a ~3.5 MB body. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "request",
+      "displayName": "SatNOGS Transmitters Fetch Request",
+      "description": "Builds the SatNOGS DB transmitters fetch request + parse job from a timer tick. ONE whole-table request per cycle with the source-policy.json identifying UA and conditional-request validators from node CONFIG.",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload at all, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON http request for the SatNOGS transmitters table.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SatNOGS transmitters fetch request."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "satnogs-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON job attribution (source satnogs-db).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution ({source_url,source_name,provider_id,archive_*}) produced and consumed inside this flow; it is ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SatNOGS parse job."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse",
+      "displayName": "Parse SatNOGS Transmitters into $RFB",
+      "description": "Decodes the SatNOGS transmitters JSON table into a size-prefixed $RFB record stream (one record per link direction, Hz -> MHz, POLARIZATION explicitly UNKNOWN, CITATION carrying the CC-BY-SA-4.0 attribution) plus the storage.ingest_with_source meta and the raw payload for archiving.",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "satnogs-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON fetch-job attribution.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution ({source_url,source_name,provider_id,archive_*}) emitted by this module's own request node inside the same flow; ingest bookkeeping, never persisted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON from hostcap/http-request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}) consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying the SatNOGS transmitters table."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "rfb_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the RFB batch, carrying licence-bearing provenance.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, licence-bearing provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "RFB ingest meta."
+        },
+        {
+          "portId": "rfb_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFB.fbs",
+                  "fileIdentifier": "$RFB",
+                  "rootTypeName": "RFB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $RFB FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "RFB record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decoded source payload bytes (for raw archiving).",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/json",
+                "detail": "The verbatim SatNOGS DB transmitters table as fetched: vendor JSON from db.satnogs.org, archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "RFB.fbs",
+      "fileIdentifier": "$RFB",
+      "rootTypeName": "RFB"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "satnogs-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

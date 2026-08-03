@@ -1,0 +1,57 @@
+
+NORAD-keyed objects in GCAT satcat: 69,367
+
+  FIELD                        OBJECTS      COVERAGE
+  ----------------------------------------------------
+  manufacturer CODE (GCAT)      45702      65.9%
+  manufacturer NAME (GCAT)      44271      63.8%
+  bus/platform      (GCAT)      37534      54.1%
+  object type       (GCAT)      69367     100.0%
+  launch date       (GCAT)      69367     100.0%
+  owner/operator    (GCAT)      67465      97.3%
+  mass (any of 3)   (GCAT)      37315      53.8%
+  dimensions L or D (GCAT)      37145      53.5%
+  span              (GCAT)      37355      53.9%
+  shape             (GCAT)      37340      53.8%
+  mission/program   (GCAT)      27308      39.4%
+  mission category  (GCAT)      27313      39.4%
+  discipline        (GCAT)       1441       2.1%
+  RF frequencies (SatNOGS)       2620       3.8%
+  ----------------------------------------------------
+
+  SatNOGS: 2,763 satellites, 4,994 transmitters
+           4,994 transmitters resolved to a NORAD id, 0 unresolved (skipped, never guessed)
+
+  distinct manufacturers: 986
+  distinct buses:         1,901
+  distinct object types:  394
+  distinct categories:    96
+
+  top manufacturers by object count:
+     13043  SpaceX (Seattle)
+      3472  Southern State Design Bureau
+      2659  Central Specialized Design Bureau
+      1915  Shanghai Academy of Space Technology (CASC 8th Acad)
+      1468  Progress Factory
+       987  NPO Energiya
+       733  Khrunichev State Research and Production Center
+       721  RKK Energiya
+
+  object types (the 'debris etc' the owner named):
+     12450  D  P
+      9822  P      O
+      9037  P
+      6728  D  W
+      3116  R3
+      2563  D  I
+      2375  D  B
+      1954  C  F
+      1869  R2
+      1787  C  A
+
+  worked example — NORAD 25544 (ISS):
+    manufacturer=Khrunichev State Research and Production Center  type=PPTH-MU  launch=1998 Nov 20
+    mass=20351kg  length=12.6m  span=23.9m  shape=Cyl + 2 Pan
+    program=TsM  category=SS  discipline=null
+    transmitters=50  downlinks(Hz)=145825000, 145800000, 145800000, 145480000
+    modes=AFSK, FM, SSTV, FMN, CW, QPSK

@@ -93,6 +93,10 @@ struct SCVAggregateStatistics;
 struct SCVAggregateStatisticsBuilder;
 struct SCVAggregateStatisticsT;
 
+struct SCVTargetResult;
+struct SCVTargetResultBuilder;
+struct SCVTargetResultT;
+
 struct SCVResult;
 struct SCVResultBuilder;
 struct SCVResultT;
@@ -392,6 +396,48 @@ inline const char *EnumNamescvGeometryDomain(scvGeometryDomain e) {
   return EnumNamesscvGeometryDomain()[index];
 }
 
+enum class scvTargetShape : uint8_t {
+  POINT = 0,
+  POLYGON = 1,
+  RECTANGLE = 2,
+  BOX = 3,
+  SPHERE = 4,
+  EXTRUDED_POLYGON = 5,
+  MIN = POINT,
+  MAX = EXTRUDED_POLYGON
+};
+
+inline const scvTargetShape (&EnumValuesscvTargetShape())[6] {
+  static const scvTargetShape values[] = {
+    scvTargetShape::POINT,
+    scvTargetShape::POLYGON,
+    scvTargetShape::RECTANGLE,
+    scvTargetShape::BOX,
+    scvTargetShape::SPHERE,
+    scvTargetShape::EXTRUDED_POLYGON
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesscvTargetShape() {
+  static const char * const names[7] = {
+    "POINT",
+    "POLYGON",
+    "RECTANGLE",
+    "BOX",
+    "SPHERE",
+    "EXTRUDED_POLYGON",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamescvTargetShape(scvTargetShape e) {
+  if (::flatbuffers::IsOutRange(e, scvTargetShape::POINT, scvTargetShape::EXTRUDED_POLYGON)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesscvTargetShape()[index];
+}
+
 enum class scvResultState : uint8_t {
   OK = 0,
   PARTIAL = 1,
@@ -531,11 +577,14 @@ enum class scvRasterProductKind : uint16_t {
   PASS_COUNT_RGBA = 12,
   CURRENT_ACCESS_RGBA = 13,
   LATITUDE_BAND_COVERAGE = 14,
+  BUCKET_PASS_START_COUNT = 15,
+  WINDOW_START_ACCESS_BITSET = 16,
+  WINDOW_STOP_ACCESS_BITSET = 17,
   MIN = CELL_BOUNDS_DEG,
-  MAX = LATITUDE_BAND_COVERAGE
+  MAX = WINDOW_STOP_ACCESS_BITSET
 };
 
-inline const scvRasterProductKind (&EnumValuesscvRasterProductKind())[15] {
+inline const scvRasterProductKind (&EnumValuesscvRasterProductKind())[18] {
   static const scvRasterProductKind values[] = {
     scvRasterProductKind::CELL_BOUNDS_DEG,
     scvRasterProductKind::CELL_CENTERS_DEG,
@@ -551,13 +600,16 @@ inline const scvRasterProductKind (&EnumValuesscvRasterProductKind())[15] {
     scvRasterProductKind::BUCKET_ACTIVE_CELL_COUNT,
     scvRasterProductKind::PASS_COUNT_RGBA,
     scvRasterProductKind::CURRENT_ACCESS_RGBA,
-    scvRasterProductKind::LATITUDE_BAND_COVERAGE
+    scvRasterProductKind::LATITUDE_BAND_COVERAGE,
+    scvRasterProductKind::BUCKET_PASS_START_COUNT,
+    scvRasterProductKind::WINDOW_START_ACCESS_BITSET,
+    scvRasterProductKind::WINDOW_STOP_ACCESS_BITSET
   };
   return values;
 }
 
 inline const char * const *EnumNamesscvRasterProductKind() {
-  static const char * const names[16] = {
+  static const char * const names[19] = {
     "CELL_BOUNDS_DEG",
     "CELL_CENTERS_DEG",
     "PERCENT_COVERAGE",
@@ -573,13 +625,16 @@ inline const char * const *EnumNamesscvRasterProductKind() {
     "PASS_COUNT_RGBA",
     "CURRENT_ACCESS_RGBA",
     "LATITUDE_BAND_COVERAGE",
+    "BUCKET_PASS_START_COUNT",
+    "WINDOW_START_ACCESS_BITSET",
+    "WINDOW_STOP_ACCESS_BITSET",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamescvRasterProductKind(scvRasterProductKind e) {
-  if (::flatbuffers::IsOutRange(e, scvRasterProductKind::CELL_BOUNDS_DEG, scvRasterProductKind::LATITUDE_BAND_COVERAGE)) return "";
+  if (::flatbuffers::IsOutRange(e, scvRasterProductKind::CELL_BOUNDS_DEG, scvRasterProductKind::WINDOW_STOP_ACCESS_BITSET)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesscvRasterProductKind()[index];
 }
@@ -1600,6 +1655,11 @@ struct SCVTargetT : public ::flatbuffers::NativeTable {
   std::unique_ptr<SCVVec3T> POSITION_M{};
   std::unique_ptr<SCVVec3T> VELOCITY_MPS{};
   double RADIUS_M = 0.0;
+  scvTargetShape TARGET_KIND = scvTargetShape::POINT;
+  scvGeometryDomain DOMAIN = scvGeometryDomain::SURFACE;
+  std::vector<std::unique_ptr<SCVVec3T>> POLYGON_VERTICES{};
+  double MIN_ALTITUDE_M = 0.0;
+  double MAX_ALTITUDE_M = 0.0;
   SCVTargetT() = default;
   SCVTargetT(const SCVTargetT &o);
   SCVTargetT(SCVTargetT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1617,7 +1677,12 @@ struct SCVTarget FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_FRAME = 10,
     VT_POSITION_M = 12,
     VT_VELOCITY_MPS = 14,
-    VT_RADIUS_M = 16
+    VT_RADIUS_M = 16,
+    VT_TARGET_KIND = 18,
+    VT_DOMAIN = 20,
+    VT_POLYGON_VERTICES = 22,
+    VT_MIN_ALTITUDE_M = 24,
+    VT_MAX_ALTITUDE_M = 26
   };
   uint32_t TARGET_ID() const {
     return GetField<uint32_t>(VT_TARGET_ID, 0);
@@ -1640,6 +1705,21 @@ struct SCVTarget FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double RADIUS_M() const {
     return GetField<double>(VT_RADIUS_M, 0.0);
   }
+  scvTargetShape TARGET_KIND() const {
+    return static_cast<scvTargetShape>(GetField<uint8_t>(VT_TARGET_KIND, 0));
+  }
+  scvGeometryDomain DOMAIN() const {
+    return static_cast<scvGeometryDomain>(GetField<uint8_t>(VT_DOMAIN, 0));
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>> *POLYGON_VERTICES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>> *>(VT_POLYGON_VERTICES);
+  }
+  double MIN_ALTITUDE_M() const {
+    return GetField<double>(VT_MIN_ALTITUDE_M, 0.0);
+  }
+  double MAX_ALTITUDE_M() const {
+    return GetField<double>(VT_MAX_ALTITUDE_M, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1654,6 +1734,13 @@ struct SCVTarget FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_VELOCITY_MPS) &&
            verifier.VerifyTable(VELOCITY_MPS()) &&
            VerifyField<double>(verifier, VT_RADIUS_M, 8) &&
+           VerifyField<uint8_t>(verifier, VT_TARGET_KIND, 1) &&
+           VerifyField<uint8_t>(verifier, VT_DOMAIN, 1) &&
+           VerifyOffset(verifier, VT_POLYGON_VERTICES) &&
+           verifier.VerifyVector(POLYGON_VERTICES()) &&
+           verifier.VerifyVectorOfTables(POLYGON_VERTICES()) &&
+           VerifyField<double>(verifier, VT_MIN_ALTITUDE_M, 8) &&
+           VerifyField<double>(verifier, VT_MAX_ALTITUDE_M, 8) &&
            verifier.EndTable();
   }
   SCVTargetT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1686,6 +1773,21 @@ struct SCVTargetBuilder {
   void add_RADIUS_M(double RADIUS_M) {
     fbb_.AddElement<double>(SCVTarget::VT_RADIUS_M, RADIUS_M, 0.0);
   }
+  void add_TARGET_KIND(scvTargetShape TARGET_KIND) {
+    fbb_.AddElement<uint8_t>(SCVTarget::VT_TARGET_KIND, static_cast<uint8_t>(TARGET_KIND), 0);
+  }
+  void add_DOMAIN(scvGeometryDomain DOMAIN) {
+    fbb_.AddElement<uint8_t>(SCVTarget::VT_DOMAIN, static_cast<uint8_t>(DOMAIN), 0);
+  }
+  void add_POLYGON_VERTICES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>>> POLYGON_VERTICES) {
+    fbb_.AddOffset(SCVTarget::VT_POLYGON_VERTICES, POLYGON_VERTICES);
+  }
+  void add_MIN_ALTITUDE_M(double MIN_ALTITUDE_M) {
+    fbb_.AddElement<double>(SCVTarget::VT_MIN_ALTITUDE_M, MIN_ALTITUDE_M, 0.0);
+  }
+  void add_MAX_ALTITUDE_M(double MAX_ALTITUDE_M) {
+    fbb_.AddElement<double>(SCVTarget::VT_MAX_ALTITUDE_M, MAX_ALTITUDE_M, 0.0);
+  }
   explicit SCVTargetBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1705,14 +1807,24 @@ inline ::flatbuffers::Offset<SCVTarget> CreateSCVTarget(
     scvCoordinateFrame FRAME = scvCoordinateFrame::UNKNOWN,
     ::flatbuffers::Offset<SCVVec3> POSITION_M = 0,
     ::flatbuffers::Offset<SCVVec3> VELOCITY_MPS = 0,
-    double RADIUS_M = 0.0) {
+    double RADIUS_M = 0.0,
+    scvTargetShape TARGET_KIND = scvTargetShape::POINT,
+    scvGeometryDomain DOMAIN = scvGeometryDomain::SURFACE,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>>> POLYGON_VERTICES = 0,
+    double MIN_ALTITUDE_M = 0.0,
+    double MAX_ALTITUDE_M = 0.0) {
   SCVTargetBuilder builder_(_fbb);
+  builder_.add_MAX_ALTITUDE_M(MAX_ALTITUDE_M);
+  builder_.add_MIN_ALTITUDE_M(MIN_ALTITUDE_M);
   builder_.add_RADIUS_M(RADIUS_M);
+  builder_.add_POLYGON_VERTICES(POLYGON_VERTICES);
   builder_.add_VELOCITY_MPS(VELOCITY_MPS);
   builder_.add_POSITION_M(POSITION_M);
   builder_.add_NAME(NAME);
   builder_.add_OBJECT_ID(OBJECT_ID);
   builder_.add_TARGET_ID(TARGET_ID);
+  builder_.add_DOMAIN(DOMAIN);
+  builder_.add_TARGET_KIND(TARGET_KIND);
   builder_.add_FRAME(FRAME);
   return builder_.Finish();
 }
@@ -1730,9 +1842,15 @@ inline ::flatbuffers::Offset<SCVTarget> CreateSCVTargetDirect(
     scvCoordinateFrame FRAME = scvCoordinateFrame::UNKNOWN,
     ::flatbuffers::Offset<SCVVec3> POSITION_M = 0,
     ::flatbuffers::Offset<SCVVec3> VELOCITY_MPS = 0,
-    double RADIUS_M = 0.0) {
+    double RADIUS_M = 0.0,
+    scvTargetShape TARGET_KIND = scvTargetShape::POINT,
+    scvGeometryDomain DOMAIN = scvGeometryDomain::SURFACE,
+    const std::vector<::flatbuffers::Offset<SCVVec3>> *POLYGON_VERTICES = nullptr,
+    double MIN_ALTITUDE_M = 0.0,
+    double MAX_ALTITUDE_M = 0.0) {
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
+  auto POLYGON_VERTICES__ = POLYGON_VERTICES ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>>(*POLYGON_VERTICES) : 0;
   return CreateSCVTarget(
       _fbb,
       TARGET_ID,
@@ -1741,7 +1859,12 @@ inline ::flatbuffers::Offset<SCVTarget> CreateSCVTargetDirect(
       FRAME,
       POSITION_M,
       VELOCITY_MPS,
-      RADIUS_M);
+      RADIUS_M,
+      TARGET_KIND,
+      DOMAIN,
+      POLYGON_VERTICES__,
+      MIN_ALTITUDE_M,
+      MAX_ALTITUDE_M);
 }
 
 ::flatbuffers::Offset<SCVTarget> CreateSCVTarget(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTargetT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -4384,6 +4507,213 @@ struct SCVAggregateStatistics::Traits {
 
 ::flatbuffers::Offset<SCVAggregateStatistics> CreateSCVAggregateStatistics(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAggregateStatisticsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct SCVTargetResultT : public ::flatbuffers::NativeTable {
+  typedef SCVTargetResult TableType;
+  uint32_t TARGET_ID = 0;
+  std::string NAME{};
+  uint32_t ACCESS_COUNT = 0;
+  uint32_t REVISIT_COUNT = 0;
+  double TOTAL_ACCESS_DURATION_SEC = 0.0;
+  double MEAN_REVISIT_TIME_SEC = 0.0;
+  double MAX_GAP_SEC = 0.0;
+  std::vector<double> INTERVAL_START_SEC{};
+  std::vector<double> INTERVAL_STOP_SEC{};
+  std::vector<uint32_t> PASS_START_BUCKETS{};
+  std::vector<uint32_t> ACCESS_BITSET{};
+};
+
+struct SCVTargetResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SCVTargetResultT NativeTableType;
+  typedef SCVTargetResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TARGET_ID = 4,
+    VT_NAME = 6,
+    VT_ACCESS_COUNT = 8,
+    VT_REVISIT_COUNT = 10,
+    VT_TOTAL_ACCESS_DURATION_SEC = 12,
+    VT_MEAN_REVISIT_TIME_SEC = 14,
+    VT_MAX_GAP_SEC = 16,
+    VT_INTERVAL_START_SEC = 18,
+    VT_INTERVAL_STOP_SEC = 20,
+    VT_PASS_START_BUCKETS = 22,
+    VT_ACCESS_BITSET = 24
+  };
+  uint32_t TARGET_ID() const {
+    return GetField<uint32_t>(VT_TARGET_ID, 0);
+  }
+  const ::flatbuffers::String *NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  }
+  uint32_t ACCESS_COUNT() const {
+    return GetField<uint32_t>(VT_ACCESS_COUNT, 0);
+  }
+  uint32_t REVISIT_COUNT() const {
+    return GetField<uint32_t>(VT_REVISIT_COUNT, 0);
+  }
+  double TOTAL_ACCESS_DURATION_SEC() const {
+    return GetField<double>(VT_TOTAL_ACCESS_DURATION_SEC, 0.0);
+  }
+  double MEAN_REVISIT_TIME_SEC() const {
+    return GetField<double>(VT_MEAN_REVISIT_TIME_SEC, 0.0);
+  }
+  double MAX_GAP_SEC() const {
+    return GetField<double>(VT_MAX_GAP_SEC, 0.0);
+  }
+  const ::flatbuffers::Vector<double> *INTERVAL_START_SEC() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_INTERVAL_START_SEC);
+  }
+  const ::flatbuffers::Vector<double> *INTERVAL_STOP_SEC() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_INTERVAL_STOP_SEC);
+  }
+  const ::flatbuffers::Vector<uint32_t> *PASS_START_BUCKETS() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_PASS_START_BUCKETS);
+  }
+  const ::flatbuffers::Vector<uint32_t> *ACCESS_BITSET() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_ACCESS_BITSET);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_TARGET_ID, 4) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(NAME()) &&
+           VerifyField<uint32_t>(verifier, VT_ACCESS_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_REVISIT_COUNT, 4) &&
+           VerifyField<double>(verifier, VT_TOTAL_ACCESS_DURATION_SEC, 8) &&
+           VerifyField<double>(verifier, VT_MEAN_REVISIT_TIME_SEC, 8) &&
+           VerifyField<double>(verifier, VT_MAX_GAP_SEC, 8) &&
+           VerifyOffset(verifier, VT_INTERVAL_START_SEC) &&
+           verifier.VerifyVector(INTERVAL_START_SEC()) &&
+           VerifyOffset(verifier, VT_INTERVAL_STOP_SEC) &&
+           verifier.VerifyVector(INTERVAL_STOP_SEC()) &&
+           VerifyOffset(verifier, VT_PASS_START_BUCKETS) &&
+           verifier.VerifyVector(PASS_START_BUCKETS()) &&
+           VerifyOffset(verifier, VT_ACCESS_BITSET) &&
+           verifier.VerifyVector(ACCESS_BITSET()) &&
+           verifier.EndTable();
+  }
+  SCVTargetResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SCVTargetResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SCVTargetResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTargetResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SCVTargetResultBuilder {
+  typedef SCVTargetResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_TARGET_ID(uint32_t TARGET_ID) {
+    fbb_.AddElement<uint32_t>(SCVTargetResult::VT_TARGET_ID, TARGET_ID, 0);
+  }
+  void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
+    fbb_.AddOffset(SCVTargetResult::VT_NAME, NAME);
+  }
+  void add_ACCESS_COUNT(uint32_t ACCESS_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVTargetResult::VT_ACCESS_COUNT, ACCESS_COUNT, 0);
+  }
+  void add_REVISIT_COUNT(uint32_t REVISIT_COUNT) {
+    fbb_.AddElement<uint32_t>(SCVTargetResult::VT_REVISIT_COUNT, REVISIT_COUNT, 0);
+  }
+  void add_TOTAL_ACCESS_DURATION_SEC(double TOTAL_ACCESS_DURATION_SEC) {
+    fbb_.AddElement<double>(SCVTargetResult::VT_TOTAL_ACCESS_DURATION_SEC, TOTAL_ACCESS_DURATION_SEC, 0.0);
+  }
+  void add_MEAN_REVISIT_TIME_SEC(double MEAN_REVISIT_TIME_SEC) {
+    fbb_.AddElement<double>(SCVTargetResult::VT_MEAN_REVISIT_TIME_SEC, MEAN_REVISIT_TIME_SEC, 0.0);
+  }
+  void add_MAX_GAP_SEC(double MAX_GAP_SEC) {
+    fbb_.AddElement<double>(SCVTargetResult::VT_MAX_GAP_SEC, MAX_GAP_SEC, 0.0);
+  }
+  void add_INTERVAL_START_SEC(::flatbuffers::Offset<::flatbuffers::Vector<double>> INTERVAL_START_SEC) {
+    fbb_.AddOffset(SCVTargetResult::VT_INTERVAL_START_SEC, INTERVAL_START_SEC);
+  }
+  void add_INTERVAL_STOP_SEC(::flatbuffers::Offset<::flatbuffers::Vector<double>> INTERVAL_STOP_SEC) {
+    fbb_.AddOffset(SCVTargetResult::VT_INTERVAL_STOP_SEC, INTERVAL_STOP_SEC);
+  }
+  void add_PASS_START_BUCKETS(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> PASS_START_BUCKETS) {
+    fbb_.AddOffset(SCVTargetResult::VT_PASS_START_BUCKETS, PASS_START_BUCKETS);
+  }
+  void add_ACCESS_BITSET(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> ACCESS_BITSET) {
+    fbb_.AddOffset(SCVTargetResult::VT_ACCESS_BITSET, ACCESS_BITSET);
+  }
+  explicit SCVTargetResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SCVTargetResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SCVTargetResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SCVTargetResult> CreateSCVTargetResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t TARGET_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
+    uint32_t ACCESS_COUNT = 0,
+    uint32_t REVISIT_COUNT = 0,
+    double TOTAL_ACCESS_DURATION_SEC = 0.0,
+    double MEAN_REVISIT_TIME_SEC = 0.0,
+    double MAX_GAP_SEC = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> INTERVAL_START_SEC = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> INTERVAL_STOP_SEC = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> PASS_START_BUCKETS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> ACCESS_BITSET = 0) {
+  SCVTargetResultBuilder builder_(_fbb);
+  builder_.add_MAX_GAP_SEC(MAX_GAP_SEC);
+  builder_.add_MEAN_REVISIT_TIME_SEC(MEAN_REVISIT_TIME_SEC);
+  builder_.add_TOTAL_ACCESS_DURATION_SEC(TOTAL_ACCESS_DURATION_SEC);
+  builder_.add_ACCESS_BITSET(ACCESS_BITSET);
+  builder_.add_PASS_START_BUCKETS(PASS_START_BUCKETS);
+  builder_.add_INTERVAL_STOP_SEC(INTERVAL_STOP_SEC);
+  builder_.add_INTERVAL_START_SEC(INTERVAL_START_SEC);
+  builder_.add_REVISIT_COUNT(REVISIT_COUNT);
+  builder_.add_ACCESS_COUNT(ACCESS_COUNT);
+  builder_.add_NAME(NAME);
+  builder_.add_TARGET_ID(TARGET_ID);
+  return builder_.Finish();
+}
+
+struct SCVTargetResult::Traits {
+  using type = SCVTargetResult;
+  static auto constexpr Create = CreateSCVTargetResult;
+};
+
+inline ::flatbuffers::Offset<SCVTargetResult> CreateSCVTargetResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t TARGET_ID = 0,
+    const char *NAME = nullptr,
+    uint32_t ACCESS_COUNT = 0,
+    uint32_t REVISIT_COUNT = 0,
+    double TOTAL_ACCESS_DURATION_SEC = 0.0,
+    double MEAN_REVISIT_TIME_SEC = 0.0,
+    double MAX_GAP_SEC = 0.0,
+    const std::vector<double> *INTERVAL_START_SEC = nullptr,
+    const std::vector<double> *INTERVAL_STOP_SEC = nullptr,
+    const std::vector<uint32_t> *PASS_START_BUCKETS = nullptr,
+    const std::vector<uint32_t> *ACCESS_BITSET = nullptr) {
+  auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
+  auto INTERVAL_START_SEC__ = INTERVAL_START_SEC ? _fbb.CreateVector<double>(*INTERVAL_START_SEC) : 0;
+  auto INTERVAL_STOP_SEC__ = INTERVAL_STOP_SEC ? _fbb.CreateVector<double>(*INTERVAL_STOP_SEC) : 0;
+  auto PASS_START_BUCKETS__ = PASS_START_BUCKETS ? _fbb.CreateVector<uint32_t>(*PASS_START_BUCKETS) : 0;
+  auto ACCESS_BITSET__ = ACCESS_BITSET ? _fbb.CreateVector<uint32_t>(*ACCESS_BITSET) : 0;
+  return CreateSCVTargetResult(
+      _fbb,
+      TARGET_ID,
+      NAME__,
+      ACCESS_COUNT,
+      REVISIT_COUNT,
+      TOTAL_ACCESS_DURATION_SEC,
+      MEAN_REVISIT_TIME_SEC,
+      MAX_GAP_SEC,
+      INTERVAL_START_SEC__,
+      INTERVAL_STOP_SEC__,
+      PASS_START_BUCKETS__,
+      ACCESS_BITSET__);
+}
+
+::flatbuffers::Offset<SCVTargetResult> CreateSCVTargetResult(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTargetResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct SCVResultT : public ::flatbuffers::NativeTable {
   typedef SCVResult TableType;
   std::string JOB_ID{};
@@ -4399,6 +4729,7 @@ struct SCVResultT : public ::flatbuffers::NativeTable {
   std::unique_ptr<SCVPackedRasterProductsT> RASTER_PRODUCTS{};
   std::string MESSAGE{};
   std::unique_ptr<SCVAggregateStatisticsT> AGGREGATE_STATISTICS{};
+  std::vector<std::unique_ptr<SCVTargetResultT>> TARGET_RESULTS{};
   SCVResultT() = default;
   SCVResultT(const SCVResultT &o);
   SCVResultT(SCVResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -4422,7 +4753,8 @@ struct SCVResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_GEOMETRY = 22,
     VT_RASTER_PRODUCTS = 24,
     VT_MESSAGE = 26,
-    VT_AGGREGATE_STATISTICS = 28
+    VT_AGGREGATE_STATISTICS = 28,
+    VT_TARGET_RESULTS = 30
   };
   const ::flatbuffers::String *JOB_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_JOB_ID);
@@ -4463,6 +4795,9 @@ struct SCVResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const SCVAggregateStatistics *AGGREGATE_STATISTICS() const {
     return GetPointer<const SCVAggregateStatistics *>(VT_AGGREGATE_STATISTICS);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVTargetResult>> *TARGET_RESULTS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVTargetResult>> *>(VT_TARGET_RESULTS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -4490,6 +4825,9 @@ struct SCVResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(MESSAGE()) &&
            VerifyOffset(verifier, VT_AGGREGATE_STATISTICS) &&
            verifier.VerifyTable(AGGREGATE_STATISTICS()) &&
+           VerifyOffset(verifier, VT_TARGET_RESULTS) &&
+           verifier.VerifyVector(TARGET_RESULTS()) &&
+           verifier.VerifyVectorOfTables(TARGET_RESULTS()) &&
            verifier.EndTable();
   }
   SCVResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -4540,6 +4878,9 @@ struct SCVResultBuilder {
   void add_AGGREGATE_STATISTICS(::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS) {
     fbb_.AddOffset(SCVResult::VT_AGGREGATE_STATISTICS, AGGREGATE_STATISTICS);
   }
+  void add_TARGET_RESULTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVTargetResult>>> TARGET_RESULTS) {
+    fbb_.AddOffset(SCVResult::VT_TARGET_RESULTS, TARGET_RESULTS);
+  }
   explicit SCVResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -4565,9 +4906,11 @@ inline ::flatbuffers::Offset<SCVResult> CreateSCVResult(
     ::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY = 0,
     ::flatbuffers::Offset<SCVPackedRasterProducts> RASTER_PRODUCTS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> MESSAGE = 0,
-    ::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS = 0) {
+    ::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVTargetResult>>> TARGET_RESULTS = 0) {
   SCVResultBuilder builder_(_fbb);
   builder_.add_TRACE_ID(TRACE_ID);
+  builder_.add_TARGET_RESULTS(TARGET_RESULTS);
   builder_.add_AGGREGATE_STATISTICS(AGGREGATE_STATISTICS);
   builder_.add_MESSAGE(MESSAGE);
   builder_.add_RASTER_PRODUCTS(RASTER_PRODUCTS);
@@ -4602,11 +4945,13 @@ inline ::flatbuffers::Offset<SCVResult> CreateSCVResultDirect(
     ::flatbuffers::Offset<SCVPackedGeometryChunk> GEOMETRY = 0,
     ::flatbuffers::Offset<SCVPackedRasterProducts> RASTER_PRODUCTS = 0,
     const char *MESSAGE = nullptr,
-    ::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS = 0) {
+    ::flatbuffers::Offset<SCVAggregateStatistics> AGGREGATE_STATISTICS = 0,
+    const std::vector<::flatbuffers::Offset<SCVTargetResult>> *TARGET_RESULTS = nullptr) {
   auto JOB_ID__ = JOB_ID ? _fbb.CreateString(JOB_ID) : 0;
   auto HISTOGRAMS__ = HISTOGRAMS ? _fbb.CreateVector<::flatbuffers::Offset<SCVHistogramBin>>(*HISTOGRAMS) : 0;
   auto CONTRIBUTIONS__ = CONTRIBUTIONS ? _fbb.CreateVector<::flatbuffers::Offset<SCVSensorContribution>>(*CONTRIBUTIONS) : 0;
   auto MESSAGE__ = MESSAGE ? _fbb.CreateString(MESSAGE) : 0;
+  auto TARGET_RESULTS__ = TARGET_RESULTS ? _fbb.CreateVector<::flatbuffers::Offset<SCVTargetResult>>(*TARGET_RESULTS) : 0;
   return CreateSCVResult(
       _fbb,
       JOB_ID__,
@@ -4621,7 +4966,8 @@ inline ::flatbuffers::Offset<SCVResult> CreateSCVResultDirect(
       GEOMETRY,
       RASTER_PRODUCTS,
       MESSAGE__,
-      AGGREGATE_STATISTICS);
+      AGGREGATE_STATISTICS,
+      TARGET_RESULTS__);
 }
 
 ::flatbuffers::Offset<SCVResult> CreateSCVResult(::flatbuffers::FlatBufferBuilder &_fbb, const SCVResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5146,7 +5492,13 @@ inline SCVTargetT::SCVTargetT(const SCVTargetT &o)
         FRAME(o.FRAME),
         POSITION_M((o.POSITION_M) ? new SCVVec3T(*o.POSITION_M) : nullptr),
         VELOCITY_MPS((o.VELOCITY_MPS) ? new SCVVec3T(*o.VELOCITY_MPS) : nullptr),
-        RADIUS_M(o.RADIUS_M) {
+        RADIUS_M(o.RADIUS_M),
+        TARGET_KIND(o.TARGET_KIND),
+        DOMAIN(o.DOMAIN),
+        MIN_ALTITUDE_M(o.MIN_ALTITUDE_M),
+        MAX_ALTITUDE_M(o.MAX_ALTITUDE_M) {
+  POLYGON_VERTICES.reserve(o.POLYGON_VERTICES.size());
+  for (const auto &POLYGON_VERTICES_ : o.POLYGON_VERTICES) { POLYGON_VERTICES.emplace_back((POLYGON_VERTICES_) ? new SCVVec3T(*POLYGON_VERTICES_) : nullptr); }
 }
 
 inline SCVTargetT &SCVTargetT::operator=(SCVTargetT o) FLATBUFFERS_NOEXCEPT {
@@ -5157,6 +5509,11 @@ inline SCVTargetT &SCVTargetT::operator=(SCVTargetT o) FLATBUFFERS_NOEXCEPT {
   std::swap(POSITION_M, o.POSITION_M);
   std::swap(VELOCITY_MPS, o.VELOCITY_MPS);
   std::swap(RADIUS_M, o.RADIUS_M);
+  std::swap(TARGET_KIND, o.TARGET_KIND);
+  std::swap(DOMAIN, o.DOMAIN);
+  std::swap(POLYGON_VERTICES, o.POLYGON_VERTICES);
+  std::swap(MIN_ALTITUDE_M, o.MIN_ALTITUDE_M);
+  std::swap(MAX_ALTITUDE_M, o.MAX_ALTITUDE_M);
   return *this;
 }
 
@@ -5176,6 +5533,11 @@ inline void SCVTarget::UnPackTo(SCVTargetT *_o, const ::flatbuffers::resolver_fu
   { auto _e = POSITION_M(); if (_e) { if(_o->POSITION_M) { _e->UnPackTo(_o->POSITION_M.get(), _resolver); } else { _o->POSITION_M = std::unique_ptr<SCVVec3T>(_e->UnPack(_resolver)); } } else if (_o->POSITION_M) { _o->POSITION_M.reset(); } }
   { auto _e = VELOCITY_MPS(); if (_e) { if(_o->VELOCITY_MPS) { _e->UnPackTo(_o->VELOCITY_MPS.get(), _resolver); } else { _o->VELOCITY_MPS = std::unique_ptr<SCVVec3T>(_e->UnPack(_resolver)); } } else if (_o->VELOCITY_MPS) { _o->VELOCITY_MPS.reset(); } }
   { auto _e = RADIUS_M(); _o->RADIUS_M = _e; }
+  { auto _e = TARGET_KIND(); _o->TARGET_KIND = _e; }
+  { auto _e = DOMAIN(); _o->DOMAIN = _e; }
+  { auto _e = POLYGON_VERTICES(); if (_e) { _o->POLYGON_VERTICES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->POLYGON_VERTICES[_i]) { _e->Get(_i)->UnPackTo(_o->POLYGON_VERTICES[_i].get(), _resolver); } else { _o->POLYGON_VERTICES[_i] = std::unique_ptr<SCVVec3T>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->POLYGON_VERTICES.resize(0); } }
+  { auto _e = MIN_ALTITUDE_M(); _o->MIN_ALTITUDE_M = _e; }
+  { auto _e = MAX_ALTITUDE_M(); _o->MAX_ALTITUDE_M = _e; }
 }
 
 inline ::flatbuffers::Offset<SCVTarget> CreateSCVTarget(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTargetT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -5193,6 +5555,11 @@ inline ::flatbuffers::Offset<SCVTarget> SCVTarget::Pack(::flatbuffers::FlatBuffe
   auto _POSITION_M = _o->POSITION_M ? CreateSCVVec3(_fbb, _o->POSITION_M.get(), _rehasher) : 0;
   auto _VELOCITY_MPS = _o->VELOCITY_MPS ? CreateSCVVec3(_fbb, _o->VELOCITY_MPS.get(), _rehasher) : 0;
   auto _RADIUS_M = _o->RADIUS_M;
+  auto _TARGET_KIND = _o->TARGET_KIND;
+  auto _DOMAIN = _o->DOMAIN;
+  auto _POLYGON_VERTICES = _o->POLYGON_VERTICES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>> (_o->POLYGON_VERTICES.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVVec3(*__va->__fbb, __va->__o->POLYGON_VERTICES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _MIN_ALTITUDE_M = _o->MIN_ALTITUDE_M;
+  auto _MAX_ALTITUDE_M = _o->MAX_ALTITUDE_M;
   return CreateSCVTarget(
       _fbb,
       _TARGET_ID,
@@ -5201,7 +5568,12 @@ inline ::flatbuffers::Offset<SCVTarget> SCVTarget::Pack(::flatbuffers::FlatBuffe
       _FRAME,
       _POSITION_M,
       _VELOCITY_MPS,
-      _RADIUS_M);
+      _RADIUS_M,
+      _TARGET_KIND,
+      _DOMAIN,
+      _POLYGON_VERTICES,
+      _MIN_ALTITUDE_M,
+      _MAX_ALTITUDE_M);
 }
 
 inline SCVTargetStateSampleT::SCVTargetStateSampleT(const SCVTargetStateSampleT &o)
@@ -6118,6 +6490,62 @@ inline ::flatbuffers::Offset<SCVAggregateStatistics> SCVAggregateStatistics::Pac
       _PERCENT_COVERAGE);
 }
 
+inline SCVTargetResultT *SCVTargetResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SCVTargetResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SCVTargetResult::UnPackTo(SCVTargetResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = TARGET_ID(); _o->TARGET_ID = _e; }
+  { auto _e = NAME(); if (_e) _o->NAME = _e->str(); }
+  { auto _e = ACCESS_COUNT(); _o->ACCESS_COUNT = _e; }
+  { auto _e = REVISIT_COUNT(); _o->REVISIT_COUNT = _e; }
+  { auto _e = TOTAL_ACCESS_DURATION_SEC(); _o->TOTAL_ACCESS_DURATION_SEC = _e; }
+  { auto _e = MEAN_REVISIT_TIME_SEC(); _o->MEAN_REVISIT_TIME_SEC = _e; }
+  { auto _e = MAX_GAP_SEC(); _o->MAX_GAP_SEC = _e; }
+  { auto _e = INTERVAL_START_SEC(); if (_e) { _o->INTERVAL_START_SEC.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->INTERVAL_START_SEC[_i] = _e->Get(_i); } } else { _o->INTERVAL_START_SEC.resize(0); } }
+  { auto _e = INTERVAL_STOP_SEC(); if (_e) { _o->INTERVAL_STOP_SEC.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->INTERVAL_STOP_SEC[_i] = _e->Get(_i); } } else { _o->INTERVAL_STOP_SEC.resize(0); } }
+  { auto _e = PASS_START_BUCKETS(); if (_e) { _o->PASS_START_BUCKETS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->PASS_START_BUCKETS[_i] = _e->Get(_i); } } else { _o->PASS_START_BUCKETS.resize(0); } }
+  { auto _e = ACCESS_BITSET(); if (_e) { _o->ACCESS_BITSET.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ACCESS_BITSET[_i] = _e->Get(_i); } } else { _o->ACCESS_BITSET.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<SCVTargetResult> CreateSCVTargetResult(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTargetResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SCVTargetResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SCVTargetResult> SCVTargetResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTargetResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVTargetResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _TARGET_ID = _o->TARGET_ID;
+  auto _NAME = _o->NAME.empty() ? 0 : _fbb.CreateString(_o->NAME);
+  auto _ACCESS_COUNT = _o->ACCESS_COUNT;
+  auto _REVISIT_COUNT = _o->REVISIT_COUNT;
+  auto _TOTAL_ACCESS_DURATION_SEC = _o->TOTAL_ACCESS_DURATION_SEC;
+  auto _MEAN_REVISIT_TIME_SEC = _o->MEAN_REVISIT_TIME_SEC;
+  auto _MAX_GAP_SEC = _o->MAX_GAP_SEC;
+  auto _INTERVAL_START_SEC = _o->INTERVAL_START_SEC.size() ? _fbb.CreateVector(_o->INTERVAL_START_SEC) : 0;
+  auto _INTERVAL_STOP_SEC = _o->INTERVAL_STOP_SEC.size() ? _fbb.CreateVector(_o->INTERVAL_STOP_SEC) : 0;
+  auto _PASS_START_BUCKETS = _o->PASS_START_BUCKETS.size() ? _fbb.CreateVector(_o->PASS_START_BUCKETS) : 0;
+  auto _ACCESS_BITSET = _o->ACCESS_BITSET.size() ? _fbb.CreateVector(_o->ACCESS_BITSET) : 0;
+  return CreateSCVTargetResult(
+      _fbb,
+      _TARGET_ID,
+      _NAME,
+      _ACCESS_COUNT,
+      _REVISIT_COUNT,
+      _TOTAL_ACCESS_DURATION_SEC,
+      _MEAN_REVISIT_TIME_SEC,
+      _MAX_GAP_SEC,
+      _INTERVAL_START_SEC,
+      _INTERVAL_STOP_SEC,
+      _PASS_START_BUCKETS,
+      _ACCESS_BITSET);
+}
+
 inline SCVResultT::SCVResultT(const SCVResultT &o)
       : JOB_ID(o.JOB_ID),
         TRACE_ID(o.TRACE_ID),
@@ -6134,6 +6562,8 @@ inline SCVResultT::SCVResultT(const SCVResultT &o)
   for (const auto &HISTOGRAMS_ : o.HISTOGRAMS) { HISTOGRAMS.emplace_back((HISTOGRAMS_) ? new SCVHistogramBinT(*HISTOGRAMS_) : nullptr); }
   CONTRIBUTIONS.reserve(o.CONTRIBUTIONS.size());
   for (const auto &CONTRIBUTIONS_ : o.CONTRIBUTIONS) { CONTRIBUTIONS.emplace_back((CONTRIBUTIONS_) ? new SCVSensorContributionT(*CONTRIBUTIONS_) : nullptr); }
+  TARGET_RESULTS.reserve(o.TARGET_RESULTS.size());
+  for (const auto &TARGET_RESULTS_ : o.TARGET_RESULTS) { TARGET_RESULTS.emplace_back((TARGET_RESULTS_) ? new SCVTargetResultT(*TARGET_RESULTS_) : nullptr); }
 }
 
 inline SCVResultT &SCVResultT::operator=(SCVResultT o) FLATBUFFERS_NOEXCEPT {
@@ -6150,6 +6580,7 @@ inline SCVResultT &SCVResultT::operator=(SCVResultT o) FLATBUFFERS_NOEXCEPT {
   std::swap(RASTER_PRODUCTS, o.RASTER_PRODUCTS);
   std::swap(MESSAGE, o.MESSAGE);
   std::swap(AGGREGATE_STATISTICS, o.AGGREGATE_STATISTICS);
+  std::swap(TARGET_RESULTS, o.TARGET_RESULTS);
   return *this;
 }
 
@@ -6175,6 +6606,7 @@ inline void SCVResult::UnPackTo(SCVResultT *_o, const ::flatbuffers::resolver_fu
   { auto _e = RASTER_PRODUCTS(); if (_e) { if(_o->RASTER_PRODUCTS) { _e->UnPackTo(_o->RASTER_PRODUCTS.get(), _resolver); } else { _o->RASTER_PRODUCTS = std::unique_ptr<SCVPackedRasterProductsT>(_e->UnPack(_resolver)); } } else if (_o->RASTER_PRODUCTS) { _o->RASTER_PRODUCTS.reset(); } }
   { auto _e = MESSAGE(); if (_e) _o->MESSAGE = _e->str(); }
   { auto _e = AGGREGATE_STATISTICS(); if (_e) { if(_o->AGGREGATE_STATISTICS) { _e->UnPackTo(_o->AGGREGATE_STATISTICS.get(), _resolver); } else { _o->AGGREGATE_STATISTICS = std::unique_ptr<SCVAggregateStatisticsT>(_e->UnPack(_resolver)); } } else if (_o->AGGREGATE_STATISTICS) { _o->AGGREGATE_STATISTICS.reset(); } }
+  { auto _e = TARGET_RESULTS(); if (_e) { _o->TARGET_RESULTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->TARGET_RESULTS[_i]) { _e->Get(_i)->UnPackTo(_o->TARGET_RESULTS[_i].get(), _resolver); } else { _o->TARGET_RESULTS[_i] = std::unique_ptr<SCVTargetResultT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->TARGET_RESULTS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SCVResult> CreateSCVResult(::flatbuffers::FlatBufferBuilder &_fbb, const SCVResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6198,6 +6630,7 @@ inline ::flatbuffers::Offset<SCVResult> SCVResult::Pack(::flatbuffers::FlatBuffe
   auto _RASTER_PRODUCTS = _o->RASTER_PRODUCTS ? CreateSCVPackedRasterProducts(_fbb, _o->RASTER_PRODUCTS.get(), _rehasher) : 0;
   auto _MESSAGE = _o->MESSAGE.empty() ? 0 : _fbb.CreateString(_o->MESSAGE);
   auto _AGGREGATE_STATISTICS = _o->AGGREGATE_STATISTICS ? CreateSCVAggregateStatistics(_fbb, _o->AGGREGATE_STATISTICS.get(), _rehasher) : 0;
+  auto _TARGET_RESULTS = _o->TARGET_RESULTS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVTargetResult>> (_o->TARGET_RESULTS.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVTargetResult(*__va->__fbb, __va->__o->TARGET_RESULTS[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreateSCVResult(
       _fbb,
       _JOB_ID,
@@ -6212,7 +6645,8 @@ inline ::flatbuffers::Offset<SCVResult> SCVResult::Pack(::flatbuffers::FlatBuffe
       _GEOMETRY,
       _RASTER_PRODUCTS,
       _MESSAGE,
-      _AGGREGATE_STATISTICS);
+      _AGGREGATE_STATISTICS,
+      _TARGET_RESULTS);
 }
 
 inline SCVT::SCVT(const SCVT &o)

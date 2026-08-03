@@ -1,0 +1,140 @@
+{
+  "programId": "com.digitalarsenal.flows.satnogs-rf-ingest",
+  "name": "SatNOGS RF Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow, RF spectrum: a cron TIMER tick enters at satnogs-source:request, which emits ONE whole-table hostcap/http-request GET of the SatNOGS DB transmitters API (bulk, never a pagination walk) carrying the identifying User-Agent the source-policy.json fetch discipline mandates. satnogs-source:parse joins that job with the response, decodes ~4,994 transmitter rows into a size-prefixed $RFB record stream (batch = sha256 of the payload; Hz -> MHz per the normative RFB units rule; one record per LINK_DIRECTION so a Transceiver/Transponder becomes an UPLINK+DOWNLINK pair sharing ID_TRANSMITTER), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. SatNOGS DB is CC-BY-SA-4.0: every record carries the attribution in CITATION and the batch meta carries license/license_url/citation, keeping the share-alike obligation contained to its own licence-marked batch. Results land on the egress sink. All decisions live in-wasm; the host supplies only the http and storage connectors.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "methodId": "parse",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_rfb",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-rfb-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "rfb_meta",
+      "toNodeId": "ingest_rfb",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-rfb-records",
+      "fromNodeId": "parse",
+      "fromPortId": "rfb_records",
+      "toNodeId": "ingest_rfb",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $RFB identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-rfb-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_rfb",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-rfb-egress",
+      "fromNodeId": "ingest_rfb",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-satnogs-rf",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "description": "SatNOGS transmitter sync timer. DAILY, per the source-policy.json cadence ruling: SatNOGS DB is a volunteer-run catalogue that changes on the order of days, so aggressive polling is abuse regardless of what robots.txt permits. This is deliberately NOT the 3h GP cadence."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-satnogs-rf",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.satnogs-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

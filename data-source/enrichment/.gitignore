@@ -1,0 +1,9 @@
+# Cached source bodies (29 MB and rising) are NOT committed: they are
+# reproducible by `node fetch.mjs`, they belong to their upstream operators,
+# and two of them are share-alike licensed. The LEDGER is committed — it
+# carries the sha256, licence, citation and validators for every body, so a
+# reviewer can verify exactly which bytes a measurement was taken from without
+# the repo redistributing anyone's catalogue.
+cache/*.body
+cache/gunter/*.html
+cache/gunter/*.json
