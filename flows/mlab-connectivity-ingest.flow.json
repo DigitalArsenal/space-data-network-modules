@@ -1,0 +1,140 @@
+{
+  "programId": "com.digitalarsenal.flows.mlab-connectivity-ingest",
+  "name": "M-Lab Starlink Connectivity Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow, constellation network performance: a cron TIMER tick enters at mlab-starlink-connectivity:request, which emits ONE whole-file hostcap/http-request GET of the M-Lab statistics-pipeline per-ASN export (https://statistics.measurementlab.net/v0/asn/14593/<YEAR>/histogram_daily_stats.json) carrying an identifying User-Agent and no credentials of any kind \u2014 this lane is HTTPS only, never BigQuery. mlab-starlink-connectivity:parse joins that job with the response, collapses the eight per-date log-bucket rows into one aggregate per UTC day and emits a size-prefixed $CNP record stream (batch = sha256 of the payload; Mbps and ms verbatim, never converted; distribution statistics only, never an invented scalar; REGION omitted because the per-ASN export carries no geographic key), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. M-Lab test data is CC0: every CNPMetric provenance carries LICENSE CC0-1.0, M-Lab's own citation in ATTRIBUTION and NON_COMMERCIAL_ONLY false, which is what keeps a future CC BY-NC cross-check legally separable. Results land on the egress sink. All decisions live in-wasm; the host supplies only the http and storage connectors.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
+      "methodId": "parse",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_cnp",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-cnp-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "cnp_meta",
+      "toNodeId": "ingest_cnp",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-cnp-records",
+      "fromNodeId": "parse",
+      "fromPortId": "cnp_records",
+      "toNodeId": "ingest_cnp",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $CNP identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-cnp-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_cnp",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-cnp-egress",
+      "fromNodeId": "ingest_cnp",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-mlab-connectivity",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "description": "M-Lab statistics sync timer. DAILY: the statistics pipeline publishes a per-ASN-per-year artifact that is rewritten at most once a day when it is running at all (its most recent write for AS14593 is 2024-03-28), so anything faster is pure waste. Deliberately NOT the 3h GP cadence."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-mlab-connectivity",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.mlab-starlink-connectivity",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

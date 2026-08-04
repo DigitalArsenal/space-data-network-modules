@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.data-source.mlab-starlink-connectivity": "../data-source/mlab-starlink-connectivity",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}
