@@ -1,0 +1,243 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
+  "name": "M-Lab Starlink Connectivity Source Nodes",
+  "version": "0.1.0",
+  "description": "M-Lab NDT statistics pipeline -> SDS $CNP constellation-network-performance records. Two pure flow nodes: `request` turns a cron timer tick into ONE whole-file hostcap/http-request GET of https://statistics.measurementlab.net/v0/asn/<ASN>/<YEAR>/histogram_daily_stats.json (anonymous HTTPS, no BigQuery, no auth) plus the parser attribution job; `parse` joins that job with the http response, collapses the eight per-date log-bucket rows into one aggregate per UTC day and emits a size-prefixed $CNP record stream for hostcap/storage-ingest. Starlink IS the client-ASN key: the upstream query groups by client.Network.ASNumber and AS14593 is SPACEX-STARLINK, so no constellation is ever inferred from a throughput number. A quantity exists only as a CNPMetric with UNITS and PROVENANCE, and CNPMetric has no scalar VALUE: throughput publishes six CNPStatistic entries (MINIMUM, PERCENTILE 25, MEDIAN, MEAN, PERCENTILE 75, MAXIMUM) in Mbps verbatim and minimum-RTT publishes exactly one MEDIAN in ms. REGION is omitted entirely because the per-ASN export carries no geographic key. M-Lab test data is CC0, so every metric carries LICENSE CC0-1.0, M-Lab's own citation in ATTRIBUTION and NON_COMMERCIAL_ONLY false. No capabilities: this node performs no I/O — http and storage are the generic hostcap connector nodes.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Both methods are pure single-pass transforms over one fetched JSON table: `request` formats a fetch descriptor from node CONFIG, and `parse` walks the M-Lab per-ASN statistics rows once, collapsing the eight bucket rows of each date into a single $CNP record appended to one output stream. There is no shared mutable state, no worker pool, no fan-out and nothing for a second thread to do; the whole cost is one linear scan of a ~0.5 MB body. This guest can never spawn a thread, so it compiles on the single-thread STANDALONE_WASM lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "request",
+      "displayName": "M-Lab Statistics Fetch Request",
+      "description": "Builds the M-Lab per-ASN statistics fetch request + parse job from a timer tick. ONE whole-file request per cycle (the statistics pipeline publishes a static per-ASN-per-year artifact, not a paged API) with an identifying User-Agent and conditional-request validators from node CONFIG.",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload at all, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON http request for the M-Lab per-ASN statistics file.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "M-Lab statistics fetch request."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "mlab-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON job attribution (source mlab-ndt-statistics).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution ({source_url,source_name,provider_id,archive_*}) produced and consumed inside this flow; it is ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "M-Lab parse job."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse",
+      "displayName": "Parse M-Lab Per-ASN Statistics into $CNP",
+      "description": "Collapses the eight per-date log-bucket rows of the M-Lab per-ASN export into one $CNP aggregate per UTC day (WINDOW_START inclusive, WINDOW_STOP exclusive, AGGREGATION_PERIOD DAY) and emits a size-prefixed $CNP record stream plus the storage.ingest_with_source meta and the raw payload for archiving. Throughput stays in Mbps and RTT in ms — units are never silently converted — and the histogram columns and geometric means are recorded as unencoded in the batch provenance rather than forced into a CNPStatistic that would mean something else.",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "mlab-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON fetch-job attribution.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution ({source_url,source_name,provider_id,archive_*}) emitted by this module's own request node inside the same flow; ingest bookkeeping, never persisted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON from hostcap/http-request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}) consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying the M-Lab per-ASN statistics file."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cnp_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the CNP batch, carrying licence-bearing provenance.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, licence-bearing provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CNP ingest meta."
+        },
+        {
+          "portId": "cnp_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "CNP.fbs",
+                  "fileIdentifier": "$CNP",
+                  "rootTypeName": "CNP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $CNP FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CNP record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decoded source payload bytes (for raw archiving).",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/json",
+                "detail": "The verbatim M-Lab per-ASN histogram_daily_stats.json as fetched from statistics.measurementlab.net, archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "CNP.fbs",
+      "fileIdentifier": "$CNP",
+      "rootTypeName": "CNP"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "mlab-starlink-connectivity-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@digitalarsenal/sdn-flow-mlab-connectivity-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../mlab-connectivity-ingest.flow.json --deps ../mlab-connectivity-ingest.deps.json",
+    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../mlab-connectivity-ingest.flow.json --deps ../mlab-connectivity-ingest.deps.json --out ./dist/cnp"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}
