@@ -6,8 +6,13 @@
  * hostcalls. All HTTP semantics live here (TRUE isomorphism; the host is a
  * dumb pipe):
  *
- *   - URL path suffix routing: "/omm/bulk" -> omm_bulk, "/query" ->
- *     data_query, anything else -> not_found.
+ *   - URL path suffix routing: "/<code>/bulk" -> omm_bulk (per-schema bulk
+ *     read: the matched standard travels in query.schema, e.g. "/rfb/bulk" ->
+ *     "RFB.fbs"), "/query" -> data_query, anything else -> not_found.
+ *     The ROUTE ID stays "omm_bulk": it is the retrieval node's method name in
+ *     the compiled flow graph (data-source/retrieval:omm_bulk), and that
+ *     method has always been schema-generic — it was simply only ever handed
+ *     "OMM.fbs". Renaming it would be a flow-graph change, not a routing one.
  *   - Query-string parsing (module-owned, still URL-encoded on the wire):
  *     epoch (RFC3339 "YYYY-MM-DDTHH:MM:SSZ" or unix-seconds number),
  *     mode|profile ("profile" wins when both present), limit (positive
@@ -363,10 +368,26 @@ int route(void) {
         }
     };
 
-    if (ends_with(path, "/omm/bulk")) {
+    // Per-schema bulk read: "<code>/bulk" names the standard (loop C.3b served
+    // only "/omm/bulk"; sdn-data-retrieval-rfb-bulk-route generalized it, so
+    // "/rfb/bulk" reaches the live RF catalogue through the SAME retrieval
+    // node — its query already carries the schema, it was only ever handed one
+    // value).
+    const std::string bulk_schema = sdn_http_route::bulk_route_schema(path);
+    if (!bulk_schema.empty()) {
+        if (format == "json" && !sdn_http_route::json_encode_available(bulk_schema)) {
+            // Refuse rather than mis-encode: the flow's json branch is an $OMM
+            // encoder, and running $RFB bytes through it would answer confident
+            // nonsense. Say which formats exist instead.
+            decision += "\"route\":\"not_found\",";
+            append_common_tail(&decision);
+            decision += ",\"error\":\"json encoding is not available for " + json_escape(bulk_schema) +
+                        "; request format=flatbuffer\"}";
+            return push_decision(decision);
+        }
         decision += "\"route\":\"omm_bulk\",";
         append_common_tail(&decision);
-        decision += ",\"query\":{\"schema\":\"OMM.fbs\"";
+        decision += ",\"query\":{\"schema\":\"" + json_escape(bulk_schema) + "\"";
         if (const std::string* source = find_query_param(params, "source")) {
             if (!source->empty()) decision += ",\"source\":\"" + json_escape(*source) + "\"";
         }

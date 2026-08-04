@@ -18,12 +18,19 @@ const sdkHttpCppRoot = fileURLToPath(
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
+// Per-schema bulk-route parsing (src/bulk_route.h). The compiler takes ONE
+// translation unit, so this is prepended exactly like the SDK ABI header above.
+// It is a separate file so the routing rule can be compiled and tested natively
+// (tests/bulk_route.test.mjs) without the wasm toolchain.
+const bulkRoutePath = path.join(packageRoot, "src", "bulk_route.h");
+
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const [httpRequestHeader, implementationSource] = await Promise.all([
+const [httpRequestHeader, bulkRouteHeader, implementationSource] = await Promise.all([
   fs.readFile(path.join(sdkHttpCppRoot, "HttpRequestAbi_generated.h"), "utf8"),
+  fs.readFile(bulkRoutePath, "utf8"),
   fs.readFile(sourcePath, "utf8"),
 ]);
-const sourceCode = [httpRequestHeader, implementationSource].join("\n\n");
+const sourceCode = [httpRequestHeader, bulkRouteHeader, implementationSource].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
