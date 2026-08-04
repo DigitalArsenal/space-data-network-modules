@@ -455,3 +455,61 @@ test("route_node_activity: non-GET/HEAD methods answer route=error status=405", 
     assert.match(decision.error, new RegExp(method));
   }
 });
+
+// ---------------------------------------------------------------------------
+// Per-schema bulk routing THROUGH THE WASM (sdn-data-retrieval-rfb-bulk-route).
+//
+// tests/bulk_route.test.mjs compiles src/bulk_route.h natively and proves the
+// RULE. These prove the rule is COMPILED INTO the shipped artifact and survives
+// the guest ABI — the wasm lane that could not run while this module's build was
+// refused by the isomorphic-pthreads artifact guard
+// (mod-flow-bundles-descriptor-abi-gen2).
+// ---------------------------------------------------------------------------
+
+test("route /<code>/bulk carries the named SDS standard in query.schema (wasm lane)", async (t) => {
+  for (const [path, schema] of [
+    ["/api/v1/data/rfb/bulk", "RFB.fbs"],
+    ["/api/v1/data/RFB/bulk", "RFB.fbs"],
+    ["/api/v1/data/omm/bulk", "OMM.fbs"],
+    ["/api/v1/data/satcat/bulk", "SATCAT.fbs"],
+    ["/test/data/rfb/bulk", "RFB.fbs"],
+  ]) {
+    const decision = decodeDecision(await invokeRoute(t, { method: "GET", path, query: "" }));
+    assert.equal(decision.route, "omm_bulk", path);
+    assert.equal(decision.query.schema, schema, path);
+  }
+});
+
+test("route rejects a bulk path whose code segment is not a standard code (wasm lane)", async (t) => {
+  for (const path of ["/bulk", "/api/v1/data/toolongcode/bulk", "/api/v1/data/r%2Fb/bulk"]) {
+    const decision = decodeDecision(await invokeRoute(t, { method: "GET", path, query: "" }));
+    assert.equal(decision.route, "not_found", path);
+  }
+});
+
+// The match is on the SUFFIX and the flow does not know its own mount, so the
+// segment before "/bulk" is ALWAYS read as the standard code — including when
+// that segment is the mount itself. "/api/v1/data/bulk" therefore asks for
+// standard $DATA, not for "the default standard". Recorded as the rule's actual
+// behaviour so nobody later reads it as an $OMM alias.
+test("a bulk path with no standard segment names the MOUNT as the code (wasm lane)", async (t) => {
+  const decision = decodeDecision(
+    await invokeRoute(t, { method: "GET", path: "/api/v1/data/bulk", query: "" }),
+  );
+  assert.equal(decision.route, "omm_bulk");
+  assert.equal(decision.query.schema, "DATA.fbs");
+});
+
+test("route refuses ?format=json on a non-$OMM standard rather than mis-encoding it (wasm lane)", async (t) => {
+  const refused = decodeDecision(
+    await invokeRoute(t, { method: "GET", path: "/api/v1/data/rfb/bulk", query: "format=json" }),
+  );
+  assert.equal(refused.route, "not_found", "the flow's json branch is an $OMM encoder");
+  assert.ok(typeof refused.error === "string" && refused.error.length > 0, "the refusal must be explained");
+
+  const honoured = decodeDecision(
+    await invokeRoute(t, { method: "GET", path: "/api/v1/data/omm/bulk", query: "format=json" }),
+  );
+  assert.equal(honoured.route, "omm_bulk");
+  assert.equal(honoured.format, "json");
+});

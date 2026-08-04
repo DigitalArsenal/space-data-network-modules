@@ -3,12 +3,12 @@
   "format": "wasm-object",
   "language": "c++",
   "threadModel": "single-thread",
-  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_",
   "methodSymbols": {
-    "route": "sdm_guest_636f6d2e6469676974616c61_route",
-    "discover": "sdm_guest_636f6d2e6469676974616c61_discover",
-    "route_public_query": "sdm_guest_636f6d2e6469676974616c61_route_public_query",
-    "route_node_status": "sdm_guest_636f6d2e6469676974616c61_route_node_status",
-    "route_node_activity": "sdm_guest_636f6d2e6469676974616c61_route_node_activity"
+    "route": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route",
+    "discover": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_discover",
+    "route_public_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route_public_query",
+    "route_node_status": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route_node_status",
+    "route_node_activity": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route_node_activity"
   }
 }

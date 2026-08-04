@@ -35,11 +35,27 @@ const sourceCode = [httpRequestHeader, bulkRouteHeader, implementationSource].jo
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
+// THREAD MODEL IS DECLARED, NEVER INFERRED.
+//
+// Omitting it made the SDK deduce one from `runtimeTargets`, and when that rule
+// changed (targeting wasmedge now selects the wasi-threads model) this build
+// started claiming a pthreads contract the emitted wasm cannot honour — a pure
+// string router spawns nothing, so the link emits no `thread-spawn` import and
+// no `wasi_thread_start`, and the isomorphic-pthreads artifact guard correctly
+// refused it. Pinning the model states what the SHIPPED guest-link object has
+// always been (dist/guest-link/metadata.json: "single-thread"), so a future SDK
+// inference change cannot silently reshape a deployed artifact.
+//
+// Migrating this family off legacy Emscripten onto clang wasi-sequential is
+// tracked separately (graph: mod-foundation-family-wasi-sequential): every node
+// in a flow must move in the same wave or the link fails
+// `mixed-guest-thread-models`.
 const compilation = await compileModuleFromSource({
   manifest,
   sourceCode,
   language: "c++",
   outputPath,
+  threadModel: "single-thread",
 });
 
 // Persist the prefixed guest-link object + metadata for the flow compiler
