@@ -10,8 +10,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "minVersion": "0.5.0",
-      "maxVersion": "0.5.0"
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
@@ -126,6 +126,209 @@
       "kind": "wasm",
       "path": "dist/isomorphic/module.wasm",
       "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "route_public_query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "q",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "sandbox_query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "tojson",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "methodId": "encode",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "responder",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "route-decision",
+      "fromNodeId": "route",
+      "fromPortId": "decision",
+      "toNodeId": "q",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "q-decision",
+      "fromNodeId": "q",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "q-body",
+      "fromNodeId": "q",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "q-etag",
+      "fromNodeId": "q",
+      "fromPortId": "etag",
+      "toNodeId": "respond",
+      "toPortId": "etag",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "q-stream",
+      "fromNodeId": "q",
+      "fromPortId": "stream",
+      "toNodeId": "tojson",
+      "toPortId": "stream",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "aligned-binary",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 8
+        },
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": true,
+        "opaque": false,
+        "routePolicy": "aligned-shared-arena-or-canonical"
+      }
+    },
+    {
+      "edgeId": "tojson-body",
+      "fromNodeId": "tojson",
+      "fromPortId": "json",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponseAbi.fbs",
+          "fileIdentifier": "$HTR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request"
     }
   ],
   "abiVersion": 1
