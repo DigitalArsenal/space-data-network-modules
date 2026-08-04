@@ -1,0 +1,243 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
+  "name": "SigMF Raw-IQ Capture Source Nodes",
+  "version": "0.1.0",
+  "description": "Public raw-IQ archives -> SDS $IQC pointer records. Two pure flow nodes: `request` turns a cron timer tick into ONE bulk hostcap/http-request GET of the configured archive's metadata index (default IQEngine: https://www.iqengine.org/api/datasources/local/local/meta, anonymous, no token, ~31 MB, 36,636 SigMF documents) plus the parser attribution job naming the source adapter; `parse` joins that job with the response, decodes each SigMF document and emits a size-prefixed $IQC record stream for hostcap/storage-ingest. $IQC IS A POINTER RECORD: it carries where the samples are (PAYLOADS[].URL), what they hash to (BYTE_SHA512 from SigMF core:sha512) and nothing else — CUSTODY stays UPSTREAM_ONLY and no payload is ever mirrored. SigMF publishes HERTZ, so SAMPLE_RATE_HZ / CENTER_FREQ_HZ / FREQ_*_EDGE_HZ carry the value unconverted ($RFB's MHz convention is deliberately NOT adopted) and DATATYPE is the SigMF token verbatim. GEOLOCATION is omitted entirely when the source published no position, and a transposed lat/lon is refused rather than swapped. LICENCE IS PER RECORDING: core:license rides verbatim and an absent one means UNKNOWN TERMS, never public domain. The source-adapter registry ships exactly one adapter, the one whose anonymous read surface was verified live; a stub adapter that fabricates data is forbidden and an unknown adapter id fails closed. No capabilities: this node performs no I/O — http and storage are the generic hostcap connector nodes.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Both methods are pure single-pass transforms over one fetched JSON document: `request` formats a fetch descriptor from node CONFIG, and `parse` walks the archive's capture documents once, emitting one $IQC record per document into a single append-only stream. There is no shared mutable state, no worker pool, no fan-out and nothing for a second thread to do; the whole cost is one linear scan of the metadata index. This guest can never spawn a thread, so it compiles on the single-thread STANDALONE_WASM lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "request",
+      "displayName": "SigMF Archive Metadata Fetch Request",
+      "description": "Builds the archive bulk-metadata fetch request + parse job from a timer tick. ONE bulk request per cycle — the per-file metadata route exists but walking it would be a 36,636-request crawl of a community-run service. The job frame names the source adapter; an adapter id absent from the registry fails closed.",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload at all, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON http request for the archive metadata index.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Archive metadata fetch request."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "sigmf-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON job attribution naming the source adapter.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution ({adapter,source_url,source_name,provider_id,base_url,account,container,archive_*}) produced and consumed inside this flow; it is ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SigMF parse job."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse",
+      "displayName": "Parse Archive SigMF Metadata into $IQC",
+      "description": "Decodes each SigMF document in the archive metadata index into an $IQC pointer record (Hz unconverted, DATATYPE verbatim, SEGMENTS/ANNOTATIONS/EXTENSIONS carried, GEOLOCATION omitted when unpublished or out of WGS-84 range, licence per recording, PAYLOADS pointing upstream with CUSTODY UPSTREAM_ONLY) plus the storage.ingest_with_source meta and the raw payload for archiving.",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "sigmf-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON fetch-job attribution naming the source adapter.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution emitted by this module's own request node inside the same flow; ingest bookkeeping, never persisted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON from hostcap/http-request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}) consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying the archive metadata index."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "iqc_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the IQC batch.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, decode-statistics provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "IQC ingest meta."
+        },
+        {
+          "portId": "iqc_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "IQC.fbs",
+                  "fileIdentifier": "$IQC",
+                  "rootTypeName": "IQC",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $IQC FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "IQC record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decoded source payload bytes (for raw archiving).",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/json",
+                "detail": "The verbatim archive metadata index as fetched (IQEngine's SigMF document array), archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "IQC.fbs",
+      "fileIdentifier": "$IQC",
+      "rootTypeName": "IQC"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "sigmf-captures-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

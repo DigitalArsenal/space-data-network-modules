@@ -1,0 +1,140 @@
+{
+  "programId": "com.digitalarsenal.flows.sigmf-captures-ingest",
+  "name": "SigMF Raw-IQ Capture Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow, raw-IQ capture pointers: a cron TIMER tick enters at sigmf-captures:request, which emits ONE bulk hostcap/http-request GET of the configured archive's metadata index (default IQEngine https://www.iqengine.org/api/datasources/local/local/meta \u2014 anonymous, no token) rather than a per-file crawl of a community-run service. sigmf-captures:parse joins that job with the response and emits a size-prefixed $IQC record stream (batch = sha256 of the payload; SigMF hertz carried unconverted; DATATYPE verbatim; GEOLOCATION omitted when unpublished and REFUSED when the coordinates are out of WGS-84 range; licence per RECORDING, empty meaning unknown terms), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. $IQC is a POINTER RECORD: PAYLOADS carry the upstream URLs and hashes with CUSTODY UPSTREAM_ONLY, so no capture payload is ever mirrored by this flow. Results land on the egress sink. All decisions live in-wasm; the host supplies only the http and storage connectors.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
+      "methodId": "parse",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_iqc",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-iqc-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "iqc_meta",
+      "toNodeId": "ingest_iqc",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-iqc-records",
+      "fromNodeId": "parse",
+      "fromPortId": "iqc_records",
+      "toNodeId": "ingest_iqc",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $IQC identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-iqc-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_iqc",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-iqc-egress",
+      "fromNodeId": "ingest_iqc",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-sigmf-captures",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 604800000,
+      "description": "SigMF archive sync timer. WEEKLY: these archives grow by hand-contributed recordings over weeks, and one cycle pulls a ~31 MB index from a free community deployment, so a daily poll would be abuse with no new data to show for it."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-sigmf-captures",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.sigmf-captures",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

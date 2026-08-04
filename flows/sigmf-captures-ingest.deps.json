@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.data-source.sigmf-captures": "../data-source/sigmf-captures",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}
