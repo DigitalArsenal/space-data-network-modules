@@ -5,6 +5,9 @@
 
 #include <flatbuffers/flatbuffers.h>
 
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
 #include "EPM_generated.h"
 
 #include <cryptopp/osrng.h>
@@ -60,12 +63,23 @@ int main() {
   EpmFields tosign;
   tosign.entity_type = "User";
   tosign.signature_timestamp = 1782470000;
+  tosign.signature_algorithm = "ed25519";
   sdn::epm::CryptoKey k;
   k.public_key = ToHex(pub32, 32);
-  k.xpub = "xpub6DHmTESTidentity";
   k.address_type = "ed25519";
   k.key_type = "Signing";
+  k.key_path = "m/44'/0'/0'/0'/0'";
+  k.algorithm = "ed25519";
+  k.encoding = "raw-ed25519";
   tosign.keys.push_back(k);
+  sdn::epm::CryptoKey account;
+  account.xpub = "xpub6DHmTESTidentity";
+  account.address_type = "p2pkh";
+  account.key_type = "Signing";
+  account.key_path = "m/44'/0'/0'";
+  account.algorithm = "secp256k1";
+  account.encoding = "compressed-sec1";
+  tosign.keys.push_back(account);
 
   const std::string content = SigningContentBytes(tosign);
   std::vector<CryptoPP::byte> sig(signer.MaxSignatureLength());
@@ -76,20 +90,40 @@ int main() {
   // Build the size-prefixed $EPM FlatBuffer with the same fields + SIGNATURE.
   flatbuffers::FlatBufferBuilder b(1024);
   const auto pk_off = b.CreateString(k.public_key);
-  const auto xpub_off = b.CreateString(k.xpub);
   const auto at_off = b.CreateString(k.address_type);
+  const auto kp_off = b.CreateString(k.key_path);
+  const auto alg_off = b.CreateString(k.algorithm);
+  const auto enc_off = b.CreateString(k.encoding);
   CryptoKeyBuilder ckb(b);
   ckb.add_PUBLIC_KEY(pk_off);
-  ckb.add_XPUB(xpub_off);
   ckb.add_ADDRESS_TYPE(at_off);
   ckb.add_KEY_TYPE(KeyType::Signing);
-  const auto ck_off = ckb.Finish();
-  const auto keys_off = b.CreateVector(std::vector<flatbuffers::Offset<::CryptoKey>>{ck_off});
+  ckb.add_KEY_PATH(kp_off);
+  ckb.add_ALGORITHM(alg_off);
+  ckb.add_ENCODING(enc_off);
+  const auto ed_off = ckb.Finish();
+  const auto xpub_off = b.CreateString(account.xpub);
+  const auto account_at = b.CreateString(account.address_type);
+  const auto account_kp = b.CreateString(account.key_path);
+  const auto account_alg = b.CreateString(account.algorithm);
+  const auto account_enc = b.CreateString(account.encoding);
+  CryptoKeyBuilder account_builder(b);
+  account_builder.add_XPUB(xpub_off);
+  account_builder.add_ADDRESS_TYPE(account_at);
+  account_builder.add_KEY_TYPE(KeyType::Signing);
+  account_builder.add_KEY_PATH(account_kp);
+  account_builder.add_ALGORITHM(account_alg);
+  account_builder.add_ENCODING(account_enc);
+  const auto account_off = account_builder.Finish();
+  const auto keys_off = b.CreateVector(
+      std::vector<flatbuffers::Offset<::CryptoKey>>{ed_off, account_off});
   const auto sig_off = b.CreateString(sig_hex);
+  const auto sig_alg_off = b.CreateString(tosign.signature_algorithm);
   EPMBuilder eb(b);
   eb.add_KEYS(keys_off);
   eb.add_SIGNATURE(sig_off);
   eb.add_SIGNATURE_TIMESTAMP(1782470000);
+  eb.add_SIGNATURE_ALGORITHM(sig_alg_off);
   eb.add_ENTITY_TYPE(EntityType::User);
   FinishSizePrefixedEPMBuffer(b, eb.Finish());
 

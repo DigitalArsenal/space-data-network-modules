@@ -74,6 +74,9 @@ JsonValue BuildSigningContent(const EpmFields& epm) {
       if (k.key_type == "Signing" || k.key_type == "Encryption") {
         entry.object.emplace_back("KEY_TYPE", JsonValue::Str(k.key_type));
       }
+      AddStr(&entry, "KEY_PATH", k.key_path);
+      AddStr(&entry, "ALGORITHM", k.algorithm);
+      AddStr(&entry, "ENCODING", k.encoding);
       if (!entry.object.empty()) keys.array.push_back(std::move(entry));
     }
     if (!keys.array.empty()) content.object.emplace_back("KEYS", std::move(keys));
@@ -86,6 +89,8 @@ JsonValue BuildSigningContent(const EpmFields& epm) {
   if (epm.signature_timestamp != 0) {
     content.object.emplace_back("SIGNATURE_TIMESTAMP", JsonValue::Int(epm.signature_timestamp));
   }
+
+  AddStr(&content, "SIGNATURE_ALGORITHM", epm.signature_algorithm);
 
   {
     JsonValue proofs = JsonValue::Arr();

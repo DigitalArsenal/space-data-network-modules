@@ -2,6 +2,9 @@
 
 #include <flatbuffers/flatbuffers.h>
 
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
 #include "EPM_generated.h"
 
 namespace sdn::epm {
@@ -64,6 +67,9 @@ bool EpmFieldsFromBytes(const uint8_t* bytes, std::size_t len, EpmFields* out,
       ck.address_type = Str(k->ADDRESS_TYPE());
       ck.key_address = Str(k->KEY_ADDRESS());
       ck.key_type = EnumNameKeyType(k->KEY_TYPE());  // "Signing" | "Encryption"
+      ck.key_path = Str(k->KEY_PATH());
+      ck.algorithm = Str(k->ALGORITHM());
+      ck.encoding = Str(k->ENCODING());
       f.keys.push_back(std::move(ck));
     }
   }
@@ -74,6 +80,7 @@ bool EpmFieldsFromBytes(const uint8_t* bytes, std::size_t len, EpmFields* out,
 
   f.entity_type = EnumNameEntityType(epm->ENTITY_TYPE());  // "User" | "Node"
   f.signature_timestamp = epm->SIGNATURE_TIMESTAMP();
+  f.signature_algorithm = Str(epm->SIGNATURE_ALGORITHM());
 
   if (const auto* proofs = epm->CHAIN_PROOFS()) {
     for (const ::ChainProof* p : *proofs) {
