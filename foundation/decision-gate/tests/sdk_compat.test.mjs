@@ -26,10 +26,27 @@ const decoder = new TextDecoder();
 
 // JSON-bytes / raw-bytes frames ride the aligned-binary wire format.
 function bytesInput(portId, bytes) {
+  const payload = bytes instanceof Uint8Array ? bytes : encoder.encode(bytes);
   return {
     portId,
-    typeRef: { wireFormat: "aligned-binary" },
-    payload: bytes instanceof Uint8Array ? bytes : encoder.encode(bytes),
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
+  };
+}
+
+function ommInput(portId, bytes) {
+  const payload = bytes instanceof Uint8Array ? bytes : encoder.encode(bytes);
+  return {
+    portId,
+    typeRef: {
+      schemaName: "OMM.fbs",
+      fileIdentifier: "$OMM",
+      rootTypeName: "OMM",
+      wireFormat: "aligned-binary",
+      requiredAlignment: 8,
+      byteLength: payload.byteLength,
+    },
+    payload,
   };
 }
 
@@ -183,11 +200,14 @@ test("branch flatbuffer: verbatim stream + decision + deterministic etag", async
   const decision = JSON.stringify({ route: "omm_bulk", format: "flatbuffer" });
   const response = await invoke(t, "branch", [
     bytesInput("decision", decision),
-    bytesInput("stream", CANNED_STREAM),
+    ommInput("stream", CANNED_STREAM),
   ]);
   const byPort = framesByPort(response);
   assert.deepEqual([...byPort.keys()].sort(), ["decision", "etag", "flatbuffer"]);
   assert.deepEqual(new Uint8Array(byPort.get("flatbuffer").payload), CANNED_STREAM);
+  assert.equal(byPort.get("flatbuffer").typeRef?.schemaName, "OMM.fbs");
+  assert.equal(byPort.get("flatbuffer").typeRef?.fileIdentifier, "$OMM");
+  assert.equal(byPort.get("flatbuffer").typeRef?.rootTypeName, "OMM");
   assert.equal(decoder.decode(byPort.get("decision").payload), decision);
   const etag = decoder.decode(byPort.get("etag").payload);
   assert.match(etag, /^W\/"fnv1a64-[0-9a-f]{16}"$/);
@@ -195,7 +215,7 @@ test("branch flatbuffer: verbatim stream + decision + deterministic etag", async
   // Deterministic: the same stream always hashes to the same entity tag.
   const again = await invoke(t, "branch", [
     bytesInput("decision", decision),
-    bytesInput("stream", CANNED_STREAM),
+    ommInput("stream", CANNED_STREAM),
   ]);
   assert.equal(decoder.decode(framesByPort(again).get("etag").payload), etag);
 });
@@ -211,7 +231,7 @@ test("branch flatbuffer: body-reference descriptor passes through with the host-
   });
   const response = await invoke(t, "branch", [
     bytesInput("decision", decision),
-    bytesInput("stream", descriptor),
+    ommInput("stream", descriptor),
   ]);
   const byPort = framesByPort(response);
   assert.deepEqual([...byPort.keys()].sort(), ["decision", "etag", "flatbuffer"]);
@@ -231,7 +251,7 @@ test("branch json: stream routed to the json port", async (t) => {
   const decision = JSON.stringify({ route: "omm_bulk", format: "json" });
   const response = await invoke(t, "branch", [
     bytesInput("decision", decision),
-    bytesInput("stream", CANNED_STREAM),
+    ommInput("stream", CANNED_STREAM),
   ]);
   const byPort = framesByPort(response);
   assert.deepEqual([...byPort.keys()].sort(), ["decision", "etag", "json"]);

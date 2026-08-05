@@ -149,10 +149,19 @@
               "setId": "sdn-retrieval-stream-bytes",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
                 }
               ],
-              "description": "Retrieval result bytes passed through verbatim: an ALIGNED size-prefixed FlatBuffer stream ($OMM for omm_bulk, generic aligned rows for data_query)."
+              "description": "Retrieval result bytes passed through verbatim as an aligned size-prefixed $OMM stream."
             }
           ],
           "minStreams": 1,
@@ -169,10 +178,19 @@
               "setId": "sdn-branch-flatbuffer-stream",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
                 }
               ],
-              "description": "The stream verbatim when decision.format=flatbuffer (default): wired straight to http-respond body."
+              "description": "The typed $OMM stream verbatim when decision.format=flatbuffer (default): wired straight to http-respond body."
             }
           ],
           "minStreams": 0,

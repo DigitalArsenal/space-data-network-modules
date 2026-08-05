@@ -431,6 +431,9 @@ int respond(void) {
     // 4. 200 with the body frame verbatim — either inline bytes or a
     //    body-reference descriptor forwarded as $HTR BODY_REF fields.
     const plugin_input_frame_t* body_frame = find_input("body");
+    if (!body_frame) body_frame = find_input("epm_body");
+    if (!body_frame) body_frame = find_input("pnm_body");
+    if (!body_frame) body_frame = find_input("omm_body");
     const uint8_t* body = body_frame ? body_frame->payload : nullptr;
     const size_t body_length = body ? static_cast<size_t>(body_frame->payload_length) : 0u;
 

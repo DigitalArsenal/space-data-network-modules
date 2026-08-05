@@ -41,19 +41,105 @@
           "portId": "body",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-response-body-bytes",
+              "setId": "sdn-http-response-json-or-control-body",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "Response body bytes passed through verbatim: an ALIGNED size-prefixed FlatBuffer stream (decision.format=flatbuffer) or JSON bytes (decision.format=json)."
+              "description": "JSON response or body-reference control bytes.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "JSON response bodies and body-reference descriptors are flow-local material and carry no SDS record identity."
+              }
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Optional response body frame; absent means an empty 200 body."
+          "description": "Optional opaque response body; absent means an empty 200 body."
+        },
+        {
+          "portId": "epm_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-epm-response-body",
+              "allowedTypes": [
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM"
+                },
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 1
+                }
+              ],
+              "description": "Typed $EPM response stream."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional typed $EPM response stream."
+        },
+        {
+          "portId": "pnm_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnm-response-body",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM"
+                },
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 1
+                }
+              ],
+              "description": "Typed $PNM response stream."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional typed $PNM response stream."
+        },
+        {
+          "portId": "omm_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-response-body",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Typed $OMM response stream."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional typed $OMM response stream."
         },
         {
           "portId": "etag",

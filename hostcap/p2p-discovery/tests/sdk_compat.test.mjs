@@ -52,7 +52,12 @@ function readWasm() {
 }
 
 function jsonInput(portId, value) {
-  return { portId, typeRef: { wireFormat: "aligned-binary" }, payload: encoder.encode(JSON.stringify(value)) };
+  const payload = encoder.encode(JSON.stringify(value));
+  return {
+    portId,
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
+  };
 }
 
 function createStub({ result, fail } = {}) {

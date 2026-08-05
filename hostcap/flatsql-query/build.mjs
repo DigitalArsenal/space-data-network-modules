@@ -24,6 +24,7 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
+  threadModel: "single-thread",
   // The module imports the sync space_data_module_host hostcall bridge; those
   // symbols resolve at instantiation (SDK harness bridge / Go node bridge).
   allowUndefinedImports: true,

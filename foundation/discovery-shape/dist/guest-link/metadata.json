@@ -3,11 +3,11 @@
   "format": "wasm-object",
   "language": "c++",
   "threadModel": "single-thread",
-  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_",
   "methodSymbols": {
-    "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
-    "shape_standards": "sdm_guest_636f6d2e6469676974616c61_shape_standards",
-    "shape_pnm": "sdm_guest_636f6d2e6469676974616c61_shape_pnm",
-    "shape_latest": "sdm_guest_636f6d2e6469676974616c61_shape_latest"
+    "shape_peers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_peers",
+    "shape_standards": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_standards",
+    "shape_pnm": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_pnm",
+    "shape_latest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_latest"
   }
 }

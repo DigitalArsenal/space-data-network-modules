@@ -70,6 +70,15 @@
       "queueDepth": 16
     },
     {
+      "edgeId": "q-omm-body",
+      "fromNodeId": "q",
+      "fromPortId": "omm_body",
+      "toNodeId": "respond",
+      "toPortId": "omm_body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
       "edgeId": "q-etag",
       "fromNodeId": "q",
       "fromPortId": "etag",

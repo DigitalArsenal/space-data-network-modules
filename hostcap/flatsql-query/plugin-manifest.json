@@ -141,6 +141,33 @@
           "description": "Body frame for http-respond (absent when the stream port carries the result or on errors)."
         },
         {
+          "portId": "omm_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-public-query-omm-body",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Full-record $OMM result stream on the flatbuffer response path."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Typed $OMM body for foundation/http-respond."
+        },
+        {
           "portId": "etag",
           "acceptedTypeSets": [
             {
@@ -175,9 +202,6 @@
                   "rootTypeName": "OMM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
-                },
-                {
-                  "acceptsAnyFlatbuffer": true
                 }
               ],
               "description": "Full-record result stream on the json path, fed to foundation/omm-json for the bare-array presentation."

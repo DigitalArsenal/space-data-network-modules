@@ -3,16 +3,15 @@
   "name": "SDN Data Retrieval Flow",
   "version": "0.2.4",
   "pluginFamily": "flow",
-  "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; engineLinkage: flatsql (loop C.7) — the retrieval node submits queries DIRECTLY to the live store engine via wasm imports (modules flatsql/flatsql_link); no storage.flatsql_* hostcalls exist on this path. Flatbuffer-branch bodies stay in engine memory as SDNE body-ref tokens; the json branch copies bytes engine->flow in-wasm.",
+  "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; engineLinkage: bridge — the retrieval node reaches the store over the storage.flatsql_* hostcall bridge (capability storage_query). The former \"flatsql\" linkage, which linked the live store engine into this artifact's own linear memory, is RETIRED: FlatSQL is an independently signed and instantiated isomorphic WASM node, never a library baked into every flow that reads. Flatbuffer-branch bodies cross the bridge as SDNE body-ref tokens when the host honours \"deliver\":\"ref\" and as segment bytes otherwise; the json branch copies bytes engine->flow in-wasm.",
   "capabilities": [
-    "storage_engine_link",
     "storage_query"
   ],
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "minVersion": "0.4.0",
-      "maxVersion": "0.4.0"
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.decision-gate",
@@ -31,8 +30,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
+      "minVersion": "0.2.1",
+      "maxVersion": "0.2.1"
     }
   ],
   "externalInterfaces": [
@@ -137,6 +136,403 @@
       "kind": "wasm",
       "path": "dist/isomorphic/module.wasm",
       "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.foundation.http-route",
+      "methodId": "route",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "gate",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "methodId": "dispatch",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "omm",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "methodId": "omm_bulk",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "methodId": "data_query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "branch",
+      "pluginId": "com.digitalarsenal.foundation.decision-gate",
+      "methodId": "branch",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "tojson",
+      "pluginId": "com.digitalarsenal.foundation.omm-json",
+      "methodId": "encode",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "responder",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "route-decision",
+      "fromNodeId": "route",
+      "fromPortId": "decision",
+      "toNodeId": "gate",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "gate-omm-bulk",
+      "fromNodeId": "gate",
+      "fromPortId": "omm_bulk",
+      "toNodeId": "omm",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "CAQ.fbs",
+          "fileIdentifier": "$CAQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "CAQ",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "gate-data-query",
+      "fromNodeId": "gate",
+      "fromPortId": "data_query",
+      "toNodeId": "query",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "CAQ.fbs",
+          "fileIdentifier": "$CAQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "CAQ",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "gate-routed-decision",
+      "fromNodeId": "gate",
+      "fromPortId": "routed",
+      "toNodeId": "branch",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "gate-not-found",
+      "fromNodeId": "gate",
+      "fromPortId": "not_found",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "omm-stream",
+      "fromNodeId": "omm",
+      "fromPortId": "stream",
+      "toNodeId": "branch",
+      "toPortId": "stream",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "aligned-binary",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 8
+        },
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": true,
+        "opaque": false,
+        "routePolicy": "aligned-shared-arena-or-canonical"
+      }
+    },
+    {
+      "edgeId": "query-rows",
+      "fromNodeId": "query",
+      "fromPortId": "rows",
+      "toNodeId": "branch",
+      "toPortId": "stream",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "branch-flatbuffer-body",
+      "fromNodeId": "branch",
+      "fromPortId": "flatbuffer",
+      "toNodeId": "respond",
+      "toPortId": "omm_body",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "aligned-binary",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 8
+        },
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": true,
+        "opaque": false,
+        "routePolicy": "aligned-shared-arena-or-canonical"
+      }
+    },
+    {
+      "edgeId": "branch-json-stream",
+      "fromNodeId": "branch",
+      "fromPortId": "json",
+      "toNodeId": "tojson",
+      "toPortId": "stream",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "aligned-binary",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 8
+        },
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": true,
+        "opaque": false,
+        "routePolicy": "aligned-shared-arena-or-canonical"
+      }
+    },
+    {
+      "edgeId": "branch-decision",
+      "fromNodeId": "branch",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "branch-etag",
+      "fromNodeId": "branch",
+      "fromPortId": "etag",
+      "toNodeId": "respond",
+      "toPortId": "etag",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tojson-body",
+      "fromNodeId": "tojson",
+      "fromPortId": "json",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponseAbi.fbs",
+          "fileIdentifier": "$HTR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request"
     }
   ],
   "abiVersion": 1

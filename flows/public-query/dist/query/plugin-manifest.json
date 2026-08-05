@@ -222,6 +222,43 @@
       }
     },
     {
+      "edgeId": "q-omm-body",
+      "fromNodeId": "q",
+      "fromPortId": "omm_body",
+      "toNodeId": "respond",
+      "toPortId": "omm_body",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "aligned-binary",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 8
+        },
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": true,
+        "opaque": false,
+        "routePolicy": "aligned-shared-arena-or-canonical"
+      }
+    },
+    {
       "edgeId": "q-etag",
       "fromNodeId": "q",
       "fromPortId": "etag",
