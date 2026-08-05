@@ -1,0 +1,136 @@
+{
+  "id": "supplemental-omm",
+  "name": "Supplemental OMM",
+  "version": "1.0.0",
+  "description": "Five independent ephemeris providers fitted into supplemental OMM and OCM records by one composed isomorphic module.",
+  "modules": [
+    {
+      "id": "supplemental-omm",
+      "pluginId": "org.sdn.flows.od-supplemental-omm",
+      "version": "1.0.0",
+      "role": "primary",
+      "description": "The complete five-provider, full-arc orbit-determination, FlatSQL, publication, and status composition.",
+      "maxMemoryPages": 16384,
+      "runtimeTarget": "node"
+    }
+  ],
+  "data": [
+    {
+      "id": "fitted-omm",
+      "sdsType": "OMM",
+      "direction": "produces",
+      "moduleId": "supplemental-omm"
+    },
+    {
+      "id": "runtime-status",
+      "sdsType": "DSS",
+      "direction": "produces",
+      "moduleId": "supplemental-omm",
+      "description": "Generic per-node runtime counters emitted as canonical DSS records inside signed-node FSB transport envelopes."
+    },
+    {
+      "id": "fitted-ocm",
+      "sdsType": "OCM",
+      "direction": "produces",
+      "moduleId": "supplemental-omm"
+    }
+  ],
+  "sources": [
+    {
+      "id": "source-starlink",
+      "kind": "dataset",
+      "ref": "spacex-starlink-operator-ephemeris"
+    },
+    {
+      "id": "source-glonass",
+      "kind": "dataset",
+      "ref": "glonass-precise-ephemeris"
+    },
+    {
+      "id": "source-intelsat",
+      "kind": "dataset",
+      "ref": "intelsat-operator-ephemeris"
+    },
+    {
+      "id": "source-cpf",
+      "kind": "dataset",
+      "ref": "ilrs-cpf-predictions"
+    },
+    {
+      "id": "source-iss",
+      "kind": "dataset",
+      "ref": "iss-operator-ephemeris"
+    }
+  ],
+  "pages": [
+    {
+      "id": "provider-status-board",
+      "title": "Supplemental OMM — Provider Status Board",
+      "description": "Live progress for five provider lanes plus the orbit-determination lane.",
+      "mediaType": "text/html",
+      "entry": true,
+      "encoding": "utf8",
+      "contentFile": "ui/index.html"
+    }
+  ],
+  "createdAt": "2026-07-21T00:00:00.000Z",
+  "updatedAt": "2026-07-21T00:00:00.000Z",
+  "dataflow": [
+    {
+      "name": "starlink-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-starlink.dss",
+      "contentEncoding": "utf8"
+    },
+    {
+      "name": "glonass-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-glonass.dss",
+      "contentEncoding": "utf8"
+    },
+    {
+      "name": "intelsat-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-intelsat.dss",
+      "contentEncoding": "utf8"
+    },
+    {
+      "name": "cpf-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-cpf.dss",
+      "contentEncoding": "utf8"
+    },
+    {
+      "name": "iss-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/provider-iss.dss",
+      "contentEncoding": "utf8"
+    },
+    {
+      "name": "od-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/od.dss",
+      "contentEncoding": "utf8"
+    },
+    {
+      "name": "store-runtime-status",
+      "direction": "to_page",
+      "sdsSchema": "FSB",
+      "transport": "gateway_route",
+      "locator": "/sdn/v1/artifacts/{contentHash}/runtime/nodes/store.dss",
+      "contentEncoding": "utf8"
+    }
+  ]
+}

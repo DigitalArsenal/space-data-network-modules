@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-23T00:00:00Z",
+  "purpose": "Offline development-only, correct-frame, exact-epoch CelesTrak parity evidence; never a production input",
+  "source": {
+    "relativePath": "analysis/od/tests/data/supgp-reference/starlink-live-20260714/meme/MEME_67850_STARLINK-36840_1950953_Operational_1468317240_UNCLASSIFIED.txt",
+    "sha256": "1150fd8c90f3b818097a71ca4cee5becfcc41e7c5a8e7a3007dbbac0a45d5e56",
+    "noradCatId": 67850,
+    "objectName": "STARLINK-36840"
+  },
+  "celestrak": {
+    "relativePath": "analysis/od/tests/data/supgp-reference/starlink-live-20260714/celestrak_supgp_live.csv",
+    "sha256": "8e477313e9daf301b8c21a232b5b85ebf8bdcc3c650ba221f7036667d2e46221",
+    "row": "STARLINK-36840,2026-034A,2026-07-14T11:10:42.000010,15.30201782,.0000881,53.1591,335.0913,110.3425,120.8459,0,C,67850,195,1,-.60976E-4,-.18097E-4,0,0.177,SpaceX-E",
+    "reportedRmsKm": 0.177,
+    "reportedRmsUse": "informational only; it is CelesTrak's own fit statistic and is not the approved identical-observation score"
+  },
+  "window": {
+    "epoch": "2026-07-14T11:10:42.000010Z",
+    "durationSeconds": 28800,
+    "observationCount": 481,
+    "selection": "exact source observation through the inclusive following eight hours",
+    "sourceFrame": "EME2000",
+    "fitFrame": "TEME",
+    "frameAuthority": "https://docs.space-safety.starlink.com/docs/tutorial-basics/trajectories/"
+  },
+  "generator": {
+    "relativePath": "flows/supplemental-omm/nodes/od/test/reference/exact-celestrak-parity.cpp",
+    "sha256": "6875742760f4491bfaea2e823946b42dd8506b85cc2444fc72cd136a229776ff",
+    "upstreamCommit": "551f6e178c3332cad46171fd1a0002345271144c",
+    "sourcePatchSha256": "c9e6042809c4ec8ce38a878fb0fd6bd1969e2f9bd4f307c924e571a090b17882",
+    "frozenWasmObjectSha256": "e1f1baa093cb52ef6fc880e4aa4de958c2bb074b8dac4d7826c50fa540e94ea8",
+    "compiler": "AppleClang 21.0.0.21000101",
+    "flags": "-std=c++17 -O3 -ffast-math -DNDEBUG -DEIGEN_DONT_PARALLELIZE",
+    "algorithm": "The exact patched seven-parameter OD/Vallado source first transforms all 481 captured EME2000 states to TEME, then propagates both element sets over those identical TEME observations and computes sqrt(mean(dx^2+dy^2+dz^2)). Mean-motion derivative is derived only after the epoch series and does not participate in propagation or scoring.",
+    "commandArguments": [
+      "MEME_67850_STARLINK-36840_1950953_Operational_1468317240_UNCLASSIFIED.txt",
+      "2026-07-14T11:10:42.000010",
+      "15.30201782",
+      ".0000881",
+      "53.1591",
+      "335.0913",
+      "110.3425",
+      "120.8459",
+      "-.60976E-4",
+      "-.18097E-4",
+      "0"
+    ]
+  },
+  "result": {
+    "nativeSdnRmsKm": 0.241111173177,
+    "signedWasmSdnRmsKm": 0.241108373,
+    "celestrakSameEphemerisRmsKm": 0.275328465189,
+    "nativeMarginKm": 0.0342172920116,
+    "iterations": 4,
+    "converged": true,
+    "gate": "sdn_rms_km <= celestrak_rms_km + 0.000001",
+    "passed": true,
+    "nativeOutput": "points=481 epoch=2026-07-14T11:10:41.999991Z sdn_rms_km=0.241111173177 celestrak_rms_km=0.275328465189 margin_km=0.0342172920116 iterations=4 converged=1"
+  }
+}

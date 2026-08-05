@@ -1,0 +1,28 @@
+{
+  "pluginId": "org.spacedatanetwork.bond-attestation",
+  "name": "Security Bond Attestation",
+  "version": "1.0.0",
+  "description": "Queries free, keyless public chain services (Blockstream, public Ethereum RPC, Solana mainnet RPC, CoinGecko prices) for the balances at this node's own EPM-derived BTC/ETH/SOL bond addresses and returns one USD-priced attestation. Chain RPC lives in WASM over the generic http capability, never in the host (owner law 2026-07-16; owner directive 2026-08-03).",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http"
+  ],
+  "protocols": [],
+  "timers": [],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "attest",
+      "displayName": "Attest Security Bond",
+      "description": "Takes this node's chain addresses ({btc, eth, sol} JSON), fetches each balance from a free public service, prices the total in USD, and returns the attestation JSON. A chain that fails to answer contributes nothing and is named in errors[] — never an invented balance.",
+      "inputPorts": [],
+      "outputPorts": []
+    }
+  ],
+  "schemasUsed": []
+}

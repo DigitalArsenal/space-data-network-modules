@@ -1,0 +1,12 @@
+{
+  "com.orbpro.spacex-starlink-source": "./nodes/providers/starlink",
+  "com.orbpro.glonass-source": "./nodes/providers/glonass",
+  "com.orbpro.intelsat-source": "./nodes/providers/intelsat",
+  "com.orbpro.cpf-source": "./nodes/providers/cpf",
+  "com.orbpro.iss-source": "./nodes/providers/iss",
+  "org.sdn.flows.supplemental-omm.od": "./nodes/od",
+  "org.sdn.flows.supplemental-omm.timer": "./nodes/timer",
+  "com.digitalarsenal.flatsql.store": "./nodes/flatsql",
+  "org.sdn.flows.supplemental-omm.publication": "./nodes/publication",
+  "org.sdn.flows.supplemental-omm.status": "./nodes/status"
+}

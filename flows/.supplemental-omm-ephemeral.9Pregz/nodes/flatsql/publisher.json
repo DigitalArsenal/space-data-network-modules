@@ -1,0 +1,7 @@
+{
+  "algorithm": "ed25519",
+  "keyId": "ephemeral-hd-wallet-wasm-test",
+  "publicKeyHex": "62eb15b4797bffb9ace9972ad14cf41dc9491295374c46e7d47d978de09ca391",
+  "developmentOnly": false,
+  "buildMode": "production"
+}

@@ -1,0 +1,8 @@
+{
+  "sha256": "ca9bfc618ed155d3d442aa5ce7921e8386ec748701100046fc123e0cd05f31e1",
+  "canonicalModuleHash": "f5d95b50dcf0694591f93c588cb561939096c8b0a20ef47f262b720375cdbe11",
+  "signedHash": "3ca2ddad61c978bd4272b44bef23ba195bc9a36a2ad145830cf8f9eb6eb9204c",
+  "signatureScope": "bundle",
+  "keyId": "ephemeral-hd-wallet-wasm-test",
+  "threadModel": "wasi-threads"
+}
