@@ -92,9 +92,6 @@
                   "rootTypeName": "EPM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 1
-                },
-                {
-                  "acceptsAnyFlatbuffer": true
                 }
               ],
               "description": "Response body: size-prefixed $EPM stream (default) or bare JSON array bytes (format=json). Absent on not_found."
@@ -104,6 +101,29 @@
           "maxStreams": 1,
           "required": false,
           "description": "Response body for http-respond (absent on not_found)."
+        },
+        {
+          "portId": "opaque_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-json-or-control-body",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Non-SDS response bytes emitted only for the JSON presentation or an intra-flow body-reference descriptor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "JSON presentation bytes and body-reference descriptors are flow-local response material, not SDS records."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Opaque JSON/control response body, separated from the typed SDS body port."
         },
         {
           "portId": "etag",
@@ -205,9 +225,6 @@
                   "rootTypeName": "PNM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 1
-                },
-                {
-                  "acceptsAnyFlatbuffer": true
                 }
               ],
               "description": "Response body: size-prefixed $PNM stream (default; newest per (peer, standard)) or bare JSON array bytes (format=json). Absent on not_found."
@@ -217,6 +234,29 @@
           "maxStreams": 1,
           "required": false,
           "description": "Response body for http-respond (absent on not_found)."
+        },
+        {
+          "portId": "opaque_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-json-or-control-body",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Non-SDS response bytes emitted only for the JSON presentation or an intra-flow body-reference descriptor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "JSON presentation bytes and body-reference descriptors are flow-local response material, not SDS records."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Opaque JSON/control response body, separated from the typed SDS body port."
         },
         {
           "portId": "etag",
@@ -318,9 +358,6 @@
                   "rootTypeName": "PNM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 1
-                },
-                {
-                  "acceptsAnyFlatbuffer": true
                 }
               ],
               "description": "Response body: size-prefixed $PNM stream (default; newest per (peer, standard)) or bare JSON array bytes (format=json). Absent on not_found."
@@ -330,6 +367,29 @@
           "maxStreams": 1,
           "required": false,
           "description": "Response body for http-respond (absent on not_found)."
+        },
+        {
+          "portId": "opaque_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-json-or-control-body",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Non-SDS response bytes emitted only for the JSON presentation or an intra-flow body-reference descriptor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "JSON presentation bytes and body-reference descriptors are flow-local response material, not SDS records."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Opaque JSON/control response body, separated from the typed SDS body port."
         },
         {
           "portId": "etag",
@@ -431,9 +491,6 @@
                   "rootTypeName": "PNM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 1
-                },
-                {
-                  "acceptsAnyFlatbuffer": true
                 }
               ],
               "description": "Response body: size-prefixed $PNM stream (default; newest per (peer, standard)) or bare JSON array bytes (format=json). Absent on not_found."
@@ -443,6 +500,29 @@
           "maxStreams": 1,
           "required": false,
           "description": "fb path only: the batch record stream verbatim OR the body-reference descriptor. Absent on not_found/error and on the json path."
+        },
+        {
+          "portId": "opaque_body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-discovery-json-or-control-body",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Non-SDS response bytes emitted only for the JSON presentation or an intra-flow body-reference descriptor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "JSON presentation bytes and body-reference descriptors are flow-local response material, not SDS records."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Opaque JSON/control response body, separated from the typed SDS body port."
         },
         {
           "portId": "etag",
@@ -466,25 +546,22 @@
           "portId": "stream",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-discovery-standards-body",
+              "setId": "sds-omm-aligned-stream",
               "allowedTypes": [
                 {
-                  "schemaName": "PNM.fbs",
-                  "fileIdentifier": "$PNM",
-                  "rootTypeName": "PNM"
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
                 },
                 {
-                  "schemaName": "PNM.fbs",
-                  "fileIdentifier": "$PNM",
-                  "rootTypeName": "PNM",
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
                   "wireFormat": "aligned-binary",
-                  "requiredAlignment": 1
-                },
-                {
-                  "acceptsAnyFlatbuffer": true
+                  "requiredAlignment": 8
                 }
               ],
-              "description": "Response body: size-prefixed $PNM stream (default; newest per (peer, standard)) or bare JSON array bytes (format=json). Absent on not_found."
+              "description": "Raw aligned $OMM record stream for the JSON presentation adapter."
             }
           ],
           "minStreams": 0,

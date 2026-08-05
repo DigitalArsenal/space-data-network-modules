@@ -22,10 +22,11 @@ function readWasm() {
 }
 
 function jsonInput(portId, value) {
+  const payload = encoder.encode(typeof value === "string" ? value : JSON.stringify(value));
   return {
     portId,
-    typeRef: { wireFormat: "aligned-binary" },
-    payload: encoder.encode(typeof value === "string" ? value : JSON.stringify(value)),
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
   };
 }
 

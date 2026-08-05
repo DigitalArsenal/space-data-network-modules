@@ -2,9 +2,10 @@
   "programId": "com.digitalarsenal.flows.pnm-history",
   "name": "SDN PNM Publication History Flow",
   "version": "0.1.2",
-  "compiler": "space-data-module flow compile (linked-direct, emception)",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
   "nodes": 5,
-  "edges": 7,
+  "edges": 8,
   "triggers": 1,
   "capabilities": [
     "p2p_read"
@@ -47,12 +48,18 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "version": "0.4.0",
-      "sha256": "6f373a3681b9a741bf76ebaffa44682315036bdeabd6064adb3d15ccfb345d33",
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "version": "0.7.0",
+      "sha256": "bae707c220d812218b9c0c19112628390f9e7b7a667e3b834142bfc0eae54a56",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_",
       "methodSymbols": {
-        "route": "sdm_guest_636f6d2e6469676974616c61_route",
-        "discover": "sdm_guest_636f6d2e6469676974616c61_discover"
+        "route": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route",
+        "discover": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_discover",
+        "route_public_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route_public_query",
+        "route_node_status": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route_node_status",
+        "route_node_activity": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726f757465_route_node_activity"
       }
     },
     {
@@ -60,13 +67,16 @@
       "dependencyId": "com.digitalarsenal.hostcap.p2p-discovery",
       "pluginId": "com.digitalarsenal.hostcap.p2p-discovery",
       "version": "0.3.0",
-      "sha256": "82dc7583e059c472ba3d47e2ddbad3a31834c612305b1de9c650573d9131260e",
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "sha256": "8cc8ee2b919b8f88fe7b5b3e87f3e06034c03fb45b7185b14bd003955016eeb4",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e7032702d646973636f76657279_",
       "methodSymbols": {
-        "peers_snapshot": "sdm_guest_636f6d2e6469676974616c61_peers_snapshot",
-        "standards_snapshot": "sdm_guest_636f6d2e6469676974616c61_standards_snapshot",
-        "pnm_history": "sdm_guest_636f6d2e6469676974616c61_pnm_history",
-        "latest_dataset": "sdm_guest_636f6d2e6469676974616c61_latest_dataset"
+        "peers_snapshot": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e7032702d646973636f76657279_peers_snapshot",
+        "standards_snapshot": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e7032702d646973636f76657279_standards_snapshot",
+        "pnm_history": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e7032702d646973636f76657279_pnm_history",
+        "latest_dataset": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e7032702d646973636f76657279_latest_dataset"
       }
     },
     {
@@ -74,24 +84,30 @@
       "dependencyId": "com.digitalarsenal.foundation.discovery-shape",
       "pluginId": "com.digitalarsenal.foundation.discovery-shape",
       "version": "0.3.2",
-      "sha256": "9a8ab7ff501c589fc49098e55d0db7adddd55a30518d1964e515bdf4eda10d24",
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "sha256": "f910ba9c2f666c599e7e546533be08612a6cfacad73a437de794eaae296981a3",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_",
       "methodSymbols": {
-        "shape_peers": "sdm_guest_636f6d2e6469676974616c61_shape_peers",
-        "shape_standards": "sdm_guest_636f6d2e6469676974616c61_shape_standards",
-        "shape_pnm": "sdm_guest_636f6d2e6469676974616c61_shape_pnm",
-        "shape_latest": "sdm_guest_636f6d2e6469676974616c61_shape_latest"
+        "shape_peers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_peers",
+        "shape_standards": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_standards",
+        "shape_pnm": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_pnm",
+        "shape_latest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e646973636f766572792d7368617065_shape_latest"
       }
     },
     {
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "version": "0.2.0",
-      "sha256": "3aa0fcb8841ccbd67b9b0939c1d440c2ba7c092634fade31c26955420fd235a9",
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "version": "0.2.1",
+      "sha256": "ba0eeac0a64ad318d5e3c720d61c1ef83e248232f8e3003b65a542d30d318ade",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_",
       "methodSymbols": {
-        "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
+        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond"
       }
     }
   ]

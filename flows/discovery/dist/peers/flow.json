@@ -83,6 +83,15 @@
       "fromNodeId": "shape",
       "fromPortId": "body",
       "toNodeId": "respond",
+      "toPortId": "epm_body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "shape-opaque-body",
+      "fromNodeId": "shape",
+      "fromPortId": "opaque_body",
+      "toNodeId": "respond",
       "toPortId": "body",
       "backpressurePolicy": "queue",
       "queueDepth": 16

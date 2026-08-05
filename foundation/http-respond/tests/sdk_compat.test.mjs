@@ -24,10 +24,11 @@ const encoder = new TextEncoder();
 
 // JSON-bytes / raw-bytes frames ride the aligned-binary wire format.
 function bytesInput(portId, bytes) {
+  const payload = bytes instanceof Uint8Array ? bytes : encoder.encode(bytes);
   return {
     portId,
-    typeRef: { wireFormat: "aligned-binary" },
-    payload: bytes instanceof Uint8Array ? bytes : encoder.encode(bytes),
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
   };
 }
 

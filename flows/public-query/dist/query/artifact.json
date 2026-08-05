@@ -5,7 +5,7 @@
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 5,
-  "edges": 7,
+  "edges": 8,
   "triggers": 1,
   "capabilities": [
     "storage_query"
@@ -67,14 +67,14 @@
       "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
       "version": "0.2.0",
-      "sha256": "508b9cca5be9d446ce0413959c4e658a13144aed2fb94382a9c37920ee7ab86e",
+      "sha256": "dffd8d616fefb308326bb426ca70cad2ff142cf3788fa821409417ae360a2a7e",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_",
       "methodSymbols": {
-        "query": "sdm_guest_636f6d2e6469676974616c61_query",
-        "sandbox_query": "sdm_guest_636f6d2e6469676974616c61_sandbox_query"
+        "query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_query",
+        "sandbox_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_sandbox_query"
       }
     },
     {
@@ -96,13 +96,13 @@
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.2.1",
-      "sha256": "b365bb14f3b108a05ba339fcb8e433a43c07f57f5a4a9f9ca6f7cd05804d1773",
+      "sha256": "ba0eeac0a64ad318d5e3c720d61c1ef83e248232f8e3003b65a542d30d318ade",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_",
       "methodSymbols": {
-        "respond": "sdm_guest_636f6d2e6469676974616c61_respond"
+        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond"
       }
     }
   ]

@@ -435,6 +435,16 @@ int push_bytes(const char* port_id, const uint8_t* data, uint32_t length) {
     return pushed < 0 ? 500 : 0;
 }
 
+int push_sds_stream(const char* port_id, const char* schema_name,
+                    const char* file_identifier, const char* root_type_name,
+                    const uint8_t* data, uint32_t length) {
+    const int32_t pushed = plugin_push_output_ex(
+        port_id, schema_name, file_identifier,
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root_type_name,
+        0, 1, data, length);
+    return pushed < 0 ? 500 : 0;
+}
+
 int push_string(const char* port_id, const std::string& value) {
     return push_bytes(port_id, reinterpret_cast<const uint8_t*>(value.data()),
                       static_cast<uint32_t>(value.size()));
@@ -717,13 +727,14 @@ int shape_peers(void) {
             body += peer_presentation_json(*selected[i], frames);
         }
         body += "]";
-        if (push_string("body", body) != 0) {
+        if (push_string("opaque_body", body) != 0) {
             plugin_set_error("push-failed", "failed to push the json body frame.");
             return 500;
         }
         return 0;
     }
-    if (push_bytes("body", stream.data(), static_cast<uint32_t>(stream.size())) != 0) {
+    if (push_sds_stream("body", "EPM.fbs", "$EPM", "EPM", stream.data(),
+                        static_cast<uint32_t>(stream.size())) != 0) {
         plugin_set_error("push-failed", "failed to push the stream body frame.");
         return 500;
     }
@@ -805,13 +816,14 @@ int shape_standards(void) {
         return 500;
     }
     if (decision.format == "json") {
-        if (push_string("body", body) != 0) {
+        if (push_string("opaque_body", body) != 0) {
             plugin_set_error("push-failed", "failed to push the json body frame.");
             return 500;
         }
         return 0;
     }
-    if (push_bytes("body", stream.data(), static_cast<uint32_t>(stream.size())) != 0) {
+    if (push_sds_stream("body", "PNM.fbs", "$PNM", "PNM", stream.data(),
+                        static_cast<uint32_t>(stream.size())) != 0) {
         plugin_set_error("push-failed", "failed to push the stream body frame.");
         return 500;
     }
@@ -913,13 +925,14 @@ int shape_pnm(void) {
         return 500;
     }
     if (decision.format == "json") {
-        if (push_string("body", body) != 0) {
+        if (push_string("opaque_body", body) != 0) {
             plugin_set_error("push-failed", "failed to push the json body frame.");
             return 500;
         }
         return 0;
     }
-    if (push_bytes("body", stream.data(), static_cast<uint32_t>(stream.size())) != 0) {
+    if (push_sds_stream("body", "PNM.fbs", "$PNM", "PNM", stream.data(),
+                        static_cast<uint32_t>(stream.size())) != 0) {
         plugin_set_error("push-failed", "failed to push the stream body frame.");
         return 500;
     }
@@ -1039,8 +1052,10 @@ int shape_latest(void) {
         }
         if (push_string("decision", decision.raw) != 0 ||
             push_string("etag", etag) != 0 ||
-            push_bytes("stream", normalized.data(),
-                       static_cast<uint32_t>(normalized.size())) != 0) {
+            plugin_push_output_ex(
+                "stream", "OMM.fbs", "$OMM",
+                PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM", 0, 8,
+                normalized.data(), static_cast<uint32_t>(normalized.size())) < 0) {
             plugin_set_error("push-failed", "failed to push decision/etag/stream frames.");
             return 500;
         }
@@ -1069,7 +1084,7 @@ int shape_latest(void) {
                       "{\"$sdnbodyref\":1,\"token\":%lld,\"size\":%lld,\"frames\":%lld,\"fnv1a64\":\"%s\"}",
                       static_cast<long long>(token), static_cast<long long>(size),
                       static_cast<long long>(frames), fnv.c_str());
-        if (push_string("body", buf) != 0) {
+        if (push_string("opaque_body", buf) != 0) {
             plugin_set_error("push-failed", "failed to push the body-reference frame.");
             return 500;
         }
@@ -1080,7 +1095,8 @@ int shape_latest(void) {
                          "latest_dataset envelope carries neither a ref nor a stream segment.");
         return 502;
     }
-    if (push_bytes("body", snapshot.stream, snapshot.stream_length) != 0) {
+    if (push_sds_stream("body", "PNM.fbs", "$PNM", "PNM",
+                        snapshot.stream, snapshot.stream_length) != 0) {
         plugin_set_error("push-failed", "failed to push the stream body frame.");
         return 500;
     }

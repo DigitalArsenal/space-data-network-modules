@@ -160,7 +160,7 @@ int push_caq(const char* port, const std::string& query) {
     return plugin_push_output_ex(
         port, "CAQ.fbs", "$CAQ",
         PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "CAQ",
-        0, 8,
+        0, 0,
         builder.GetBufferPointer(), builder.GetSize());
 }
 
@@ -312,10 +312,10 @@ int branch(void) {
     const uint32_t stream_length = stream_frame->payload_length;
     const int pushed = plugin_push_output_ex(
         as_json ? "json" : "flatbuffer",
-        as_json ? "OMM.fbs" : nullptr,
-        as_json ? "$OMM" : nullptr,
+        "OMM.fbs",
+        "$OMM",
         PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
-        as_json ? "OMM" : nullptr,
+        "OMM",
         0, 8, stream, stream_length);
     if (pushed < 0) {
         plugin_set_error("push-failed", "failed to push the branched stream frame.");

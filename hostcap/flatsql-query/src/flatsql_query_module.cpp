@@ -663,12 +663,20 @@ int sandbox_query(void) {
         // through foundation/omm-json (bare-array presentation, schema-exact
         // keys). The etag above is over the RAW stream — shared by both
         // encodings of the same logical result.
-        if (push_bytes("stream", seg, seg_len, 8)) return 500;
+        const int32_t pushed = plugin_push_output_ex(
+            "stream", "OMM.fbs", "$OMM",
+            PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
+            0, 8, seg, seg_len);
+        if (pushed < 0) return 500;
         return push_decision_out(decision);
     }
 
     // fb byte delivery (host without a bridge): body verbatim.
-    if (push_bytes("body", seg, seg_len, 8)) return 500;
+    const int32_t pushed = plugin_push_output_ex(
+        "omm_body", "OMM.fbs", "$OMM",
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
+        0, 8, seg, seg_len);
+    if (pushed < 0) return 500;
     return push_decision_out(decision);
 }
 

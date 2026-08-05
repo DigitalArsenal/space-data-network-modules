@@ -116,7 +116,11 @@ function encodeHostcallEnvelope(meta, segments = []) {
 }
 
 function input(portId, payload) {
-  return { portId, typeRef: { wireFormat: "aligned-binary" }, payload };
+  return {
+    portId,
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
+  };
 }
 
 function jsonInput(portId, value) {
@@ -235,7 +239,11 @@ test("peers_list flatbuffer: stored EPM verbatim + synthesized EPM, shared etag"
     ],
   });
   const byPort = outputsByPort(response);
-  const body = byPort.get("body").payload;
+  const bodyFrame = byPort.get("body");
+  assert.equal(bodyFrame.typeRef?.schemaName, "EPM.fbs");
+  assert.equal(bodyFrame.typeRef?.fileIdentifier, "$EPM");
+  assert.equal(bodyFrame.typeRef?.rootTypeName, "EPM");
+  const body = bodyFrame.payload;
   const frames = splitStream(body);
   assert.equal(frames.length, 2, "one $EPM frame per peer");
 
@@ -283,7 +291,7 @@ test("peers_list json: bare array presentation; etag matches the fb encoding", a
     "identical logical stream => identical tag on both encodings",
   );
 
-  const records = JSON.parse(decoder.decode(jsonPorts.get("body").payload));
+  const records = JSON.parse(decoder.decode(jsonPorts.get("opaque_body").payload));
   assert.ok(Array.isArray(records), "json body is a BARE top-level array");
   assert.equal(records.length, 2);
 
@@ -321,7 +329,7 @@ test("peer_get selects one peer; unknown ids rewrite to not_found", async (t) =>
     ],
   });
   const hitPorts = outputsByPort(hit);
-  const records = JSON.parse(decoder.decode(hitPorts.get("body").payload));
+  const records = JSON.parse(decoder.decode(hitPorts.get("opaque_body").payload));
   assert.equal(records.length, 1);
   assert.equal(records[0].peer_id, CELESTRAK_PEER);
 
@@ -350,6 +358,9 @@ test("standards: $PNM frames verbatim in entry order + json presentation", async
     ],
   });
   const fbPorts = outputsByPort(fb);
+  assert.equal(fbPorts.get("body").typeRef?.schemaName, "PNM.fbs");
+  assert.equal(fbPorts.get("body").typeRef?.fileIdentifier, "$PNM");
+  assert.equal(fbPorts.get("body").typeRef?.rootTypeName, "PNM");
   const frames = splitStream(fbPorts.get("body").payload);
   assert.equal(frames.length, 2);
   assert.deepEqual(Array.from(frames[0]), Array.from(PNM_FRAME_A));
@@ -367,7 +378,7 @@ test("standards: $PNM frames verbatim in entry order + json presentation", async
     decoder.decode(jsonPorts.get("etag").payload),
     decoder.decode(fbPorts.get("etag").payload),
   );
-  const records = JSON.parse(decoder.decode(jsonPorts.get("body").payload));
+  const records = JSON.parse(decoder.decode(jsonPorts.get("opaque_body").payload));
   assert.equal(records.length, 2);
   // PNM schema fields carry SCHEMA-EXACT names (hard rule
   // json-schema-capitalization-rule); synthesized fields stay lowercase.
@@ -502,6 +513,8 @@ test("shape_latest fb: inline stream verbatim + host-derived etag (loop G.4)", a
   assert.equal(JSON.parse(decoder.decode(ports.get("decision").payload)).route, "latest_dataset");
   assert.equal(decoder.decode(ports.get("etag").payload), 'W/"fnv1a64-00baddecafc0ffee"');
   const body = ports.get("body").payload;
+  assert.equal(ports.get("body").typeRef?.schemaName, "PNM.fbs");
+  assert.equal(ports.get("body").typeRef?.fileIdentifier, "$PNM");
   // fb path: the published (double-prefixed) shard bytes VERBATIM.
   assert.deepEqual(Array.from(body), Array.from(LATEST_SHARD_STREAM));
   assert.equal(ports.has("stream"), false);
@@ -519,7 +532,7 @@ test("shape_latest fb: body-reference descriptor forwarded (loop G.4)", async (t
       })),
     ],
   }));
-  const body = JSON.parse(decoder.decode(ports.get("body").payload));
+  const body = JSON.parse(decoder.decode(ports.get("opaque_body").payload));
   assert.equal(body.$sdnbodyref, 1);
   assert.equal(body.token, 7);
   assert.equal(body.size, 44);
@@ -541,6 +554,8 @@ test("shape_latest json: OMM stream goes to the omm-json port; non-OMM answers 4
   // json path: the redundant outer prefix is unwrapped — omm-json gets the
   // stored (single-prefixed) record stream.
   assert.deepEqual(Array.from(ports.get("stream").payload), Array.from(LATEST_NORMALIZED_STREAM));
+  assert.equal(ports.get("stream").typeRef?.schemaName, "OMM.fbs");
+  assert.equal(ports.get("stream").typeRef?.fileIdentifier, "$OMM");
   assert.equal(ports.has("body"), false);
   assert.equal(decoder.decode(ports.get("etag").payload), 'W/"fnv1a64-00baddecafc0ffee"');
 
@@ -692,7 +707,7 @@ test("json properties cross-check exactly against the EPM/PNM IDL field names", 
       input("snapshot", peersEnvelope()),
     ],
   }));
-  const peerRecords = JSON.parse(decoder.decode(peers.get("body").payload));
+  const peerRecords = JSON.parse(decoder.decode(peers.get("opaque_body").payload));
   assertSchemaExactKeys(
     peerRecords[0].epm,
     epmFields,
@@ -709,7 +724,7 @@ test("json properties cross-check exactly against the EPM/PNM IDL field names", 
       input("snapshot", standardsEnvelope()),
     ],
   }));
-  const standardsRecords = JSON.parse(decoder.decode(standards.get("body").payload));
+  const standardsRecords = JSON.parse(decoder.decode(standards.get("opaque_body").payload));
   assertSchemaExactKeys(
     standardsRecords[0],
     pnmFields,
@@ -725,7 +740,7 @@ test("json properties cross-check exactly against the EPM/PNM IDL field names", 
       input("snapshot", pnmHistoryEnvelope()),
     ],
   }));
-  const pnmRecords = JSON.parse(decoder.decode(pnm.get("body").payload));
+  const pnmRecords = JSON.parse(decoder.decode(pnm.get("opaque_body").payload));
   assert.equal(pnmRecords.length, 1);
   assertSchemaExactKeys(
     pnmRecords[0],

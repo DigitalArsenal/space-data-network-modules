@@ -47,6 +47,7 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
+  threadModel: "single-thread",
 });
 
 // Persist the prefixed guest-link object + metadata for the flow compiler

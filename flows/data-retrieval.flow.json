@@ -131,7 +131,7 @@
       "fromNodeId": "branch",
       "fromPortId": "flatbuffer",
       "toNodeId": "respond",
-      "toPortId": "body",
+      "toPortId": "omm_body",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },
