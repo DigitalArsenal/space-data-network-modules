@@ -25,6 +25,14 @@ struct BatchObject {
     std::vector<uint8_t> oem;  // one in-memory $OEM FlatBuffer (non-size-prefixed)
 };
 
+struct BatchEpochResult {
+    std::vector<uint8_t> omm;
+    std::vector<uint8_t> obd;
+    std::vector<uint8_t> ocm;
+    double rms_km = 0.0;
+    bool converged = false;
+};
+
 struct BatchResult {
     bool ok = false;
     std::vector<uint8_t> omm;   // size-prefixed $OMM
@@ -34,6 +42,10 @@ struct BatchResult {
     bool converged = false;
     std::string error_code;
     std::string error_message;
+    // The first local epoch stays in the legacy scalar fields above for the
+    // command/resident benchmark ABI. Every later complete-arc local fit is
+    // retained here and the composed flow emits all of them.
+    std::vector<BatchEpochResult> additional_epochs;
     unsigned long long worker_tid = 0;  // OS thread id (hashed) that ran this fit
 };
 

@@ -474,12 +474,14 @@ uint64_t count_records_isomorphic(const std::vector<uint8_t>& bytes,
   return counter(bytes);
 }
 
-int emit_complete_response(const std::vector<uint8_t>& bytes,
-                           std::string_view native_schema,
-                           std::string_view native_identifier,
-                           RecordCounter count_records,
-                           const uint8_t* preverified_digest = nullptr) {
-  if (bytes.empty()) return -1;
+int emit_complete_response_with_request_id(
+    const std::vector<uint8_t>& bytes,
+    std::string_view native_schema,
+    std::string_view native_identifier,
+    RecordCounter count_records,
+    uint64_t request_id,
+    const uint8_t* preverified_digest = nullptr) {
+  if (bytes.empty() || request_id == 0) return -1;
   if (g_aligned_output_requested &&
       (native_schema.size() > 64 || native_identifier.size() > 4)) {
     return -1;
@@ -490,7 +492,6 @@ int emit_complete_response(const std::vector<uint8_t>& bytes,
   } else {
     sha256(bytes.data(), bytes.size(), digest);
   }
-  const uint64_t request_id = ++g_next_request_id;
   const uint64_t records = count_records_isomorphic(bytes, count_records);
   uint32_t sequence = 0;
   const size_t chunk_bytes =
@@ -552,6 +553,21 @@ int emit_complete_response(const std::vector<uint8_t>& bytes,
     ++sequence;
   }
   return static_cast<int>(sequence);
+}
+
+int emit_complete_response(const std::vector<uint8_t>& bytes,
+                           std::string_view native_schema,
+                           std::string_view native_identifier,
+                           RecordCounter count_records,
+                           const uint8_t* preverified_digest = nullptr) {
+  if (bytes.empty()) return -1;
+  if (g_aligned_output_requested &&
+      (native_schema.size() > 64 || native_identifier.size() > 4)) {
+    return -1;
+  }
+  return emit_complete_response_with_request_id(
+      bytes, native_schema, native_identifier, count_records,
+      ++g_next_request_id, preverified_digest);
 }
 
 uint32_t output_frame_count(size_t byte_length) {

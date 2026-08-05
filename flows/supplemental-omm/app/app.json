@@ -2,7 +2,7 @@
   "id": "supplemental-omm",
   "name": "Supplemental OMM",
   "version": "1.0.0",
-  "description": "Five independent ephemeris providers fitted into supplemental OMM, OCM, and OBD records by one composed isomorphic module.",
+  "description": "Five independent ephemeris providers fitted into supplemental OMM and OCM records by one composed isomorphic module.",
   "modules": [
     {
       "id": "supplemental-omm",
@@ -31,12 +31,6 @@
     {
       "id": "fitted-ocm",
       "sdsType": "OCM",
-      "direction": "produces",
-      "moduleId": "supplemental-omm"
-    },
-    {
-      "id": "fit-diagnostics",
-      "sdsType": "OBD",
       "direction": "produces",
       "moduleId": "supplemental-omm"
     }

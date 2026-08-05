@@ -265,8 +265,36 @@ int main(int argc, char** argv) {
     if (!bits_equal(omm->MEAN_MOTION(), B.mean_motion))
         return fail("emitted $OMM MEAN_MOTION != fitted mean motion");
 
+    // ── (4) Complete-arc flow entry: multiple ordered epoch record sets ─────────
+    const std::string epoch_opts =
+        "{\"dataSource\":\"ISS-E\",\"objectName\":\"ISS\",\"objectId\":\"1998-067-A\","
+        "\"noradCatId\":25544,\"maxIterations\":1}";
+    std::vector<od::PluginFitFBResult> epochs =
+        od::fit_ephemeris_epochs_fb(oem_fb.data(), oem_fb.size(), epoch_opts);
+    if (epochs.size() < 2)
+        return fail("12-hour complete OEM did not produce multiple epoch-specific fits");
+    std::string previous_epoch;
+    for (const auto& epoch_result : epochs) {
+        if (!epoch_result.ok || epoch_result.omm.empty() ||
+            epoch_result.ocm.empty() || epoch_result.obd.empty())
+            return fail("complete-arc epoch is missing OMM/OCM/OBD companions");
+        if (!SizePrefixedOMMBufferHasIdentifier(epoch_result.omm.data()))
+            return fail("complete-arc epoch OMM missing file identifier");
+        flatbuffers::Verifier epoch_verifier(epoch_result.omm.data(), epoch_result.omm.size());
+        if (!VerifySizePrefixedOMMBuffer(epoch_verifier))
+            return fail("complete-arc epoch OMM failed verification");
+        const OMM* epoch_omm = GetSizePrefixedOMM(epoch_result.omm.data());
+        const std::string current_epoch =
+            epoch_omm && epoch_omm->EPOCH() ? epoch_omm->EPOCH()->str() : std::string();
+        if (current_epoch.empty()) return fail("complete-arc epoch OMM has no EPOCH");
+        if (!previous_epoch.empty() && current_epoch <= previous_epoch)
+            return fail("complete-arc OMM epochs are not strictly increasing");
+        previous_epoch = current_epoch;
+    }
+
     std::printf("$OMM emit : %zu bytes, ORIGINATOR=%s NORAD=%u MEAN_MOTION=%.9f (VerifyOMMBuffer OK)\n",
                 fb.omm.size(), omm->ORIGINATOR()->c_str(), omm->NORAD_CAT_ID(), omm->MEAN_MOTION());
+    std::printf("complete arc: %zu ordered OMM/OCM/OBD epoch sets\n", epochs.size());
     std::printf("PARITY PASS: KVN and $OEM-FlatBuffer fits are bit-for-bit identical.\n");
     return 0;
 }

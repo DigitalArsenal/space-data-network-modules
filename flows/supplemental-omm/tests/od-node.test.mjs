@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -22,15 +23,18 @@ import { flatSqlNodeOperation } from "../../../../spacedatastandards.org/lib/js/
 import { flatSqlNodeStatus } from "../../../../spacedatastandards.org/lib/js/FSO/flatSqlNodeStatus.js";
 import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OCM } from "../../../../spacedatastandards.org/lib/js/OCM/OCM.js";
-import { OBD } from "../../../../spacedatastandards.org/lib/js/OBD/OBD.js";
+import { selectLatestManifestEntries } from "../scripts/benchmark-starlink-catalog.mjs";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const nodeRoot = path.join(packageRoot, "nodes/od");
 const modulesRoot = path.resolve(packageRoot, "../..");
 const inputPorts = ["starlink", "glonass", "intelsat", "cpf", "iss"];
-const recordOutputPorts = ["omm", "ocm", "obd"];
+const recordOutputPorts = ["omm", "ocm"];
 const fsbAlignedSize = 1_048_744;
 const fsbAlignedDataCapacity = 1_048_576;
+const maxStarlinkManifestBytes = 8 * 1024 * 1024;
+const maxStarlinkSourceBytes = 4 * 1024 * 1024;
+const liveFetchWaveWidth = 64;
 const fsoAlignedSize = 361_648;
 const outputPorts = ["control", "status", ...recordOutputPorts];
 const fsbType = {
@@ -160,6 +164,87 @@ function inputFrame(payload, {
   };
 }
 
+function completeCanonicalObjectFrames({
+  data,
+  requestId,
+  schemaName,
+  fileIdentifier = "MEME",
+  portId = "starlink",
+  chunkBytes = fsbAlignedDataCapacity,
+}) {
+  assert.ok(data.byteLength > 0);
+  assert.ok(Number.isSafeInteger(chunkBytes) && chunkBytes > 0);
+  const checksum = crypto.createHash("sha256").update(data).digest();
+  const frames = [];
+  for (let offset = 0, sequence = 0; offset < data.byteLength; sequence += 1) {
+    const end = Math.min(offset + chunkBytes, data.byteLength);
+    frames.push(
+      inputFrame(
+        makeChunk({
+          data: data.subarray(offset, end),
+          sequence,
+          final: end === data.byteLength,
+          totalBytes: data.byteLength,
+          checksum,
+          requestId,
+          schemaName,
+          fileIdentifier,
+        }),
+        { portId },
+      ),
+    );
+    offset = end;
+  }
+  return frames;
+}
+
+async function readBoundedHttpBody(response, maximumBytes, label) {
+  if (!response.ok) {
+    throw new Error(`${label} returned HTTP ${response.status}`);
+  }
+  const declared = response.headers.get("content-length");
+  if (declared !== null) {
+    const declaredBytes = Number(declared);
+    if (
+      !Number.isSafeInteger(declaredBytes) ||
+      declaredBytes < 0 ||
+      declaredBytes > maximumBytes
+    ) {
+      throw new Error(
+        `${label} Content-Length ${declared} exceeds ${maximumBytes}`,
+      );
+    }
+  }
+  if (!response.body?.getReader) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > maximumBytes) {
+      throw new Error(`${label} exceeded ${maximumBytes} bytes`);
+    }
+    return bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let byteLength = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = new Uint8Array(value ?? 0);
+    if (chunk.byteLength > maximumBytes - byteLength) {
+      await reader.cancel(`${label} exceeded its byte bound`);
+      throw new Error(`${label} exceeded ${maximumBytes} bytes`);
+    }
+    chunks.push(chunk);
+    byteLength += chunk.byteLength;
+  }
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 function readOdTestArtifact() {
   const gitRef = String(
     process.env.SUPPLEMENTAL_OMM_OD_TEST_ARTIFACT_GIT_REF ?? "",
@@ -183,95 +268,77 @@ function readOdTestArtifact() {
   return new Uint8Array(result.stdout);
 }
 
-function makeLongMemeFixture() {
-  // Closed-form circular TEME orbit, km and km/s, sampled in UTC every minute.
-  // Eight hours crosses the OD core's 3.2-hour local-fit window and therefore
-  // proves that one provider object aggregates multiple epoch-specific fits.
-  const radiusKm = 7_000;
-  const inclination = (53 * Math.PI) / 180;
-  const meanMotion = Math.sqrt(398_600.4418 / radiusKm ** 3);
-  const lines = [
-    "created:2026-07-21 00:00:00 UTC",
-    "ephemeris_start:2026-07-21 00:00:00 UTC ephemeris_stop:2026-07-21 08:00:00 UTC step_size:60",
-    "ephemeris_source:closed-form-circular-test",
-    "UVW",
-  ];
-  for (let seconds = 0; seconds <= 8 * 60 * 60; seconds += 60) {
-    const angle = meanMotion * seconds;
-    const hour = Math.floor(seconds / 3_600);
-    const minute = Math.floor((seconds % 3_600) / 60);
-    const epoch = `2026202${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}00.000`;
-    const x = radiusKm * Math.cos(angle);
-    const y = radiusKm * Math.sin(angle) * Math.cos(inclination);
-    const z = radiusKm * Math.sin(angle) * Math.sin(inclination);
-    const vx = -radiusKm * meanMotion * Math.sin(angle);
-    const vy = radiusKm * meanMotion * Math.cos(angle) * Math.cos(inclination);
-    const vz = radiusKm * meanMotion * Math.cos(angle) * Math.sin(inclination);
-    lines.push(
-      `${epoch} ${x.toFixed(10)} ${y.toFixed(10)} ${z.toFixed(10)} ${vx.toFixed(12)} ${vy.toFixed(12)} ${vz.toFixed(12)}`,
-    );
+function capturedMemeHeaderAndBlocks() {
+  const lines = fs.readFileSync(
+    path.join(
+      modulesRoot,
+      "analysis/od/tests/data/supgp-reference/starlink-live-20260714/meme/" +
+        "MEME_67850_STARLINK-36840_1950953_Operational_1468317240_UNCLASSIFIED.txt",
+    ),
+    "utf8",
+  ).split(/\r?\n/);
+  const dataStart = lines.findIndex((line) => line.trim() === "UVW") + 1;
+  assert.ok(dataStart >= 4);
+  const blocks = [];
+  for (let index = dataStart; index + 3 < lines.length; index += 4) {
+    assert.match(lines[index], /^\d{13}\.\d{3}\s/);
+    blocks.push(lines.slice(index, index + 4));
   }
-  return new TextEncoder().encode(`${lines.join("\n")}\n`);
+  return { header: lines.slice(0, dataStart), blocks };
+}
+
+function capturedMemeBlocksFixture(indices) {
+  const { header, blocks } = capturedMemeHeaderAndBlocks();
+  const selected = indices.map((index) => {
+    assert.ok(index >= 0 && index < blocks.length);
+    return blocks[index];
+  });
+  return new TextEncoder().encode(
+    `${[...header, ...selected.flat()].join("\n")}\n`,
+  );
+}
+
+function makeLongMemeFixture() {
+  // Fourteen hours of a captured EME2000 Starlink product contains two
+  // complete inclusive eight-hour windows on the six-hour anchor grid.
+  return capturedMemeBlocksFixture(
+    Array.from({ length: 14 * 60 + 1 }, (_, index) => index),
+  );
 }
 
 function makeProductionShapedMemeFixture() {
-  // Analytic, smooth three-day TEME arc at the production 60-second cadence.
-  // A bounded radial oscillation makes the source intentionally non-SGP4 so
-  // the regression exercises the optimizer's expensive rescue phases instead
-  // of a trivially converged two-body circle. Units are km and km/s in UTC.
-  const durationSeconds = 3 * 24 * 60 * 60;
-  const radiusKm = 7_000;
-  const inclination = (53 * Math.PI) / 180;
-  const meanMotion = Math.sqrt(398_600.4418 / radiusKm ** 3);
-  const radialFrequency = meanMotion * 3.25;
-  const lines = [
-    "created:2026-07-21 00:00:00 UTC",
-    "ephemeris_start:2026-07-21 00:00:00 UTC ephemeris_stop:2026-07-24 00:00:00 UTC step_size:60",
-    "ephemeris_source:closed-form-production-shaped-test",
-    "UVW",
-  ];
-  for (let seconds = 0; seconds <= durationSeconds; seconds += 60) {
-    const angle = meanMotion * seconds;
-    const radialPhase = radialFrequency * seconds;
-    const radius = radiusKm + 0.8 * Math.sin(radialPhase);
-    const radialVelocity = 0.8 * radialFrequency * Math.cos(radialPhase);
-    const planeX = radius * Math.cos(angle);
-    const planeY = radius * Math.sin(angle);
-    const planeVx = radialVelocity * Math.cos(angle) - radius * meanMotion * Math.sin(angle);
-    const planeVy = radialVelocity * Math.sin(angle) + radius * meanMotion * Math.cos(angle);
-    const dayOfYear = 202 + Math.floor(seconds / 86_400);
-    const secondsOfDay = seconds % 86_400;
-    const hour = Math.floor(secondsOfDay / 3_600);
-    const minute = Math.floor((secondsOfDay % 3_600) / 60);
-    const epoch = `2026${String(dayOfYear).padStart(3, "0")}${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}00.000`;
-    lines.push(
-      `${epoch} ${planeX.toFixed(10)} ${(planeY * Math.cos(inclination)).toFixed(10)} ${(planeY * Math.sin(inclination)).toFixed(10)} ${planeVx.toFixed(12)} ${(planeVy * Math.cos(inclination)).toFixed(12)} ${(planeVy * Math.sin(inclination)).toFixed(12)}`,
-    );
+  const { blocks } = capturedMemeHeaderAndBlocks();
+  return capturedMemeBlocksFixture(
+    Array.from({ length: blocks.length }, (_, index) => index),
+  );
+}
+
+function irregularMemeObservationMinutes() {
+  const minutes = [];
+  for (let minute = 0; minute <= 24 * 60; minute += 30) {
+    if (![360, 720, 960].includes(minute)) minutes.push(minute);
   }
-  return new TextEncoder().encode(`${lines.join("\n")}\n`);
+  minutes.push(370, 730, 950);
+  return minutes.sort((left, right) => left - right);
+}
+
+function makeIrregularMemeFixture() {
+  return capturedMemeBlocksFixture(irregularMemeObservationMinutes());
 }
 
 function makeGlonassSp3Fixture() {
-  const radiusKm = 25_510;
-  const meanMotion = Math.sqrt(398_600.4418 / radiusKm ** 3);
-  const lines = ["#dP2026  7 21  0  0  0.00000000 ORBIT TEST"];
-  for (let index = 0; index < 8; index += 1) {
-    const seconds = index * 15 * 60;
-    const hour = Math.floor(seconds / 3_600);
-    const minute = Math.floor((seconds % 3_600) / 60);
-    lines.push(
-      `*  2026 07 21 ${String(hour).padStart(2, "0")} ${String(minute).padStart(2, "0")} 00.00000000`,
+  const source = fs.readFileSync(
+    path.join(modulesRoot, "analysis/od/tests/data/glonass/iac_glonass.sp3.glo"),
+    "utf8",
+  );
+  const lines = source
+    .split(/\r?\n/)
+    .filter((line) =>
+      line.startsWith("#") ||
+      line.startsWith("*") ||
+      line.startsWith("PR01") ||
+      line.startsWith("PR02")
     );
-    for (const [satellite, phase] of [["R01", 0], ["R02", Math.PI / 3]]) {
-      const angle = meanMotion * seconds + phase;
-      const x = radiusKm * Math.cos(angle);
-      const y = radiusKm * Math.sin(angle);
-      const z = 2_000 * Math.sin(angle / 2);
-      lines.push(
-        `P${satellite} ${x.toFixed(9)} ${y.toFixed(9)} ${z.toFixed(9)} 0.000000`,
-      );
-    }
-  }
   return new TextEncoder().encode(`${lines.join("\n")}\n`);
 }
 
@@ -286,21 +353,192 @@ function makeFutureGlonassSp3Fixture() {
   return new TextEncoder().encode(`${lines.join("\n")}\n`);
 }
 
-function makeNonconvergentMemeFixture() {
-  // Three parseable states whose cadence is wider than the OD core's local
-  // fit window. The parser accepts the object, but the first epoch has fewer
-  // than three in-window states, so the fitter deterministically returns a
-  // nonconverged result without entering an expensive optimizer rescue.
-  return new TextEncoder().encode([
-    "created:2026-07-21 00:00:00 UTC",
-    "ephemeris_start:2026-07-21 00:00:00 UTC ephemeris_stop:2026-07-21 08:00:00 UTC step_size:14400",
-    "ephemeris_source:nonconvergent-test",
-    "UVW",
-    "2026202000000.000 7000 0 0 0 7.5 1",
-    "2026202040000.000 -6999 10 5 -0.01 -7.5 -1",
-    "2026202080000.000 6998 -20 -10 0.02 7.5 1",
-    "",
-  ].join("\n"));
+function capturedCelestrakComparisonWindow(fullFixture) {
+  const lines = new TextDecoder().decode(fullFixture).split(/\r?\n/);
+  const dataStart = lines.findIndex((line) => line.trim() === "UVW") + 1;
+  assert.ok(dataStart >= 4);
+  const blocks = [];
+  for (let index = dataStart; index + 3 < lines.length; index += 4) {
+    assert.match(lines[index], /^\d{13}\.\d{3}\s/);
+    blocks.push(lines.slice(index, index + 4));
+  }
+  const first = blocks.findIndex(([state]) =>
+    state.startsWith("2026195111042.000 ")
+  );
+  assert.ok(first >= 0, "captured CelesTrak epoch needs an exact source state");
+  const selected = blocks.slice(first, first + 481);
+  assert.equal(selected.length, 481);
+  assert.match(selected.at(-1)[0], /^2026195191042\.000\s/);
+  return new TextEncoder().encode(
+    `${[...lines.slice(0, dataStart), ...selected.flat()].join("\n")}\n`,
+  );
+}
+
+function memeStateTimestampToIso(timestamp) {
+  assert.match(timestamp, /^\d{13}\.\d{3}$/);
+  const year = Number(timestamp.slice(0, 4));
+  const dayOfYear = Number(timestamp.slice(4, 7));
+  const hour = Number(timestamp.slice(7, 9));
+  const minute = Number(timestamp.slice(9, 11));
+  const second = Number(timestamp.slice(11, 13));
+  const millisecond = Number(timestamp.slice(14, 17));
+  return new Date(
+    Date.UTC(year, 0, dayOfYear, hour, minute, second, millisecond),
+  ).toISOString();
+}
+
+function memeToEme2000Oem(memeFixture) {
+  const states = new TextDecoder()
+    .decode(memeFixture)
+    .split(/\r?\n/)
+    .filter((line) => /^\d{13}\.\d{3}\s/.test(line))
+    .map((line) => {
+      const [epoch, ...components] = line.trim().split(/\s+/);
+      assert.equal(components.length, 6);
+      return `${memeStateTimestampToIso(epoch)} ${components.join(" ")}`;
+    });
+  assert.ok(states.length >= 3);
+  return new TextEncoder().encode(
+    [
+      "CCSDS_OEM_VERS = 3.0",
+      "OBJECT_NAME = STARLINK-36840",
+      "OBJECT_ID = 2026-034A",
+      "CENTER_NAME = EARTH",
+      "REF_FRAME = EME2000",
+      "TIME_SYSTEM = UTC",
+      ...states,
+      "",
+    ].join("\n"),
+  );
+}
+
+function makeIterationBoundMemeFixture() {
+  // Preserve a valid captured EME2000 eight-hour window, but add alternating
+  // deterministic position errors that no single SGP4 element set can fit
+  // below the publication quality ceiling.
+  const { header, blocks } = capturedMemeHeaderAndBlocks();
+  const selected = blocks.slice(0, 481).map((block, index) => {
+    const [epoch, ...components] = block[0].trim().split(/\s+/);
+    assert.equal(components.length, 6);
+    const axis = index % 3;
+    const sign = index % 2 === 0 ? 1 : -1;
+    components[axis] = (
+      Number(components[axis]) + sign * 100
+    ).toFixed(10);
+    return [`${epoch} ${components.join(" ")}`, ...block.slice(1)];
+  });
+  assert.equal(selected.length, 481);
+  return new TextEncoder().encode(
+    `${[...header, ...selected.flat()].join("\n")}\n`,
+  );
+}
+
+function makeTerminalReentryMemeFixture(stateCount = 841) {
+  assert.ok(Number.isSafeInteger(stateCount) && stateCount >= 3);
+  const { header, blocks } = capturedMemeHeaderAndBlocks();
+  const selected = blocks
+    .slice(0, stateCount)
+    .map((block) => [...block]);
+  assert.equal(selected.length, stateCount);
+  const [epoch, ...components] = selected.at(-1)[0].trim().split(/\s+/);
+  assert.equal(components.length, 6);
+  const position = components.slice(0, 3).map(Number);
+  const radius = Math.hypot(...position);
+  const terminalRadiusKm = 6_378.135 + 119;
+  for (let index = 0; index < 3; index += 1) {
+    components[index] = (
+      position[index] * terminalRadiusKm / radius
+    ).toFixed(10);
+  }
+  selected.at(-1)[0] = `${epoch} ${components.join(" ")}`;
+  return new TextEncoder().encode(
+    `${[...header, ...selected.flat()].join("\n")}\n`,
+  );
+}
+
+function dateToMemeStateTimestamp(date) {
+  const year = date.getUTCFullYear();
+  const yearStart = Date.UTC(year, 0, 1);
+  const dayOfYear =
+    Math.floor((date.getTime() - yearStart) / (24 * 60 * 60 * 1000)) + 1;
+  return (
+    `${year}${String(dayOfYear).padStart(3, "0")}` +
+    `${String(date.getUTCHours()).padStart(2, "0")}` +
+    `${String(date.getUTCMinutes()).padStart(2, "0")}` +
+    `${String(date.getUTCSeconds()).padStart(2, "0")}.` +
+    `${String(date.getUTCMilliseconds()).padStart(3, "0")}`
+  );
+}
+
+function makeCumulativelyDriftingTerminalReentryMemeFixture() {
+  const { header, blocks } = capturedMemeHeaderAndBlocks();
+  const selected = blocks.slice(0, 181).map((block) => [...block]);
+  const firstEpoch = selected[0][0].trim().split(/\s+/, 1)[0];
+  const firstMs = Date.parse(memeStateTimestampToIso(firstEpoch));
+  for (let index = 0; index < selected.length; index += 1) {
+    const [, ...components] = selected[index][0].trim().split(/\s+/);
+    const epochMs =
+      firstMs + index * 60_000 + (index === 0 ? 0 : 1);
+    selected[index][0] =
+      `${dateToMemeStateTimestamp(new Date(epochMs))} ${components.join(" ")}`;
+  }
+
+  const [epoch, ...components] = selected.at(-1)[0].trim().split(/\s+/);
+  const position = components.slice(0, 3).map(Number);
+  const radius = Math.hypot(...position);
+  const terminalRadiusKm = 6_378.135 + 119;
+  for (let index = 0; index < 3; index += 1) {
+    components[index] = (
+      position[index] * terminalRadiusKm / radius
+    ).toFixed(10);
+  }
+  selected.at(-1)[0] = `${epoch} ${components.join(" ")}`;
+  return new TextEncoder().encode(
+    `${[...header, ...selected.flat()].join("\n")}\n`,
+  );
+}
+
+function makeCumulativelyDriftingTerminalReentryIssFixture() {
+  const { blocks } = capturedMemeHeaderAndBlocks();
+  const selected = blocks.slice(0, 31);
+  const firstEpoch = selected[0][0].trim().split(/\s+/, 1)[0];
+  const firstUs =
+    BigInt(Date.parse(memeStateTimestampToIso(firstEpoch))) * 1_000n;
+  const states = selected.map((block, index) => {
+    const [, ...components] = block[0].trim().split(/\s+/);
+    const epochUs =
+      firstUs +
+      BigInt(index) * 60_000_000n +
+      BigInt(Math.max(0, index - 1)) * 500n;
+    const date = new Date(Number(epochUs / 1_000n));
+    const fractionalUs = String(epochUs % 1_000_000n).padStart(6, "0");
+    const epoch = `${date.toISOString().slice(0, 19)}.${fractionalUs}`;
+    return { epoch, components };
+  });
+
+  const terminal = states.at(-1).components;
+  const position = terminal.slice(0, 3).map(Number);
+  const radius = Math.hypot(...position);
+  const terminalRadiusKm = 6_378.135 + 119;
+  for (let index = 0; index < 3; index += 1) {
+    terminal[index] = (
+      position[index] * terminalRadiusKm / radius
+    ).toFixed(10);
+  }
+  return new TextEncoder().encode(
+    [
+      "CCSDS_OEM_VERS = 3.0",
+      "OBJECT_NAME = ISS-TERMINAL-DRIFT",
+      "OBJECT_ID = 1998-067A",
+      "CENTER_NAME = EARTH",
+      "REF_FRAME = EME2000",
+      "TIME_SYSTEM = UTC",
+      ...states.map(({ epoch, components }) =>
+        `${epoch} ${components.join(" ")}`
+      ),
+      "",
+    ].join("\n"),
+  );
 }
 
 function assertOutputWireFormat(response, wireFormat) {
@@ -439,51 +677,89 @@ function decodeControl(output) {
   };
 }
 
-function decodeStatusOutput(response) {
+function decodeStatusOutputs(response) {
   const outputs = response.outputs.filter((output) => output.portId === "status");
-  assert.equal(outputs.length, 1, "each consumed logical object needs one status");
-  const output = outputs[0];
-  const bytes = new Uint8Array(output.payload);
   const decode = (candidate) =>
     typeof candidate === "string"
       ? candidate
       : new TextDecoder().decode(candidate ?? new Uint8Array());
-  if (output.wireFormat === "aligned-binary") {
-    assert.equal(bytes.byteLength, fsoAlignedSize);
-    assert.equal(output.typeRef?.byteLength, fsoAlignedSize);
-    assert.equal(output.typeRef?.requiredAlignment, 8);
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const errorLength = bytes[357_416];
-    const messageLength = view.getUint32(357_548, true);
-    assert.ok(errorLength <= 128);
-    assert.ok(messageLength <= 4096);
+  return outputs.map((output) => {
+    const bytes = new Uint8Array(output.payload);
+    if (output.wireFormat === "aligned-binary") {
+      assert.equal(bytes.byteLength, fsoAlignedSize);
+      assert.equal(output.typeRef?.byteLength, fsoAlignedSize);
+      assert.equal(output.typeRef?.requiredAlignment, 8);
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const errorLength = bytes[357_416];
+      const messageLength = view.getUint32(357_548, true);
+      assert.ok(errorLength <= 128);
+      assert.ok(messageLength <= 4096);
+      return {
+        wireFormat: output.wireFormat,
+        operation: bytes[2],
+        requestId: view.getBigUint64(8, true),
+        status: bytes[357_392],
+        affectedRecords: view.getBigUint64(357_400, true),
+        resultBytes: view.getBigUint64(357_408, true),
+        errorCode: new TextDecoder().decode(
+          bytes.subarray(357_417, 357_417 + errorLength),
+        ),
+        message: new TextDecoder().decode(
+          bytes.subarray(357_552, 357_552 + messageLength),
+        ),
+      };
+    }
+    assert.equal(output.wireFormat, "flatbuffer");
+    const value = FSO.getRootAsFSO(new ByteBuffer(bytes));
     return {
       wireFormat: output.wireFormat,
-      operation: bytes[2],
-      requestId: view.getBigUint64(8, true),
-      status: bytes[357_392],
-      affectedRecords: view.getBigUint64(357_400, true),
-      resultBytes: view.getBigUint64(357_408, true),
-      errorCode: new TextDecoder().decode(
-        bytes.subarray(357_417, 357_417 + errorLength),
-      ),
-      message: new TextDecoder().decode(
-        bytes.subarray(357_552, 357_552 + messageLength),
-      ),
+      operation: value.OPERATION(),
+      requestId: value.REQUEST_ID(),
+      status: value.STATUS(),
+      affectedRecords: value.AFFECTED_RECORDS(),
+      resultBytes: value.RESULT_BYTES(),
+      errorCode: decode(value.ERROR_CODE()),
+      message: new TextDecoder().decode(value.messageArray() ?? new Uint8Array()),
     };
+  });
+}
+
+function decodeStatusOutput(response) {
+  const outputs = decodeStatusOutputs(response);
+  assert.equal(outputs.length, 1, "each consumed logical object needs one status");
+  return outputs[0];
+}
+
+function classifyOdProductShape({
+  statusMessage,
+  trajectoryDescription,
+  hasOmm,
+}) {
+  const terminalStatusMarked =
+    /^Terminal reentry OCM complete(?:$|:|;)/.test(statusMessage);
+  const terminalDescriptorMarked =
+    trajectoryDescription ===
+      "TERMINAL_REENTRY_SOURCE_TRAJECTORY_TEME";
+  if (terminalStatusMarked || terminalDescriptorMarked) {
+    assert.equal(
+      terminalStatusMarked,
+      true,
+      "terminal OCM descriptor requires the explicit status marker",
+    );
+    assert.equal(
+      terminalDescriptorMarked,
+      true,
+      "terminal status requires the exact trajectory descriptor",
+    );
+    assert.equal(hasOmm, false, "terminal OCM-only output cannot include an OMM");
+    return "terminal-ocm";
   }
-  assert.equal(output.wireFormat, "flatbuffer");
-  const value = FSO.getRootAsFSO(new ByteBuffer(bytes));
-  return {
-    wireFormat: output.wireFormat,
-    operation: value.OPERATION(),
-    requestId: value.REQUEST_ID(),
-    status: value.STATUS(),
-    affectedRecords: value.AFFECTED_RECORDS(),
-    resultBytes: value.RESULT_BYTES(),
-    errorCode: decode(value.ERROR_CODE()),
-    message: new TextDecoder().decode(value.messageArray() ?? new Uint8Array()),
-  };
+  assert.equal(
+    hasOmm,
+    true,
+    "a normal complete fit must carry the OMM/OCM pair",
+  );
+  return "normal";
 }
 
 function resultMetrics(response, wireFormat) {
@@ -499,7 +775,7 @@ function resultMetrics(response, wireFormat) {
   return { affectedRecords, resultBytes };
 }
 
-function expectedOdFlatSqlRequestIds(response) {
+function expectedOdFlatSqlRequestIds(response, transactionId) {
   const encodeU32 = (value) => {
     const bytes = Buffer.alloc(4);
     bytes.writeUInt32BE(value);
@@ -531,6 +807,7 @@ function expectedOdFlatSqlRequestIds(response) {
   });
   const transactionDigest = crypto.createHash("sha256").update(Buffer.concat([
     Buffer.from("sdn:supplemental-omm:od:flatsql-transaction:v1\0", "utf8"),
+    encodeU64(transactionId),
     encodeU32(streams.length),
     ...streams.flatMap((stream) => [
       encodeText(stream.portId),
@@ -541,7 +818,7 @@ function expectedOdFlatSqlRequestIds(response) {
       stream.digest,
     ]),
   ])).digest();
-  const used = new Set([project(transactionDigest)]);
+  const used = new Set([BigInt(transactionId)]);
   const streamIds = {};
   for (const stream of streams) {
     const base = [
@@ -568,7 +845,7 @@ function expectedOdFlatSqlRequestIds(response) {
     streamIds[stream.portId] = requestId;
   }
   return {
-    control: project(transactionDigest),
+    control: BigInt(transactionId),
     streams: streamIds,
   };
 }
@@ -583,7 +860,11 @@ function odFlatSqlRequestIds(response) {
         control.payload.byteLength,
       ).getBigUint64(8, true)
     : decodeControl(control).requestId;
-  const streamIds = Object.fromEntries(recordOutputPorts.map((portId) => {
+  const emittedRecordPorts = recordOutputPorts.filter((portId) =>
+    response.outputs.some((output) => output.portId === portId)
+  );
+  assert.ok(emittedRecordPorts.length > 0, "OD response has no record stream");
+  const streamIds = Object.fromEntries(emittedRecordPorts.map((portId) => {
     const outputs = response.outputs.filter((output) => output.portId === portId);
     assert.ok(outputs.length > 0, `OD response is missing ${portId}`);
     const requestIds = new Set(outputs.map((output) =>
@@ -768,7 +1049,7 @@ test("OD is a strict dual-FSB native-response transform", () => {
   const status = method.outputPorts.find((port) => port.portId === "status");
   assert.equal(status?.required, false);
   assert.equal(status?.minStreams, 0);
-  assert.equal(status?.maxStreams, 4096);
+  assert.equal(status?.maxStreams, 64);
   assert.doesNotMatch(JSON.stringify(manifest), /OEM\.fbs|\$OEM|acceptsAnyFlatbuffer/i);
 });
 
@@ -787,6 +1068,7 @@ test("OD source reassembles complete native chunks and owns every provider parse
     "FINAL",
     "run_batch_fit",
     "additional_epochs",
+    "convergenceTolerance",
     "CONFIGURE_INDEX",
     "TABLE_BINDINGS",
     "kResultSchemaIdl",
@@ -796,37 +1078,190 @@ test("OD source reassembles complete native chunks and owns every provider parse
   assert.doesNotMatch(source, /128\s*\*\s*1024|131072|rangeBytes|celestrak/i);
 });
 
+test("OD package and signed artifact contain only OMM and OCM result products", () => {
+  const manifest = readJson("plugin-manifest.json");
+  const method = manifest.methods?.find((candidate) => candidate.methodId === "fit");
+  assert.ok(method);
+  assert.deepEqual(
+    method.outputPorts.map((port) => port.portId),
+    ["control", "status", "omm", "ocm"],
+  );
+
+  for (const relativePath of [
+    "src/node.cpp",
+    "manifest.mjs",
+    "build.mjs",
+    "README.md",
+    "vendor/od_batch_fit.hpp",
+  ]) {
+    assert.doesNotMatch(
+      fs.readFileSync(path.join(nodeRoot, relativePath), "utf8"),
+      /\bOBD\b|\bobd\b/,
+      `${relativePath} still owns the retired OBD product`,
+    );
+  }
+  const sourcePatch = fs.readFileSync(
+    path.join(nodeRoot, "vendor/od-fit-core-source.patch"),
+    "utf8",
+  );
+  const addedPatchLines = sourcePatch
+    .split("\n")
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+    .join("\n");
+  assert.doesNotMatch(
+    addedPatchLines,
+    /\bOBD\b|\bobd\b/,
+    "the reconstructed fit core still adds the retired OBD product",
+  );
+
+  const artifact = fs.readFileSync(path.join(nodeRoot, "dist/isomorphic/module.wasm"));
+  assert.doesNotMatch(
+    artifact.toString("latin1"),
+    /\$OBD|OBD\.fbs/,
+    "the signed OD child still embeds the retired OBD schema or port",
+  );
+});
+
+test("OD admits bounded nonempty batches to the real fitter and releases fitted OEM bytes", () => {
+  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  const header = fs.readFileSync(path.join(nodeRoot, "vendor/od_batch_fit.hpp"), "utf8");
+  const patch = fs.readFileSync(
+    path.join(nodeRoot, "vendor/od-fit-core-source.patch"),
+    "utf8",
+  );
+
+  assert.match(source, /kMaxFitBatchObjects\s*=\s*16\s*;/);
+  assert.match(source, /kFitWorkerThreads\s*=\s*16\s*;/);
+  assert.match(source, /kMaxFitBatchBytes\s*=\s*\d+u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/);
+  assert.match(
+    source,
+    /run_batch_fit\s*\(\s*batch_objects\s*,\s*kFitWorkerThreads\s*,\s*&stats\s*\)/,
+    "the signed node must pass admitted complete objects into the real fitter",
+  );
+  assert.doesNotMatch(
+    source,
+    /run_batch_fit\s*\(\s*no_objects|fit_one_bounded/,
+    "a link-only empty call or serial wrapper is not a parallel OD batch",
+  );
+  assert.match(source, /g_fitted_fit_objects/);
+  assert.match(
+    source,
+    /std::vector<od::BatchObject>\s*\(\s*\)\.swap\s*\(\s*batch_objects\s*\)/,
+    "complete source ephemerides must be released as soon as their batch fit returns",
+  );
+
+  assert.match(header, /std::string\s+fit_options\s*;/);
+  assert.match(patch, /obj\.fit_options/);
+  assert.match(patch, /preflight_fit_epochs/);
+  assert.doesNotMatch(
+    patch,
+    /if\s*\(\s*!epoch\.ok[^)]*\)\s*continue/,
+    "one incomplete epoch must reject the entire source fit before any result moves",
+  );
+});
+
+test("OD globally bounds native assemblies and every queued fit stage", () => {
+  const manifest = readJson("plugin-manifest.json");
+  const method = manifest.methods?.find((candidate) => candidate.methodId === "fit");
+  assert.equal(method?.maxBatch, 64);
+  for (const port of method?.inputPorts ?? []) {
+    assert.equal(port.maxStreams, 64, `${port.portId} input stream bound changed`);
+  }
+  assert.equal(
+    method?.outputPorts.find((port) => port.portId === "status")?.maxStreams,
+    64,
+  );
+  for (const portId of recordOutputPorts) {
+    assert.equal(
+      method?.outputPorts.find((port) => port.portId === portId)?.maxStreams,
+      64,
+    );
+  }
+
+  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  for (const declaration of [
+    /kGuestTransientBudgetBytes\s*=\s*256u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/,
+    /kMaxIncompleteAssemblies\s*=\s*64\s*;/,
+    /kMaxIncompleteAssemblyDeclaredBytes\s*=\s*256u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/,
+    /kMaxIncompleteAssemblyBytes\s*=\s*128u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/,
+    /kMaxQueuedStorageBytes\s*=\s*192u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/,
+    /kMaxPendingFitObjects\s*=\s*64\s*;/,
+    /kMaxPendingFitBytes\s*=\s*128u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/,
+    /kMaxFittedFitObjects\s*=\s*16\s*;/,
+    /kMaxFittedFitBytes\s*=\s*8u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/,
+  ]) {
+    assert.match(source, declaration);
+  }
+  assert.doesNotMatch(
+    source,
+    /fresh\.bytes\.reserve\s*\(\s*static_cast<size_t>\s*\(\s*chunk\.total_bytes\s*\)\s*\)/,
+    "declared TOTAL_BYTES must not become an eager allocation",
+  );
+  for (const accounting of [
+    "incomplete_assembly_declared_bytes",
+    "incomplete_assembly_bytes",
+    "pending_fit_bytes",
+    "fitted_fit_bytes",
+    "queued_storage_bytes",
+  ]) {
+    assert.match(source, new RegExp(accounting), `missing ${accounting}`);
+  }
+});
+
 test("OD passes a deterministic supported work bound to every complete-arc fit", () => {
   const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  const header = fs.readFileSync(path.join(nodeRoot, "vendor/od_batch_fit.hpp"), "utf8");
+  const patch = fs.readFileSync(
+    path.join(nodeRoot, "vendor/od-fit-core-source.patch"),
+    "utf8",
+  );
   const declaredBound = source.match(/kMaxFitIterations\s*=\s*(\d+)\s*;/);
   assert.ok(declaredBound, "signed OD source must declare its solver-work bound");
   const maxIterations = Number(declaredBound[1]);
-  assert.equal(maxIterations, 40);
+  assert.equal(maxIterations, 60);
 
   const encodedBound = source.match(/"maxIterations"\s*:\s*(\d+)/);
   assert.ok(encodedBound, "signed OD source must encode the supported maxIterations option");
   assert.equal(Number(encodedBound[1]), maxIterations);
+  assert.match(source, /"multiEpochSpacingSeconds"\s*:\s*21600/);
+  assert.match(source, /"multiEpochWindowSeconds"\s*:\s*28800/);
   assert.match(
     source,
-    /fit_ephemeris_epochs_fb\([^;]+kFitOptions/s,
-    "the complete-arc fitter must receive the nonempty deterministic options",
+    /object\.fit_options\.assign\s*\(\s*kFitOptions\.data\(\),\s*kFitOptions\.size\(\)\s*\)/,
+    "every admitted object must carry the nonempty deterministic options",
   );
-  assert.doesNotMatch(
-    source,
-    /fit_ephemeris_epochs_fb\([^;]+std::string_view\s*\{\s*\}/s,
+  assert.match(header, /std::string\s+fit_options\s*;/);
+  assert.match(
+    patch,
+    /fit_ephemeris_epochs_fb\([^;]+obj\.fit_options/s,
+    "the real batch fitter must receive each object's deterministic options",
   );
+  assert.match(patch, /multi_epoch_spacing_sec/);
+  assert.match(patch, /multi_epoch_window_sec/);
+  assert.match(patch, /use_all_window_states/);
 });
 
 test("OD preflights every returned epoch before moving any result bytes", () => {
-  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
-  const helper = source.match(
+  const patch = fs.readFileSync(
+    path.join(nodeRoot, "vendor/od-fit-core-source.patch"),
+    "utf8",
+  );
+  const reconstructed = patch
+    .split("\n")
+    .filter((line) =>
+      line.startsWith(" ") ||
+      (line.startsWith("+") && !line.startsWith("+++"))
+    )
+    .map((line) => line.slice(1))
+    .join("\n");
+  const helper = reconstructed.match(
     /bool preflight_fit_epochs\([^]*?\n\}/,
   )?.[0];
-  assert.ok(helper, "signed OD source must own an all-epoch preflight helper");
-  assert.match(helper, /for\s*\(const od::PluginFitFBResult& epoch : epochs\)/);
+  assert.ok(helper, "frozen batch core must own an all-epoch preflight helper");
+  assert.match(helper, /for\s*\(const PluginFitFBResult& epoch : epochs\)/);
   assert.match(
     helper,
-    /!epoch\.ok\s*\|\|\s*epoch\.omm\.empty\(\)\s*\|\|\s*epoch\.ocm\.empty\(\)\s*\|\|\s*\n\s*epoch\.obd\.empty\(\)/,
+    /!epoch\.ok\s*\|\|\s*epoch\.omm\.empty\(\)\s*\|\|\s*epoch\.ocm\.empty\(\)/,
   );
   assert.match(
     helper,
@@ -838,13 +1273,13 @@ test("OD preflights every returned epoch before moving any result bytes", () => 
   );
   assert.match(helper, /fit-incomplete-epoch/);
 
-  const boundedFit = source.match(
-    /od::BatchResult fit_one_bounded\([^]*?\n\}/,
+  const boundedFit = reconstructed.match(
+    /BatchResult fit_one\([^]*?\n\}/,
   )?.[0];
   assert.ok(boundedFit);
   const preflight = boundedFit.indexOf("preflight_fit_epochs");
   const firstMove = boundedFit.indexOf("std::move");
-  const accepted = boundedFit.indexOf("result.ok = true");
+  const accepted = boundedFit.indexOf("r.ok = true");
   assert.ok(preflight >= 0, "bounded fit must invoke all-epoch preflight");
   assert.ok(firstMove >= 0);
   assert.ok(accepted >= 0);
@@ -862,6 +1297,152 @@ test("OD preflights every returned epoch before moving any result bytes", () => 
   );
 });
 
+test("OD convergence belongs only to the elements selected for publication", () => {
+  const patch = fs.readFileSync(
+    path.join(nodeRoot, "vendor/od-fit-core-source.patch"),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    patch,
+    /previously_converged|result\.converged\s*=\s*result\.converged\s*\|\|/,
+    "a discarded fit cannot transfer convergence to a lower-RMS element set",
+  );
+  assert.doesNotMatch(
+    patch,
+    /^\+\s*result\.converged\s*=\s*true\s*;/m,
+    "a fixed-budget derivative-free search cannot claim LM convergence",
+  );
+  assert.ok(
+    [...patch.matchAll(/^\+\s*result\.converged\s*=\s*false\s*;/gm)].length >= 2,
+    "Nelder-Mead and differential evolution must remain search seeds",
+  );
+  assert.match(
+    patch,
+    /if\s*\(\s*\(!best_result\.converged\s*\|\|\s*best_result\.rms_km\s*>\s*0\.28\)/,
+    "multi-start admission must account for a low-RMS non-converged primary",
+  );
+  assert.match(
+    patch,
+    /if\s*\(\s*best_result\.converged\s*&&\s*best_result\.rms_km\s*<\s*0\.22\s*\)\s*break;/,
+    "multi-start cannot stop early on a low-RMS non-converged incumbent",
+  );
+});
+
+test("OD benchmark metrics cover terminal drains and product validation", () => {
+  const source = fs.readFileSync(fileURLToPath(import.meta.url), "utf8");
+  const section = (startParts, endParts) => {
+    const start = source.indexOf(startParts.join(""));
+    const end = source.indexOf(endParts.join(""), start + 1);
+    assert.ok(start >= 0, `missing benchmark marker ${startParts.join("")}`);
+    assert.ok(end > start, `missing section end ${endParts.join("")}`);
+    return source.slice(start, end);
+  };
+
+  const batch = section(
+    ["OD fits one bounded provider batch and drains fitted results ", "through zero-input continuations"],
+    ["OD preserves source transaction IDs across transport, chunking, ", "wire format, and restart"],
+  );
+  assert.ok(
+    batch.indexOf("const batchElapsedMs") >
+      batch.indexOf('harness.invoke({ methodId: "fit", inputs: [] })'),
+    "bounded-batch timing must include every zero-input output continuation",
+  );
+  assert.match(batch, /fitAndFullOutputDrainMs=/);
+
+  const realCorpus = section(
+    ["benchmark OD on complete real MEME files sampled across ", "the retained catalog"],
+    ["benchmark OD full-arc ", "worker scaling"],
+  );
+  assert.ok(
+    realCorpus.indexOf("const usageAfter") >
+      realCorpus.indexOf("OMM/OCM epochs diverged"),
+    "real-corpus wall/CPU/resource samples must end after product validation",
+  );
+  assert.match(realCorpus, /p50FullBatchFitDrainValidationSeconds=/);
+  assert.match(source, /const terminalStatusMarked/);
+  assert.match(source, /Terminal reentry OCM complete/);
+  assert.match(source, /TERMINAL_REENTRY_SOURCE_TRAJECTORY_TEME/);
+  assert.match(realCorpus, /classifyOdProductShape/);
+  assert.match(realCorpus, /terminalOcmOnlyObjects/);
+  assert.match(realCorpus, /terminalOcm\.ORBIT_DETERMINATION\(\), null/);
+  assert.match(realCorpus, /observationCount === 481 \|\| observationCount === 241/);
+  assert.ok(
+    realCorpus.indexOf("responses.length >= maximumDrainResponses") <
+      realCorpus.indexOf(
+        'await harness.invoke({ methodId: "fit", inputs: [] })',
+        realCorpus.indexOf("responses.length >= maximumDrainResponses"),
+      ),
+    "the drain bound must be checked before requesting another continuation",
+  );
+  assert.ok(
+    realCorpus.indexOf("await harness.threadHost?.terminateAll?.()") <
+      realCorpus.indexOf(
+        "harness.destroy()",
+        realCorpus.indexOf("await harness.threadHost?.terminateAll?.()"),
+      ),
+    "benchmark worker termination must finish before harness destruction",
+  );
+
+  const fullArc = section(
+    ["benchmark OD full-arc ", "worker scaling"],
+    ["OD reassembles native chunks, aggregates one object's epochs, ", "and persists them independently"],
+  );
+  assert.match(
+    fullArc,
+    /harness\.invoke\(\{ methodId: "fit", inputs: \[\] \}\)/,
+    "full-arc scaling must drain zero-input continuations",
+  );
+  assert.ok(
+    fullArc.indexOf("const elapsedSeconds") >
+      fullArc.indexOf("OMM/OCM epochs diverged"),
+    "full-arc wall timing must include all per-source OMM/OCM validation",
+  );
+  assert.match(fullArc, /endToEndFitDrainValidationSeconds=/);
+});
+
+test("OD benchmark product classification is explicitly terminal or paired", () => {
+  assert.equal(
+    classifyOdProductShape({
+      statusMessage: "Terminal reentry OCM complete: STARLINK-1606",
+      trajectoryDescription: "TERMINAL_REENTRY_SOURCE_TRAJECTORY_TEME",
+      hasOmm: false,
+    }),
+    "terminal-ocm",
+  );
+  for (const malformed of [
+    {
+      statusMessage: "OD fit complete",
+      trajectoryDescription: "",
+      hasOmm: false,
+    },
+    {
+      statusMessage: "Terminal reentry OCM complete: STARLINK-1606",
+      trajectoryDescription: "CARTESIAN_PV",
+      hasOmm: false,
+    },
+    {
+      statusMessage: "OD fit complete",
+      trajectoryDescription: "TERMINAL_REENTRY_SOURCE_TRAJECTORY_TEME",
+      hasOmm: false,
+    },
+    {
+      statusMessage: "Terminal reentry OCM complete: STARLINK-1606",
+      trajectoryDescription: "TERMINAL_REENTRY_SOURCE_TRAJECTORY_TEME",
+      hasOmm: true,
+    },
+  ]) {
+    assert.throws(() => classifyOdProductShape(malformed));
+  }
+  assert.equal(
+    classifyOdProductShape({
+      statusMessage: "OD fit complete: STARLINK-1663",
+      trajectoryDescription: "",
+      hasOmm: true,
+    }),
+    "normal",
+  );
+});
+
 test("OD signed-node build is self-contained inside the Supplemental package", () => {
   const buildSource = fs.readFileSync(path.join(nodeRoot, "build.mjs"), "utf8");
   assert.doesNotMatch(
@@ -875,29 +1456,55 @@ test("OD signed-node build is self-contained inside the Supplemental package", (
   assert.ok(fs.existsSync(fitObject), `missing ${fitObject}`);
   assert.equal(
     crypto.createHash("sha256").update(fs.readFileSync(fitObject)).digest("hex"),
-    "7ebc7409148e085759c976ae07f01c378b2f4f5a3662bd21a7c9b6ed6608782e",
+    "e1f1baa093cb52ef6fc880e4aa4de958c2bb074b8dac4d7826c50fa540e94ea8",
   );
 
   const fitHeader = path.join(nodeRoot, "vendor/od_batch_fit.hpp");
   assert.ok(fs.existsSync(fitHeader), `missing ${fitHeader}`);
   assert.match(fs.readFileSync(fitHeader, "utf8"), /additional_epochs/);
+  assert.equal(
+    crypto.createHash("sha256").update(fs.readFileSync(fitHeader)).digest("hex"),
+    "0cc0ffaad93fa089e274e3d24d6db1aa66c01c801a73392805d8b4d15955817a",
+  );
 
   const sourcePatch = path.join(nodeRoot, "vendor/od-fit-core-source.patch");
   assert.equal(
     crypto.createHash("sha256").update(fs.readFileSync(sourcePatch)).digest("hex"),
-    "18af55440c188144082029cacafbaed35a813740d0aefc15aa43cd27bf8dd761",
+    "c9e6042809c4ec8ce38a878fb0fd6bd1969e2f9bd4f307c924e571a090b17882",
   );
   const modulesRoot = path.resolve(packageRoot, "../..");
-  const forward = spawnSync("git", ["apply", "--check", "--unidiff-zero", sourcePatch], {
-    cwd: modulesRoot,
-  });
-  const reverse = spawnSync("git", ["apply", "--check", "--reverse", "--unidiff-zero", sourcePatch], {
-    cwd: modulesRoot,
-  });
-  assert.ok(
-    forward.status === 0 || reverse.status === 0,
-    "vendored source delta must apply to the pinned base or exactly match the working source",
+  const reconstructedRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "supplemental-od-core-test-"),
   );
+  try {
+    const archived = spawnSync(
+      "git",
+      [
+        "archive",
+        "551f6e178c3332cad46171fd1a0002345271144c",
+        "analysis/od",
+      ],
+      { cwd: modulesRoot, maxBuffer: 32 * 1024 * 1024 },
+    );
+    assert.equal(archived.status, 0, String(archived.stderr));
+    const extracted = spawnSync("tar", ["-x", "-C", reconstructedRoot], {
+      input: archived.stdout,
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    assert.equal(extracted.status, 0, String(extracted.stderr));
+    const forward = spawnSync(
+      "git",
+      ["apply", "--check", "--unsafe-paths", sourcePatch],
+      { cwd: reconstructedRoot },
+    );
+    assert.equal(
+      forward.status,
+      0,
+      `vendored source delta must apply to the recorded base: ${forward.stderr}`,
+    );
+  } finally {
+    fs.rmSync(reconstructedRoot, { recursive: true, force: true });
+  }
 
   const license = path.join(nodeRoot, "vendor/SGP4-LICENSE.txt");
   assert.equal(
@@ -906,8 +1513,111 @@ test("OD signed-node build is self-contained inside the Supplemental package", (
   );
   const notice = fs.readFileSync(path.join(nodeRoot, "vendor/NOTICE.md"), "utf8");
   assert.match(notice, /base\s+revision[^]+plus the then-uncommitted/i);
+  assert.match(notice, /temporary archive/i);
+  assert.match(notice, /wasi-sdk:wasi-sdk-24/);
   assert.match(notice, /SGP4-LICENSE\.txt/);
 });
+
+test("OD frozen core provides an executable source-to-object reproduction", () => {
+  const verifierPath = path.join(
+    packageRoot,
+    "scripts/verify-od-fit-core-reproducibility.mjs",
+  );
+  assert.ok(fs.existsSync(verifierPath), `missing ${verifierPath}`);
+  const verifier = fs.readFileSync(verifierPath, "utf8");
+  assert.match(verifier, /551f6e178c3332cad46171fd1a0002345271144c/);
+  assert.match(
+    verifier,
+    /sha256:6ff1234684d0353e914106f698216a16646c64c208f46b3021676b76435cdc50/,
+  );
+  assert.match(
+    verifier,
+    /sha256:59df2a99139fad8ce3814d725c85a7a1b444ea97519186c4aa0be87cda8e6b1d/,
+  );
+  assert.match(
+    verifier,
+    /ghcr\.io\/webassembly\/wasi-sdk@sha256:59df2a99139fad8ce3814d725c85a7a1b444ea97519186c4aa0be87cda8e6b1d/,
+  );
+  assert.doesNotMatch(verifier, /wasi-sdk:wasi-sdk-24@sha256:/);
+  assert.match(verifier, /5ab8e415ad13f1e9a75c1cdb1e990f37b1c79d75/);
+  assert.match(
+    verifier,
+    /b04f3dad6c88b1a90e7276c115eaabf3ba7b6c94059269209d0120a83b5989a2/,
+  );
+  assert.match(verifier, /eigen-5\.0\.1\.tar\.gz/);
+  assert.match(
+    verifier,
+    /e9c326dc8c05cd1e044c71f30f1b2e34a6161a3b6ecf445d56b53ff1669e3dec/,
+  );
+  assert.match(
+    verifier,
+    /0cc0ffaad93fa089e274e3d24d6db1aa66c01c801a73392805d8b4d15955817a/,
+  );
+  assert.match(verifier, /vendor[\\/]od_batch_fit\.hpp/);
+  assert.match(verifier, /licensing\/core\/src\/cpp\/generated\/sds/);
+  assert.match(verifier, /--network/);
+  assert.match(verifier, /--pull/);
+  for (const translationUnit of [
+    "sgp4_fitter.cpp",
+    "meme_parser.cpp",
+    "frame_transform.cpp",
+    "oem_parser.cpp",
+    "oem_fb_reader.cpp",
+    "omm_fb_builder.cpp",
+    "ocm_fb_builder.cpp",
+    "plugin_runtime.cpp",
+    "SGP4.cpp",
+    "od_batch_fit.cpp",
+    "noexcept_stubs.cpp",
+  ]) {
+    assert.match(verifier, new RegExp(translationUnit.replace(".", "\\.")));
+  }
+  assert.match(verifier, /--target=wasm32-wasip1-threads/);
+  assert.match(verifier, /-ffast-math/);
+  assert.match(verifier, /timingSafeEqual/);
+});
+
+test(
+  "OD frozen core rebuilds byte-identically from the pinned source archive",
+  {
+    skip: process.env.SDN_OD_VERIFY_FROZEN_CORE_REPRODUCIBILITY !== "1",
+    timeout: Number(
+      process.env.SDN_OD_VERIFY_FROZEN_CORE_TIMEOUT_MS ?? 300_000,
+    ),
+  },
+  () => {
+    const verifierPath = path.join(
+      packageRoot,
+      "scripts/verify-od-fit-core-reproducibility.mjs",
+    );
+    const timeout = Number(
+      process.env.SDN_OD_VERIFY_FROZEN_CORE_TIMEOUT_MS ?? 300_000,
+    );
+    const verified = spawnSync(process.execPath, [verifierPath], {
+      cwd: packageRoot,
+      encoding: "utf8",
+      timeout,
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    assert.equal(
+      verified.status,
+      0,
+      `${verified.stdout}\n${verified.stderr}`,
+    );
+    const report = JSON.parse(verified.stdout);
+    assert.equal(report.reconstructedSourceMatchesPatch, true);
+    assert.equal(report.objectMatchesVendoredBytes, true);
+    assert.equal(report.headerMatchesReconstructedBytes, true);
+    assert.equal(
+      report.headerSha256,
+      "0cc0ffaad93fa089e274e3d24d6db1aa66c01c801a73392805d8b4d15955817a",
+    );
+    assert.equal(
+      report.objectSha256,
+      "e1f1baa093cb52ef6fc880e4aa4de958c2bb074b8dac4d7826c50fa540e94ea8",
+    );
+  },
+);
 
 test("OD artifact is independently bundle-signed", async () => {
   const artifactPath = path.join(nodeRoot, "dist/isomorphic/module.wasm");
@@ -990,6 +1700,264 @@ test("OD rejects canonical chunk ordering and checksum failures", async (t) => {
     ],
   });
   assertChunkInvalid(checksumFailure);
+});
+
+test("OD applies fixed FSB field bounds to canonical chunks", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  const oversized = new Uint8Array(fsbAlignedDataCapacity + 1);
+  const response = await harness.invoke({
+    methodId: "fit",
+    inputs: [
+      inputFrame(
+        makeChunk({
+          data: oversized,
+          sequence: 0,
+          final: true,
+          totalBytes: oversized.byteLength,
+          checksum: new Uint8Array(),
+          requestId: 92_100n,
+        }),
+      ),
+    ],
+  });
+  assertChunkInvalid(response);
+});
+
+test("OD rejects a sixty-fifth incomplete assembly and recovers after release", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+  const frame = ({ requestId, sequence = 0, totalBytes = 2 }) =>
+    inputFrame(
+      makeChunk({
+        data: new Uint8Array([Number(requestId % 251n)]),
+        sequence,
+        final: false,
+        totalBytes,
+        checksum: new Uint8Array(),
+        requestId,
+      }),
+    );
+
+  const admitted = await harness.invoke({
+    methodId: "fit",
+    inputs: Array.from({ length: 64 }, (_, index) =>
+      frame({ requestId: 92_200n + BigInt(index) })
+    ),
+  });
+  assert.equal(admitted.statusCode, 0, admitted.errorMessage);
+  assert.deepEqual(admitted.outputs, []);
+
+  const overflow = await harness.invoke({
+    methodId: "fit",
+    inputs: [frame({ requestId: 92_264n })],
+  });
+  assert.equal(overflow.statusCode, 413, overflow.errorMessage);
+  assert.equal(overflow.errorCode, "od-capacity");
+
+  const released = await harness.invoke({
+    methodId: "fit",
+    inputs: [
+      frame({
+        requestId: 92_200n,
+        sequence: 1,
+        totalBytes: 3,
+      }),
+    ],
+  });
+  assertChunkInvalid(released);
+
+  const recovered = await harness.invoke({
+    methodId: "fit",
+    inputs: [frame({ requestId: 92_264n })],
+  });
+  assert.equal(recovered.statusCode, 0, recovered.errorMessage);
+  assert.equal(recovered.errorCode, null);
+});
+
+test("OD bounds aggregate declared assembly bytes without eager allocation", async (t) => {
+  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  assert.doesNotMatch(source, /fresh\.bytes\.reserve/);
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+  const frame = ({ requestId, sequence = 0, totalBytes = 64 * 1024 * 1024 }) =>
+    inputFrame(
+      makeChunk({
+        data: new Uint8Array([1]),
+        sequence,
+        final: false,
+        totalBytes,
+        checksum: new Uint8Array(),
+        requestId,
+        schemaName: "OEM",
+        fileIdentifier: "OEM",
+      }),
+      { portId: "iss" },
+    );
+
+  for (let index = 0; index < 4; index += 1) {
+    const admitted = await harness.invoke({
+      methodId: "fit",
+      inputs: [frame({ requestId: 92_300n + BigInt(index) })],
+    });
+    assert.equal(admitted.statusCode, 0, admitted.errorMessage);
+  }
+  const overflow = await harness.invoke({
+    methodId: "fit",
+    inputs: [frame({ requestId: 92_304n })],
+  });
+  assert.equal(overflow.statusCode, 413, overflow.errorMessage);
+  assert.equal(overflow.errorCode, "od-capacity");
+
+  const released = await harness.invoke({
+    methodId: "fit",
+    inputs: [
+      frame({
+        requestId: 92_300n,
+        sequence: 1,
+        totalBytes: 63 * 1024 * 1024,
+      }),
+    ],
+  });
+  assertChunkInvalid(released);
+  const recovered = await harness.invoke({
+    methodId: "fit",
+    inputs: [frame({ requestId: 92_304n })],
+  });
+  assert.equal(recovered.statusCode, 0, recovered.errorMessage);
+});
+
+test(
+  "OD bounds actual incomplete assembly storage and recovers after release",
+  { timeout: 120_000 },
+  async (t) => {
+    const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+    assert.match(
+      source,
+      /kMaxIncompleteAssemblyBytes\s*=\s*128u?\s*\*\s*1024u?\s*\*\s*1024u?\s*;/,
+    );
+    const manifest = readJson("plugin-manifest.json");
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+    const oneMiB = new Uint8Array(1024 * 1024);
+    const totalBytes = 64 * 1024 * 1024;
+    const frame = ({ requestId, sequence, declaredBytes = totalBytes }) =>
+      inputFrame(
+        makeChunk({
+          data: oneMiB,
+          sequence,
+          final: false,
+          totalBytes: declaredBytes,
+          checksum: new Uint8Array(),
+          requestId,
+          schemaName: "OEM",
+          fileIdentifier: "OEM",
+        }),
+        { portId: "iss" },
+      );
+
+    for (const requestId of [92_400n, 92_401n]) {
+      for (let offset = 0; offset < 64; offset += 16) {
+        const admitted = await harness.invoke({
+          methodId: "fit",
+          inputs: Array.from({ length: 16 }, (_, index) =>
+            frame({ requestId, sequence: offset + index })
+          ),
+        });
+        assert.equal(admitted.statusCode, 0, admitted.errorMessage);
+      }
+    }
+    const overflow = await harness.invoke({
+      methodId: "fit",
+      inputs: [frame({ requestId: 92_402n, sequence: 0 })],
+    });
+    assert.equal(overflow.statusCode, 413, overflow.errorMessage);
+    assert.equal(overflow.errorCode, "od-capacity");
+
+    const released = await harness.invoke({
+      methodId: "fit",
+      inputs: [
+        frame({
+          requestId: 92_400n,
+          sequence: 64,
+          declaredBytes: totalBytes - 1,
+        }),
+      ],
+    });
+    assertChunkInvalid(released);
+    const recovered = await harness.invoke({
+      methodId: "fit",
+      inputs: [frame({ requestId: 92_402n, sequence: 0 })],
+    });
+    assert.equal(recovered.statusCode, 0, recovered.errorMessage);
+  },
+);
+
+test("OD rejects pending-object overflow and resumes its bounded queue", async (t) => {
+  const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
+  assert.match(source, /kMaxPendingFitObjects\s*=\s*64\s*;/);
+  const fixture = new Uint8Array(
+    fs.readFileSync(
+      path.join(
+        packageRoot,
+        "../../data-source/spacex-starlink-source/test/fixtures/meme/" +
+          "MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+      ),
+    ),
+  );
+  assert.ok(fixture.byteLength < fsbAlignedDataCapacity);
+  const checksum = crypto.createHash("sha256").update(fixture).digest();
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+  const inputs = Array.from({ length: 65 }, (_, index) =>
+    inputFrame(
+      makeChunk({
+        data: fixture,
+        sequence: 0,
+        final: true,
+        totalBytes: fixture.byteLength,
+        checksum,
+        requestId: 92_500n + BigInt(index),
+        schemaName: `MEME:${68_000 + index}:STARLINK-PENDING-${index}`,
+      }),
+    )
+  );
+
+  const overflow = await harness.invoke({ methodId: "fit", inputs });
+  assert.equal(overflow.statusCode, 413, overflow.errorMessage);
+  assert.equal(overflow.errorCode, "od-capacity");
+  assert.deepEqual(overflow.outputs, []);
+
+  const recovered = await harness.invoke({ methodId: "fit", inputs: [] });
+  assert.equal(recovered.statusCode, 0, recovered.errorMessage);
+  assert.equal(recovered.errorCode, null);
+  assert.equal(recovered.backlogRemaining, 63);
+  assert.equal(decodeStatusOutput(recovered).status, flatSqlNodeStatus.COMPLETE);
 });
 
 test("OD rejects aligned DATA length beyond its fixed bound", async (t) => {
@@ -1184,7 +2152,9 @@ for (const wireFormat of ["flatbuffer", "aligned-binary"]) {
       affectedRecords: metrics.affectedRecords,
       resultBytes: metrics.resultBytes,
       errorCode: "",
-      message: `OD fit complete: ${successName} (NORAD ${successNorad})`,
+      message:
+        `OD fit complete: ${successName} (NORAD ${successNorad}); ` +
+        "batch_objects=1; workers=1; distinct_threads=1",
     });
 
     const parseRequestId = 94_100n + suffix;
@@ -1242,7 +2212,12 @@ for (const wireFormat of ["flatbuffer", "aligned-binary"]) {
     const fitStatus = decodeStatusOutput(fitFailure);
     assert.equal(fitStatus.wireFormat, wireFormat);
     assert.equal(fitStatus.operation, 0);
-    assert.equal(fitStatus.requestId, fitRequestId);
+    assert.ok(fitStatus.requestId > 0n);
+    assert.notEqual(
+      fitStatus.requestId,
+      fitRequestId,
+      "non-Starlink wrapper counters cannot become durable transaction IDs",
+    );
     assert.equal(fitStatus.status, flatSqlNodeStatus.INTERNAL_ERROR);
     assert.equal(fitStatus.affectedRecords, 0n);
     assert.equal(fitStatus.resultBytes, 0n);
@@ -1304,8 +2279,15 @@ test("OD expands one GLONASS response into one-object fit continuations", async 
   );
 
   const fittedNames = [];
+  const transactionIds = [];
   for (const response of [first, second]) {
     assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null, response.errorMessage);
+    transactionIds.push(
+      decodeControl(
+        response.outputs.find((output) => output.portId === "control"),
+      ).requestId,
+    );
     const omm = reassembleRecordStream(response.outputs, "omm");
     const names = new Set(
       splitSizePrefixedRecords(omm.stream).map((record) =>
@@ -1316,6 +2298,78 @@ test("OD expands one GLONASS response into one-object fit continuations", async 
     fittedNames.push(...names);
   }
   assert.deepEqual(fittedNames, ["GLONASS R01", "GLONASS R02"]);
+  assert.equal(new Set(transactionIds).size, transactionIds.length);
+  assert.ok(
+    transactionIds.every((transactionId) =>
+      transactionId > 0n && transactionId !== 88001n
+    ),
+    "fanout children need nonzero transaction IDs distinct from their parent",
+  );
+});
+
+test("OD derives a restart-stable transaction ID for one-object non-Starlink responses", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const createHarness = async () => {
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+    return harness;
+  };
+  const fixture = new TextEncoder().encode(
+    new TextDecoder()
+      .decode(makeGlonassSp3Fixture())
+      .split("\n")
+      .filter((line) => !line.startsWith("PR02"))
+      .join("\n"),
+  );
+  const checksum = crypto.createHash("sha256").update(fixture).digest();
+  const parentRequestId = 1n;
+  const fit = (harness) =>
+    harness.invoke({
+      methodId: "fit",
+      inputs: [
+        inputFrame(
+          makeChunk({
+            data: fixture,
+            sequence: 0,
+            final: true,
+            totalBytes: fixture.byteLength,
+            checksum,
+            requestId: parentRequestId,
+            schemaName: "SP3",
+            fileIdentifier: "SP3",
+          }),
+          { portId: "glonass" },
+        ),
+      ],
+    });
+
+  const first = await fit(await createHarness());
+  const afterRestart = await fit(await createHarness());
+  assert.equal(first.statusCode, 0, first.errorMessage);
+  assert.equal(afterRestart.statusCode, 0, afterRestart.errorMessage);
+  assert.equal(first.errorCode, null, first.errorMessage);
+  assert.equal(afterRestart.errorCode, null, afterRestart.errorMessage);
+  const firstTransactionId = decodeControl(
+    first.outputs.find((output) => output.portId === "control"),
+  ).requestId;
+  const restartTransactionId = decodeControl(
+    afterRestart.outputs.find((output) => output.portId === "control"),
+  ).requestId;
+  assert.notEqual(
+    firstTransactionId,
+    parentRequestId,
+    "restart-local provider counters are not durable transaction identities",
+  );
+  assert.equal(firstTransactionId, restartTransactionId);
+  assert.equal(decodeStatusOutput(first).requestId, firstTransactionId);
+  assert.equal(
+    decodeStatusOutput(afterRestart).requestId,
+    restartTransactionId,
+  );
 });
 
 test("OD retains each queued object's canonical or aligned outer wire format", async (t) => {
@@ -1391,7 +2445,7 @@ test("OD retains each queued object's canonical or aligned outer wire format", a
   ]);
 });
 
-test("OD emits and persists nonconvergent best-effort records without stranding queued objects", async (t) => {
+test("OD rejects iteration-bound low-quality records without persistence or queue loss", async (t) => {
   const manifest = readJson("plugin-manifest.json");
   const harness = await createBrowserModuleHarness({
     wasmSource: readOdTestArtifact(),
@@ -1400,7 +2454,7 @@ test("OD emits and persists nonconvergent best-effort records without stranding 
   });
   t.after(() => harness.destroy());
 
-  const badFixture = makeNonconvergentMemeFixture();
+  const badFixture = makeIterationBoundMemeFixture();
   const badChecksum = crypto.createHash("sha256").update(badFixture).digest();
   const goodFixture = new Uint8Array(
     fs.readFileSync(
@@ -1441,67 +2495,18 @@ test("OD emits and persists nonconvergent best-effort records without stranding 
     inputs: [badFrame(90001n)],
   });
   assert.equal(isolatedBad.statusCode, 0, isolatedBad.errorMessage);
-  assert.equal(isolatedBad.errorCode, null);
+  assert.equal(isolatedBad.errorCode, "od-quality-gate");
   assert.equal(isolatedBad.yielded, false);
   assert.equal(isolatedBad.backlogRemaining, 0);
-  assert.deepEqual(
-    isolatedBad.outputs.map((output) => output.portId).sort(),
-    ["control", "obd", "ocm", "omm", "status"],
-  );
-
-  let bestEffortRecordCount = 0n;
-  const bestEffortStreams = new Map();
-  for (const portId of recordOutputPorts) {
-    const records = reassembleRecordStream(isolatedBad.outputs, portId);
-    assert.equal(records.recordCount, 1n, `${portId} best-effort record missing`);
-    bestEffortRecordCount += records.recordCount;
-    bestEffortStreams.set(portId, records.stream);
-  }
-  const bestEffortOmm = OMM.getSizePrefixedRootAsOMM(
-    new ByteBuffer(splitSizePrefixedRecords(bestEffortStreams.get("omm"))[0]),
-  );
-  assert.equal(bestEffortOmm.NORAD_CAT_ID(), 90001);
-  assert.equal(bestEffortOmm.OBJECT_NAME(), "STARLINK-BAD");
-  const bestEffortOcm = OCM.getSizePrefixedRootAsOCM(
-    new ByteBuffer(splitSizePrefixedRecords(bestEffortStreams.get("ocm"))[0]),
-  );
-  assert.match(
-    bestEffortOcm.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA() ?? "",
-    /converged=0/,
-  );
-  const bestEffortStatus = decodeStatusOutput(isolatedBad);
-  const bestEffortMetrics = resultMetrics(isolatedBad, "flatbuffer");
-  assert.deepEqual(bestEffortStatus, {
-    wireFormat: "flatbuffer",
-    operation: 0,
-    requestId: 90001n,
-    status: flatSqlNodeStatus.COMPLETE,
-    affectedRecords: bestEffortMetrics.affectedRecords,
-    resultBytes: bestEffortMetrics.resultBytes,
-    errorCode: "",
-    message: "OD fit complete: STARLINK-BAD (NORAD 90001)",
-  });
-
-  const flatSql = await createFlatSqlPersistenceHarness(t);
-  const append = await flatSql.invoke({
-    methodId: "append_records",
-    inputs: isolatedBad.outputs
-      .filter((output) => output.portId !== "status")
-      .map((output) => ({
-        ...output,
-        portId: output.portId === "control" ? "control" : "records",
-      })),
-  });
-  assert.equal(append.statusCode, 0, append.errorMessage);
-  const appendStatusFrame = append.outputs.find(
-    (output) => output.portId === "status",
-  );
-  assert.ok(appendStatusFrame, "FlatSQL returns best-effort append status");
-  const appendStatus = FSO.getRootAsFSO(
-    new ByteBuffer(new Uint8Array(appendStatusFrame.payload)),
-  );
-  assert.equal(appendStatus.STATUS(), 4);
-  assert.equal(appendStatus.AFFECTED_RECORDS(), bestEffortRecordCount);
+  assert.deepEqual(isolatedBad.outputs.map((output) => output.portId), ["status"]);
+  const rejectedStatus = decodeStatusOutput(isolatedBad);
+  assert.equal(rejectedStatus.requestId, 90001n);
+  assert.equal(rejectedStatus.status, flatSqlNodeStatus.INTERNAL_ERROR);
+  assert.equal(rejectedStatus.affectedRecords, 0n);
+  assert.equal(rejectedStatus.resultBytes, 0n);
+  assert.equal(rejectedStatus.errorCode, "od-quality-gate");
+  assert.match(rejectedStatus.message, /STARLINK-BAD/);
+  assert.match(rejectedStatus.message, /RMS|converged/);
 
   const futureGood = await harness.invoke({
     methodId: "fit",
@@ -1519,15 +2524,10 @@ test("OD emits and persists nonconvergent best-effort records without stranding 
     ],
   });
   assert.equal(coalescedBad.statusCode, 0, coalescedBad.errorMessage);
-  assert.equal(coalescedBad.errorCode, null);
   assert.equal(coalescedBad.yielded, true);
   assert.equal(coalescedBad.backlogRemaining, 1);
-  const coalescedOmm = reassembleRecordStream(coalescedBad.outputs, "omm");
-  const coalescedIdentity = OMM.getSizePrefixedRootAsOMM(
-    new ByteBuffer(splitSizePrefixedRecords(coalescedOmm.stream)[0]),
-  );
-  assert.equal(coalescedIdentity.NORAD_CAT_ID(), 90002);
-  assert.equal(coalescedIdentity.OBJECT_NAME(), "STARLINK-BAD");
+  assert.deepEqual(coalescedBad.outputs.map((output) => output.portId), ["status"]);
+  assert.equal(coalescedBad.errorCode, "od-quality-gate");
   assert.equal(decodeStatusOutput(coalescedBad).requestId, 90002n);
 
   const queuedGood = await harness.invoke({ methodId: "fit", inputs: [] });
@@ -1540,6 +2540,355 @@ test("OD emits and persists nonconvergent best-effort records without stranding 
   );
   assert.equal(identity.NORAD_CAT_ID(), 67854);
   assert.equal(identity.OBJECT_NAME(), "STARLINK-AFTER-QUEUED-BAD");
+});
+
+test("OD emits one complete state-series OCM and no OMM for terminal reentry", async (t) => {
+  const fixture = makeTerminalReentryMemeFixture();
+  const sourceStates = new TextDecoder()
+    .decode(fixture)
+    .split(/\r?\n/)
+    .filter((line) => /^\d{13}\.\d{3}\s/.test(line))
+    .map((line) => {
+      const [epoch, ...components] = line.trim().split(/\s+/);
+      return { epoch, components: components.map(Number) };
+    });
+  assert.equal(sourceStates.length, 841);
+  assert.ok(
+    Math.hypot(...sourceStates.at(-1).components.slice(0, 3)) -
+        6_378.135 <= 120,
+  );
+
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "fit",
+    inputs: completeCanonicalObjectFrames({
+      data: fixture,
+      requestId: 90_101n,
+      schemaName: "MEME:46144:STARLINK-TERMINAL",
+    }),
+  });
+
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.errorCode, null, response.errorMessage);
+  assert.equal(
+    response.outputs.some((output) => output.portId === "omm"),
+    false,
+  );
+  const ocmStream = reassembleRecordStream(response.outputs, "ocm");
+  assert.equal(ocmStream.recordCount, 1n);
+  const [encodedOcm] = splitSizePrefixedRecords(ocmStream.stream);
+  const ocm = OCM.getSizePrefixedRootAsOCM(new ByteBuffer(encodedOcm));
+  assert.match(String(ocm.TRAJ_TYPE_DESCRIPTION()), /terminal.reentry/i);
+  assert.match(String(ocm.TRAJ_TYPE_DESCRIPTION()), /TEME/);
+  assert.equal(ocm.STATE_VECTOR_SIZE(), 6);
+  assert.equal(ocm.STATE_STEP_SIZE(), 60);
+  assert.equal(ocm.stateDataLength(), sourceStates.length * 6);
+  assert.ok([...ocm.stateDataArray()].every(Number.isFinite));
+  assert.equal(ocm.covarianceDataLength(), 0);
+  assert.equal(ocm.ORBIT_DETERMINATION(), null);
+  assert.equal(
+    ocm.METADATA()?.START_TIME(),
+    memeStateTimestampToIso(sourceStates[0].epoch),
+  );
+  assert.equal(
+    ocm.METADATA()?.STOP_TIME(),
+    memeStateTimestampToIso(sourceStates.at(-1).epoch),
+  );
+  assert.ok(
+    Math.abs(ocm.METADATA()?.TIME_SPAN() - 14 / 24) < 1e-12,
+  );
+  assert.equal(ocm.METADATA()?.CATALOG_NAME(), "46144");
+  assert.equal(ocm.METADATA()?.OBJECT_NAME(), "STARLINK-TERMINAL");
+  const transformedStates = ocm.stateDataArray();
+  assert.ok(
+    Math.abs(
+      Math.hypot(...transformedStates.slice(-6, -3)) -
+        Math.hypot(...sourceStates.at(-1).components.slice(0, 3)),
+    ) < 1e-6,
+    "the EME2000-to-TEME rotation must preserve terminal position magnitude",
+  );
+  const status = decodeStatusOutput(response);
+  assert.equal(status.status, flatSqlNodeStatus.COMPLETE);
+  assert.equal(status.affectedRecords, 1n);
+  assert.match(status.message, /terminal.reentry/i);
+});
+
+test("OD terminal OCM bytes and transaction identity match canonical and aligned input", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const fixture = makeTerminalReentryMemeFixture(31);
+  const checksum = crypto.createHash("sha256").update(fixture).digest();
+  const invoke = async (wireFormat) => {
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+    const requestId = 90_104n;
+    const schemaName = "MEME:46144:STARLINK-TERMINAL-PARITY";
+    return harness.invoke({
+      methodId: "fit",
+      inputs: wireFormat === "aligned-binary"
+        ? [
+            inputFrame(
+              makeAlignedChunk({
+                data: fixture,
+                checksum,
+                requestId,
+                schemaName,
+                fileIdentifier: "MEME",
+              }),
+              { wireFormat },
+            ),
+          ]
+        : completeCanonicalObjectFrames({
+            data: fixture,
+            requestId,
+            schemaName,
+          }),
+    });
+  };
+
+  const canonical = await invoke("flatbuffer");
+  const aligned = await invoke("aligned-binary");
+  for (const [response, wireFormat] of [
+    [canonical, "flatbuffer"],
+    [aligned, "aligned-binary"],
+  ]) {
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null, response.errorMessage);
+    assert.equal(
+      response.outputs.some(({ portId }) => portId === "omm"),
+      false,
+    );
+    assertOutputWireFormat(response, wireFormat);
+  }
+
+  assert.deepEqual(
+    reassembleRecordStream(canonical.outputs, "ocm").stream,
+    readAlignedRecordStream(aligned.outputs, "ocm").stream,
+  );
+  assert.deepEqual(
+    odFlatSqlRequestIds(canonical),
+    odFlatSqlRequestIds(aligned),
+  );
+  assert.equal(
+    decodeStatusOutput(canonical).requestId,
+    decodeStatusOutput(aligned).requestId,
+  );
+});
+
+test(
+  "OD preserves every state in hash-pinned real terminal reentry OCMs",
+  {
+    skip: !process.env.SDN_OD_TERMINAL_REENTRY_REGRESSION_DIR,
+    timeout: Number(
+      process.env.SDN_OD_TERMINAL_REENTRY_REGRESSION_TIMEOUT_MS ?? 120_000,
+    ),
+  },
+  async (t) => {
+    const regressionRoot = path.resolve(
+      process.env.SDN_OD_TERMINAL_REENTRY_REGRESSION_DIR,
+    );
+    const cases = [
+      {
+        norad: 46144,
+        objectName: "STARLINK-1606",
+        filename:
+          "MEME_46144_STARLINK-1606_1762130_Operational_1466618520_UNCLASSIFIED.txt",
+        sourceSha256:
+          "e23e60929c6d3254422a96b8d84b425ce3f5da6914517a49fc40a017529278f5",
+        ocmSha256:
+          "4f6bc00068f092269cb79dfbe64fb334d0211e3261d911565999aa0167fe02bf",
+      },
+      {
+        norad: 47587,
+        objectName: "STARLINK-1991",
+        filename:
+          "MEME_47587_STARLINK-1991_1761918_Operational_1466657400_UNCLASSIFIED.txt",
+        sourceSha256:
+          "246119027c6ec9fabe520eb13ac987337e5f2b20a808ba1cf549af4cb7a35f63",
+        ocmSha256:
+          "1b6092e64b972c6fe87a4ab50f9052dc6dfffcfa99663999fb25fc648990a4e1",
+      },
+    ];
+    const manifest = readJson("plugin-manifest.json");
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+
+    for (const [caseIndex, terminalCase] of cases.entries()) {
+      const fixture = new Uint8Array(
+        fs.readFileSync(path.join(regressionRoot, terminalCase.filename)),
+      );
+      assert.equal(
+        crypto.createHash("sha256").update(fixture).digest("hex"),
+        terminalCase.sourceSha256,
+      );
+      const sourceStates = new TextDecoder()
+        .decode(fixture)
+        .split(/\r?\n/)
+        .filter((line) => /^\d{13}\.\d{3}\s/.test(line))
+        .map((line) => {
+          const [epoch, ...encodedComponents] = line.trim().split(/\s+/);
+          const components = encodedComponents.map(Number);
+          assert.equal(components.length, 6);
+          assert.ok(components.every(Number.isFinite));
+          return { epoch, components };
+        });
+      assert.ok(sourceStates.length >= 3);
+      assert.ok(
+        Math.hypot(...sourceStates.at(-1).components.slice(0, 3)) <=
+          6_378.135 + 120,
+      );
+
+      const response = await harness.invoke({
+        methodId: "fit",
+        inputs: completeCanonicalObjectFrames({
+          data: fixture,
+          requestId: 91_000n + BigInt(caseIndex),
+          schemaName:
+            `MEME:${terminalCase.norad}:${terminalCase.objectName}`,
+        }),
+      });
+      assert.equal(response.statusCode, 0, response.errorMessage);
+      assert.equal(response.errorCode, null, response.errorMessage);
+      assert.equal(
+        response.outputs.some(({ portId }) => portId === "omm"),
+        false,
+      );
+      const stream = reassembleRecordStream(response.outputs, "ocm");
+      assert.equal(stream.recordCount, 1n);
+      const [encodedOcm] = splitSizePrefixedRecords(stream.stream);
+      assert.equal(
+        crypto.createHash("sha256").update(encodedOcm).digest("hex"),
+        terminalCase.ocmSha256,
+      );
+
+      const ocm = OCM.getSizePrefixedRootAsOCM(
+        new ByteBuffer(encodedOcm),
+      );
+      assert.equal(
+        ocm.TRAJ_TYPE_DESCRIPTION(),
+        "TERMINAL_REENTRY_SOURCE_TRAJECTORY_TEME",
+      );
+      assert.equal(ocm.STATE_VECTOR_SIZE(), 6);
+      assert.equal(ocm.STATE_STEP_SIZE(), 60);
+      assert.equal(ocm.stateDataLength(), sourceStates.length * 6);
+      assert.equal(ocm.covarianceDataLength(), 0);
+      assert.equal(ocm.ORBIT_DETERMINATION(), null);
+      assert.equal(ocm.METADATA()?.CATALOG_NAME(), String(terminalCase.norad));
+      assert.equal(ocm.METADATA()?.OBJECT_NAME(), terminalCase.objectName);
+      assert.equal(
+        ocm.METADATA()?.START_TIME(),
+        memeStateTimestampToIso(sourceStates[0].epoch),
+      );
+      assert.equal(
+        ocm.METADATA()?.STOP_TIME(),
+        memeStateTimestampToIso(sourceStates.at(-1).epoch),
+      );
+
+      const transformedStates = ocm.stateDataArray();
+      assert.ok(transformedStates.every(Number.isFinite));
+      for (const [stateIndex, source] of sourceStates.entries()) {
+        const offset = stateIndex * 6;
+        const transformed = transformedStates.slice(offset, offset + 6);
+        const sourcePositionNorm = Math.hypot(...source.components.slice(0, 3));
+        const transformedPositionNorm = Math.hypot(
+          ...transformed.slice(0, 3),
+        );
+        const sourceVelocityNorm = Math.hypot(...source.components.slice(3));
+        const transformedVelocityNorm = Math.hypot(...transformed.slice(3));
+        const sourceRadialVelocity =
+          source.components[0] * source.components[3] +
+          source.components[1] * source.components[4] +
+          source.components[2] * source.components[5];
+        const transformedRadialVelocity =
+          transformed[0] * transformed[3] +
+          transformed[1] * transformed[4] +
+          transformed[2] * transformed[5];
+        assert.ok(
+          Math.abs(transformedPositionNorm - sourcePositionNorm) < 1e-8,
+          `${terminalCase.norad} state ${stateIndex} position rotation changed magnitude`,
+        );
+        assert.ok(
+          Math.abs(transformedVelocityNorm - sourceVelocityNorm) < 1e-11,
+          `${terminalCase.norad} state ${stateIndex} velocity rotation changed magnitude`,
+        );
+        assert.ok(
+          Math.abs(
+            transformedRadialVelocity - sourceRadialVelocity,
+          ) < 1e-8,
+          `${terminalCase.norad} state ${stateIndex} position/velocity rotation diverged`,
+        );
+      }
+      const status = decodeStatusOutput(response);
+      assert.equal(status.status, flatSqlNodeStatus.COMPLETE);
+      assert.equal(status.affectedRecords, 1n);
+      assert.match(status.message, /terminal.reentry/i);
+    }
+  },
+);
+
+test("OD rejects a terminal trajectory whose millisecond drift accumulates", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "fit",
+    inputs: completeCanonicalObjectFrames({
+      data: makeCumulativelyDriftingTerminalReentryMemeFixture(),
+      requestId: 90_102n,
+      schemaName: "MEME:46144:STARLINK-TERMINAL-DRIFT",
+    }),
+  });
+
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.errorCode, "od-fit");
+  assert.deepEqual(response.outputs.map(({ portId }) => portId), ["status"]);
+  const status = decodeStatusOutput(response);
+  assert.equal(status.errorCode, "terminal-reentry-invalid");
+  assert.match(status.message, /uniform epoch step/i);
+});
+
+test("OD rejects sub-millisecond terminal epoch errors that accumulate", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "fit",
+    inputs: completeCanonicalObjectFrames({
+      data: makeCumulativelyDriftingTerminalReentryIssFixture(),
+      requestId: 90_103n,
+      schemaName: "OEM:25544:ISS-TERMINAL-DRIFT",
+      fileIdentifier: "OEM",
+      portId: "iss",
+    }),
+  });
+
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.errorCode, "od-fit");
+  assert.deepEqual(response.outputs.map(({ portId }) => portId), ["status"]);
+  const status = decodeStatusOutput(response);
+  assert.equal(status.errorCode, "terminal-reentry-invalid");
+  assert.match(status.message, /uniform epoch step/i);
 });
 
 test("OD consumes a complete but unusable native response as an object-level error", async (t) => {
@@ -1614,7 +2963,7 @@ test("OD consumes a complete but unusable native response as an object-level err
   assert.ok(futureGood.outputs.some((output) => output.portId === "omm"));
 });
 
-test("OD fits one queued provider object per invocation and drains through zero-input continuations", async (t) => {
+test("OD fits one bounded provider batch and drains fitted results through zero-input continuations", async (t) => {
   const manifest = readJson("plugin-manifest.json");
   const harness = await createBrowserModuleHarness({
     wasmSource: readOdTestArtifact(),
@@ -1632,43 +2981,48 @@ test("OD fits one queued provider object per invocation and drains through zero-
     ),
   );
   const checksum = crypto.createHash("sha256").update(fixture).digest();
-  const objects = [
-    { requestId: 78001n, norad: 67850, objectName: "STARLINK-QUEUE-A" },
-    { requestId: 78002n, norad: 67851, objectName: "STARLINK-QUEUE-B" },
-    { requestId: 78003n, norad: 67852, objectName: "STARLINK-QUEUE-C" },
-  ];
+  const objects = Array.from({ length: 16 }, (_, index) => ({
+    requestId: 78_001n + BigInt(index),
+    norad: 67_850 + index,
+    objectName: `STARLINK-QUEUE-${String(index + 1).padStart(2, "0")}`,
+  }));
 
-  const responses = [
-    await harness.invoke({
-      methodId: "fit",
-      inputs: objects.map(({ requestId, norad, objectName }) =>
-        inputFrame(
-          makeChunk({
-            data: fixture,
-            sequence: 0,
-            final: true,
-            totalBytes: fixture.byteLength,
-            checksum,
-            requestId,
-            schemaName: `MEME:${norad}:${objectName}`,
-          }),
-        ),
+  const batchStartedAt = process.hrtime.bigint();
+  const first = await harness.invoke({
+    methodId: "fit",
+    inputs: objects.map(({ requestId, norad, objectName }) =>
+      inputFrame(
+        makeChunk({
+          data: fixture,
+          sequence: 0,
+          final: true,
+          totalBytes: fixture.byteLength,
+          checksum,
+          requestId,
+          schemaName: `MEME:${norad}:${objectName}`,
+        }),
       ),
-    }),
-    await harness.invoke({ methodId: "fit", inputs: [] }),
-    await harness.invoke({ methodId: "fit", inputs: [] }),
-  ];
+    ),
+  });
+  const responses = [first];
+  while (
+    responses.at(-1).yielded ||
+    responses.at(-1).backlogRemaining > 0
+  ) {
+    responses.push(await harness.invoke({ methodId: "fit", inputs: [] }));
+  }
+  const batchElapsedMs =
+    Number(process.hrtime.bigint() - batchStartedAt) / 1_000_000;
 
   assert.deepEqual(
     responses.map(({ yielded, backlogRemaining }) => ({
       yielded,
       backlogRemaining,
     })),
-    [
-      { yielded: true, backlogRemaining: 2 },
-      { yielded: true, backlogRemaining: 1 },
-      { yielded: false, backlogRemaining: 0 },
-    ],
+    objects.map((_, index) => ({
+      yielded: index + 1 < objects.length,
+      backlogRemaining: objects.length - index - 1,
+    })),
   );
 
   const fittedIdentities = [];
@@ -1682,10 +3036,17 @@ test("OD fits one queued provider object per invocation and drains through zero-
     );
     const omm = reassembleRecordStream(response.outputs, "omm");
     const ocm = reassembleRecordStream(response.outputs, "ocm");
-    const obd = reassembleRecordStream(response.outputs, "obd");
     assert.ok(omm.recordCount >= 1n);
     assert.equal(ocm.recordCount, omm.recordCount);
-    assert.equal(obd.recordCount, omm.recordCount);
+    const fitStatus = decodeStatusOutput(response);
+    assert.equal(fitStatus.requestId, objects[index].requestId);
+    assert.match(fitStatus.message, /batch_objects=16/);
+    assert.match(fitStatus.message, /workers=16/);
+    assert.match(
+      fitStatus.message,
+      /distinct_threads=(?:[2-9]|1[0-6])/,
+      "a saturated batch must execute fits on more than one worker thread",
+    );
 
     const identities = new Set(
       splitSizePrefixedRecords(omm.stream).map((record) => {
@@ -1704,9 +3065,13 @@ test("OD fits one queued provider object per invocation and drains through zero-
     fittedIdentities,
     objects.map(({ norad, objectName }) => `${norad}:${objectName}`),
   );
+  t.diagnostic(
+    `batchObjects=${objects.length} workers=16 fitAndFullOutputDrainMs=${batchElapsedMs.toFixed(3)} ` +
+    `objectsPerSecond=${(objects.length * 1_000 / batchElapsedMs).toFixed(2)}`,
+  );
 });
 
-test("OD derives transport-, chunk-, request-, and restart-stable FlatSQL IDs", async (t) => {
+test("OD preserves source transaction IDs across transport, chunking, wire format, and restart", async (t) => {
   const manifest = readJson("plugin-manifest.json");
   const createOdHarness = async () => {
     const harness = await createBrowserModuleHarness({
@@ -1783,7 +3148,7 @@ test("OD derives transport-, chunk-, request-, and restart-stable FlatSQL IDs", 
 
   const instanceB = await createOdHarness();
   const targetAfterRestart = await fit(instanceB, {
-    requestId: 79_199n,
+    requestId: 79_101n,
     norad: 79_101,
     objectName: "STARLINK-ID-TARGET",
     wireFormat: "aligned-binary",
@@ -1797,8 +3162,9 @@ test("OD derives transport-, chunk-, request-, and restart-stable FlatSQL IDs", 
   assert.equal(
     afterWarmupIds.control,
     afterRestartIds.control,
-    "CONFIGURE_INDEX must identify the fitted content, not process history",
+    "CONFIGURE_INDEX must preserve the stable source transaction",
   );
+  assert.equal(afterWarmupIds.control, 79_101n);
   assert.deepEqual(
     afterWarmupIds.streams,
     afterRestartIds.streams,
@@ -1808,18 +3174,18 @@ test("OD derives transport-, chunk-, request-, and restart-stable FlatSQL IDs", 
     assert.deepEqual(
       reassembleRecordStream(targetAfterWarmup.outputs, portId).stream,
       readAlignedRecordStream(targetAfterRestart.outputs, portId).stream,
-      `${portId} fitted bytes changed with input wire format, request ID, chunking, or process history`,
+      `${portId} fitted bytes changed with input wire format, chunking, or process history`,
     );
   }
   assert.deepEqual(
     afterWarmupIds,
-    expectedOdFlatSqlRequestIds(targetAfterWarmup),
-    "request IDs must bind the ordered OMM/OCM/OBD identities, counts, lengths, and full-stream digests",
+    expectedOdFlatSqlRequestIds(targetAfterWarmup, 79_101n),
+    "request IDs must bind the source transaction and ordered OMM/OCM identities, counts, lengths, and full-stream digests",
   );
   assert.equal(
     new Set(Object.values(afterWarmupIds.streams)).size,
     recordOutputPorts.length,
-    "OMM, OCM, and OBD need distinct request IDs because FlatSQL groups chunks by request ID alone",
+    "OMM and OCM need distinct request IDs because FlatSQL groups chunks by request ID alone",
   );
   assert.ok(afterWarmupIds.control > 0n);
   assert.ok(Object.values(afterWarmupIds.streams).every((requestId) => requestId > 0n));
@@ -1916,8 +3282,8 @@ test("fresh OD and FlatSQL instances replay a lost response exactly once", async
   });
   assert.equal(targetB.statusCode, 0, targetB.errorMessage);
   assert.deepEqual(
-    expectedOdFlatSqlRequestIds(targetA),
-    expectedOdFlatSqlRequestIds(targetB),
+    expectedOdFlatSqlRequestIds(targetA, 79_201n),
+    expectedOdFlatSqlRequestIds(targetB, 79_201n),
   );
 
   const flatSqlB = await createFlatSqlPersistenceHarness(t, {
@@ -1992,12 +3358,12 @@ test("fresh OD and FlatSQL instances replay a lost response exactly once", async
   }
 });
 
-test("OD bounds optimizer work across one complete production-shaped three-day arc", async (t) => {
+test("OD selects complete eight-hour windows across a captured three-day arc", async (t) => {
   const source = fs.readFileSync(path.join(nodeRoot, "src/node.cpp"), "utf8");
   const maxIterations = Number(
     source.match(/kMaxFitIterations\s*=\s*(\d+)\s*;/)?.[1] ?? 0,
   );
-  assert.equal(maxIterations, 40);
+  assert.equal(maxIterations, 60);
   const manifest = readJson("plugin-manifest.json");
   const harness = await createBrowserModuleHarness({
     wasmSource: readOdTestArtifact(),
@@ -2007,6 +3373,122 @@ test("OD bounds optimizer work across one complete production-shaped three-day a
   t.after(() => harness.destroy());
 
   const fixture = makeProductionShapedMemeFixture();
+  const response = await harness.invoke({
+    methodId: "fit",
+    inputs: completeCanonicalObjectFrames({
+      data: fixture,
+      requestId: 79_001n,
+      schemaName: "MEME:79001:STARLINK-CAPTURED-THREE-DAY",
+    }),
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.errorCode, null, response.errorMessage);
+  assert.equal(response.yielded, false);
+  assert.equal(response.backlogRemaining, 0);
+
+  const omm = reassembleRecordStream(response.outputs, "omm");
+  const ocm = reassembleRecordStream(response.outputs, "ocm");
+  const combinedOutputBytes =
+    omm.stream.byteLength + ocm.stream.byteLength;
+  assert.equal(
+    omm.recordCount,
+    12n,
+    "a 72-hour arc must produce the 6-hour grid plus its terminal 8-hour window",
+  );
+  assert.equal(ocm.recordCount, omm.recordCount);
+
+  const fittedEpochs = splitSizePrefixedRecords(omm.stream).map((record) =>
+    OMM.getSizePrefixedRootAsOMM(new ByteBuffer(record)).EPOCH(),
+  );
+  const expectedEpochs = [
+    "2026-07-14T09:53:42.000000Z",
+    "2026-07-14T15:53:42.000000Z",
+    "2026-07-14T21:53:42.000000Z",
+    "2026-07-15T03:53:42.000000Z",
+    "2026-07-15T09:53:42.000000Z",
+    "2026-07-15T15:53:42.000000Z",
+    "2026-07-15T21:53:42.000000Z",
+    "2026-07-16T03:53:42.000000Z",
+    "2026-07-16T09:53:42.000000Z",
+    "2026-07-16T15:53:42.000000Z",
+    "2026-07-16T21:53:42.000000Z",
+    "2026-07-17T01:53:42.000000Z",
+  ];
+  for (const [index, epoch] of fittedEpochs.entries()) {
+    assert.ok(
+      Math.abs(Date.parse(epoch) - Date.parse(expectedEpochs[index])) <= 1,
+      "Julian-date rendering may differ by one millisecond, but not the selected source observation",
+    );
+  }
+
+  const decodeText = (value) =>
+    typeof value === "string"
+      ? value
+      : new TextDecoder().decode(value ?? new Uint8Array());
+  const records = splitSizePrefixedRecords(ocm.stream).map((record) =>
+    OCM.getSizePrefixedRootAsOCM(new ByteBuffer(record)),
+  );
+  for (const record of records) {
+    assert.equal(
+      record.ORBIT_DETERMINATION()?.OD_OBSERVATIONS_USED(),
+      481,
+      "each inclusive 8-hour window must use all 481 one-minute source states",
+    );
+  }
+  const reportedRmsKm = records.map((record) => {
+    const residuals = decodeText(
+      record.ORBIT_DETERMINATION()?.OD_RESIDUALS(),
+    );
+    const rms = Number(residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1]);
+    assert.ok(Number.isFinite(rms), `invalid OCM residual summary ${residuals}`);
+    return rms;
+  });
+  const reportedIterations = records.map((record) => {
+    const convergenceCriteria = decodeText(
+      record.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA(),
+    );
+    const iterations = Number(
+      convergenceCriteria.match(/(?:^|;\s*)iterations=(\d+)(?:;|$)/)?.[1],
+    );
+    assert.ok(
+      Number.isSafeInteger(iterations),
+      `invalid OCM convergence criteria ${convergenceCriteria}`,
+    );
+    assert.ok(
+      iterations >= 0 && iterations <= maxIterations,
+      `OCM iteration count ${iterations} exceeded ${maxIterations}`,
+    );
+    return iterations;
+  });
+  const reportedConvergence = records.map((record) => {
+    const criteria = decodeText(
+      record.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA(),
+    );
+    const value = criteria.match(/(?:^|;\s*)converged=([01])(?:;|$)/)?.[1];
+    assert.ok(value === "0" || value === "1", `invalid OCM criteria ${criteria}`);
+    return value === "1";
+  });
+  t.diagnostic(
+    `maxIterations=${maxIterations} observedMaxIterations=${Math.max(...reportedIterations)} inputBytes=${fixture.byteLength} outputBytes=${combinedOutputBytes} ommBytes=${omm.stream.byteLength} ocmBytes=${ocm.stream.byteLength} ommRecords=${omm.recordCount} ocmRecords=${ocm.recordCount} maxRmsKm=${Math.max(...reportedRmsKm)}`,
+  );
+  t.diagnostic(
+    `epochMetrics=${fittedEpochs.map((epoch, index) =>
+      `${epoch}:${reportedRmsKm[index]}km/${reportedIterations[index]}it/` +
+      `${reportedConvergence[index] ? "converged" : "best-effort"}`
+    ).join(",")}`,
+  );
+});
+
+test("OD selects first-at-or-after grid anchors and the terminal complete window on irregular arcs", async (t) => {
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  const fixture = makeIrregularMemeFixture();
   const checksum = crypto.createHash("sha256").update(fixture).digest();
   const response = await harness.invoke({
     methodId: "fit",
@@ -2018,60 +3500,1687 @@ test("OD bounds optimizer work across one complete production-shaped three-day a
           final: true,
           totalBytes: fixture.byteLength,
           checksum,
-          requestId: 79_001n,
-          schemaName: "MEME:79001:STARLINK-PRODUCTION-SHAPED",
+          requestId: 79_002n,
+          schemaName: "MEME:79002:STARLINK-IRREGULAR-ANCHORS",
         }),
       ),
     ],
   });
   assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.yielded, false);
-  assert.equal(response.backlogRemaining, 0);
+  assert.equal(response.errorCode, null, response.errorMessage);
 
   const omm = reassembleRecordStream(response.outputs, "omm");
   const ocm = reassembleRecordStream(response.outputs, "ocm");
-  const obd = reassembleRecordStream(response.outputs, "obd");
-  const combinedOutputBytes =
-    omm.stream.byteLength + ocm.stream.byteLength + obd.stream.byteLength;
-  assert.ok(omm.recordCount >= 20n, "the complete three-day arc must retain multiple local epochs");
+  assert.equal(omm.recordCount, 4n);
   assert.equal(ocm.recordCount, omm.recordCount);
-  assert.equal(obd.recordCount, omm.recordCount);
-
   const fittedEpochs = splitSizePrefixedRecords(omm.stream).map((record) =>
     OMM.getSizePrefixedRootAsOMM(new ByteBuffer(record)).EPOCH(),
   );
-  assert.equal(fittedEpochs.length, Number(omm.recordCount));
-  assert.equal(fittedEpochs[0], "2026-07-21T00:00:00.000000Z");
-  for (let index = 1; index < fittedEpochs.length; index += 1) {
+  const expectedEpochs = [
+    "2026-07-14T09:53:42.000000Z",
+    "2026-07-14T16:03:42.000000Z",
+    "2026-07-14T22:03:42.000000Z",
+    "2026-07-15T01:43:42.000000Z",
+  ];
+  for (const [index, epoch] of fittedEpochs.entries()) {
     assert.ok(
-      Date.parse(fittedEpochs[index]) > Date.parse(fittedEpochs[index - 1]),
-      "epoch-specific fits must remain strictly ordered",
+      Math.abs(Date.parse(epoch) - Date.parse(expectedEpochs[index])) <= 1,
     );
   }
-  assert.ok(
-    Date.parse(fittedEpochs.at(-1)) >= Date.parse("2026-07-23T20:00:00.000Z"),
-    "the final local fit must cover the three-day source's terminal window",
+  const expectedObservationCounts = [17, 17, 17, 16];
+  const ocmRecords = splitSizePrefixedRecords(ocm.stream).map((record) =>
+    OCM.getSizePrefixedRootAsOCM(new ByteBuffer(record)),
   );
+  assert.deepEqual(
+    ocmRecords.map((record) =>
+      record.ORBIT_DETERMINATION()?.OD_OBSERVATIONS_USED()
+    ),
+    expectedObservationCounts,
+    "irregular inclusive windows must retain every source observation",
+  );
+});
 
-  const records = splitSizePrefixedRecords(obd.stream).map((record) =>
-    OBD.getSizePrefixedRootAsOBD(new ByteBuffer(record)),
-  );
-  const reportedIterations = records.map((record) => record.NUM_ITERATIONS());
-  const reportedRmsKm = records.map((record) => record.WRMS());
-  t.diagnostic(
-    `maxIterations=${maxIterations} inputBytes=${fixture.byteLength} outputBytes=${combinedOutputBytes} ommBytes=${omm.stream.byteLength} ocmBytes=${ocm.stream.byteLength} obdBytes=${obd.stream.byteLength} ommRecords=${omm.recordCount} ocmRecords=${ocm.recordCount} obdRecords=${obd.recordCount} maxReportedIterations=${Math.max(...reportedIterations)} maxRmsKm=${Math.max(...reportedRmsKm)}`,
-  );
-  for (const record of records) {
-    assert.ok(Number.isFinite(record.WRMS()), "every epoch must report finite RMS");
-    // The 12 km ceiling anchors the uncapped baseline's 11.59382193 km worst
-    // epoch with about 3.5% headroom and rejects cap 16's 25.2813 km regression.
-    assert.ok(record.WRMS() < 12, `three-day local-fit RMS ${record.WRMS()} km exceeded 12 km`);
+test(
+  "OD fits every state in every complete window of a captured Starlink MEME arc",
+  {
+    timeout: 180_000,
+  },
+  async (t) => {
+    const fixturePath = String(process.env.SDN_OD_REAL_MEME_FILE ?? "").trim()
+      ? path.resolve(process.env.SDN_OD_REAL_MEME_FILE)
+      : path.join(
+          modulesRoot,
+          "analysis/od/tests/data/supgp-reference/starlink-live-20260714/meme/" +
+            "MEME_67850_STARLINK-36840_1950953_Operational_1468317240_UNCLASSIFIED.txt",
+        );
+    const fixture = new Uint8Array(fs.readFileSync(fixturePath));
     assert.ok(
-      record.NUM_ITERATIONS() <= maxIterations,
-      `epoch used ${record.NUM_ITERATIONS()} optimizer iterations instead of the supported bound`,
+      fixture.byteLength > fsbAlignedDataCapacity,
+      "the captured fixture must exercise complete-file multi-chunk reassembly",
+    );
+    const manifest = readJson("plugin-manifest.json");
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+
+    const startedAt = process.hrtime.bigint();
+    const response = await harness.invoke({
+      methodId: "fit",
+      inputs: completeCanonicalObjectFrames({
+        data: fixture,
+        requestId: 79_003n,
+        schemaName: "MEME:62559:STARLINK-11517",
+      }),
+    });
+    const elapsedSeconds =
+      Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null, response.errorMessage);
+
+    const omm = reassembleRecordStream(response.outputs, "omm");
+    const ocm = reassembleRecordStream(response.outputs, "ocm");
+    assert.equal(omm.recordCount, 12n);
+    assert.equal(ocm.recordCount, omm.recordCount);
+    const records = splitSizePrefixedRecords(ocm.stream).map((record) =>
+      OCM.getSizePrefixedRootAsOCM(new ByteBuffer(record)),
+    );
+    const decodeText = (value) =>
+      typeof value === "string"
+        ? value
+        : new TextDecoder().decode(value ?? new Uint8Array());
+    const observations = records.map((record) =>
+      record.ORBIT_DETERMINATION()?.OD_OBSERVATIONS_USED()
+    );
+    assert.deepEqual(
+      observations,
+      Array(12).fill(481),
+      "each captured eight-hour window must fit all 481 one-minute states",
+    );
+    const rmsKm = records.map((record) => {
+      const residuals = decodeText(
+        record.ORBIT_DETERMINATION()?.OD_RESIDUALS(),
+      );
+      const rms = Number(residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1]);
+      assert.ok(Number.isFinite(rms), `invalid OCM residual summary ${residuals}`);
+      return rms;
+    });
+    const iterations = records.map((record) => {
+      const criteria = decodeText(
+        record.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA(),
+      );
+      const count = Number(
+        criteria.match(/(?:^|;\s*)iterations=(\d+)(?:;|$)/)?.[1],
+      );
+      assert.ok(Number.isSafeInteger(count), `invalid OCM criteria ${criteria}`);
+      assert.ok(count >= 0 && count <= 60, `iteration cap exceeded: ${criteria}`);
+      return count;
+    });
+    const converged = records.map((record) => {
+      const criteria = decodeText(
+        record.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA(),
+      );
+      return criteria.match(/(?:^|;\s*)converged=([01])(?:;|$)/)?.[1] === "1";
+    });
+    assert.deepEqual(
+      converged,
+      Array(12).fill(true),
+      "every emitted captured-arc epoch must satisfy the declared convergence criterion",
+    );
+    const maxRmsKm = Math.max(...rmsKm);
+    assert.ok(
+      maxRmsKm < 12,
+      `captured complete-window RMS ${maxRmsKm} km exceeded 12 km`,
+    );
+    t.diagnostic(
+      `realMeme=${path.basename(fixturePath)} inputBytes=${fixture.byteLength} ` +
+      `epochs=${omm.recordCount} observationsPerEpoch=481 ` +
+      `wallSeconds=${elapsedSeconds.toFixed(6)} ` +
+      `maxRmsKm=${maxRmsKm} maxIterations=${Math.max(...iterations)}`,
+    );
+  },
+);
+
+test("signed OD transforms raw Starlink EME2000 states through the OEM frame path", async (t) => {
+  const fullFixture = new Uint8Array(
+    fs.readFileSync(
+      path.join(
+        modulesRoot,
+        "analysis/od/tests/data/supgp-reference/starlink-live-20260714/meme/" +
+          "MEME_67850_STARLINK-36840_1950953_Operational_1468317240_UNCLASSIFIED.txt",
+      ),
+    ),
+  );
+  const memeFixture = capturedCelestrakComparisonWindow(fullFixture);
+  const oemFixture = memeToEme2000Oem(memeFixture);
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  const invoke = async ({ data, requestId, schemaName, fileIdentifier, portId }) => {
+    const response = await harness.invoke({
+      methodId: "fit",
+      inputs: completeCanonicalObjectFrames({
+        data,
+        requestId,
+        schemaName,
+        fileIdentifier,
+        portId,
+      }),
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null);
+    const records = splitSizePrefixedRecords(
+      reassembleRecordStream(response.outputs, "omm").stream,
+    );
+    assert.equal(records.length, 1);
+    return OMM.getSizePrefixedRootAsOMM(new ByteBuffer(records[0]));
+  };
+  const fromMeme = await invoke({
+    data: memeFixture,
+    requestId: 79_101n,
+    schemaName: "MEME:67850:STARLINK-36840",
+    fileIdentifier: "MEME",
+    portId: "starlink",
+  });
+  const fromEme2000Oem = await invoke({
+    data: oemFixture,
+    requestId: 79_102n,
+    schemaName: "OEM:67850:STARLINK-36840",
+    fileIdentifier: "OEM",
+    portId: "iss",
+  });
+  assert.equal(fromMeme.EPOCH(), fromEme2000Oem.EPOCH());
+  for (const field of [
+    "MEAN_MOTION",
+    "ECCENTRICITY",
+    "INCLINATION",
+    "RA_OF_ASC_NODE",
+    "ARG_OF_PERICENTER",
+    "MEAN_ANOMALY",
+    "BSTAR",
+  ]) {
+    assert.ok(
+      Math.abs(fromMeme[field]() - fromEme2000Oem[field]()) <= 1e-10,
+      `${field} differs: MEME=${fromMeme[field]()} ` +
+        `EME2000-OEM=${fromEme2000Oem[field]()}`,
     );
   }
 });
+
+test("OD beats the captured CelesTrak row on its exact eight-hour source window", async (t) => {
+  const evidencePath = path.join(
+    nodeRoot,
+    "test/reference/celestrak-same-ephemeris-20260714.json",
+  );
+  const evidenceBytes = fs.readFileSync(evidencePath);
+  assert.equal(
+    crypto.createHash("sha256").update(evidenceBytes).digest("hex"),
+    "c5b078304945aa9ab519261bb4434c5a6e2c5eb842a73a2d79577e30b2572e32",
+  );
+  const evidence = JSON.parse(evidenceBytes);
+  const scorerPath = path.join(
+    nodeRoot,
+    "test/reference/exact-celestrak-parity.cpp",
+  );
+  assert.equal(
+    crypto.createHash("sha256").update(fs.readFileSync(scorerPath)).digest("hex"),
+    evidence.generator.sha256,
+  );
+  assert.equal(
+    crypto.createHash("sha256")
+      .update(fs.readFileSync(path.join(nodeRoot, "vendor/od-fit-core.o")))
+      .digest("hex"),
+    evidence.generator.frozenWasmObjectSha256,
+  );
+  assert.equal(
+    crypto.createHash("sha256")
+      .update(
+        fs.readFileSync(path.join(nodeRoot, "vendor/od-fit-core-source.patch")),
+      )
+      .digest("hex"),
+    evidence.generator.sourcePatchSha256,
+  );
+  const captureRoot = path.join(
+    modulesRoot,
+    "analysis/od/tests/data/supgp-reference/starlink-live-20260714",
+  );
+  const fixturePath = path.join(
+    captureRoot,
+    "meme/MEME_67850_STARLINK-36840_1950953_Operational_1468317240_UNCLASSIFIED.txt",
+  );
+  const celestrakPath = path.join(captureRoot, "celestrak_supgp_live.csv");
+  const fullFixture = new Uint8Array(fs.readFileSync(fixturePath));
+  const celestrakCapture = fs.readFileSync(celestrakPath);
+  assert.equal(
+    crypto.createHash("sha256").update(fullFixture).digest("hex"),
+    evidence.source.sha256,
+  );
+  assert.equal(
+    crypto.createHash("sha256").update(celestrakCapture).digest("hex"),
+    evidence.celestrak.sha256,
+  );
+  const referenceRow = celestrakCapture.toString("utf8")
+    .split(/\r?\n/)
+    .find((line) => line.startsWith("STARLINK-36840,"));
+  assert.equal(referenceRow, evidence.celestrak.row);
+
+  const fixture = capturedCelestrakComparisonWindow(fullFixture);
+  const manifest = readJson("plugin-manifest.json");
+  const harness = await createBrowserModuleHarness({
+    wasmSource: readOdTestArtifact(),
+    manifest,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "fit",
+    inputs: completeCanonicalObjectFrames({
+      data: fixture,
+      requestId: 79_004n,
+      schemaName: "MEME:67850:STARLINK-36840",
+    }),
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.errorCode, null);
+  const omm = reassembleRecordStream(response.outputs, "omm");
+  const ocm = reassembleRecordStream(response.outputs, "ocm");
+  assert.equal(omm.recordCount, 1n);
+  assert.equal(ocm.recordCount, 1n);
+  const fitted = OMM.getSizePrefixedRootAsOMM(
+    new ByteBuffer(splitSizePrefixedRecords(omm.stream)[0]),
+  );
+  assert.ok(
+    Math.abs(
+      Date.parse(fitted.EPOCH()) -
+        Date.parse("2026-07-14T11:10:42.000Z"),
+    ) <= 1,
+    `unexpected exact comparison epoch ${fitted.EPOCH()}`,
+  );
+  const quality = OCM.getSizePrefixedRootAsOCM(
+    new ByteBuffer(splitSizePrefixedRecords(ocm.stream)[0]),
+  );
+  assert.equal(
+    quality.ORBIT_DETERMINATION()?.OD_OBSERVATIONS_USED(),
+    481,
+  );
+  const encodedResiduals =
+    quality.ORBIT_DETERMINATION()?.OD_RESIDUALS();
+  const residuals = typeof encodedResiduals === "string"
+    ? encodedResiduals
+    : new TextDecoder().decode(encodedResiduals ?? new Uint8Array());
+  const sdnRmsKm = Number(
+    residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1],
+  );
+  assert.ok(Number.isFinite(sdnRmsKm), residuals);
+  assert.ok(
+    Math.abs(sdnRmsKm - evidence.result.signedWasmSdnRmsKm) < 1e-9,
+    `signed WASM score ${sdnRmsKm} changed from hash-bound ` +
+      `${evidence.result.signedWasmSdnRmsKm}`,
+  );
+
+  assert.equal(evidence.window.observationCount, 481);
+  assert.equal(evidence.window.durationSeconds, 28_800);
+  assert.equal(evidence.result.gate, "sdn_rms_km <= celestrak_rms_km + 0.000001");
+  assert.ok(
+    evidence.result.nativeSdnRmsKm <=
+      evidence.result.celestrakSameEphemerisRmsKm + 1e-6,
+    evidence.result.nativeOutput,
+  );
+  const celestrakSameEphemerisRmsKm =
+    evidence.result.celestrakSameEphemerisRmsKm;
+  assert.ok(
+    sdnRmsKm <= celestrakSameEphemerisRmsKm + 1e-6,
+    `same-ephemeris gate failed: SDN ${sdnRmsKm} km > ` +
+      `CelesTrak ${celestrakSameEphemerisRmsKm} km`,
+  );
+  t.diagnostic(
+    `sameEphemerisNorad=67850 points=481 epoch=${fitted.EPOCH()} ` +
+      `sdnRmsKm=${sdnRmsKm} celestrakRmsKm=${celestrakSameEphemerisRmsKm} ` +
+      `marginKm=${(celestrakSameEphemerisRmsKm - sdnRmsKm).toFixed(9)} ` +
+      "gate=sdn<=celestrak+0.000001",
+  );
+});
+
+test(
+  "OD publishes observable derivatives for a hash-pinned high-drag source",
+  {
+    skip: !process.env.SDN_OD_ADAPTIVE_WINDOW_REGRESSION_FILE,
+    timeout: Number(
+      process.env.SDN_OD_ADAPTIVE_WINDOW_REGRESSION_TIMEOUT_MS ?? 120_000,
+    ),
+  },
+  async (t) => {
+    const fixturePath = path.resolve(
+      process.env.SDN_OD_ADAPTIVE_WINDOW_REGRESSION_FILE,
+    );
+    const fixture = new Uint8Array(fs.readFileSync(fixturePath));
+    assert.equal(
+      crypto.createHash("sha256").update(fixture).digest("hex"),
+      "af9d94bfac38302c5cfe4a296c8079c20327fb339d043a23b91c7c839c8b1ebd",
+      "adaptive-window regression must use the diagnosed complete ephemeris",
+    );
+    const manifest = readJson("plugin-manifest.json");
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+    const response = await harness.invoke({
+      methodId: "fit",
+      inputs: completeCanonicalObjectFrames({
+        data: fixture,
+        requestId: 79_535n,
+        schemaName: "MEME:46535:STARLINK-1663",
+      }),
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null, response.errorMessage);
+
+    const omm = reassembleRecordStream(response.outputs, "omm");
+    const ocm = reassembleRecordStream(response.outputs, "ocm");
+    assert.equal(omm.recordCount, 8n);
+    assert.equal(ocm.recordCount, omm.recordCount);
+    const fittedOmms = splitSizePrefixedRecords(omm.stream).map((encoded) =>
+      OMM.getSizePrefixedRootAsOMM(new ByteBuffer(encoded))
+    );
+    const epochDays = fittedOmms.map(
+      (record) => Date.parse(record.EPOCH()) / 86_400_000,
+    );
+    for (let index = 0; index < fittedOmms.length; index += 1) {
+      let measuredMeanMotionDot;
+      if (index === 0 || index + 1 === fittedOmms.length) {
+        const left = index === 0 ? 0 : fittedOmms.length - 2;
+        const right = left + 1;
+        const elapsedDays = epochDays[right] - epochDays[left];
+        assert.ok(elapsedDays > 0);
+        measuredMeanMotionDot =
+          (fittedOmms[right].MEAN_MOTION() -
+            fittedOmms[left].MEAN_MOTION()) /
+          elapsedDays;
+      } else {
+        const t0 = epochDays[index - 1] - epochDays[index];
+        const t2 = epochDays[index + 1] - epochDays[index];
+        measuredMeanMotionDot =
+          fittedOmms[index - 1].MEAN_MOTION() *
+            (-t2 / (t0 * (t0 - t2))) +
+          fittedOmms[index].MEAN_MOTION() *
+            ((-t0 - t2) / ((-t0) * (-t2))) +
+          fittedOmms[index + 1].MEAN_MOTION() *
+            (-t0 / ((t2 - t0) * t2));
+      }
+      assert.ok(
+        Math.abs(
+          fittedOmms[index].MEAN_MOTION_DOT() - measuredMeanMotionDot,
+        ) < 1e-9,
+        `epoch ${index + 1} published unobservable mean-motion derivative ` +
+          `${fittedOmms[index].MEAN_MOTION_DOT()} instead of ` +
+          `${measuredMeanMotionDot} rev/day^2 from adjacent fitted epochs`,
+      );
+    }
+    for (const encoded of splitSizePrefixedRecords(ocm.stream)) {
+      const record = OCM.getSizePrefixedRootAsOCM(new ByteBuffer(encoded));
+      const determination = record.ORBIT_DETERMINATION();
+      assert.equal(determination?.OD_OBSERVATIONS_USED(), 481);
+      const encodedConvergence = determination?.OD_CONVERGENCE_CRITERIA();
+      const convergence = typeof encodedConvergence === "string"
+        ? encodedConvergence
+        : new TextDecoder().decode(
+            encodedConvergence ?? new Uint8Array(),
+          );
+      assert.match(convergence, /(?:^|;\s*)converged=(?:true|1)(?:;|$)/);
+      const encodedResiduals = determination?.OD_RESIDUALS();
+      const residuals = typeof encodedResiduals === "string"
+        ? encodedResiduals
+        : new TextDecoder().decode(encodedResiduals ?? new Uint8Array());
+      const rmsKm = Number(
+        residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1],
+      );
+      assert.ok(Number.isFinite(rmsKm), residuals);
+      assert.ok(rmsKm < 12, `fallback RMS ${rmsKm} km exceeded 12 km`);
+    }
+  },
+);
+
+test(
+  "OD retries a hash-pinned rejected primary fit with complete four-hour windows",
+  {
+    skip: !process.env.SDN_OD_FOUR_HOUR_FALLBACK_REGRESSION_FILE,
+    timeout: Number(
+      process.env.SDN_OD_FOUR_HOUR_FALLBACK_REGRESSION_TIMEOUT_MS ?? 120_000,
+    ),
+  },
+  async (t) => {
+    const fixturePath = path.resolve(
+      process.env.SDN_OD_FOUR_HOUR_FALLBACK_REGRESSION_FILE,
+    );
+    const fixture = new Uint8Array(fs.readFileSync(fixturePath));
+    assert.equal(
+      crypto.createHash("sha256").update(fixture).digest("hex"),
+      "bbb6d4c5db1f0d3d8d67fdec6987d18f42e4e70f41cf42d0023b1bcd4fee72bd",
+      "four-hour fallback regression must use the diagnosed complete ephemeris",
+    );
+    const manifest = readJson("plugin-manifest.json");
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+    const response = await harness.invoke({
+      methodId: "fit",
+      inputs: completeCanonicalObjectFrames({
+        data: fixture,
+        requestId: 79_753n,
+        schemaName: "MEME:46753:STARLINK-1922",
+      }),
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null, response.errorMessage);
+
+    const omm = reassembleRecordStream(response.outputs, "omm");
+    const ocm = reassembleRecordStream(response.outputs, "ocm");
+    assert.equal(omm.recordCount, 14n);
+    assert.equal(ocm.recordCount, omm.recordCount);
+    for (const encoded of splitSizePrefixedRecords(ocm.stream)) {
+      const record = OCM.getSizePrefixedRootAsOCM(new ByteBuffer(encoded));
+      const determination = record.ORBIT_DETERMINATION();
+      assert.equal(determination?.OD_OBSERVATIONS_USED(), 241);
+      const encodedConvergence = determination?.OD_CONVERGENCE_CRITERIA();
+      const convergence = typeof encodedConvergence === "string"
+        ? encodedConvergence
+        : new TextDecoder().decode(
+            encodedConvergence ?? new Uint8Array(),
+          );
+      assert.match(convergence, /(?:^|;\s*)converged=(?:true|1)(?:;|$)/);
+      const encodedResiduals = determination?.OD_RESIDUALS();
+      const residuals = typeof encodedResiduals === "string"
+        ? encodedResiduals
+        : new TextDecoder().decode(encodedResiduals ?? new Uint8Array());
+      const rmsKm = Number(
+        residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1],
+      );
+      assert.ok(Number.isFinite(rmsKm), residuals);
+      assert.ok(rmsKm < 12, `fallback RMS ${rmsKm} km exceeded 12 km`);
+    }
+  },
+);
+
+test(
+  "OD converges every full-window epoch for the hash-pinned NORAD 44748 regression",
+  {
+    skip: !process.env.SDN_OD_QUALITY_GATE_REGRESSION_FILE,
+    timeout: Number(
+      process.env.SDN_OD_QUALITY_GATE_REGRESSION_TIMEOUT_MS ?? 120_000,
+    ),
+  },
+  async (t) => {
+    const fixturePath = path.resolve(
+      process.env.SDN_OD_QUALITY_GATE_REGRESSION_FILE,
+    );
+    const fixture = new Uint8Array(fs.readFileSync(fixturePath));
+    assert.equal(
+      crypto.createHash("sha256").update(fixture).digest("hex"),
+      "5399b0ad07435e66a96ce7a0e7196ff41d93b49bc2e67c7c08cc5aa698d7b6c4",
+      "quality-gate regression must use the diagnosed complete ephemeris",
+    );
+    const manifest = readJson("plugin-manifest.json");
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+
+    const responses = [
+      await harness.invoke({
+        methodId: "fit",
+        inputs: completeCanonicalObjectFrames({
+          data: fixture,
+          requestId: 79_044n,
+          schemaName: "MEME:44748:STARLINK-1043",
+        }),
+      }),
+    ];
+    while (
+      responses.at(-1).yielded ||
+      responses.at(-1).backlogRemaining > 0
+    ) {
+      responses.push(await harness.invoke({ methodId: "fit", inputs: [] }));
+    }
+    assert.equal(responses.length, 1);
+    const [response] = responses;
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null, response.errorMessage);
+
+    const omm = reassembleRecordStream(response.outputs, "omm");
+    const ocm = reassembleRecordStream(response.outputs, "ocm");
+    assert.equal(omm.recordCount, 8n);
+    assert.equal(ocm.recordCount, 8n);
+    const ommEpochs = splitSizePrefixedRecords(omm.stream).map((record) =>
+      OMM.getSizePrefixedRootAsOMM(new ByteBuffer(record)).EPOCH()
+    );
+    const ocmRecords = splitSizePrefixedRecords(ocm.stream).map((record) =>
+      OCM.getSizePrefixedRootAsOCM(new ByteBuffer(record))
+    );
+    const ocmEpochs = [];
+    for (const record of ocmRecords) {
+      const determination = record.ORBIT_DETERMINATION();
+      assert.equal(determination?.OD_OBSERVATIONS_USED(), 481);
+      ocmEpochs.push(determination?.OD_EPOCH());
+      const encodedConvergence = determination?.OD_CONVERGENCE_CRITERIA();
+      const convergence = typeof encodedConvergence === "string"
+        ? encodedConvergence
+        : new TextDecoder().decode(
+            encodedConvergence ?? new Uint8Array(),
+          );
+      assert.match(convergence, /(?:^|;\s*)converged=(?:true|1)(?:;|$)/);
+      const encodedResiduals = determination?.OD_RESIDUALS();
+      const residuals = typeof encodedResiduals === "string"
+        ? encodedResiduals
+        : new TextDecoder().decode(encodedResiduals ?? new Uint8Array());
+      const rmsKm = Number(residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1]);
+      assert.ok(Number.isFinite(rmsKm), residuals);
+      assert.ok(rmsKm < 12, `quality regression RMS ${rmsKm} km exceeded 12 km`);
+    }
+    assert.deepEqual(ocmEpochs, ommEpochs);
+  },
+);
+
+test(
+  "OD retains converged element sets for the hash-pinned NORAD 45668 regression",
+  {
+    skip: !process.env.SDN_OD_CONVERGENCE_SELECTION_REGRESSION_FILE,
+    timeout: Number(
+      process.env.SDN_OD_CONVERGENCE_SELECTION_REGRESSION_TIMEOUT_MS ??
+        120_000,
+    ),
+  },
+  async (t) => {
+    const fixturePath = path.resolve(
+      process.env.SDN_OD_CONVERGENCE_SELECTION_REGRESSION_FILE,
+    );
+    const fixture = new Uint8Array(fs.readFileSync(fixturePath));
+    assert.equal(
+      crypto.createHash("sha256").update(fixture).digest("hex"),
+      "e48b367c46cfe990d3668341663e0e226c9a5f0c865808b05179d5de23cf4dc4",
+      "convergence-selection regression must use the diagnosed complete ephemeris",
+    );
+    const manifest = readJson("plugin-manifest.json");
+    const harness = await createBrowserModuleHarness({
+      wasmSource: readOdTestArtifact(),
+      manifest,
+      surface: "direct",
+    });
+    t.after(() => harness.destroy());
+
+    const response = await harness.invoke({
+      methodId: "fit",
+      inputs: completeCanonicalObjectFrames({
+        data: fixture,
+        requestId: 79_668n,
+        schemaName: "MEME:45668:STARLINK-1451",
+      }),
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.errorCode, null, response.errorMessage);
+
+    const omm = reassembleRecordStream(response.outputs, "omm");
+    const ocm = reassembleRecordStream(response.outputs, "ocm");
+    assert.equal(omm.recordCount, 12n);
+    assert.equal(ocm.recordCount, omm.recordCount);
+    for (const encoded of splitSizePrefixedRecords(ocm.stream)) {
+      const record = OCM.getSizePrefixedRootAsOCM(new ByteBuffer(encoded));
+      const determination = record.ORBIT_DETERMINATION();
+      assert.equal(determination?.OD_OBSERVATIONS_USED(), 481);
+      const encodedConvergence = determination?.OD_CONVERGENCE_CRITERIA();
+      const convergence = typeof encodedConvergence === "string"
+        ? encodedConvergence
+        : new TextDecoder().decode(
+            encodedConvergence ?? new Uint8Array(),
+          );
+      assert.match(convergence, /(?:^|;\s*)converged=(?:true|1)(?:;|$)/);
+    }
+  },
+);
+
+test(
+  "benchmark OD on complete real MEME files sampled across the retained catalog",
+  {
+    skip: process.env.SDN_OD_REAL_MEME_BENCHMARK !== "1",
+    timeout: Number(
+      process.env.SDN_OD_REAL_MEME_TIMEOUT_MS ?? 600_000,
+    ),
+  },
+  async (t) => {
+    const liveCatalog =
+      process.env.SDN_OD_REAL_MEME_LIVE === "1";
+    const fetchAttempts = Number(
+      process.env.SDN_OD_REAL_MEME_FETCH_ATTEMPTS ?? 3,
+    );
+    assert.ok(
+      Number.isSafeInteger(fetchAttempts) &&
+        fetchAttempts >= 1 &&
+        fetchAttempts <= 5,
+      "fetch attempts must be an integer in 1..5",
+    );
+    const fetchTimeoutMs = Number(
+      process.env.SDN_OD_REAL_MEME_FETCH_TIMEOUT_MS ?? 120_000,
+    );
+    assert.ok(
+      Number.isSafeInteger(fetchTimeoutMs) &&
+        fetchTimeoutMs >= 1_000 &&
+        fetchTimeoutMs <= 600_000,
+      "fetch timeout must be an integer in 1000..600000 milliseconds",
+    );
+    const corpusRoot = path.resolve(
+      process.env.SDN_OD_REAL_MEME_DIR ??
+        "/Users/tj/software/starlink_downloader/ephemerides",
+    );
+    const manifest = readJson("plugin-manifest.json");
+    const benchmarkArtifact = readOdTestArtifact();
+    const artifactSha256 = crypto
+      .createHash("sha256")
+      .update(benchmarkArtifact)
+      .digest("hex");
+    const attemptLogPath = String(
+      process.env.SDN_OD_REAL_MEME_ATTEMPT_LOG ?? "",
+    ).trim();
+    const attemptLogDescriptor = attemptLogPath
+      ? fs.openSync(path.resolve(attemptLogPath), "wx", 0o600)
+      : null;
+    if (attemptLogDescriptor !== null) {
+      t.after(() => fs.closeSync(attemptLogDescriptor));
+    }
+    const realCorpusAttempt = (event) => {
+      if (attemptLogDescriptor === null) return;
+      fs.writeSync(
+        attemptLogDescriptor,
+        `${JSON.stringify({
+          timestamp: new Date().toISOString(),
+          ...event,
+        })}\n`,
+      );
+    };
+    let manifestSha256 = null;
+    let allSources;
+    if (liveCatalog) {
+      assert.equal(
+        typeof globalThis.fetch,
+        "function",
+        "live catalog benchmark requires fetch",
+      );
+      const manifestUrl =
+        process.env.SDN_OD_REAL_MEME_MANIFEST_URL ??
+        "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
+      const ephemerisBase =
+        process.env.SDN_OD_REAL_MEME_BASE_URL ??
+        "https://api.starlink.com/public-files/ephemerides/";
+      const manifestBytes = await readBoundedHttpBody(
+        await globalThis.fetch(manifestUrl, {
+          signal: AbortSignal.timeout(fetchTimeoutMs),
+        }),
+        maxStarlinkManifestBytes,
+        "Starlink manifest",
+      );
+      manifestSha256 = crypto
+        .createHash("sha256")
+        .update(manifestBytes)
+        .digest("hex");
+      const filenames = selectLatestManifestEntries(
+        new TextDecoder().decode(manifestBytes),
+      );
+      allSources = filenames.map((filename, ordinal) => ({
+        filename,
+        ordinal,
+        sourceKind: "network",
+        location: new URL(encodeURIComponent(filename), ephemerisBase).href,
+      }));
+    } else {
+      allSources = fs.readdirSync(corpusRoot)
+        .filter((name) => /^MEME_.+\.txt$/.test(name))
+        .sort()
+        .map((filename) => ({
+          filename,
+          location: path.join(corpusRoot, filename),
+        }))
+        .filter(({ location }) => {
+          const size = fs.statSync(location).size;
+          return size > fsbAlignedDataCapacity &&
+            size <= maxStarlinkSourceBytes;
+        })
+        .map((source, ordinal) => ({
+          ...source,
+          ordinal,
+          sourceKind: "local",
+        }));
+    }
+    realCorpusAttempt({
+      event: "catalog-frozen",
+      sourceKind: liveCatalog ? "network" : "local",
+      entries: allSources.length,
+      manifestSha256,
+      artifactSha256,
+    });
+    assert.ok(
+      allSources.length >= 16,
+      "real benchmark needs at least 16 complete sources",
+    );
+
+    const widths = (
+      process.env.SDN_OD_REAL_MEME_WIDTHS ?? "1,2,4,8,16"
+    )
+      .split(",")
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isSafeInteger(value) && value > 0 && value <= 16);
+    if (liveCatalog) {
+      assert.equal(
+        widths.length,
+        1,
+        "a live catalog benchmark requires exactly one width",
+      );
+    }
+    const repetitions = Number(
+      process.env.SDN_OD_REAL_MEME_REPETITIONS ?? 4,
+    );
+    assert.ok(widths.length > 0);
+    assert.ok(Number.isSafeInteger(repetitions) && repetitions > 0);
+
+    const sampleCount = Math.min(
+      allSources.length,
+      Number(
+        process.env.SDN_OD_REAL_MEME_SAMPLE_COUNT ??
+          (liveCatalog ? allSources.length : Math.max(...widths) * repetitions),
+      ),
+    );
+    assert.ok(Number.isSafeInteger(sampleCount) && sampleCount > 0);
+    const sampledSources = Array.from({ length: sampleCount }, (_, index) => {
+      const ordinal = sampleCount === 1
+        ? 0
+        : Math.round((index * (allSources.length - 1)) / (sampleCount - 1));
+      return allSources[ordinal];
+    });
+    assert.equal(
+      new Set(sampledSources.map(({ ordinal }) => ordinal)).size,
+      sampleCount,
+      "even-ordinal selection must not duplicate catalog sources",
+    );
+    const sampleDigest = crypto.createHash("sha256")
+      .update(sampledSources.map(({ filename }) => filename).join("\n"))
+      .digest("hex");
+    const collectFailures =
+      process.env.SDN_OD_REAL_MEME_COLLECT_FAILURES === "1";
+    const percentile = (values, probability) => {
+      const sorted = [...values].sort((left, right) => left - right);
+      return sorted[
+        Math.min(
+          sorted.length - 1,
+          Math.max(0, Math.ceil(probability * sorted.length) - 1),
+        )
+      ];
+    };
+
+    const loadSourceWave = async (sources) => {
+      const attempted = sources.map((source) => {
+        const match = source.filename.match(
+          /^MEME_(\d+)_([^_]+)_/,
+        );
+        assert.ok(
+          match,
+          `unable to read MEME identity from ${source.filename}`,
+        );
+        return {
+          ...source,
+          norad: Number(match[1]),
+          objectName: match[2],
+          requestId: 88_000n + BigInt(source.ordinal),
+        };
+      });
+      const sourceLoadStartedAt = process.hrtime.bigint();
+      const loadResults = await Promise.allSettled(
+        attempted.map(async (expected) => {
+          const maximumAttempts =
+            expected.sourceKind === "network" ? fetchAttempts : 1;
+          let lastError;
+          for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+            realCorpusAttempt({
+              event: "source-start",
+              ordinal: expected.ordinal,
+              filename: expected.filename,
+              sourceKind: expected.sourceKind,
+              attempt,
+            });
+            try {
+              const data = expected.sourceKind === "network"
+                ? await readBoundedHttpBody(
+                    await globalThis.fetch(expected.location, {
+                      signal: AbortSignal.timeout(fetchTimeoutMs),
+                    }),
+                    maxStarlinkSourceBytes,
+                    expected.filename,
+                  )
+                : new Uint8Array(fs.readFileSync(expected.location));
+              if (
+                data.byteLength === 0 ||
+                data.byteLength > maxStarlinkSourceBytes
+              ) {
+                throw new Error(
+                  `${expected.filename} has ${data.byteLength} bytes outside ` +
+                    `1..${maxStarlinkSourceBytes}`,
+                );
+              }
+              realCorpusAttempt({
+                event: "source-loaded",
+                ordinal: expected.ordinal,
+                filename: expected.filename,
+                sourceKind: expected.sourceKind,
+                attempt,
+                bytes: data.byteLength,
+              });
+              return data;
+            } catch (error) {
+              lastError = error;
+              realCorpusAttempt({
+                event: attempt < maximumAttempts
+                  ? "source-retry"
+                  : "source-exhausted",
+                ordinal: expected.ordinal,
+                filename: expected.filename,
+                sourceKind: expected.sourceKind,
+                attempt,
+                error: String(error?.message ?? error),
+              });
+            }
+          }
+          throw lastError;
+        }),
+      );
+      return {
+        entries: attempted.map((expected, index) => {
+          const result = loadResults[index];
+          return result.status === "fulfilled"
+            ? { expected, data: result.value }
+            : { expected, loadError: result.reason };
+        }),
+        sourceLoadSeconds:
+          Number(process.hrtime.bigint() - sourceLoadStartedAt) /
+          1_000_000_000,
+      };
+    };
+
+    const fitBatch = async (entries, harness) => {
+      const failures = [];
+      const failure = (expected, details) => {
+        const record = {
+          file: expected?.filename ?? null,
+          norad: expected?.norad ?? null,
+          objectName: expected?.objectName ?? null,
+          ordinal: expected?.ordinal ?? null,
+          sourceKind: expected?.sourceKind ?? null,
+          ...details,
+        };
+        failures.push(record);
+        realCorpusAttempt({ event: "failure", ...record });
+      };
+      const fixtureBytes = [];
+      for (const entry of entries) {
+        if (!entry.loadError) {
+          fixtureBytes.push({ ...entry.expected, data: entry.data });
+        } else {
+          failure(entry.expected, {
+            type: "source-load",
+            statusCode: null,
+            errorCode: "source-load",
+            errorMessage: String(
+              entry.loadError?.message ?? entry.loadError,
+            ),
+          });
+        }
+      }
+      const expectedByRequestId = new Map(
+        fixtureBytes.map((fixture) => [fixture.requestId, fixture]),
+      );
+      const inputs = fixtureBytes.flatMap(({
+        data,
+        norad,
+        objectName,
+        requestId,
+      }) => {
+        return completeCanonicalObjectFrames({
+          data,
+          requestId,
+          schemaName: `MEME:${norad}:${objectName}`,
+        });
+      });
+      const inputBytes = fixtureBytes.reduce(
+        (sum, { data }) => sum + data.byteLength,
+        0,
+      );
+      const usageBefore = process.resourceUsage();
+      const startedAt = process.hrtime.bigint();
+      const responses = fixtureBytes.length > 0
+        ? [await harness.invoke({ methodId: "fit", inputs })]
+        : [];
+      const maximumDrainResponses = fixtureBytes.length + 1;
+      let harnessUnhealthy = false;
+      while (
+        responses.length > 0 &&
+        (
+          responses.at(-1).yielded ||
+          responses.at(-1).backlogRemaining > 0
+        )
+      ) {
+        if (responses.length >= maximumDrainResponses) {
+          harnessUnhealthy = true;
+          failure(null, {
+            type: "drain-bound",
+            statusCode: responses.at(-1).statusCode,
+            errorCode: responses.at(-1).errorCode,
+            errorMessage:
+              `OD remained nonterminal after ${responses.length} responses`,
+          });
+          break;
+        }
+        responses.push(
+          await harness.invoke({ methodId: "fit", inputs: [] }),
+        );
+      }
+      if (
+        responses.length > 0 &&
+        (
+          responses.at(-1).yielded ||
+          responses.at(-1).backlogRemaining > 0
+        )
+      ) {
+        harnessUnhealthy = true;
+      } else {
+        const quiescent = await harness.invoke({ methodId: "fit", inputs: [] });
+        if (
+          quiescent.statusCode !== 0 ||
+          quiescent.errorCode !== null ||
+          quiescent.outputs.length !== 0 ||
+          quiescent.yielded ||
+          quiescent.backlogRemaining > 0
+        ) {
+          harnessUnhealthy = true;
+          failure(null, {
+            type: "quiescence",
+            statusCode: quiescent.statusCode,
+            errorCode: quiescent.errorCode,
+            errorMessage: "OD emitted output or backlog after terminal drain",
+          });
+        }
+      }
+
+      const rmsKm = [];
+      let ommRecords = 0;
+      let ocmRecords = 0;
+      let terminalOcmOnlyObjects = 0;
+      let maxObservedIterations = 0;
+      const seenRequestIds = new Set();
+      for (const response of responses) {
+        let statuses;
+        try {
+          statuses = decodeStatusOutputs(response);
+        } catch (error) {
+          harnessUnhealthy = true;
+          failure(null, {
+            type: "status-decode",
+            statusCode: response.statusCode,
+            errorCode: response.errorCode,
+            errorMessage: String(error?.message ?? error),
+          });
+          continue;
+        }
+        if (statuses.length !== 1) {
+          harnessUnhealthy = true;
+          failure(null, {
+            type: "missing-status",
+            statusCode: response.statusCode,
+            errorCode: response.errorCode,
+            errorMessage:
+              response.errorMessage ??
+                `OD response carried ${statuses.length} status outputs`,
+          });
+          continue;
+        }
+        const successful = [];
+        for (const status of statuses) {
+          const expected = expectedByRequestId.get(status.requestId);
+          if (!expected) {
+            harnessUnhealthy = true;
+            failure(null, {
+              type: "unexpected-status",
+              statusCode: response.statusCode,
+              errorCode: status.errorCode || response.errorCode,
+              errorMessage:
+                `unexpected OD transaction ${status.requestId}: ${status.message}`,
+            });
+            continue;
+          }
+          if (seenRequestIds.has(status.requestId)) {
+            harnessUnhealthy = true;
+            failure(expected, {
+              type: "duplicate-status",
+              statusCode: response.statusCode,
+              errorCode: status.errorCode || response.errorCode,
+              errorMessage: `duplicate OD transaction ${status.requestId}`,
+            });
+            continue;
+          }
+          seenRequestIds.add(status.requestId);
+          if (
+            response.statusCode !== 0 ||
+            status.status !== flatSqlNodeStatus.COMPLETE
+          ) {
+            failure(expected, {
+              type: "od-status",
+              statusCode: response.statusCode,
+              errorCode: status.errorCode || response.errorCode,
+              errorMessage: status.message || response.errorMessage,
+            });
+            continue;
+          }
+          successful.push({ expected, status });
+        }
+        if (successful.length === 0) continue;
+        if (successful.length !== 1) {
+          harnessUnhealthy = true;
+          for (const { expected } of successful) {
+            failure(expected, {
+              type: "ambiguous-output",
+              statusCode: response.statusCode,
+              errorCode: response.errorCode,
+              errorMessage:
+                "one response carried multiple successful OD transactions",
+            });
+          }
+          continue;
+        }
+        const [{ expected, status }] = successful;
+        const sourceLabel =
+          `${expected.norad}:${expected.objectName} (${expected.location})`;
+        try {
+          const ocm = reassembleRecordStream(response.outputs, "ocm");
+          const controlOutputs = response.outputs.filter(
+            (output) => output.portId === "control",
+          );
+          assert.equal(controlOutputs.length, 1);
+          const [controlOutput] = controlOutputs;
+          const controlRequestId = controlOutput.wireFormat === "aligned-binary"
+            ? new DataView(
+                controlOutput.payload.buffer,
+                controlOutput.payload.byteOffset,
+                controlOutput.payload.byteLength,
+              ).getBigUint64(8, true)
+            : decodeControl(controlOutput).requestId;
+          assert.equal(controlRequestId, status.requestId);
+          const hasOmm = response.outputs.some(
+            (output) => output.portId === "omm",
+          );
+          const encodedOcmRecords =
+            splitSizePrefixedRecords(ocm.stream);
+          const decodedOcmRecords = encodedOcmRecords.map((record) =>
+            OCM.getSizePrefixedRootAsOCM(new ByteBuffer(record))
+          );
+          const productShape = classifyOdProductShape({
+            statusMessage: status.message,
+            trajectoryDescription:
+              decodedOcmRecords.length === 1
+                ? String(decodedOcmRecords[0].TRAJ_TYPE_DESCRIPTION())
+                : "",
+            hasOmm,
+          });
+          if (productShape === "terminal-ocm") {
+            assert.equal(status.affectedRecords, 1n);
+            assert.equal(ocm.recordCount, 1n);
+            assert.equal(status.resultBytes, BigInt(ocm.stream.byteLength));
+            const [terminalOcm] = decodedOcmRecords;
+            assert.equal(
+              terminalOcm.METADATA()?.CATALOG_NAME(),
+              String(expected.norad),
+            );
+            assert.equal(
+              terminalOcm.METADATA()?.OBJECT_NAME(),
+              expected.objectName,
+            );
+            assert.equal(terminalOcm.STATE_VECTOR_SIZE(), 6);
+            const stepSeconds = terminalOcm.STATE_STEP_SIZE();
+            assert.ok(Number.isFinite(stepSeconds) && stepSeconds > 0);
+            const stateValueCount = terminalOcm.stateDataLength();
+            assert.ok(stateValueCount >= 18);
+            assert.equal(stateValueCount % 6, 0);
+            assert.ok(
+              terminalOcm.stateDataArray().every(Number.isFinite),
+            );
+            assert.equal(terminalOcm.covarianceDataLength(), 0);
+            assert.equal(terminalOcm.ORBIT_DETERMINATION(), null);
+            const startMilliseconds =
+              Date.parse(terminalOcm.METADATA()?.START_TIME());
+            const stopMilliseconds =
+              Date.parse(terminalOcm.METADATA()?.STOP_TIME());
+            assert.ok(Number.isFinite(startMilliseconds));
+            assert.ok(stopMilliseconds > startMilliseconds);
+            const stateCount = stateValueCount / 6;
+            const expectedDurationSeconds =
+              (stateCount - 1) * stepSeconds;
+            assert.ok(
+              Math.abs(
+                (stopMilliseconds - startMilliseconds) / 1_000 -
+                  expectedDurationSeconds,
+              ) <= 0.001,
+              "terminal OCM state count, step, and endpoints diverged",
+            );
+            assert.ok(
+              Math.abs(
+                terminalOcm.METADATA()?.TIME_SPAN() * 86_400 -
+                  expectedDurationSeconds,
+              ) <= 0.001,
+            );
+            ocmRecords += 1;
+            terminalOcmOnlyObjects += 1;
+            realCorpusAttempt({
+              event: "od-complete",
+              ordinal: expected.ordinal,
+              filename: expected.filename,
+              sourceKind: expected.sourceKind,
+              records: 1,
+              product: "terminal-ocm",
+              maxRmsKm: null,
+            });
+            continue;
+          }
+
+          const omm = reassembleRecordStream(response.outputs, "omm");
+          assert.ok(
+            omm.recordCount >= 1n,
+            "a complete real ephemeris must yield at least one complete window",
+          );
+          assert.equal(ocm.recordCount, omm.recordCount);
+          assert.ok(omm.recordCount <= BigInt(Number.MAX_SAFE_INTEGER));
+          assert.ok(ocm.recordCount <= BigInt(Number.MAX_SAFE_INTEGER));
+          assert.equal(status.affectedRecords, omm.recordCount);
+          assert.equal(
+            status.resultBytes,
+            BigInt(omm.stream.byteLength + ocm.stream.byteLength),
+          );
+          const decodedOmmRecords = splitSizePrefixedRecords(omm.stream).map(
+            (record) => OMM.getSizePrefixedRootAsOMM(new ByteBuffer(record)),
+          );
+          assert.ok(
+            decodedOmmRecords.every((record) =>
+              record.NORAD_CAT_ID() === expected.norad &&
+              record.OBJECT_NAME() === expected.objectName
+            ),
+            `OMM output crossed source boundary for ${expected.norad}:${expected.objectName}`,
+          );
+          const ommEpochs = decodedOmmRecords.map((record) =>
+            Date.parse(record.EPOCH())
+          );
+          const ocmEpochs = [];
+          const sourceRmsKm = [];
+          const observationCounts = new Set();
+          let sourceMaxObservedIterations = 0;
+          for (const record of splitSizePrefixedRecords(ocm.stream)) {
+            const value = OCM.getSizePrefixedRootAsOCM(
+              new ByteBuffer(record),
+            );
+            assert.equal(value.METADATA()?.CATALOG_NAME(), String(expected.norad));
+            assert.equal(value.METADATA()?.OBJECT_NAME(), expected.objectName);
+            ocmEpochs.push(
+              Date.parse(value.ORBIT_DETERMINATION()?.OD_EPOCH()),
+            );
+            const observationCount =
+              value.ORBIT_DETERMINATION()?.OD_OBSERVATIONS_USED();
+            assert.ok(
+              observationCount === 481 || observationCount === 241,
+              `unexpected complete-window observation count ${observationCount}`,
+            );
+            observationCounts.add(observationCount);
+            const encoded = value.ORBIT_DETERMINATION()?.OD_RESIDUALS();
+            const residuals = typeof encoded === "string"
+              ? encoded
+              : new TextDecoder().decode(encoded ?? new Uint8Array());
+            const rms = Number(
+              residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1],
+            );
+            assert.ok(Number.isFinite(rms));
+            assert.ok(
+              rms < 12,
+              `real complete-window RMS ${rms} km exceeded 12 km`,
+            );
+            const convergence =
+              value.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA();
+            const convergenceText =
+              typeof convergence === "string"
+                ? convergence
+                : new TextDecoder().decode(
+                    convergence ?? new Uint8Array(),
+                  );
+            assert.match(
+              convergenceText,
+              /(?:^|;\s*)converged=(?:true|1)(?:;|$)/,
+            );
+            const iterations = Number(
+              convergenceText.match(
+                /(?:^|;\s*)iterations=(\d+)(?:;|$)/,
+              )?.[1],
+            );
+            assert.ok(
+              Number.isSafeInteger(iterations) &&
+                iterations >= 0 &&
+                iterations <= 60,
+              `invalid iteration count in ${convergenceText}`,
+            );
+            sourceMaxObservedIterations = Math.max(
+              sourceMaxObservedIterations,
+              iterations,
+            );
+            sourceRmsKm.push(rms);
+          }
+          assert.equal(
+            observationCounts.size,
+            1,
+            "one source transaction mixed primary and fallback windows",
+          );
+          assert.deepEqual(
+            ocmEpochs,
+            ommEpochs,
+            `OMM/OCM epochs diverged for ${expected.norad}:${expected.objectName}`,
+          );
+          ommRecords += Number(omm.recordCount);
+          ocmRecords += Number(ocm.recordCount);
+          maxObservedIterations = Math.max(
+            maxObservedIterations,
+            sourceMaxObservedIterations,
+          );
+          rmsKm.push(...sourceRmsKm);
+          realCorpusAttempt({
+            event: "od-complete",
+            ordinal: expected.ordinal,
+            filename: expected.filename,
+            sourceKind: expected.sourceKind,
+            records: decodedOmmRecords.length,
+            product:
+              observationCounts.has(241) ? "omm-ocm-fallback" : "omm-ocm",
+            maxRmsKm: Math.max(...sourceRmsKm),
+          });
+        } catch (error) {
+          failure(expected, {
+            type: "output-validation",
+            statusCode: response.statusCode,
+            errorCode: response.errorCode,
+            errorMessage: `${sourceLabel}: ${error?.message ?? error}`,
+          });
+        }
+      }
+      for (const expected of fixtureBytes) {
+        if (seenRequestIds.has(expected.requestId)) continue;
+        harnessUnhealthy = true;
+        failure(expected, {
+          type: "missing-status",
+          statusCode: null,
+          errorCode: "missing-status",
+          errorMessage:
+            `no terminal OD status for transaction ${expected.requestId}`,
+        });
+      }
+      const fitDrainValidationSeconds =
+        Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+      const usageAfter = process.resourceUsage();
+      if (!collectFailures && failures.length > 0) {
+        assert.fail(
+          `${failures.length} OD batch failures: ${JSON.stringify(failures[0])}`,
+        );
+      }
+      return {
+        objectCount: entries.length,
+        fitDrainValidationSeconds,
+        cpuSeconds:
+          (usageAfter.userCPUTime - usageBefore.userCPUTime +
+            usageAfter.systemCPUTime - usageBefore.systemCPUTime) /
+          1_000_000,
+        failures,
+        harnessUnhealthy,
+        inputBytes,
+        maxRmsKm: rmsKm.length > 0 ? Math.max(...rmsKm) : null,
+        maxObservedIterations,
+        ocmRecords,
+        ommRecords,
+        terminalOcmOnlyObjects,
+        processPeakRssMiB: usageAfter.maxRSS / 1_024,
+      };
+    };
+
+    const createBenchmarkHarness = () =>
+      createBrowserModuleHarness({
+        wasmSource: benchmarkArtifact,
+        manifest,
+        surface: "direct",
+      });
+    const destroyBenchmarkHarness = async (harness) => {
+      await harness.threadHost?.terminateAll?.();
+      harness.destroy();
+    };
+    const allFailures = [];
+    for (const width of widths) {
+      const trials = [];
+      let harness = await createBenchmarkHarness();
+      const fetchWaveWidth = liveCatalog ? liveFetchWaveWidth : width;
+      let sourceLoadSeconds = 0;
+      let processedSources = 0;
+      const pipelineStartedAt = process.hrtime.bigint();
+      let waveOffset = 0;
+      let nextWavePromise = loadSourceWave(
+        sampledSources.slice(0, fetchWaveWidth),
+      );
+      try {
+        while (nextWavePromise) {
+          const loadedWave = await nextWavePromise;
+          sourceLoadSeconds += loadedWave.sourceLoadSeconds;
+          waveOffset += fetchWaveWidth;
+          nextWavePromise = waveOffset < sampledSources.length
+            ? loadSourceWave(
+                sampledSources.slice(
+                  waveOffset,
+                  waveOffset + fetchWaveWidth,
+                ),
+              )
+            : null;
+          for (
+            let entryOffset = 0;
+            entryOffset < loadedWave.entries.length;
+            entryOffset += width
+          ) {
+            const entries = loadedWave.entries.slice(
+              entryOffset,
+              entryOffset + width,
+            );
+            const trial = await fitBatch(entries, harness);
+            for (const entry of entries) {
+              entry.data = null;
+            }
+            trials.push(trial);
+            processedSources += entries.length;
+            if (
+              trial.harnessUnhealthy &&
+              processedSources < sampledSources.length
+            ) {
+              await destroyBenchmarkHarness(harness);
+              harness = await createBenchmarkHarness();
+            }
+          }
+        }
+      } finally {
+        await destroyBenchmarkHarness(harness);
+      }
+      const pipelineWallSeconds =
+        Number(process.hrtime.bigint() - pipelineStartedAt) / 1_000_000_000;
+      const wallSeconds = trials.map(
+        ({ fitDrainValidationSeconds }) => fitDrainValidationSeconds,
+      );
+      const fullBatchSeconds = trials
+        .filter(({ objectCount }) => objectCount === width)
+        .map(({ fitDrainValidationSeconds }) => fitDrainValidationSeconds);
+      const tailTrial = trials.find(({ objectCount }) => objectCount < width);
+      const totalObjects = trials.reduce(
+        (sum, { objectCount }) => sum + objectCount,
+        0,
+      );
+      const totalSeconds = wallSeconds.reduce((sum, value) => sum + value, 0);
+      const totalBytes = trials.reduce(
+        (sum, { inputBytes }) => sum + inputBytes,
+        0,
+      );
+      const totalCpuSeconds = trials.reduce(
+        (sum, { cpuSeconds }) => sum + cpuSeconds,
+        0,
+      );
+      const totalOmmRecords = trials.reduce(
+        (sum, { ommRecords }) => sum + ommRecords,
+        0,
+      );
+      const totalOcmRecords = trials.reduce(
+        (sum, { ocmRecords }) => sum + ocmRecords,
+        0,
+      );
+      const totalTerminalOcmOnlyObjects = trials.reduce(
+        (sum, { terminalOcmOnlyObjects }) =>
+          sum + terminalOcmOnlyObjects,
+        0,
+      );
+      assert.equal(
+        totalOcmRecords,
+        totalOmmRecords + totalTerminalOcmOnlyObjects,
+        "OCM totals must equal paired OMM records plus terminal OCM-only objects",
+      );
+      const maxObservedIterations = Math.max(
+        ...trials.map(({ maxObservedIterations }) => maxObservedIterations),
+      );
+      const failures = trials.flatMap((trial) => trial.failures);
+      allFailures.push(...failures);
+      const finiteRms = trials
+        .map(({ maxRmsKm }) => maxRmsKm)
+        .filter(Number.isFinite);
+      const batchPercentile = (probability) =>
+        fullBatchSeconds.length > 0
+          ? percentile(fullBatchSeconds, probability).toFixed(6)
+          : "none";
+      t.diagnostic(
+        `realCorpusFiles=${allSources.length} source=${liveCatalog ? "live-network" : "retained-local"} ` +
+        `manifestSha256=${manifestSha256 ?? "none"} artifactSha256=${artifactSha256} ` +
+        `selection=even-ordinal ` +
+        `sampleFiles=${totalObjects} sampleDigest=${sampleDigest} ` +
+        `width=${width} batches=${trials.length} ` +
+        `attemptLog=${attemptLogPath || "none"} ` +
+        `inputBytes=${totalBytes} p50FullBatchFitDrainValidationSeconds=${batchPercentile(0.5)} ` +
+        `p95FullBatchFitDrainValidationSeconds=${batchPercentile(0.95)} ` +
+        `p99FullBatchFitDrainValidationSeconds=${batchPercentile(0.99)} ` +
+        `tailObjects=${tailTrial?.objectCount ?? 0} ` +
+        `tailFitDrainValidationSeconds=${tailTrial?.fitDrainValidationSeconds.toFixed(6) ?? "none"} ` +
+        `fetchWaveWidth=${fetchWaveWidth} ` +
+        `sourceLoadWaveSeconds=${sourceLoadSeconds.toFixed(6)} ` +
+        `pipelineWallSeconds=${pipelineWallSeconds.toFixed(6)} ` +
+        `sequentialSourcePlusFitSeconds=${(sourceLoadSeconds + totalSeconds).toFixed(6)} ` +
+        `aggregateObjectsPerSecond=${(totalObjects / totalSeconds).toFixed(4)} ` +
+        `aggregateMiBPerSecond=${(totalBytes / 1024 / 1024 / totalSeconds).toFixed(3)} ` +
+        `cpuSeconds=${totalCpuSeconds.toFixed(3)} ` +
+        `averageCpuCores=${(totalCpuSeconds / totalSeconds).toFixed(3)} ` +
+        `totalOmmRecords=${totalOmmRecords} ` +
+        `totalOcmRecords=${totalOcmRecords} ` +
+        `terminalOcmOnlyObjects=${totalTerminalOcmOnlyObjects} ` +
+        `maxObservedIterations=${maxObservedIterations} ` +
+        `processPeakRssMiB=${Math.max(...trials.map(({ processPeakRssMiB }) => processPeakRssMiB)).toFixed(3)} ` +
+        `failedObjects=${failures.length} ` +
+        `maxRmsKm=${finiteRms.length > 0 ? Math.max(...finiteRms) : "none"}`,
+      );
+      for (const failure of failures) {
+        t.diagnostic(`realCorpusFailure=${JSON.stringify(failure)}`);
+      }
+    }
+    assert.equal(
+      allFailures.length,
+      0,
+      `${allFailures.length} complete real ephemerides failed OD; ` +
+        "see realCorpusFailure diagnostics",
+    );
+  },
+);
+
+test(
+  "benchmark OD full-arc worker scaling",
+  {
+    skip: process.env.SDN_OD_FULL_ARC_BENCHMARK !== "1",
+    timeout: 180_000,
+  },
+  async (t) => {
+    const manifest = readJson("plugin-manifest.json");
+    const fixture = makeProductionShapedMemeFixture();
+    const widths = (
+      process.env.SDN_OD_FULL_ARC_WIDTHS ?? "1,2,4,8,16"
+    )
+      .split(",")
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isSafeInteger(value) && value > 0);
+    assert.ok(widths.length > 0, "benchmark requires at least one worker width");
+    for (const width of widths) {
+      const harness = await createBrowserModuleHarness({
+        wasmSource: readOdTestArtifact(),
+        manifest,
+        surface: "direct",
+      });
+      try {
+        const expectedSources = new Map(
+          Array.from({ length: width }, (_, index) => {
+            const requestId = 87_000n + BigInt(index);
+            return [
+              requestId,
+              {
+                norad: 87_000 + index,
+                objectName: `STARLINK-FULL-ARC-${width}-${index}`,
+              },
+            ];
+          }),
+        );
+        const startedAt = process.hrtime.bigint();
+        const first = await harness.invoke({
+          methodId: "fit",
+          inputs: Array.from({ length: width }, (_, index) =>
+            completeCanonicalObjectFrames({
+              data: fixture,
+              requestId: 87_000n + BigInt(index),
+              schemaName:
+                `MEME:${87_000 + index}:STARLINK-FULL-ARC-${width}-${index}`,
+            })
+          ).flat(),
+        });
+        const responses = [first];
+        while (
+          responses.at(-1).yielded ||
+          responses.at(-1).backlogRemaining > 0
+        ) {
+          responses.push(
+            await harness.invoke({ methodId: "fit", inputs: [] }),
+          );
+        }
+        assert.equal(
+          responses.length,
+          width,
+          "every full-arc source must produce one drained response",
+        );
+        assert.equal(responses.at(-1).yielded, false);
+        assert.equal(responses.at(-1).backlogRemaining, 0);
+
+        const seenRequestIds = new Set();
+        const rmsKm = [];
+        for (const response of responses) {
+          assert.equal(response.statusCode, 0, response.errorMessage);
+          assert.equal(response.errorCode, null, response.errorMessage);
+          const status = decodeStatusOutput(response);
+          const expected = expectedSources.get(status.requestId);
+          assert.ok(
+            expected,
+            `unexpected full-arc source transaction ${status.requestId}`,
+          );
+          assert.equal(
+            seenRequestIds.has(status.requestId),
+            false,
+            `duplicate full-arc source transaction ${status.requestId}`,
+          );
+          seenRequestIds.add(status.requestId);
+          assert.match(status.message, new RegExp(`batch_objects=${width}`));
+          assert.match(status.message, new RegExp(`workers=${width}`));
+
+          const omm = reassembleRecordStream(response.outputs, "omm");
+          const ocm = reassembleRecordStream(response.outputs, "ocm");
+          assert.equal(
+            omm.recordCount,
+            12n,
+            "a complete captured 72-hour arc must produce 12 epoch-specific OMMs",
+          );
+          assert.equal(ocm.recordCount, omm.recordCount);
+          const ommRecords = splitSizePrefixedRecords(omm.stream).map((record) =>
+            OMM.getSizePrefixedRootAsOMM(new ByteBuffer(record))
+          );
+          assert.ok(
+            ommRecords.every((record) =>
+              record.NORAD_CAT_ID() === expected.norad &&
+              record.OBJECT_NAME() === expected.objectName
+            ),
+            `OMM output crossed source boundary for ${expected.norad}:${expected.objectName}`,
+          );
+          const ommEpochs = ommRecords.map((record) =>
+            Date.parse(record.EPOCH())
+          );
+          const ocmEpochs = [];
+          for (const record of splitSizePrefixedRecords(ocm.stream)) {
+            const value = OCM.getSizePrefixedRootAsOCM(
+              new ByteBuffer(record),
+            );
+            assert.equal(value.METADATA()?.CATALOG_NAME(), String(expected.norad));
+            assert.equal(value.METADATA()?.OBJECT_NAME(), expected.objectName);
+            ocmEpochs.push(
+              Date.parse(value.ORBIT_DETERMINATION()?.OD_EPOCH()),
+            );
+            assert.equal(
+              value.ORBIT_DETERMINATION()?.OD_OBSERVATIONS_USED(),
+              481,
+            );
+            const encodedResiduals =
+              value.ORBIT_DETERMINATION()?.OD_RESIDUALS();
+            const residuals = typeof encodedResiduals === "string"
+              ? encodedResiduals
+              : new TextDecoder().decode(
+                  encodedResiduals ?? new Uint8Array(),
+                );
+            const rms = Number(
+              residuals.match(/WRMS=([0-9.eE+-]+)\s+km/)?.[1],
+            );
+            assert.ok(Number.isFinite(rms));
+            assert.ok(rms < 12);
+            const convergence =
+              value.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA();
+            assert.match(
+              typeof convergence === "string"
+                ? convergence
+                : new TextDecoder().decode(
+                    convergence ?? new Uint8Array(),
+                  ),
+              /(?:^|;\s*)converged=(?:true|1)(?:;|$)/,
+            );
+            rmsKm.push(rms);
+          }
+          assert.deepEqual(
+            ocmEpochs,
+            ommEpochs,
+            `OMM/OCM epochs diverged for ${expected.norad}:${expected.objectName}`,
+          );
+        }
+        assert.equal(seenRequestIds.size, expectedSources.size);
+        const elapsedSeconds =
+          Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+        const maxRmsKm = Math.max(...rmsKm);
+        assert.ok(maxRmsKm < 12);
+        const maxRssMiB = process.resourceUsage().maxRSS / 1_024;
+        t.diagnostic(
+          `fullArcObjects=${width} workers=${width} inputBytesEach=${fixture.byteLength} ` +
+          `endToEndFitDrainValidationSeconds=${elapsedSeconds.toFixed(6)} ` +
+          `objectsPerSecond=${(width / elapsedSeconds).toFixed(4)} ` +
+          `maxRssMiB=${maxRssMiB.toFixed(3)} maxRmsKm=${maxRmsKm}`,
+        );
+      } finally {
+        harness.destroy();
+      }
+    }
+  },
+);
 
 test("OD reassembles native chunks, aggregates one object's epochs, and persists them independently", async (t) => {
   const manifest = readJson("plugin-manifest.json");
@@ -2118,6 +5227,7 @@ test("OD reassembles native chunks, aggregates one object's epochs, and persists
     inputs: [inputFrame(chunks[2])],
   });
   assert.equal(complete.statusCode, 0, complete.errorMessage);
+  assert.equal(complete.errorCode, null, complete.errorMessage);
   assert.equal(complete.yielded, false);
   assert.equal(complete.backlogRemaining, 0);
   const controlFrames = complete.outputs.filter((output) => output.portId === "control");
@@ -2129,15 +5239,12 @@ test("OD reassembles native chunks, aggregates one object's epochs, and persists
   assert.deepEqual(control.bindings, [
     { fileIdentifier: "$OMM", tableName: "OMM" },
     { fileIdentifier: "$OCM", tableName: "OCM" },
-    { fileIdentifier: "$OBD", tableName: "OBD" },
   ]);
   for (const marker of [
     /table\s+OMM/,
     /table\s+OCM/,
-    /table\s+OBD/,
     /REFERENCE_FRAME\s*:\s*RFM/,
     /METADATA\s*:\s*Metadata/,
-    /SENSORS\s*:\s*\[odSensorContribution\]/,
   ]) {
     assert.match(control.schemaIdl, marker);
   }

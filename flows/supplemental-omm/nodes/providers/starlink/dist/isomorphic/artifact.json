@@ -1,8 +1,8 @@
 {
-  "sha256": "2438dcd006c6e51540c7479ac8e1f43cc9e0c5388f4486b7300aa4d6c807c0bb",
-  "canonicalModuleHash": "3589ef0608355ada359cb32591853169ad36a82b0e98a6eaf153365c3ec7c836",
-  "signedHash": "5dbf75a75c6adfc784184a677ca799ea9c45e638971af857619e98b5fa677417",
+  "sha256": "ffb27b6965c9caf4e0e4df516e693390568602a1493cc2203c713a740ccb090b",
+  "canonicalModuleHash": "f8e2e83084a99b8c50ff021624d858ddc94b8159681a602a695b5022e99e522c",
+  "signedHash": "3845bb643a098bee222d121842221587b53c7c96362473844d0f88af681a796d",
   "signatureScope": "bundle",
-  "keyId": "spaceaware-sdn-isomorphic-2026-07-21",
+  "keyId": "supplemental-omm-starlink-provider-development",
   "threadModel": "wasi-threads"
 }

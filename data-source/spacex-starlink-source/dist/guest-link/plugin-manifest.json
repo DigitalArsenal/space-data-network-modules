@@ -58,7 +58,7 @@
     {
       "methodId": "emit",
       "displayName": "Fetch + parse operator ephemeris and emit $OEM (OD-flow guest-link)",
-      "description": "Fetches the provider catalog via the host http connector (ps::http_get), parses to SDS $OEM in-memory, and emits one $OEM aligned-binary frame per object on the oem port. Nothing stored/signed/published.",
+      "description": "Fetches every selected operator ephemeris as a complete file through bounded parallel host HTTP calls, parses to SDS $OEM in-memory, and emits one bounded page of $OEM aligned-binary frames per invocation until the full catalog is drained. Nothing stored/signed/published.",
       "inputPorts": [
         {
           "portId": "config",
@@ -109,7 +109,7 @@
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot"
+      "drainPolicy": "drain-until-yield"
     }
   ],
   "schemasUsed": [

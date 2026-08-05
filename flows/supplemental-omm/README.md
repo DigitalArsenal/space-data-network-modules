@@ -23,11 +23,16 @@ fetch complete provider-native responses and emit bounded paired canonical or
 aligned FSB chunks. Canonical FSB remains the durable and cross-runtime
 fallback. The OD node reassembles and validates the complete response, parses
 MEME, SP3, ECF, CPF, or CCSDS OEM KVN internally, fits the complete arc, and
-emits multiple epoch-specific OMM, OCM, and OBD record streams.
+emits multiple epoch-specific OMM and OCM record streams.
 
-Each successful fit batch also emits an idempotent FlatSQL `CONFIGURE_INDEX`
-control containing the complete canonical result schema and the `$OMM`, `$OCM`,
-and `$OBD` table bindings. Only fitted result records reach the independent
+Normal orbital trajectories require strict epoch-paired OMM/OCM output. A
+finite, ordered, uniformly sampled trajectory ending at or below the WGS-72
+120 km reentry interface instead emits one complete TEME state-series OCM and
+no OMM, covariance, or orbit-determination block.
+
+Each successful fit also emits an idempotent FlatSQL `CONFIGURE_INDEX`
+control containing the complete canonical result schema and the `$OMM` and
+`$OCM` table bindings. Only fitted result records reach the independent
 FlatSQL and publication nodes; provider-native ephemerides remain transient.
 
 `app/app.json` and `app/ui/index.html` are bundle-owned APP source and UI. The

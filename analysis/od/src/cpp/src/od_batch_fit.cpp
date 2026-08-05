@@ -14,8 +14,14 @@ namespace {
 // Run the SACRED per-object fit for one $OEM and package its result records.
 BatchResult fit_one(const BatchObject& obj) {
     BatchResult r;
-    PluginFitFBResult fr = fit_ephemeris_fb(
+    std::vector<PluginFitFBResult> epochs = fit_ephemeris_epochs_fb(
         obj.oem.empty() ? nullptr : obj.oem.data(), obj.oem.size(), std::string_view{});
+    if (epochs.empty()) {
+        r.error_code = "fit-empty";
+        r.error_message = "complete-arc fitter produced no epoch records";
+        return r;
+    }
+    PluginFitFBResult& fr = epochs.front();
     if (!fr.ok) {
         r.ok = false;
         r.error_code = fr.error_code;
@@ -28,6 +34,18 @@ BatchResult fit_one(const BatchObject& obj) {
     r.ocm = std::move(fr.ocm);
     r.rms_km = fr.rms_km;
     r.converged = fr.converged;
+    r.additional_epochs.reserve(epochs.size() - 1);
+    for (std::size_t i = 1; i < epochs.size(); ++i) {
+        PluginFitFBResult& epoch = epochs[i];
+        if (!epoch.ok || epoch.omm.empty()) continue;
+        BatchEpochResult additional;
+        additional.omm = std::move(epoch.omm);
+        additional.obd = std::move(epoch.obd);
+        additional.ocm = std::move(epoch.ocm);
+        additional.rms_km = epoch.rms_km;
+        additional.converged = epoch.converged;
+        r.additional_epochs.push_back(std::move(additional));
+    }
     return r;
 }
 

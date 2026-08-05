@@ -57,6 +57,14 @@ PluginFitFBResult fit_ephemeris_fb(
     std::size_t oem_len,
     std::string_view options_json = {});
 
+/// Complete-arc flow path: parse one full SDS $OEM once, fit deterministic
+/// overlapping local windows that cover its first through terminal state, and
+/// return one epoch-specific $OMM/$OCM/$OBD record set per window.
+std::vector<PluginFitFBResult> fit_ephemeris_epochs_fb(
+    const uint8_t* oem_buf,
+    std::size_t oem_len,
+    std::string_view options_json = {});
+
 }  // namespace od
 
 #endif  // OD_PLUGIN_RUNTIME_H

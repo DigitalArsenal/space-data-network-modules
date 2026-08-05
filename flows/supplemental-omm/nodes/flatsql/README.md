@@ -14,8 +14,8 @@ cached state uncertain before a base or WAL commit and restores the
 storage-selected generation after any interrupted boundary. WAL growth remains
 bounded at 32,768 entries, 65,536 keys, and 512 MiB. Those bounds admit the
 audited 8,825-file Starlink run even under the conservative assumption that its
-26,475 OMM/OCM/OBD streams persist as separate append transactions. The exact
-composed scheduler normally concatenates the three streams into one transaction
+OMM/OCM streams persist as separate append transactions. The exact
+composed scheduler normally concatenates the two streams into one transaction
 per fitted object. The projected 263,055,600 fitted bytes require no
 intermediate full-base rewrite and leave more than 273 million bytes (about
 261 MiB) below the 512 MiB byte ceiling. Explicit snapshots

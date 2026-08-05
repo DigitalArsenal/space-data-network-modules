@@ -61,12 +61,28 @@ async function generatedSchemaHeader(schemaCode) {
   );
 }
 
+async function generatedAlignedSchemaHeader(headerPath, includeRuntime) {
+  const source = await readFile(headerPath, "utf8");
+  if (includeRuntime) return source;
+  const withoutRuntime = source.replace(
+    /namespace flatbuffers \{\nnamespace aligned_runtime \{[\s\S]*?\}  \/\/ namespace aligned_runtime\n\}  \/\/ namespace flatbuffers\n/,
+    "",
+  );
+  if (withoutRuntime === source) {
+    throw new Error(
+      `unable to isolate shared aligned runtime in ${headerPath}`,
+    );
+  }
+  return withoutRuntime;
+}
+
 export async function buildProviderNode({
   nodeRoot,
   defaultSigningByte,
   defaultSigningKeyId,
   threadModel = "single-thread",
   schemaCodes = ["FSB"],
+  alignedSchemaCodes = ["FSB"],
   sourceFragments = [],
 }) {
   if (
@@ -91,18 +107,29 @@ export async function buildProviderNode({
   await mkdir(buildRoot, { recursive: true });
   await mkdir(unsignedRoot, { recursive: true });
   await mkdir(distRoot, { recursive: true });
-  await run(
-    flatcPath,
-    [
-      "--no-warnings",
-      "--cpp",
-      "--aligned",
-      "-o",
-      buildRoot,
-      path.join(standardsRoot, "schema/FSB/main.fbs"),
-    ],
-    nodeRoot,
-  );
+  const alignedHeaderPaths = [];
+  for (const schemaCode of alignedSchemaCodes) {
+    if (!schemaCodes.includes(schemaCode)) {
+      throw new Error(
+        `aligned schema ${schemaCode} must also appear in schemaCodes`,
+      );
+    }
+    const alignedRoot = path.join(buildRoot, "aligned", schemaCode);
+    await mkdir(alignedRoot, { recursive: true });
+    await run(
+      flatcPath,
+      [
+        "--no-warnings",
+        "--cpp",
+        "--aligned",
+        "-o",
+        alignedRoot,
+        path.join(standardsRoot, `schema/${schemaCode}/main.fbs`),
+      ],
+      nodeRoot,
+    );
+    alignedHeaderPaths.push(path.join(alignedRoot, "main_aligned.h"));
+  }
 
   const manifest = JSON.parse(
     await readFile(path.join(nodeRoot, "plugin-manifest.json"), "utf8"),
@@ -110,7 +137,9 @@ export async function buildProviderNode({
   const sourceCode = (
     await Promise.all([
       ...schemaCodes.map(generatedSchemaHeader),
-      readFile(path.join(buildRoot, "main_aligned.h"), "utf8"),
+      ...alignedHeaderPaths.map((headerPath, index) =>
+        generatedAlignedSchemaHeader(headerPath, index === 0)
+      ),
       ...sourceFragments,
       readFile(path.join(providersRoot, "common/provider_runtime.hpp"), "utf8"),
       readFile(path.join(nodeRoot, "src/node.cpp"), "utf8"),

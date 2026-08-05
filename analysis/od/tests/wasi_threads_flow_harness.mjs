@@ -30,7 +30,9 @@
 //   fixtures.json: { "<url>": "<abs path to fixture file>", ... }
 
 import { Worker, isMainThread, workerData, parentPort, threadId } from "node:worker_threads";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+import { extractPublicationRecordCollection } from "space-data-module-sdk";
 
 const PAGE = 65536;
 const INVALID_INDEX = 0xffffffff;
@@ -71,8 +73,9 @@ function makeWasi(memoryRef, onExit) {
 // Request framing (guest provider_source.hpp): [u32le metaLen][meta json][u32le segCount].
 // Response framing the guest decodes: [u32le metaLen][meta json][u32le 0].
 // ----------------------------------------------------------------------------
-function makeHostcall(memoryRef, fixtures, stats) {
+function makeHostcall(memoryRef, fixtures, stats, metricsSab) {
   let responseBuf = new Uint8Array(0);
+  const metrics = metricsSab ? new BigInt64Array(metricsSab) : null;
   const u8 = () => new Uint8Array(memoryRef().buffer);
   function setResponseMeta(metaObj) {
     const meta = textEnc.encode(JSON.stringify(metaObj));
@@ -98,14 +101,22 @@ function makeHostcall(memoryRef, fixtures, stats) {
       let req = {};
       try { req = JSON.parse(metaStr); } catch {}
       if (op === "http.request") {
+        if (metrics) Atomics.add(metrics, 0, 1n);
         stats.httpCalls.push(req.url ?? "");
-        const path = fixtures[req.url];
-        if (path) {
-          const bytes = readFileSync(path);
+        const fixture = fixtures[req.url];
+        if (fixture) {
+          const bytes = typeof fixture === "string"
+            ? readFileSync(fixture)
+            : Buffer.from(fixture.body ?? "", fixture.encoding ?? "utf8");
           stats.httpServed.push(req.url);
+          if (metrics) {
+            Atomics.add(metrics, 1, 1n);
+            Atomics.add(metrics, 2, BigInt(bytes.length));
+          }
           setResponseMeta({ ok: true, status: 200, body_encoding: "base64", body: Buffer.from(bytes).toString("base64") });
         } else {
           stats.http404.push(req.url ?? "");
+          if (metrics) Atomics.add(metrics, 3, 1n);
           setResponseMeta({ ok: true, status: 404, body_encoding: "utf8", body: "" });
         }
         return 0;
@@ -146,13 +157,16 @@ function makeFlatsql(memoryRef, store) {
       store.byId[fid] = (store.byId[fid] || 0) + 1;
       return BigInt(seq);
     },
+    query_rows: () => 0n,
+    mark_deleted_bulk: () => 0n,
+    compact: () => 0n,
   };
 }
 
 // ----------------------------------------------------------------------------
 // Instantiate the composed reactor with a wasi.thread-spawn host over Workers.
 // ----------------------------------------------------------------------------
-function instantiate({ moduleBytes, sharedMemory, tidSab, osTidSab, spawnLog, fixtures, store, stats }) {
+function instantiate({ moduleBytes, sharedMemory, tidSab, osTidSab, metricsSab, spawnLog, fixtures, store, stats }) {
   const mod = new WebAssembly.Module(moduleBytes);
   const tidArr = new Int32Array(tidSab);
   const memoryRef = () => sharedMemory;
@@ -163,12 +177,12 @@ function instantiate({ moduleBytes, sharedMemory, tidSab, osTidSab, spawnLog, fi
       "thread-spawn": (startArg) => {
         const t = Atomics.add(tidArr, 0, 1) + 1;
         new Worker(new URL(import.meta.url), {
-          workerData: { role: "thread", moduleBytes, sharedMemory, tidSab, osTidSab, tid: t, startArg },
+          workerData: { role: "thread", moduleBytes, sharedMemory, tidSab, osTidSab, metricsSab, fixtures, tid: t, startArg },
         });
         return t;
       },
     },
-    space_data_module_host: makeHostcall(memoryRef, fixtures, stats),
+    space_data_module_host: makeHostcall(memoryRef, fixtures, stats, metricsSab),
     flatsql: makeFlatsql(memoryRef, store),
   };
   return new WebAssembly.Instance(mod, imports);
@@ -228,7 +242,7 @@ if (!isMainThread) {
     const store = { records: [], byId: {}, execCalls: 0 };
     const stats = { httpCalls: [], httpServed: [], http404: [] };
     if (wd.osTidSab) { try { new Int32Array(wd.osTidSab)[wd.tid & 1023] = threadId; } catch {} }
-    const inst = instantiate({ ...wd, spawnLog: null, fixtures: {}, store, stats });
+    const inst = instantiate({ ...wd, spawnLog: null, fixtures: wd.fixtures ?? {}, store, stats });
     try {
       inst.exports.wasi_thread_start(wd.tid, wd.startArg);
     } catch (e) { if (!(e && typeof e.__wasiExit === "number")) throw e; }
@@ -238,6 +252,7 @@ if (!isMainThread) {
     const store = { records: [], byId: {}, execCalls: 0 };
     const stats = { httpCalls: [], httpServed: [], http404: [] };
     let dispatched = 0, err = null;
+    const startedAt = performance.now();
     try {
       const inst = instantiate({ ...wd, store, stats });
       dispatched = driveFlow(inst, wd.sharedMemory);
@@ -245,20 +260,59 @@ if (!isMainThread) {
       if (!(e && typeof e.__wasiExit === "number")) err = String(e && e.stack || e);
     }
     const tids = new Int32Array(wd.tidSab)[0];
+    const metrics = wd.metricsSab ? [...new BigInt64Array(wd.metricsSab)].map(Number) : [0, 0, 0, 0];
     let osTids = [];
     if (wd.osTidSab) { osTids = [...new Set([...new Int32Array(wd.osTidSab)].filter((x) => x !== 0))]; }
     parentPort.postMessage({
       rootDone: true, err, dispatched, spawnCount: tids, osTids,
+      elapsedMs: performance.now() - startedAt,
+      sharedMemoryBytes: wd.sharedMemory.buffer.byteLength,
+      maxRssKb: process.resourceUsage().maxRSS,
       store: { total: store.records.length, byId: store.byId, execCalls: store.execCalls },
-      stats: { httpServed: stats.httpServed, http404: stats.http404.length },
+      stats: {
+        httpServed: stats.httpServed,
+        http404: stats.http404.length,
+        calls: metrics[0],
+        served: metrics[1],
+        bytes: metrics[2],
+        notFound: metrics[3],
+      },
     });
   }
 } else {
   const wasmPath = process.argv[2];
-  const fixturesPath = process.argv[3];
-  if (!wasmPath || !fixturesPath) { console.error("usage: node wasi_threads_flow_harness.mjs <runtime.wasm> <fixtures.json>"); process.exit(2); }
-  const moduleBytes = readFileSync(wasmPath);
-  const fixtures = JSON.parse(readFileSync(fixturesPath, "utf8"));
+  const fixtureSource = process.argv[3];
+  if (!wasmPath || !fixtureSource) {
+    console.error("usage: node wasi_threads_flow_harness.mjs <runtime.wasm> <fixtures.json|ephemeris-dir> [--sample N]");
+    process.exit(2);
+  }
+  const publishedBytes = new Uint8Array(readFileSync(wasmPath));
+  const moduleBytes = extractPublicationRecordCollection(publishedBytes)?.payloadBytes ?? publishedBytes;
+  let fixtures;
+  let selectedObjects = 0;
+  if (statSync(fixtureSource).isDirectory()) {
+    const allFiles = readdirSync(fixtureSource)
+      .filter((name) => /^MEME_.*\.txt$/.test(name))
+      .sort();
+    const sampleFlag = process.argv.indexOf("--sample");
+    const requested = sampleFlag >= 0 ? Number(process.argv[sampleFlag + 1]) : allFiles.length;
+    const sampleCount = Math.max(1, Math.min(allFiles.length, Number.isFinite(requested) ? Math.trunc(requested) : allFiles.length));
+    const selected = [];
+    for (let i = 0; i < sampleCount; i++) {
+      const index = sampleCount === 1
+        ? Math.floor((allFiles.length - 1) / 2)
+        : Math.round((i * (allFiles.length - 1)) / (sampleCount - 1));
+      selected.push(allFiles[index]);
+    }
+    selectedObjects = selected.length;
+    const baseUrl = "https://api.starlink.com/public-files/ephemerides/";
+    fixtures = {
+      [`${baseUrl}MANIFEST.txt`]: { body: `${selected.join("\n")}\n` },
+    };
+    for (const name of selected) fixtures[`${baseUrl}${name}`] = path.join(fixtureSource, name);
+  } else {
+    fixtures = JSON.parse(readFileSync(fixtureSource, "utf8"));
+  }
 
   // Shared memory sized from the module's imported-memory min, generous initial
   // to avoid frequent growth during the multi-object Eigen fit.
@@ -271,9 +325,10 @@ if (!isMainThread) {
   const sharedMemory = new WebAssembly.Memory({ initial: initialPages, maximum: 32768, shared: true });
   const tidSab = new SharedArrayBuffer(4);
   const osTidSab = new SharedArrayBuffer(4 * 1024); // per-guest-thread Node threadId slots
+  const metricsSab = new SharedArrayBuffer(8 * 4);
 
   const root = new Worker(new URL(import.meta.url), {
-    workerData: { role: "root", moduleBytes, sharedMemory, tidSab, osTidSab, fixtures },
+    workerData: { role: "root", moduleBytes, sharedMemory, tidSab, osTidSab, metricsSab, fixtures },
   });
   let done = false;
   root.on("message", (m) => {
@@ -283,9 +338,17 @@ if (!isMainThread) {
       const report = {
         ok: !m.err,
         error: m.err || null,
+        sample: { selectedObjects },
+        benchmark: {
+          elapsedMs: m.elapsedMs,
+          sourceBytes: m.stats.bytes,
+          sourceMiBPerSecond: m.elapsedMs > 0 ? (m.stats.bytes / 1048576) / (m.elapsedMs / 1000) : 0,
+          sharedMemoryBytes: m.sharedMemoryBytes,
+          maxRssKb: m.maxRssKb,
+        },
         threads: { spawnCount: m.spawnCount, distinctOsThreadIds: (m.osTids || []).length, ids: m.osTids || [] },
         drain: { nodesDispatched: m.dispatched },
-        http: { served: m.stats.httpServed, notFound: m.stats.http404 },
+        http: { calls: m.stats.calls, served: m.stats.served, bytes: m.stats.bytes, notFound: m.stats.notFound },
         store: m.store,
       };
       const spawned = m.spawnCount > 1 || (m.osTids || []).length > 1;

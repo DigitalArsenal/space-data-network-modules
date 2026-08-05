@@ -369,20 +369,31 @@ test("batch: offset/count select a window into the manifest", async () => {
   assert.equal(tail.count, 0, "tail window past the resolvable fixtures is empty");
 });
 
-test("range: object files are range-fetched to the fit window (Range header, 206)", async () => {
+test("pull: object ephemerides are always fetched as complete files", async () => {
   const { http } = await runPull({ objectCap: 2 });
   const memeFetches = (http || []).filter((h) => !h.url.endsWith("MANIFEST.txt"));
   assert.ok(memeFetches.length >= 1, "at least one object fetched");
   for (const f of memeFetches) {
-    assert.ok(f.headers.Range, `object fetch carries a Range header (${f.url})`);
-    assert.match(f.headers.Range, /^bytes=0-\d+$/, "Range is a leading byte window");
+    assert.ok(!f.headers.Range, `full-file fetch must not carry Range (${f.url})`);
   }
 });
 
-test("range: rangeBytes=0 opts out (full-file fetch, no Range header)", async () => {
-  const { http } = await runPull({ objectCap: 2, rangeBytes: 0 });
+test("pull: a legacy rangeBytes request cannot restore prefix-only fitting", async () => {
+  const { http } = await runPull({ objectCap: 2, rangeBytes: 131072 });
   const memeFetches = (http || []).filter((h) => !h.url.endsWith("MANIFEST.txt"));
   for (const f of memeFetches) {
-    assert.ok(!f.headers.Range, "no Range header when rangeBytes=0");
+    assert.ok(!f.headers.Range, "rangeBytes is ignored; every fit receives the complete file");
   }
+});
+
+test("source contract has no default prefix window and declares bounded parallel full-file batches", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "src", "spacex_starlink_source.cpp"),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /kDefaultRangeBytes|http_get_range\s*\(/);
+  assert.match(source, /kDefaultFetchConcurrency\s*=\s*64/);
+  assert.match(source, /kDefaultFlowBatchSize\s*=\s*64/);
+  assert.match(source, /std::thread/);
+  assert.match(source, /run_flow_batch/);
 });

@@ -41,14 +41,15 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "version": "0.6.0",
-      "sha256": "9b55369910514b1e7012b2f9174982bb379a37c584182d5ad8629b34968f3964",
+      "version": "0.7.0",
+      "sha256": "aa2dce71508d7a6174381251fe38061f7fa53b99d9a5c5668895bd0767b83c6c",
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
       "methodSymbols": {
         "route": "sdm_guest_636f6d2e6469676974616c61_route",
         "discover": "sdm_guest_636f6d2e6469676974616c61_discover",
         "route_public_query": "sdm_guest_636f6d2e6469676974616c61_route_public_query",
-        "route_node_status": "sdm_guest_636f6d2e6469676974616c61_route_node_status"
+        "route_node_status": "sdm_guest_636f6d2e6469676974616c61_route_node_status",
+        "route_node_activity": "sdm_guest_636f6d2e6469676974616c61_route_node_activity"
       }
     },
     {

@@ -1354,6 +1354,70 @@ FitResult fit_sgp4(
     return best_result;
 }
 
+std::vector<std::size_t> select_fit_epoch_indices(
+    const std::vector<EphemerisPoint>& points,
+    double fit_window_sec) {
+    std::vector<std::size_t> indices;
+    if (points.size() < 3) return indices;
+
+    const double window_sec = fit_window_sec > 0.0 ? fit_window_sec : 11520.0;
+    const double window_days = window_sec / SEC_PER_DAY;
+    const double first_jd = points.front().epoch_jd;
+    const double last_jd = points.back().epoch_jd;
+    indices.push_back(0);
+    if (!(last_jd - first_jd > window_days)) return indices;
+
+    // Leave at least three samples after every selected epoch. The final epoch
+    // starts about one fit window before the last state, so it is a full local
+    // fit rather than a degenerate two-point tail.
+    const std::size_t max_start = points.size() - 3;
+    auto index_at_or_after = [&](double target_jd) {
+        auto it = std::lower_bound(
+            points.begin(), points.end(), target_jd,
+            [](const EphemerisPoint& point, double target) {
+                return point.epoch_jd < target;
+            });
+        std::size_t index = static_cast<std::size_t>(it - points.begin());
+        if (index > max_start) index = max_start;
+        return index;
+    };
+
+    const double terminal_start_jd = last_jd - window_days;
+    for (double target = first_jd + window_days;
+         target < terminal_start_jd;
+         target += window_days) {
+        const std::size_t index = index_at_or_after(target);
+        if (index > indices.back()) indices.push_back(index);
+    }
+    const std::size_t terminal = index_at_or_after(terminal_start_jd);
+    if (terminal > indices.back()) indices.push_back(terminal);
+    return indices;
+}
+
+std::vector<FitResult> fit_sgp4_epoch_series(
+    const StateSeries& series,
+    const FitterConfig& config) {
+    FitterConfig cfg = config;
+    if (series.meta.position_only) cfg.position_only = true;
+
+    const std::vector<std::size_t> indices =
+        select_fit_epoch_indices(series.samples, cfg.fit_window_sec);
+    std::vector<FitResult> results;
+    results.reserve(indices.size());
+    for (const std::size_t index : indices) {
+        FitResult result = fit_single_epoch(series.samples, index, cfg);
+        if (series.meta.norad_cat_id > 0)
+            result.elements.norad_cat_id = series.meta.norad_cat_id;
+        if (!series.meta.object_name.empty())
+            result.elements.object_name = series.meta.object_name;
+        if (!series.meta.object_id.empty())
+            result.elements.object_id = series.meta.object_id;
+        result.elements.data_source = series.meta.data_source;
+        results.push_back(std::move(result));
+    }
+    return results;
+}
+
 FitResult fit_sgp4_series(
     const StateSeries& series,
     const FitterConfig& config) {

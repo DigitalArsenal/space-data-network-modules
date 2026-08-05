@@ -10,8 +10,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.foundation.http-route",
-      "minVersion": "0.6.0",
-      "maxVersion": "0.6.0"
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.node-status",

@@ -14,6 +14,26 @@ Read [`space-data-module-sdk/docs/browser-wasmedge-isomorphic.md`](../space-data
 for the isomorphic artifact contract: one `dist/isomorphic/module.wasm` that
 loads unchanged in both browser and WasmEdge.
 
+## Flow-Node Architecture
+
+- Flows are signed compositions of WASM nodes. Graph topology, routing,
+  scheduling policy, state machines, provider behavior, and application logic
+  remain in the flow artifact, never in Go or JavaScript host code.
+- FlatSQL is a canonical signed WASM module that a flow declares and connects
+  as a pluggable node. Do not model it as a `hostcap` store,
+  `storage_engine_link`, Go service, or JavaScript database, and do not
+  statically fold it into a consuming module.
+- Timer/cron policy is a WASM node. Hosts supply clocks and generic wakeups
+  only.
+- Every input and output accepted type set declares both canonical SDS
+  FlatBuffer and aligned-binary representations for the same logical schema.
+  The compiler must reject missing or incompatible pairs.
+- `PIV`/`TAB.WIRE_FORMAT` selects the representation per frame. Aligned-binary
+  is used only for compatible shared-memory routes; canonical FlatBuffers are
+  mandatory for durable, network, publication, and fallback boundaries.
+- The same signed artifact bytes and hash must execute in the browser harness
+  and WasmEdge. Host-specific flow binaries are forbidden.
+
 ## When Working In This Repository
 
 Packages are organized by family subfolder (e.g., `propagator/`, `analysis/`,
@@ -95,6 +115,8 @@ whatever `AEROSPACE_IVV_EXTRACTED_ROOT` points to. The archive smoke tests use
 ## What Belongs Here
 
 - Individual SDN module packages and their published `dist/` outputs.
+- Signed flow graphs and composed flow artifacts under `flows/`, including
+  explicit FlatSQL and timer node dependencies.
 - Module-specific C++/WASM source, manifests, build scripts, and tests.
 - Basilisk-derived runtime seeds, module plans, standards maps, and thin
   wrappers that use `../basilisk` as the upstream source of truth.
@@ -104,6 +126,7 @@ whatever `AEROSPACE_IVV_EXTRACTED_ROOT` points to. The archive smoke tests use
 ## What Does Not Belong Here
 
 - SDK internals — those live in `space-data-module-sdk`.
-- Application-specific host behavior — that belongs in the host repo (OrbPro,
-  `sdn-js`, Go SDN).
-- Flow composition and runtime orchestration belong in host repos such as OrbPro and Space Data Network.
+- Application-specific behavior belongs in signed module/flow artifacts or the
+  consuming UI, not in `sdn-js`, Go SDN, or another host control plane.
+- Hosts may install, verify, launch, and connect artifacts generically; flow
+  composition and runtime orchestration semantics remain in the signed flow.

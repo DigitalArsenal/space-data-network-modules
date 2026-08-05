@@ -124,6 +124,35 @@ extern "C" int fit(void) {
       last_rc = emit_provenance(r.obd, provider);
       if (last_rc < 0) return last_rc;
     }
+
+    // Complete-arc continuation epochs for the same input object. Each local
+    // fit carries its own epoch/RMS/covariance and the same provider sidecar;
+    // no host control-plane code interprets or expands these records.
+    for (const od::BatchEpochResult& epoch : r.additional_epochs) {
+      last_rc = plugin_push_output_ex(
+          "omm", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
+          0, 8, epoch.omm.data(), static_cast<uint32_t>(epoch.omm.size()));
+      if (last_rc < 0) return last_rc;
+      last_rc = emit_provenance(epoch.omm, provider);
+      if (last_rc < 0) return last_rc;
+
+      if (!epoch.ocm.empty()) {
+        last_rc = plugin_push_output_ex(
+            "ocm", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OCM",
+            0, 8, epoch.ocm.data(), static_cast<uint32_t>(epoch.ocm.size()));
+        if (last_rc < 0) return last_rc;
+        last_rc = emit_provenance(epoch.ocm, provider);
+        if (last_rc < 0) return last_rc;
+      }
+      if (!epoch.obd.empty()) {
+        last_rc = plugin_push_output_ex(
+            "obd", "OBD.fbs", "$OBD", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OBD",
+            0, 8, epoch.obd.data(), static_cast<uint32_t>(epoch.obd.size()));
+        if (last_rc < 0) return last_rc;
+        last_rc = emit_provenance(epoch.obd, provider);
+        if (last_rc < 0) return last_rc;
+      }
+    }
   }
   return 0;
 }

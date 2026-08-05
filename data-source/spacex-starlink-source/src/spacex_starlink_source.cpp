@@ -24,7 +24,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <algorithm>
+#include <atomic>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "provider_source.hpp"
@@ -53,6 +56,13 @@ static const char* kDefaultManifestURL =
 // never busy-waits) and stays an optional override.
 static const long kDefaultObjectCap = 0;        // 0 => unlimited (whole constellation)
 static const long kDefaultFetchIntervalMs = 0;  // 0 => no artificial inter-object spacing
+// The production artifact is wasi-threads. Sixty-four bounded workers matches
+// the generic host's concurrently-live worker quota and is enough to keep the
+// network busy without creating one thread per catalog object.
+static const long kDefaultFetchConcurrency = 64;
+// One full-file page at a time keeps raw OEM input bounded while OD and storage
+// drain between pages. The generic flow scheduler resumes yielded pages.
+static const long kDefaultFlowBatchSize = 64;
 
 extern "C" {
 // Guest allocator used by the host to pass request/response buffers.
@@ -74,13 +84,6 @@ using namespace meme_oem;  // MemeMeta/parse_meme/build_oem_fb (src/meme_oem.hpp
 // START_TIME, STOP_TIME, STEP_SIZE, STATE_VECTOR_SIZE, EPHEMERIS_DATA } plus
 // ── Config (optional, from the invoke request payload) ───────────────────────
 
-// Per-object range-fetch cap: only the first ~2-3 orbits of the multi-day MEME
-// file are needed (the OD fit windows to ~2 orbits internally and the accuracy is
-// lossless — see analysis/od test_downsample_accuracy). 128 KiB of a Starlink MEME
-// (~118 B/line, 4 lines/state) is ~270 states ≈ ~4.5 h ≈ ~2.8 orbits. api.starlink.com
-// honors byte ranges (HTTP 206), cutting per-object download ~16x (2 MB -> 128 KB).
-static const long kDefaultRangeBytes = 131072;
-
 struct PullConfig {
     long object_cap = kDefaultObjectCap;   // <=0 => unlimited (emit the whole catalog)
     long fetch_interval_ms = kDefaultFetchIntervalMs;
@@ -89,7 +92,8 @@ struct PullConfig {
     // count<0 => the whole [0, object_cap) span (legacy single-shot behavior).
     long offset = -1;
     long count = -1;
-    long range_bytes = kDefaultRangeBytes; // 0 => full file (no Range header)
+    long fetch_concurrency = kDefaultFetchConcurrency;
+    long flow_batch_size = kDefaultFlowBatchSize;
     bool probe = false;                    // true => return only the total object count (u32le)
 };
 
@@ -111,8 +115,12 @@ PullConfig parse_config(const uint8_t* req, uint32_t len) {
     if (off >= 0) c.offset = off;
     long cnt = ps::json_number_field(json, "count", -1);
     if (cnt >= 0) c.count = cnt;
-    long rb = ps::json_number_field(json, "rangeBytes", -1);
-    if (rb >= 0) c.range_bytes = rb;
+    long concurrency = ps::json_number_field(json, "fetchConcurrency", -1);
+    if (concurrency > 0) c.fetch_concurrency = std::min<long>(concurrency, 64);
+    long batch_size = ps::json_number_field(json, "batchSize", -1);
+    if (batch_size > 0) c.flow_batch_size = std::min<long>(batch_size, 64);
+    // Deliberately ignore the retired rangeBytes option. Every object is fetched
+    // with a plain GET and an HTTP 200 response before any fitting can occur.
     if (json.find("\"probe\":true") != std::string::npos) c.probe = true;
     return c;
 }
@@ -127,82 +135,158 @@ static inline void put_u32le(std::string& s, size_t at, uint32_t v) {
 
 // ── The pull method ──────────────────────────────────────────────────────────
 
-std::string run_pull(const uint8_t* req, uint32_t req_len) {
-    PullConfig cfg = parse_config(req, req_len);
+struct PullRecords {
+    std::vector<std::vector<uint8_t>> records;
+};
 
-    ps::HttpResult manifest = ps::http_get(cfg.manifest_url);
-    std::vector<std::string> entries = ps::listing_lines(manifest.body, "MEME_");
+std::vector<uint8_t> fetch_complete_oem(const std::string& filename) {
+    const std::string url = std::string(kBaseURL) + filename;
+    // A plain GET and HTTP 200 are mandatory. A 206 response is partial by
+    // definition and is rejected so a proxy/upstream cannot silently restore a
+    // prefix-only fit.
+    ps::HttpResult obj = ps::http_get(url);
+    if (obj.status != 200 || obj.body.empty()) return {};
 
-    // Total objects this pull will cover. DEFAULT = the WHOLE manifest (no host
-    // pager in the WASM-only flow); a positive objectCap override bounds it.
+    MemeMeta meta;
+    parse_meme_filename(filename, &meta);
+    std::vector<double> states;
+    const std::string content(obj.body.begin(), obj.body.end());
+    parse_meme(content, &meta, &states);
+    if (states.empty()) return {};
+    return build_oem_fb(meta, states);
+}
+
+PullRecords fetch_complete_span(const std::vector<std::string>& entries,
+                                long start,
+                                long end,
+                                long requested_concurrency) {
+    PullRecords out;
+    if (start < 0) start = 0;
+    if (end < start) end = start;
+    const std::size_t span = static_cast<std::size_t>(end - start);
+    if (span == 0) return out;
+
+    std::vector<std::vector<uint8_t>> ordered(span);
+    const std::size_t worker_count = std::min<std::size_t>(
+        span, static_cast<std::size_t>(std::max<long>(1, requested_concurrency)));
+    std::atomic<std::size_t> next{0};
+    auto worker = [&]() {
+        for (;;) {
+            const std::size_t local = next.fetch_add(1, std::memory_order_relaxed);
+            if (local >= span) break;
+            ordered[local] = fetch_complete_oem(entries[static_cast<std::size_t>(start) + local]);
+        }
+    };
+
+    // The flow guest is compiled with wasm atomics + wasi-threads. The separate
+    // legacy Emscripten reactor is intentionally kept single-threaded for its JS
+    // fixture harness, while native builds exercise the same bounded pool.
+#if !defined(__wasm__) || defined(__wasm_atomics__) || defined(__EMSCRIPTEN_PTHREADS__)
+    std::vector<std::thread> workers;
+    workers.reserve(worker_count > 0 ? worker_count - 1 : 0);
+    for (std::size_t i = 1; i < worker_count; ++i) workers.emplace_back(worker);
+    worker();
+    for (std::thread& thread : workers) thread.join();
+#else
+    worker();
+#endif
+
+    out.records.reserve(span);
+    for (std::vector<uint8_t>& record : ordered) {
+        if (!record.empty()) out.records.push_back(std::move(record));
+    }
+    return out;
+}
+
+std::string encode_oem_stream(const std::vector<std::vector<uint8_t>>& records) {
+    std::size_t total_size = 4;
+    for (const auto& record : records) total_size += 4 + record.size();
+    std::string stream(4, '\0');
+    stream.reserve(total_size);
+    for (const auto& record : records) {
+        const std::size_t header = stream.size();
+        stream.append(4, '\0');
+        put_u32le(stream, header, static_cast<uint32_t>(record.size()));
+        stream.append(reinterpret_cast<const char*>(record.data()), record.size());
+    }
+    put_u32le(stream, 0, static_cast<uint32_t>(records.size()));
+    return stream;
+}
+
+long limited_total(const PullConfig& cfg, const std::vector<std::string>& entries) {
     long total = static_cast<long>(entries.size());
     if (cfg.object_cap > 0 && total > cfg.object_cap) total = cfg.object_cap;
-    if (total < 0) total = 0;
+    return std::max<long>(0, total);
+}
 
-    // Probe mode: the host learns how many objects exist so it can schedule
-    // concurrent [offset,count) batches. Return the total as a bare u32le.
+// Legacy/direct pull surface: still supports explicit offset/count benchmarking,
+// but every selected object is fetched in full and the selected span is fetched
+// concurrently. The composed flow uses run_flow_batch below to bound memory.
+std::string run_pull(const uint8_t* req, uint32_t req_len) {
+    const PullConfig cfg = parse_config(req, req_len);
+    const ps::HttpResult manifest = ps::http_get(cfg.manifest_url);
+    const std::vector<std::string> entries = ps::listing_lines(manifest.body, "MEME_");
+    const long total = limited_total(cfg, entries);
+
     if (cfg.probe) {
-        std::string out(4, '\0');
-        put_u32le(out, 0, static_cast<uint32_t>(total));
-        return out;
+        std::string result(4, '\0');
+        put_u32le(result, 0, static_cast<uint32_t>(total));
+        return result;
     }
 
-    // Batch window into the manifest. Default (offset<0 / count<0) = the whole
-    // [0,total) span (legacy single-shot). Host-driven batches pass explicit
-    // offset+count so many small pulls run concurrently with bounded memory.
-    long start = (cfg.offset >= 0) ? cfg.offset : 0;
-    long end = (cfg.count >= 0) ? (start + cfg.count) : total;
-    if (start > total) start = total;
-    if (end > total) end = total;
+    long start = cfg.offset >= 0 ? cfg.offset : 0;
+    long end = cfg.count >= 0 ? start + cfg.count : total;
+    start = std::min(start, total);
+    end = std::min(end, total);
+    return encode_oem_stream(
+        fetch_complete_span(entries, start, end, cfg.fetch_concurrency).records);
+}
 
-    // Emit an $OEM STREAM, never a store: fetch + parse + build one aligned-binary
-    // SDS $OEM per object and frame it into a length-prefixed stream the OD runner
-    // splits into the transient per-object set fed to the FlowPool. Ephemeris is
-    // in-memory only (SDN OD-flow invariant) — no storage.write / sign / publish;
-    // provenance rides on the RESULT $OMM/$OCM/$OBD the OD flow's store node writes.
-    // Stream layout: [u32le count]  then count x ( [u32le len][non-size-prefixed $OEM] ).
-    std::string stream(4, '\0');  // reserve the count header
-    // Bound peak memory for the full-catalog emit: pre-reserve an estimate (~14 KiB
-    // per range-fetched $OEM = ~264 states * 48 B + FlatBuffer overhead) so the
-    // accumulating stream never reallocates by doubling. Without this the final
-    // ~150 MB (~11k Starlink) would transiently need ~2x during the last grow.
-    // Negligible for the small-fixture test path (a few objects).
-    {
-        const size_t est_per_oem = 14336;
-        const size_t span = (end > start) ? static_cast<size_t>(end - start) : 0;
-        stream.reserve(4 + span * est_per_oem);
-    }
-    uint32_t count = 0;
+struct FlowPullBatch {
+    std::vector<std::vector<uint8_t>> records;
+    uint32_t backlog_remaining = 0;
+};
 
-    for (long i = start; i < end; ++i) {
-        const std::string& filename = entries[static_cast<size_t>(i)];
-        std::string url = std::string(kBaseURL) + filename;
-        // Range-fetch only the fit window (first ~2-3 orbits) unless rangeBytes==0.
-        ps::HttpResult obj = (cfg.range_bytes > 0)
-                                 ? ps::http_get_range(url, cfg.range_bytes)
-                                 : ps::http_get(url);
-        // Range servers reply 206 (partial); non-range servers reply 200 (full).
-        if ((obj.status != 200 && obj.status != 206) || obj.body.empty()) continue;
+struct FlowPullState {
+    PullConfig config;
+    std::vector<std::string> entries;
+    long next = 0;
+    long total = 0;
+    bool active = false;
+};
 
-        MemeMeta m;
-        parse_meme_filename(filename, &m);
-        std::vector<double> states;
-        std::string content(obj.body.begin(), obj.body.end());
-        parse_meme(content, &m, &states);  // drops the truncated trailing record
-        if (states.empty()) continue;
+FlowPullState g_flow_pull;
 
-        std::vector<uint8_t> oem = build_oem_fb(m, states);  // in-memory $OEM (TEME)
-        if (oem.empty()) continue;
-
-        const size_t hdr = stream.size();
-        stream.append(4, '\0');
-        put_u32le(stream, hdr, static_cast<uint32_t>(oem.size()));
-        stream.append(reinterpret_cast<const char*>(oem.data()), oem.size());
-        count++;
+// Persistent WASM-only pager. The first timer/config frame captures the complete
+// manifest. Each invocation performs one bounded, parallel, full-file page;
+// emit_entry marks a positive backlog as yielded and the generic runtime resumes
+// this function after downstream OD/storage have had a chance to drain.
+FlowPullBatch run_flow_batch(const uint8_t* req, uint32_t req_len) {
+    if (!g_flow_pull.active) {
+        g_flow_pull.config = parse_config(req, req_len);
+        const ps::HttpResult manifest = ps::http_get(g_flow_pull.config.manifest_url);
+        g_flow_pull.entries = ps::listing_lines(manifest.body, "MEME_");
+        g_flow_pull.total = limited_total(g_flow_pull.config, g_flow_pull.entries);
+        g_flow_pull.next = 0;
+        g_flow_pull.active = g_flow_pull.total > 0;
     }
 
-    put_u32le(stream, 0, count);
-    return stream;
+    FlowPullBatch batch;
+    if (!g_flow_pull.active) return batch;
+    const long end = std::min(
+        g_flow_pull.total, g_flow_pull.next + g_flow_pull.config.flow_batch_size);
+    PullRecords fetched = fetch_complete_span(
+        g_flow_pull.entries, g_flow_pull.next, end,
+        g_flow_pull.config.fetch_concurrency);
+    batch.records = std::move(fetched.records);
+    g_flow_pull.next = end;
+    batch.backlog_remaining = static_cast<uint32_t>(
+        std::max<long>(0, g_flow_pull.total - g_flow_pull.next));
+    if (batch.backlog_remaining == 0) {
+        g_flow_pull.active = false;
+        g_flow_pull.entries.clear();
+    }
+    return batch;
 }
 
 }  // namespace

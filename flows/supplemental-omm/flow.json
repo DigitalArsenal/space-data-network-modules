@@ -3,6 +3,7 @@
   "name": "Supplemental OMM Orbit Determination",
   "version": "1.0.0",
   "description": "Signed isomorphic graph: one WASM timer policy fans typed ticks to five independent provider nodes; provider FSB ephemerides feed an independent OD node; fitted FSB records reach independently signed FlatSQL, publication, and status nodes. Hosts expose only application-blind capabilities and never own schedule, storage, status, or publication policy.",
+  "allowCycles": true,
   "nodes": [
     {
       "nodeId": "timer",
@@ -35,7 +36,7 @@
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "2438dcd006c6e51540c7479ac8e1f43cc9e0c5388f4486b7300aa4d6c807c0bb"
+        "sha256": "ffb27b6965c9caf4e0e4df516e693390568602a1493cc2203c713a740ccb090b"
       }
     },
     {
@@ -113,7 +114,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "3d20add1211c79012e31fa48b046ba04aa4cbd4e648637db8037793938f5796b"
+        "sha256": "952227b000a57578f0986b652b5ecb8d551b1d160ac9db7db26628863bbcbb7a"
       }
     },
     {
@@ -216,7 +217,7 @@
       "toNodeId": "od",
       "toPortId": "starlink",
       "backpressurePolicy": "queue",
-      "queueDepth": 65536
+      "queueDepth": 256
     },
     {
       "edgeId": "glonass-native-to-od",
@@ -261,7 +262,7 @@
       "toNodeId": "store",
       "toPortId": "control",
       "backpressurePolicy": "queue",
-      "queueDepth": 1
+      "queueDepth": 64
     },
     {
       "edgeId": "od-status-to-status",
@@ -279,7 +280,7 @@
       "toNodeId": "store",
       "toPortId": "records",
       "backpressurePolicy": "queue",
-      "queueDepth": 65536
+      "queueDepth": 64
     },
     {
       "edgeId": "od-ocm-to-store",
@@ -288,16 +289,7 @@
       "toNodeId": "store",
       "toPortId": "records",
       "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
-      "edgeId": "od-obd-to-store",
-      "fromNodeId": "od",
-      "fromPortId": "obd",
-      "toNodeId": "store",
-      "toPortId": "records",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
+      "queueDepth": 64
     },
     {
       "edgeId": "starlink-progress-to-status",
@@ -363,15 +355,6 @@
       "queueDepth": 65536
     },
     {
-      "edgeId": "od-obd-to-publication",
-      "fromNodeId": "od",
-      "fromPortId": "obd",
-      "toNodeId": "publication",
-      "toPortId": "records",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
       "edgeId": "store-status-to-status",
       "fromNodeId": "store",
       "fromPortId": "status",
@@ -379,6 +362,15 @@
       "toPortId": "store",
       "backpressurePolicy": "queue",
       "queueDepth": 65536
+    },
+    {
+      "edgeId": "store-status-to-starlink-ack",
+      "fromNodeId": "store",
+      "fromPortId": "status",
+      "toNodeId": "provider-starlink",
+      "toPortId": "ack",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64
     }
   ],
   "runtimeNodeRoutes": [

@@ -123,6 +123,9 @@ if(NOT EMSCRIPTEN)
     add_executable(test_downsample_accuracy tests/test_downsample_accuracy.cpp)
     target_link_libraries(test_downsample_accuracy od_lib)
 
+    add_executable(test_epoch_coverage tests/test_epoch_coverage.cpp)
+    target_link_libraries(test_epoch_coverage od_lib)
+
     # SACRED parity gate: fitting an $OEM FlatBuffer built from the ISS fixture
     # must match the KVN text path bit-for-bit (RMS + every mean element). This
     # test builds the $OEM FlatBuffer, so it needs the SDS + flatbuffers headers.

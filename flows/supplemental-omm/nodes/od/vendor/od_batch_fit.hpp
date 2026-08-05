@@ -2,9 +2,10 @@
 // objects across workers). Mirrors the analysis/conjunction-assessment
 // std::thread work-stealing fan-out (src/cpp/src/plugin_invoke_bridge.cpp): a
 // std::atomic next-index hands each worker the next object; each worker runs the
-// SACRED per-object fit (od::fit_ephemeris_fb) over an in-memory $OEM and emits
-// $OMM + $OBD + $OCM. Results are indexed by INPUT ORDER so the batch output is
-// byte-identical regardless of worker count (RMS bit-parity is preserved:
+// SACRED per-object fit (od::fit_ephemeris_epochs_fb) over an in-memory $OEM
+// and emits epoch-specific $OMM + $OCM records. Results are indexed by INPUT
+// ORDER so the batch output is byte-identical regardless of worker count
+// (RMS bit-parity is preserved:
 // per-object fits are independent and deterministic).
 //
 // This is the isomorphic-pthreads unit: built with the wasi-threads toolchain it
@@ -23,11 +24,11 @@ namespace od {
 
 struct BatchObject {
     std::vector<uint8_t> oem;  // one in-memory $OEM FlatBuffer (non-size-prefixed)
+    std::string fit_options;   // deterministic per-input fitter policy
 };
 
 struct BatchEpochResult {
     std::vector<uint8_t> omm;
-    std::vector<uint8_t> obd;
     std::vector<uint8_t> ocm;
     double rms_km = 0.0;
     bool converged = false;
@@ -36,12 +37,12 @@ struct BatchEpochResult {
 struct BatchResult {
     bool ok = false;
     std::vector<uint8_t> omm;   // size-prefixed $OMM
-    std::vector<uint8_t> obd;   // size-prefixed $OBD
     std::vector<uint8_t> ocm;   // size-prefixed $OCM (STATE + real fit COVARIANCE)
     double rms_km = 0.0;
     bool converged = false;
     std::string error_code;
     std::string error_message;
+    bool terminal_reentry_ocm_only = false;
     // The first local epoch stays in the legacy scalar fields above for the
     // command/resident benchmark ABI. Every later complete-arc local fit is
     // retained here and the composed flow emits all of them.
@@ -61,11 +62,10 @@ struct BatchRunStats {
 // so relying on it single-threads the pool and NO std::thread ever spawns. This
 // fixed positive default guarantees the bounded work-stealing pool actually
 // spawns workers; run_batch_fit clamps it down to the object count, so a batch of
-// one still degenerates to a single fit. 8 gives real parallelism on the 2-vCPU
-// prod node plus the observable >1-thread spawn proof, without a
-// one-thread-per-object blow-up on the ~11k-object catalog (work-stealing churns
-// the full set across the 8 workers).
-inline constexpr int kOdFitDefaultThreads = 8;
+// one still degenerates to a single fit. 16 matches the signed node's bounded
+// admission width and the measured server throughput target without a
+// one-thread-per-object blow-up on the full catalog.
+inline constexpr int kOdFitDefaultThreads = 16;
 
 // Fit an entire batch. worker_count = clamp(num_threads>0 ? num_threads :
 // (hardware_concurrency()>=2 ? hardware_concurrency() : kOdFitDefaultThreads), 1,

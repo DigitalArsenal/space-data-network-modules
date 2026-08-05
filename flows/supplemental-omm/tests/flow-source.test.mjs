@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -105,10 +106,14 @@ test("timer, native provider, OD, FlatSQL, publication, and status lanes are exp
   );
   assert.ok(actual.has("od.control->store.control"));
   assert.ok(actual.has("od.status->status.od"));
-  for (const record of ["omm", "ocm", "obd"]) {
+  for (const record of ["omm", "ocm"]) {
     assert.ok(actual.has(`od.${record}->store.records`));
     assert.ok(actual.has(`od.${record}->publication.records`));
   }
+  assert.ok(
+    [...actual].every((edge) => !/(?:^|\.)obd(?:\.|->|$)/i.test(edge)),
+    "OBD is not a Supplemental OMM graph lane",
+  );
   assert.ok(actual.has("store.status->status.store"));
   assert.ok(
     flow.runtimeNodeRoutes.some(
@@ -139,6 +144,98 @@ test("timer, native provider, OD, FlatSQL, publication, and status lanes are exp
   ]);
 });
 
+test("FlatSQL success feeds the signed Starlink cursor through one bounded cycle", () => {
+  const flow = readJson("flow.json");
+  const actual = new Set(flow.edges.map(edgeKey));
+  assert.equal(flow.allowCycles, true);
+  assert.ok(
+    actual.has("store.status->provider-starlink.ack"),
+    "the durable FlatSQL status must reach the WASM node that owns the cursor",
+  );
+
+  const cycleNodeIds = new Set(["provider-starlink", "od", "store"]);
+  const cycleEdges = flow.edges.filter(
+    (edge) =>
+      cycleNodeIds.has(edge.fromNodeId) && cycleNodeIds.has(edge.toNodeId),
+  );
+  assert.deepEqual(
+    new Set(cycleEdges.map(edgeKey)),
+    new Set([
+      "provider-starlink.oem->od.starlink",
+      "od.control->store.control",
+      "od.omm->store.records",
+      "od.ocm->store.records",
+      "store.status->provider-starlink.ack",
+    ]),
+  );
+  const expectedQueueDepth = new Map([
+    ["starlink-native-to-od", 256],
+    ["od-control-to-store", 64],
+    ["od-omm-to-store", 64],
+    ["od-ocm-to-store", 64],
+    ["store-status-to-starlink-ack", 64],
+  ]);
+  for (const edge of cycleEdges) {
+    assert.equal(
+      edge.backpressurePolicy,
+      "queue",
+      `${edge.edgeId} cannot drop a source transaction or its only acknowledgement`,
+    );
+    assert.equal(
+      edge.queueDepth,
+      expectedQueueDepth.get(edge.edgeId),
+      `${edge.edgeId} must match its signed producer frame bound`,
+    );
+  }
+  const starlinkMethod = readJson(
+    "nodes/providers/starlink/plugin-manifest.json",
+  ).methods
+    .find(({ methodId }) => methodId === "emit");
+  const starlinkInput = starlinkMethod?.inputPorts.find(
+    ({ portId }) => portId === "ack",
+  );
+  const starlinkOutput = starlinkMethod?.outputPorts.find(
+    ({ portId }) => portId === "oem",
+  );
+  assert.ok(starlinkInput, "Starlink must declare the FlatSQL acknowledgement input");
+  assert.equal(starlinkInput.maxStreams, 64);
+  assert.equal(starlinkOutput?.maxStreams, 256);
+  assert.equal(starlinkMethod?.maxBatch, 64);
+  const allowedTypes = starlinkInput.acceptedTypeSets?.[0]?.allowedTypes ?? [];
+  assert.equal(allowedTypes.length, 2);
+  assert.ok(allowedTypes.every(({ schemaName }) => schemaName === "FSO.fbs"));
+  assert.deepEqual(
+    new Set(allowedTypes.map(({ wireFormat }) => wireFormat)),
+    new Set(["flatbuffer", "aligned-binary"]),
+  );
+});
+
+test("OBD is absent from the executable Supplemental application surface", () => {
+  const executableFiles = [
+    "flow.json",
+    "app/app.json",
+    "app/ui/index.html",
+    "nodes/od/src/node.cpp",
+    "nodes/od/manifest.mjs",
+    "nodes/od/build.mjs",
+    "nodes/od/README.md",
+    "nodes/od/vendor/od_batch_fit.hpp",
+    "nodes/od/plugin-manifest.json",
+    "nodes/od/dist/isomorphic/module.wasm",
+    "nodes/flatsql/README.md",
+  ];
+  for (const relativePath of executableFiles) {
+    const source = fs
+      .readFileSync(requireFile(relativePath))
+      .toString(relativePath.endsWith(".wasm") ? "latin1" : "utf8");
+    assert.doesNotMatch(
+      source,
+      /\bOBD\b|\$OBD|\bobd\b/i,
+      `${relativePath} still exposes OBD`,
+    );
+  }
+});
+
 test("every child dependency resolves to an independently packaged module", () => {
   const flow = readJson("flow.json");
   const deps = readJson("deps.json");
@@ -157,7 +254,13 @@ test("every child dependency resolves to an independently packaged module", () =
       fs.readFileSync(path.join(dependencyRoot, "plugin-manifest.json"), "utf8"),
     );
     assert.equal(manifest.pluginId, node.pluginId);
-    assert.ok(fs.existsSync(path.resolve(packageRoot, node.artifact.path)));
+    const artifactPath = path.resolve(packageRoot, node.artifact.path);
+    assert.ok(fs.existsSync(artifactPath));
+    assert.equal(
+      crypto.createHash("sha256").update(fs.readFileSync(artifactPath)).digest("hex"),
+      node.artifact.sha256,
+      `${node.nodeId} graph binding must match its exact signed child bytes`,
+    );
     assert.ok(fs.existsSync(path.resolve(packageRoot, node.artifact.publisher)));
     assert.doesNotMatch(deps[node.pluginId], /guest-link|hostcap/);
   }

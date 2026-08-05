@@ -260,6 +260,35 @@ bool build_meme_series(std::string_view content, StateSeries* out,
     return true;
 }
 
+PluginFitFBResult build_fit_record_set(const FitResult& fit,
+                                       const FitterConfig& config,
+                                       double fit_span_days) {
+    PluginFitFBResult result{};
+    result.omm = build_omm_flatbuffer(fit.elements);
+    result.obd = build_obd_flatbuffer(fit.elements, fit_span_days);
+
+    OCMInputs ocm{};
+    ocm.el = &fit.elements;
+    ocm.has_state = fit.has_state_covariance;
+    ocm.has_covariance = fit.has_state_covariance;
+    if (fit.has_state_covariance) {
+        for (int i = 0; i < 6; i++) ocm.state_teme[i] = fit.state_teme[i];
+        for (int i = 0; i < 21; i++) ocm.covariance[i] = fit.state_covariance[i];
+    }
+    ocm.rms_km = fit.elements.rms_km;
+    ocm.num_observations = fit.cov_num_observations;
+    ocm.iterations = fit.elements.iterations;
+    ocm.converged = fit.elements.converged;
+    ocm.convergence_tol = config.convergence_tol;
+    result.ocm = build_ocm_flatbuffer(ocm, "SDN-OD", fit.elements.epoch_iso);
+
+    result.rms_km = fit.elements.rms_km;
+    result.converged = fit.elements.converged;
+    result.mean_motion = fit.elements.mean_motion;
+    result.ok = true;
+    return result;
+}
+
 }  // namespace
 
 PluginFitResult fit_ephemeris_payload(
@@ -395,6 +424,59 @@ PluginFitFBResult fit_ephemeris_fb(
         result.error_message = "Unknown plugin error.";
     }
     return result;
+}
+
+std::vector<PluginFitFBResult> fit_ephemeris_epochs_fb(
+    const uint8_t* oem_buf,
+    std::size_t oem_len,
+    std::string_view options_json) {
+    std::vector<PluginFitFBResult> results;
+    try {
+        OEMParseResult parsed = read_oem_flatbuffer(oem_buf, oem_len);
+        if (!parsed.ok) {
+            PluginFitFBResult error{};
+            error.error_code = parsed.error_code;
+            error.error_message = parsed.error_message;
+            results.push_back(std::move(error));
+            return results;
+        }
+        StateSeries series = std::move(parsed.series);
+        apply_series_labels(&series, options_json);
+
+        FitterConfig config = parse_fit_options(options_json);
+        config.compute_covariance = true;
+        std::vector<FitResult> fits = fit_sgp4_epoch_series(series, config);
+        if (fits.empty()) {
+            PluginFitFBResult error{};
+            error.error_code = "insufficient-ephemeris";
+            error.error_message = "At least three complete ephemeris states are required.";
+            results.push_back(std::move(error));
+            return results;
+        }
+
+        results.reserve(fits.size());
+        const double last_jd = series.samples.back().epoch_jd;
+        const double max_span_days = config.fit_window_sec / 86400.0;
+        for (const FitResult& fit : fits) {
+            const double available_days =
+                std::max(0.0, last_jd - fit.elements.epoch_jd);
+            const double fit_span_days =
+                std::min(max_span_days, available_days);
+            results.push_back(build_fit_record_set(fit, config, fit_span_days));
+        }
+        return results;
+    } catch (const std::exception& ex) {
+        PluginFitFBResult error{};
+        error.error_code = "fit-failed";
+        error.error_message = ex.what();
+        results.push_back(std::move(error));
+    } catch (...) {
+        PluginFitFBResult error{};
+        error.error_code = "fit-failed";
+        error.error_message = "Unknown plugin error.";
+        results.push_back(std::move(error));
+    }
+    return results;
 }
 
 }  // namespace od

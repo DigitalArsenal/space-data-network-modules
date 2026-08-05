@@ -13,5 +13,8 @@
 #include "spacex_starlink_source.cpp"  // provides run_pull() (anonymous namespace, same TU)
 
 extern "C" __attribute__((visibility("default"))) int emit(void) {
-  return od_flow::emit_via(&run_pull);
+  plugin_reset_output_state();
+  const od_flow::ConfigInput config = od_flow::read_config_input();
+  FlowPullBatch batch = run_flow_batch(config.data, config.size);
+  return od_flow::emit_oem_batch(batch.records, batch.backlog_remaining, true);
 }

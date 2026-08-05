@@ -40,7 +40,7 @@ function fsbPort(portId, description, output = false) {
       },
     ],
     minStreams: 0,
-    maxStreams: output ? 100_000 : 4096,
+    maxStreams: 64,
     required: false,
     description,
   };
@@ -71,7 +71,7 @@ export const manifest = {
   name: "Supplemental OMM Native Orbit Determination",
   version: "1.0.0",
   description:
-    "Reassembles complete provider-native response chunks inside WASM, parses each provider format, fits the complete ephemeris with the OD core, and emits multiple epoch-specific OMM, OCM, and OBD record streams.",
+    "Reassembles complete provider-native response chunks inside WASM, parses each provider format, fits bounded batches of complete ephemerides with the OD core, and emits multiple epoch-specific OMM and OCM record streams.",
   pluginFamily: "analysis",
   capabilities: [],
   externalInterfaces: [],
@@ -91,18 +91,17 @@ export const manifest = {
       outputPorts: [
         fsoPort(
           "control",
-          "Idempotent FlatSQL CONFIGURE_INDEX control containing the complete canonical result schema and OMM/OCM/OBD table bindings.",
+          "Idempotent FlatSQL CONFIGURE_INDEX control containing the complete canonical result schema and OMM/OCM table bindings.",
         ),
         fsoPort(
           "status",
           "One typed OD outcome for each consumed complete provider response or fitted logical object.",
-          { required: false, maxStreams: 4096 },
+          { required: false, maxStreams: 64 },
         ),
         fsbPort("omm", "Size-prefixed canonical OMM records in FSB record streams.", true),
         fsbPort("ocm", "Size-prefixed canonical OCM records in FSB record streams.", true),
-        fsbPort("obd", "Size-prefixed canonical OBD records in FSB record streams.", true),
       ],
-      maxBatch: 4096,
+      maxBatch: 64,
       drainPolicy: "drain-until-yield",
     },
   ],

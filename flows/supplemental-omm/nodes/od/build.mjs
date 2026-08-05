@@ -48,7 +48,7 @@ const manifestPath = path.join(nodeRoot, "plugin-manifest.json");
 const sourcePath = path.join(nodeRoot, "src/node.cpp");
 const fitCoreObject = path.join(nodeRoot, "vendor/od-fit-core.o");
 const fitCoreObjectSha256 =
-  "7ebc7409148e085759c976ae07f01c378b2f4f5a3662bd21a7c9b6ed6608782e";
+  "e1f1baa093cb52ef6fc880e4aa4de958c2bb074b8dac4d7826c50fa540e94ea8";
 const developmentSigningSeed = "55".repeat(32);
 const { signingSeed, signingKeyId, developmentOnly, productionMode } =
   resolveSupplementalSigning({
@@ -109,7 +109,7 @@ async function flattenResultSchemaIdl() {
     flattened.push(withoutFileDirectives.trim());
   }
 
-  for (const schemaCode of ["OMM", "OCM", "OBD"]) {
+  for (const schemaCode of ["OMM", "OCM"]) {
     await visit(path.join(standardsRoot, `schema/${schemaCode}/main.fbs`));
   }
   return `${flattened.join("\n\n")}\n`;

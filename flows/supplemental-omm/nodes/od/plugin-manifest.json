@@ -2,7 +2,7 @@
   "pluginId": "org.sdn.flows.supplemental-omm.od",
   "name": "Supplemental OMM Native Orbit Determination",
   "version": "1.0.0",
-  "description": "Reassembles complete provider-native response chunks inside WASM, parses each provider format, fits the complete ephemeris with the OD core, and emits multiple epoch-specific OMM, OCM, and OBD record streams.",
+  "description": "Reassembles complete provider-native response chunks inside WASM, parses each provider format, fits bounded batches of complete ephemerides with the OD core, and emits multiple epoch-specific OMM and OCM record streams.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -46,7 +46,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
           "description": "Ordered complete native MEME response chunks."
         },
@@ -78,7 +78,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
           "description": "Ordered complete native SP3 response chunks."
         },
@@ -110,7 +110,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
           "description": "Ordered complete native ECF response chunks."
         },
@@ -142,7 +142,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
           "description": "Ordered complete native CPF response chunks."
         },
@@ -174,7 +174,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
           "description": "Ordered complete native CCSDS OEM KVN response chunks."
         }
@@ -210,7 +210,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Idempotent FlatSQL CONFIGURE_INDEX control containing the complete canonical result schema and OMM/OCM/OBD table bindings."
+          "description": "Idempotent FlatSQL CONFIGURE_INDEX control containing the complete canonical result schema and OMM/OCM table bindings."
         },
         {
           "portId": "status",
@@ -240,7 +240,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 4096,
+          "maxStreams": 64,
           "required": false,
           "description": "One typed OD outcome for each consumed complete provider response or fitted logical object."
         },
@@ -272,7 +272,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 100000,
+          "maxStreams": 64,
           "required": false,
           "description": "Size-prefixed canonical OMM records in FSB record streams."
         },
@@ -304,44 +304,12 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 100000,
+          "maxStreams": 64,
           "required": false,
           "description": "Size-prefixed canonical OCM records in FSB record streams."
-        },
-        {
-          "portId": "obd",
-          "acceptedTypeSets": [
-            {
-              "setId": "fsb-dual",
-              "allowedTypes": [
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "flatbuffer"
-                },
-                {
-                  "schemaName": "FSB.fbs",
-                  "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
-                  "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-                  "rootTypeName": "FSB",
-                  "wireFormat": "aligned-binary",
-                  "byteLength": 1048744,
-                  "requiredAlignment": 8
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 100000,
-          "required": false,
-          "description": "Size-prefixed canonical OBD records in FSB record streams."
         }
       ],
-      "maxBatch": 4096,
+      "maxBatch": 64,
       "drainPolicy": "drain-until-yield"
     }
   ],

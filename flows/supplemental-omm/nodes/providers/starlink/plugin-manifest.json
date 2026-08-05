@@ -2,7 +2,7 @@
   "pluginId": "com.orbpro.spacex-starlink-source",
   "name": "Starlink Complete Ephemeris Provider",
   "version": "2.0.0",
-  "description": "Downloads the complete Starlink operator ephemeris catalog into a durable WASM-owned opaque spool before emitting byte-exact provider-native responses as paired canonical or aligned FSB chunks.",
+  "description": "Streams bounded waves of complete Starlink operator ephemerides directly to orbit determination, retaining only a compact FlatSQL-acknowledged restart cursor.",
   "pluginFamily": "data_source",
   "capabilities": ["http", "storage_adapter"],
   "externalInterfaces": [],
@@ -43,6 +43,37 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false
+        },
+        {
+          "portId": "ack",
+          "acceptedTypeSets": [
+            {
+              "setId": "fso-dual",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "schemaVersion": "1.158.2",
+                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "aligned-binary",
+                  "byteLength": 361648,
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -72,10 +103,10 @@
                 }
               ]
             }
-          ],
-          "minStreams": 0,
-          "maxStreams": 4096,
-          "required": false
+        ],
+        "minStreams": 0,
+        "maxStreams": 256,
+        "required": false
         },
         {
           "portId": "progress",
@@ -109,7 +140,7 @@
           "required": false
         }
       ],
-      "maxBatch": 4096,
+      "maxBatch": 64,
       "drainPolicy": "drain-until-yield"
     }
   ],
@@ -127,6 +158,13 @@
       "schemaVersion": "1.99.0",
       "schemaHash": "819a40979c746d4e712fb62c1af54592b0067a6e8166afad9d83ed494bff7a37",
       "rootTypeName": "DSS"
+    },
+    {
+      "schemaName": "FSO.fbs",
+      "fileIdentifier": "$FSO",
+      "schemaVersion": "1.158.2",
+      "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+      "rootTypeName": "FSO"
     }
   ],
   "buildArtifacts": [

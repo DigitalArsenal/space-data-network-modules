@@ -20,6 +20,7 @@
 
 #include "meme_parser.h"
 #include "state_series.h"
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -146,6 +147,21 @@ FitResult fit_sgp4(
 /// OBJECT_NAME/OBJECT_ID/NORAD flow from the parsed ephemeris when present).
 /// This is the format-neutral entry point both the MEME and OEM paths use.
 FitResult fit_sgp4_series(
+    const StateSeries& series,
+    const FitterConfig& config = {});
+
+/// Select deterministic local-fit epochs that cover the complete ephemeris.
+/// Adjacent starts are no farther apart than fit_window_sec, the first index is
+/// zero, and the final start leaves enough trailing samples while covering the
+/// terminal state. Short arcs retain the legacy single epoch at index zero.
+std::vector<std::size_t> select_fit_epoch_indices(
+    const std::vector<EphemerisPoint>& points,
+    double fit_window_sec);
+
+/// Fit one local SGP4 element set at every selected coverage epoch. Unlike the
+/// legacy fit_sgp4 multi-start (which chooses one best epoch), every result is
+/// retained so OMM/OCM/OBD records span the complete source ephemeris.
+std::vector<FitResult> fit_sgp4_epoch_series(
     const StateSeries& series,
     const FitterConfig& config = {});
 

@@ -1,8 +1,46 @@
+diff --git a/analysis/od/src/cpp/CMakeLists.txt b/analysis/od/src/cpp/CMakeLists.txt
+index b3d1c01..c7fb5ef 100644
+--- a/analysis/od/src/cpp/CMakeLists.txt
++++ b/analysis/od/src/cpp/CMakeLists.txt
+@@ -85,7 +85,6 @@ set(OD_SOURCES
+     src/oem_parser.cpp
+     src/oem_fb_reader.cpp
+     src/omm_fb_builder.cpp
+-    src/obd_fb_builder.cpp
+     src/ocm_fb_builder.cpp
+     src/sgp4_fitter.cpp
+     src/plugin_runtime.cpp
 diff --git a/analysis/od/src/cpp/guest-link/od_batch_fit_entry.cpp b/analysis/od/src/cpp/guest-link/od_batch_fit_entry.cpp
-index 25c36fa..6fee59a 100644
+index 25c36fa..01f0965 100644
 --- a/analysis/od/src/cpp/guest-link/od_batch_fit_entry.cpp
 +++ b/analysis/od/src/cpp/guest-link/od_batch_fit_entry.cpp
-@@ -126,0 +127,29 @@ extern "C" int fit(void) {
+@@ -5,8 +5,8 @@
+  * operator object — across PER-PROVIDER input ports (oem_starlink / oem_glonass /
+  * oem_intelsat / oem_cpf / oem_iss, plus a generic "oem" for untagged edges),
+  * fans them across std::thread workers via od::run_batch_fit (the BOUNDED
+- * work-stealing pool), and emits, per fitted object, aligned-binary $OMM (+ $OCM
+- * covariance + $OBD run-result) on the "omm"/"ocm"/"obd" output ports.
++ * work-stealing pool), and emits, per fitted object, aligned-binary $OMM and
++ * $OCM covariance records on the "omm"/"ocm" output ports.
+  *
+  * PER-PROVIDER ATTRIBUTION (in-wasm, no fit/builder change, RMS-parity untouched):
+  * the provider identity is derived from the INPUT PORT each $OEM arrived on
+@@ -17,7 +17,7 @@
+  * where cid = the SAME CIDv1(raw,sha2-256) the flatsql-store derives over the
+  * record bytes (common/sds_cid.hpp). The store maps cid -> {provider,source_name}
+  * (order-independent, no SDS parsing) to fill its provider/source_name columns.
+- * Because provenance is a SIDECAR, the fitted $OMM/$OCM/$OBD bytes are byte-for-
++ * Because provenance is a SIDECAR, the fitted $OMM/$OCM bytes are byte-for-
+  * byte unchanged — the RMS-parity gate is unaffected.
+  *
+  * This is the ONLY TU whose strong method symbol is renamed by the SDK guest-link
+@@ -117,12 +117,26 @@ extern "C" int fit(void) {
+       last_rc = emit_provenance(r.ocm, provider);
+       if (last_rc < 0) return last_rc;
+     }
+-    if (!r.obd.empty()) {
+-      last_rc = plugin_push_output_ex("obd", "OBD.fbs", "$OBD", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,
+-                                      "OBD", 0, 8, r.obd.data(), static_cast<uint32_t>(r.obd.size()));
 +
 +    // Complete-arc continuation epochs for the same input object. Each local
 +    // fit carries its own epoch/RMS/covariance and the same provider sidecar;
@@ -11,9 +49,10 @@ index 25c36fa..6fee59a 100644
 +      last_rc = plugin_push_output_ex(
 +          "omm", "OMM.fbs", "$OMM", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OMM",
 +          0, 8, epoch.omm.data(), static_cast<uint32_t>(epoch.omm.size()));
-+      if (last_rc < 0) return last_rc;
+       if (last_rc < 0) return last_rc;
+-      last_rc = emit_provenance(r.obd, provider);
 +      last_rc = emit_provenance(epoch.omm, provider);
-+      if (last_rc < 0) return last_rc;
+       if (last_rc < 0) return last_rc;
 +
 +      if (!epoch.ocm.empty()) {
 +        last_rc = plugin_push_output_ex(
@@ -23,106 +62,552 @@ index 25c36fa..6fee59a 100644
 +        last_rc = emit_provenance(epoch.ocm, provider);
 +        if (last_rc < 0) return last_rc;
 +      }
-+      if (!epoch.obd.empty()) {
-+        last_rc = plugin_push_output_ex(
-+            "obd", "OBD.fbs", "$OBD", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OBD",
-+            0, 8, epoch.obd.data(), static_cast<uint32_t>(epoch.obd.size()));
-+        if (last_rc < 0) return last_rc;
-+        last_rc = emit_provenance(epoch.obd, provider);
-+        if (last_rc < 0) return last_rc;
-+      }
-+    }
+     }
+   }
+   return 0;
+diff --git a/analysis/od/src/cpp/include/od/ocm_fb_builder.h b/analysis/od/src/cpp/include/od/ocm_fb_builder.h
+index ab3ff14..ee1d5e4 100644
+--- a/analysis/od/src/cpp/include/od/ocm_fb_builder.h
++++ b/analysis/od/src/cpp/include/od/ocm_fb_builder.h
+@@ -29,6 +29,7 @@
+ #include <vector>
+
+ #include "od/sgp4_fitter.h"  // SGP4Elements
++#include "od/state_series.h"
+
+ namespace od {
+
+@@ -63,6 +64,15 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
+                                           const std::string& originator = "SDN-OD",
+                                           const std::string& creation_date = std::string());
+
++/// Build one comprehensive source-trajectory OCM for an explicitly classified
++/// terminal reentry. Every state is already TEME and uniformly sampled.
++/// Unlike a fit OCM, this record omits covariance and OrbitDetermination rather
++/// than fabricating either.
++std::vector<uint8_t> build_terminal_reentry_ocm_flatbuffer(
++    const StateSeries& series,
++    double state_step_seconds,
++    const std::string& originator = "SDN-OD");
++
+ }  // namespace od
+
+ #endif  // OD_OCM_FB_BUILDER_H
 diff --git a/analysis/od/src/cpp/include/od/plugin_runtime.h b/analysis/od/src/cpp/include/od/plugin_runtime.h
-index bd6c937..a0cbe75 100644
+index bd6c937..d86da65 100644
 --- a/analysis/od/src/cpp/include/od/plugin_runtime.h
 +++ b/analysis/od/src/cpp/include/od/plugin_runtime.h
-@@ -59,0 +60,8 @@ PluginFitFBResult fit_ephemeris_fb(
+@@ -35,8 +35,6 @@ PluginFitResult fit_ephemeris_payload(
+ struct PluginFitFBResult {
+     bool ok = false;
+     std::vector<uint8_t> omm;  // size-prefixed $OMM FlatBuffer (mean elements)
+-    std::vector<uint8_t> obd;  // size-prefixed $OBD FlatBuffer (OD run result: WRMS,
+-                               // iterations, method) — same fit, emitted alongside $OMM
+     std::vector<uint8_t> ocm;  // size-prefixed $OCM FlatBuffer (epoch STATE + 6x6
+                                // COVARIANCE + OD residual summary) — same fit. Empty
+                                // when covariance was not requested/available.
+@@ -45,6 +43,9 @@ struct PluginFitFBResult {
+     double rms_km = 0.0;
+     bool converged = false;
+     double mean_motion = 0.0;
++    // Explicitly authorizes the one-record OCM-only lane. This is never inferred
++    // from a missing OMM: only a validated terminal-reentry source sets it.
++    bool terminal_reentry_ocm_only = false;
+ };
+
+ /// FLATBUFFER input path (the flow-node data hop): read an SDS `$OEM` FlatBuffer,
+@@ -57,6 +58,14 @@ PluginFitFBResult fit_ephemeris_fb(
+     std::size_t oem_len,
+     std::string_view options_json = {});
+
 +/// Complete-arc flow path: parse one full SDS $OEM once, fit deterministic
 +/// overlapping local windows that cover its first through terminal state, and
-+/// return one epoch-specific $OMM/$OCM/$OBD record set per window.
++/// return one epoch-specific $OMM/$OCM record set per window.
 +std::vector<PluginFitFBResult> fit_ephemeris_epochs_fb(
 +    const uint8_t* oem_buf,
 +    std::size_t oem_len,
 +    std::string_view options_json = {});
 +
+ }  // namespace od
+
+ #endif  // OD_PLUGIN_RUNTIME_H
 diff --git a/analysis/od/src/cpp/include/od/sgp4_fitter.h b/analysis/od/src/cpp/include/od/sgp4_fitter.h
-index c416198..52fb4c0 100644
+index c416198..7e041e6 100644
 --- a/analysis/od/src/cpp/include/od/sgp4_fitter.h
 +++ b/analysis/od/src/cpp/include/od/sgp4_fitter.h
-@@ -22,0 +23 @@
+@@ -20,6 +20,7 @@
+
+ #include "meme_parser.h"
+ #include "state_series.h"
 +#include <cstddef>
-@@ -151,0 +153,15 @@ FitResult fit_sgp4_series(
+ #include <cstdint>
+ #include <string>
+ #include <vector>
+@@ -83,6 +84,13 @@ struct FitterConfig {
+     // Subsample: target ~144 points over fit window
+     int subsample = 1;
+
++    // Complete-arc multi-epoch policy. These do not affect the legacy
++    // single-epoch entry. The multi-epoch entry uses six-hour anchors, fits an
++    // inclusive eight-hour interval, and disables automatic point reduction.
++    double multi_epoch_spacing_sec = 21600.0;
++    double multi_epoch_window_sec = 28800.0;
++    bool use_all_window_states = false;
++
+     // B* bounds
+     double bstar_max = 1.0;
+     double bstar_min = -1.0;
+@@ -149,6 +157,24 @@ FitResult fit_sgp4_series(
+     const StateSeries& series,
+     const FitterConfig& config = {});
+
 +/// Select deterministic local-fit epochs that cover the complete ephemeris.
-+/// Adjacent starts are no farther apart than fit_window_sec, the first index is
-+/// zero, and the final start leaves enough trailing samples while covering the
-+/// terminal state. Short arcs retain the legacy single epoch at index zero.
++/// Each regular anchor is the first observation at or after
++/// first+k*spacing_sec whose inclusive window fits inside the source span. The
++/// greatest observation whose complete window fits is appended as a terminal
++/// anchor, and duplicate source indices are removed. Arcs shorter than one
++/// complete window return no anchors.
 +std::vector<std::size_t> select_fit_epoch_indices(
 +    const std::vector<EphemerisPoint>& points,
++    double spacing_sec,
 +    double fit_window_sec);
 +
 +/// Fit one local SGP4 element set at every selected coverage epoch. Unlike the
 +/// legacy fit_sgp4 multi-start (which chooses one best epoch), every result is
-+/// retained so OMM/OCM/OBD records span the complete source ephemeris.
++/// retained so OMM/OCM records span the complete source ephemeris.
 +std::vector<FitResult> fit_sgp4_epoch_series(
 +    const StateSeries& series,
 +    const FitterConfig& config = {});
 +
+ /// Fit SGP4 elements from a MEME file. `data_source` is the provider/source
+ /// token supplied by the caller/manifest (empty = unlabeled); it is NOT
+ /// hardcoded to any operator.
+diff --git a/analysis/od/src/cpp/src/ocm_fb_builder.cpp b/analysis/od/src/cpp/src/ocm_fb_builder.cpp
+index 7f105c1..a1ff7cc 100644
+--- a/analysis/od/src/cpp/src/ocm_fb_builder.cpp
++++ b/analysis/od/src/cpp/src/ocm_fb_builder.cpp
+@@ -11,7 +11,9 @@
+
+ #include "od/ocm_fb_builder.h"
+
++#include <cmath>
+ #include <cstdio>
++#include <cstdint>
+ #include <string>
+ #include <vector>
+
+@@ -47,6 +49,56 @@
+
+ namespace od {
+
++namespace {
++
++std::string jd_to_iso_milliseconds(double jd) {
++    constexpr double kUnixEpochJulianDate = 2440587.5;
++    constexpr std::int64_t kMillisecondsPerDay = 86400000;
++    const std::int64_t unix_milliseconds = static_cast<std::int64_t>(
++        std::llround(
++            (jd - kUnixEpochJulianDate) *
++            static_cast<double>(kMillisecondsPerDay)));
++    std::int64_t days = unix_milliseconds / kMillisecondsPerDay;
++    std::int64_t day_milliseconds =
++        unix_milliseconds % kMillisecondsPerDay;
++    if (day_milliseconds < 0) {
++        day_milliseconds += kMillisecondsPerDay;
++        --days;
++    }
++
++    const std::int64_t julian_day_number = days + 2440588;
++    std::int64_t l = julian_day_number + 68569;
++    const std::int64_t n = 4 * l / 146097;
++    l -= (146097 * n + 3) / 4;
++    const std::int64_t i = 4000 * (l + 1) / 1461001;
++    l = l - 1461 * i / 4 + 31;
++    const std::int64_t j = 80 * l / 2447;
++    const int day = static_cast<int>(l - 2447 * j / 80);
++    l = j / 11;
++    const int month = static_cast<int>(j + 2 - 12 * l);
++    const int year = static_cast<int>(100 * (n - 49) + i + l);
++
++    const int hour =
++        static_cast<int>(day_milliseconds / 3600000);
++    day_milliseconds %= 3600000;
++    const int minute =
++        static_cast<int>(day_milliseconds / 60000);
++    day_milliseconds %= 60000;
++    const int second =
++        static_cast<int>(day_milliseconds / 1000);
++    const int millisecond =
++        static_cast<int>(day_milliseconds % 1000);
++
++    char encoded[32];
++    std::snprintf(
++        encoded, sizeof(encoded),
++        "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
++        year, month, day, hour, minute, second, millisecond);
++    return encoded;
++}
++
++}  // namespace
++
+ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
+                                           const std::string& originator,
+                                           const std::string& creation_date) {
+@@ -115,8 +167,10 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
+     Offset<String> od_res_s = fbb.CreateString(resbuf);
+     Offset<String> od_covred_s = fbb.CreateString(cov_reduction);
+     char convbuf[64];
+-    std::snprintf(convbuf, sizeof(convbuf), "sigma_rel<%.3g;converged=%d",
+-                  in.convergence_tol, in.converged ? 1 : 0);
++    std::snprintf(
++        convbuf, sizeof(convbuf),
++        "sigma_rel<%.3g;iterations=%d;converged=%d",
++        in.convergence_tol, in.iterations, in.converged ? 1 : 0);
+     Offset<String> od_conv_s = fbb.CreateString(convbuf);
+     OrbitDeterminationBuilder ob(fbb);
+     ob.add_OD_ALGORITHM(od_algo_s);
+@@ -149,4 +203,132 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
+     return std::vector<uint8_t>(p, p + fbb.GetSize());
+ }
+
++std::vector<uint8_t> build_terminal_reentry_ocm_flatbuffer(
++    const StateSeries& series,
++    double state_step_seconds,
++    const std::string& originator) {
++    if (series.samples.size() < 3 || !(state_step_seconds > 0.0)) return {};
++
++    const std::string start_time =
++        jd_to_iso_milliseconds(series.samples.front().epoch_jd);
++    const std::string stop_time =
++        jd_to_iso_milliseconds(series.samples.back().epoch_jd);
++    const double time_span_days =
++        state_step_seconds *
++        static_cast<double>(series.samples.size() - 1) / 86400.0;
++
++    std::vector<double> states;
++    states.reserve(series.samples.size() * 6);
++    for (const EphemerisPoint& sample : series.samples) {
++        states.push_back(sample.x);
++        states.push_back(sample.y);
++        states.push_back(sample.z);
++        states.push_back(sample.vx);
++        states.push_back(sample.vy);
++        states.push_back(sample.vz);
++    }
++
++    flatbuffers::FlatBufferBuilder fbb(
++        4096 + states.size() * sizeof(double));
++    using ::flatbuffers::Offset;
++    using ::flatbuffers::String;
++
++    const auto version = fbb.CreateString("3.0");
++    const auto creation = fbb.CreateString(stop_time);
++    const auto encoded_originator =
++        fbb.CreateString(originator.empty() ? "SDN-OD" : originator);
++    const auto object_name = series.meta.object_name.empty()
++        ? Offset<String>{}
++        : fbb.CreateString(series.meta.object_name);
++    const auto object_id = series.meta.object_id.empty()
++        ? Offset<String>{}
++        : fbb.CreateString(series.meta.object_id);
++    const std::string catalog_id = series.meta.norad_cat_id > 0
++        ? std::to_string(series.meta.norad_cat_id)
++        : std::string();
++    const auto catalog_name = catalog_id.empty()
++        ? Offset<String>{}
++        : fbb.CreateString(catalog_id);
++    const auto object_designator = catalog_id.empty()
++        ? Offset<String>{}
++        : fbb.CreateString(catalog_id);
++    const auto time_system = fbb.CreateString("UTC");
++    const auto epoch_tzero = fbb.CreateString(start_time);
++    const auto encoded_start = fbb.CreateString(start_time);
++    const auto encoded_stop = fbb.CreateString(stop_time);
++    const auto ops_status = fbb.CreateString("DECAYING");
++    const auto orbit_category = fbb.CreateString("REENTRY");
++    const auto trajectory_element = fbb.CreateString("TRAJECTORY");
++    const auto data_elements =
++        fbb.CreateVector(std::vector<Offset<String>>{trajectory_element});
++    const auto trajectory_description = fbb.CreateString(
++        "TERMINAL_REENTRY_SOURCE_TRAJECTORY_TEME");
++    const auto reference_frame_name = fbb.CreateString("REFERENCE_FRAME");
++    const auto reference_frame_value = fbb.CreateString("TEME");
++    const auto source_frame_name = fbb.CreateString("SOURCE_FRAME");
++    const auto source_frame_value = fbb.CreateString(
++        series.meta.source_frame.empty() ? "UNSPECIFIED"
++                                         : series.meta.source_frame);
++    const auto terminal_name = fbb.CreateString("TERMINAL_REENTRY");
++    const auto terminal_value = fbb.CreateString("true");
++    const auto covariance_name = fbb.CreateString("COVARIANCE");
++    const auto covariance_value = fbb.CreateString("NOT_PROVIDED");
++    const auto state_data = fbb.CreateVector(states);
++
++    HeaderBuilder header_builder(fbb);
++    header_builder.add_CCSDS_OCM_VERS(version);
++    header_builder.add_CREATION_DATE(creation);
++    header_builder.add_ORIGINATOR(encoded_originator);
++    const auto header = header_builder.Finish();
++
++    MetadataBuilder metadata_builder(fbb);
++    metadata_builder.add_OBJECT_NAME(object_name);
++    metadata_builder.add_INTERNATIONAL_DESIGNATOR(object_id);
++    metadata_builder.add_CATALOG_NAME(catalog_name);
++    metadata_builder.add_OBJECT_DESIGNATOR(object_designator);
++    metadata_builder.add_TIME_SYSTEM(time_system);
++    metadata_builder.add_EPOCH_TZERO(epoch_tzero);
++    metadata_builder.add_OPS_STATUS(ops_status);
++    metadata_builder.add_ORBIT_CATEGORY(orbit_category);
++    metadata_builder.add_OCM_DATA_ELEMENTS(data_elements);
++    metadata_builder.add_START_TIME(encoded_start);
++    metadata_builder.add_STOP_TIME(encoded_stop);
++    metadata_builder.add_TIME_SPAN(time_span_days);
++    const auto metadata = metadata_builder.Finish();
++
++    std::vector<Offset<UserDefinedParameters>> user_parameters;
++    UserDefinedParametersBuilder reference_builder(fbb);
++    reference_builder.add_PARAM_NAME(reference_frame_name);
++    reference_builder.add_PARAM_VALUE(reference_frame_value);
++    user_parameters.push_back(reference_builder.Finish());
++    UserDefinedParametersBuilder source_builder(fbb);
++    source_builder.add_PARAM_NAME(source_frame_name);
++    source_builder.add_PARAM_VALUE(source_frame_value);
++    user_parameters.push_back(source_builder.Finish());
++    UserDefinedParametersBuilder terminal_builder(fbb);
++    terminal_builder.add_PARAM_NAME(terminal_name);
++    terminal_builder.add_PARAM_VALUE(terminal_value);
++    user_parameters.push_back(terminal_builder.Finish());
++    UserDefinedParametersBuilder covariance_builder(fbb);
++    covariance_builder.add_PARAM_NAME(covariance_name);
++    covariance_builder.add_PARAM_VALUE(covariance_value);
++    user_parameters.push_back(covariance_builder.Finish());
++    const auto encoded_user_parameters = fbb.CreateVector(user_parameters);
++
++    OCMBuilder ocm_builder(fbb);
++    ocm_builder.add_HEADER(header);
++    ocm_builder.add_METADATA(metadata);
++    ocm_builder.add_TRAJ_TYPE(trajectoryType::CARTESIAN_PV);
++    ocm_builder.add_TRAJ_TYPE_DESCRIPTION(trajectory_description);
++    ocm_builder.add_STATE_STEP_SIZE(state_step_seconds);
++    ocm_builder.add_STATE_VECTOR_SIZE(static_cast<uint8_t>(6));
++    ocm_builder.add_STATE_DATA(state_data);
++    ocm_builder.add_USER_DEFINED_PARAMETERS(encoded_user_parameters);
++    const auto ocm = ocm_builder.Finish();
++
++    FinishSizePrefixedOCMBuffer(fbb, ocm);
++    const uint8_t* bytes = fbb.GetBufferPointer();
++    return std::vector<uint8_t>(bytes, bytes + fbb.GetSize());
++}
++
+ }  // namespace od
 diff --git a/analysis/od/src/cpp/src/od_batch_fit.cpp b/analysis/od/src/cpp/src/od_batch_fit.cpp
-index effcb24..cb6b47f 100644
+index effcb24..3058139 100644
 --- a/analysis/od/src/cpp/src/od_batch_fit.cpp
 +++ b/analysis/od/src/cpp/src/od_batch_fit.cpp
-@@ -17 +17 @@ BatchResult fit_one(const BatchObject& obj) {
--    PluginFitFBResult fr = fit_ephemeris_fb(
-+    std::vector<PluginFitFBResult> epochs = fit_ephemeris_epochs_fb(
-@@ -18,0 +19,6 @@ BatchResult fit_one(const BatchObject& obj) {
+@@ -11,23 +11,71 @@ namespace od {
+
+ namespace {
+
++bool preflight_fit_epochs(const std::vector<PluginFitFBResult>& epochs,
++                          std::string* error_code,
++                          std::string* error_message) {
 +    if (epochs.empty()) {
-+        r.error_code = "fit-empty";
-+        r.error_message = "complete-arc fitter produced no epoch records";
-+        return r;
++        *error_code = "fit-empty";
++        *error_message = "complete-arc fitter produced no epoch records";
++        return false;
 +    }
++    if (epochs.size() == 1 && epochs.front().terminal_reentry_ocm_only) {
++        const PluginFitFBResult& terminal = epochs.front();
++        if (terminal.ok && terminal.omm.empty() && !terminal.ocm.empty()) {
++            return true;
++        }
++        *error_code = "terminal-reentry-ocm-invalid";
++        *error_message =
++            "terminal reentry must produce exactly one OCM and no OMM";
++        return false;
++    }
++    for (const PluginFitFBResult& epoch : epochs) {
++        if (epoch.terminal_reentry_ocm_only ||
++            !epoch.ok || epoch.omm.empty() || epoch.ocm.empty()) {
++            if (!epoch.ok) {
++                *error_code = epoch.error_code.empty()
++                    ? "fit-epoch-failed"
++                    : epoch.error_code;
++                *error_message = epoch.error_message.empty()
++                    ? "complete-arc fitter returned a failed epoch"
++                    : epoch.error_message;
++            } else {
++                *error_code = "fit-incomplete-epoch";
++                *error_message =
++                    "complete-arc fitter returned an incomplete epoch record set";
++            }
++            return false;
++        }
++    }
++    return true;
++}
++
+ // Run the SACRED per-object fit for one $OEM and package its result records.
+ BatchResult fit_one(const BatchObject& obj) {
+     BatchResult r;
+-    PluginFitFBResult fr = fit_ephemeris_fb(
+-        obj.oem.empty() ? nullptr : obj.oem.data(), obj.oem.size(), std::string_view{});
+-    if (!fr.ok) {
+-        r.ok = false;
+-        r.error_code = fr.error_code;
+-        r.error_message = fr.error_message;
++    std::vector<PluginFitFBResult> epochs = fit_ephemeris_epochs_fb(
++        obj.oem.empty() ? nullptr : obj.oem.data(), obj.oem.size(),
++        obj.fit_options);
++    if (!preflight_fit_epochs(epochs, &r.error_code, &r.error_message)) {
+         return r;
+     }
 +    PluginFitFBResult& fr = epochs.front();
-@@ -30,0 +37,12 @@ BatchResult fit_one(const BatchObject& obj) {
+     r.ok = true;
+     r.omm = std::move(fr.omm);
+-    r.obd = std::move(fr.obd);
+     r.ocm = std::move(fr.ocm);
+     r.rms_km = fr.rms_km;
+     r.converged = fr.converged;
++    r.terminal_reentry_ocm_only = fr.terminal_reentry_ocm_only;
 +    r.additional_epochs.reserve(epochs.size() - 1);
 +    for (std::size_t i = 1; i < epochs.size(); ++i) {
 +        PluginFitFBResult& epoch = epochs[i];
-+        if (!epoch.ok || epoch.omm.empty()) continue;
 +        BatchEpochResult additional;
 +        additional.omm = std::move(epoch.omm);
-+        additional.obd = std::move(epoch.obd);
 +        additional.ocm = std::move(epoch.ocm);
 +        additional.rms_km = epoch.rms_km;
 +        additional.converged = epoch.converged;
 +        r.additional_epochs.push_back(std::move(additional));
 +    }
+     return r;
+ }
+
 diff --git a/analysis/od/src/cpp/src/od_batch_fit.hpp b/analysis/od/src/cpp/src/od_batch_fit.hpp
-index 697c10b..5d6f687 100644
+index 697c10b..8b58a9b 100644
 --- a/analysis/od/src/cpp/src/od_batch_fit.hpp
 +++ b/analysis/od/src/cpp/src/od_batch_fit.hpp
-@@ -27,0 +28,8 @@ struct BatchObject {
+@@ -2,9 +2,10 @@
+ // objects across workers). Mirrors the analysis/conjunction-assessment
+ // std::thread work-stealing fan-out (src/cpp/src/plugin_invoke_bridge.cpp): a
+ // std::atomic next-index hands each worker the next object; each worker runs the
+-// SACRED per-object fit (od::fit_ephemeris_fb) over an in-memory $OEM and emits
+-// $OMM + $OBD + $OCM. Results are indexed by INPUT ORDER so the batch output is
+-// byte-identical regardless of worker count (RMS bit-parity is preserved:
++// SACRED per-object fit (od::fit_ephemeris_epochs_fb) over an in-memory $OEM
++// and emits epoch-specific $OMM + $OCM records. Results are indexed by INPUT
++// ORDER so the batch output is byte-identical regardless of worker count
++// (RMS bit-parity is preserved:
+ // per-object fits are independent and deterministic).
+ //
+ // This is the isomorphic-pthreads unit: built with the wasi-threads toolchain it
+@@ -23,17 +24,29 @@ namespace od {
+
+ struct BatchObject {
+     std::vector<uint8_t> oem;  // one in-memory $OEM FlatBuffer (non-size-prefixed)
++    std::string fit_options;   // deterministic per-input fitter policy
++};
++
 +struct BatchEpochResult {
 +    std::vector<uint8_t> omm;
-+    std::vector<uint8_t> obd;
 +    std::vector<uint8_t> ocm;
 +    double rms_km = 0.0;
 +    bool converged = false;
-+};
-+
-@@ -36,0 +45,4 @@ struct BatchResult {
+ };
+
+ struct BatchResult {
+     bool ok = false;
+     std::vector<uint8_t> omm;   // size-prefixed $OMM
+-    std::vector<uint8_t> obd;   // size-prefixed $OBD
+     std::vector<uint8_t> ocm;   // size-prefixed $OCM (STATE + real fit COVARIANCE)
+     double rms_km = 0.0;
+     bool converged = false;
+     std::string error_code;
+     std::string error_message;
++    bool terminal_reentry_ocm_only = false;
 +    // The first local epoch stays in the legacy scalar fields above for the
 +    // command/resident benchmark ABI. Every later complete-arc local fit is
 +    // retained here and the composed flow emits all of them.
 +    std::vector<BatchEpochResult> additional_epochs;
+     unsigned long long worker_tid = 0;  // OS thread id (hashed) that ran this fit
+ };
+
+@@ -49,11 +62,10 @@ struct BatchRunStats {
+ // so relying on it single-threads the pool and NO std::thread ever spawns. This
+ // fixed positive default guarantees the bounded work-stealing pool actually
+ // spawns workers; run_batch_fit clamps it down to the object count, so a batch of
+-// one still degenerates to a single fit. 8 gives real parallelism on the 2-vCPU
+-// prod node plus the observable >1-thread spawn proof, without a
+-// one-thread-per-object blow-up on the ~11k-object catalog (work-stealing churns
+-// the full set across the 8 workers).
+-inline constexpr int kOdFitDefaultThreads = 8;
++// one still degenerates to a single fit. 16 matches the signed node's bounded
++// admission width and the measured server throughput target without a
++// one-thread-per-object blow-up on the full catalog.
++inline constexpr int kOdFitDefaultThreads = 16;
+
+ // Fit an entire batch. worker_count = clamp(num_threads>0 ? num_threads :
+ // (hardware_concurrency()>=2 ? hardware_concurrency() : kOdFitDefaultThreads), 1,
 diff --git a/analysis/od/src/cpp/src/plugin_runtime.cpp b/analysis/od/src/cpp/src/plugin_runtime.cpp
-index ed6adb2..fae4584 100644
+index ed6adb2..decd4d6 100644
 --- a/analysis/od/src/cpp/src/plugin_runtime.cpp
 +++ b/analysis/od/src/cpp/src/plugin_runtime.cpp
-@@ -262,0 +263,29 @@ bool build_meme_series(std::string_view content, StateSeries* out,
+@@ -1,7 +1,6 @@
+ #include "od/plugin_runtime.h"
+
+ #include "od/meme_parser.h"
+-#include "od/obd_fb_builder.h"
+ #include "od/ocm_fb_builder.h"
+ #include "od/oem_fb_reader.h"
+ #include "od/oem_parser.h"
+@@ -11,6 +10,9 @@
+
+ #include <algorithm>
+ #include <cctype>
++#include <cmath>
++#include <cstdint>
++#include <cstring>
+ #include <cstdlib>
+ #include <exception>
+ #include <limits>
+@@ -200,6 +202,30 @@ FitterConfig parse_fit_options(std::string_view options_json) {
+     if (requested_limit > 0) {
+         config.max_iterations = std::clamp(requested_limit, 1, 300);
+     }
++    double convergence_tolerance = 0.0;
++    if (parse_double_option(
++            options_json, "convergenceTolerance",
++            &convergence_tolerance) &&
++        convergence_tolerance > 0.0) {
++        config.convergence_tol =
++            std::clamp(convergence_tolerance, 1e-8, 1e-2);
++    }
++    double multi_epoch_spacing_sec = 0.0;
++    if (parse_double_option(
++            options_json, "multiEpochSpacingSeconds",
++            &multi_epoch_spacing_sec) &&
++        multi_epoch_spacing_sec > 0.0) {
++        config.multi_epoch_spacing_sec =
++            std::clamp(multi_epoch_spacing_sec, 1.0, 86400.0);
++    }
++    double multi_epoch_window_sec = 0.0;
++    if (parse_double_option(
++            options_json, "multiEpochWindowSeconds",
++            &multi_epoch_window_sec) &&
++        multi_epoch_window_sec > 0.0) {
++        config.multi_epoch_window_sec =
++            std::clamp(multi_epoch_window_sec, 1.0, 172800.0);
++    }
+
+     // A2.4d same-ephemeris reference scoring (OWNER RULING 2026-07-13 "same
+     // ephemeris"). A caller may supply a reference GP element set (a captured
+@@ -260,6 +286,200 @@ bool build_meme_series(std::string_view content, StateSeries* out,
+     return true;
+ }
+
 +PluginFitFBResult build_fit_record_set(const FitResult& fit,
-+                                       const FitterConfig& config,
-+                                       double fit_span_days) {
++                                       const FitterConfig& config) {
 +    PluginFitFBResult result{};
 +    result.omm = build_omm_flatbuffer(fit.elements);
-+    result.obd = build_obd_flatbuffer(fit.elements, fit_span_days);
 +
 +    OCMInputs ocm{};
 +    ocm.el = &fit.elements;
@@ -146,7 +631,204 @@ index ed6adb2..fae4584 100644
 +    return result;
 +}
 +
-@@ -399,0 +429,53 @@ PluginFitFBResult fit_ephemeris_fb(
++bool finite_binary64(double value) {
++    static_assert(sizeof(double) == sizeof(std::uint64_t));
++    std::uint64_t bits = 0;
++    std::memcpy(&bits, &value, sizeof(bits));
++    return (bits & UINT64_C(0x7ff0000000000000)) !=
++        UINT64_C(0x7ff0000000000000);
++}
++
++enum class TerminalReentryClassification {
++    NotTerminal,
++    Valid,
++    Invalid,
++};
++
++TerminalReentryClassification classify_terminal_reentry(
++    const StateSeries& series,
++    double* state_step_seconds,
++    std::string* error_message) {
++    constexpr double kWgs72EarthRadiusKm = 6378.135;
++    constexpr double kReentryInterfaceAltitudeKm = 120.0;
++    constexpr double kUniformStepToleranceSeconds = 0.001;
++    if (series.samples.empty()) {
++        return TerminalReentryClassification::NotTerminal;
++    }
++    const EphemerisPoint& terminal = series.samples.back();
++    if (!finite_binary64(terminal.x) || !finite_binary64(terminal.y) ||
++        !finite_binary64(terminal.z)) {
++        return TerminalReentryClassification::NotTerminal;
++    }
++    const double terminal_radius_squared =
++        terminal.x * terminal.x +
++        terminal.y * terminal.y +
++        terminal.z * terminal.z;
++    constexpr double kReentryInterfaceRadiusKm =
++        kWgs72EarthRadiusKm + kReentryInterfaceAltitudeKm;
++    if (!(terminal_radius_squared <=
++          kReentryInterfaceRadiusKm * kReentryInterfaceRadiusKm)) {
++        return TerminalReentryClassification::NotTerminal;
++    }
++    if (series.meta.center_name != "EARTH") {
++        *error_message =
++            "terminal reentry requires an Earth-centered trajectory";
++        return TerminalReentryClassification::Invalid;
++    }
++    if (series.meta.position_only || series.samples.size() < 3) {
++        *error_message =
++            "terminal reentry requires at least three full position/velocity states";
++        return TerminalReentryClassification::Invalid;
++    }
++    double expected_step = 0.0;
++    for (std::size_t index = 0; index < series.samples.size(); ++index) {
++        const EphemerisPoint& sample = series.samples[index];
++        if (!finite_binary64(sample.epoch_jd) ||
++            !finite_binary64(sample.x) || !finite_binary64(sample.y) ||
++            !finite_binary64(sample.z) || !finite_binary64(sample.vx) ||
++            !finite_binary64(sample.vy) || !finite_binary64(sample.vz)) {
++            *error_message =
++                "terminal reentry contains a non-finite state";
++            return TerminalReentryClassification::Invalid;
++        }
++        if (index == 0) continue;
++        const double step =
++            (sample.epoch_jd - series.samples[index - 1].epoch_jd) *
++            86400.0;
++        if (!(step > 0.0)) {
++            *error_message =
++                "terminal reentry epochs must be strictly increasing";
++            return TerminalReentryClassification::Invalid;
++        }
++        if (index == 1) {
++            expected_step =
++                std::round(step * 1000.0) / 1000.0;
++            if (!(expected_step > 0.0)) {
++                *error_message =
++                    "terminal reentry epoch step is below one millisecond";
++                return TerminalReentryClassification::Invalid;
++            }
++        }
++        const double elapsed =
++            (sample.epoch_jd - series.samples.front().epoch_jd) *
++            86400.0;
++        const double expected_elapsed =
++            expected_step * static_cast<double>(index);
++        if (std::abs(elapsed - expected_elapsed) >
++            kUniformStepToleranceSeconds) {
++            *error_message =
++                "terminal reentry states must use one uniform epoch step";
++            return TerminalReentryClassification::Invalid;
++        }
++    }
++    *state_step_seconds = expected_step;
++    return TerminalReentryClassification::Valid;
++}
++
++bool fitted_epochs_pass_publication_gate(
++    const std::vector<FitResult>& fits) {
++    constexpr double kMaximumRmsKm = 12.0;
++    return !fits.empty() &&
++        std::all_of(
++            fits.begin(), fits.end(),
++            [](const FitResult& fit) {
++                return finite_binary64(fit.rms_km) &&
++                    fit.rms_km >= 0.0 &&
++                    fit.rms_km < kMaximumRmsKm &&
++                    fit.converged;
++            });
++}
++
++bool assign_observed_mean_motion_derivatives(
++    std::vector<FitResult>* fits) {
++    if (!fits || fits->empty()) return false;
++    if (fits->size() == 1) {
++        fits->front().elements.mean_motion_dot = 0.0;
++        fits->front().elements.mean_motion_ddot = 0.0;
++        return true;
++    }
++
++    for (std::size_t index = 0; index < fits->size(); ++index) {
++        double derivative = 0.0;
++        if (index == 0 || index + 1 == fits->size()) {
++            const std::size_t left =
++                index == 0 ? 0 : fits->size() - 2;
++            const std::size_t right = left + 1;
++            const double elapsed_days =
++                (*fits)[right].elements.epoch_jd -
++                (*fits)[left].elements.epoch_jd;
++            if (!(elapsed_days > 0.0) ||
++                !finite_binary64(elapsed_days)) {
++                return false;
++            }
++            derivative =
++                ((*fits)[right].elements.mean_motion -
++                 (*fits)[left].elements.mean_motion) /
++                elapsed_days;
++        } else {
++            const FitResult& left = (*fits)[index - 1];
++            const FitResult& center = (*fits)[index];
++            const FitResult& right = (*fits)[index + 1];
++            const double x0 = left.elements.epoch_jd;
++            const double x1 = center.elements.epoch_jd;
++            const double x2 = right.elements.epoch_jd;
++            if (!(x0 < x1 && x1 < x2) ||
++                !finite_binary64(x0) ||
++                !finite_binary64(x1) ||
++                !finite_binary64(x2)) {
++                return false;
++            }
++            const double t0 = x0 - x1;
++            const double t2 = x2 - x1;
++            const double left_weight =
++                -t2 / (t0 * (t0 - t2));
++            const double center_weight =
++                (-t0 - t2) / ((-t0) * (-t2));
++            const double right_weight =
++                -t0 / ((t2 - t0) * t2);
++            derivative =
++                left.elements.mean_motion * left_weight +
++                center.elements.mean_motion * center_weight +
++                right.elements.mean_motion * right_weight;
++        }
++        if (!finite_binary64(derivative)) return false;
++        (*fits)[index].elements.mean_motion_dot = derivative;
++        (*fits)[index].elements.mean_motion_ddot = 0.0;
++    }
++    return true;
++}
++
+ }  // namespace
+
+ PluginFitResult fit_ephemeris_payload(
+@@ -345,22 +565,12 @@ PluginFitFBResult fit_ephemeris_fb(
+
+         FitterConfig config = parse_fit_options(options_json);
+         // SDN OD-Flow: request the post-fit $OCM covariance (opt-in; does not
+-        // change the fit numerics — the $OMM/$OBD bytes stay identical).
++        // change the fit numerics or $OMM bytes).
+         config.compute_covariance = true;
+         auto fit = fit_sgp4_series(series, config);
+
+         // Aligned-binary $OMM out (ORIGINATOR="SDN-OD").
+         result.omm = build_omm_flatbuffer(fit.elements);
+-        // Aligned-binary $OBD out (OD run result: WRMS, iterations, method) — the
+-        // SAME fit, telemetry captured as a typed record. Fit span = the ephemeris
+-        // time window the fit covered (JD is in days).
+-        double fit_span_days = 0.0;
+-        if (series.samples.size() >= 2) {
+-            fit_span_days =
+-                series.samples.back().epoch_jd - series.samples.front().epoch_jd;
+-        }
+-        result.obd = build_obd_flatbuffer(fit.elements, fit_span_days);
+-
+         // Aligned-binary $OCM out (epoch STATE + 6x6 COVARIANCE + OD residual
+         // summary) — the SAME fit. Covariance is the real normal-equations fit
+         // covariance when the solve was well-conditioned; otherwise the builder
+@@ -397,4 +607,134 @@ PluginFitFBResult fit_ephemeris_fb(
+     return result;
+ }
+
 +std::vector<PluginFitFBResult> fit_ephemeris_epochs_fb(
 +    const uint8_t* oem_buf,
 +    std::size_t oem_len,
@@ -166,24 +848,101 @@ index ed6adb2..fae4584 100644
 +
 +        FitterConfig config = parse_fit_options(options_json);
 +        config.compute_covariance = true;
++        double terminal_state_step_seconds = 0.0;
++        std::string terminal_error;
++        const TerminalReentryClassification terminal_classification =
++            classify_terminal_reentry(
++                series, &terminal_state_step_seconds, &terminal_error);
++        if (terminal_classification ==
++            TerminalReentryClassification::Invalid) {
++            PluginFitFBResult error{};
++            error.error_code = "terminal-reentry-invalid";
++            error.error_message = terminal_error;
++            results.push_back(std::move(error));
++            return results;
++        }
++        if (terminal_classification ==
++            TerminalReentryClassification::Valid) {
++            PluginFitFBResult terminal{};
++            terminal.ocm = build_terminal_reentry_ocm_flatbuffer(
++                series, terminal_state_step_seconds, "SDN-OD");
++            if (terminal.ocm.empty()) {
++                terminal.error_code = "terminal-reentry-ocm-failed";
++                terminal.error_message =
++                    "unable to build the complete terminal-reentry OCM";
++            } else {
++                terminal.ok = true;
++                terminal.terminal_reentry_ocm_only = true;
++            }
++            results.push_back(std::move(terminal));
++            return results;
++        }
 +        std::vector<FitResult> fits = fit_sgp4_epoch_series(series, config);
++        const bool strictly_ordered =
++            std::adjacent_find(
++                series.samples.begin(), series.samples.end(),
++                [](const EphemerisPoint& left,
++                   const EphemerisPoint& right) {
++                    return right.epoch_jd <= left.epoch_jd;
++                }) == series.samples.end();
++        if (!fits.empty() &&
++            !fitted_epochs_pass_publication_gate(fits)) {
++            FitterConfig fallback = config;
++            fallback.multi_epoch_spacing_sec = 10800.0;
++            fallback.multi_epoch_window_sec = 14400.0;
++            std::vector<FitResult> fallback_fits =
++                fit_sgp4_epoch_series(series, fallback);
++            if (!fallback_fits.empty()) {
++                fits = std::move(fallback_fits);
++                config = fallback;
++            }
++        }
++        if (fits.empty() && series.samples.size() >= 3 &&
++            strictly_ordered) {
++            // Backward-compatible short-arc lane: providers whose complete
++            // product contains less than one eight-hour interval retain the
++            // legacy single-epoch fit. Complete >=8 h products never enter this
++            // lane and must use the six-hour-anchor/all-state segmentation.
++            constexpr double kEpochToleranceSeconds = 0.001;
++            const double coverage_seconds =
++                (series.samples.back().epoch_jd -
++                 series.samples.front().epoch_jd) *
++                86400.0;
++            if (coverage_seconds + kEpochToleranceSeconds <
++                config.multi_epoch_window_sec) {
++                fits.push_back(fit_sgp4_series(series, config));
++            }
++        }
 +        if (fits.empty()) {
 +            PluginFitFBResult error{};
-+            error.error_code = "insufficient-ephemeris";
-+            error.error_message = "At least three complete ephemeris states are required.";
++            if (series.samples.size() < 3) {
++                error.error_code = "insufficient-ephemeris";
++                error.error_message =
++                    "At least three complete ephemeris states are required.";
++            } else if (!strictly_ordered) {
++                error.error_code = "nonmonotonic-ephemeris";
++                error.error_message =
++                    "Ephemeris epochs must be strictly increasing.";
++            } else {
++                error.error_code = "insufficient-span";
++                error.error_message =
++                    "At least eight hours of ephemeris coverage are required.";
++            }
++            results.push_back(std::move(error));
++            return results;
++        }
++        if (!assign_observed_mean_motion_derivatives(&fits)) {
++            PluginFitFBResult error{};
++            error.error_code = "mean-motion-derivative-invalid";
++            error.error_message =
++                "fitted epochs cannot produce an ordered mean-motion derivative";
 +            results.push_back(std::move(error));
 +            return results;
 +        }
 +
 +        results.reserve(fits.size());
-+        const double last_jd = series.samples.back().epoch_jd;
-+        const double max_span_days = config.fit_window_sec / 86400.0;
 +        for (const FitResult& fit : fits) {
-+            const double available_days =
-+                std::max(0.0, last_jd - fit.elements.epoch_jd);
-+            const double fit_span_days =
-+                std::min(max_span_days, available_days);
-+            results.push_back(build_fit_record_set(fit, config, fit_span_days));
++            results.push_back(build_fit_record_set(fit, config));
 +        }
 +        return results;
 +    } catch (const std::exception& ex) {
@@ -200,48 +959,417 @@ index ed6adb2..fae4584 100644
 +    return results;
 +}
 +
+ }  // namespace od
 diff --git a/analysis/od/src/cpp/src/sgp4_fitter.cpp b/analysis/od/src/cpp/src/sgp4_fitter.cpp
-index e160552..8b00257 100644
+index e160552..524e814 100644
 --- a/analysis/od/src/cpp/src/sgp4_fitter.cpp
 +++ b/analysis/od/src/cpp/src/sgp4_fitter.cpp
-@@ -1356,0 +1357,64 @@ FitResult fit_sgp4(
+@@ -50,7 +50,7 @@ static constexpr double RE_ER = 1.0;                    // Earth radii
+
+ // ── Equinoctial element indices ──
+
+-static constexpr int NPARAMS = 8;
++static constexpr int NPARAMS = 7;
+ static constexpr int IDX_AF = 0;
+ static constexpr int IDX_AG = 1;
+ static constexpr int IDX_A  = 2;  // semi-major axis in Earth radii
+@@ -58,7 +58,6 @@ static constexpr int IDX_L  = 3;  // mean longitude (rad)
+ static constexpr int IDX_PE = 4;
+ static constexpr int IDX_QE = 5;
+ static constexpr int IDX_BSTAR = 6;
+-static constexpr int IDX_NDOT = 7;  // mean motion derivative (rev/day²)
+
+ static int bounded_iteration_count(int default_count, const FitterConfig& config) {
+     if (config.max_iterations <= 0) {
+@@ -67,6 +66,35 @@ static int bounded_iteration_count(int default_count, const FitterConfig& config
+     return std::max(1, std::min(default_count, config.max_iterations));
+ }
+
++static bool finite_fit_rms(double value) {
++    static_assert(sizeof(double) == sizeof(std::uint64_t));
++    std::uint64_t bits = 0;
++    std::memcpy(&bits, &value, sizeof(bits));
++    return (bits & UINT64_C(0x7ff0000000000000)) !=
++        UINT64_C(0x7ff0000000000000);
++}
++
++static bool prefer_lower_rms(
++    const FitResult& candidate,
++    const FitResult& incumbent) {
++    const bool candidate_finite = finite_fit_rms(candidate.rms_km);
++    const bool incumbent_finite = finite_fit_rms(incumbent.rms_km);
++    if (candidate_finite != incumbent_finite) return candidate_finite;
++    return candidate_finite && candidate.rms_km < incumbent.rms_km;
++}
++
++static bool prefer_fit_candidate(
++    const FitResult& candidate,
++    const FitResult& incumbent) {
++    const bool candidate_finite = finite_fit_rms(candidate.rms_km);
++    const bool incumbent_finite = finite_fit_rms(incumbent.rms_km);
++    if (candidate_finite != incumbent_finite) return candidate_finite;
++    if (candidate.converged != incumbent.converged) {
++        return candidate.converged;
++    }
++    return candidate_finite && candidate.rms_km < incumbent.rms_km;
++}
++
+ // ── Angle normalization ──
+
+ static double normalize_angle(double a) {
+@@ -532,7 +560,6 @@ static void get_equinoctial(const SGP4Elements& el, double p[NPARAMS]) {
+     p[IDX_PE] = eq.pe;
+     p[IDX_QE] = eq.qe;
+     p[IDX_BSTAR] = eq.bstar;
+-    p[IDX_NDOT] = el.mean_motion_dot;
+ }
+
+ static SGP4Elements set_equinoctial(const SGP4Elements& base, const double p[NPARAMS]) {
+@@ -545,7 +572,8 @@ static SGP4Elements set_equinoctial(const SGP4Elements& base, const double p[NPA
+     eq.qe = p[IDX_QE];
+     eq.bstar = p[IDX_BSTAR];
+     SGP4Elements el = equinoctial_to_classical(eq, base);
+-    el.mean_motion_dot = p[IDX_NDOT];
++    el.mean_motion_dot = 0.0;
++    el.mean_motion_ddot = 0.0;
+     return el;
+ }
+
+@@ -674,8 +702,8 @@ static FitResult lm_fit_equinoctial(
+     const FitterConfig& config) {
+
+     SGP4Elements el = initial_el;
++    el.mean_motion_dot = 0.0;
+     el.mean_motion_ddot = 0.0;
+-    // ndot is now fit as the 8th parameter — keep initial value
+
+     double params[NPARAMS];
+     get_equinoctial(el, params);
+@@ -745,11 +773,11 @@ static FitResult lm_fit_equinoctial(
+
+         Eigen::VectorXd delta_p = J_aug.bdcSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>().solve(r_aug);
+
+-        // Step limiting (Vallado: 90% for orbital, 40% for B*/ndot)
++        // Step limiting (Vallado: 90% for orbital, 40% for B*).
+         for (int i = 0; i < NPARAMS; i++) {
+             double ref = std::abs(params[i]) + 1e-12;
+             double rel = std::abs(delta_p(i)) / ref;
+-            double max_step = (i == IDX_BSTAR || i == IDX_NDOT) ? 0.4 : 0.9;
++            double max_step = i == IDX_BSTAR ? 0.4 : 0.9;
+             if (rel > max_step) {
+                 delta_p(i) *= max_step / rel;
+             }
+@@ -782,6 +810,15 @@ static FitResult lm_fit_equinoctial(
+             }
+             prev_sigma = rms;
+         } else {
++            const double relative_trial_change =
++                std::abs(trial_rms - rms) / (rms + 1e-30);
++            if (std::isfinite(relative_trial_change) &&
++                relative_trial_change < config.convergence_tol &&
++                iter > 2) {
++                converged = true;
++                iter++;
++                break;
++            }
+             lambda *= 10.0;
+             if (lambda > 1e10) lambda = 1e10;
+         }
+@@ -910,8 +947,12 @@ static FitResult nelder_mead_polish(
+     FitResult result;
+     result.elements = best_el;
+     result.elements.rms_km = best_rms;
++    // This fixed-budget search has no convergence termination test. Its
++    // elements may seed LM, but cannot satisfy the publication convergence
++    // gate by themselves.
++    result.elements.converged = false;
+     result.rms_km = best_rms;
+-    result.converged = true;
++    result.converged = false;
+     result.iterations = max_iter;
+     return result;
+ }
+@@ -938,8 +979,7 @@ static FitResult differential_evolution(
+         0.1,     // L (rad) — ~6 degrees
+         0.01,    // pe
+         0.01,    // qe
+-        0.002,   // B*
+-        0.002    // ndot
++        0.002    // B*
+     };
+
+     std::vector<std::array<double, NPARAMS>> pop(pop_size);
+@@ -990,8 +1030,11 @@ static FitResult differential_evolution(
+     FitResult result;
+     result.elements = best_el;
+     result.elements.rms_km = pop_cost[best_idx];
++    // Differential evolution is likewise a fixed-generation search seed, not
++    // evidence that differential correction converged.
++    result.elements.converged = false;
+     result.rms_km = pop_cost[best_idx];
+-    result.converged = true;
++    result.converged = false;
+     result.iterations = max_gen;
+     return result;
+ }
+@@ -1142,7 +1185,7 @@ static bool compute_state_covariance_impl(
+     for (int k = 0; k < 6; k++)
+         if (!(out_cov21[diag[k]] > 0.0)) return false;
+
+-    num_obs = static_cast<int>(M);
++    num_obs = static_cast<int>(N);
+     return true;
+ }
+
+@@ -1155,21 +1198,26 @@ static FitResult fit_single_epoch(
+     std::vector<EphemerisPoint> fit_points;
+     double epoch_jd = all_points[epoch_idx].epoch_jd;
+     double max_jd = epoch_jd + config.fit_window_sec / SEC_PER_DAY;
++    constexpr double kEpochToleranceDays = 1e-9;
+
+-    // Determine subsample rate to get ~144 points
++    // The legacy single-epoch path automatically reduces dense windows to
++    // roughly 144 points. The complete-arc multi-epoch path explicitly
++    // disables that reduction and fits every source state in its inclusive
++    // eight-hour interval.
+     size_t total_in_window = 0;
+     for (size_t i = epoch_idx; i < all_points.size(); i++) {
+-        if (all_points[i].epoch_jd > max_jd) break;
++        if (all_points[i].epoch_jd > max_jd + kEpochToleranceDays) break;
+         total_in_window++;
+     }
+     int subsample = config.subsample;
+-    if (subsample <= 1 && total_in_window > 160) {
++    if (!config.use_all_window_states &&
++        subsample <= 1 && total_in_window > 160) {
+         subsample = static_cast<int>(total_in_window / 144);
+         if (subsample < 1) subsample = 1;
+     }
+
+     for (size_t i = epoch_idx; i < all_points.size(); i += subsample) {
+-        if (all_points[i].epoch_jd > max_jd) break;
++        if (all_points[i].epoch_jd > max_jd + kEpochToleranceDays) break;
+         fit_points.push_back(all_points[i]);
+     }
+
+@@ -1193,7 +1241,8 @@ static FitResult fit_single_epoch(
+     el.norad_cat_id = 99999;
+     el.object_id = "99999A  ";
+
+-    // Phase 2: Initial B* and ndot from altitude
++    // Phase 2: Initial B* from altitude. SGP4 does not consume n-dot during
++    // propagation, so it is not a fit parameter.
+     // CelesTrak SupGP B* for 550km Starlink is typically 0.03-0.05
+     // CelesTrak ndot for 550km Starlink is typically 0.005-0.01 rev/day²
+     double alt_km2 = kepler[0] - RE_KM;
+@@ -1201,22 +1250,34 @@ static FitResult fit_single_epoch(
+         double expected_bstar = std::exp(-(alt_km2 - 200.0) / 120.0) * 0.05;
+         expected_bstar = std::max(1e-5, std::min(0.1, expected_bstar));
+         el.bstar = expected_bstar;
+-        // ndot correlates with B* and altitude
+-        double expected_ndot = expected_bstar * 0.2;  // rough correlation from CelesTrak data
+-        el.mean_motion_dot = expected_ndot;
+     }
++    el.mean_motion_dot = 0.0;
++    el.mean_motion_ddot = 0.0;
+
+     // Phase 3: LM with equinoctial elements (B* in Jacobian from the start)
+     FitterConfig lm_config = config;
+     lm_config.max_iterations = bounded_iteration_count(50, config);
+     auto result = lm_fit_equinoctial(el, fit_points, lm_config);
++    bool has_converged_candidate =
++        result.converged && finite_fit_rms(result.rms_km);
++    FitResult best_converged_candidate = result;
++    const auto remember_converged_candidate =
++        [&](const FitResult& candidate) {
++            if (candidate.converged && finite_fit_rms(candidate.rms_km) &&
++                (!has_converged_candidate ||
++                 candidate.rms_km < best_converged_candidate.rms_km)) {
++                best_converged_candidate = candidate;
++                has_converged_candidate = true;
++            }
++        };
+
+     // Phase 4: Second LM pass with tighter convergence from best result
+     FitterConfig lm2_config = config;
+     lm2_config.max_iterations = bounded_iteration_count(30, config);
+     lm2_config.convergence_tol = 1e-4;
+     auto result2 = lm_fit_equinoctial(result.elements, fit_points, lm2_config);
+-    if (result2.rms_km < result.rms_km) result = result2;
++    remember_converged_candidate(result2);
++    if (prefer_lower_rms(result2, result)) result = result2;
+
+     // Track whether a derivative-free rescue (NM/DE) produced the current best.
+     // Those methods land NEAR a minimum but not AT it; a final LM (Gauss-Newton)
+@@ -1230,10 +1291,8 @@ static FitResult fit_single_epoch(
+             result.elements,
+             fit_points,
+             bounded_iteration_count(300, config));
+-        if (nm_result.rms_km < result.rms_km) {
+-            result.elements = nm_result.elements;
+-            result.rms_km = nm_result.rms_km;
+-            result.iterations = nm_result.iterations;
++        if (prefer_lower_rms(nm_result, result)) {
++            result = nm_result;
+             used_derivative_free = true;
+         }
+     }
+@@ -1245,14 +1304,13 @@ static FitResult fit_single_epoch(
+             fit_points,
+             40,
+             bounded_iteration_count(60, config));
+-        if (de_result.rms_km < result.rms_km) {
++        if (prefer_lower_rms(de_result, result)) {
+             auto de_lm = lm_fit_equinoctial(de_result.elements, fit_points, lm_config);
+-            if (de_lm.rms_km < result.rms_km) {
++            remember_converged_candidate(de_lm);
++            if (prefer_lower_rms(de_lm, de_result)) {
+                 result = de_lm;
+-            } else if (de_result.rms_km < result.rms_km) {
+-                result.elements = de_result.elements;
+-                result.rms_km = de_result.rms_km;
+-                result.iterations = de_result.iterations;
++            } else {
++                result = de_result;
+                 used_derivative_free = true;
+             }
+         }
+@@ -1267,23 +1325,40 @@ static FitResult fit_single_epoch(
+     // of the way to the true local minimum. Only runs when a derivative-free
+     // phase produced the current best, so fits that already reached their LM
+     // minimum (dense MEME arcs, sub-metre fixture fits — Phases 5-6 never fired)
+-    // are left byte-for-byte unchanged. Monotone: the result is replaced only on
+-    // a STRICT improvement and `converged` is never downgraded, so no
+-    // currently-passing gate margin can regress. Provider-agnostic: the trigger
+-    // is the solver path taken, never the data source.
++    // are left byte-for-byte unchanged. A lower-RMS unconverged candidate may
++    // seed this polish, while a separate indivisible FitResult retains the
++    // lowest-RMS element set that actually converged. Provider-agnostic: the
++    // trigger is the solver path taken, never the data source.
+     if (used_derivative_free) {
+         FitterConfig polish_config = config;
+         polish_config.max_iterations = bounded_iteration_count(60, config);
+         polish_config.convergence_tol = 1e-6;
+         auto polished = lm_fit_equinoctial(result.elements, fit_points, polish_config);
+-        if (polished.rms_km < result.rms_km) {
+-            result.elements = polished.elements;
+-            result.rms_km = polished.rms_km;
+-            result.iterations = polished.iterations;
+-            if (polished.converged) result.converged = true;  // never downgrade
+-        }
++        remember_converged_candidate(polished);
++        if (prefer_lower_rms(polished, result)) result = polished;
++    }
++
++    // A low-RMS solver candidate can exhaust one bounded LM pass while it is
++    // still descending. Give only that non-converged search result one final
++    // bounded differential-correction pass from its own elements. This is not a
++    // flag promotion: the refinement must independently satisfy LM convergence
++    // before it can enter the converged-candidate set.
++    if (!result.converged) {
++        FitterConfig final_lm_config = config;
++        final_lm_config.max_iterations =
++            bounded_iteration_count(60, config);
++        auto final_lm =
++            lm_fit_equinoctial(result.elements, fit_points, final_lm_config);
++        remember_converged_candidate(final_lm);
++        if (prefer_lower_rms(final_lm, result)) result = final_lm;
+     }
+
++    // Non-converged candidates remain useful search seeds for later solver
++    // phases, but they are never publishable merely because an earlier,
++    // different element set converged. Select the lowest-RMS converged element
++    // set as one indivisible FitResult after every search phase has completed.
++    if (has_converged_candidate) result = best_converged_candidate;
++
+     // Final RMS
+     result.rms_km = compute_rms_position(result.elements, fit_points);
+     result.elements.rms_km = result.rms_km;
+@@ -1331,7 +1406,8 @@ FitResult fit_sgp4(
+     auto best_result = fit_single_epoch(points, 0, config);
+
+     // Multi-start: try many epoch offsets if mediocre
+-    if (best_result.rms_km > 0.28 && points.size() > 100) {
++    if ((!best_result.converged || best_result.rms_km > 0.28) &&
++        points.size() > 100) {
+         size_t points_per_hour = 3600 / 60;  // MEME = 60s cadence
+
+         // Try 1h through 12h offsets. A positive interactive iteration cap
+@@ -1344,16 +1420,106 @@ FitResult fit_sgp4(
+             size_t offset = points_per_hour * h;
+             if (offset >= points.size()) break;
+             auto trial = fit_single_epoch(points, offset, config);
+-            if (trial.rms_km < best_result.rms_km) {
++            if (prefer_fit_candidate(trial, best_result)) {
+                 best_result = trial;
+             }
+-            if (best_result.rms_km < 0.22) break;
++            if (best_result.converged && best_result.rms_km < 0.22) break;
+         }
+     }
+
+     return best_result;
+ }
+
 +std::vector<std::size_t> select_fit_epoch_indices(
 +    const std::vector<EphemerisPoint>& points,
++    double spacing_sec,
 +    double fit_window_sec) {
 +    std::vector<std::size_t> indices;
 +    if (points.size() < 3) return indices;
 +
-+    const double window_sec = fit_window_sec > 0.0 ? fit_window_sec : 11520.0;
++    const double spacing =
++        spacing_sec > 0.0 ? spacing_sec : 21600.0;
++    const double window_sec =
++        fit_window_sec > 0.0 ? fit_window_sec : 28800.0;
++    const double spacing_days = spacing / SEC_PER_DAY;
 +    const double window_days = window_sec / SEC_PER_DAY;
 +    const double first_jd = points.front().epoch_jd;
 +    const double last_jd = points.back().epoch_jd;
-+    indices.push_back(0);
-+    if (!(last_jd - first_jd > window_days)) return indices;
-+
-+    // Leave at least three samples after every selected epoch. The final epoch
-+    // starts about one fit window before the last state, so it is a full local
-+    // fit rather than a degenerate two-point tail.
-+    const std::size_t max_start = points.size() - 3;
-+    auto index_at_or_after = [&](double target_jd) {
-+        auto it = std::lower_bound(
-+            points.begin(), points.end(), target_jd,
-+            [](const EphemerisPoint& point, double target) {
-+                return point.epoch_jd < target;
-+            });
-+        std::size_t index = static_cast<std::size_t>(it - points.begin());
-+        if (index > max_start) index = max_start;
-+        return index;
-+    };
-+
-+    const double terminal_start_jd = last_jd - window_days;
-+    for (double target = first_jd + window_days;
-+         target < terminal_start_jd;
-+         target += window_days) {
-+        const std::size_t index = index_at_or_after(target);
-+        if (index > indices.back()) indices.push_back(index);
++    constexpr double kEpochToleranceDays = 1e-9;
++    if (last_jd - first_jd + kEpochToleranceDays < window_days) {
++        return indices;
 +    }
-+    const std::size_t terminal = index_at_or_after(terminal_start_jd);
-+    if (terminal > indices.back()) indices.push_back(terminal);
++    for (std::size_t index = 1; index < points.size(); ++index) {
++        if (!(points[index].epoch_jd > points[index - 1].epoch_jd)) {
++            return {};
++        }
++    }
++
++    const double latest_complete_start = last_jd - window_days;
++    for (std::size_t k = 0;; ++k) {
++        const double target =
++            first_jd + static_cast<double>(k) * spacing_days;
++        if (target > latest_complete_start + kEpochToleranceDays) break;
++        const auto it = std::lower_bound(
++            points.begin(), points.end(), target - kEpochToleranceDays,
++            [](const EphemerisPoint& point, double value) {
++                return point.epoch_jd < value;
++            });
++        if (it == points.end() ||
++            it->epoch_jd > latest_complete_start + kEpochToleranceDays) {
++            break;
++        }
++        const std::size_t index =
++            static_cast<std::size_t>(it - points.begin());
++        if (indices.empty() || indices.back() != index) {
++            indices.push_back(index);
++        }
++    }
++
++    const auto terminal_after = std::upper_bound(
++        points.begin(), points.end(),
++        latest_complete_start + kEpochToleranceDays,
++        [](double value, const EphemerisPoint& point) {
++            return value < point.epoch_jd;
++        });
++    if (terminal_after != points.begin()) {
++        const std::size_t terminal = static_cast<std::size_t>(
++            std::prev(terminal_after) - points.begin());
++        if (indices.empty() || indices.back() != terminal) {
++            indices.push_back(terminal);
++        }
++    }
 +    return indices;
 +}
 +
@@ -250,9 +1378,13 @@ index e160552..8b00257 100644
 +    const FitterConfig& config) {
 +    FitterConfig cfg = config;
 +    if (series.meta.position_only) cfg.position_only = true;
++    cfg.fit_window_sec = cfg.multi_epoch_window_sec;
++    cfg.use_all_window_states = true;
 +
 +    const std::vector<std::size_t> indices =
-+        select_fit_epoch_indices(series.samples, cfg.fit_window_sec);
++        select_fit_epoch_indices(
++            series.samples, cfg.multi_epoch_spacing_sec,
++            cfg.multi_epoch_window_sec);
 +    std::vector<FitResult> results;
 +    results.reserve(indices.size());
 +    for (const std::size_t index : indices) {
@@ -269,3 +1401,6 @@ index e160552..8b00257 100644
 +    return results;
 +}
 +
+ FitResult fit_sgp4_series(
+     const StateSeries& series,
+     const FitterConfig& config) {
