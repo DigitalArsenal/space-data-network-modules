@@ -1,0 +1,30 @@
+CMakeFiles/flatsql_sdn_node.dir/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/generated/plugin_manifest_exports.c.o: \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/generated/plugin_manifest_exports.c \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/stddef.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/stddef.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/__stddef_header_macro.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/__stddef_ptrdiff_t.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/__stddef_size_t.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/__stddef_wchar_t.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/__stddef_null.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/__stddef_max_align_t.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/__stddef_offsetof.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/stdint.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/stdint.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/bits/alltypes.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/bits/stdint.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/emscripten.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/em_asm.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/em_js.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/em_macros.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/lib/clang/23/include/stdbool.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/stdbool.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/em_types.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/promise.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/compat/stdlib.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/stdlib.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/features.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/alloca.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/version.h \
+  /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/od/deps/emsdk/upstream/emscripten/cache/sysroot/include/emscripten/wget.h

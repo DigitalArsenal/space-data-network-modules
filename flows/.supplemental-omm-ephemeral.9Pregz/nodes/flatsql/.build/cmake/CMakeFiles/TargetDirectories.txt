@@ -1,0 +1,8 @@
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/flatsql.dir
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/flatsql_wasi.dir
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/flatsql_wasi_noeh.dir
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/flatsql_sdn_node_capi.dir
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/flatsql_sdn_node.dir
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/flatsql_sdm.dir
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/edit_cache.dir
+/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/flows/.supplemental-omm-ephemeral.9Pregz/nodes/flatsql/.build/cmake/CMakeFiles/rebuild_cache.dir
