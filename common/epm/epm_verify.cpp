@@ -29,6 +29,25 @@ std::string Lower(std::string s) {
   return s;
 }
 
+bool IsCanonicalAccountPath(const std::string& value) {
+  const std::string path = Trim(value);
+  constexpr const char* prefix = "m/44'/0'/";
+  if (path.rfind(prefix, 0) != 0 || path.size() <= std::strlen(prefix) + 1 ||
+      path.back() != '\'') {
+    return false;
+  }
+  const std::size_t begin = std::strlen(prefix);
+  for (std::size_t i = begin; i + 1 < path.size(); ++i) {
+    if (!std::isdigit(static_cast<unsigned char>(path[i]))) return false;
+  }
+  return true;
+}
+
+bool IsCanonicalAccountXpubKey(const CryptoKey& key) {
+  return Lower(Trim(key.algorithm)) == "secp256k1" &&
+         !Trim(key.xpub).empty() && IsCanonicalAccountPath(key.key_path);
+}
+
 // Matches Go decodeHexString: trim, strip 0x/0X, hex-decode.
 bool HexDecode(const std::string& in, std::vector<uint8_t>* out) {
   std::string s = Trim(in);
@@ -64,12 +83,18 @@ VerifyResult VerifyEpm(const EpmFields& epm,
     return r;
   }
 
-  const auto curve_of = [](const std::string& address_type) -> Curve {
-    const std::string at = Lower(Trim(address_type));
-    if (at.empty() || at == "ed25519") return Curve::kEd25519;
-    if (at == "secp256k1") return Curve::kSecp256k1;
+  const auto curve_of = [](const std::string& algorithm) -> Curve {
+    const std::string alg = Lower(Trim(algorithm));
+    if (alg.empty() || alg == "ed25519") return Curve::kEd25519;
+    if (alg == "secp256k1") return Curve::kSecp256k1;
     return Curve::kUnsupported;
   };
+  const std::string declared_algorithm = Lower(Trim(epm.signature_algorithm));
+  const Curve declared_curve = curve_of(declared_algorithm);
+  if (!declared_algorithm.empty() && declared_curve == Curve::kUnsupported) {
+    r.error = "unsupported EPM signature algorithm";
+    return r;
+  }
 
   const std::string content = SigningContentBytes(epm);
   const uint8_t* msg = reinterpret_cast<const uint8_t*>(content.data());
@@ -82,9 +107,10 @@ VerifyResult VerifyEpm(const EpmFields& epm,
   // Two ordered passes so ed25519 signing keys are tried first (preserving the
   // 25519 default), then secp256k1. Accept the first key that verifies.
   for (const Curve want : {Curve::kEd25519, Curve::kSecp256k1}) {
+    if (!declared_algorithm.empty() && want != declared_curve) continue;
     for (const auto& k : epm.keys) {
       if (k.key_type != "Signing") continue;
-      if (curve_of(k.address_type) != want) continue;
+      if (curve_of(k.algorithm) != want) continue;
       any_signing_key = true;
 
       std::vector<uint8_t> pub;
@@ -118,6 +144,14 @@ VerifyResult VerifyEpm(const EpmFields& epm,
         }
         last_error = "EPM signature invalid";
       } else {  // Curve::kSecp256k1
+        // A module-delivery proof authenticates an Ed25519 challenge key. When
+        // that binding is supplied, a secp256k1-signed EPM cannot substitute
+        // for it; the account xpub is instead cross-curve bound by the verified
+        // Ed25519 signature over the complete EPM.
+        if (expected_signing_pubkey != nullptr) {
+          last_error = "EPM does not authenticate the proven ed25519 signing key";
+          continue;
+        }
         if (pub.size() != kSecp256k1CompressedBytes &&
             pub.size() != kSecp256k1UncompressedBytes) {
           last_error = "malformed secp256k1 signing key";
@@ -147,14 +181,22 @@ VerifyResult VerifyEpm(const EpmFields& epm,
     return r;
   }
 
-  const std::string xpub = Trim(verified->xpub);
-  if (xpub.empty()) {
-    r.error = "EPM signing key carries no xpub";
+  const CryptoKey* account_key = nullptr;
+  for (const auto& key : epm.keys) {
+    if (!IsCanonicalAccountXpubKey(key)) continue;
+    if (account_key != nullptr) {
+      r.error = "EPM carries ambiguous canonical account xpub keys";
+      return r;
+    }
+    account_key = &key;
+  }
+  if (account_key == nullptr) {
+    r.error = "EPM carries no canonical secp256k1 account xpub key";
     return r;
   }
 
   r.ok = true;
-  r.xpub = xpub;
+  r.xpub = Trim(account_key->xpub);
   return r;
 }
 

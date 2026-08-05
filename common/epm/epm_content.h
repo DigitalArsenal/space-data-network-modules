@@ -24,6 +24,9 @@ struct CryptoKey {
   std::string address_type;
   std::string key_address;
   std::string key_type;  // "Signing" | "Encryption" | "" (omitted)
+  std::string key_path;
+  std::string algorithm;
+  std::string encoding;
 };
 
 struct ChainProof {
@@ -65,6 +68,7 @@ struct EpmFields {
   std::string entity_type;  // ENTITY_TYPE enum name; always included
   int64_t signature_timestamp = 0;  // included only when non-zero
   std::vector<ChainProof> chain_proofs;
+  std::string signature_algorithm;
 };
 
 // Build the EPM signing content as a JsonValue (matching the Go field set/rules).

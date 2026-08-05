@@ -4,6 +4,9 @@
 
 #include <flatbuffers/flatbuffers.h>
 
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
 #include "EPM_generated.h"
 
 #include <cryptopp/asn.h>
@@ -71,11 +74,15 @@ static std::vector<uint8_t> BuildSignedSecpEpm(const std::string& xpub, int64_t 
   EpmFields f;
   f.entity_type = "User";
   f.signature_timestamp = ts;
+  f.signature_algorithm = "secp256k1";
   sdn::epm::CryptoKey k;
   k.public_key = ToHex(pub33, sizeof(pub33));
   k.xpub = xpub;
   k.address_type = "secp256k1";
   k.key_type = "Signing";
+  k.key_path = "m/44'/0'/0'";
+  k.algorithm = "secp256k1";
+  k.encoding = "der";
   f.keys.push_back(k);
 
   const std::string content = SigningContentBytes(f);
@@ -91,36 +98,56 @@ static std::vector<uint8_t> BuildSignedSecpEpm(const std::string& xpub, int64_t 
   const auto pk = b.CreateString(k.public_key);
   const auto xp = b.CreateString(xpub);
   const auto at = b.CreateString("secp256k1");
+  const auto kp = b.CreateString(k.key_path);
+  const auto alg = b.CreateString(k.algorithm);
+  const auto enc = b.CreateString(k.encoding);
   CryptoKeyBuilder ckb(b);
   ckb.add_PUBLIC_KEY(pk);
   ckb.add_XPUB(xp);
   ckb.add_ADDRESS_TYPE(at);
   ckb.add_KEY_TYPE(KeyType::Signing);
+  ckb.add_KEY_PATH(kp);
+  ckb.add_ALGORITHM(alg);
+  ckb.add_ENCODING(enc);
   const auto ck = ckb.Finish();
   const auto keys = b.CreateVector(std::vector<flatbuffers::Offset<::CryptoKey>>{ck});
   const auto so = b.CreateString(ToHex(der.data(), der.size()));
+  const auto signature_algorithm = b.CreateString(f.signature_algorithm);
   EPMBuilder eb(b);
   eb.add_KEYS(keys);
   eb.add_SIGNATURE(so);
   eb.add_SIGNATURE_TIMESTAMP(ts);
+  eb.add_SIGNATURE_ALGORITHM(signature_algorithm);
   eb.add_ENTITY_TYPE(EntityType::User);
   FinishSizePrefixedEPMBuffer(b, eb.Finish());
   return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
-// Build a signed, size-prefixed $EPM (one ed25519 signing key) bound to `xpub`.
+// Build a signed, size-prefixed $EPM whose proven Ed25519 key signs a separate
+// canonical secp256k1 account-xpub entry.
 static std::vector<uint8_t> BuildSignedEpm(CryptoPP::ed25519::Signer& signer,
                                            const uint8_t pub32[32],
                                            const std::string& xpub, int64_t ts) {
   EpmFields f;
   f.entity_type = "User";
   f.signature_timestamp = ts;
+  f.signature_algorithm = "ed25519";
   sdn::epm::CryptoKey k;
   k.public_key = ToHex(pub32, 32);
-  k.xpub = xpub;
   k.address_type = "ed25519";
   k.key_type = "Signing";
+  k.key_path = "m/44'/0'/0'/0'/0'";
+  k.algorithm = "ed25519";
+  k.encoding = "raw-ed25519";
   f.keys.push_back(k);
+  sdn::epm::CryptoKey account;
+  account.xpub = xpub;
+  account.address_type = "p2pkh";
+  account.key_type = "Signing";
+  account.key_path = "m/44'/0'/0'";
+  account.algorithm = "secp256k1";
+  account.encoding = "compressed-sec1";
+  f.keys.push_back(account);
 
   const std::string content = SigningContentBytes(f);
   CryptoPP::AutoSeededRandomPool prng;
@@ -130,20 +157,40 @@ static std::vector<uint8_t> BuildSignedEpm(CryptoPP::ed25519::Signer& signer,
 
   flatbuffers::FlatBufferBuilder b(1024);
   const auto pk = b.CreateString(k.public_key);
-  const auto xp = b.CreateString(xpub);
   const auto at = b.CreateString("ed25519");
+  const auto kp = b.CreateString(k.key_path);
+  const auto alg = b.CreateString(k.algorithm);
+  const auto enc = b.CreateString(k.encoding);
   CryptoKeyBuilder ckb(b);
   ckb.add_PUBLIC_KEY(pk);
-  ckb.add_XPUB(xp);
   ckb.add_ADDRESS_TYPE(at);
   ckb.add_KEY_TYPE(KeyType::Signing);
-  const auto ck = ckb.Finish();
-  const auto keys = b.CreateVector(std::vector<flatbuffers::Offset<::CryptoKey>>{ck});
+  ckb.add_KEY_PATH(kp);
+  ckb.add_ALGORITHM(alg);
+  ckb.add_ENCODING(enc);
+  const auto ed_ck = ckb.Finish();
+  const auto xp = b.CreateString(xpub);
+  const auto account_at = b.CreateString(account.address_type);
+  const auto account_kp = b.CreateString(account.key_path);
+  const auto account_alg = b.CreateString(account.algorithm);
+  const auto account_enc = b.CreateString(account.encoding);
+  CryptoKeyBuilder account_builder(b);
+  account_builder.add_XPUB(xp);
+  account_builder.add_ADDRESS_TYPE(account_at);
+  account_builder.add_KEY_TYPE(KeyType::Signing);
+  account_builder.add_KEY_PATH(account_kp);
+  account_builder.add_ALGORITHM(account_alg);
+  account_builder.add_ENCODING(account_enc);
+  const auto account_ck = account_builder.Finish();
+  const auto keys = b.CreateVector(
+      std::vector<flatbuffers::Offset<::CryptoKey>>{ed_ck, account_ck});
   const auto so = b.CreateString(ToHex(sig.data(), sig.size()));
+  const auto signature_algorithm = b.CreateString(f.signature_algorithm);
   EPMBuilder eb(b);
   eb.add_KEYS(keys);
   eb.add_SIGNATURE(so);
   eb.add_SIGNATURE_TIMESTAMP(ts);
+  eb.add_SIGNATURE_ALGORITHM(signature_algorithm);
   eb.add_ENTITY_TYPE(EntityType::User);
   FinishSizePrefixedEPMBuffer(b, eb.Finish());
   return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
@@ -213,34 +260,31 @@ int main() {
   const auto sepm = BuildSignedSecpEpm("xpubSECPALLOWED", ts);
   const std::vector<std::string> secp_allow = {"xpubSECPALLOWED", "xpubANOTHER"};
   {
-    // proven_signing_pubkey is the ed25519 challenge key; it must NOT block a
-    // secp256k1 EPM (cross-curve binding N/A) — the xpub allowlist gates instead.
+    // A secp-only EPM cannot replace the Ed25519 key authenticated by LPF.
     auto r = AuthorizeModuleRequest(sepm.data(), sepm.size(), pub32, secp_allow,
                                     ts + 10, 300, verify, verify_secp);
-    CHECK(r.ok && r.xpub == "xpubSECPALLOWED",
-          "secp256k1 EPM: allowed xpub + fresh -> grant");
-    if (!r.ok) std::printf("    err: %s\n", r.error.c_str());
+    CHECK(!r.ok, "secp256k1 EPM cannot bypass proven Ed25519 proof key");
   }
   {
-    auto r = AuthorizeModuleRequest(sepm.data(), sepm.size(), pub32, {"xpubOTHER"},
+    auto r = AuthorizeModuleRequest(sepm.data(), sepm.size(), nullptr, {"xpubOTHER"},
                                     ts + 10, 300, verify, verify_secp);
     CHECK(!r.ok, "secp256k1 EPM: xpub not in allowlist -> deny");
   }
   {
-    auto r = AuthorizeModuleRequest(sepm.data(), sepm.size(), pub32, secp_allow,
+    auto r = AuthorizeModuleRequest(sepm.data(), sepm.size(), nullptr, secp_allow,
                                     ts + 1000, 300, verify, verify_secp);
     CHECK(!r.ok, "secp256k1 EPM: stale -> deny");
   }
   {
     // No secp256k1 verifier supplied -> the secp256k1 signing key is skipped -> deny.
-    auto r = AuthorizeModuleRequest(sepm.data(), sepm.size(), pub32, secp_allow,
+    auto r = AuthorizeModuleRequest(sepm.data(), sepm.size(), nullptr, secp_allow,
                                     ts + 10, 300, verify);
     CHECK(!r.ok, "secp256k1 EPM without secp256k1 verifier -> deny");
   }
   {
     auto bad = sepm;
     bad[bad.size() / 2] ^= 0xFF;
-    auto r = AuthorizeModuleRequest(bad.data(), bad.size(), pub32, secp_allow,
+    auto r = AuthorizeModuleRequest(bad.data(), bad.size(), nullptr, secp_allow,
                                     ts + 10, 300, verify, verify_secp);
     CHECK(!r.ok, "tampered secp256k1 EPM bytes -> deny");
   }

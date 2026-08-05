@@ -95,12 +95,23 @@ int main() {
   epm.entity_type = "Individual";
   epm.legal_name = "Acme & Co";
   epm.signature_timestamp = 1782470000;
+  epm.signature_algorithm = "ed25519";
   CryptoKey k;
   k.public_key = ToHex(pub32, 32);
-  k.xpub = "xpub6DHmTESTidentity";
   k.address_type = "ed25519";
   k.key_type = "Signing";
+  k.key_path = "m/44'/0'/0'/0'/0'";
+  k.algorithm = "ed25519";
+  k.encoding = "raw-ed25519";
   epm.keys.push_back(k);
+  CryptoKey account;
+  account.xpub = "xpub6DHmTESTidentity";
+  account.address_type = "p2pkh";
+  account.key_type = "Signing";
+  account.key_path = "m/44'/0'/0'";
+  account.algorithm = "secp256k1";
+  account.encoding = "compressed-sec1";
+  epm.keys.push_back(account);
 
   const std::string content = SigningContentBytes(epm);
   std::vector<CryptoPP::byte> sig(signer.MaxSignatureLength());
@@ -141,6 +152,33 @@ int main() {
     auto r = VerifyEpm(no_key, sig.data(), sig.size(), pub32, cpp_verify);
     CHECK(!r.ok, "EPM without signing key rejected");
   }
+  {
+    EpmFields no_account = epm;
+    no_account.keys.pop_back();
+    const std::string changed = SigningContentBytes(no_account);
+    std::vector<CryptoPP::byte> changed_sig(signer.MaxSignatureLength());
+    changed_sig.resize(signer.SignMessage(
+        prng, reinterpret_cast<const CryptoPP::byte*>(changed.data()), changed.size(),
+        changed_sig.data()));
+    auto r = VerifyEpm(no_account, changed_sig.data(), changed_sig.size(), pub32, cpp_verify);
+    CHECK(!r.ok && r.error.find("no canonical") != std::string::npos,
+          "verified Ed25519 EPM without separate account xpub rejected");
+  }
+  {
+    EpmFields ambiguous = epm;
+    CryptoKey second = account;
+    second.xpub = "xpubSECOND";
+    second.key_path = "m/44'/0'/1'";
+    ambiguous.keys.push_back(second);
+    const std::string changed = SigningContentBytes(ambiguous);
+    std::vector<CryptoPP::byte> changed_sig(signer.MaxSignatureLength());
+    changed_sig.resize(signer.SignMessage(
+        prng, reinterpret_cast<const CryptoPP::byte*>(changed.data()), changed.size(),
+        changed_sig.data()));
+    auto r = VerifyEpm(ambiguous, changed_sig.data(), changed_sig.size(), pub32, cpp_verify);
+    CHECK(!r.ok && r.error.find("ambiguous") != std::string::npos,
+          "multiple canonical account xpub entries rejected");
+  }
 
   // ---- secp256k1-signed EPM ----
   std::printf("EPM verify (secp256k1):\n");
@@ -158,11 +196,15 @@ int main() {
     sepm.entity_type = "Individual";
     sepm.legal_name = "Acme & Co";
     sepm.signature_timestamp = 1782470000;
+    sepm.signature_algorithm = "secp256k1";
     CryptoKey sk_key;
     sk_key.public_key = ToHex(pub33, sizeof(pub33));
     sk_key.xpub = "xpubSECPidentity";
     sk_key.address_type = "secp256k1";
     sk_key.key_type = "Signing";
+    sk_key.key_path = "m/44'/0'/0'";
+    sk_key.algorithm = "secp256k1";
+    sk_key.encoding = "der";
     sepm.keys.push_back(sk_key);
 
     const std::string scontent = SigningContentBytes(sepm);
@@ -177,11 +219,10 @@ int main() {
       if (!r.ok) std::printf("    err: %s\n", r.error.c_str());
     }
     {
-      // A stray 32-byte ed25519 proven key must NOT block secp256k1 (cross-curve
-      // binding does not apply) — this is what lets a secp256k1 requester pass.
+      // A module-delivery proof authenticates this Ed25519 key; a secp-only EPM
+      // must not bypass that proof merely because its xpub is allowlisted.
       auto r = VerifyEpm(sepm, sder.data(), sder.size(), pub32, cpp_verify, cpp_secp_verify);
-      CHECK(r.ok && r.xpub == "xpubSECPidentity",
-            "secp256k1 EPM ignores ed25519 proven-key binding");
+      CHECK(!r.ok, "secp256k1 EPM cannot bypass proven ed25519 binding");
     }
     {
       auto bad = sder;
@@ -215,17 +256,23 @@ int main() {
     EpmFields mixed;
     mixed.entity_type = "Individual";
     mixed.signature_timestamp = 1782470000;
+    mixed.signature_algorithm = "ed25519";
     CryptoKey ed_key;
     ed_key.public_key = ToHex(pub32, 32);
-    ed_key.xpub = "xpubED25519identity";
     ed_key.address_type = "ed25519";
     ed_key.key_type = "Signing";
+    ed_key.key_path = "m/44'/0'/0'/0'/0'";
+    ed_key.algorithm = "ed25519";
+    ed_key.encoding = "raw-ed25519";
     mixed.keys.push_back(ed_key);
     CryptoKey secp_key;
     secp_key.public_key = ToHex(pub33, sizeof(pub33));
     secp_key.xpub = "xpubSECPidentity";
     secp_key.address_type = "secp256k1";
     secp_key.key_type = "Signing";
+    secp_key.key_path = "m/44'/0'/0'";
+    secp_key.algorithm = "secp256k1";
+    secp_key.encoding = "compressed-sec1";
     mixed.keys.push_back(secp_key);
 
     const std::string mcontent = SigningContentBytes(mixed);
@@ -233,8 +280,8 @@ int main() {
     msig.resize(signer.SignMessage(prng, reinterpret_cast<const CryptoPP::byte*>(mcontent.data()),
                                    mcontent.size(), msig.data()));
     auto r = VerifyEpm(mixed, msig.data(), msig.size(), pub32, cpp_verify, cpp_secp_verify);
-    CHECK(r.ok && r.xpub == "xpubED25519identity",
-          "mixed EPM: ed25519 signing key verifies first");
+    CHECK(r.ok && r.xpub == "xpubSECPidentity",
+          "mixed EPM: proven Ed25519 signature binds separate account xpub");
   }
 
   std::printf(g_fail == 0 ? "\nALL PASS\n" : "\n%d FAILURE(S)\n", g_fail);

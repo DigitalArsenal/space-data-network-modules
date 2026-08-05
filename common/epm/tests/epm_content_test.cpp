@@ -30,12 +30,17 @@ int main() {
   k.address_type = "ed25519";
   k.key_address = "";  // empty -> omitted
   k.key_type = "Signing";
+  k.key_path = "m/44'/0'/0'/0'/0'";
+  k.algorithm = "ed25519";
+  k.encoding = "raw-ed25519";
   epm.keys.push_back(k);
 
   const std::string canon = SigningContentBytes(epm);
   const std::string expect =
       "{\"ENTITY_TYPE\":\"Individual\",\"KEYS\":[{\"ADDRESS_TYPE\":\"ed25519\","
-      "\"KEY_TYPE\":\"Signing\",\"PUBLIC_KEY\":\"aabbcc\",\"XPUB\":\"xpubTEST\"}],"
+      "\"ALGORITHM\":\"ed25519\",\"ENCODING\":\"raw-ed25519\","
+      "\"KEY_PATH\":\"m/44'/0'/0'/0'/0'\",\"KEY_TYPE\":\"Signing\","
+      "\"PUBLIC_KEY\":\"aabbcc\",\"XPUB\":\"xpubTEST\"}],"
       "\"SIGNATURE_TIMESTAMP\":1782470000}";
   CHECK(canon == expect, "canonical content: field set + recursive key sort + omit-empty");
   if (canon != expect) std::printf("    got: %s\n    exp: %s\n", canon.c_str(), expect.c_str());
