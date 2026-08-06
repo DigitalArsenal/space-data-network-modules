@@ -74,6 +74,7 @@ export async function buildSignedNode({
   signingEnvironmentPrefix,
   defaultSigningByte,
   defaultSigningKeyId,
+  threadModel = "wasi-sequential",
 }) {
   const buildRoot = path.join(nodeRoot, ".build");
   const unsignedRoot = path.join(nodeRoot, "dist/.unsigned");
@@ -140,6 +141,10 @@ export async function buildSignedNode({
     language: "c++",
     outputPath: unsignedPath,
     allowUndefinedImports: true,
+    // DECLARED, never inferred: runtimeTargets ["browser","wasmedge"] makes the
+    // SDK infer wasi-threads for every caller, and these guests provably never
+    // spawn a thread (manifest.sequentialJustification says why).
+    threadModel,
   });
   if (!compilation.report?.ok) {
     throw new Error(

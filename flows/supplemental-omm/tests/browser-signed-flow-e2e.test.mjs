@@ -30,33 +30,33 @@ const starlinkArtifactPath = path.join(
   "nodes/providers/starlink/dist/isomorphic/module.wasm",
 );
 const trustedReleaseSigner =
-  "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89";
+  "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd";
 
 // This release lock is updated only when the production-signed outer bundle is
 // deliberately replaced. The child locks below prove which exact separately
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "29dfc59acd816157190067d36efcee6c6a232c90880e5e66fa87b739c3ef4b0f";
+  "d8dd6bc2cac11a4005d1a1f327264fe57f48b1495e85b7bd008169db1520d5f0";
 const expectedChildSha256 = Object.freeze({
-  timer: "ef67e56165444a164994d22f5d496d732667f1f7fcc4e22f660445547e550379",
+  timer: "c728bfb51644cd8c49d135cfc29ccc7dcf495e051ebd1fa9f58e9afdd66640e8",
   "provider-starlink":
-    "2438dcd006c6e51540c7479ac8e1f43cc9e0c5388f4486b7300aa4d6c807c0bb",
+    "b6b4ab5c31e3c783d5a80db470539a8a11d652ad8a69ff2907d5085b1bc62851",
   "provider-glonass":
-    "337a5e408161f3745395aac23881bdbdabfe4b77c89f0077bd4dcb72a320375a",
+    "ce738ceb46af1b9252b3fa94720aac64e0e56fd89652630c0d332773ad2055ca",
   "provider-intelsat":
-    "100550e29a77fb24c1c4be6026190f7ce92dc732d24ec8c3e67ca3195f12779b",
+    "259f6816eff7a5e31c2d9cd4c962a585cc8f01ace03964f2fb014aa800f9fef8",
   "provider-cpf":
-    "e950098721ae74e6d47be7842db848820804a5e6bc5e115ba38b9bdfd9da90ae",
+    "9865efc121a3ac687defb8ff0095c30ec9d92ad78747d7645719622dd1f2b7d4",
   "provider-iss":
-    "cfd39ab3c98511d06120c401171f38270cf591369f21a4183b367b0b26b1ece8",
-  od: "3d20add1211c79012e31fa48b046ba04aa4cbd4e648637db8037793938f5796b",
+    "1883a9587c775be307f7b1dc73600ba804ee3348a96720424c789c1285a9b77b",
+  od: "cbcdd060f81963f3874817bc5971cbedde7860724cd99f4dcad13dd1a8ea443c",
   store:
-    "9413cbc137efb46b63e0d7b398c5a8b5a8e91c23bd501ba2e16fb6220b8f5991",
+    "bdd61ebd9b755b697cd501c94d111702ad63c3b0e39bef382c1ac8a435ccf2a5",
   publication:
-    "091cd16f2c0054b6445e930db749ebb92309af6c8ea3afd2796222184b67ebbe",
+    "80d1b976cc5ab5ec7299b80a99185c6808de436538c02eb1e993df061564cd46",
   status:
-    "53bf69a807b84b08e3d45d0008f74d14e6c3735c32665fd3bd63f7700c4d9229",
+    "7b9a4daa95c162812c0763d7bfd68d6c76401bdde0f30e419f8d84751d12d886",
 });
 
 const defaultUrls = Object.freeze({
@@ -74,7 +74,7 @@ const defaultUrls = Object.freeze({
 const fsbType = Object.freeze({
   schemaName: "FSB.fbs",
   fileIdentifier: "$FSB",
-  schemaVersion: "1.158.1",
+  schemaVersion: "1.164.0",
   schemaHash:
     "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
   rootTypeName: "FSB",

@@ -42,7 +42,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -50,7 +50,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -75,7 +75,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -83,7 +83,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -106,7 +106,7 @@
     {
       "schemaName": "FSB.fbs",
       "fileIdentifier": "$FSB",
-      "schemaVersion": "1.158.1",
+      "schemaVersion": "1.164.0",
       "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
       "rootTypeName": "FSB"
     }
@@ -119,5 +119,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "The publication node walks one ordered batch of fitted result records and emits one canonical FSB transport envelope; the envelope's DATA vector offsets are produced in order, so record k+1's placement depends on record k. It spawns nothing, and the built artifact imports no wasi.thread-spawn and exports no wasi_thread_start."
+  }
 }

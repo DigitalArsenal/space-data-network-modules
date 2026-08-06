@@ -28,16 +28,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -59,7 +59,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -67,7 +67,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -92,16 +92,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -131,16 +131,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -164,7 +164,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -172,7 +172,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -195,16 +195,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -234,16 +234,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -267,16 +267,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -306,16 +306,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -339,16 +339,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -378,16 +378,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -411,16 +411,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -450,16 +450,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -483,16 +483,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -522,16 +522,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -555,7 +555,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -563,7 +563,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -586,16 +586,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -625,7 +625,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -633,7 +633,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -658,16 +658,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -684,5 +684,9 @@
       "maxBatch": 4096,
       "drainPolicy": "drain-until-yield"
     }
-  ]
+  ],
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "The FlatSQL store node appends records into a single arena whose write cursor is the serialization point; concurrent appends inside the guest would race that cursor and break the byte-identical persisted-state guarantee the tri-runtime parity contract depends on. Any parallelism is the caller's: the host may run independent store invocations against separate arenas, and the heavy query work runs in the engine's own AOT context outside this artifact."
+  }
 }

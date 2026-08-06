@@ -1,11 +1,28 @@
-const fsbCanonical = Object.freeze({
-  schemaName: "FSB.fbs",
-  fileIdentifier: "$FSB",
-  schemaVersion: "1.158.1",
-  schemaHash: "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-  rootTypeName: "FSB",
-  wireFormat: "flatbuffer",
-});
+import { loadStandardsCatalog } from "space-data-module-sdk/standards";
+
+// A manifest NEVER hardcodes an SDS version or hash. The SDK validates every
+// type reference against the canonical catalog, so a literal here is a
+// time-bomb that detonates on the next SDS cut (it did: FSO/FSB 1.158 vs a
+// canonical 1.164 refused every one of these ten signed children). Read the
+// same catalog the validator reads and the two cannot disagree.
+const standardsCatalog = await loadStandardsCatalog();
+
+function canonicalTypeRef(schemaName) {
+  const entry = standardsCatalog.find((e) => e.schemaName === schemaName);
+  if (!entry?.version || !entry?.hash || !entry?.rootTypeName || !entry?.fileIdentifier) {
+    throw new Error(`canonical SDS catalog has no complete entry for ${schemaName}`);
+  }
+  return Object.freeze({
+    schemaName,
+    fileIdentifier: entry.fileIdentifier,
+    schemaVersion: entry.version,
+    schemaHash: entry.hash,
+    rootTypeName: entry.rootTypeName,
+    wireFormat: "flatbuffer",
+  });
+}
+
+const fsbCanonical = canonicalTypeRef("FSB.fbs");
 
 const fsbAligned = Object.freeze({
   ...fsbCanonical,
@@ -14,14 +31,7 @@ const fsbAligned = Object.freeze({
   requiredAlignment: 8,
 });
 
-const fsoCanonical = Object.freeze({
-  schemaName: "FSO.fbs",
-  fileIdentifier: "$FSO",
-  schemaVersion: "1.158.2",
-  schemaHash: "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
-  rootTypeName: "FSO",
-  wireFormat: "flatbuffer",
-});
+const fsoCanonical = canonicalTypeRef("FSO.fbs");
 
 const fsoAligned = Object.freeze({
   ...fsoCanonical,
@@ -108,18 +118,18 @@ export const manifest = {
   ],
   schemasUsed: [
     {
-      schemaName: "FSB.fbs",
-      fileIdentifier: "$FSB",
-      schemaVersion: "1.158.1",
-      schemaHash: "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
-      rootTypeName: "FSB",
+      schemaName: fsbCanonical.schemaName,
+      fileIdentifier: fsbCanonical.fileIdentifier,
+      schemaVersion: fsbCanonical.schemaVersion,
+      schemaHash: fsbCanonical.schemaHash,
+      rootTypeName: fsbCanonical.rootTypeName,
     },
     {
-      schemaName: "FSO.fbs",
-      fileIdentifier: "$FSO",
-      schemaVersion: "1.158.2",
-      schemaHash: "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
-      rootTypeName: "FSO",
+      schemaName: fsoCanonical.schemaName,
+      fileIdentifier: fsoCanonical.fileIdentifier,
+      schemaVersion: fsoCanonical.schemaVersion,
+      schemaHash: fsoCanonical.schemaHash,
+      rootTypeName: fsoCanonical.rootTypeName,
     },
   ],
   buildArtifacts: [

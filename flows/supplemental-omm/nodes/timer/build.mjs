@@ -93,6 +93,11 @@ const compilation = await compileModuleFromSource({
   language: "c++",
   outputPath: unsignedPath,
   allowUndefinedImports: true,
+  // DECLARE the thread model; never let it be inferred. runtimeTargets
+  // ["browser","wasmedge"] makes the SDK infer wasi-threads, and this guest
+  // provably never spawns one, so the inferred build fails the isomorphic
+  // artifact guard. manifest.sequentialJustification carries the reason.
+  threadModel: "wasi-sequential",
 });
 if (!compilation.report?.ok) {
   throw new Error(

@@ -20,61 +20,71 @@
       "nodeId": "timer",
       "pluginId": "org.sdn.flows.supplemental-omm.timer",
       "methodId": "on_wakeup",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "provider-starlink",
       "pluginId": "com.orbpro.spacex-starlink-source",
       "methodId": "emit",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "provider-glonass",
       "pluginId": "com.orbpro.glonass-source",
       "methodId": "emit",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "provider-intelsat",
       "pluginId": "com.orbpro.intelsat-source",
       "methodId": "emit",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "provider-cpf",
       "pluginId": "com.orbpro.cpf-source",
       "methodId": "emit",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "provider-iss",
       "pluginId": "com.orbpro.iss-source",
       "methodId": "emit",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "methodId": "fit",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "store",
       "pluginId": "com.digitalarsenal.flatsql.store",
       "methodId": "append_records",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "publication",
       "pluginId": "org.sdn.flows.supplemental-omm.publication",
       "methodId": "publish_records",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "status",
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "methodId": "record_event",
-      "dispatchModel": "isomorphic"
+      "dispatchModel": "isomorphic",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -83,7 +93,7 @@
       "dependencyId": "org.sdn.flows.supplemental-omm.timer",
       "pluginId": "org.sdn.flows.supplemental-omm.timer",
       "version": "1.0.0",
-      "sha256": "ef67e56165444a164994d22f5d496d732667f1f7fcc4e22f660445547e550379",
+      "sha256": "c728bfb51644cd8c49d135cfc29ccc7dcf495e051ebd1fa9f58e9afdd66640e8",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/timer/dist/isomorphic/module.wasm",
       "publisher": "./nodes/timer/publisher.json",
@@ -95,7 +105,7 @@
       "dependencyId": "com.orbpro.spacex-starlink-source",
       "pluginId": "com.orbpro.spacex-starlink-source",
       "version": "2.0.0",
-      "sha256": "2438dcd006c6e51540c7479ac8e1f43cc9e0c5388f4486b7300aa4d6c807c0bb",
+      "sha256": "b6b4ab5c31e3c783d5a80db470539a8a11d652ad8a69ff2907d5085b1bc62851",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
       "publisher": "./nodes/providers/starlink/publisher.json",
@@ -107,7 +117,7 @@
       "dependencyId": "com.orbpro.glonass-source",
       "pluginId": "com.orbpro.glonass-source",
       "version": "2.0.0",
-      "sha256": "337a5e408161f3745395aac23881bdbdabfe4b77c89f0077bd4dcb72a320375a",
+      "sha256": "ce738ceb46af1b9252b3fa94720aac64e0e56fd89652630c0d332773ad2055ca",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
       "publisher": "./nodes/providers/glonass/publisher.json",
@@ -119,7 +129,7 @@
       "dependencyId": "com.orbpro.intelsat-source",
       "pluginId": "com.orbpro.intelsat-source",
       "version": "2.0.0",
-      "sha256": "100550e29a77fb24c1c4be6026190f7ce92dc732d24ec8c3e67ca3195f12779b",
+      "sha256": "259f6816eff7a5e31c2d9cd4c962a585cc8f01ace03964f2fb014aa800f9fef8",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
       "publisher": "./nodes/providers/intelsat/publisher.json",
@@ -131,7 +141,7 @@
       "dependencyId": "com.orbpro.cpf-source",
       "pluginId": "com.orbpro.cpf-source",
       "version": "2.0.0",
-      "sha256": "e950098721ae74e6d47be7842db848820804a5e6bc5e115ba38b9bdfd9da90ae",
+      "sha256": "9865efc121a3ac687defb8ff0095c30ec9d92ad78747d7645719622dd1f2b7d4",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
       "publisher": "./nodes/providers/cpf/publisher.json",
@@ -143,7 +153,7 @@
       "dependencyId": "com.orbpro.iss-source",
       "pluginId": "com.orbpro.iss-source",
       "version": "2.0.0",
-      "sha256": "cfd39ab3c98511d06120c401171f38270cf591369f21a4183b367b0b26b1ece8",
+      "sha256": "1883a9587c775be307f7b1dc73600ba804ee3348a96720424c789c1285a9b77b",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/providers/iss/dist/isomorphic/module.wasm",
       "publisher": "./nodes/providers/iss/publisher.json",
@@ -155,7 +165,7 @@
       "dependencyId": "org.sdn.flows.supplemental-omm.od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "version": "1.0.0",
-      "sha256": "3d20add1211c79012e31fa48b046ba04aa4cbd4e648637db8037793938f5796b",
+      "sha256": "cbcdd060f81963f3874817bc5971cbedde7860724cd99f4dcad13dd1a8ea443c",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/od/dist/isomorphic/module.wasm",
       "publisher": "./nodes/od/publisher.json",
@@ -167,7 +177,7 @@
       "dependencyId": "com.digitalarsenal.flatsql.store",
       "pluginId": "com.digitalarsenal.flatsql.store",
       "version": "2.0.2",
-      "sha256": "9413cbc137efb46b63e0d7b398c5a8b5a8e91c23bd501ba2e16fb6220b8f5991",
+      "sha256": "bdd61ebd9b755b697cd501c94d111702ad63c3b0e39bef382c1ac8a435ccf2a5",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/flatsql/dist/isomorphic/module.wasm",
       "publisher": "./nodes/flatsql/publisher.json",
@@ -179,7 +189,7 @@
       "dependencyId": "org.sdn.flows.supplemental-omm.publication",
       "pluginId": "org.sdn.flows.supplemental-omm.publication",
       "version": "1.0.0",
-      "sha256": "091cd16f2c0054b6445e930db749ebb92309af6c8ea3afd2796222184b67ebbe",
+      "sha256": "80d1b976cc5ab5ec7299b80a99185c6808de436538c02eb1e993df061564cd46",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/publication/dist/isomorphic/module.wasm",
       "publisher": "./nodes/publication/publisher.json",
@@ -191,7 +201,7 @@
       "dependencyId": "org.sdn.flows.supplemental-omm.status",
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "version": "1.0.0",
-      "sha256": "53bf69a807b84b08e3d45d0008f74d14e6c3735c32665fd3bd63f7700c4d9229",
+      "sha256": "7b9a4daa95c162812c0763d7bfd68d6c76401bdde0f30e419f8d84751d12d886",
       "dispatchModel": "isomorphic",
       "artifactPath": "./nodes/status/dist/isomorphic/module.wasm",
       "publisher": "./nodes/status/publisher.json",
@@ -206,110 +216,110 @@
       "pluginId": "org.sdn.flows.supplemental-omm.timer",
       "methodId": "on_wakeup",
       "dispatchModel": "isomorphic",
-      "sha256": "ef67e56165444a164994d22f5d496d732667f1f7fcc4e22f660445547e550379",
+      "sha256": "c728bfb51644cd8c49d135cfc29ccc7dcf495e051ebd1fa9f58e9afdd66640e8",
       "entryId": "org.sdn.flows.supplemental-omm.timer",
       "publisherEntryId": "nodes/timer.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "provider-starlink",
       "pluginId": "com.orbpro.spacex-starlink-source",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
-      "sha256": "2438dcd006c6e51540c7479ac8e1f43cc9e0c5388f4486b7300aa4d6c807c0bb",
+      "sha256": "b6b4ab5c31e3c783d5a80db470539a8a11d652ad8a69ff2907d5085b1bc62851",
       "entryId": "com.orbpro.spacex-starlink-source",
       "publisherEntryId": "nodes/provider-starlink.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "provider-glonass",
       "pluginId": "com.orbpro.glonass-source",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
-      "sha256": "337a5e408161f3745395aac23881bdbdabfe4b77c89f0077bd4dcb72a320375a",
+      "sha256": "ce738ceb46af1b9252b3fa94720aac64e0e56fd89652630c0d332773ad2055ca",
       "entryId": "com.orbpro.glonass-source",
       "publisherEntryId": "nodes/provider-glonass.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "provider-intelsat",
       "pluginId": "com.orbpro.intelsat-source",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
-      "sha256": "100550e29a77fb24c1c4be6026190f7ce92dc732d24ec8c3e67ca3195f12779b",
+      "sha256": "259f6816eff7a5e31c2d9cd4c962a585cc8f01ace03964f2fb014aa800f9fef8",
       "entryId": "com.orbpro.intelsat-source",
       "publisherEntryId": "nodes/provider-intelsat.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "provider-cpf",
       "pluginId": "com.orbpro.cpf-source",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
-      "sha256": "e950098721ae74e6d47be7842db848820804a5e6bc5e115ba38b9bdfd9da90ae",
+      "sha256": "9865efc121a3ac687defb8ff0095c30ec9d92ad78747d7645719622dd1f2b7d4",
       "entryId": "com.orbpro.cpf-source",
       "publisherEntryId": "nodes/provider-cpf.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "provider-iss",
       "pluginId": "com.orbpro.iss-source",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
-      "sha256": "cfd39ab3c98511d06120c401171f38270cf591369f21a4183b367b0b26b1ece8",
+      "sha256": "1883a9587c775be307f7b1dc73600ba804ee3348a96720424c789c1285a9b77b",
       "entryId": "com.orbpro.iss-source",
       "publisherEntryId": "nodes/provider-iss.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "methodId": "fit",
       "dispatchModel": "isomorphic",
-      "sha256": "3d20add1211c79012e31fa48b046ba04aa4cbd4e648637db8037793938f5796b",
+      "sha256": "cbcdd060f81963f3874817bc5971cbedde7860724cd99f4dcad13dd1a8ea443c",
       "entryId": "org.sdn.flows.supplemental-omm.od",
       "publisherEntryId": "nodes/od.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "store",
       "pluginId": "com.digitalarsenal.flatsql.store",
       "methodId": "append_records",
       "dispatchModel": "isomorphic",
-      "sha256": "9413cbc137efb46b63e0d7b398c5a8b5a8e91c23bd501ba2e16fb6220b8f5991",
+      "sha256": "bdd61ebd9b755b697cd501c94d111702ad63c3b0e39bef382c1ac8a435ccf2a5",
       "entryId": "com.digitalarsenal.flatsql.store",
       "publisherEntryId": "nodes/store.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "publication",
       "pluginId": "org.sdn.flows.supplemental-omm.publication",
       "methodId": "publish_records",
       "dispatchModel": "isomorphic",
-      "sha256": "091cd16f2c0054b6445e930db749ebb92309af6c8ea3afd2796222184b67ebbe",
+      "sha256": "80d1b976cc5ab5ec7299b80a99185c6808de436538c02eb1e993df061564cd46",
       "entryId": "org.sdn.flows.supplemental-omm.publication",
       "publisherEntryId": "nodes/publication.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     },
     {
       "nodeId": "status",
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "methodId": "record_event",
       "dispatchModel": "isomorphic",
-      "sha256": "53bf69a807b84b08e3d45d0008f74d14e6c3735c32665fd3bd63f7700c4d9229",
+      "sha256": "7b9a4daa95c162812c0763d7bfd68d6c76401bdde0f30e419f8d84751d12d886",
       "entryId": "org.sdn.flows.supplemental-omm.status",
       "publisherEntryId": "nodes/status.publisher.json",
-      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-07-21",
-      "publisherPublicKeyHex": "088ac3d85932dc6946e3ff62882afb48885c2df0cd8b34f2993c5885e3424d89"
+      "publisherKeyId": "spaceaware-sdn-isomorphic-2026-08-06",
+      "publisherPublicKeyHex": "d4b97660cea81cff7db4bccc8be327efb259ec7b48cf8bf6c0d7d9819b1537fd"
     }
   ],
   "runtimeNodeRoutes": [
@@ -358,9 +368,9 @@
   ],
   "bundle": {
     "version": 2,
-    "portableWasmSha256": "100dbaba860f8a044eca8f4f8a2f65bf93f41db82062d47f4947533739d292bc",
-    "flowPlgSha256": "35014af8c760a0afb6c4a8cce9b1460ba0737a5847ad387bca96969b1ba31e06",
-    "appSha256": "cc615bebbab6f241a74e1b7a873a4a0e7c4ca86ed4dcba5afba227c9bd9a982d",
+    "portableWasmSha256": "8de5debf2721ea6b424dc12f6ae5f1525be34d27af82f08097dc38cdcc96eab9",
+    "flowPlgSha256": "3b6836555c8fc69b6f94c4efd648499664914a40dd2c897b9ec8af06ec879786",
+    "appSha256": "b79fabb1a3b01eeb87f87c54afa8ff7d502760cabb31036e05a7e2c8e7de3f27",
     "signatureHashAlgorithm": "sha256-sdn-module-bundle-v1",
     "requiredEntries": [
       "manifest",

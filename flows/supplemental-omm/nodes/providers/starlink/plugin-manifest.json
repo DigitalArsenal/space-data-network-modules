@@ -4,10 +4,18 @@
   "version": "2.0.0",
   "description": "Downloads the complete Starlink operator ephemeris catalog into a durable WASM-owned opaque spool before emitting byte-exact provider-native responses as paired canonical or aligned FSB chunks.",
   "pluginFamily": "data_source",
-  "capabilities": ["http", "storage_adapter"],
+  "capabilities": [
+    "http",
+    "storage_adapter"
+  ],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "emit",
@@ -22,7 +30,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -30,7 +38,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -55,7 +63,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -63,7 +71,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -86,7 +94,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -94,7 +102,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -117,7 +125,7 @@
     {
       "schemaName": "FSB.fbs",
       "fileIdentifier": "$FSB",
-      "schemaVersion": "1.158.1",
+      "schemaVersion": "1.164.0",
       "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
       "rootTypeName": "FSB"
     },

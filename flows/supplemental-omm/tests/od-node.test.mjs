@@ -17,7 +17,7 @@ import {
 } from "../../../../spacedatastandards.org/node_modules/flatbuffers/js/flatbuffers.js";
 import { FSB } from "../../../../spacedatastandards.org/lib/js/FSB/FSB.js";
 import { FSO } from "../../../../spacedatastandards.org/lib/js/FSO/FSO.js";
-import { FTB } from "../../../../spacedatastandards.org/lib/js/FSO/FTB.js";
+import { FSOTableBinding } from "../../../../spacedatastandards.org/lib/js/FSO/FSOTableBinding.js";
 import { flatSqlNodeOperation } from "../../../../spacedatastandards.org/lib/js/FSO/flatSqlNodeOperation.js";
 import { flatSqlNodeStatus } from "../../../../spacedatastandards.org/lib/js/FSO/flatSqlNodeStatus.js";
 import { OMM } from "../../../../spacedatastandards.org/lib/js/OMM/OMM.js";
@@ -36,7 +36,7 @@ const outputPorts = ["control", "status", ...recordOutputPorts];
 const fsbType = {
   schemaName: "FSB.fbs",
   fileIdentifier: "$FSB",
-  schemaVersion: "1.158.1",
+  schemaVersion: "1.164.0",
   schemaHash: "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
   rootTypeName: "FSB",
   wireFormat: "flatbuffer",
@@ -424,7 +424,7 @@ function decodeControl(output) {
       : new TextDecoder().decode(candidate ?? new Uint8Array());
   const bindings = [];
   for (let index = 0; index < value.tableBindingsLength(); index += 1) {
-    const binding = value.TABLE_BINDINGS(index, new FTB());
+    const binding = value.TABLE_BINDINGS(index, new FSOTableBinding());
     bindings.push({
       fileIdentifier: decode(binding?.FILE_IDENTIFIER()),
       tableName: decode(binding?.TABLE_NAME()),

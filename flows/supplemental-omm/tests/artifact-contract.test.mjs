@@ -34,7 +34,20 @@ function sha256(bytes) {
 
 test("the universal-AOT build profile is compatible with the production host", () => {
   const compiler = fs.readFileSync(universalAotCompilerPath, "utf8");
-  assert.match(compiler, /WasmEdge-0\.14\.1/);
+  // The compiler version is THE SDK's wasmedgePin.json, read at build time. A
+  // literal version in either the script or this test is the drift that shipped
+  // 0.14.1-compiled AOT sections to 0.16.4 hosts, which ignore and prune them.
+  // Assert the script READS the pin; never assert a number typed here.
+  assert.match(
+    compiler,
+    /wasmedgePin\.json/,
+    "the AOT compiler must read the SDK WasmEdge pin, not hardcode a version",
+  );
+  assert.doesNotMatch(
+    compiler,
+    /version 0\.\d+\.\d+/,
+    "the AOT compiler must not hardcode a WasmEdge version",
+  );
   const parentProfile = compiler.match(/compile_parent\(\) \{([\s\S]*?)\n\}/)?.[1];
   const childProfile = compiler.match(/compile_child\(\) \{([\s\S]*?)\n\}/)?.[1];
   assert.ok(parentProfile, "missing explicit parent AOT profile");
@@ -195,6 +208,12 @@ test(
       }),
     ];
 
+    // The invariant is that ONE pinned compiler produced the whole bundle, not
+    // that its format version equals a number typed into this file. WasmEdge
+    // bumps the AOT binary version between runtimes (0.14.x emits 1, 0.16.x
+    // emits 2); pinning the literal here made a correct pin bump look like a
+    // regression. Target OS/arch stays asserted — that IS a portability fact.
+    let sharedBinaryVersion = null;
     for (const [label, moduleBytes] of modules) {
       assert.equal(WebAssembly.validate(moduleBytes), true, `${label} is not browser-valid WASM`);
       const aotSections = listWasmCustomSections(moduleBytes).filter(
@@ -208,7 +227,16 @@ test(
         0,
       );
       assert.ok(nextOffset + 2 <= aotHeader.byteLength, `${label} has a truncated AOT target header`);
-      assert.equal(binaryVersion, 1, `${label} must use WasmEdge AOT binary version 1`);
+      assert.ok(
+        Number.isInteger(binaryVersion) && binaryVersion >= 1,
+        `${label} has no readable WasmEdge AOT binary version`,
+      );
+      sharedBinaryVersion ??= binaryVersion;
+      assert.equal(
+        binaryVersion,
+        sharedBinaryVersion,
+        `${label} was AOT-compiled by a different WasmEdge than the rest of the bundle`,
+      );
       assert.deepEqual(
         [...aotHeader.subarray(nextOffset, nextOffset + 2)],
         [1, 1],

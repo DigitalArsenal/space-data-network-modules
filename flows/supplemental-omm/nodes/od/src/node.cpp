@@ -974,10 +974,10 @@ int32_t push_canonical_configuration(uint64_t request_id) {
   const auto schema_idl = builder.CreateVector(
       reinterpret_cast<const uint8_t*>(kResultSchemaIdl),
       std::strlen(kResultSchemaIdl));
-  std::vector<flatbuffers::Offset<FTB>> bindings;
-  bindings.push_back(CreateFTBDirect(builder, "$OMM", "OMM"));
-  bindings.push_back(CreateFTBDirect(builder, "$OCM", "OCM"));
-  bindings.push_back(CreateFTBDirect(builder, "$OBD", "OBD"));
+  std::vector<flatbuffers::Offset<FSOTableBinding>> bindings;
+  bindings.push_back(CreateFSOTableBindingDirect(builder, "$OMM", "OMM"));
+  bindings.push_back(CreateFSOTableBindingDirect(builder, "$OCM", "OCM"));
+  bindings.push_back(CreateFSOTableBindingDirect(builder, "$OBD", "OBD"));
   const auto table_bindings = builder.CreateVector(bindings);
   FSOBuilder control(builder);
   control.add_OPERATION(flatSqlNodeOperation_CONFIGURE_INDEX);

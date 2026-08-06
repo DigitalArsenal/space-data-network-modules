@@ -11,6 +11,19 @@ import { listWasmCustomSections } from "space-data-module-sdk";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 
+// The fake compilers below must answer with THE pinned version, read from the
+// SDK's wasmedgePin.json exactly like scripts/compile-universal-aot.sh does. A
+// literal here would re-create the drift this pin exists to prevent.
+const pinnedWasmEdgeVersion = JSON.parse(
+  fs.readFileSync(
+    path.join(
+      packageRoot,
+      "../../node_modules/space-data-module-sdk/src/testing/wasmedgePin.json",
+    ),
+    "utf8",
+  ),
+).wasmedgeVersion;
+
 const childBuilders = [
   "nodes/providers/build-provider.mjs",
   "nodes/build-signed-node.mjs",
@@ -104,7 +117,7 @@ test("production staging invokes the pinned compiler profile while development s
     "const fs = require('node:fs');",
     "const args = process.argv.slice(2);",
     "if (args[0] === '--version') {",
-    "  console.log('wasmedgec version 0.14.1');",
+    `  console.log('wasmedgec version ${pinnedWasmEdgeVersion}');`,
     "  process.exit(0);",
     "}",
     "const input = fs.readFileSync(args.at(-2));",
@@ -153,7 +166,7 @@ test("production staging invokes the pinned compiler profile while development s
   fs.writeFileSync(copyingCompiler, [
     "#!/bin/sh",
     "if [ \"$1\" = \"--version\" ]; then",
-    "  echo 'wasmedgec version 0.14.1'",
+    `  echo 'wasmedgec version ${pinnedWasmEdgeVersion}'`,
     "  exit 0",
     "fi",
     "previous=''",

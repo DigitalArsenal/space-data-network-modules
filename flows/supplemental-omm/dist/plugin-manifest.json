@@ -117,16 +117,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -150,14 +150,14 @@
     {
       "schemaName": "FSO.fbs",
       "fileIdentifier": "$FSO",
-      "schemaVersion": "1.158.2",
-      "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+      "schemaVersion": "1.164.0",
+      "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
       "rootTypeName": "FSO"
     },
     {
       "schemaName": "FSB.fbs",
       "fileIdentifier": "$FSB",
-      "schemaVersion": "1.158.1",
+      "schemaVersion": "1.164.0",
       "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
       "rootTypeName": "FSB"
     },
@@ -284,7 +284,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -329,7 +329,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -373,6 +373,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -386,7 +387,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -431,7 +432,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -475,6 +476,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -488,7 +490,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -533,7 +535,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -577,6 +579,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -590,7 +593,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -635,7 +638,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -679,6 +682,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -692,7 +696,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -737,7 +741,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -781,6 +785,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -794,7 +799,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -839,7 +844,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -883,6 +888,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -896,7 +902,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -941,7 +947,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -985,6 +991,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -998,7 +1005,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1043,7 +1050,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1087,6 +1094,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1100,7 +1108,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1145,7 +1153,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1189,6 +1197,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1202,7 +1211,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1247,7 +1256,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1291,6 +1300,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1304,40 +1314,40 @@
         "canonicalType": {
           "schemaName": "FSO.fbs",
           "fileIdentifier": "$FSO",
-          "schemaVersion": "1.158.2",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
-            162,
+            118,
             152,
-            239,
-            150,
-            175,
-            41,
-            98,
-            64,
-            115,
-            237,
-            247,
-            73,
-            132,
-            142,
-            143,
-            241,
-            229,
-            184,
-            244,
-            94,
-            86,
-            150,
-            108,
-            46,
+            213,
+            76,
+            186,
+            97,
+            187,
+            182,
+            56,
+            16,
+            77,
+            55,
             33,
-            12,
-            183,
-            25,
-            243,
-            197,
-            232,
-            33
+            28,
+            194,
+            219,
+            177,
+            94,
+            68,
+            106,
+            239,
+            207,
+            237,
+            251,
+            74,
+            102,
+            208,
+            196,
+            108,
+            112,
+            185,
+            15
           ],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "flatbuffer",
@@ -1349,40 +1359,40 @@
         "alignedType": {
           "schemaName": "FSO.fbs",
           "fileIdentifier": "$FSO",
-          "schemaVersion": "1.158.2",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
-            162,
+            118,
             152,
-            239,
-            150,
-            175,
-            41,
-            98,
-            64,
-            115,
-            237,
-            247,
-            73,
-            132,
-            142,
-            143,
-            241,
-            229,
-            184,
-            244,
-            94,
-            86,
-            150,
-            108,
-            46,
+            213,
+            76,
+            186,
+            97,
+            187,
+            182,
+            56,
+            16,
+            77,
+            55,
             33,
-            12,
-            183,
-            25,
-            243,
-            197,
-            232,
-            33
+            28,
+            194,
+            219,
+            177,
+            94,
+            68,
+            106,
+            239,
+            207,
+            237,
+            251,
+            74,
+            102,
+            208,
+            196,
+            108,
+            112,
+            185,
+            15
           ],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "aligned-binary",
@@ -1393,6 +1403,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1406,40 +1417,40 @@
         "canonicalType": {
           "schemaName": "FSO.fbs",
           "fileIdentifier": "$FSO",
-          "schemaVersion": "1.158.2",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
-            162,
+            118,
             152,
-            239,
-            150,
-            175,
-            41,
-            98,
-            64,
-            115,
-            237,
-            247,
-            73,
-            132,
-            142,
-            143,
-            241,
-            229,
-            184,
-            244,
-            94,
-            86,
-            150,
-            108,
-            46,
+            213,
+            76,
+            186,
+            97,
+            187,
+            182,
+            56,
+            16,
+            77,
+            55,
             33,
-            12,
-            183,
-            25,
-            243,
-            197,
-            232,
-            33
+            28,
+            194,
+            219,
+            177,
+            94,
+            68,
+            106,
+            239,
+            207,
+            237,
+            251,
+            74,
+            102,
+            208,
+            196,
+            108,
+            112,
+            185,
+            15
           ],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "flatbuffer",
@@ -1451,40 +1462,40 @@
         "alignedType": {
           "schemaName": "FSO.fbs",
           "fileIdentifier": "$FSO",
-          "schemaVersion": "1.158.2",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
-            162,
+            118,
             152,
-            239,
-            150,
-            175,
-            41,
-            98,
-            64,
-            115,
-            237,
-            247,
-            73,
-            132,
-            142,
-            143,
-            241,
-            229,
-            184,
-            244,
-            94,
-            86,
-            150,
-            108,
-            46,
+            213,
+            76,
+            186,
+            97,
+            187,
+            182,
+            56,
+            16,
+            77,
+            55,
             33,
-            12,
-            183,
-            25,
-            243,
-            197,
-            232,
-            33
+            28,
+            194,
+            219,
+            177,
+            94,
+            68,
+            106,
+            239,
+            207,
+            237,
+            251,
+            74,
+            102,
+            208,
+            196,
+            108,
+            112,
+            185,
+            15
           ],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "aligned-binary",
@@ -1495,6 +1506,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1508,7 +1520,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1553,7 +1565,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1597,6 +1609,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1610,7 +1623,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1655,7 +1668,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1699,6 +1712,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1712,7 +1726,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1757,7 +1771,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1801,6 +1815,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1814,7 +1829,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1859,7 +1874,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1903,6 +1918,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -1916,7 +1932,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -1961,7 +1977,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2005,6 +2021,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2018,7 +2035,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2063,7 +2080,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2107,6 +2124,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2120,7 +2138,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2165,7 +2183,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2209,6 +2227,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2222,7 +2241,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2267,7 +2286,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2311,6 +2330,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2324,7 +2344,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2369,7 +2389,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2413,6 +2433,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2426,7 +2447,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2471,7 +2492,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2515,6 +2536,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2528,7 +2550,7 @@
         "canonicalType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2573,7 +2595,7 @@
         "alignedType": {
           "schemaName": "FSB.fbs",
           "fileIdentifier": "$FSB",
-          "schemaVersion": "1.158.1",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
             11,
             35,
@@ -2617,6 +2639,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
@@ -2630,40 +2653,40 @@
         "canonicalType": {
           "schemaName": "FSO.fbs",
           "fileIdentifier": "$FSO",
-          "schemaVersion": "1.158.2",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
-            162,
+            118,
             152,
-            239,
-            150,
-            175,
-            41,
-            98,
-            64,
-            115,
-            237,
-            247,
-            73,
-            132,
-            142,
-            143,
-            241,
-            229,
-            184,
-            244,
-            94,
-            86,
-            150,
-            108,
-            46,
+            213,
+            76,
+            186,
+            97,
+            187,
+            182,
+            56,
+            16,
+            77,
+            55,
             33,
-            12,
-            183,
-            25,
-            243,
-            197,
-            232,
-            33
+            28,
+            194,
+            219,
+            177,
+            94,
+            68,
+            106,
+            239,
+            207,
+            237,
+            251,
+            74,
+            102,
+            208,
+            196,
+            108,
+            112,
+            185,
+            15
           ],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "flatbuffer",
@@ -2675,40 +2698,40 @@
         "alignedType": {
           "schemaName": "FSO.fbs",
           "fileIdentifier": "$FSO",
-          "schemaVersion": "1.158.2",
+          "schemaVersion": "1.164.0",
           "schemaHash": [
-            162,
+            118,
             152,
-            239,
-            150,
-            175,
-            41,
-            98,
-            64,
-            115,
-            237,
-            247,
-            73,
-            132,
-            142,
-            143,
-            241,
-            229,
-            184,
-            244,
-            94,
-            86,
-            150,
-            108,
-            46,
+            213,
+            76,
+            186,
+            97,
+            187,
+            182,
+            56,
+            16,
+            77,
+            55,
             33,
-            12,
-            183,
-            25,
-            243,
-            197,
-            232,
-            33
+            28,
+            194,
+            219,
+            177,
+            94,
+            68,
+            106,
+            239,
+            207,
+            237,
+            251,
+            74,
+            102,
+            208,
+            196,
+            108,
+            112,
+            185,
+            15
           ],
           "acceptsAnyFlatbuffer": false,
           "wireFormat": "aligned-binary",
@@ -2719,6 +2742,7 @@
         },
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     }

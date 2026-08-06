@@ -18,7 +18,7 @@ const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const fsbType = {
   schemaName: "FSB.fbs",
   fileIdentifier: "$FSB",
-  schemaVersion: "1.158.1",
+  schemaVersion: "1.164.0",
   schemaHash: "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
   rootTypeName: "FSB",
 };
@@ -27,8 +27,8 @@ const fsbRequiredAlignment = 8;
 const fsoType = {
   schemaName: "FSO.fbs",
   fileIdentifier: "$FSO",
-  schemaVersion: "1.158.2",
-  schemaHash: "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+  schemaVersion: "1.164.0",
+  schemaHash: "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
   rootTypeName: "FSO",
 };
 const fsoAlignedByteLength = 361_648;

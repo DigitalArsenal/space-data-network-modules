@@ -38,7 +38,7 @@ const providers = [
 const fsbType = {
   schemaName: "FSB.fbs",
   fileIdentifier: "$FSB",
-  schemaVersion: "1.158.1",
+  schemaVersion: "1.164.0",
   schemaHash: "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
   rootTypeName: "FSB",
 };

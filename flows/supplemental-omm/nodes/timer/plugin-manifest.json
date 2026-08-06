@@ -56,16 +56,16 @@
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "flatbuffer"
                 },
                 {
                   "schemaName": "FSO.fbs",
                   "fileIdentifier": "$FSO",
-                  "schemaVersion": "1.158.2",
-                  "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+                  "schemaVersion": "1.164.0",
+                  "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
                   "rootTypeName": "FSO",
                   "wireFormat": "aligned-binary",
                   "byteLength": 361648,
@@ -90,7 +90,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "flatbuffer"
@@ -98,7 +98,7 @@
                 {
                   "schemaName": "FSB.fbs",
                   "fileIdentifier": "$FSB",
-                  "schemaVersion": "1.158.1",
+                  "schemaVersion": "1.164.0",
                   "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
                   "rootTypeName": "FSB",
                   "wireFormat": "aligned-binary",
@@ -122,14 +122,14 @@
     {
       "schemaName": "FSO.fbs",
       "fileIdentifier": "$FSO",
-      "schemaVersion": "1.158.2",
-      "schemaHash": "a298ef96af29624073edf749848e8ff1e5b8f45e56966c2e210cb719f3c5e821",
+      "schemaVersion": "1.164.0",
+      "schemaHash": "7698d54cba61bbb638104d37211cc2dbb15e446aefcfedfb4a66d0c46c70b90f",
       "rootTypeName": "FSO"
     },
     {
       "schemaName": "FSB.fbs",
       "fileIdentifier": "$FSB",
-      "schemaVersion": "1.158.1",
+      "schemaVersion": "1.164.0",
       "schemaHash": "0b23aa63d0e3f17d828fc84dd433605c2794cb81ade7c043cb200e954c84e945",
       "rootTypeName": "FSB"
     }
@@ -142,5 +142,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "The timer node is a pure policy transform: it reads one clock value, decides whether the hourly window has elapsed, and emits a single typed tick frame. It owns no data set to fan out, allocates no worker pool, and calls no pthread_create; the built artifact imports no wasi.thread-spawn and exports no wasi_thread_start. Parallelism for this flow lives in the OD fit node, one hop downstream."
+  }
 }
