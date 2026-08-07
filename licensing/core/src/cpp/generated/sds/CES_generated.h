@@ -59,8 +59,7 @@ enum class cesPoolingKind : int8_t {
   CLS = 1,
   MAX = 2,
   UNKNOWN = 3,
-  MIN = MEAN,
-  MAX = UNKNOWN
+  MIN = MEAN
 };
 
 inline const cesPoolingKind (&EnumValuescesPoolingKind())[4] {

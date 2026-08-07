@@ -57,6 +57,53 @@ function rewriteGeneratedHeader(generated, family, includeFamilies) {
   });
 }
 
+// flatc always appends an auto MIN/MAX convenience pair to every enum. When a
+// schema declares a real member literally named MIN or MAX (SDS $CES
+// cesPoolingKind::MAX), the sentinel's generated name collides byte-for-byte
+// with the real member's and C++ rejects the duplicate enumerator — which makes
+// EVERY header in the tree that transitively includes it uncompilable.
+//
+// spacedatastandards.org fixes this in its own generator
+// (scripts/generateSource.mjs :: dedupeCppEnumConstants, commit 995c82809e).
+// This generator calls flatc directly and therefore bypasses that step, so it
+// must apply the identical post-process or the two generators disagree and this
+// vendored tree silently becomes uncompilable. Keep them in lockstep.
+//
+// Only flatc's own redundant, always-recomputable sentinel is dropped; the
+// declared member keeps its name and ordinal, so nothing on the wire moves.
+function dedupeCppEnumConstants(source) {
+  const enumRe = /^enum (?:class )?(\w+) : (\w+) \{\n([\s\S]*?)\n\};\n/gm;
+  return source.replace(enumRe, (whole, enumName, underlying, body) => {
+    const seen = new Set();
+    const kept = [];
+    for (const line of body.split("\n")) {
+      const match = line.match(/^(\s*)(\w+)\s*=\s*(.+?),?\s*$/);
+      if (!match) {
+        kept.push(line);
+        continue;
+      }
+      const [, indent, ident, value] = match;
+      if (seen.has(ident)) {
+        continue;
+      }
+      seen.add(ident);
+      kept.push({ indent, ident, value });
+    }
+    const lastEntryIndex = kept.map((entry) => typeof entry).lastIndexOf("object");
+    const rebuilt = kept
+      .map((entry, index) => {
+        if (typeof entry === "string") {
+          return entry;
+        }
+        const comma = index < lastEntryIndex ? "," : "";
+        return `${entry.indent}${entry.ident} = ${entry.value}${comma}`;
+      })
+      .join("\n");
+    const keyword = whole.startsWith("enum class ") ? "enum class" : "enum";
+    return `${keyword} ${enumName} : ${underlying} {\n${rebuilt}\n};\n`;
+  });
+}
+
 function ensureFileExists(filePath, label) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`${label} not found at ${filePath}`);
@@ -121,7 +168,9 @@ async function main() {
     });
     fs.writeFileSync(
       path.join(outDir, `${family}_generated.h`),
-      rewriteGeneratedHeader(generated, family, includeFamilies),
+      dedupeCppEnumConstants(
+        rewriteGeneratedHeader(generated, family, includeFamilies),
+      ),
     );
   }
 

@@ -1370,6 +1370,7 @@ struct APPT : public ::flatbuffers::NativeTable {
   std::string CREATED_AT{};
   std::string UPDATED_AT{};
   std::vector<std::unique_ptr<APPDataflowT>> DATAFLOW{};
+  appRuntimeTarget RUNTIME_CLASS = appRuntimeTarget::NODE;
   APPT() = default;
   APPT(const APPT &o);
   APPT(APPT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1392,7 +1393,8 @@ struct APP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_UI = 18,
     VT_CREATED_AT = 20,
     VT_UPDATED_AT = 22,
-    VT_DATAFLOW = 24
+    VT_DATAFLOW = 24,
+    VT_RUNTIME_CLASS = 26
   };
   /// Stable app identity, unique per publisher. Required.
   const ::flatbuffers::String *ID() const {
@@ -1444,6 +1446,17 @@ struct APP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<APPDataflow>> *DATAFLOW() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<APPDataflow>> *>(VT_DATAFLOW);
   }
+  /// App-wide runtime class, reusing appRuntimeTarget. Lets a pulled manifest
+  /// self-describe where the app as a whole is meant to run, instead of that
+  /// classification being supplied externally at install time. This is the
+  /// app-level DEFAULT/DECLARATION only: an individual APPModuleRef.
+  /// RUNTIME_TARGET still governs where that specific member module loads and
+  /// may specialize away from RUNTIME_CLASS (for example a NODE-class app
+  /// with one PAGE-capable module). Defaults to NODE to preserve the prior
+  /// node-only assumption of manifests written before this field existed.
+  appRuntimeTarget RUNTIME_CLASS() const {
+    return static_cast<appRuntimeTarget>(GetField<uint8_t>(VT_RUNTIME_CLASS, 0));
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1474,6 +1487,7 @@ struct APP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_DATAFLOW) &&
            verifier.VerifyVector(DATAFLOW()) &&
            verifier.VerifyVectorOfTables(DATAFLOW()) &&
+           VerifyField<uint8_t>(verifier, VT_RUNTIME_CLASS, 1) &&
            verifier.EndTable();
   }
   APPT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1518,6 +1532,9 @@ struct APPBuilder {
   void add_DATAFLOW(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APPDataflow>>> DATAFLOW) {
     fbb_.AddOffset(APP::VT_DATAFLOW, DATAFLOW);
   }
+  void add_RUNTIME_CLASS(appRuntimeTarget RUNTIME_CLASS) {
+    fbb_.AddElement<uint8_t>(APP::VT_RUNTIME_CLASS, static_cast<uint8_t>(RUNTIME_CLASS), 0);
+  }
   explicit APPBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1542,7 +1559,8 @@ inline ::flatbuffers::Offset<APP> CreateAPP(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APPUIPage>>> UI = 0,
     ::flatbuffers::Offset<::flatbuffers::String> CREATED_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> UPDATED_AT = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APPDataflow>>> DATAFLOW = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<APPDataflow>>> DATAFLOW = 0,
+    appRuntimeTarget RUNTIME_CLASS = appRuntimeTarget::NODE) {
   APPBuilder builder_(_fbb);
   builder_.add_DATAFLOW(DATAFLOW);
   builder_.add_UPDATED_AT(UPDATED_AT);
@@ -1555,6 +1573,7 @@ inline ::flatbuffers::Offset<APP> CreateAPP(
   builder_.add_VERSION(VERSION);
   builder_.add_NAME(NAME);
   builder_.add_ID(ID);
+  builder_.add_RUNTIME_CLASS(RUNTIME_CLASS);
   return builder_.Finish();
 }
 
@@ -1575,7 +1594,8 @@ inline ::flatbuffers::Offset<APP> CreateAPPDirect(
     std::vector<::flatbuffers::Offset<APPUIPage>> *UI = nullptr,
     const char *CREATED_AT = nullptr,
     const char *UPDATED_AT = nullptr,
-    std::vector<::flatbuffers::Offset<APPDataflow>> *DATAFLOW = nullptr) {
+    std::vector<::flatbuffers::Offset<APPDataflow>> *DATAFLOW = nullptr,
+    appRuntimeTarget RUNTIME_CLASS = appRuntimeTarget::NODE) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto VERSION__ = VERSION ? _fbb.CreateString(VERSION) : 0;
@@ -1599,7 +1619,8 @@ inline ::flatbuffers::Offset<APP> CreateAPPDirect(
       UI__,
       CREATED_AT__,
       UPDATED_AT__,
-      DATAFLOW__);
+      DATAFLOW__,
+      RUNTIME_CLASS);
 }
 
 ::flatbuffers::Offset<APP> CreateAPP(::flatbuffers::FlatBufferBuilder &_fbb, const APPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1851,7 +1872,8 @@ inline APPT::APPT(const APPT &o)
         VERSION(o.VERSION),
         DESCRIPTION(o.DESCRIPTION),
         CREATED_AT(o.CREATED_AT),
-        UPDATED_AT(o.UPDATED_AT) {
+        UPDATED_AT(o.UPDATED_AT),
+        RUNTIME_CLASS(o.RUNTIME_CLASS) {
   MODULES.reserve(o.MODULES.size());
   for (const auto &MODULES_ : o.MODULES) { MODULES.emplace_back((MODULES_) ? new APPModuleRefT(*MODULES_) : nullptr); }
   DATA.reserve(o.DATA.size());
@@ -1876,6 +1898,7 @@ inline APPT &APPT::operator=(APPT o) FLATBUFFERS_NOEXCEPT {
   std::swap(CREATED_AT, o.CREATED_AT);
   std::swap(UPDATED_AT, o.UPDATED_AT);
   std::swap(DATAFLOW, o.DATAFLOW);
+  std::swap(RUNTIME_CLASS, o.RUNTIME_CLASS);
   return *this;
 }
 
@@ -1899,6 +1922,7 @@ inline void APP::UnPackTo(APPT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = CREATED_AT(); if (_e) _o->CREATED_AT = _e->str(); }
   { auto _e = UPDATED_AT(); if (_e) _o->UPDATED_AT = _e->str(); }
   { auto _e = DATAFLOW(); if (_e) { _o->DATAFLOW.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->DATAFLOW[_i]) { _e->Get(_i)->UnPackTo(_o->DATAFLOW[_i].get(), _resolver); } else { _o->DATAFLOW[_i] = std::unique_ptr<APPDataflowT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->DATAFLOW.resize(0); } }
+  { auto _e = RUNTIME_CLASS(); _o->RUNTIME_CLASS = _e; }
 }
 
 inline ::flatbuffers::Offset<APP> CreateAPP(::flatbuffers::FlatBufferBuilder &_fbb, const APPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1920,6 +1944,7 @@ inline ::flatbuffers::Offset<APP> APP::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _CREATED_AT = _o->CREATED_AT.empty() ? 0 : _fbb.CreateString(_o->CREATED_AT);
   auto _UPDATED_AT = _o->UPDATED_AT.empty() ? 0 : _fbb.CreateString(_o->UPDATED_AT);
   auto _DATAFLOW = _o->DATAFLOW.size() ? _fbb.CreateVector<::flatbuffers::Offset<APPDataflow>> (_o->DATAFLOW.size(), [](size_t i, _VectorArgs *__va) { return CreateAPPDataflow(*__va->__fbb, __va->__o->DATAFLOW[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _RUNTIME_CLASS = _o->RUNTIME_CLASS;
   return CreateAPP(
       _fbb,
       _ID,
@@ -1932,7 +1957,8 @@ inline ::flatbuffers::Offset<APP> APP::Pack(::flatbuffers::FlatBufferBuilder &_f
       _UI,
       _CREATED_AT,
       _UPDATED_AT,
-      _DATAFLOW);
+      _DATAFLOW,
+      _RUNTIME_CLASS);
 }
 
 inline const APP *GetAPP(const void *buf) {

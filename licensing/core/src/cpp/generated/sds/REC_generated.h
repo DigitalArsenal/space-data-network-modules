@@ -39,8 +39,10 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "CFP_generated.h"
 #include "CHN_generated.h"
 #include "CLT_generated.h"
+#include "CMR_generated.h"
 #include "CMS_generated.h"
 #include "CMT_generated.h"
+#include "CNP_generated.h"
 #include "COM_generated.h"
 #include "COT_generated.h"
 #include "CPS_generated.h"
@@ -85,6 +87,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "HYP_generated.h"
 #include "IDM_generated.h"
 #include "ION_generated.h"
+#include "IQC_generated.h"
 #include "IRO_generated.h"
 #include "KMF_generated.h"
 #include "KML_generated.h"
@@ -422,11 +425,14 @@ enum class RecordType : uint8_t {
   SBM = 197,
   PMM = 198,
   OPP = 199,
+  IQC = 200,
+  CNP = 201,
+  CMR = 202,
   MIN = NONE,
-  MAX = OPP
+  MAX = CMR
 };
 
-inline const RecordType (&EnumValuesRecordType())[200] {
+inline const RecordType (&EnumValuesRecordType())[203] {
   static const RecordType values[] = {
     RecordType::NONE,
     RecordType::ACL,
@@ -627,13 +633,16 @@ inline const RecordType (&EnumValuesRecordType())[200] {
     RecordType::QEM,
     RecordType::SBM,
     RecordType::PMM,
-    RecordType::OPP
+    RecordType::OPP,
+    RecordType::IQC,
+    RecordType::CNP,
+    RecordType::CMR
   };
   return values;
 }
 
 inline const char * const *EnumNamesRecordType() {
-  static const char * const names[201] = {
+  static const char * const names[204] = {
     "NONE",
     "ACL",
     "ACM",
@@ -834,13 +843,16 @@ inline const char * const *EnumNamesRecordType() {
     "SBM",
     "PMM",
     "OPP",
+    "IQC",
+    "CNP",
+    "CMR",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameRecordType(RecordType e) {
-  if (::flatbuffers::IsOutRange(e, RecordType::NONE, RecordType::OPP)) return "";
+  if (::flatbuffers::IsOutRange(e, RecordType::NONE, RecordType::CMR)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesRecordType()[index];
 }
@@ -1645,6 +1657,18 @@ template<> struct RecordTypeTraits<OPP> {
   static const RecordType enum_value = RecordType::OPP;
 };
 
+template<> struct RecordTypeTraits<IQC> {
+  static const RecordType enum_value = RecordType::IQC;
+};
+
+template<> struct RecordTypeTraits<CNP> {
+  static const RecordType enum_value = RecordType::CNP;
+};
+
+template<> struct RecordTypeTraits<CMR> {
+  static const RecordType enum_value = RecordType::CMR;
+};
+
 template<typename T> struct RecordTypeUnionTraits {
   static const RecordType enum_value = RecordType::NONE;
 };
@@ -2443,6 +2467,18 @@ template<> struct RecordTypeUnionTraits<PMMT> {
 
 template<> struct RecordTypeUnionTraits<OPPT> {
   static const RecordType enum_value = RecordType::OPP;
+};
+
+template<> struct RecordTypeUnionTraits<IQCT> {
+  static const RecordType enum_value = RecordType::IQC;
+};
+
+template<> struct RecordTypeUnionTraits<CNPT> {
+  static const RecordType enum_value = RecordType::CNP;
+};
+
+template<> struct RecordTypeUnionTraits<CMRT> {
+  static const RecordType enum_value = RecordType::CMR;
 };
 
 struct RecordTypeUnion {
@@ -4067,6 +4103,30 @@ struct RecordTypeUnion {
     return type == RecordType::OPP ?
       reinterpret_cast<const OPPT *>(value) : nullptr;
   }
+  IQCT *AsIQC() {
+    return type == RecordType::IQC ?
+      reinterpret_cast<IQCT *>(value) : nullptr;
+  }
+  const IQCT *AsIQC() const {
+    return type == RecordType::IQC ?
+      reinterpret_cast<const IQCT *>(value) : nullptr;
+  }
+  CNPT *AsCNP() {
+    return type == RecordType::CNP ?
+      reinterpret_cast<CNPT *>(value) : nullptr;
+  }
+  const CNPT *AsCNP() const {
+    return type == RecordType::CNP ?
+      reinterpret_cast<const CNPT *>(value) : nullptr;
+  }
+  CMRT *AsCMR() {
+    return type == RecordType::CMR ?
+      reinterpret_cast<CMRT *>(value) : nullptr;
+  }
+  const CMRT *AsCMR() const {
+    return type == RecordType::CMR ?
+      reinterpret_cast<const CMRT *>(value) : nullptr;
+  }
 };
 
 template <bool B = false>
@@ -4694,6 +4754,15 @@ struct Record FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   const OPP *value_as_OPP() const {
     return value_type() == RecordType::OPP ? static_cast<const OPP *>(value()) : nullptr;
+  }
+  const IQC *value_as_IQC() const {
+    return value_type() == RecordType::IQC ? static_cast<const IQC *>(value()) : nullptr;
+  }
+  const CNP *value_as_CNP() const {
+    return value_type() == RecordType::CNP ? static_cast<const CNP *>(value()) : nullptr;
+  }
+  const CMR *value_as_CMR() const {
+    return value_type() == RecordType::CMR ? static_cast<const CMR *>(value()) : nullptr;
   }
   /// Standard identifier (e.g., "OMM", "CDM", "CAT")
   const ::flatbuffers::String *standard() const {
@@ -5508,6 +5577,18 @@ template<> inline const PMM *Record::value_as<PMM>() const {
 
 template<> inline const OPP *Record::value_as<OPP>() const {
   return value_as_OPP();
+}
+
+template<> inline const IQC *Record::value_as<IQC>() const {
+  return value_as_IQC();
+}
+
+template<> inline const CNP *Record::value_as<CNP>() const {
+  return value_as_CNP();
+}
+
+template<> inline const CMR *Record::value_as<CMR>() const {
+  return value_as_CMR();
 }
 
 struct RecordBuilder {
@@ -6533,6 +6614,18 @@ inline bool VerifyRecordType(::flatbuffers::VerifierTemplate<B> &verifier, const
       auto ptr = reinterpret_cast<const OPP *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case RecordType::IQC: {
+      auto ptr = reinterpret_cast<const IQC *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::CNP: {
+      auto ptr = reinterpret_cast<const CNP *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case RecordType::CMR: {
+      auto ptr = reinterpret_cast<const CMR *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     default: return true;
   }
 }
@@ -7349,6 +7442,18 @@ inline void *RecordTypeUnion::UnPack(const void *obj, RecordType type, const ::f
       auto ptr = reinterpret_cast<const OPP *>(obj);
       return ptr->UnPack(resolver);
     }
+    case RecordType::IQC: {
+      auto ptr = reinterpret_cast<const IQC *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::CNP: {
+      auto ptr = reinterpret_cast<const CNP *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case RecordType::CMR: {
+      auto ptr = reinterpret_cast<const CMR *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -8152,6 +8257,18 @@ inline ::flatbuffers::Offset<void> RecordTypeUnion::Pack(::flatbuffers::FlatBuff
       auto ptr = reinterpret_cast<const OPPT *>(value);
       return CreateOPP(_fbb, ptr, _rehasher).Union();
     }
+    case RecordType::IQC: {
+      auto ptr = reinterpret_cast<const IQCT *>(value);
+      return CreateIQC(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::CNP: {
+      auto ptr = reinterpret_cast<const CNPT *>(value);
+      return CreateCNP(_fbb, ptr, _rehasher).Union();
+    }
+    case RecordType::CMR: {
+      auto ptr = reinterpret_cast<const CMRT *>(value);
+      return CreateCMR(_fbb, ptr, _rehasher).Union();
+    }
     default: return 0;
   }
 }
@@ -8952,6 +9069,18 @@ inline RecordTypeUnion::RecordTypeUnion(const RecordTypeUnion &u) : type(u.type)
     }
     case RecordType::OPP: {
       value = new OPPT(*reinterpret_cast<OPPT *>(u.value));
+      break;
+    }
+    case RecordType::IQC: {
+      value = new IQCT(*reinterpret_cast<IQCT *>(u.value));
+      break;
+    }
+    case RecordType::CNP: {
+      value = new CNPT(*reinterpret_cast<CNPT *>(u.value));
+      break;
+    }
+    case RecordType::CMR: {
+      value = new CMRT(*reinterpret_cast<CMRT *>(u.value));
       break;
     }
     default:
@@ -9953,6 +10082,21 @@ inline void RecordTypeUnion::Reset() {
     }
     case RecordType::OPP: {
       auto ptr = reinterpret_cast<OPPT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::IQC: {
+      auto ptr = reinterpret_cast<IQCT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::CNP: {
+      auto ptr = reinterpret_cast<CNPT *>(value);
+      delete ptr;
+      break;
+    }
+    case RecordType::CMR: {
+      auto ptr = reinterpret_cast<CMRT *>(value);
       delete ptr;
       break;
     }

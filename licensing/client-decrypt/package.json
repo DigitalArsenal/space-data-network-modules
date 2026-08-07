@@ -19,7 +19,7 @@
   "scripts": {
     "build": "node build.mjs",
     "build:clean": "rm -rf .build dist && node build.mjs",
-    "test": "node test/api.test.mjs && node test/decrypt.test.mjs && node test/e2e-roundtrip.test.mjs"
+    "test": "node test/api.test.mjs && node test/decrypt.test.mjs && node test/e2e-roundtrip.test.mjs && node test/protected-publication-trailer.test.mjs"
   },
   "devDependencies": {
     "blockstore-core": "^6.1.2",
