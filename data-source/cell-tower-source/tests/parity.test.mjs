@@ -399,7 +399,13 @@ test("route refuses an unknown merge method instead of defaulting", async (t) =>
     }),
   );
   const reply = jsonFrame(out, "reply");
+  // route MUST be "error": http-respond reads decision.status only in that
+  // branch, so any other route name turns this 400 into a silent empty 200 —
+  // which is exactly what the live mount did until it was caught by curling
+  // the deployed route rather than trusting the unit test.
+  assert.equal(reply.route, "error");
   assert.equal(reply.status, 400);
+  assert.equal(reply.code, "unknown-method");
   assert.match(reply.error, /unknown METHOD/u);
   assert.equal(out.has("requests"), false);
 });

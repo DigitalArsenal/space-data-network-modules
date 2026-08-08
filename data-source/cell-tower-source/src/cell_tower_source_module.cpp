@@ -861,7 +861,8 @@ int route(void) {
     HtqReader htq;
     if (!htq.init(frame->payload, frame->payload_length)) {
         push_json("reply",
-                  "{\"route\":\"cellular\",\"format\":\"json\",\"status\":400"
+                  "{\"route\":\"error\",\"format\":\"json\",\"status\":400"
+                  ",\"code\":\"bad-envelope\""
                   ",\"error\":\"request envelope is not a readable $HTQ frame\"}");
         return 0;
     }
@@ -888,16 +889,21 @@ int route(void) {
         // An unknown strategy is REFUSED, never silently defaulted: answering a
         // question the caller did not ask, under a name they chose, is worse
         // than saying no.
+        // route MUST be "error": foundation/http-respond reads decision.status
+        // ONLY in that branch (http_respond_module.cpp:395-401). Naming any
+        // other route made this 400 fall through as a silent empty 200 on the
+        // live mount — a refusal that reports success is worse than no refusal.
         push_json("reply",
-                  std::string("{\"route\":\"cellular-aggregate\",\"format\":\"json\""
-                              ",\"status\":400,\"error\":\"unknown METHOD \\\"") +
+                  std::string("{\"route\":\"error\",\"format\":\"json\",\"status\":400"
+                              ",\"code\":\"unknown-method\",\"error\":\"unknown METHOD \\\"") +
                       json_escape(method_name) + "\\\"\"}");
         return 0;
     }
 
     if (wanted.empty()) {
         push_json("reply",
-                  "{\"route\":\"cellular-aggregate\",\"format\":\"json\",\"status\":400"
+                  "{\"route\":\"error\",\"format\":\"json\",\"status\":400"
+                  ",\"code\":\"no-providers\""
                   ",\"error\":\"PROVIDERS must name at least one provider\"}");
         return 0;
     }
