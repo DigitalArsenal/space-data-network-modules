@@ -827,13 +827,17 @@ int emit_catalog(void) {
            ",\"AUTHORITY_PRECEDENCE\",\"CENTROID\"]";
     // keySlot is deliberately OMITTED until the node can accept a credential.
     out += "}";
-    if (push_json("catalog", out) < 0) return 500;
-    // foundation/http-respond is driven by a DECISION frame; a body with no
-    // decision has no status or content-type to be sent under.
-    if (push_json("decision",
+    // ORDER MATTERS AND SO DOES THE PORT NAME. `decision` is NOT a declared
+    // output of `route`; pushing there orphaned the frame, the host never
+    // harvested it, and it survived in the pooled instance's queue to be served
+    // to a LATER, UNRELATED caller (host-01, 2026-08-08: two callers received a
+    // previous request's catalog body). The decision rides `reply`, which IS
+    // declared and IS wired to respond.decision.
+    if (push_json("reply",
                   "{\"route\":\"cellular-providers\",\"format\":\"json\",\"status\":200}") < 0) {
         return 500;
     }
+    if (push_json("catalog", out) < 0) return 500;
     return 0;
 }
 
@@ -898,7 +902,7 @@ int route(void) {
         return 0;
     }
 
-    std::string requests = "[";
+    std::vector<std::string> descriptors;
     std::string consulted = "[";
     std::string skipped = "[";
     size_t emitted = 0, skipped_count = 0;
@@ -917,12 +921,12 @@ int route(void) {
                        "\",\"reason\":\"credential required and the node cannot yet store one\"}";
             continue;
         }
-        if (emitted++) { requests += ","; consulted += ","; }
-        requests += std::string("{\"provider_id\":\"") + spec->id + "\",\"method\":\"GET\",\"url\":\"" +
-                    json_escape(spec->url) + "\",\"headers\":{\"accept\":\"*/*\"},\"timeoutMs\":30000}";
+        if (emitted++) { consulted += ","; }
+        descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
+                              "\",\"method\":\"GET\",\"url\":\"" + json_escape(spec->url) +
+                              "\",\"headers\":{\"accept\":\"*/*\"},\"timeoutMs\":30000}");
         consulted += std::string("\"") + spec->id + "\"";
     }
-    requests += "]";
     consulted += "]";
     skipped += "]";
 
@@ -932,8 +936,19 @@ int route(void) {
                             ",\"providers_consulted\":" + consulted +
                             ",\"skipped\":" + skipped + "}";
 
-    if (push_json("requests", requests) < 0) return 500;
+    // The job goes FIRST: parse and deconflict both need the run contract, and a
+    // response frame arriving before it would have nothing to be interpreted
+    // against.
     if (push_json("job", job) < 0) return 500;
+    // ONE FRAME PER DESCRIPTOR. hostcap/http-request consumes a single
+    // {method,url,headers,timeoutMs}; the earlier single-frame JSON array
+    // matched nothing, so ZERO fetches were attempted and the route answered
+    // 200-with-no-records in 27 ms without ever contacting a provider. An empty
+    // answer that never asked is indistinguishable from an honest empty answer,
+    // which is exactly why this was invisible.
+    for (const std::string& descriptor : descriptors) {
+        if (push_json("requests", descriptor) < 0) return 500;
+    }
     return 0;
 }
 

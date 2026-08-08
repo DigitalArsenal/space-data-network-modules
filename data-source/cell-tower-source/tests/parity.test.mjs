@@ -105,6 +105,11 @@ function byPort(response) {
   return map;
 }
 
+/** All frames on a port, in emission order — a port may carry many. */
+function framesFor(response, portId) {
+  return response.outputs.filter((f) => f.portId === portId);
+}
+
 function jsonFrame(map, portId) {
   const frame = map.get(portId);
   assert.ok(frame, `missing output frame ${portId}`);
@@ -340,6 +345,51 @@ test("credentialed providers are not selected by default", async (t) => {
   }
 });
 
+test("no branch emits a frame on an undeclared port", async (t) => {
+  // The catalog branch pushed a "decision" frame, but `decision` is not a
+  // declared output of `route`. The host never harvested it, and on a pooled
+  // instance it SURVIVED into a later, unrelated caller's response — on an
+  // anonymous route (host-01, 2026-08-08). Containment there was luck of
+  // payload, not design, so the shape is pinned: every emitted port must be one
+  // the manifest declares.
+  const declared = new Set(
+    JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"))
+      .methods.find((m) => m.methodId === "route")
+      .outputPorts.map((p) => p.portId),
+  );
+  const harness = await harnessFor(t);
+
+  for (const request of [
+    htqRequest({ method: "GET", path: "/api/v1/cellular/providers" }),
+    htqRequest({ body: JSON.stringify({ PROVIDERS: ["fcc-asr"], METHOD: "MOST_RECENT" }) }),
+    htqRequest({ body: JSON.stringify({ PROVIDERS: [] }) }),
+    htqRequest({ body: JSON.stringify({ PROVIDERS: ["fcc-asr"], METHOD: "BEST_GUESS" }) }),
+  ]) {
+    const response = await harness.invoke({ methodId: "route", inputs: [request] });
+    for (const frame of response.outputs) {
+      assert.ok(
+        declared.has(frame.portId),
+        `route emitted an undeclared port "${frame.portId}" — that frame cannot be harvested and will leak across requests`,
+      );
+    }
+  }
+});
+
+test("the catalog branch emits a decision so its body can be sent", async (t) => {
+  // A body with no decision frame has no status or content-type, which is how
+  // GET /providers 502'd while still producing bytes.
+  const harness = await harnessFor(t);
+  const out = byPort(
+    await harness.invoke({
+      methodId: "route",
+      inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
+    }),
+  );
+  assert.ok(out.has("catalog"), "catalog body missing");
+  assert.ok(out.has("reply"), "catalog decision missing");
+  assert.equal(jsonFrame(out, "reply").status, 200);
+});
+
 test("route refuses an unknown merge method instead of defaulting", async (t) => {
   const harness = await harnessFor(t);
   const out = byPort(
@@ -367,8 +417,7 @@ test("route refuses an empty provider set", async (t) => {
 
 test("route skips credentialed providers loudly and never fetches them", async (t) => {
   const harness = await harnessFor(t);
-  const out = byPort(
-    await harness.invoke({
+  const response = await harness.invoke({
       methodId: "route",
       inputs: [
         htqRequest({
@@ -378,14 +427,24 @@ test("route skips credentialed providers loudly and never fetches them", async (
           }),
         }),
       ],
-    }),
-  );
+  });
+  const out = byPort(response);
   const job = jsonFrame(out, "job");
-  const requests = jsonFrame(out, "requests");
-  // opencellid needs a token the node cannot yet store, so it is skipped with a
-  // stated reason. It must NOT appear as a fetch, and must NOT be counted as
-  // consulted — "asked" would be a lie.
+  // ONE FRAME PER DESCRIPTOR, not one frame carrying an array.
+  // hostcap/http-request consumes a single {method,url,headers,timeoutMs}; the
+  // array form matched nothing, so zero fetches were attempted and the route
+  // answered 200-with-no-records without ever contacting a provider. An empty
+  // answer that never asked looks exactly like an honest empty answer, which is
+  // why it went unnoticed on a live mount.
+  const requests = framesFor(response, "requests").map((f) =>
+    JSON.parse(decoder.decode(f.payload)),
+  );
   assert.deepEqual(requests.map((r) => r.provider_id), ["fcc-asr"]);
+  for (const descriptor of requests) {
+    assert.equal(typeof descriptor.url, "string");
+    assert.equal(descriptor.method, "GET");
+    assert.equal(Array.isArray(descriptor), false);
+  }
   assert.deepEqual(job.providers_consulted, ["fcc-asr"]);
   assert.equal(job.skipped.length, 1);
   assert.equal(job.skipped[0].provider_id, "opencellid");
