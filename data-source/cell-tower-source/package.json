@@ -1,0 +1,11 @@
+{
+  "name": "@digitalarsenal/cell-tower-source",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cellular provider registries -> one deconflicted SDS $TBS site stream.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

@@ -1,0 +1,346 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+  "name": "Cellular Base-Station Aggregation Nodes",
+  "version": "0.1.0",
+  "description": "Many cellular/base-station registries -> one deconflicted SDS $TBS site stream. Three pure flow nodes: `route` turns one $HTQ request into N hostcap/http-request GET descriptors for the provider set the CALLER named plus the run contract; `parse` decodes each provider's native payload into normalized reports; `deconflict` merges reports across providers under the caller's chosen tbsMergeMethod and emits a size-prefixed $TBS record stream plus a run summary. Configuration is REQUEST-SCOPED, never node-global, so two callers can ask for different provider sets at once without either changing what the node is. No capabilities: this node performs no I/O \u2014 http is the generic hostcap connector node. Providers requiring a login are skipped with an explicit reason until the node can store a credential.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "All three methods are single-pass transforms over frames the flow hands them: `route` formats fetch descriptors from the request, `parse` walks each provider body once, and `deconflict` groups reports and emits one record per group. There is no shared mutable state, no worker pool and no fan-out inside the guest \u2014 the fan-out is the flow's, across N http connector nodes. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "route",
+      "displayName": "Route a cellular aggregation request",
+      "description": "Reads the caller's PROVIDERS list, METHOD and LIMIT from one $HTQ request and emits one hostcap/http-request descriptor per selected provider plus the run contract. An unknown METHOD is REFUSED on the reply port rather than silently defaulted. Providers requiring a login are skipped with an explicit reason.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request-envelope",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request envelope."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON array of http request descriptors, one per selected provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request descriptors ({provider_id,method,url,headers,timeoutMs}) produced and consumed inside this flow; the shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-provider fetch descriptors."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Run contract for parse and deconflict."
+        },
+        {
+          "portId": "reply",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-reply-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON early reply for a refused request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Error reply ({status,error}) handed to the flow's http-respond node; the shape is defined by the host http mount, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Early reply for a refused request."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse",
+      "displayName": "Normalize provider payloads",
+      "description": "Decodes each provider's native payload into normalized reports, dropping rows whose coordinates are out of range rather than clamping them. A provider whose fetch failed contributes nothing but stays in providers_consulted, so 'asked and got nothing' never reads as 'agreed'.",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Run contract from route."
+        },
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON from hostcap/http-request, one frame per provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ({provider_id,status,headers,body}) consumed inside this flow; the shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One HTTP response per selected provider."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Run contract, forwarded."
+        },
+        {
+          "portId": "reports",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-reports-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON array of normalized per-provider reports.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Normalized intermediate produced and consumed inside this flow. It is deliberately NOT $TBS: a single provider's unreconciled report cannot satisfy the standard's required CONSENSUS, and emitting one would assert a deconfliction that has not happened."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Normalized reports."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "deconflict",
+      "displayName": "Deconflict across providers into $TBS",
+      "description": "Groups reports across providers by network identity (falling back to proximity where a provider publishes no identifiers) and merges each group under the caller's tbsMergeMethod, emitting one $TBS record per site with every contributing provider in SOURCES and the merge recorded in CONSENSUS. Semantics mirror packages/cell-towers-worldwide/src/deconflict.mjs and are parity-gated against it.",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON run contract (method, limit, providers consulted, skipped).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run contract produced by this module's own route node and consumed by its parse and deconflict nodes inside the same flow; bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Run contract."
+        },
+        {
+          "portId": "reports",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-reports-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON array of normalized per-provider reports.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Normalized intermediate produced and consumed inside this flow. It is deliberately NOT $TBS: a single provider's unreconciled report cannot satisfy the standard's required CONSENSUS, and emitting one would assert a deconfliction that has not happened."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Normalized reports."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $TBS record stream."
+        },
+        {
+          "portId": "summary",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-summary-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON run summary (counts, method, skipped providers).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run counters handed to the flow's http-respond node for the response headers; bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Run summary for the reply."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TBS.fbs",
+      "fileIdentifier": "$TBS",
+      "rootTypeName": "TBS"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "cell-tower-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
