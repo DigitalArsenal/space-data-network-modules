@@ -83,6 +83,30 @@ const compilation = await compileModuleFromSource({
   allowUndefinedImports: true,
 });
 
+// Persist the prefixed guest-link object + metadata for the flow compiler.
+// Without this the flow bake refuses the module: a linked-direct node is
+// STATICALLY LINKED into the composed runtime, so the compiler needs the
+// relocatable object, not just the standalone wasm.
+const guestLinkDir = path.join(distRoot, "guest-link");
+await fs.mkdir(guestLinkDir, { recursive: true });
+await fs.writeFile(path.join(guestLinkDir, "module-link.o"), compilation.guestLink.objectBytes);
+await fs.writeFile(
+  path.join(guestLinkDir, "metadata.json"),
+  `${JSON.stringify(
+    {
+      version: 1,
+      format: compilation.guestLink.format,
+      language: compilation.guestLink.language,
+      threadModel: compilation.guestLink.threadModel,
+      symbolPrefix: compilation.guestLink.symbolPrefix,
+      methodSymbols: compilation.guestLink.methodSymbols,
+    },
+    null,
+    2,
+  )}\n`,
+);
+await fs.copyFile(manifestPath, path.join(guestLinkDir, "plugin-manifest.json"));
+
 // The compiler writes `outputPath` itself; it does not hand back bytes.
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 

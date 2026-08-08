@@ -22,7 +22,7 @@
     {
       "methodId": "route",
       "displayName": "Route a cellular aggregation request",
-      "description": "Reads the caller's PROVIDERS list, METHOD and LIMIT from one $HTQ request and emits one hostcap/http-request descriptor per selected provider plus the run contract. An unknown METHOD is REFUSED on the reply port rather than silently defaulted. Providers requiring a login are skipped with an explicit reason.",
+      "description": "Decodes the one $HTQ envelope the host delivers and dispatches on PATH, because the host mounts ONE http trigger per flow and all HTTP semantics live in-wasm. The catalog route answers the provider list; every other path is the aggregation, reading PROVIDERS/METHOD/LIMIT from the body and emitting one hostcap/http-request descriptor per selected provider plus the run contract. An unknown METHOD is REFUSED on the reply port rather than silently defaulted; providers requiring a login are skipped with an explicit reason.",
       "inputPorts": [
         {
           "portId": "request",
@@ -117,41 +117,7 @@
           "maxStreams": 1,
           "required": false,
           "description": "Routing decision for a refused request (status 400 with the reason)."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot"
-    },
-    {
-      "methodId": "catalog",
-      "displayName": "Provider catalog",
-      "description": "Answers the provider list this node can actually reach: each provider's access posture, licence, attribution, whether a credential is currently held, and the merge methods on offer. Reports NO credential values and no key material. The configuring page renders exactly this and compiles no provider list of its own.",
-      "inputPorts": [
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-http-request-envelope",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The HTTP request envelope."
-        }
-      ],
-      "outputPorts": [
+        },
         {
           "portId": "catalog",
           "acceptedTypeSets": [
@@ -166,37 +132,14 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Provider catalog handed to the flow's http-respond node. It is source METADATA (ids, access posture, licence, whether a lane is configured), not observation data, so no SDS record type describes it and inventing one would be worse than naming it what it is."
+                "detail": "Provider catalog handed to the flow's http-respond node. Source METADATA (ids, access posture, licence, whether a lane is configured), not observation data, so no SDS record type describes it and inventing one would be worse than naming it what it is."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
-          "required": true,
-          "description": "Provider catalog."
-        },
-        {
-          "portId": "decision",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-http-route-decision-json",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status,...}).",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. It carries the status and content-type the body is sent under, plus this run's counters."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Routing decision for the catalog response."
+          "required": false,
+          "description": "Provider catalog, emitted when the request PATH is the catalog route."
         }
       ],
       "maxBatch": 1,

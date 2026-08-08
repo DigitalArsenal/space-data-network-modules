@@ -8,35 +8,19 @@
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "route",
-      "dispatchModel": "isomorphic",
       "kind": "transform",
       "capabilities": [],
       "drainPolicy": "single-shot",
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "2be49667a0846c87ae0f10217d2c6a255e8da9e38495a467609825fb05f2f8b9"
-      }
-    },
-    {
-      "nodeId": "catalog",
-      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
-      "methodId": "catalog",
-      "dispatchModel": "isomorphic",
-      "kind": "transform",
-      "capabilities": [],
-      "drainPolicy": "single-shot",
-      "artifact": {
-        "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
-        "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "2be49667a0846c87ae0f10217d2c6a255e8da9e38495a467609825fb05f2f8b9"
+        "sha256": "ae3fc3bb415766a84afacb070089f19de39c4d199bcafb823c4752ec3549d34f"
       }
     },
     {
       "nodeId": "http",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
-      "dispatchModel": "isomorphic",
       "kind": "transform",
       "capabilities": [
         "http"
@@ -52,36 +36,33 @@
       "nodeId": "parse",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "parse",
-      "dispatchModel": "isomorphic",
       "kind": "transform",
       "capabilities": [],
       "drainPolicy": "drain-until-yield",
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "2be49667a0846c87ae0f10217d2c6a255e8da9e38495a467609825fb05f2f8b9"
+        "sha256": "ae3fc3bb415766a84afacb070089f19de39c4d199bcafb823c4752ec3549d34f"
       }
     },
     {
       "nodeId": "merge",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "deconflict",
-      "dispatchModel": "isomorphic",
       "kind": "transform",
       "capabilities": [],
       "drainPolicy": "single-shot",
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "2be49667a0846c87ae0f10217d2c6a255e8da9e38495a467609825fb05f2f8b9"
+        "sha256": "ae3fc3bb415766a84afacb070089f19de39c4d199bcafb823c4752ec3549d34f"
       }
     },
     {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
-      "dispatchModel": "isomorphic",
-      "kind": "transform",
+      "kind": "responder",
       "capabilities": [],
       "drainPolicy": "single-shot",
       "artifact": {
@@ -94,24 +75,9 @@
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
-      "dispatchModel": "isomorphic",
       "kind": "sink",
       "capabilities": [],
       "drainPolicy": "single-shot"
-    },
-    {
-      "nodeId": "respond_catalog",
-      "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "methodId": "respond",
-      "dispatchModel": "isomorphic",
-      "kind": "transform",
-      "capabilities": [],
-      "drainPolicy": "single-shot",
-      "artifact": {
-        "path": "../foundation/http-respond/dist/isomorphic/module.wasm",
-        "publisher": "../foundation/http-respond/publisher.json",
-        "sha256": "26cb434bf23b9f8064dabc376eaeaca07c0698669a7d6471f35d75d7cf2da42a"
-      }
     }
   ],
   "edges": [
@@ -204,30 +170,11 @@
       "queueDepth": 4
     },
     {
-      "edgeId": "catalog-respond",
-      "fromNodeId": "catalog",
+      "edgeId": "route-catalog-respond",
+      "fromNodeId": "route",
       "fromPortId": "catalog",
-      "toNodeId": "respond_catalog",
+      "toNodeId": "respond",
       "toPortId": "body",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
-    },
-    {
-      "edgeId": "respond-catalog-egress",
-      "fromNodeId": "respond_catalog",
-      "fromPortId": "response",
-      "toNodeId": "egress",
-      "toPortId": "response",
-      "backpressurePolicy": "queue",
-      "queueDepth": 4
-    },
-    {
-      "edgeId": "catalog-decision",
-      "fromNodeId": "catalog",
-      "fromPortId": "decision",
-      "toNodeId": "respond_catalog",
-      "toPortId": "decision",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
@@ -238,15 +185,8 @@
       "triggerId": "http-request",
       "kind": "http-request",
       "source": "host-http",
-      "httpPath": "/api/v1/cellular/aggregate",
-      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
-    },
-    {
-      "triggerId": "http-catalog",
-      "kind": "http-request",
-      "source": "host-http",
-      "httpPath": "/api/v1/cellular/providers",
-      "description": "The provider catalog read. A SEPARATE trigger, because the host mounts a route per trigger with an httpPath (flowrt/flowplugin.go:80-93) — declaring a route in api.routes alone documents it without mounting it, which would 404."
+      "httpPath": "/api/v1/cellular/",
+      "description": "The ONE http trigger. flowrt/httpmount.go:562-570 takes the first http-request trigger and breaks, so a second trigger is unreachable rather than a second route; PATH dispatch happens in-wasm, which is also what HttpRequestAbi.fbs mandates."
     }
   ],
   "triggerBindings": [
@@ -256,13 +196,6 @@
       "targetPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 16
-    },
-    {
-      "triggerId": "http-catalog",
-      "targetNodeId": "catalog",
-      "targetPortId": "request",
-      "backpressurePolicy": "queue",
-      "queueDepth": 8
     }
   ],
   "requiredPlugins": [

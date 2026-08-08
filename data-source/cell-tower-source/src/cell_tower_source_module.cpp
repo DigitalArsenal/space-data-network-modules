@@ -620,6 +620,64 @@ double confidence_of(const std::vector<Report>& reports, const std::vector<size_
     return std::round(raw * 1000.0) / 1000.0;
 }
 
+// ── $HTQ request envelope ──────────────────────────────────────────────────
+//
+// The host is a DUMB PIPE (module-sdk schemas/HttpRequestAbi.fbs): it delivers
+// exactly one $HTQ frame and streams back one $HTR. ALL HTTP semantics —
+// routing, query parsing, content negotiation — live in here. That is also why
+// this flow has ONE http trigger and dispatches on PATH internally: the host
+// takes the FIRST http-request trigger and breaks (flowrt/httpmount.go:562-570),
+// so a second trigger is silently unreachable rather than a second route.
+//
+// Hand-decoded rather than inlining the generated header: the envelope is one
+// table with six fields, and the module already inlines $TBS. Slots are
+// METHOD=0, PATH=1, QUERY=2, HEADERS=3, BODY=4, REMOTE=5.
+struct HtqReader {
+    const uint8_t* buf = nullptr;
+    uint32_t len = 0;
+    uint32_t root = 0;
+    uint32_t vtable = 0;
+    uint16_t vtable_len = 0;
+
+    bool init(const uint8_t* data, uint32_t size) {
+        if (!data || size < 8) return false;
+        buf = data; len = size;
+        root = rd32(0);
+        if (root + 4 > len) return false;
+        const int32_t soffset = static_cast<int32_t>(rd32(root));
+        const int64_t vt = static_cast<int64_t>(root) - soffset;
+        if (vt < 0 || vt + 4 > len) return false;
+        vtable = static_cast<uint32_t>(vt);
+        vtable_len = rd16(vtable);
+        return true;
+    }
+    uint32_t rd32(uint32_t at) const {
+        return static_cast<uint32_t>(buf[at]) | (static_cast<uint32_t>(buf[at + 1]) << 8) |
+               (static_cast<uint32_t>(buf[at + 2]) << 16) | (static_cast<uint32_t>(buf[at + 3]) << 24);
+    }
+    uint16_t rd16(uint32_t at) const {
+        return static_cast<uint16_t>(buf[at]) | (static_cast<uint16_t>(buf[at + 1]) << 8);
+    }
+    uint16_t slot(int index) const {
+        const uint32_t at = vtable + 4 + static_cast<uint32_t>(index) * 2;
+        if (at + 2 > vtable + vtable_len || at + 2 > len) return 0;
+        return rd16(at);
+    }
+    std::string str(int index) const {
+        const uint16_t rel = slot(index);
+        if (!rel) return std::string();
+        const uint32_t at = root + rel;
+        if (at + 4 > len) return std::string();
+        const uint32_t off = at + rd32(at);
+        if (off + 4 > len) return std::string();
+        const uint32_t n = rd32(off);
+        if (off + 4 + n > len) return std::string();
+        return std::string(reinterpret_cast<const char*>(buf + off + 4), n);
+    }
+    std::string bytes(int index) const { return str(index); }  // same layout for [ubyte]
+};
+
+
 // ── $TBS encoding ──────────────────────────────────────────────────────────
 // SOURCES and CONSENSUS are `required` in the IDL, so both are always built.
 // Optional scalars are only added when the source actually reported them:
@@ -731,6 +789,54 @@ std::string input_text(const char* port_id, uint32_t ordinal) {
     return std::string(reinterpret_cast<const char*>(f->payload), f->payload_length);
 }
 
+// ---------------------------------------------------------------------------
+// catalog: the provider list this node can actually reach.
+//
+// The GUI calls this FIRST and renders exactly what it is told, so the catalog
+// is the module's, never a list compiled into the page. It reports each
+// provider's access posture and whether a credential is currently held, so the
+// page can disable what it cannot use instead of offering a control that fails.
+//
+// It reports NO credential values and no key material — only whether a lane is
+// configured. `keySlot` is emitted ONLY when the node published a real slot to
+// seal to; while it is absent the GUI must refuse to collect a credential
+// rather than show a form with nowhere safe to send it.
+// ---------------------------------------------------------------------------
+int emit_catalog(void) {
+    std::string out = "{\"providers\":[";
+    for (size_t i = 0; i < kProviderCount; ++i) {
+        const ProviderSpec& p = kProviders[i];
+        if (i) out += ",";
+        out += std::string("{\"id\":\"") + p.id + "\"";
+        out += ",\"name\":\"" + json_escape(p.authority) + "\"";
+        out += ",\"authority\":\"" + json_escape(p.authority) + "\"";
+        out += ",\"license\":\"" + json_escape(p.license) + "\"";
+        out += ",\"attribution\":\"" + json_escape(p.attribution) + "\"";
+        out += ",\"credentialRequired\":" + std::string(p.login_required ? "true" : "false");
+        // No credential store is reachable from this module yet
+        // (upstream-sdn-3), so this is honestly false rather than optimistic.
+        out += ",\"credentialConfigured\":false";
+        out += ",\"credentialLane\":\"cell_" + std::string(p.id) + "\"";
+        out += ",\"authoritative\":" + std::string(p.authoritative ? "true" : "false");
+        // A provider needing a login cannot be selected by default: offering it
+        // pre-ticked would produce a run that silently skips it.
+        out += ",\"defaultSelected\":" + std::string(p.login_required ? "false" : "true");
+        out += "}";
+    }
+    out += "],\"methods\":[\"SINGLE_SOURCE\",\"HIGHEST_SAMPLE_COUNT\",\"MOST_RECENT\""
+           ",\"AUTHORITY_PRECEDENCE\",\"CENTROID\"]";
+    // keySlot is deliberately OMITTED until the node can accept a credential.
+    out += "}";
+    if (push_json("catalog", out) < 0) return 500;
+    // foundation/http-respond is driven by a DECISION frame; a body with no
+    // decision has no status or content-type to be sent under.
+    if (push_json("decision",
+                  "{\"route\":\"cellular-providers\",\"format\":\"json\",\"status\":200}") < 0) {
+        return 500;
+    }
+    return 0;
+}
+
 }  // namespace
 
 extern "C" {
@@ -743,8 +849,26 @@ extern "C" {
 // either of them changing what the node is.
 // ---------------------------------------------------------------------------
 int route(void) {
-    const std::string request = input_text("request", 0);
-    const std::string body = json_string(request, "body", request);
+    const int32_t idx = plugin_find_input_index("request", 0);
+    if (idx < 0) return 400;
+    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
+    if (!frame || !frame->payload) return 400;
+
+    HtqReader htq;
+    if (!htq.init(frame->payload, frame->payload_length)) {
+        push_json("reply",
+                  "{\"route\":\"cellular\",\"format\":\"json\",\"status\":400"
+                  ",\"error\":\"request envelope is not a readable $HTQ frame\"}");
+        return 0;
+    }
+    const std::string path = htq.str(1);
+    const std::string body = htq.bytes(4);
+
+    // ONE trigger, dispatched here. The catalog read and the aggregation are
+    // two routes of one flow, because the host mounts one trigger per flow.
+    if (path.size() >= 10 && path.compare(path.size() - 10, 10, "/providers") == 0) {
+        return emit_catalog();
+    }
 
     std::vector<std::string> wanted = json_string_array(body, "PROVIDERS");
     const std::string method_name = json_string(body, "METHOD", "HIGHEST_SAMPLE_COUNT");
@@ -810,54 +934,6 @@ int route(void) {
 
     if (push_json("requests", requests) < 0) return 500;
     if (push_json("job", job) < 0) return 500;
-    return 0;
-}
-
-// ---------------------------------------------------------------------------
-// catalog: the provider list this node can actually reach.
-//
-// The GUI calls this FIRST and renders exactly what it is told, so the catalog
-// is the module's, never a list compiled into the page. It reports each
-// provider's access posture and whether a credential is currently held, so the
-// page can disable what it cannot use instead of offering a control that fails.
-//
-// It reports NO credential values and no key material — only whether a lane is
-// configured. `keySlot` is emitted ONLY when the node published a real slot to
-// seal to; while it is absent the GUI must refuse to collect a credential
-// rather than show a form with nowhere safe to send it.
-// ---------------------------------------------------------------------------
-int catalog(void) {
-    std::string out = "{\"providers\":[";
-    for (size_t i = 0; i < kProviderCount; ++i) {
-        const ProviderSpec& p = kProviders[i];
-        if (i) out += ",";
-        out += std::string("{\"id\":\"") + p.id + "\"";
-        out += ",\"name\":\"" + json_escape(p.authority) + "\"";
-        out += ",\"authority\":\"" + json_escape(p.authority) + "\"";
-        out += ",\"license\":\"" + json_escape(p.license) + "\"";
-        out += ",\"attribution\":\"" + json_escape(p.attribution) + "\"";
-        out += ",\"credentialRequired\":" + std::string(p.login_required ? "true" : "false");
-        // No credential store is reachable from this module yet
-        // (upstream-sdn-3), so this is honestly false rather than optimistic.
-        out += ",\"credentialConfigured\":false";
-        out += ",\"credentialLane\":\"cell_" + std::string(p.id) + "\"";
-        out += ",\"authoritative\":" + std::string(p.authoritative ? "true" : "false");
-        // A provider needing a login cannot be selected by default: offering it
-        // pre-ticked would produce a run that silently skips it.
-        out += ",\"defaultSelected\":" + std::string(p.login_required ? "false" : "true");
-        out += "}";
-    }
-    out += "],\"methods\":[\"SINGLE_SOURCE\",\"HIGHEST_SAMPLE_COUNT\",\"MOST_RECENT\""
-           ",\"AUTHORITY_PRECEDENCE\",\"CENTROID\"]";
-    // keySlot is deliberately OMITTED until the node can accept a credential.
-    out += "}";
-    if (push_json("catalog", out) < 0) return 500;
-    // foundation/http-respond is driven by a DECISION frame; a body with no
-    // decision has no status or content-type to be sent under.
-    if (push_json("decision",
-                  "{\"route\":\"cellular-providers\",\"format\":\"json\",\"status\":200}") < 0) {
-        return 500;
-    }
     return 0;
 }
 

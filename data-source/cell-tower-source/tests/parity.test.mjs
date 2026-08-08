@@ -16,10 +16,26 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { createRequire } from "node:module";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+
+// flatbuffers and the generated $HTQ binding both live inside the module SDK,
+// which is where this package resolves them from — this repo declares no
+// dependencies of its own.
+// .../space-data-module-sdk/src/testing/index.js -> the SDK root is three up.
+const sdkTestingEntry = fileURLToPath(
+  new URL(import.meta.resolve("space-data-module-sdk/testing")),
+);
+const sdkRoot = path.resolve(path.dirname(sdkTestingEntry), "..", "..");
+const sdkRequire = createRequire(path.join(sdkRoot, "package.json"));
+const flatbuffers = sdkRequire("flatbuffers");
+const { HttpRequest } = sdkRequire(
+  path.join(sdkRoot, "src", "generated", "http", "sdn", "http", "http-request.js"),
+);
 
 import {
   MergeMethod,
@@ -40,6 +56,36 @@ function jsonInput(portId, value) {
     portId,
     typeRef: { wireFormat: "flatbuffer" },
     payload: encoder.encode(JSON.stringify(value)),
+  };
+}
+
+/**
+ * Build a real `$HTQ` HttpRequest envelope.
+ *
+ * The first cut of these tests fed the module a JSON object with a `body`
+ * field, which is a shape I invented — the host actually delivers a FlatBuffer
+ * (module-sdk schemas/HttpRequestAbi.fbs). That mismatch is exactly why the
+ * mounted flow answered 502 while every test passed: the tests never exercised
+ * the envelope the host sends. They build the real thing now.
+ */
+function htqRequest({ method = "POST", path = "/api/v1/cellular/aggregate", query = "", body = "" }) {
+  const b = new flatbuffers.Builder(1024);
+  const methodOff = b.createString(method);
+  const pathOff = b.createString(path);
+  const queryOff = b.createString(query);
+  const bodyBytes = typeof body === "string" ? encoder.encode(body) : body;
+  const bodyOff = HttpRequest.createBodyVector(b, bodyBytes);
+  HttpRequest.startHttpRequest(b);
+  HttpRequest.addMethod(b, methodOff);
+  HttpRequest.addPath(b, pathOff);
+  HttpRequest.addQuery(b, queryOff);
+  HttpRequest.addBody(b, bodyOff);
+  const off = HttpRequest.endHttpRequest(b);
+  HttpRequest.finishHttpRequestBuffer(b, off);
+  return {
+    portId: "request",
+    typeRef: { wireFormat: "flatbuffer" },
+    payload: b.asUint8Array(),
   };
 }
 
@@ -191,9 +237,7 @@ async function runModule(t, providers, method) {
     await harness.invoke({
       methodId: "route",
       inputs: [
-        jsonInput("request", {
-          body: JSON.stringify({ PROVIDERS: providers, METHOD: method, LIMIT: 5000 }),
-        }),
+        htqRequest({ body: JSON.stringify({ PROVIDERS: providers, METHOD: method, LIMIT: 5000 }) }),
       ],
     }),
   );
@@ -232,8 +276,8 @@ test("catalog answers the provider list the page renders", async (t) => {
   const harness = await harnessFor(t);
   const out = byPort(
     await harness.invoke({
-      methodId: "catalog",
-      inputs: [jsonInput("request", { body: "" })],
+      methodId: "route",
+      inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
     }),
   );
   const catalog = jsonFrame(out, "catalog");
@@ -257,8 +301,8 @@ test("catalog leaks no credential value and no key material", async (t) => {
   const harness = await harnessFor(t);
   const out = byPort(
     await harness.invoke({
-      methodId: "catalog",
-      inputs: [jsonInput("request", { body: "" })],
+      methodId: "route",
+      inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
     }),
   );
   const raw = decoder.decode(out.get("catalog").payload);
@@ -284,8 +328,8 @@ test("credentialed providers are not selected by default", async (t) => {
   const harness = await harnessFor(t);
   const out = byPort(
     await harness.invoke({
-      methodId: "catalog",
-      inputs: [jsonInput("request", { body: "" })],
+      methodId: "route",
+      inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
     }),
   );
   const catalog = jsonFrame(out, "catalog");
@@ -301,11 +345,7 @@ test("route refuses an unknown merge method instead of defaulting", async (t) =>
   const out = byPort(
     await harness.invoke({
       methodId: "route",
-      inputs: [
-        jsonInput("request", {
-          body: JSON.stringify({ PROVIDERS: ["fcc-asr"], METHOD: "BEST_GUESS" }),
-        }),
-      ],
+      inputs: [htqRequest({ body: JSON.stringify({ PROVIDERS: ["fcc-asr"], METHOD: "BEST_GUESS" }) })],
     }),
   );
   const reply = jsonFrame(out, "reply");
@@ -319,7 +359,7 @@ test("route refuses an empty provider set", async (t) => {
   const out = byPort(
     await harness.invoke({
       methodId: "route",
-      inputs: [jsonInput("request", { body: JSON.stringify({ PROVIDERS: [] }) })],
+      inputs: [htqRequest({ body: JSON.stringify({ PROVIDERS: [] }) })],
     }),
   );
   assert.equal(jsonFrame(out, "reply").status, 400);
@@ -331,7 +371,7 @@ test("route skips credentialed providers loudly and never fetches them", async (
     await harness.invoke({
       methodId: "route",
       inputs: [
-        jsonInput("request", {
+        htqRequest({
           body: JSON.stringify({
             PROVIDERS: ["opencellid", "fcc-asr"],
             METHOD: "HIGHEST_SAMPLE_COUNT",

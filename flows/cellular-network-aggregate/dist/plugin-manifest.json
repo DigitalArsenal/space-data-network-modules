@@ -93,60 +93,6 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
-    },
-    {
-      "methodId": "http_catalog",
-      "displayName": "Flow trigger http-catalog",
-      "description": "Compiled-flow ingress for trigger \"http-catalog\" (http-request).",
-      "inputPorts": [
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-http-request-envelope",
-              "allowedTypes": [
-                {
-                  "acceptsAnyFlatbuffer": true
-                }
-              ],
-              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
-              }
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The HTTP request envelope."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "response",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-http-response-envelope",
-              "allowedTypes": [
-                {
-                  "schemaName": "HttpResponseAbi.fbs",
-                  "fileIdentifier": "$HTR",
-                  "rootTypeName": "HttpResponse"
-                }
-              ],
-              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Exactly one HTTP response envelope per invoke."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot"
     }
   ],
   "schemasUsed": [
@@ -179,16 +125,7 @@
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "route",
       "kind": "transform",
-      "dispatchModel": "isomorphic",
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
-      "nodeId": "catalog",
-      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
-      "methodId": "catalog",
-      "kind": "transform",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
@@ -197,7 +134,7 @@
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
       "kind": "transform",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
@@ -206,7 +143,7 @@
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "parse",
       "kind": "transform",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
@@ -215,7 +152,7 @@
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "deconflict",
       "kind": "transform",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
@@ -223,8 +160,8 @@
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
-      "kind": "transform",
-      "dispatchModel": "isomorphic",
+      "kind": "responder",
+      "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
@@ -234,15 +171,6 @@
       "methodId": "emit",
       "kind": "sink",
       "dispatchModel": "host-capability",
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
-      "nodeId": "respond_catalog",
-      "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "methodId": "respond",
-      "kind": "transform",
-      "dispatchModel": "isomorphic",
       "uiX": 0,
       "uiY": 0
     }
@@ -406,52 +334,11 @@
       }
     },
     {
-      "edgeId": "catalog-respond",
-      "fromNodeId": "catalog",
+      "edgeId": "route-catalog-respond",
+      "fromNodeId": "route",
       "fromPortId": "catalog",
-      "toNodeId": "respond_catalog",
+      "toNodeId": "respond",
       "toPortId": "body",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "respond-catalog-egress",
-      "fromNodeId": "respond_catalog",
-      "fromPortId": "response",
-      "toNodeId": "egress",
-      "toPortId": "response",
-      "contract": {
-        "canonicalType": {
-          "schemaName": "HttpResponseAbi.fbs",
-          "fileIdentifier": "$HTR",
-          "schemaVersion": null,
-          "schemaHash": [],
-          "acceptsAnyFlatbuffer": false,
-          "wireFormat": "flatbuffer",
-          "rootTypeName": "HttpResponse",
-          "fixedStringLength": 0,
-          "byteLength": 0,
-          "requiredAlignment": 0
-        },
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": false,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "catalog-decision",
-      "fromNodeId": "catalog",
-      "fromPortId": "decision",
-      "toNodeId": "respond_catalog",
-      "toPortId": "decision",
       "contract": {
         "canonicalType": null,
         "alignedType": null,
@@ -468,25 +355,13 @@
       "kind": "http-request",
       "source": "host-http",
       "defaultIntervalMs": 0,
-      "httpPath": "/api/v1/cellular/aggregate"
-    },
-    {
-      "triggerId": "http-catalog",
-      "kind": "http-request",
-      "source": "host-http",
-      "defaultIntervalMs": 0,
-      "httpPath": "/api/v1/cellular/providers"
+      "httpPath": "/api/v1/cellular/"
     }
   ],
   "flowTriggerBindings": [
     {
       "triggerId": "http-request",
       "targetNodeId": "route",
-      "targetPortId": "request"
-    },
-    {
-      "triggerId": "http-catalog",
-      "targetNodeId": "catalog",
       "targetPortId": "request"
     }
   ],

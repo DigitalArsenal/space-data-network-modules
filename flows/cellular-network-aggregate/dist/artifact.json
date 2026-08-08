@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 8,
-  "edges": 12,
-  "triggers": 2,
+  "nodes": 6,
+  "edges": 10,
+  "triggers": 1,
   "capabilities": [
     "http"
   ],
@@ -16,42 +16,35 @@
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "route",
-      "dispatchModel": "isomorphic",
-      "resolvedFromPluginFamily": null
-    },
-    {
-      "nodeId": "catalog",
-      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
-      "methodId": "catalog",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": "linked-direct",
       "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "http",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": "linked-direct",
       "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "parse",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "parse",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": "linked-direct",
       "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "merge",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "deconflict",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": "linked-direct",
       "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
-      "dispatchModel": "isomorphic",
+      "dispatchModel": "linked-direct",
       "resolvedFromPluginFamily": null
     },
     {
@@ -59,13 +52,6 @@
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
       "dispatchModel": "host",
-      "resolvedFromPluginFamily": null
-    },
-    {
-      "nodeId": "respond_catalog",
-      "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "methodId": "respond",
-      "dispatchModel": "isomorphic",
       "resolvedFromPluginFamily": null
     }
   ],
@@ -75,12 +61,16 @@
       "dependencyId": "com.digitalarsenal.data-source.cell-tower-source",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "version": "0.1.0",
-      "sha256": "2be49667a0846c87ae0f10217d2c6a255e8da9e38495a467609825fb05f2f8b9",
-      "dispatchModel": "isomorphic",
-      "artifactPath": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
-      "publisher": "../data-source/cell-tower-source/publisher.json",
-      "symbolPrefix": null,
-      "methodSymbols": {}
+      "sha256": "ae3fc3bb415766a84afacb070089f19de39c4d199bcafb823c4752ec3549d34f",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d736f75726365_",
+      "methodSymbols": {
+        "route": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d736f75726365_route",
+        "parse": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d736f75726365_parse",
+        "deconflict": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d736f75726365_deconflict"
+      }
     },
     {
       "kind": "node",
@@ -88,11 +78,13 @@
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "version": "0.1.0",
       "sha256": "574ad19601b2cd7954d34d60a7551a2b22e69f65f63279d935da1e7943aa6316",
-      "dispatchModel": "isomorphic",
-      "artifactPath": "../hostcap/http-request/dist/isomorphic/module.wasm",
-      "publisher": "../hostcap/http-request/publisher.json",
-      "symbolPrefix": null,
-      "methodSymbols": {}
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c61_request"
+      }
     },
     {
       "kind": "node",
@@ -100,11 +92,13 @@
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.2.1",
       "sha256": "26cb434bf23b9f8064dabc376eaeaca07c0698669a7d6471f35d75d7cf2da42a",
-      "dispatchModel": "isomorphic",
-      "artifactPath": "../foundation/http-respond/dist/isomorphic/module.wasm",
-      "publisher": "../foundation/http-respond/publisher.json",
-      "symbolPrefix": null,
-      "methodSymbols": {}
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_",
+      "methodSymbols": {
+        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e687474702d726573706f6e64_respond"
+      }
     }
   ]
 }
