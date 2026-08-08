@@ -404,6 +404,35 @@ test("route refuses an unknown merge method instead of defaulting", async (t) =>
   assert.equal(out.has("requests"), false);
 });
 
+test("a run with no fetchable provider answers, instead of stalling the chain", async (t) => {
+  // `parse.responses` is a REQUIRED input, so a run that fetches nothing leaves
+  // that node unable to fire and the host with nothing to send — a silent 502
+  // with no log line (host-01, 2026-08-08: `opencellid` alone, since it needs a
+  // credential the node cannot store, so every selected provider was skipped).
+  // The request was valid; the honest answer is an empty result WITH reasons.
+  const harness = await harnessFor(t);
+  const out = byPort(
+    await harness.invoke({
+      methodId: "route",
+      inputs: [
+        htqRequest({
+          body: JSON.stringify({ PROVIDERS: ["opencellid"], METHOD: "MOST_RECENT" }),
+        }),
+      ],
+    }),
+  );
+  const reply = jsonFrame(out, "reply");
+  assert.equal(reply.status, 200);
+  assert.equal(reply.providersConsulted, 0);
+  assert.equal(reply.sitesOut, 0);
+  assert.equal(reply.skipped.length, 1);
+  assert.equal(reply.skipped[0].provider_id, "opencellid");
+  // Nothing downstream may be started: a job or a request descriptor here would
+  // restart the very stall this avoids.
+  assert.equal(out.has("job"), false);
+  assert.equal(out.has("requests"), false);
+});
+
 test("route refuses an empty provider set", async (t) => {
   const harness = await harnessFor(t);
   const out = byPort(

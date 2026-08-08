@@ -936,6 +936,29 @@ int route(void) {
                             ",\"providers_consulted\":" + consulted +
                             ",\"skipped\":" + skipped + "}";
 
+    // ZERO FETCHABLE PROVIDERS — SHORT-CIRCUIT, never start the pipeline.
+    //
+    // `parse.responses` is a REQUIRED input with minStreams 1, so a run with no
+    // fetches leaves that node unable to fire, the chain stalls, and the host
+    // finds nothing to send: a silent 502 with no log line anywhere (host-01,
+    // 2026-08-08, `opencellid` as the sole provider — it needs a credential the
+    // node cannot yet store, so every selected provider was skipped).
+    //
+    // The request was valid and the honest answer is an empty result WITH the
+    // reasons, so this emits a decision and no body. `respond.body` is optional
+    // and absent means an empty 200, which is exactly the shape wanted here.
+    // Starting a pipeline that cannot complete is never better than answering.
+    if (descriptors.empty()) {
+        const std::string empty_reply =
+            std::string("{\"route\":\"cellular-aggregate\",\"format\":\"record-stream\""
+                        ",\"status\":200,\"reportsIn\":0,\"sitesOut\":0,\"collapsed\":0"
+                        ",\"multiProviderSites\":0,\"providersConsulted\":0"
+                        ",\"method\":\"") + json_escape(method_name) + "\"" +
+            ",\"skipped\":" + skipped + "}";
+        if (push_json("reply", empty_reply) < 0) return 500;
+        return 0;
+    }
+
     // The job goes FIRST: parse and deconflict both need the run contract, and a
     // response frame arriving before it would have nothing to be interpreted
     // against.
