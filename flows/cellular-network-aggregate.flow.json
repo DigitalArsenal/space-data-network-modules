@@ -1,0 +1,212 @@
+{
+  "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
+  "name": "Cellular Network Aggregation",
+  "version": "0.1.0",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The host owns no schedule, no provider list, no merge policy and no record semantics \u2014 it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "route",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "./data-source/cell-tower-source/publisher.json"
+      }
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": [
+        "http"
+      ],
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "parse",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "drain-until-yield",
+      "artifact": {
+        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "./data-source/cell-tower-source/publisher.json"
+      }
+    },
+    {
+      "nodeId": "merge",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "deconflict",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "./data-source/cell-tower-source/publisher.json"
+      }
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "dispatchModel": "isomorphic",
+      "kind": "sink",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "kind": "sink",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-http",
+      "fromNodeId": "route",
+      "fromPortId": "requests",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16,
+      "opaque": true
+    },
+    {
+      "edgeId": "route-job-parse",
+      "fromNodeId": "route",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "responses",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-job-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "job",
+      "toNodeId": "merge",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-reports-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "reports",
+      "toNodeId": "merge",
+      "toPortId": "reports",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "merge-records-respond",
+      "fromNodeId": "merge",
+      "fromPortId": "records",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "merge-summary-respond",
+      "fromNodeId": "merge",
+      "fromPortId": "summary",
+      "toNodeId": "respond",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "route-reply-respond",
+      "fromNodeId": "route",
+      "fromPortId": "reply",
+      "toNodeId": "respond",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "frame",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "httpPath": "/api/v1/cellular/aggregate",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.cell-tower-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.foundation.http-respond"
+  ],
+  "api": {
+    "tag": "cellular",
+    "tagDescription": "Terrestrial cellular base-station aggregation across open provider registries.",
+    "routes": [
+      {
+        "path": "aggregate",
+        "method": "POST",
+        "operationId": "aggregateCellularSites",
+        "summary": "Aggregate and deconflict cellular base-station sites across providers",
+        "description": "Takes a provider set and a tbsMergeMethod and answers with a size-prefixed $TBS record stream. ANONYMOUS is requested deliberately: every provider reachable without a credential publishes open data under an attribution licence, the answer carries that attribution in $TBS.SOURCES, and this is a public read that changes no node state. The host still decides; gateway.anonymous.deny overrides this request.",
+        "anonymous": true
+      },
+      {
+        "path": "providers",
+        "method": "GET",
+        "operationId": "listCellularProviders",
+        "summary": "The provider catalog this node's module can reach",
+        "description": "Provider ids, access posture and whether a credential is currently held. Anonymous for the same reason as aggregate: it is a public read of open-data source metadata and reveals no secret. Credential VALUES are never exposed by any route.",
+        "anonymous": true
+      }
+    ]
+  }
+}
