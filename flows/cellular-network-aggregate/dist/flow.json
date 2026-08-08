@@ -14,7 +14,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "ae3fc3bb415766a84afacb070089f19de39c4d199bcafb823c4752ec3549d34f"
+        "sha256": "ced2fa511fecbd2ac1e97a13ae213b7eaf0c255d792406c6d353276db55e0dc9"
       }
     },
     {
@@ -42,7 +42,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "ae3fc3bb415766a84afacb070089f19de39c4d199bcafb823c4752ec3549d34f"
+        "sha256": "ced2fa511fecbd2ac1e97a13ae213b7eaf0c255d792406c6d353276db55e0dc9"
       }
     },
     {
@@ -55,7 +55,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "ae3fc3bb415766a84afacb070089f19de39c4d199bcafb823c4752ec3549d34f"
+        "sha256": "ced2fa511fecbd2ac1e97a13ae213b7eaf0c255d792406c6d353276db55e0dc9"
       }
     },
     {
