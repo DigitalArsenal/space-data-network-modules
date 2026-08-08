@@ -18,6 +18,19 @@
       }
     },
     {
+      "nodeId": "catalog",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "catalog",
+      "dispatchModel": "isomorphic",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "./data-source/cell-tower-source/publisher.json"
+      }
+    },
+    {
       "nodeId": "http",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
@@ -67,6 +80,15 @@
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
+      "dispatchModel": "isomorphic",
+      "kind": "sink",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "respond_catalog",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
       "dispatchModel": "isomorphic",
       "kind": "sink",
       "capabilities": [],
@@ -162,6 +184,26 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "catalog-respond",
+      "fromNodeId": "catalog",
+      "fromPortId": "catalog",
+      "toNodeId": "respond_catalog",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "respond-catalog-egress",
+      "fromNodeId": "respond_catalog",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "frame",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
     }
   ],
   "triggers": [
@@ -171,6 +213,13 @@
       "source": "host-http",
       "httpPath": "/api/v1/cellular/aggregate",
       "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    },
+    {
+      "triggerId": "http-catalog",
+      "kind": "http-request",
+      "source": "host-http",
+      "httpPath": "/api/v1/cellular/providers",
+      "description": "The provider catalog read. A SEPARATE trigger, because the host mounts a route per trigger with an httpPath (flowrt/flowplugin.go:80-93) \u2014 declaring a route in api.routes alone documents it without mounting it, which would 404."
     }
   ],
   "triggerBindings": [
@@ -180,6 +229,13 @@
       "targetPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 16
+    },
+    {
+      "triggerId": "http-catalog",
+      "targetNodeId": "catalog",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 8
     }
   ],
   "requiredPlugins": [

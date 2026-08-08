@@ -811,6 +811,48 @@ int route(void) {
 }
 
 // ---------------------------------------------------------------------------
+// catalog: the provider list this node can actually reach.
+//
+// The GUI calls this FIRST and renders exactly what it is told, so the catalog
+// is the module's, never a list compiled into the page. It reports each
+// provider's access posture and whether a credential is currently held, so the
+// page can disable what it cannot use instead of offering a control that fails.
+//
+// It reports NO credential values and no key material — only whether a lane is
+// configured. `keySlot` is emitted ONLY when the node published a real slot to
+// seal to; while it is absent the GUI must refuse to collect a credential
+// rather than show a form with nowhere safe to send it.
+// ---------------------------------------------------------------------------
+int catalog(void) {
+    std::string out = "{\"providers\":[";
+    for (size_t i = 0; i < kProviderCount; ++i) {
+        const ProviderSpec& p = kProviders[i];
+        if (i) out += ",";
+        out += std::string("{\"id\":\"") + p.id + "\"";
+        out += ",\"name\":\"" + json_escape(p.authority) + "\"";
+        out += ",\"authority\":\"" + json_escape(p.authority) + "\"";
+        out += ",\"license\":\"" + json_escape(p.license) + "\"";
+        out += ",\"attribution\":\"" + json_escape(p.attribution) + "\"";
+        out += ",\"credentialRequired\":" + std::string(p.login_required ? "true" : "false");
+        // No credential store is reachable from this module yet
+        // (upstream-sdn-3), so this is honestly false rather than optimistic.
+        out += ",\"credentialConfigured\":false";
+        out += ",\"credentialLane\":\"cell_" + std::string(p.id) + "\"";
+        out += ",\"authoritative\":" + std::string(p.authoritative ? "true" : "false");
+        // A provider needing a login cannot be selected by default: offering it
+        // pre-ticked would produce a run that silently skips it.
+        out += ",\"defaultSelected\":" + std::string(p.login_required ? "false" : "true");
+        out += "}";
+    }
+    out += "],\"methods\":[\"SINGLE_SOURCE\",\"HIGHEST_SAMPLE_COUNT\",\"MOST_RECENT\""
+           ",\"AUTHORITY_PRECEDENCE\",\"CENTROID\"]";
+    // keySlot is deliberately OMITTED until the node can accept a credential.
+    out += "}";
+    if (push_json("catalog", out) < 0) return 500;
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // parse: job + N http responses -> normalized reports.
 // ---------------------------------------------------------------------------
 int parse(void) {

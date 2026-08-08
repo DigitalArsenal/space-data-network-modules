@@ -123,6 +123,63 @@
       "drainPolicy": "single-shot"
     },
     {
+      "methodId": "catalog",
+      "displayName": "Provider catalog",
+      "description": "Answers the provider list this node can actually reach: each provider's access posture, licence, attribution, whether a credential is currently held, and the merge methods on offer. Reports NO credential values and no key material. The configuring page renders exactly this and compiles no provider list of its own.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request-envelope",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request envelope."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-catalog-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON provider catalog for the configuring page.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provider catalog handed to the flow's http-respond node. It is source METADATA (ids, access posture, licence, whether a lane is configured), not observation data, so no SDS record type describes it and inventing one would be worse than naming it what it is."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Provider catalog."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
       "methodId": "parse",
       "displayName": "Normalize provider payloads",
       "description": "Decodes each provider's native payload into normalized reports, dropping rows whose coordinates are out of range rather than clamping them. A provider whose fetch failed contributes nothing but stays in providers_consulted, so 'asked and got nothing' never reads as 'agreed'.",

@@ -228,6 +228,74 @@ async function runModule(t, providers, method) {
 
 const PROVIDERS = ["fcc-asr", "mls-archive"];
 
+test("catalog answers the provider list the page renders", async (t) => {
+  const harness = await harnessFor(t);
+  const out = byPort(
+    await harness.invoke({
+      methodId: "catalog",
+      inputs: [jsonInput("request", { body: "" })],
+    }),
+  );
+  const catalog = jsonFrame(out, "catalog");
+  assert.ok(Array.isArray(catalog.providers) && catalog.providers.length > 0);
+  for (const p of catalog.providers) {
+    assert.equal(typeof p.id, "string");
+    assert.equal(typeof p.credentialRequired, "boolean");
+    assert.equal(typeof p.license, "string");
+  }
+  // Every method the GUI may offer must be one the record type can describe.
+  assert.deepEqual(catalog.methods, [
+    "SINGLE_SOURCE",
+    "HIGHEST_SAMPLE_COUNT",
+    "MOST_RECENT",
+    "AUTHORITY_PRECEDENCE",
+    "CENTROID",
+  ]);
+});
+
+test("catalog leaks no credential value and no key material", async (t) => {
+  const harness = await harnessFor(t);
+  const out = byPort(
+    await harness.invoke({
+      methodId: "catalog",
+      inputs: [jsonInput("request", { body: "" })],
+    }),
+  );
+  const raw = decoder.decode(out.get("catalog").payload);
+  for (const forbidden of ["password", "secret", "token", "privateKey", "apiKey"]) {
+    assert.ok(
+      !new RegExp(forbidden, "iu").test(raw),
+      `catalog response mentions ${forbidden}`,
+    );
+  }
+  const catalog = JSON.parse(raw);
+  // No node key slot exists yet (upstream-sdn-3), so the catalog must OMIT
+  // keySlot rather than publish a placeholder — the GUI keys its refuse-to-
+  // collect behaviour off exactly this absence.
+  assert.equal("keySlot" in catalog, false);
+  // And nothing may claim a credential is held when none can be.
+  assert.equal(
+    catalog.providers.every((p) => p.credentialConfigured === false),
+    true,
+  );
+});
+
+test("credentialed providers are not selected by default", async (t) => {
+  const harness = await harnessFor(t);
+  const out = byPort(
+    await harness.invoke({
+      methodId: "catalog",
+      inputs: [jsonInput("request", { body: "" })],
+    }),
+  );
+  const catalog = jsonFrame(out, "catalog");
+  // Pre-ticking a provider the run will silently skip produces a result that
+  // quietly excludes what the user believes they asked for.
+  for (const p of catalog.providers) {
+    if (p.credentialRequired) assert.equal(p.defaultSelected, false);
+  }
+});
+
 test("route refuses an unknown merge method instead of defaulting", async (t) => {
   const harness = await harnessFor(t);
   const out = byPort(
