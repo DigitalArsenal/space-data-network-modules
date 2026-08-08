@@ -1,0 +1,494 @@
+{
+  "pluginId": "com.digitalarsenal.flows.cellular-network-aggregate",
+  "name": "Cellular Network Aggregation",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
+  "capabilities": [
+    "http"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "minVersion": "0.2.1",
+      "maxVersion": "0.2.1"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "http_request",
+      "displayName": "Flow trigger http-request",
+      "description": "Compiled-flow ingress for trigger \"http-request\" (http-request).",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request-envelope",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request envelope."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "http_catalog",
+      "displayName": "Flow trigger http-catalog",
+      "description": "Compiled-flow ingress for trigger \"http-catalog\" (http-request).",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request-envelope",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request envelope."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS, HEADERS (sorted, lower-cased names), BODY. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TBS.fbs",
+      "fileIdentifier": "$TBS",
+      "rootTypeName": "TBS"
+    },
+    {
+      "schemaName": "HttpResponseAbi.fbs",
+      "fileIdentifier": "$HTR",
+      "rootTypeName": "HttpResponse"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_cellular_network_aggregate-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "route",
+      "kind": "transform",
+      "dispatchModel": "isomorphic",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "catalog",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "catalog",
+      "kind": "transform",
+      "dispatchModel": "isomorphic",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": "isomorphic",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "parse",
+      "kind": "transform",
+      "dispatchModel": "isomorphic",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "merge",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "deconflict",
+      "kind": "transform",
+      "dispatchModel": "isomorphic",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "transform",
+      "dispatchModel": "isomorphic",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "respond_catalog",
+      "pluginId": "com.digitalarsenal.foundation.http-respond",
+      "methodId": "respond",
+      "kind": "transform",
+      "dispatchModel": "isomorphic",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "route-http",
+      "fromNodeId": "route",
+      "fromPortId": "requests",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "route-job-parse",
+      "fromNodeId": "route",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "responses",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-job-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "job",
+      "toNodeId": "merge",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-reports-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "reports",
+      "toNodeId": "merge",
+      "toPortId": "reports",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "merge-records-respond",
+      "fromNodeId": "merge",
+      "fromPortId": "records",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "TBS.fbs",
+          "fileIdentifier": "$TBS",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "TBS",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "merge-summary-respond",
+      "fromNodeId": "merge",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "route-reply-respond",
+      "fromNodeId": "route",
+      "fromPortId": "reply",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "respond-egress",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponseAbi.fbs",
+          "fileIdentifier": "$HTR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "catalog-respond",
+      "fromNodeId": "catalog",
+      "fromPortId": "catalog",
+      "toNodeId": "respond_catalog",
+      "toPortId": "body",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "respond-catalog-egress",
+      "fromNodeId": "respond_catalog",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponseAbi.fbs",
+          "fileIdentifier": "$HTR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "catalog-decision",
+      "fromNodeId": "catalog",
+      "fromPortId": "decision",
+      "toNodeId": "respond_catalog",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "defaultIntervalMs": 0,
+      "httpPath": "/api/v1/cellular/aggregate"
+    },
+    {
+      "triggerId": "http-catalog",
+      "kind": "http-request",
+      "source": "host-http",
+      "defaultIntervalMs": 0,
+      "httpPath": "/api/v1/cellular/providers"
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request"
+    },
+    {
+      "triggerId": "http-catalog",
+      "targetNodeId": "catalog",
+      "targetPortId": "request"
+    }
+  ],
+  "abiVersion": 1
+}
