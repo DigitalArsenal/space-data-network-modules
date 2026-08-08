@@ -99,24 +99,24 @@
           "portId": "reply",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-reply-json",
+              "setId": "sdn-http-route-decision-json",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON early reply for a refused request.",
+              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status,...}).",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Error reply ({status,error}) handed to the flow's http-respond node; the shape is defined by the host http mount, not by SDS."
+                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. It carries the status and content-type the body is sent under, plus this run's counters."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "Early reply for a refused request."
+          "description": "Routing decision for a refused request (status 400 with the reason)."
         }
       ],
       "maxBatch": 1,
@@ -174,6 +174,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "Provider catalog."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status,...}).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. It carries the status and content-type the body is sent under, plus this run's counters."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Routing decision for the catalog response."
         }
       ],
       "maxBatch": 1,
@@ -357,27 +380,27 @@
           "description": "Size-prefixed $TBS record stream."
         },
         {
-          "portId": "summary",
+          "portId": "decision",
           "acceptedTypeSets": [
             {
-              "setId": "cell-tower-summary-json",
+              "setId": "sdn-http-route-decision-json",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON run summary (counts, method, skipped providers).",
+              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status,...}).",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Run counters handed to the flow's http-respond node for the response headers; bookkeeping, never persisted as a record."
+                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. It carries the status and content-type the body is sent under, plus this run's counters."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Run summary for the reply."
+          "description": "Routing decision carrying status and this run's counters."
         }
       ],
       "maxBatch": 1,

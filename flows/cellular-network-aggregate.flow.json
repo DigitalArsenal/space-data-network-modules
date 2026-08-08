@@ -2,7 +2,7 @@
   "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
   "version": "0.1.0",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The host owns no schedule, no provider list, no merge policy and no record semantics \u2014 it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
   "nodes": [
     {
       "nodeId": "route",
@@ -13,8 +13,9 @@
       "capabilities": [],
       "drainPolicy": "single-shot",
       "artifact": {
-        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
-        "publisher": "./data-source/cell-tower-source/publisher.json"
+        "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "../data-source/cell-tower-source/publisher.json",
+        "sha256": "251b167fe591f13526580f15a60f97934458951432f1921fcb8fe2f505cd0933"
       }
     },
     {
@@ -26,8 +27,9 @@
       "capabilities": [],
       "drainPolicy": "single-shot",
       "artifact": {
-        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
-        "publisher": "./data-source/cell-tower-source/publisher.json"
+        "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "../data-source/cell-tower-source/publisher.json",
+        "sha256": "251b167fe591f13526580f15a60f97934458951432f1921fcb8fe2f505cd0933"
       }
     },
     {
@@ -39,7 +41,12 @@
       "capabilities": [
         "http"
       ],
-      "drainPolicy": "drain-until-yield"
+      "drainPolicy": "drain-until-yield",
+      "artifact": {
+        "path": "../hostcap/http-request/dist/isomorphic/module.wasm",
+        "publisher": "../hostcap/http-request/publisher.json",
+        "sha256": "f4077d1660745473b49d0accde178d0573c2bd1b4b69439da5b741ba14667adb"
+      }
     },
     {
       "nodeId": "parse",
@@ -50,8 +57,9 @@
       "capabilities": [],
       "drainPolicy": "drain-until-yield",
       "artifact": {
-        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
-        "publisher": "./data-source/cell-tower-source/publisher.json"
+        "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "../data-source/cell-tower-source/publisher.json",
+        "sha256": "251b167fe591f13526580f15a60f97934458951432f1921fcb8fe2f505cd0933"
       }
     },
     {
@@ -63,8 +71,9 @@
       "capabilities": [],
       "drainPolicy": "single-shot",
       "artifact": {
-        "path": "./data-source/cell-tower-source/dist/isomorphic/module.wasm",
-        "publisher": "./data-source/cell-tower-source/publisher.json"
+        "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
+        "publisher": "../data-source/cell-tower-source/publisher.json",
+        "sha256": "251b167fe591f13526580f15a60f97934458951432f1921fcb8fe2f505cd0933"
       }
     },
     {
@@ -72,9 +81,14 @@
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
       "dispatchModel": "isomorphic",
-      "kind": "sink",
+      "kind": "transform",
       "capabilities": [],
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "../foundation/http-respond/dist/isomorphic/module.wasm",
+        "publisher": "../foundation/http-respond/publisher.json",
+        "sha256": "ba0eeac0a64ad318d5e3c720d61c1ef83e248232f8e3003b65a542d30d318ade"
+      }
     },
     {
       "nodeId": "egress",
@@ -90,9 +104,14 @@
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
       "dispatchModel": "isomorphic",
-      "kind": "sink",
+      "kind": "transform",
       "capabilities": [],
-      "drainPolicy": "single-shot"
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "../foundation/http-respond/dist/isomorphic/module.wasm",
+        "publisher": "../foundation/http-respond/publisher.json",
+        "sha256": "ba0eeac0a64ad318d5e3c720d61c1ef83e248232f8e3003b65a542d30d318ade"
+      }
     }
   ],
   "edges": [
@@ -158,9 +177,9 @@
     {
       "edgeId": "merge-summary-respond",
       "fromNodeId": "merge",
-      "fromPortId": "summary",
+      "fromPortId": "decision",
       "toNodeId": "respond",
-      "toPortId": "meta",
+      "toPortId": "decision",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
@@ -170,7 +189,7 @@
       "fromNodeId": "route",
       "fromPortId": "reply",
       "toNodeId": "respond",
-      "toPortId": "meta",
+      "toPortId": "decision",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
@@ -180,10 +199,9 @@
       "fromNodeId": "respond",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "frame",
+      "toPortId": "response",
       "backpressurePolicy": "queue",
-      "queueDepth": 4,
-      "opaque": true
+      "queueDepth": 4
     },
     {
       "edgeId": "catalog-respond",
@@ -200,7 +218,16 @@
       "fromNodeId": "respond_catalog",
       "fromPortId": "response",
       "toNodeId": "egress",
-      "toPortId": "frame",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "catalog-decision",
+      "fromNodeId": "catalog",
+      "fromPortId": "decision",
+      "toNodeId": "respond_catalog",
+      "toPortId": "decision",
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
@@ -219,7 +246,7 @@
       "kind": "http-request",
       "source": "host-http",
       "httpPath": "/api/v1/cellular/providers",
-      "description": "The provider catalog read. A SEPARATE trigger, because the host mounts a route per trigger with an httpPath (flowrt/flowplugin.go:80-93) \u2014 declaring a route in api.routes alone documents it without mounting it, which would 404."
+      "description": "The provider catalog read. A SEPARATE trigger, because the host mounts a route per trigger with an httpPath (flowrt/flowplugin.go:80-93) — declaring a route in api.routes alone documents it without mounting it, which would 404."
     }
   ],
   "triggerBindings": [

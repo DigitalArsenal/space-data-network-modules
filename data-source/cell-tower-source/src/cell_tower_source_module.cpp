@@ -761,13 +761,16 @@ int route(void) {
         // question the caller did not ask, under a name they chose, is worse
         // than saying no.
         push_json("reply",
-                  std::string("{\"status\":400,\"error\":\"unknown METHOD \\\"") +
+                  std::string("{\"route\":\"cellular-aggregate\",\"format\":\"json\""
+                              ",\"status\":400,\"error\":\"unknown METHOD \\\"") +
                       json_escape(method_name) + "\\\"\"}");
         return 0;
     }
 
     if (wanted.empty()) {
-        push_json("reply", "{\"status\":400,\"error\":\"PROVIDERS must name at least one provider\"}");
+        push_json("reply",
+                  "{\"route\":\"cellular-aggregate\",\"format\":\"json\",\"status\":400"
+                  ",\"error\":\"PROVIDERS must name at least one provider\"}");
         return 0;
     }
 
@@ -849,6 +852,12 @@ int catalog(void) {
     // keySlot is deliberately OMITTED until the node can accept a credential.
     out += "}";
     if (push_json("catalog", out) < 0) return 500;
+    // foundation/http-respond is driven by a DECISION frame; a body with no
+    // decision has no status or content-type to be sent under.
+    if (push_json("decision",
+                  "{\"route\":\"cellular-providers\",\"format\":\"json\",\"status\":200}") < 0) {
+        return 500;
+    }
     return 0;
 }
 
@@ -952,7 +961,8 @@ int deconflict(void) {
     }
 
     const std::string summary =
-        std::string("{\"reportsIn\":") + std::to_string(reports.size()) +
+        std::string("{\"route\":\"cellular-aggregate\",\"format\":\"record-stream\""
+                    ",\"status\":200,\"reportsIn\":") + std::to_string(reports.size()) +
         ",\"sitesOut\":" + std::to_string(written) +
         ",\"collapsed\":" + std::to_string(reports.size() > written ? reports.size() - written : 0) +
         ",\"multiProviderSites\":" + std::to_string(multi) +
@@ -961,7 +971,7 @@ int deconflict(void) {
         ",\"skipped\":" + json_string(job, "skipped", "[]") + "}";
 
     if (push_tbs_stream("records", stream) < 0) return 500;
-    if (push_json("summary", summary) < 0) return 500;
+    if (push_json("decision", summary) < 0) return 500;
     return 0;
 }
 

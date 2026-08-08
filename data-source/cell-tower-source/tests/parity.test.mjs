@@ -221,7 +221,7 @@ async function runModule(t, providers, method) {
   return {
     job,
     reports,
-    summary: jsonFrame(merged, "summary"),
+    summary: jsonFrame(merged, "decision"),
     records: splitStream(recordsFrame.payload).map(tbsReader),
   };
 }
