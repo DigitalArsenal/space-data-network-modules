@@ -36,6 +36,18 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
+  // THREAD MODEL — declared, never inferred (scripts/lib/thread-model.mjs
+  // holds the full rationale; graph task modules-undeclared-threadmodel-artifacts).
+  //
+  // Truth of the SHIPPED artifact 1324f92f1ff2… (110630 B, landed 2026-05-05 at
+  // SDK pin 5a054283): unshared linear memory, no `wasi.thread-spawn` import, no
+  // `wasi_thread_start` export. It carries no wasi-threads contract and never did.
+  // Those bytes were produced by INFERENCE: at that era pin the resolver matched
+  // `browser` FIRST and returned single-thread. Today `wasmedge` wins and returns
+  // emscripten-pthreads, so this build stopped producing bytes at all — the SDK's
+  // artifact guard correctly refuses a guest with no thread-spawn import. Declaring
+  // the truth makes the lane a property of THIS SOURCE instead of the SDK version.
+  threadModel: "single-thread",
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));

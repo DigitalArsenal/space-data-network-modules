@@ -47,6 +47,19 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
+  // THREAD MODEL — declared, never inferred (scripts/lib/thread-model.mjs
+  // holds the full rationale; graph task modules-undeclared-threadmodel-artifacts).
+  //
+  // Truth of the SHIPPED artifact 56395f977af8… (131571 B, landed 2026-07-03 at
+  // SDK pin 2cc72ffc): unshared linear memory, no `wasi.thread-spawn` import, no
+  // `wasi_thread_start` export. It carries no wasi-threads contract and never did.
+  // dist/guest-link/metadata.json of those bytes says "single-thread", which agrees.
+  // Those bytes were produced by INFERENCE: at that era pin the resolver matched
+  // `browser` FIRST and returned single-thread. Today `wasmedge` wins and returns
+  // emscripten-pthreads, so this build stopped producing bytes at all — the SDK's
+  // artifact guard correctly refuses a guest with no thread-spawn import. Declaring
+  // the truth makes the lane a property of THIS SOURCE instead of the SDK version.
+  threadModel: "single-thread",
   // The module imports the sync space_data_module_host hostcall bridge; those
   // symbols resolve at instantiation (SDK harness bridge / Go node bridge).
   allowUndefinedImports: true,
@@ -88,6 +101,8 @@ const linkedCompilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath: path.join(distRoot, "linked-build", "module.wasm"),
+  // Same declared lane as the primary artifact above — see scripts/lib/thread-model.mjs.
+  threadModel: "single-thread",
   allowUndefinedImports: true,
   defines: ["SDN_FLATSQL_LINKED=1"],
 });
