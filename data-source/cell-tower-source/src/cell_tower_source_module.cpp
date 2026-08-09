@@ -616,6 +616,26 @@ std::vector<std::string> split_json_objects(const std::string& src) {
     return out;
 }
 
+// What SHAPE is this response body, judged only by structure?
+//
+// Used to corroborate a positional attribution before decoding (see parse).
+// Returns nullptr when the body says nothing decisive — an unknown shape must
+// not veto an attribution, only contradict one, or a provider whose adapter
+// has not landed yet could never be added.
+const char* detect_body_format(const std::string& body) {
+    size_t i = 0;
+    while (i < body.size() && (body[i] == ' ' || body[i] == '\n' || body[i] == '\r' || body[i] == '\t')) ++i;
+    if (i >= body.size()) return nullptr;
+    // A top-level array is a row API answer (`soql-json`).
+    if (body[i] == '[') return "soql-json";
+    // A top-level object carrying `elements` is an Overpass answer.
+    if (body[i] == '{') {
+        if (!json_string(body, "elements", "").empty()) return "osm-json";
+        return nullptr;
+    }
+    return nullptr;
+}
+
 // Decode an Overpass `elements` array into reports.
 //
 // OSM does not publish MCC/MNC/cell ids — these are MASTS, not cells — so the
@@ -1110,6 +1130,9 @@ int route(void) {
     }
 
     std::vector<std::string> descriptors;
+    // Parallel to `descriptors`: which provider each one belongs to. See the
+    // correlation-list note where the job is built.
+    std::vector<std::string> descriptor_providers;
     std::string consulted = "[";
     std::string skipped = "[";
     size_t emitted = 0, skipped_count = 0;
@@ -1174,15 +1197,42 @@ int route(void) {
                                   "\",\"headers\":{\"accept\":\"application/json\"" +
                                   ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
                                   ",\"timeoutMs\":40000}");
+            descriptor_providers.push_back(spec->id);
         }
     }
     consulted += "]";
     skipped += "]";
 
+    // THE CORRELATION LIST — one entry per descriptor, in emission order.
+    //
+    // `parse` cannot read the provider off a response frame, because the frame
+    // is not ours: `hostcap/http-request` emits EXACTLY
+    // {"status","headers","bodyB64"} (http_request_module.cpp:399) and echoes
+    // nothing from the request it was handed. `parse` used to read
+    // `provider_id` straight off that frame, found "" on every one, and skipped
+    // all of them — so the node fetched every provider for real and answered
+    // 200 with zero records and no error line, live on host-01.
+    //
+    // It passed every local run because `tests/live-probe.mjs` performs the
+    // fetch in JS and SYNTHESISES `provider_id` into the response object it
+    // feeds parse; the probe never instantiates the hostcap node whose output
+    // shape is the whole question. A stand-in that supplies the field under
+    // test cannot fail the way production does.
+    //
+    // So the correlation travels through the job, which route and parse both
+    // see, instead of through a frame neither of them owns.
+    std::string request_providers = "[";
+    for (size_t i = 0; i < descriptor_providers.size(); ++i) {
+        if (i) request_providers += ",";
+        request_providers += "\"" + json_escape(descriptor_providers[i]) + "\"";
+    }
+    request_providers += "]";
+
     const std::string job = std::string("{\"method\":") + std::to_string(static_cast<int>(method)) +
                             ",\"method_name\":\"" + json_escape(method_name) + "\"" +
                             ",\"limit\":" + std::to_string(static_cast<long>(limit)) +
                             ",\"providers_consulted\":" + consulted +
+                            ",\"request_providers\":" + request_providers +
                             ",\"skipped\":" + skipped + "}";
 
     // ZERO FETCHABLE PROVIDERS — SHORT-CIRCUIT, never start the pipeline.
@@ -1231,12 +1281,27 @@ int parse(void) {
     const std::string job = input_text("job", 0);
     std::vector<Report> reports;
 
+    // Emission-order provider list written by route (see the correlation-list
+    // note there). Response frame k answers descriptor k.
+    const std::vector<std::string> request_providers =
+        json_string_array(job, "request_providers");
+
     const uint32_t count = plugin_get_input_count();
+    size_t response_index = 0;
     for (uint32_t i = 0; i < count; ++i) {
         const plugin_input_frame_t* f = plugin_get_input_frame(i);
         if (!f || !f->port_id || std::strcmp(f->port_id, "responses") != 0) continue;
         const std::string frame(reinterpret_cast<const char*>(f->payload), f->payload_length);
-        const std::string provider_id = json_string(frame, "provider_id", "");
+        const size_t k = response_index++;
+
+        // Prefer a provider the frame states about ITSELF. No host emits this
+        // today, so this is forward compatibility, not the live path: if the
+        // hostcap ever grows a correlation echo, attribution stops depending on
+        // frame order the moment it does, with no change here.
+        std::string provider_id = json_string(frame, "provider_id", "");
+        if (provider_id.empty() && k < request_providers.size()) {
+            provider_id = request_providers[k];
+        }
         const ProviderSpec* spec = find_provider(provider_id);
         if (!spec) continue;
         const double status = json_number(frame, "status", 0);
@@ -1248,6 +1313,27 @@ int parse(void) {
         if (body_b64.empty()) continue;
         std::string payload;
         if (!base64_decode(body_b64, &payload) || payload.empty()) continue;
+
+        // FAIL CLOSED ON A CONTRADICTED ATTRIBUTION.
+        //
+        // Positional correlation is only as good as the flow preserving frame
+        // order along route.requests -> http -> parse.responses. These
+        // descriptors have very different latencies (an Overpass mirror runs
+        // seconds behind a Socrata row query), so if the runtime ever emits in
+        // COMPLETION order instead, index k would name the wrong provider —
+        // and this record type's whole point is that a deconflicted site
+        // cannot be re-serialized unattributed. Exporting a mast under a
+        // regulator's name that never asserted it is the one outcome worth
+        // losing data to avoid.
+        //
+        // So the body must corroborate the provider the index named. The
+        // signatures are structural, not heuristic: an Overpass answer is one
+        // object carrying `elements`, an open-data row answer is a top-level
+        // array. On a mismatch this drops the frame rather than decoding it
+        // against a guess — the run reports fewer providers, never a wrong one.
+        const char* observed = detect_body_format(payload);
+        if (observed && std::strcmp(observed, spec->format) != 0) continue;
+
         if (std::strcmp(spec->format, "csv") == 0) decode_csv(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "osm-json") == 0) decode_osm_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "soql-json") == 0) decode_soql_json(*spec, payload, &reports);

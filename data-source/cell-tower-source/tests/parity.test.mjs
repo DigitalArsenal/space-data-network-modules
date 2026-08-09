@@ -135,8 +135,14 @@ function splitStream(payload) {
   return records;
 }
 
+// EXACTLY what hostcap/http-request emits on "response":
+// {"status","headers","bodyB64"}. There is deliberately NO provider_id —
+// no host has ever produced one, and synthesising it here is what let a
+// dead pipeline pass every local run (see live-probe.mjs). `providerId`
+// survives as documentation of which descriptor slot a frame answers;
+// parse correlates by POSITION, so callers must pass frames in
+// descriptor order.
 const httpResponse = (providerId, body) => ({
-  provider_id: providerId,
   status: 200,
   headers: {},
   bodyB64: Buffer.from(body).toString("base64"),

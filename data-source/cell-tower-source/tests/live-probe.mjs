@@ -52,15 +52,31 @@ const job = JSON.parse(dec.decode(byPort(routed).get("job").payload));
 const descriptors = framesFor(routed, "requests").map((f) => JSON.parse(dec.decode(f.payload)));
 console.log("descriptors:", descriptors.length, "| consulted:", job.providers_consulted);
 
+// The response frames handed to parse must be EXACTLY what
+// hostcap/http-request emits on its "response" port —
+// {"status","headers","bodyB64"} and nothing else
+// (hostcap/http-request/src/http_request_module.cpp:399).
+//
+// This loop used to add `provider_id: d.provider_id`, a field no host has ever
+// produced. parse read that field to pick the decoder, so the probe was feeding
+// in the very answer it was supposed to be testing for. Live on host-01 the
+// field was absent on every frame, parse skipped all of them, and the node
+// fetched all four URLs for real and answered 200 with zero records and no
+// error line — while this probe reported 1451 reports. Synthesising a field the
+// host does not send is how a green harness certifies a dead pipeline.
 const responses = [];
 for (const d of descriptors) {
   try {
     const res = await fetch(d.url, { headers: d.headers, signal: AbortSignal.timeout(45000) });
     const text = await res.text();
     console.log(`  fetch ${d.provider_id} @ ${new URL(d.url).host} -> ${res.status} ${text.length}B`);
-    responses.push({ provider_id: d.provider_id, status: res.status, headers: {}, bodyB64: Buffer.from(text).toString("base64") });
+    responses.push({ status: res.status, headers: {}, bodyB64: Buffer.from(text).toString("base64") });
   } catch (e) {
     console.log(`  fetch ${d.provider_id} @ ${new URL(d.url).host} -> FAILED ${String(e.message).slice(0, 60)}`);
+    // A failed fetch still occupies its descriptor's slot: parse correlates by
+    // position, so dropping the frame silently would shift every provider after
+    // it onto the wrong body. The host emits a frame per request either way.
+    responses.push({ status: 0, headers: {}, bodyB64: "" });
   }
 }
 

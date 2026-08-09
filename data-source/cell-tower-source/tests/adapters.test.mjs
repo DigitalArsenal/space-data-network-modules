@@ -84,8 +84,14 @@ const jsonFrame = (map, portId) => {
   return JSON.parse(decoder.decode(frame.payload));
 };
 
+// EXACTLY what hostcap/http-request emits on "response":
+// {"status","headers","bodyB64"}. There is deliberately NO provider_id —
+// no host has ever produced one, and synthesising it here is what let a
+// dead pipeline pass every local run (see live-probe.mjs). `providerId`
+// survives as documentation of which descriptor slot a frame answers;
+// parse correlates by POSITION, so callers must pass frames in
+// descriptor order.
 const httpResponse = (providerId, body) => ({
-  provider_id: providerId,
   status: 200,
   headers: { "content-type": "application/json" },
   bodyB64: Buffer.from(body).toString("base64"),
@@ -231,4 +237,65 @@ test("a malformed BBOX is refused rather than silently inverted", async (t) => {
   // south>north would compile into a filter matching nothing, which reads as
   // "this area has no towers" instead of "you sent the corners backwards".
   assert.match(descriptors[0].url, /29\.600000%20and%2030\.100000/u, "inverted bbox was not rejected");
+});
+
+// --- correlation: how parse knows WHICH provider a response body came from ---
+//
+// These pin the defect that shipped to host-01 on 2026-08-09: parse read
+// `provider_id` off the response frame, but hostcap/http-request emits only
+// {"status","headers","bodyB64"}. Every live frame therefore resolved to no
+// provider and was skipped — the node fetched all four URLs for real and
+// answered 200 with zero records and no error line, while every local test and
+// the live probe reported 1451 reports, because they all synthesised the field.
+
+test("attribution survives the host's real response shape (no provider_id)", async (t) => {
+  const overpass = JSON.parse(OVERPASS.toString("utf8"));
+  const fcc = JSON.parse(FCC.toString("utf8"));
+
+  // Frames exactly as the hostcap emits them, in descriptor order. Nothing in
+  // these objects names a provider; the correlation must come from the job.
+  const frames = [
+    { status: 200, headers: {}, bodyB64: Buffer.from(FCC).toString("base64") },
+    { status: 200, headers: {}, bodyB64: Buffer.from(OVERPASS).toString("base64") },
+  ];
+  for (const f of frames) {
+    assert.ok(!("provider_id" in f), "the host does not send provider_id — do not add it");
+  }
+
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
+  const byProvider = {};
+  for (const r of reports) byProvider[r.provider_id] = (byProvider[r.provider_id] || 0) + 1;
+
+  assert.equal(byProvider["fcc-uls-3650"], fcc.length);
+  assert.equal(byProvider["openstreetmap-overpass"], overpass.elements.length);
+});
+
+test("a body that contradicts its slot is dropped, never decoded under the wrong provider", async (t) => {
+  // Same two descriptors, responses SWAPPED — the shape a completion-ordered
+  // runtime would produce if it ever stopped preserving frame order. Losing
+  // these rows is the correct outcome; exporting Overpass masts under the FCC's
+  // name is not, because an authoritative attribution wins deconfliction and
+  // would be re-serialized as though a regulator had asserted it.
+  const frames = [
+    { status: 200, headers: {}, bodyB64: Buffer.from(OVERPASS).toString("base64") },
+    { status: 200, headers: {}, bodyB64: Buffer.from(FCC).toString("base64") },
+  ];
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
+  assert.deepEqual(reports, [], "a contradicted attribution must yield nothing at all");
+});
+
+test("a failed fetch does not shift every provider after it onto the wrong body", async (t) => {
+  // The host emits a frame per request whatever happens, so slot 0 staying
+  // present-but-empty is what keeps slot 1 pointing at its own provider.
+  const overpass = JSON.parse(OVERPASS.toString("utf8"));
+  const frames = [
+    { status: 504, headers: {}, bodyB64: "" },
+    { status: 200, headers: {}, bodyB64: Buffer.from(OVERPASS).toString("base64") },
+  ];
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
+  assert.equal(reports.length, overpass.elements.length);
+  assert.ok(
+    reports.every((r) => r.provider_id === "openstreetmap-overpass"),
+    "the surviving body was attributed to the provider that failed",
+  );
 });
