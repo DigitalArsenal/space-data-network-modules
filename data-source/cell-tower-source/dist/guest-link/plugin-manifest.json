@@ -168,10 +168,10 @@
               }
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "Run contract from route."
+          "required": false,
+          "description": "The run contract. Delivered EXACTLY ONCE per run, on the first invocation, and never re-delivered (the runtime FIFO-consumes it). It must therefore be OPTIONAL: while it was required:true, draining that single frame left this node permanently unready and every later response queued forever, unconsumed and unreported. Cached in module state on arrival."
         },
         {
           "portId": "responses",
@@ -192,9 +192,9 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 100000,
           "required": true,
-          "description": "One HTTP response per selected provider."
+          "description": "HTTP responses, one per request descriptor route emitted. NOT capped at 1: the fan-out is one descriptor per provider URL including mirrors, and a cap of 1 delivered only the first, which is why a two-provider request returned exactly the first-named provider's answer."
         }
       ],
       "outputPorts": [

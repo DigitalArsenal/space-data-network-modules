@@ -244,25 +244,35 @@ function referenceReports(providerIds) {
 
 async function runModule(t, providers, method) {
   const harness = await harnessFor(t);
-  const routed = byPort(
-    await harness.invoke({
-      methodId: "route",
-      inputs: [
-        htqRequest({ body: JSON.stringify({ PROVIDERS: providers, METHOD: method, LIMIT: 5000 }) }),
-      ],
-    }),
-  );
+  const routedRaw = await harness.invoke({
+    methodId: "route",
+    inputs: [
+      htqRequest({ body: JSON.stringify({ PROVIDERS: providers, METHOD: method, LIMIT: 5000 }) }),
+    ],
+  });
+  const routed = byPort(routedRaw);
   const job = jsonFrame(routed, "job");
 
   const responses = providers.map((id) =>
     jsonInput("responses", httpResponse(id, CSV)),
   );
-  const parsed = byPort(
+  // One response per DESCRIPTOR, not per provider — mirrors add descriptors,
+  // and the fan-in only completes when each is accounted for.
+  const descriptorCount = framesFor(routedRaw, "requests").length;
+  while (responses.length < descriptorCount) {
+    responses.push(jsonInput("responses", { status: 0, headers: {}, bodyB64: "" }));
+  }
+  // parse accumulates across invocations and emits on the quiet tick after the
+  // last response — drive it the way the scheduler does, not once.
+  let parsed = byPort(
     await harness.invoke({
       methodId: "parse",
       inputs: [jsonInput("job", job), ...responses],
     }),
   );
+  for (let tick = 0; tick < 8 && !parsed.get("reports"); tick += 1) {
+    parsed = byPort(await harness.invoke({ methodId: "parse", inputs: [] }));
+  }
   const reports = jsonFrame(parsed, "reports");
 
   const merged = byPort(

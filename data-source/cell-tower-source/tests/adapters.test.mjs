@@ -107,14 +107,36 @@ async function routeFor(t, body) {
   };
 }
 
+// parse is a FAN-IN node: it accumulates across invocations and emits once, on
+// the quiet tick after the last response (it asks for that tick with
+// plugin_set_yielded/backlog_remaining). Invoking it ONCE and reading the output
+// would test a node the runtime does not have — so drive it the way the
+// scheduler does, and let the emission arrive when it actually arrives.
+async function drainParse(harness, inputs, maxTicks = 8) {
+  let outputs = await harness.invoke({ methodId: "parse", inputs });
+  for (let tick = 0; tick < maxTicks; tick += 1) {
+    const map = byPort(outputs);
+    if (map.get("reports")) return map;
+    outputs = await harness.invoke({ methodId: "parse", inputs: [] });
+  }
+  throw new Error("parse never emitted reports");
+}
+
+// A provider with mirrors emits SEVERAL descriptors, and the host answers each
+// one — so a test that supplies fewer frames than descriptors is describing a
+// run where the rest failed. Say that explicitly with empty frames rather than
+// leaving the fan-in short by accident, which is the difference between testing
+// the failed-fetch path and hanging on it.
+const FAILED_FETCH = { status: 0, headers: {}, bodyB64: "" };
+
 async function parseWith(t, providers, responses, body = {}) {
-  const { harness, job } = await routeFor(t, { PROVIDERS: providers, METHOD: "CENTROID", LIMIT: 400, ...body });
-  const parsed = byPort(
-    await harness.invoke({
-      methodId: "parse",
-      inputs: [jsonInput("job", job), ...responses.map((r) => jsonInput("responses", r))],
-    }),
-  );
+  const { harness, job, descriptors } = await routeFor(t, { PROVIDERS: providers, METHOD: "CENTROID", LIMIT: 400, ...body });
+  const padded = [...responses];
+  while (padded.length < descriptors.length) padded.push(FAILED_FETCH);
+  const parsed = await drainParse(harness, [
+    jsonInput("job", job),
+    ...padded.map((r) => jsonInput("responses", r)),
+  ]);
   return jsonFrame(parsed, "reports");
 }
 
@@ -270,18 +292,39 @@ test("attribution survives the host's real response shape (no provider_id)", asy
   assert.equal(byProvider["openstreetmap-overpass"], overpass.elements.length);
 });
 
-test("a body that contradicts its slot is dropped, never decoded under the wrong provider", async (t) => {
-  // Same two descriptors, responses SWAPPED — the shape a completion-ordered
-  // runtime would produce if it ever stopped preserving frame order. Losing
-  // these rows is the correct outcome; exporting Overpass masts under the FCC's
-  // name is not, because an authoritative attribution wins deconfliction and
-  // would be re-serialized as though a regulator had asserted it.
+test("attribution follows the BODY, not the slot it arrived in", async (t) => {
+  // Same two descriptors, responses SWAPPED — the shape a missing frame
+  // produces, and it is the ordinary case here rather than an exotic one:
+  // hostcap/http-request pushes NO frame for a failed fetch, and Overpass ships
+  // three endpoints precisely because they fail (one answered a five-node query
+  // in 30.7s from host-01, so it times out on real ones).
+  //
+  // Position therefore cannot be the primary key. Among the providers a run
+  // consulted, a body whose format only ONE of them uses can only be that
+  // one's, whatever slot it landed in — so this must decode BOTH, correctly
+  // attributed, rather than lose them.
+  const overpass = JSON.parse(OVERPASS.toString("utf8"));
+  const fcc = JSON.parse(FCC.toString("utf8"));
   const frames = [
     { status: 200, headers: {}, bodyB64: Buffer.from(OVERPASS).toString("base64") },
     { status: 200, headers: {}, bodyB64: Buffer.from(FCC).toString("base64") },
   ];
   const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
-  assert.deepEqual(reports, [], "a contradicted attribution must yield nothing at all");
+  const byProvider = {};
+  for (const r of reports) byProvider[r.provider_id] = (byProvider[r.provider_id] || 0) + 1;
+  assert.equal(byProvider["openstreetmap-overpass"], overpass.elements.length);
+  assert.equal(byProvider["fcc-uls-3650"], fcc.length);
+});
+
+test("a body no consulted provider could have produced is dropped, not guessed", async (t) => {
+  // Neither an Overpass document nor a row array. Nothing may be invented from
+  // it: a deconflicted site that cannot be re-serialized with its true source
+  // is worse than a site that is simply absent.
+  const frames = [
+    { status: 200, headers: {}, bodyB64: Buffer.from('"not-a-provider-document"').toString("base64") },
+  ];
+  const reports = await parseWith(t, ["fcc-uls-3650", "openstreetmap-overpass"], frames);
+  assert.deepEqual(reports, []);
 });
 
 test("a failed fetch does not shift every provider after it onto the wrong body", async (t) => {

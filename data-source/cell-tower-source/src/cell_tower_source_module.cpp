@@ -636,6 +636,17 @@ const char* detect_body_format(const std::string& body) {
     return nullptr;
 }
 
+// Format of the body carried by a hostcap response frame, or nullptr when the
+// frame carries no usable body. Decodes base64 once for the sniff; parse
+// decodes again for the real work, which is cheap next to the fetch.
+const char* detect_body_format_of_frame(const std::string& frame) {
+    const std::string body_b64 = json_string(frame, "bodyB64", "");
+    if (body_b64.empty()) return nullptr;
+    std::string payload;
+    if (!base64_decode(body_b64, &payload) || payload.empty()) return nullptr;
+    return detect_body_format(payload);
+}
+
 // Decode an Overpass `elements` array into reports.
 //
 // OSM does not publish MCC/MNC/cell ids — these are MASTS, not cells — so the
@@ -1277,28 +1288,105 @@ int route(void) {
 // ---------------------------------------------------------------------------
 // parse: job + N http responses -> normalized reports.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// parse is a FAN-IN node, and the run does not fit in one invocation.
+//
+// route emits ONE `job` frame and N `requests` frames. The runtime FIFO-consumes
+// `job` on the first invocation and NEVER re-delivers it, so everything derived
+// from it has to survive between invocations — hence this state. It is reset
+// when a `job` frame arrives, which is exactly once per run, and again after the
+// run's single emission, so a pooled instance never carries a run into the next.
+//
+// (Two defects lived here at once. `job` was declared required:true, so draining
+// that one frame left this node permanently unready and every later response sat
+// in the queue forever; and `responses` was capped at maxStreams 1, so only the
+// first descriptor's body was ever delivered. Together they made a two-provider
+// request return precisely the first-named provider's answer — the order of the
+// PROVIDERS array decided the result.)
+static std::string g_job;
+static std::vector<std::string> g_request_providers;
+// Providers this run actually consulted — the candidate set for format-based
+// attribution when a body can only belong to one of them.
+static std::vector<std::string> g_providers_consulted;
+static std::vector<Report> g_reports;
+static size_t g_response_cursor = 0;
+static bool g_have_job = false;
+// Emit exactly once per run: respond/egress carry ONE HTTP body.
+static bool g_emitted = false;
+// Bounds the yield loop so a lost frame can never hang the request forever.
+static uint32_t g_idle_ticks = 0;
+
+void reset_run_state(void) {
+    g_job.clear();
+    g_request_providers.clear();
+    g_providers_consulted.clear();
+    g_reports.clear();
+    g_response_cursor = 0;
+    g_have_job = false;
+    g_emitted = false;
+    g_idle_ticks = 0;
+}
+
 int parse(void) {
     const std::string job = input_text("job", 0);
-    std::vector<Report> reports;
+    if (!job.empty()) {
+        // A new run begins. Never accumulate across runs.
+        reset_run_state();
+        g_job = job;
+        g_request_providers = json_string_array(job, "request_providers");
+        g_providers_consulted = json_string_array(job, "providers_consulted");
+        g_have_job = true;
+    }
 
     // Emission-order provider list written by route (see the correlation-list
-    // note there). Response frame k answers descriptor k.
-    const std::vector<std::string> request_providers =
-        json_string_array(job, "request_providers");
+    // note there). Response frame k answers descriptor k, and the cursor is
+    // RUN-scoped rather than invocation-scoped: a per-invocation counter
+    // restarted at 0 every time and mapped later batches onto provider 0.
+    const std::vector<std::string>& request_providers = g_request_providers;
+    std::vector<Report>& reports = g_reports;
 
     const uint32_t count = plugin_get_input_count();
-    size_t response_index = 0;
+    size_t new_responses = 0;
     for (uint32_t i = 0; i < count; ++i) {
         const plugin_input_frame_t* f = plugin_get_input_frame(i);
         if (!f || !f->port_id || std::strcmp(f->port_id, "responses") != 0) continue;
         const std::string frame(reinterpret_cast<const char*>(f->payload), f->payload_length);
-        const size_t k = response_index++;
+        const size_t k = g_response_cursor++;
+        ++new_responses;
 
         // Prefer a provider the frame states about ITSELF. No host emits this
         // today, so this is forward compatibility, not the live path: if the
         // hostcap ever grows a correlation echo, attribution stops depending on
         // frame order the moment it does, with no change here.
         std::string provider_id = json_string(frame, "provider_id", "");
+
+        // POSITION IS THE FALLBACK, NOT THE PRIMARY. It cannot be the primary:
+        // `hostcap/http-request` pushes NO frame for a failed fetch, so one
+        // slow mirror silently removes a slot and every later body inherits the
+        // wrong provider's index. That is not hypothetical here — Overpass
+        // publishes three endpoints precisely because they fail, and one of
+        // them answered a five-node query in 30.7 s from this host, so it
+        // times out on real ones routinely.
+        //
+        // So attribute by what the body IS, whenever that is unambiguous:
+        // among the providers this run actually consulted, if exactly ONE uses
+        // the format this body is in, the body can only be that provider's, no
+        // matter which slot it arrived in or how many siblings went missing.
+        // Ambiguity (two consulted providers sharing a format) falls back to
+        // position, still corroborated below.
+        const char* observed_format = detect_body_format_of_frame(frame);
+        if (provider_id.empty() && observed_format) {
+            const ProviderSpec* only = nullptr;
+            bool ambiguous = false;
+            for (size_t c = 0; c < g_providers_consulted.size(); ++c) {
+                const ProviderSpec* candidate = find_provider(g_providers_consulted[c]);
+                if (!candidate) continue;
+                if (std::strcmp(candidate->format, observed_format) != 0) continue;
+                if (only && only != candidate) { ambiguous = true; break; }
+                only = candidate;
+            }
+            if (only && !ambiguous) provider_id = only->id;
+        }
         if (provider_id.empty() && k < request_providers.size()) {
             provider_id = request_providers[k];
         }
@@ -1342,6 +1430,96 @@ int parse(void) {
         // rather than a guess.
     }
 
+    // IS THE FAN-IN DONE? Emit exactly once per run, or not at all yet.
+    //
+    // Counting to N (= descriptors emitted) is NOT a safe completion test:
+    // `hostcap/http-request` answers a failed fetch with
+    // `plugin_set_error(...); return 502` and pushes NO response frame
+    // (http_request_module.cpp:368-370), so any provider or mirror that 504s
+    // leaves the count permanently short. Mirrors exist precisely BECAUSE
+    // upstreams fail — this session alone saw the main Overpass endpoint 504
+    // while a mirror answered — so a count-based wait would hang on the normal
+    // case, and a hung chain on this mount is a silent 502
+    // (graph: sdn-cellular-sole-provider-508 / sdn-cellular-sole-provider-502).
+    //
+    // The sound signal is the scheduler's own ordering. Ready nodes are taken
+    // FIRST-BY-INDEX and nothing runs concurrently (HERMES, flow_runtime.cpp:
+    // 1045-1047), and `http` sits at a LOWER index than `parse`. So `parse`
+    // only ever runs when `http` has nothing left to do: an invocation that
+    // brings NO new response frame means every request has already been either
+    // answered or failed, and nothing further is coming.
+    //
+    // `plugin_set_yielded` + `plugin_set_backlog_remaining` are what buy that
+    // extra tick — they make this node ready again with an EMPTY queue
+    // (JANUS, flow_runtime.cpp:381-388) — so the quiet invocation always
+    // happens rather than being waited for.
+    // Emit at the end of the first invocation that carries responses.
+    //
+    // Waiting for a count of N descriptors is NOT safe: `hostcap/http-request`
+    // answers a failed fetch with `plugin_set_error(...); return 502` and pushes
+    // NO response frame (http_request_module.cpp:368-370), so any provider or
+    // mirror that 504s leaves a count-based wait permanently short. Mirrors
+    // exist precisely BECAUSE upstreams fail — this session alone saw the main
+    // Overpass endpoint 504 while a mirror answered — so counting to N would
+    // hang on the ordinary case, and a hung chain on this mount is a silent 502
+    // (graph: sdn-cellular-sole-provider-502).
+    //
+    // Waiting is also unnecessary. Ready nodes are taken FIRST-BY-INDEX and
+    // nothing runs concurrently (HERMES, flow_runtime.cpp:1045-1047,1337-1338),
+    // and `http` sits at a LOWER index than `parse`. So `http` drains its whole
+    // request queue before `parse` is ever chosen, and every response that will
+    // exist is already queued when `parse` first runs. With `responses` no
+    // longer capped at maxStreams 1, one invocation sees all of them.
+    //
+    // The accumulator above still spans invocations, so this stays correct if
+    // that ordering ever loosens; `g_emitted` is what keeps "once per run" true
+    // either way, because `merge` -> `respond` -> `egress` can only carry ONE
+    // HTTP body and a second emission would corrupt the transport.
+    if (g_emitted) return 0;
+
+    // WAIT FOR THE WHOLE FAN-IN. `parse` is invoked as soon as ONE response is
+    // queued — it does NOT get to see them all in a single invocation, which
+    // was measured live: emitting on the first batch produced exactly the
+    // first-named provider's answer and dropped every later frame, and swapping
+    // the PROVIDERS order swapped the result (88 vs 332 records).
+    //
+    // Emit as soon as every descriptor is accounted for. When some are NOT —
+    // `hostcap/http-request` pushes NO frame for a failed fetch
+    // (http_request_module.cpp:368-370), and Overpass ships three endpoints
+    // precisely because they fail — the count never completes, so waiting on it
+    // alone would hang, and a hung chain on this mount is a silent 502
+    // (graph: sdn-cellular-sole-provider-502).
+    //
+    // So the count is the fast path and a QUIET TICK is the backstop:
+    // `plugin_set_yielded` + `plugin_set_backlog_remaining` make this node ready
+    // again with an EMPTY queue (JANUS, flow_runtime.cpp:381-388), and an
+    // invocation that brings no new frame means nothing further is coming.
+    const size_t expected = g_request_providers.size();
+    const bool all_accounted_for = expected > 0 && g_response_cursor >= expected;
+    if (!all_accounted_for) {
+        if (new_responses > 0) {
+            // Something arrived but not everything: ask for another look.
+            if (++g_idle_ticks < 64) {
+                plugin_set_yielded(1);
+                plugin_set_backlog_remaining(1);
+                return 0;
+            }
+            // Runaway guard. Answer short rather than never.
+        } else if (g_response_cursor == 0) {
+            // Nothing has arrived at all yet; nothing to answer with.
+            return 0;
+        }
+        // else: a quiet tick after real responses — the fan-in is finished with
+        // fewer frames than descriptors, which is the failed-fetch case.
+    }
+
+    if (!g_have_job) {
+        // Responses with no run contract: nothing can be attributed, and
+        // guessing is the one thing this record type must not do. Stay quiet
+        // rather than emit an unattributed stream.
+        return 0;
+    }
+
     std::string out = "[";
     for (size_t i = 0; i < reports.size(); ++i) {
         if (i) out += ",";
@@ -1349,7 +1527,11 @@ int parse(void) {
     }
     out += "]";
 
-    if (push_json("job", job) < 0) return 500;
+    // Mark BEFORE pushing. A pooled instance is reset by the next run's `job`
+    // frame; what must not happen is a SECOND emission inside this run.
+    g_emitted = true;
+
+    if (push_json("job", g_job) < 0) return 500;
     if (push_json("reports", out) < 0) return 500;
     return 0;
 }
