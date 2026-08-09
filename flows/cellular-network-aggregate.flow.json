@@ -29,7 +29,7 @@
       "artifact": {
         "path": "../hostcap/http-request/dist/isomorphic/module.wasm",
         "publisher": "../hostcap/http-request/publisher.json",
-        "sha256": "e3270e443c57ead86cb07f1fe044c170d03ddbf33e8f2d5122505912ef11bd9c"
+        "sha256": "4beba21b97e2ba16e54a80b199f07feb446622cee967a631fa7aea490b91fba9"
       }
     },
     {
@@ -87,7 +87,7 @@
       "artifact": {
         "path": "../foundation/http-respond/dist/isomorphic/module.wasm",
         "publisher": "../foundation/http-respond/publisher.json",
-        "sha256": "26cb434bf23b9f8064dabc376eaeaca07c0698669a7d6471f35d75d7cf2da42a"
+        "sha256": "685a2a983d8e2d143e888ae328ab48dc7ded0e3235b5555884d38f57c0b7b8f2"
       }
     },
     {

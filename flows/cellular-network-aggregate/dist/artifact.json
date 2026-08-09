@@ -4,11 +4,16 @@
   "version": "0.1.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 6,
-  "edges": 10,
+  "nodes": 7,
+  "edges": 13,
   "triggers": 1,
   "capabilities": [
-    "http"
+    "http",
+    "secrets:cell_opencellid",
+    "secrets:cell_opencellid:write",
+    "secrets:cell_wigle",
+    "secrets:cell_wigle:write",
+    "wallet_sign"
   ],
   "engineLinkage": "bridge",
   "dispatch": [
@@ -41,6 +46,13 @@
       "resolvedFromPluginFamily": null
     },
     {
+      "nodeId": "credentials",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
+      "methodId": "mediate",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
@@ -61,7 +73,7 @@
       "dependencyId": "com.digitalarsenal.data-source.cell-tower-source",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "version": "0.1.0",
-      "sha256": "79c480666383467f38e1298bb6ff783a63004a460654b481f2aeeef8ab8432f5",
+      "sha256": "b381cba327fe5f27dc88a17123da1d6f9ce358162a497a34405f3d5fdbb49a39",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -77,7 +89,7 @@
       "dependencyId": "com.digitalarsenal.hostcap.http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "version": "0.1.0",
-      "sha256": "e3270e443c57ead86cb07f1fe044c170d03ddbf33e8f2d5122505912ef11bd9c",
+      "sha256": "4beba21b97e2ba16e54a80b199f07feb446622cee967a631fa7aea490b91fba9",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -88,10 +100,24 @@
     },
     {
       "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.cell-tower-credentials",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
+      "version": "0.1.0",
+      "sha256": "ee64e6b50094c34709b0983d266d00defb51749b0c22766f2a4323db32ecb0c6",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d63726564656e7469616c73_",
+      "methodSymbols": {
+        "mediate": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d63726564656e7469616c73_mediate"
+      }
+    },
+    {
+      "kind": "node",
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.2.1",
-      "sha256": "26cb434bf23b9f8064dabc376eaeaca07c0698669a7d6471f35d75d7cf2da42a",
+      "sha256": "685a2a983d8e2d143e888ae328ab48dc7ded0e3235b5555884d38f57c0b7b8f2",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

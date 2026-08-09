@@ -3,9 +3,14 @@
   "name": "Cellular Network Aggregation",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
   "capabilities": [
-    "http"
+    "http",
+    "secrets:cell_opencellid",
+    "secrets:cell_opencellid:write",
+    "secrets:cell_wigle",
+    "secrets:cell_wigle:write",
+    "wallet_sign"
   ],
   "dependencies": [
     {
@@ -15,6 +20,11 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
       "minVersion": "0.1.0",
       "maxVersion": "0.1.0"
     },
@@ -108,7 +118,6 @@
     }
   ],
   "runtimeTargets": [
-    "browser",
     "wasmedge"
   ],
   "buildArtifacts": [
@@ -116,7 +125,7 @@
       "artifactId": "com_digitalarsenal_flows_cellular_network_aggregate-flow-runtime",
       "kind": "wasm",
       "path": "dist/isomorphic/module.wasm",
-      "target": "browser,wasmedge"
+      "target": "wasmedge"
     }
   ],
   "flowNodes": [
@@ -151,6 +160,15 @@
       "nodeId": "merge",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "methodId": "deconflict",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "credentials",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
+      "methodId": "mediate",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
@@ -339,6 +357,51 @@
       "fromPortId": "catalog",
       "toNodeId": "respond",
       "toPortId": "body",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "route-credential-mediator",
+      "fromNodeId": "route",
+      "fromPortId": "credential",
+      "toNodeId": "credentials",
+      "toPortId": "task",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "credentials-body-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "credentials-decision-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
       "contract": {
         "canonicalType": null,
         "alignedType": null,

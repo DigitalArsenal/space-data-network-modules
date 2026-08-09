@@ -293,6 +293,33 @@ async function runModule(t, providers, method) {
 
 const PROVIDERS = ["anfr-cartoradio", "mls-archive"];
 
+/**
+ * The catalog is a TWO-STAGE answer now, and these tests are pinned to the
+ * stage this plugin owns.
+ *
+ * `route` builds the catalog and hands it to the credential MEDIATOR on the
+ * `credential` port as `{"op":"catalog","catalog":{...}}`; the mediator — a
+ * wasmedge-only sibling — appends `keySlot`, flips `credentialConfigured` per
+ * lane from `secrets.status`, and owns the reply. So `route` emits NO `catalog`
+ * body and NO `reply` for a providers request, and asserting otherwise here
+ * would be asserting a contract that was deliberately moved.
+ *
+ * These tests were left driving the OLD single-stage shape and had been failing
+ * 4/4 since the split; they are re-aimed rather than deleted, because what they
+ * pin — the provider fields the page renders, no leakage, no pre-ticked
+ * credentialed provider — is still this plugin's responsibility to get right.
+ * The mediator half (keySlot, configured flags) cannot be driven from this
+ * harness at all: `createBrowserModuleHarness` IS the browser leg and the
+ * mediator declares `runtimeTargets: ["wasmedge"]`, so the SDK 0.8.12 gate
+ * refuses it by name. That half is proven live against host-01.
+ */
+function catalogFromRoute(out) {
+  const handoff = jsonFrame(out, "credential");
+  assert.equal(handoff.op, "catalog", "route must hand the catalog to the mediator");
+  assert.ok(handoff.catalog && typeof handoff.catalog === "object", "no catalog payload");
+  return handoff.catalog;
+}
+
 test("catalog answers the provider list the page renders", async (t) => {
   const harness = await harnessFor(t);
   const out = byPort(
@@ -301,7 +328,7 @@ test("catalog answers the provider list the page renders", async (t) => {
       inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
     }),
   );
-  const catalog = jsonFrame(out, "catalog");
+  const catalog = catalogFromRoute(out);
   assert.ok(Array.isArray(catalog.providers) && catalog.providers.length > 0);
   for (const p of catalog.providers) {
     assert.equal(typeof p.id, "string");
@@ -326,19 +353,21 @@ test("catalog leaks no credential value and no key material", async (t) => {
       inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
     }),
   );
-  const raw = decoder.decode(out.get("catalog").payload);
+  const raw = decoder.decode(out.get("credential").payload);
   for (const forbidden of ["password", "secret", "token", "privateKey", "apiKey"]) {
     assert.ok(
       !new RegExp(forbidden, "iu").test(raw),
-      `catalog response mentions ${forbidden}`,
+      `catalog handoff mentions ${forbidden}`,
     );
   }
-  const catalog = JSON.parse(raw);
-  // No node key slot exists yet (upstream-sdn-3), so the catalog must OMIT
-  // keySlot rather than publish a placeholder — the GUI keys its refuse-to-
-  // collect behaviour off exactly this absence.
+  const catalog = catalogFromRoute(out);
+  // This plugin holds NO key material and no credential capability, so it can
+  // never publish a key slot. Absence here is structural, not circumstantial:
+  // a `keySlot` appearing on this port would mean the router had invented one.
   assert.equal("keySlot" in catalog, false);
-  // And nothing may claim a credential is held when none can be.
+  // And nothing may claim a credential is held. This plugin cannot know — it
+  // has no `secrets:` grant by design — so `false` is the only honest value it
+  // can emit, and the mediator is the only node allowed to raise it.
   assert.equal(
     catalog.providers.every((p) => p.credentialConfigured === false),
     true,
@@ -353,7 +382,7 @@ test("credentialed providers are not selected by default", async (t) => {
       inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
     }),
   );
-  const catalog = jsonFrame(out, "catalog");
+  const catalog = catalogFromRoute(out);
   // Pre-ticking a provider the run will silently skip produces a result that
   // quietly excludes what the user believes they asked for.
   for (const p of catalog.providers) {
@@ -391,9 +420,13 @@ test("no branch emits a frame on an undeclared port", async (t) => {
   }
 });
 
-test("the catalog branch emits a decision so its body can be sent", async (t) => {
+test("the catalog branch emits EXACTLY ONE answer, and hands the reply on", async (t) => {
   // A body with no decision frame has no status or content-type, which is how
-  // GET /providers 502'd while still producing bytes.
+  // GET /providers 502'd while still producing bytes. The fix for that lives in
+  // the mediator now, so the property to pin HERE is the opposite one: `route`
+  // must NOT also answer. Emitting a `catalog`/`reply` pair alongside the
+  // handoff would race two bodies into one responder, and whichever the host
+  // harvested first would be arbitrary.
   const harness = await harnessFor(t);
   const out = byPort(
     await harness.invoke({
@@ -401,9 +434,9 @@ test("the catalog branch emits a decision so its body can be sent", async (t) =>
       inputs: [htqRequest({ method: "GET", path: "/api/v1/cellular/providers" })],
     }),
   );
-  assert.ok(out.has("catalog"), "catalog body missing");
-  assert.ok(out.has("reply"), "catalog decision missing");
-  assert.equal(jsonFrame(out, "reply").status, 200);
+  assert.ok(out.has("credential"), "catalog handoff missing");
+  assert.equal(out.has("catalog"), false, "route answered the catalog itself as well");
+  assert.equal(out.has("reply"), false, "route emitted a second decision for one request");
 });
 
 test("route refuses an unknown merge method instead of defaulting", async (t) => {
