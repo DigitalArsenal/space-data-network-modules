@@ -29,6 +29,7 @@ import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/
 import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/manifest";
 import createCatalogSynthesisPluginManifest from "./manifest.js";
 import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
+import { activateLaneToolchain, recordLaneToolchain } from "../../scripts/lib/emsdk-toolchain.mjs";
 
 // THREAD MODEL — declared, never inferred (full rationale in
 // scripts/lib/thread-model.mjs; graph task modules-undeclared-threadmodel-artifacts).
@@ -85,37 +86,6 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
 
-function activateLocalEmsdk() {
-  const envScript = path.join(EMSDK_DIR, "emsdk_env.sh");
-  const sourcedEnv = execFileSync("bash", ["-lc", `source ${shellQuote(envScript)} >/dev/null 2>&1 && env -0`], {
-    encoding: "buffer",
-    env: { ...process.env, EM_CACHE: process.env.EM_CACHE || EM_CACHE_DIR },
-  });
-  for (const entry of sourcedEnv.toString("utf8").split("\0")) {
-    if (!entry) continue;
-    const sep = entry.indexOf("=");
-    if (sep <= 0) continue;
-    process.env[entry.slice(0, sep)] = entry.slice(sep + 1);
-  }
-}
-
-function ensureLocalEmscripten() {
-  fs.mkdirSync(EM_CACHE_DIR, { recursive: true });
-  process.env.EM_CACHE = process.env.EM_CACHE || EM_CACHE_DIR;
-  const envScript = path.join(EMSDK_DIR, "emsdk_env.sh");
-  const emccPath = path.join(EMSDK_DIR, "upstream", "emscripten", "emcc");
-  if (!fs.existsSync(envScript)) {
-    console.log(`  Cloning emsdk into ${EMSDK_DIR}...`);
-    fs.mkdirSync(path.dirname(EMSDK_DIR), { recursive: true });
-    run(`git clone https://github.com/emscripten-core/emsdk.git ${EMSDK_DIR}`);
-  }
-  if (!fs.existsSync(emccPath)) {
-    run("./emsdk install 6.0.1", { cwd: EMSDK_DIR });
-    run("./emsdk activate 6.0.1", { cwd: EMSDK_DIR });
-  }
-  activateLocalEmsdk();
-}
-
 // Embed config/provider-gate-status.json as a compiled default. The _comment
 // block is stripped (documentation only); the module reads providers /
 // spacetrackSourceNames / defaultLevelForUnlistedProvider.
@@ -154,7 +124,11 @@ async function signBuiltModule(wasmPath) {
 
 async function main() {
   console.log("SDN Plugin Build — catalog-synthesis");
-  ensureLocalEmscripten();
+  const laneToolchain = activateLaneToolchain({
+    moduleDir: "analysis/catalog-synthesis",
+    extraCandidates: [EMSDK_DIR],
+    emCache: EM_CACHE_DIR,
+  });
   fs.mkdirSync(BUILD_DIR, { recursive: true });
   fs.mkdirSync(DIST_DIR, { recursive: true });
   fs.mkdirSync(ISOMORPHIC_DIST_DIR, { recursive: true });
@@ -220,6 +194,7 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
   // dist/isomorphic/module.wasm is the loadable (unsigned) runtime artifact.
   // Refuse a declaration the emitted bytes contradict (see THREAD_MODEL above).
   assertArtifactThreadModel(outWasm, THREAD_MODEL, "analysis/catalog-synthesis");
+  recordLaneToolchain(DIST_DIR, laneToolchain);
   fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
   await signBuiltModule(outWasm);
   console.log(`  Runtime artifact (loadable, unsigned): ${path.join(ISOMORPHIC_DIST_DIR, "module.wasm")}`);

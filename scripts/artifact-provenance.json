@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-0386abf07580d473",
+  "generatedBy": "tc-d2377f5480222e06",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -22,6 +22,26 @@
         "commit": "6598ad6124fe022abfd565f5c7390b3125871956"
       },
       "id": "tc-0386abf07580d473"
+    },
+    "tc-d2377f5480222e06": {
+      "sdk": {
+        "resolved": true,
+        "version": "0.8.12",
+        "commit": "0dddf0af8d1d0c426280eab5d474066db1a39aff",
+        "dirty": false
+      },
+      "sdkDependencies": {
+        "spacedatastandards.org": "1.178.0+1785954811464",
+        "flatc-wasm": "26.1.32",
+        "flatbuffers": "25.9.23",
+        "sdn-emception": "1.0.0"
+      },
+      "externalStandardsRoot": {
+        "resolved": true,
+        "version": "1.184.0+1786183176432",
+        "commit": "6598ad6124fe022abfd565f5c7390b3125871956"
+      },
+      "id": "tc-d2377f5480222e06"
     }
   },
   "inferenceHazardBaseline": 0,
@@ -85,6 +105,12 @@
       "task": "modules-undeclared-threadmodel-artifacts",
       "note": "Third module, a DIFFERENT era pin. Its build.mjs has two compileModuleFromSource calls; both declare, and the primary artifact reproduces."
     }
+  },
+  "emsdkLane": {
+    "pin": "em-6.0.1",
+    "emscriptenVersion": "6.0.1",
+    "modules": 14,
+    "unknownToolchainBaseline": 27
   },
   "artifacts": {
     "analysis/access/dist/access.wasm": {
@@ -153,6 +179,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.7",
+        "confidence": "strong",
+        "evidence": "Has no deps/emsdk of its own; build.mjs falls back to licensing/core/deps/emsdk, which carries 5.0.7 installed 2026-05-20. Artifact committed 2026-07-13, seven weeks later."
       }
     },
     "analysis/catalog-synthesis/dist/isomorphic/module.wasm": {
@@ -179,6 +212,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.7",
+        "confidence": "strong",
+        "evidence": "Has no deps/emsdk of its own; build.mjs falls back to licensing/core/deps/emsdk, which carries 5.0.7 installed 2026-05-20. Artifact committed 2026-07-13, seven weeks later."
       }
     },
     "analysis/conjunction-assessment/dist/browser/module.wasm": {
@@ -385,6 +425,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.5",
+        "confidence": "strong",
+        "evidence": "build.mjs resolves ../deps/emsdk = analysis/od/deps/emsdk, 5.0.5 installed 2026-04-29/05-14. Artifact committed 2026-07-13."
       }
     },
     "analysis/od/fit-pipeline/dist/od-fit-pipeline.wasm": {
@@ -411,6 +458,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.5",
+        "confidence": "strong",
+        "evidence": "build.mjs resolves ../deps/emsdk = analysis/od/deps/emsdk, 5.0.5 installed 2026-04-29/05-14. Artifact committed 2026-07-13."
       }
     },
     "analysis/reentry/dist/isomorphic/module.wasm": {
@@ -464,6 +518,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "build.mjs resolves ONLY its own deps/emsdk, which is absent from this machine. Artifact committed 2026-08-03 by an emsdk that was cloned at build time and has since been deleted. Unrecoverable."
       }
     },
     "data-source/bond-attestation-source/dist/isomorphic/module.wasm": {
@@ -489,6 +550,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "build.mjs resolves ONLY its own deps/emsdk, which is absent from this machine. Artifact committed 2026-08-03 by an emsdk that was cloned at build time and has since been deleted. Unrecoverable."
       }
     },
     "data-source/celestrak-parser/dist/isomorphic/module.wasm": {
@@ -567,6 +635,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "Own deps/emsdk absent; no fallback in build.mjs. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
     "data-source/celestrak-supgp/dist/isomorphic/module.wasm": {
@@ -593,6 +668,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "Own deps/emsdk absent; no fallback in build.mjs. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
     "data-source/cell-tower-source/dist/isomorphic/module.wasm": {
@@ -645,6 +727,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk carries 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
       }
     },
     "data-source/cpf-source/dist/isomorphic/module.wasm": {
@@ -671,6 +760,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk carries 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
       }
     },
     "data-source/glonass-source/dist/glonass-source.wasm": {
@@ -697,6 +793,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-19."
       }
     },
     "data-source/glonass-source/dist/isomorphic/module.wasm": {
@@ -723,6 +826,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-19."
       }
     },
     "data-source/gps-source/dist/gps-source.wasm": {
@@ -749,6 +859,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
     "data-source/gps-source/dist/isomorphic/module.wasm": {
@@ -775,6 +892,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
     "data-source/intelsat-source/dist/intelsat-source.wasm": {
@@ -801,6 +925,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
       }
     },
     "data-source/intelsat-source/dist/isomorphic/module.wasm": {
@@ -827,6 +958,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
       }
     },
     "data-source/iss-source/dist/isomorphic/module.wasm": {
@@ -853,6 +991,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "proven",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18. REBUILT byte-identically from committed source under em-6.0.1 on 2026-08-09 — see scripts/artifact-provenance.json eraPinReproductions."
       }
     },
     "data-source/iss-source/dist/iss-source.wasm": {
@@ -879,6 +1024,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "proven",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18. REBUILT byte-identically from committed source under em-6.0.1 on 2026-08-09 — see scripts/artifact-provenance.json eraPinReproductions."
       }
     },
     "data-source/mlab-starlink-connectivity/dist/isomorphic/module.wasm": {
@@ -957,6 +1109,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
     "data-source/oneweb-source/dist/oneweb-source.wasm": {
@@ -983,6 +1142,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": null,
+        "confidence": "none",
+        "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
     "data-source/retrieval/dist/isomorphic/module.wasm": {
@@ -1087,6 +1253,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-17; artifact committed 2026-07-19."
       }
     },
     "data-source/spacex-starlink-source/dist/spacex-starlink-source.wasm": {
@@ -1113,6 +1286,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-6.0.1",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-17; artifact committed 2026-07-19."
       }
     },
     "delivery/plugin-delivery/dist/isomorphic/module.wasm": {
@@ -1136,6 +1316,13 @@
         "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.7",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20; artifact committed 2026-07-02."
       }
     },
     "delivery/plugin-delivery/dist/plugin-delivery.wasm": {
@@ -1159,6 +1346,13 @@
         "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.7",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20; artifact committed 2026-07-02."
       }
     },
     "flows/celestrak-ingest/dist/gp/isomorphic/module.wasm": {
@@ -1647,6 +1841,13 @@
           "wasmedge"
         ],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.5",
+        "confidence": "strong",
+        "evidence": "build.mjs hard-defaults to analysis/od/deps/emsdk, 5.0.5. Artifact committed 2026-08-06. (This module was already network-free before the pin landed — it refused a missing emsdk instead of cloning one — but it verified no version and recorded no identity.)"
       }
     },
     "flows/supplemental-omm/nodes/od/dist/isomorphic/module.wasm": {
@@ -2424,6 +2625,13 @@
         "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.7",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20 and never replaced; artifact committed 2026-08-07."
       }
     },
     "licensing/client-decrypt/dist/isomorphic/module.wasm": {
@@ -2447,6 +2655,13 @@
         "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
+      },
+      "emsdkToolchain": null,
+      "toolchainUnknown": true,
+      "emsdkEvidence": {
+        "toolchain": "em-5.0.7",
+        "confidence": "strong",
+        "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20 and never replaced; artifact committed 2026-08-07."
       }
     },
     "licensing/core/dist/browser/module.wasm": {

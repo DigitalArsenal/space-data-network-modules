@@ -3,7 +3,8 @@
  * Build the SDN plugin-delivery WASM module using a repo-local emsdk toolchain.
  *
  * Prerequisites:
- *   - Internet access to fetch Crypto++ 8.9.0 (or set CRYPTOPP_SOURCE_DIR)
+ *   - Crypto++ 8.9.0 source present locally (CRYPTOPP_SOURCE_DIR, deps/cryptopp, or
+ *     `node scripts/provision-emsdk.mjs --cryptopp`). This build NEVER fetches it.
  *   - npm install (for space-data-module-sdk + flatc-wasm)
  *
  * Usage:
@@ -14,7 +15,7 @@
  *   dist/isomorphic/module.wasm
  *
  * Environment:
- *   CRYPTOPP_SOURCE_DIR          — local Crypto++ source tree (skips git clone)
+ *   CRYPTOPP_SOURCE_DIR          — local Crypto++ 8.9.0 source tree
  *   SDN_LOCAL_EMSDK_DIR          — repo-local emsdk root override
  *   SDN_SERVER_PRIVATE_KEY_HEX   — 64-char hex X25519 private key (generated if omitted)
  *   FLATBUFFERS_INCLUDE_DIR      — path to flatbuffers C++ headers (optional override)
@@ -26,6 +27,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
+import {
+  activateLaneToolchain,
+  recordLaneToolchain,
+  resolveVendoredSource,
+  REPO_ROOT as MODULES_REPO_ROOT,
+} from "../../scripts/lib/emsdk-toolchain.mjs";
 
 // THREAD MODEL — declared, never inferred (full rationale in
 // scripts/lib/thread-model.mjs; graph task modules-undeclared-threadmodel-artifacts).
@@ -75,55 +82,6 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function activateLocalEmsdk() {
-  const envScript = path.join(EMSDK_DIR, "emsdk_env.sh");
-  const sourcedEnv = execFileSync(
-    "bash",
-    ["-lc", `source ${shellQuote(envScript)} >/dev/null 2>&1 && env -0`],
-    {
-      encoding: "buffer",
-      env: {
-        ...process.env,
-        EM_CACHE: process.env.EM_CACHE || EM_CACHE_DIR,
-      },
-    },
-  );
-
-  for (const entry of sourcedEnv.toString("utf8").split("\0")) {
-    if (!entry) {
-      continue;
-    }
-    const separator = entry.indexOf("=");
-    if (separator <= 0) {
-      continue;
-    }
-    const key = entry.slice(0, separator);
-    const value = entry.slice(separator + 1);
-    process.env[key] = value;
-  }
-}
-
-function ensureLocalEmscripten() {
-  fs.mkdirSync(EM_CACHE_DIR, { recursive: true });
-  process.env.EM_CACHE = process.env.EM_CACHE || EM_CACHE_DIR;
-
-  const envScript = path.join(EMSDK_DIR, "emsdk_env.sh");
-  const emccPath = path.join(EMSDK_DIR, "upstream", "emscripten", "emcc");
-
-  if (!fs.existsSync(envScript)) {
-    console.log(`  Cloning emsdk into ${EMSDK_DIR}...`);
-    fs.mkdirSync(path.dirname(EMSDK_DIR), { recursive: true });
-    run(`git clone https://github.com/emscripten-core/emsdk.git ${EMSDK_DIR}`);
-  }
-  if (!fs.existsSync(emccPath)) {
-    console.log("  Installing local emsdk...");
-    run("./emsdk install 6.0.1", { cwd: EMSDK_DIR });
-    run("./emsdk activate 6.0.1", { cwd: EMSDK_DIR });
-  }
-
-  activateLocalEmsdk();
-}
-
 function syncToolchainStamp() {
   fs.mkdirSync(BUILD_DIR, { recursive: true });
   const recorded = fs.existsSync(TOOLCHAIN_STAMP_PATH)
@@ -168,18 +126,18 @@ async function ensureCryptoppSources(dir) {
     throw new Error(`CRYPTOPP_SOURCE_DIR does not contain aes.h: ${explicit}`);
   }
 
-  if (fs.existsSync(path.join(dir, "aes.h"))) {
-    console.log("  Crypto++ already fetched.");
-    return setupCryptoppIncludeAlias(dir);
-  }
-
-  console.log("  Cloning Crypto++ 8.9.0...");
-  fs.mkdirSync(path.dirname(dir), { recursive: true });
-  run(
-    `git clone --depth=1 --branch CRYPTOPP_8_9_0 ` +
-      `https://github.com/weidai11/cryptopp.git ${dir}`,
-  );
-  return setupCryptoppIncludeAlias(dir);
+  // NO IMPLICIT FETCH. Cloning Crypto++ during a build is the same supply-chain
+  // hole as cloning the compiler was, one layer down: unreviewed upstream source
+  // compiled straight into a SIGNED artifact, with nothing recording which commit
+  // arrived. `resolveVendoredSource` refuses instead, naming the pin and the one
+  // explicit command that provisions it.
+  // Graph task: modules-raw-emcc-lane-unpinned-toolchain.
+  const vendored = resolveVendoredSource("cryptopp", {
+    candidates: [dir, path.join(MODULES_REPO_ROOT, "deps", "cryptopp")],
+    sentinel: "aes.h",
+  });
+  console.log(`  Crypto++ ${vendored.version} from ${vendored.root}`);
+  return setupCryptoppIncludeAlias(vendored.root);
 }
 
 // ── Compile Crypto++ to .a ────────────────────────────────────────────────────
@@ -266,7 +224,11 @@ function resolveFlatbuffersInclude() {
 async function main() {
   console.log("SDN Plugin Build — plugin-delivery");
   console.log(`Build dir: ${BUILD_DIR}`);
-  ensureLocalEmscripten();
+  const laneToolchain = activateLaneToolchain({
+    moduleDir: "delivery/plugin-delivery",
+    extraCandidates: [EMSDK_DIR],
+    emCache: EM_CACHE_DIR,
+  });
   syncToolchainStamp();
   fs.mkdirSync(BUILD_DIR, { recursive: true });
   fs.mkdirSync(DIST_DIR, { recursive: true });
@@ -349,6 +311,7 @@ uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
 
   // Refuse a declaration the emitted bytes contradict (see THREAD_MODEL above).
   assertArtifactThreadModel(outWasm, THREAD_MODEL, "delivery/plugin-delivery");
+  recordLaneToolchain(DIST_DIR, laneToolchain);
   fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
 
   console.log(`\n✓ Build complete: ${outWasm}`);

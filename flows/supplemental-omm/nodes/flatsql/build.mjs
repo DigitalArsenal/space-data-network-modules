@@ -14,6 +14,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { compileUniversalAot } from "../universal-aot.mjs";
 import {
+  describeEmsdkRoot,
+  loadEmsdkPin,
+  recordLaneToolchain,
+} from "../../../../scripts/lib/emsdk-toolchain.mjs";
+import {
   assertArtifactThreadModel,
 } from "../../../../scripts/lib/thread-model.mjs";
 
@@ -163,8 +168,36 @@ async function resolveLocalEmsdk() {
     }
   }
   const emscriptenDirectory = path.dirname(emcmake);
+
+  // VERIFY THE PIN. This node already refused to CLONE a missing emsdk — it was
+  // the only member of the raw-em++ lane that did — but it accepted whatever
+  // version happened to be in the directory it found. That is the half of the
+  // defect that never showed: analysis/od/deps/emsdk carries emscripten 5.0.5,
+  // while the lane pin (and every other build.mjs in the lane) says 6.0.1, so the
+  // committed artifact was compiled by a toolchain no file named.
+  // Graph task: modules-raw-emcc-lane-unpinned-toolchain.
+  const pin = loadEmsdkPin();
+  const eraId = process.env.SDN_EMSDK_ERA || null;
+  const expected = eraId ? pin.knownToolchains?.[eraId] : pin.pin;
+  if (!expected) {
+    throw new Error(
+      `SDN_EMSDK_ERA=${eraId} is not a toolchain this repo knows; ` +
+        `valid ids: ${Object.keys(pin.knownToolchains ?? {}).join(", ")}`,
+    );
+  }
+  const identity = describeEmsdkRoot(emsdkDirectory);
+  if (identity.emscriptenVersion !== expected.emscriptenVersion) {
+    throw new Error(
+      `WRONG EMSCRIPTEN at ${emsdkDirectory}: found ${identity.emscriptenVersion ?? "?"}, ` +
+        `pin ${eraId ?? pin.pin.id} requires ${expected.emscriptenVersion}. ` +
+        `Provision it with \`node scripts/provision-emsdk.mjs\` and point SDN_LOCAL_EMSDK_DIR at it, ` +
+        `or name an era toolchain with SDN_EMSDK_ERA to rebuild historical bytes deliberately.`,
+    );
+  }
+
   return {
     emcmake,
+    laneToolchain: { pinId: eraId ?? pin.pin.id, era: Boolean(eraId), identity },
     environment: {
       EMSDK: emsdkDirectory,
       EM_CONFIG: emConfig,
@@ -362,6 +395,7 @@ async function main() {
   // before the manifest section and the WasmEdge AOT wrapper are attached — the
   // threading contract is a property of the compile, not of the packaging.
   assertArtifactThreadModel(rawWasm, THREAD_MODEL, "flows/supplemental-omm/nodes/flatsql");
+  recordLaneToolchain(distDirectory, toolchain.laneToolchain);
   const manifestBytes = encodePluginManifest(manifest);
   const withManifest = bundle.appendWasmCustomSection(
     rawWasm,

@@ -143,6 +143,38 @@ export function describeStandardsRoot(standardsRoot) {
   return { resolved: true, version: pkg.version ?? null, commit: git(["rev-parse", "HEAD"], root) };
 }
 
+// THE SECOND LANE. Everything above describes the SDK compiler, and for 103 of
+// the 130 committed artifacts that is the whole story. It is not the story for
+// the other 27: fourteen modules never reach the SDK compiler at all — they drive
+// a repo-local Emscripten `em++` directly, so not one of the inputs listed above
+// touched their bytes.
+//
+// Recording the SDK toolchain against those artifacts would be worse than
+// recording nothing, because it would read as an answer. So the raw lane carries
+// its own pin (scripts/emsdk-pin.json), its own resolver
+// (scripts/lib/emsdk-toolchain.mjs), and its own PER-ARTIFACT record written at
+// build time into dist/build-toolchain.json — which is what the ledger reads.
+//
+// This function reports the lane pin so `--json` shows both lanes at once. It is
+// deliberately NOT folded into `toolchainId`: that id names the inputs that
+// decide SDK-lane bytes, and mixing in a pin that cannot affect them would churn
+// every existing entry to say nothing new.
+// Graph task: modules-raw-emcc-lane-unpinned-toolchain.
+export function describeEmsdkLane() {
+  try {
+    const pin = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "scripts", "emsdk-pin.json"), "utf8"));
+    return {
+      pin: pin.pin.id,
+      emscriptenVersion: pin.pin.emscriptenVersion,
+      emsdkCommit: pin.pin.emsdkCommit,
+      emscriptenRelease: pin.pin.emscriptenRelease,
+      modules: pin.laneModules?.length ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function resolveToolchain(options = {}) {
   const sdkRoot = resolveSdkRoot();
   const toolchain = {
@@ -179,10 +211,17 @@ export function describeToolchain(toolchain) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const toolchain = resolveToolchain();
+  const emsdkLane = describeEmsdkLane();
   if (process.argv.includes("--json")) {
-    console.log(JSON.stringify(toolchain, null, 2));
+    console.log(JSON.stringify({ ...toolchain, emsdkLane }, null, 2));
   } else {
     console.log(toolchain.id);
     console.log(describeToolchain(toolchain));
+    if (emsdkLane) {
+      console.log(
+        `raw-em++ lane ${emsdkLane.pin}: emscripten ${emsdkLane.emscriptenVersion}, ` +
+          `emsdk ${emsdkLane.emsdkCommit.slice(0, 12)}, ${emsdkLane.modules} modules`,
+      );
+    }
   }
 }

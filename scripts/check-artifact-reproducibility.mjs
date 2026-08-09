@@ -56,6 +56,7 @@ import {
   resolveToolchain,
 } from "./build-provenance.mjs";
 import { THREAD_MODELS, assertArtifactThreadModel } from "./lib/thread-model.mjs";
+import { loadEmsdkPin } from "./lib/emsdk-toolchain.mjs";
 
 const LEDGER_PATH = path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
 
@@ -77,6 +78,29 @@ const REPRESENTATIVE_MODULES = Object.freeze([
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+// THE RAW EM++ LANE. Fourteen modules never reach the SDK compiler; they drive a
+// repo-local Emscripten directly, so `generatedBy` — which describes the SDK
+// toolchain — says nothing about their bytes. Their toolchain is recorded per
+// module, at build time, in dist/build-toolchain.json (see
+// scripts/lib/emsdk-toolchain.mjs), and read back into the ledger here.
+//
+// An artifact of a lane module with NO sidecar is one built before the pin
+// existed. It is marked `toolchainUnknown: true` and carries whatever era
+// evidence could still be measured, rather than being quietly given the SDK
+// toolchain id it had no contact with. That count is a ratchet: the only way to
+// lower it is to actually rebuild the module under the pin, which writes a
+// sidecar. Graph task: modules-raw-emcc-lane-unpinned-toolchain.
+const EMSDK_PIN = loadEmsdkPin();
+const LANE_MODULES = new Set(EMSDK_PIN.laneModules ?? []);
+
+function laneSidecar(moduleDir) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(REPO_ROOT, moduleDir, "dist", "build-toolchain.json"), "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function git(args, cwd = REPO_ROOT) {
@@ -209,6 +233,17 @@ function inferSdkPin(superRepo, isoDate) {
   return sha ? { superRepoCommit: commit, sdkCommit: sha } : null;
 }
 
+function laneRecordFor(moduleDir) {
+  if (!moduleDir || !LANE_MODULES.has(moduleDir)) return {};
+  const sidecar = laneSidecar(moduleDir);
+  if (sidecar) return { emsdkToolchain: sidecar, toolchainUnknown: false };
+  return {
+    emsdkToolchain: null,
+    toolchainUnknown: true,
+    emsdkEvidence: EMSDK_PIN.shippedToolchainEvidence?.[moduleDir] ?? null,
+  };
+}
+
 function buildCensus({ superRepo } = {}) {
   const previous = loadLedger();
   const artifacts = {};
@@ -219,6 +254,7 @@ function buildCensus({ superRepo } = {}) {
     const [commit, isoDate] = (lastCommit ?? "|").split("|");
     const moduleDir = owningModule(rel);
     const prior = previous?.artifacts?.[rel];
+    const laneRecord = laneRecordFor(moduleDir);
     artifacts[rel] = {
       sha256: sha256(bytes),
       bytes: bytes.length,
@@ -228,13 +264,18 @@ function buildCensus({ superRepo } = {}) {
       // "recorded" is only claimable by a build that stamped the toolchain at
       // build time. Everything already in the tree is "inferred": archaeology
       // from the super-repo pin on the day the bytes landed.
-      provenance: prior?.provenance === "recorded" && prior?.sha256 === sha256(bytes) ? "recorded" : "inferred",
+      provenance: laneRecord?.emsdkToolchain
+        ? "recorded"
+        : prior?.provenance === "recorded" && prior?.sha256 === sha256(bytes)
+          ? "recorded"
+          : "inferred",
       toolchain: prior?.sha256 === sha256(bytes) ? (prior.toolchain ?? null) : null,
       sdkPinAtCommit:
         prior?.sha256 === sha256(bytes) && prior?.sdkPinAtCommit
           ? prior.sdkPinAtCommit
           : inferSdkPin(superRepo, isoDate),
       ...(moduleDir ? { declaration: declarationAudit(moduleDir) } : { declaration: null }),
+      ...laneRecord,
     };
   }
   return artifacts;
@@ -300,6 +341,17 @@ async function writeLedger({ superRepo, withRebuild }) {
     // an SDK `git worktree` at that pin + `npm ci` + that SDK's own locked
     // spacedatastandards.org, never by argument.
     eraPinReproductions: loadLedger()?.eraPinReproductions ?? {},
+    // The raw-em++ lane, which the fields above cannot describe: those record the
+    // SDK toolchain, and these fourteen modules never touch it. `unknownToolchain`
+    // is a RATCHET — artifacts of a lane module that shipped before the pin
+    // existed and therefore carry no build-time toolchain record. It may shrink
+    // (rebuild a module under the pin and its sidecar lands) but never grow.
+    emsdkLane: {
+      pin: EMSDK_PIN.pin.id,
+      emscriptenVersion: EMSDK_PIN.pin.emscriptenVersion,
+      modules: EMSDK_PIN.laneModules.length,
+      unknownToolchainBaseline: Object.values(artifacts).filter((a) => a.toolchainUnknown).length,
+    },
     artifacts,
   };
   fs.writeFileSync(LEDGER_PATH, `${JSON.stringify(ledger, null, 2)}\n`);
@@ -408,11 +460,58 @@ function checkLedger() {
     );
   }
 
+  // THE RAW EM++ LANE. Three separate things are enforced here, because the lane
+  // failed in three separate ways:
+  //   1. a lane artifact must say which Emscripten made it, or be explicitly
+  //      recorded as unknown — never silently inherit the SDK toolchain id;
+  //   2. the unknown count is a ratchet that may shrink and never grow;
+  //   3. a sidecar on disk must agree with the ledger, so rebuilding a lane module
+  //      without regenerating the ledger fails by name rather than landing bytes
+  //      whose recorded toolchain is the PREVIOUS one.
+  const laneUnknown = [];
+  const laneMismatch = [];
+  for (const rel of tracked) {
+    const moduleDir = owningModule(rel);
+    if (!moduleDir || !LANE_MODULES.has(moduleDir)) continue;
+    const entry = ledger.artifacts?.[rel];
+    if (!entry) continue;
+    const sidecar = laneSidecar(moduleDir);
+    if (entry.toolchainUnknown) laneUnknown.push(`${rel} (${moduleDir})`);
+    if (sidecar && !entry.emsdkToolchain) {
+      laneMismatch.push(`${rel}: built by ${sidecar.pinId} on disk, but the ledger records no lane toolchain`);
+    } else if (sidecar && entry.emsdkToolchain && JSON.stringify(sidecar) !== JSON.stringify(entry.emsdkToolchain)) {
+      laneMismatch.push(
+        `${rel}: dist/build-toolchain.json says ${sidecar.pinId}/${sidecar.emscriptenVersion}, ` +
+          `ledger says ${entry.emsdkToolchain.pinId}/${entry.emsdkToolchain.emscriptenVersion}`,
+      );
+    }
+    if (!sidecar && entry.emsdkToolchain) {
+      laneMismatch.push(`${rel}: ledger records a lane toolchain but ${moduleDir}/dist/build-toolchain.json is gone`);
+    }
+  }
+  const laneBaseline = ledger.emsdkLane?.unknownToolchainBaseline ?? laneUnknown.length;
+  if (laneUnknown.length > laneBaseline) {
+    failures.push(
+      `RAW EM++ LANE — UNRECORDED TOOLCHAIN GREW: ${laneUnknown.length} artifacts (baseline ${laneBaseline}).\n` +
+        `    A module in this lane compiles with a repo-local em++, so \`generatedBy\` does not describe it. ` +
+        `Build it with a pinned toolchain (scripts/lib/emsdk-toolchain.mjs writes dist/build-toolchain.json) and regenerate the ledger.\n` +
+        laneUnknown.map((u) => `      - ${u}`).join("\n"),
+    );
+  }
+  if (laneMismatch.length) {
+    failures.push(
+      `RAW EM++ LANE — LEDGER DISAGREES WITH THE BUILD RECORD:\n` +
+        laneMismatch.map((m) => `      - ${m}`).join("\n") +
+        `\n    Regenerate in the same commit: node scripts/check-artifact-reproducibility.mjs --write`,
+    );
+  }
+
   const modules = allBuildModules().length;
   console.log(
     `ledger: ${tracked.length} artifacts checked against ${Object.keys(ledger.artifacts ?? {}).length} recorded; ` +
       `${inferenceHazards} undeclared-lane artifacts (baseline ${baseline}); ` +
-      `${modules - undeclared.length}/${modules} modules declare a thread model (baseline ${moduleBaseline} undeclared).`,
+      `${modules - undeclared.length}/${modules} modules declare a thread model (baseline ${moduleBaseline} undeclared); ` +
+      `raw-em++ lane pin ${EMSDK_PIN.pin.id}, ${laneUnknown.length} artifacts with no build-time toolchain record (baseline ${laneBaseline}).`,
   );
   if (inferenceHazards > 0 && failures.length === 0) {
     console.log(`  (${inferenceHazards} artifacts are NOT rebuildable at the current pin — see graph task modules-dist-not-reproducible-at-sdk-pin)`);

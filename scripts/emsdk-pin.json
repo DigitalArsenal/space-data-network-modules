@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "note": "The pin for the RAW EM++ LANE — the fourteen modules that never reach the SDK compiler and drive a repo-local Emscripten directly. Read scripts/lib/emsdk-toolchain.mjs for why this file exists and what it is allowed to decide. Graph task: modules-raw-emcc-lane-unpinned-toolchain.",
+
+  "pin": {
+    "id": "em-6.0.1",
+    "emscriptenVersion": "6.0.1",
+    "emsdkCommit": "c68d67a7c82f8d9c56301dff5ff34367e3892553",
+    "emscriptenRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
+    "llvmRevision": "25e4e8d6550d392ba9e0c2936bce7cf41ee47cc0",
+    "why": "Every build.mjs in this lane already SAID `emsdk install 6.0.1`, and it is the newest of the three Emscriptens measured in the shipped bytes. Making it the pin is therefore the smallest true statement, not a new choice."
+  },
+
+  "knownToolchains": {
+    "em-6.0.1": {
+      "emscriptenVersion": "6.0.1",
+      "emsdkCommit": "c68d67a7c82f8d9c56301dff5ff34367e3892553",
+      "emsdkCommitDate": "2026-07-16T15:51:11-04:00",
+      "emscriptenRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
+      "llvmRevision": "25e4e8d6550d392ba9e0c2936bce7cf41ee47cc0"
+    },
+    "em-5.0.7": {
+      "emscriptenVersion": "5.0.7",
+      "emsdkCommit": "0dfff153dc3c596948ac088b8853006c570f2609",
+      "emsdkCommitDate": "2026-05-18T15:47:25-07:00",
+      "emscriptenRelease": "releases-6cd98e86d7749ff98b82b7f2ae78eb4f01942788-64bit",
+      "llvmRevision": "263db4cffa6f9fc2ec514a70abac81362ea41849"
+    },
+    "em-5.0.6": {
+      "emscriptenVersion": "5.0.6",
+      "emsdkCommit": "b8b37f911fa02822e76ec11dcac3b3f95ccfce42",
+      "emsdkCommitDate": "2026-04-28T11:08:25-07:00",
+      "emscriptenRelease": "releases-1724b50443d92e23ef2a56abf0dc501206839cef-64bit",
+      "llvmRevision": null,
+      "note": "Present on the build machine under analysis/conjunction-assessment/deps/emsdk. Not used by any module in this lane; recorded so the census is complete and a future stray resolution is recognised rather than mistaken for the pin."
+    },
+    "em-5.0.5": {
+      "emscriptenVersion": "5.0.5",
+      "emsdkCommit": null,
+      "emsdkCommitDate": null,
+      "emscriptenRelease": "releases-6eae703422b3962d1ed75e15f728ece57aad6bd6-64bit",
+      "llvmRevision": "bc569045b14c3fa7b960734ed2c50da7b20adea4",
+      "note": "analysis/od/deps/emsdk. Its emsdk COMMIT is unrecoverable: the 137 bootstrap files are tracked INSIDE this repo rather than being a checkout, so it has no .git of its own and `git rev-parse HEAD` there answers with the modules repo's HEAD. The emscripten release hash is the only identity it can still produce."
+    }
+  },
+
+  "laneModules": [
+    "analysis/catalog-synthesis",
+    "analysis/od/fit-pipeline",
+    "data-source/bond-attestation-source",
+    "data-source/celestrak-supgp",
+    "data-source/cpf-source",
+    "data-source/glonass-source",
+    "data-source/gps-source",
+    "data-source/intelsat-source",
+    "data-source/iss-source",
+    "data-source/oneweb-source",
+    "data-source/spacex-starlink-source",
+    "delivery/plugin-delivery",
+    "licensing/client-decrypt",
+    "flows/supplemental-omm/nodes/flatsql"
+  ],
+
+  "shippedToolchainEvidence": {
+    "note": "What produced the CURRENTLY COMMITTED bytes of each lane module, established 2026-08-09. `proven` = the artifact was rebuilt byte-identically under that toolchain. `strong` = the only Emscripten the module's own resolution order could have reached, installed before the artifact's commit and still present. `none` = the emsdk that built it no longer exists on any machine we have; the toolchain is unrecoverable and the ledger says so instead of guessing.",
+    "analysis/catalog-synthesis": {
+      "toolchain": "em-5.0.7",
+      "confidence": "strong",
+      "evidence": "Has no deps/emsdk of its own; build.mjs falls back to licensing/core/deps/emsdk, which carries 5.0.7 installed 2026-05-20. Artifact committed 2026-07-13, seven weeks later."
+    },
+    "analysis/od/fit-pipeline": {
+      "toolchain": "em-5.0.5",
+      "confidence": "strong",
+      "evidence": "build.mjs resolves ../deps/emsdk = analysis/od/deps/emsdk, 5.0.5 installed 2026-04-29/05-14. Artifact committed 2026-07-13."
+    },
+    "data-source/bond-attestation-source": {
+      "toolchain": null,
+      "confidence": "none",
+      "evidence": "build.mjs resolves ONLY its own deps/emsdk, which is absent from this machine. Artifact committed 2026-08-03 by an emsdk that was cloned at build time and has since been deleted. Unrecoverable."
+    },
+    "data-source/celestrak-supgp": {
+      "toolchain": null,
+      "confidence": "none",
+      "evidence": "Own deps/emsdk absent; no fallback in build.mjs. Artifact committed 2026-07-13. Unrecoverable."
+    },
+    "data-source/cpf-source": {
+      "toolchain": "em-6.0.1",
+      "confidence": "strong",
+      "evidence": "Own deps/emsdk carries 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
+    },
+    "data-source/glonass-source": {
+      "toolchain": "em-6.0.1",
+      "confidence": "strong",
+      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-19."
+    },
+    "data-source/gps-source": {
+      "toolchain": null,
+      "confidence": "none",
+      "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
+    },
+    "data-source/intelsat-source": {
+      "toolchain": "em-6.0.1",
+      "confidence": "strong",
+      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
+    },
+    "data-source/iss-source": {
+      "toolchain": "em-6.0.1",
+      "confidence": "proven",
+      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18. REBUILT byte-identically from committed source under em-6.0.1 on 2026-08-09 — see scripts/artifact-provenance.json eraPinReproductions."
+    },
+    "data-source/oneweb-source": {
+      "toolchain": null,
+      "confidence": "none",
+      "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
+    },
+    "data-source/spacex-starlink-source": {
+      "toolchain": "em-6.0.1",
+      "confidence": "strong",
+      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-17; artifact committed 2026-07-19."
+    },
+    "delivery/plugin-delivery": {
+      "toolchain": "em-5.0.7",
+      "confidence": "strong",
+      "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20; artifact committed 2026-07-02."
+    },
+    "licensing/client-decrypt": {
+      "toolchain": "em-5.0.7",
+      "confidence": "strong",
+      "evidence": "Own deps/emsdk 5.0.7 installed 2026-05-20 and never replaced; artifact committed 2026-08-07."
+    },
+    "flows/supplemental-omm/nodes/flatsql": {
+      "toolchain": "em-5.0.5",
+      "confidence": "strong",
+      "evidence": "build.mjs hard-defaults to analysis/od/deps/emsdk, 5.0.5. Artifact committed 2026-08-06. (This module was already network-free before the pin landed — it refused a missing emsdk instead of cloning one — but it verified no version and recorded no identity.)"
+    }
+  },
+
+  "vendoredSources": {
+    "note": "Non-toolchain third-party source these builds compile in. Same rule as the toolchain: resolved locally or refused, never fetched at build time.",
+    "cryptopp": {
+      "version": "8.9.0",
+      "tag": "CRYPTOPP_8_9_0",
+      "upstream": "https://github.com/weidai11/cryptopp.git",
+      "consumers": ["delivery/plugin-delivery", "licensing/client-decrypt"],
+      "provisionEnv": "CRYPTOPP_SOURCE_DIR"
+    }
+  }
+}
