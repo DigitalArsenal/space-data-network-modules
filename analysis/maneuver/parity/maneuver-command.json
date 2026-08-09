@@ -1,0 +1,166 @@
+{
+  "//": "TRI-RUNTIME BEHAVIOURAL FIXTURE for the maneuver-planner command surface. Every case here is byte-diffed across the browser harness, native WasmEdge and the pinned Docker WasmEdge, at 1/2/4/8 threads. Success paths AND failure paths: a deterministic error is parity evidence exactly like a deterministic answer, and this module's failure path is a TRAP (its exceptions are compiled out), so the trap CLASS is what must match rather than an error payload. Run: space-data-module parity --wasm dist/isomorphic/module.wasm --fixture parity/maneuver-command.json --lanes browser,wasmedge,docker-wasmedge",
+  "name": "maneuver-command-parity",
+  "threadEnvVar": "SDM_PARITY_THREADS",
+  "threadCounts": [1, 2, 4, 8],
+  "cases": [
+    {
+      "id": "hohmann-300km-geo",
+      "expect": "ok",
+      "//": "The canonical case the program pins. Also the tightest possible parity probe: a closed-form answer that is a handful of sqrt() calls, so any divergence between lanes is a libm difference and nothing else.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"hohmannTransfer\",\"params\":{\"r1\":6678137,\"r2\":42164000,\"mu\":3.986004418e14}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bielliptic-leo-geo",
+      "expect": "ok",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"biEllipticTransfer\",\"params\":{\"r1\":6678137,\"r2\":42164000,\"rIntermediate\":120000000,\"mu\":3.986004418e14}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "plane-change-15deg",
+      "expect": "ok",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"planeChange\",\"params\":{\"orbitalRadius\":11480000,\"velocity\":5892.311,\"deltaInclination\":0.2617993877991494}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "combined-28p5deg",
+      "expect": "ok",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"combinedManeuver\",\"params\":{\"r1\":6678137,\"r2\":42164000,\"deltaInclination\":0.49741883681838395,\"mu\":3.986004418e14}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-catch-up",
+      "expect": "ok",
+      "//": "Positive phase angle: the phasing orbit is SMALLER and the first burn is retrograde. The response carries only the magnitude, so what this case pins across lanes is that phasingSMA — the quantity the console wrapper recovers the sign from — is byte-identical everywhere.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingManeuver\",\"params\":{\"currentRadius\":6778137,\"phaseAngle\":0.5235987755982988,\"numRevs\":3,\"mu\":3.986004418e14}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-below-earth-floor",
+      "expect": "ok",
+      "//": "170 degrees in one revolution: the module returns a phasing orbit whose far apse is roughly 4300 km BENEATH the surface, with no error and no flag. It is in the parity fixture deliberately — the defect must be reproduced IDENTICALLY on all three runtimes, so that the console-side Earth-collision guard is known to be guarding the same behaviour everywhere and not papering over a lane-specific quirk.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingManeuver\",\"params\":{\"currentRadius\":6778137,\"phaseAngle\":2.9670597283903604,\"numRevs\":1,\"mu\":3.986004418e14}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lambert-elliptical-tudat",
+      "expect": "ok",
+      "//": "Tudat's elliptical Lambert case — the one geometry the solver gets right (it reaches the target to 5.8e-11 of |r2|). Included so that when the Lambert defect is repaired, the parity lane is already watching this operation on all three runtimes.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"solveLambert\",\"params\":{\"r1\":[12756272,0,0],\"r2\":[12756272,22094511.219168257,0],\"tof\":4033.8999999999996,\"mu\":398600441800000,\"prograde\":true}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "version",
+      "expect": "ok",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          { "portId": "request", "payloadUtf8": "{\"operation\":\"version\",\"params\":{}}" }
+        ]
+      }
+    },
+    {
+      "id": "unknown-operation-traps",
+      "expect": "trap",
+      "//": "The module's exceptions are compiled out, so an unknown operation aborts instead of returning make_error_result. The trap CLASS must be the same on every runtime — a module that traps in the browser and returns an error under WasmEdge is not isomorphic, whichever behaviour is the desirable one.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          { "portId": "request", "payloadUtf8": "{\"operation\":\"noSuchOperation\",\"params\":{}}" }
+        ]
+      }
+    },
+    {
+      "id": "missing-param-traps",
+      "expect": "trap",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"hohmannTransfer\",\"params\":{\"r1\":6678137}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "validator-range-traps",
+      "expect": "trap",
+      "//": "numRevs = 0 hits the module's OWN validator, which throws a carefully worded message that no caller can ever observe. Pinned so the day it becomes reachable is a visible change in this lane.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingManeuver\",\"params\":{\"currentRadius\":6778137,\"phaseAngle\":0.5,\"numRevs\":0}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "malformed-json-traps",
+      "expect": "trap",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          { "portId": "request", "payloadUtf8": "{\"operation\": \"hohmannTransfer\", " }
+        ]
+      }
+    },
+    {
+      "id": "malformed-stdin",
+      "stdinUtf8": "this is not a PIV invoke frame",
+      "//": "Below the JSON bridge entirely: the host codec's own rejection path, which must also agree across lanes."
+    }
+  ]
+}

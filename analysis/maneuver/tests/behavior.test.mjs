@@ -1,3 +1,22 @@
+/**
+ * BEHAVIOUR tests for the operations that are NOT vector-driven.
+ *
+ * The Hohmann / plane-change / combined tests that used to live here have
+ * MOVED to vectors.test.mjs, and the `hohmannReference()` helper they leaned on
+ * is gone. That helper recomputed the expected answer from the same closed form
+ * the module implements, inside the assertion — a tautology that could only
+ * fail on a typo, and that agreed with the module on cases where the module is
+ * demonstrably wrong. Expectations now come from `vectors/vectors.json`, whose
+ * provenance is recorded per row in `vectors/PROVENANCE.md`.
+ *
+ * What remains here is coverage of the relative-motion operations
+ * (`computeCAM`, `computeRoeStateTransition`, `simulateRendezvous`,
+ * `planRelativeWaypointMission`), which no maneuver command card consumes and
+ * which therefore have no authoritative vector yet. They assert structure and
+ * self-consistency, which is honest for what they are — and is why they are
+ * kept separate from the file that claims parity.
+ */
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -10,105 +29,7 @@ import {
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const MU_EARTH = 398600441800000.0;
 
-function circularVelocity(radius) {
-  return Math.sqrt(MU_EARTH / radius);
-}
-
-function hohmannReference(r1, r2) {
-  const aTransfer = (r1 + r2) / 2;
-  const v1 = circularVelocity(r1);
-  const v2 = circularVelocity(r2);
-  const vTransfer1 = Math.sqrt(MU_EARTH * ((2 / r1) - (1 / aTransfer)));
-  const vTransfer2 = Math.sqrt(MU_EARTH * ((2 / r2) - (1 / aTransfer)));
-  const dv1 = vTransfer1 - v1;
-  const dv2 = v2 - vTransfer2;
-  return {
-    aTransfer,
-    dv1,
-    dv2,
-    totalDeltaV: dv1 + dv2,
-    tof: Math.PI * Math.sqrt((aTransfer ** 3) / MU_EARTH),
-  };
-}
-
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
-  test(`Hohmann transfer matches analytic reference values on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const request = {
-      operation: "hohmannTransfer",
-      params: { r1: 6_778_000, r2: 42_164_000, mu: MU_EARTH },
-    };
-    const result = await invokeJsonRequest(harness, request);
-    const reference = hohmannReference(6_778_000, 42_164_000);
-
-    assert.ok(Math.abs(result.aTransfer - reference.aTransfer) < 1e-6);
-    assert.ok(Math.abs(result.dv1 - reference.dv1) < 1e-9);
-    assert.ok(Math.abs(result.dv2 - reference.dv2) < 1e-9);
-    assert.ok(Math.abs(result.totalDeltaV - reference.totalDeltaV) < 1e-9);
-    assert.ok(Math.abs(result.tof - reference.tof) < 1e-9);
-    assert.deepEqual(result.dv1_ric, [0, result.dv1, 0]);
-    assert.deepEqual(result.dv2_ric, [0, result.dv2, 0]);
-  });
-
-  test(`plane-change delta-v matches 2 v sin(di/2) on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const velocity = 7_500;
-    const deltaInclination = 10 * Math.PI / 180;
-    const result = await invokeJsonRequest(harness, {
-      operation: "planeChange",
-      params: {
-        orbitalRadius: 7_000_000,
-        velocity,
-        deltaInclination,
-      },
-    });
-    const reference = 2 * velocity * Math.sin(deltaInclination / 2);
-
-    assert.ok(Math.abs(result.dv - reference) < 1e-9);
-    assert.deepEqual(result.dv_ric, [0, 0, result.dv]);
-    assert.equal(result.optimalTrueAnomaly, 0);
-  });
-
-  test(`combined maneuver improves on separate transfer-plus-plane-change on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
-    if (!harness) {
-      return;
-    }
-    t.after(async () => {
-      await harness.destroy();
-    });
-
-    const r1 = 7_000_000;
-    const r2 = 10_000_000;
-    const deltaInclination = 5 * Math.PI / 180;
-    const result = await invokeJsonRequest(harness, {
-      operation: "combinedManeuver",
-      params: { r1, r2, deltaInclination, mu: MU_EARTH },
-    });
-    const hohmann = hohmannReference(r1, r2);
-    const separate = hohmann.totalDeltaV +
-      (2 * circularVelocity(r2) * Math.sin(deltaInclination / 2));
-
-    assert.ok(result.totalDeltaV > 0);
-    assert.ok(result.totalDeltaV < separate);
-    assert.ok(result.dv1 > 0);
-    assert.ok(result.dv2 > 0);
-  });
-
   test(`collision-avoidance maneuvers honor miss-distance and timing config on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {

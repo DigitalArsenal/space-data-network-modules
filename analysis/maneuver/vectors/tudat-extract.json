@@ -1,0 +1,480 @@
+{
+  "//": "MECHANICALLY EXTRACTED from Tudat unit-test sources by vectors/tools/dump-tudat-vectors.mjs. Do not hand-edit: regenerate. Tudat is consulted as an ORACLE — it is never compiled, linked, or depended on by any build in this repo.",
+  "generator": "vectors/tools/dump-tudat-vectors.mjs",
+  "tudat": {
+    "root": "/Users/tj/software/worktrees/tudat-wasm",
+    "head": "028b308759058713076755858f8ef782d75f4de8"
+  },
+  "conversions": {
+    "ASTRONOMICAL_UNIT": {
+      "value": 149597870700,
+      "expression": "1.49597870700E11",
+      "source": "/Users/tj/software/worktrees/tudat-wasm/include/tudat/astro/basic_astro/physicalConstants.h"
+    },
+    "JULIAN_DAY": {
+      "value": 86400,
+      "expression": "86400.0",
+      "source": "/Users/tj/software/worktrees/tudat-wasm/include/tudat/astro/basic_astro/physicalConstants.h"
+    },
+    "PI": {
+      "value": 3.141592653589793,
+      "expression": "3.14159265358979323846",
+      "source": "/Users/tj/software/worktrees/tudat-wasm/include/tudat/math/basic/mathematicalConstants.h"
+    }
+  },
+  "cases": [
+    {
+      "id": "tudat-izzo-hyperbolic",
+      "source": {
+        "repo": "tudat",
+        "head": "028b308759058713076755858f8ef782d75f4de8",
+        "file": "tests/test_tudat/src/astro/mission_segments/unitTestLambertTargeterIzzo.cpp",
+        "testCase": "testHyperbolicCase",
+        "symbols": {
+          "r1": "positionAtDepartureHyperbola",
+          "r2": "positionAtArrivalHyperbola",
+          "tof": "timeOfFlightHyperbola",
+          "mu": "earthGravitationalParameter",
+          "v1": "expectedInertialVelocityAtDeparture",
+          "v2": "expectedInertialVelocityAtArrival",
+          "semiMajorAxis": "expectedValueOfSemiMajorAxisHyperbola",
+          "toleranceVelocity": "toleranceVelocity"
+        }
+      },
+      "retrograde": false,
+      "note": "Hyperbolic Earth-centred arc, 100-day time of flight. Tudat's own note: results from the Noomen Lambert-targeter Excel reference. Departure/arrival positions are AU-scaled on the x and -y axes.",
+      "values": {
+        "r1": [
+          2991957414,
+          0,
+          0
+        ],
+        "r2": [
+          0,
+          -4487936121,
+          0
+        ],
+        "tof": 8640000,
+        "mu": 398600441800000,
+        "v1": [
+          -745.457,
+          156.743,
+          0
+        ],
+        "v2": [
+          104.495,
+          -693.209,
+          0
+        ],
+        "semiMajorAxis": -1270129360.2,
+        "toleranceVelocity": 0.0001
+      },
+      "trace": [
+        {
+          "name": "expectedValueOfSemiMajorAxisHyperbola",
+          "expression": "-1270129.3602e3",
+          "value": -1270129360.2
+        },
+        {
+          "name": "expectedValueOfRadialSpeedAtDepartureHyperbola",
+          "expression": "-0.74546e3",
+          "value": -745.46
+        },
+        {
+          "name": "expectedValueOfRadialSpeedAtArrivalHyperbola",
+          "expression": "0.69321e3",
+          "value": 693.21
+        },
+        {
+          "name": "expectedValueOfTransverseSpeedAtDepartureHyperbola",
+          "expression": "0.15674e3",
+          "value": 156.74
+        },
+        {
+          "name": "expectedValueOfTransverseSpeedAtArrivalHyperbola",
+          "expression": "0.10450e3",
+          "value": 104.5
+        },
+        {
+          "name": "expectedInertialVelocityAtDeparture",
+          "expression": "-745.457, 156.743, 0.0",
+          "value": [
+            -745.457,
+            156.743,
+            0
+          ]
+        },
+        {
+          "name": "expectedInertialVelocityAtArrival",
+          "expression": "104.495, -693.209, 0.0",
+          "value": [
+            104.495,
+            -693.209,
+            0
+          ]
+        },
+        {
+          "name": "toleranceSemiMajorAxisHyperbola",
+          "expression": "1.0e-7",
+          "value": 1e-7
+        },
+        {
+          "name": "toleranceVelocity",
+          "expression": "1.0e-4",
+          "value": 0.0001
+        },
+        {
+          "name": "timeOfFlightInDaysHyperbola",
+          "expression": "100.0",
+          "value": 100
+        },
+        {
+          "name": "timeOfFlightHyperbola",
+          "expression": "convertJulianDaysToSeconds( timeOfFlightInDaysHyperbola )",
+          "value": 8640000
+        },
+        {
+          "name": "earthGravitationalParameter",
+          "expression": "398600.4418e9",
+          "value": 398600441800000
+        },
+        {
+          "name": "positionAtDepartureHyperbola",
+          "expression": "convertAstronomicalUnitsToMeters( 0.02 ), 0.0, 0.0",
+          "value": [
+            2991957414,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "positionAtArrivalHyperbola",
+          "expression": "0.0, convertAstronomicalUnitsToMeters( -0.03 ), 0.0",
+          "value": [
+            0,
+            -4487936121,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tudat-izzo-elliptical",
+      "source": {
+        "repo": "tudat",
+        "head": "028b308759058713076755858f8ef782d75f4de8",
+        "file": "tests/test_tudat/src/astro/mission_segments/unitTestLambertTargeterIzzo.cpp",
+        "testCase": "testEllipticalCase",
+        "symbols": {
+          "r1": "positionAtDepartureEllipse",
+          "r2": "positionAtArrivalEllipse",
+          "tof": "timeOfFlightEllipse",
+          "mu": "earthGravitationalParameter",
+          "v1": "expectedInertialVelocityAtDeparture",
+          "v2": "expectedInertialVelocityAtArrival",
+          "semiMajorAxis": "expectedValueOfSemiMajorAxisEllipse",
+          "toleranceVelocity": "toleranceVelocity"
+        }
+      },
+      "retrograde": false,
+      "note": "Elliptical case in Earth canonical units. Tudat's own note: Mengali & Quarta, Fondamenti di Meccanica del volo Spaziale, Example 6.1, pages 159-162. The 120-degree transfer angle is what makes it a real Lambert case rather than a Hohmann in disguise.",
+      "values": {
+        "r1": [
+          12756272,
+          0,
+          0
+        ],
+        "r2": [
+          12756272,
+          22094511.219168257,
+          0
+        ],
+        "tof": 4033.8999999999996,
+        "mu": 398600441800000,
+        "v1": [
+          2735.8,
+          6594.3,
+          0
+        ],
+        "v2": [
+          -1367.9,
+          4225.03,
+          0
+        ],
+        "semiMajorAxis": 34578426.510400005,
+        "toleranceVelocity": 0.01
+      },
+      "trace": [
+        {
+          "name": "distanceUnit",
+          "expression": "6.378136e6",
+          "value": 6378136
+        },
+        {
+          "name": "timeUnit",
+          "expression": "806.78",
+          "value": 806.78
+        },
+        {
+          "name": "expectedValueOfSemiMajorAxisEllipse",
+          "expression": "5.4214 * distanceUnit",
+          "value": 34578426.510400005
+        },
+        {
+          "name": "expectedValueOfRadialSpeedAtDepartureEllipse",
+          "expression": "2.73580e3",
+          "value": 2735.8
+        },
+        {
+          "name": "expectedValueOfRadialSpeedAtArrivalEllipse",
+          "expression": "2.97503e3",
+          "value": 2975.03
+        },
+        {
+          "name": "expectedValueOfTransverseSpeedAtDepartureEllipse",
+          "expression": "6.59430e3",
+          "value": 6594.3
+        },
+        {
+          "name": "expectedValueOfTransverseSpeedAtArrivalEllipse",
+          "expression": "3.29715e3",
+          "value": 3297.15
+        },
+        {
+          "name": "expectedInertialVelocityAtDeparture",
+          "expression": "2735.8, 6594.3, 0.0",
+          "value": [
+            2735.8,
+            6594.3,
+            0
+          ]
+        },
+        {
+          "name": "expectedInertialVelocityAtArrival",
+          "expression": "-1367.9, 4225.03, 0.0",
+          "value": [
+            -1367.9,
+            4225.03,
+            0
+          ]
+        },
+        {
+          "name": "toleranceSemiMajorAxisEllipse",
+          "expression": "1.0e4",
+          "value": 10000
+        },
+        {
+          "name": "toleranceVelocity",
+          "expression": "1.0e-2",
+          "value": 0.01
+        },
+        {
+          "name": "timeOfFlightEllipse",
+          "expression": "5.0 * timeUnit",
+          "value": 4033.8999999999996
+        },
+        {
+          "name": "earthGravitationalParameter",
+          "expression": "398600.4418e9",
+          "value": 398600441800000
+        },
+        {
+          "name": "positionAtDepartureEllipse",
+          "expression": "2.0 * distanceUnit, 0.0, 0.0",
+          "value": [
+            12756272,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "positionAtArrivalEllipse",
+          "expression": "2.0 * distanceUnit, 2.0 * sqrt( 3.0 ) * distanceUnit, 0.0",
+          "value": [
+            12756272,
+            22094511.219168257,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tudat-izzo-retrograde",
+      "source": {
+        "repo": "tudat",
+        "head": "028b308759058713076755858f8ef782d75f4de8",
+        "file": "tests/test_tudat/src/astro/mission_segments/unitTestLambertTargeterIzzo.cpp",
+        "testCase": "testRetrograde",
+        "symbols": {
+          "r1": "positionAtDeparture",
+          "r2": "positionAtArrival",
+          "tof": "timeOfFlight",
+          "mu": "solarGravitationalParameter",
+          "v1": "expectedInitialVelocity",
+          "v2": "expectedFinalVelocity",
+          "toleranceVelocity": "tolerance"
+        }
+      },
+      "retrograde": true,
+      "note": "RETROGRADE heliocentric Earth-Mars transfer, 300 days. This is the highest-authority row in the tier: Tudat quotes departure and arrival velocities to 15 significant figures against ESA/ACT's Keplerian_Toolbox and gates itself at 1e-9. It is also the ONLY case that exercises the solver's retrograde branch.",
+      "values": {
+        "r1": [
+          -131798187443.90068,
+          -72114797019.4148,
+          2343782.3918863535
+        ],
+        "r2": [
+          202564770723.92966,
+          -42405023055.01754,
+          -5861543784.413235
+        ],
+        "tof": 25920000,
+        "mu": 132712428000000000000,
+        "v1": [
+          -14157.8507230353,
+          28751.266655828,
+          1395.46037631136
+        ],
+        "v2": [
+          -6609.91626743654,
+          -22363.5220239692,
+          -716.519714631494
+        ],
+        "toleranceVelocity": 1e-9
+      },
+      "trace": [
+        {
+          "name": "tolerance",
+          "expression": "1.0e-9",
+          "value": 1e-9
+        },
+        {
+          "name": "positionAtDeparture",
+          "expression": "-131798187443.90068, -72114797019.4148, 2343782.3918863535",
+          "value": [
+            -131798187443.90068,
+            -72114797019.4148,
+            2343782.3918863535
+          ]
+        },
+        {
+          "name": "positionAtArrival",
+          "expression": "202564770723.92966, -42405023055.01754, -5861543784.413235",
+          "value": [
+            202564770723.92966,
+            -42405023055.01754,
+            -5861543784.413235
+          ]
+        },
+        {
+          "name": "timeOfFlight",
+          "expression": "convertJulianDaysToSeconds( 300.0 )",
+          "value": 25920000
+        },
+        {
+          "name": "solarGravitationalParameter",
+          "expression": "1.32712428e20",
+          "value": 132712428000000000000
+        },
+        {
+          "name": "expectedInitialVelocity",
+          "expression": "-14157.8507230353, 28751.266655828, 1395.46037631136",
+          "value": [
+            -14157.8507230353,
+            28751.266655828,
+            1395.46037631136
+          ]
+        },
+        {
+          "name": "expectedFinalVelocity",
+          "expression": "-6609.91626743654, -22363.5220239692, -716.519714631494",
+          "value": [
+            -6609.91626743654,
+            -22363.5220239692,
+            -716.519714631494
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tudat-izzo-near-pi",
+      "source": {
+        "repo": "tudat",
+        "head": "028b308759058713076755858f8ef782d75f4de8",
+        "file": "tests/test_tudat/src/astro/mission_segments/unitTestLambertTargeterIzzo.cpp",
+        "testCase": "testNearPi",
+        "symbols": {
+          "r1": "keplerianStateAtDeparture",
+          "r2": "keplerianStateAtArrival",
+          "tof": "timeOfFlight",
+          "mu": "solarGravitationalParameter",
+          "v1": "expectedInitialVelocity",
+          "v2": "expectedFinalVelocity",
+          "toleranceVelocity": "tolerance"
+        }
+      },
+      "retrograde": false,
+      "note": "NEAR-PI transfer (179.999 degrees), the classic Lambert singularity: the transfer plane is barely determined and a solver that normalises a near-zero cross product loses the orbit entirely. Positions are stated in Tudat as circular equatorial Keplerian elements and converted below by the closed form for e=0, i=0, raan=0, argp=0 — r = a*(cos(nu), sin(nu), 0) — which is exact, not an approximation.",
+      "values": {
+        "r1": [
+          149597870700,
+          0,
+          0
+        ],
+        "r2": [
+          -224396806015.82242,
+          3916463.096399892,
+          0
+        ],
+        "tof": 25920000,
+        "mu": 132712428000000000000,
+        "v1": [
+          3160.36638344209,
+          32627.4771454454,
+          0
+        ],
+        "v2": [
+          3159.89183582648,
+          -21751.7065841264,
+          0
+        ],
+        "toleranceVelocity": 0.000001
+      },
+      "trace": [
+        {
+          "name": "tolerance",
+          "expression": "1.0e-6",
+          "value": 0.000001
+        },
+        {
+          "name": "timeOfFlight",
+          "expression": "convertJulianDaysToSeconds( 300.0 )",
+          "value": 25920000
+        },
+        {
+          "name": "solarGravitationalParameter",
+          "expression": "1.32712428e20",
+          "value": 132712428000000000000
+        },
+        {
+          "name": "expectedInitialVelocity",
+          "expression": "3160.36638344209, 32627.4771454454, 0.0",
+          "value": [
+            3160.36638344209,
+            32627.4771454454,
+            0
+          ]
+        },
+        {
+          "name": "expectedFinalVelocity",
+          "expression": "3159.89183582648, -21751.7065841264, 0.0",
+          "value": [
+            3159.89183582648,
+            -21751.7065841264,
+            0
+          ]
+        }
+      ]
+    }
+  ]
+}

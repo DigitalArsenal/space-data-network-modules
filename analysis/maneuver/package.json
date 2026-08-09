@@ -3,8 +3,11 @@
   "private": true,
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs",
-    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
+    "test": "node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/vectors.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
+    "vectors:build": "node vectors/tools/build-vectors.mjs",
+    "vectors:check": "node vectors/tools/build-vectors.mjs --check",
+    "vectors:dump-tudat": "node vectors/tools/dump-tudat-vectors.mjs"
   },
   "devDependencies": {
     "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
