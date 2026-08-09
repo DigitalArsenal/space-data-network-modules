@@ -115,7 +115,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Parses a CelesTrak GP CSV payload into OMM + MPE record streams with full provenance metas."
+      "description": "Parses a CelesTrak GP CSV payload into OMM + MPE record streams with full provenance metas. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "parse_satcat",
@@ -196,7 +196,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Parses a CelesTrak SATCAT payload (txt or CSV) into a CAT record stream; duplicate NORAD ids fail the batch."
+      "description": "Parses a CelesTrak SATCAT payload (txt or CSV) into a CAT record stream; duplicate NORAD ids fail the batch. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "parse_spw",
@@ -277,7 +277,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Parses CelesTrak SW-All.csv into an SPW record stream; enforces the 7-day stale-source gate against Last-Modified (else now)."
+      "description": "Parses CelesTrak SW-All.csv into an SPW record stream; enforces the 7-day stale-source gate against Last-Modified (else now). BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     }
   ],
   "buildArtifacts": [

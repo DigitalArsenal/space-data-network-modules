@@ -87,6 +87,63 @@ void append_string_or_null(std::string* out, const ::flatbuffers::String* value)
     }
 }
 
+// ---------------------------------------------------------------------------
+// SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`.
+//
+// `space_data_module_runtime_begin_node_invocation` (module-SDK
+// src/flow/runtime-src/flow_runtime.cpp) fills an invocation by popping the
+// node's queue `while (count < budget && !queue.empty())`: PORT-BLIND, with a
+// drain budget of 64. `maxStreams`, `maxBatch` and `drainPolicy` are purely
+// DECLARATIVE in the compiled runtime — enforced at compose time and in the
+// JS-only reference runtime, never by the baked runtime.wasm. So a guest that
+// reads ordinal 0 of a port and returns DESTROYS every other frame it was
+// handed on that port: they are already dequeued, nothing re-delivers them,
+// and nothing logs the loss.
+//
+// That is measured, not hypothetical. It was a live P1
+// (`cellular-multiprovider-returns-only-first-provider`) that survived four
+// passes precisely because a partial answer is indistinguishable from an
+// honest one: a two-provider request performed exactly ONE outbound fetch and
+// returned the first provider's records, byte-identical to that provider run
+// alone, with no error anywhere.
+//
+// `encode` turns ONE record stream into ONE JSON document, and its `json`
+// output feeds a single-stream consumer (foundation/http-respond's `body`), so
+// there is no N-in/N-out reading available to it: a second stream frame has
+// nowhere to go. It is refused rather than dropped.
+//
+// So a surplus is REFUSED rather than silently dropped — a named node error
+// the flow surfaces, instead of an answer assembled from whichever frame the
+// queue happened to hold first (queue order is not semantic order, so such an
+// answer is arbitrary AND indistinguishable from a correct one). This costs
+// nothing while the contract holds: one frame per port is what every deployed
+// flow delivers today.
+bool find_batched_input_port(char* message, size_t message_len) {
+    const uint32_t count = plugin_get_input_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id) continue;
+        for (uint32_t j = 0; j < i; j++) {
+            const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
+            if (!earlier || !earlier->port_id) continue;
+            if (std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
+            uint32_t on_port = 0;
+            for (uint32_t k = 0; k < count; k++) {
+                const plugin_input_frame_t* f = plugin_get_input_frame(k);
+                if (f && f->port_id && std::strcmp(f->port_id, frame->port_id) == 0) on_port++;
+            }
+            std::snprintf(message, message_len,
+                          "This invocation carries %u frames on single-stream input port \"%s\" "
+                          "(the compiled flow runtime drains a node's whole queue port-blind; "
+                          "maxStreams is declarative only). The surplus frames are refused "
+                          "rather than silently discarded.",
+                          on_port, frame->port_id);
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 extern "C" {
@@ -97,6 +154,12 @@ extern "C" {
 // never in a body envelope. The {"records":[...],"count":N} wrapper was
 // legacy-contract reproduction from C.3d; the legacy handler is dead.
 int encode(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
     const int32_t input_index = plugin_find_input_index("stream", 0);
     const plugin_input_frame_t* frame =
         input_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(input_index)) : nullptr;

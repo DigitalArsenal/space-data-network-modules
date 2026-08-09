@@ -63,7 +63,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Decodes every size-prefixed $OMM frame (identifier + verifier checked per frame) and emits one JSON frame: a bare array with the full OMM record per element, property names schema-exact (IDL capitalization)."
+      "description": "Decodes every size-prefixed $OMM frame (identifier + verifier checked per frame) and emits one JSON frame: a bare array with the full OMM record per element, property names schema-exact (IDL capitalization). BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     }
   ],
   "schemasUsed": [

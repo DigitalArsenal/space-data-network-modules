@@ -118,7 +118,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts the decision into route-specific typed frames: $CAQ requests for the retrieval methods, decision passthroughs for the join and the 404 path."
+      "description": "Converts the decision into route-specific typed frames: $CAQ requests for the retrieval methods, decision passthroughs for the join and the 404 path. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64). data-retrieval wires TWO edges into branch's \"stream\" port (omm.stream + query.rows) and relies on dispatch having routed to exactly one; that exclusivity is real but lives in OTHER modules' code, and this node used to depend on it silently, pairing a decision with whichever stream the queue held first. A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "branch",
@@ -264,7 +264,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Joins decision+stream, forwards the stream on the format-specific port, and emits the decision passthrough plus a deterministic FNV-1a etag."
+      "description": "Joins decision+stream, forwards the stream on the format-specific port, and emits the decision passthrough plus a deterministic FNV-1a etag. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64). data-retrieval wires TWO edges into branch's \"stream\" port (omm.stream + query.rows) and relies on dispatch having routed to exactly one; that exclusivity is real but lives in OTHER modules' code, and this node used to depend on it silently, pairing a decision with whichever stream the queue held first. A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     }
   ],
   "schemasUsed": [

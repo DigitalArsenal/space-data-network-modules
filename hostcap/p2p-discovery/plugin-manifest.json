@@ -97,7 +97,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards {\"peer_id\"?} to the p2p.peers_snapshot hostcall and emits the raw response envelope plus the decision passthrough."
+      "description": "Forwards {\"peer_id\"?} to the p2p.peers_snapshot hostcall and emits the raw response envelope plus the decision passthrough. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "standards_snapshot",
@@ -162,7 +162,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards to the p2p.standards_snapshot hostcall and emits the raw response envelope plus the decision passthrough."
+      "description": "Forwards to the p2p.standards_snapshot hostcall and emits the raw response envelope plus the decision passthrough. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "pnm_history",
@@ -227,7 +227,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards {\"peer_id\",\"limit\"} to the p2p.pnm_history hostcall and emits the raw response envelope plus the decision passthrough. The host returns the peer's stored signed $PNM publications newest first, attributed to the PUBLISHER by Ed25519 signature verification (not by the gossip-delivering peer recorded in the store)."
+      "description": "Forwards {\"peer_id\",\"limit\"} to the p2p.pnm_history hostcall and emits the raw response envelope plus the decision passthrough. The host returns the peer's stored signed $PNM publications newest first, attributed to the PUBLISHER by Ed25519 signature verification (not by the gossip-delivering peer recorded in the store). BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "latest_dataset",
@@ -292,7 +292,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards {\"peer_id\",\"standard\"(,\"deliver\":\"ref\")} to the p2p.latest_dataset hostcall and emits the raw response envelope plus the decision passthrough. The host serves the newest publication batch whose signed PNM verifies under the peer's publication keys AND whose shard content is fully materialized locally — gated by the OPT-IN gateway.pin config (a node's own publications are always servable). Unpinned/unmaterialized answers carry the newest PNM pointer instead of bytes."
+      "description": "Forwards {\"peer_id\",\"standard\"(,\"deliver\":\"ref\")} to the p2p.latest_dataset hostcall and emits the raw response envelope plus the decision passthrough. The host serves the newest publication batch whose signed PNM verifies under the peer's publication keys AND whose shard content is fully materialized locally — gated by the OPT-IN gateway.pin config (a node's own publications are always servable). Unpinned/unmaterialized answers carry the newest PNM pointer instead of bytes. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     }
   ],
   "schemasUsed": [

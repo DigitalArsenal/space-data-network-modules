@@ -141,6 +141,11 @@ async function invokeEncode(t, streamBytes, surface = "direct") {
           rootTypeName: "OMM",
           wireFormat: "aligned-binary",
           requiredAlignment: 8,
+          // REQUIRED: the SDK invoke codec rejects an aligned typeRef without a
+          // byteLength and throws before the wasm is entered — every
+          // behavioural test in this suite was dead until this line existed
+          // (graph task modules-guest-nodes-drop-batched-frames).
+          byteLength: streamBytes.byteLength,
         },
         payload: streamBytes,
       },
@@ -266,8 +271,20 @@ test("emitted JSON keys cross-check exactly against schema/OMM/main.fbs", async 
   }
 });
 
-test("encode maps an empty stream to zero records", async (t) => {
-  const response = await invokeEncode(t, new Uint8Array(0), "command");
+test("encode maps a record-free stream to zero records", async (t) => {
+  // A single zero-length size prefix is the wire shape of "no records" — the
+  // shape data-source/retrieval emits when a query matches nothing
+  // (`envelope_first_segment` -> zero rows -> empty stream).
+  //
+  // This used to pass `new Uint8Array(0)`, which the SDK invoke codec cannot
+  // carry at all: an aligned typeRef's byteLength is bounded at [1, UINT32_MAX]
+  // (src/invoke/codec.js normalizeFrameTypeRef), so a truly 0-byte aligned
+  // frame is inexpressible through the harness — a HARNESS limit, not a module
+  // one; the linked flow runtime hands zero-length frames over directly with no
+  // codec in the path. The 4-byte form tests the same guest branch through a
+  // frame the harness can actually deliver.
+  const stream = new Uint8Array(4); // one zero-length prefix, no records
+  const response = await invokeEncode(t, stream, "command");
   const payload = decodeJsonOutput(response);
   assert.deepEqual(payload, []);
 });

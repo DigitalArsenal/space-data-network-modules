@@ -62,7 +62,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Parses the $HTQ request (path suffix routing, query-string parameters, If-None-Match, data_query SQL body passthrough) and emits exactly one routing-decision JSON frame."
+      "description": "Parses the $HTQ request (path suffix routing, query-string parameters, If-None-Match, data_query SQL body passthrough) and emits exactly one routing-decision JSON frame. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "discover",
@@ -111,7 +111,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Parses the $HTQ request for the network-discovery surface: /peers -> peers_list, /peers/{peerId} -> peer_get, /peers/{peerId}/pnm -> pnm_history (peerId + limit; ?limit=N clamped in-wasm to [1,100], default 1 = newest publication), /standards -> standards, else (or non-GET/HEAD) not_found. G.4 adds the provider-scoped dataset route: .../peers/<peerId>/<standard>/latest -> latest_dataset with \"peerId\" + \"standard\" (the SDS standard segment, e.g. \"omm\") in the decision."
+      "description": "Parses the $HTQ request for the network-discovery surface: /peers -> peers_list, /peers/{peerId} -> peer_get, /peers/{peerId}/pnm -> pnm_history (peerId + limit; ?limit=N clamped in-wasm to [1,100], default 1 = newest publication), /standards -> standards, else (or non-GET/HEAD) not_found. G.4 adds the provider-scoped dataset route: .../peers/<peerId>/<standard>/latest -> latest_dataset with \"peerId\" + \"standard\" (the SDS standard segment, e.g. \"omm\") in the decision. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     },
     {
       "methodId": "route_public_query",
@@ -158,7 +158,7 @@
           "description": "Exactly one routing decision per request (gateway loop G.5)."
         }
       ],
-      "description": "Parse a public /api/v1/query request (gateway loop G.5): POST = sandboxed raw SELECT (body JSON object or raw SQL text; ?format wins over the body format field), GET/HEAD = queryable-surface listing, others = not_found. Pure parsing \u2014 sort/limit/profile compose in hostcap/flatsql-query sandbox_query, and ALL enforcement is in the engine sandbox.",
+      "description": "Parse a public /api/v1/query request (gateway loop G.5): POST = sandboxed raw SELECT (body JSON object or raw SQL text; ?format wins over the body format field), GET/HEAD = queryable-surface listing, others = not_found. Pure parsing \u2014 sort/limit/profile compose in hostcap/flatsql-query sandbox_query, and ALL enforcement is in the engine sandbox. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -207,7 +207,7 @@
           "description": "Exactly one routing decision per request (M1 node-status flow)."
         }
       ],
-      "description": "Parse a GET /api/v1/node/status request (M1 node-status flow): GET/HEAD -> route=status (hostcap/node-status forwards to the node_status_read.status hostcall), anything else -> route=error status=405. No If-None-Match/etag handling \u2014 the status snapshot changes on every call (uptime, bandwidth counters), so a conditional-GET contract would be pointless.",
+      "description": "Parse a GET /api/v1/node/status request (M1 node-status flow): GET/HEAD -> route=status (hostcap/node-status forwards to the node_status_read.status hostcall), anything else -> route=error status=405. No If-None-Match/etag handling \u2014 the status snapshot changes on every call (uptime, bandwidth counters), so a conditional-GET contract would be pointless. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -256,7 +256,7 @@
           "description": "Exactly one routing decision per request (M2 node-activity flow)."
         }
       ],
-      "description": "Parse a GET /api/v1/node/activity request (M2 node-activity flow): GET/HEAD -> route=activity, format=json, limit=<?limit query param clamped in-wasm to [1, 256], default 50> (hostcap/node-activity forwards the clamped limit to the node_activity_read.activity hostcall), anything else -> route=error status=405. No If-None-Match/etag handling \u2014 the activity log changes on every call, so a conditional-GET contract would be pointless.",
+      "description": "Parse a GET /api/v1/node/activity request (M2 node-activity flow): GET/HEAD -> route=activity, format=json, limit=<?limit query param clamped in-wasm to [1, 256], default 50> (hostcap/node-activity forwards the clamped limit to the node_activity_read.activity hostcall), anything else -> route=error status=405. No If-None-Match/etag handling \u2014 the activity log changes on every call, so a conditional-GET contract would be pointless. BATCHING: the \"request\" port is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node's whole queue port-blind up to the drain budget (64) - so a node handed two request frames used to route the first and destroy the second with nothing logged. It now refuses the invocation with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }

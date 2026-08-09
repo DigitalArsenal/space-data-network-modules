@@ -43,7 +43,16 @@ function readWasm() {
 }
 
 function jsonInput(portId, value) {
-  return { portId, typeRef: { wireFormat: "aligned-binary" }, payload: encoder.encode(JSON.stringify(value)) };
+  const payload = encoder.encode(JSON.stringify(value));
+  // SDS PIV/TAB aligned typeRefs REQUIRE requiredAlignment and byteLength — see
+  // graph task modules-guest-nodes-drop-batched-frames. Without them the SDK
+  // invoke codec throws before the wasm is entered and every behavioural test
+  // in this suite is dead while looking like a harness fault.
+  return {
+    portId,
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
+  };
 }
 
 function createStub({ result, fail } = {}) {

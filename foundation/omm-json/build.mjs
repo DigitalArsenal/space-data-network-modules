@@ -52,6 +52,21 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
+  // THREAD MODEL — declared explicitly, never inferred.
+  //
+  // This node is single-threaded: it spawns nothing, shares nothing, and holds
+  // only the frames of the invocation it is serving. The artifact this repo has
+  // been shipping already carries `threadModel: single-thread`
+  // (dist/guest-link/metadata.json) — it was simply never DECLARED, so it rode
+  // the SDK's inference. That inference has since moved to EMSCRIPTEN_PTHREADS
+  // for runtimeTargets [browser, wasmedge], at which point the build starts
+  // claiming a pthreads contract the emitted wasm does not have and the SDK's
+  // isomorphic-pthreads artifact guard correctly REFUSES it ("does not import
+  // the wasi thread-spawn host function ... must not ship"). Declaring the truth
+  // builds against reality instead of against whatever the SDK last guessed.
+  // Same fix, same reasoning as hostcap/http-request (7fefaf4), where the long
+  // form of this note lives.
+  threadModel: "single-thread",
 });
 
 // Persist the prefixed guest-link object + metadata for the flow compiler

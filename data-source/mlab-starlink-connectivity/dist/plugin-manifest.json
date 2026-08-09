@@ -22,7 +22,7 @@
     {
       "methodId": "request",
       "displayName": "M-Lab Statistics Fetch Request",
-      "description": "Builds the M-Lab per-ASN statistics fetch request + parse job from a timer tick. ONE whole-file request per cycle (the statistics pipeline publishes a static per-ASN-per-year artifact, not a paged API) with an identifying User-Agent and conditional-request validators from node CONFIG.",
+      "description": "Builds the M-Lab per-ASN statistics fetch request + parse job from a timer tick. ONE whole-file request per cycle (the statistics pipeline publishes a static per-ASN-per-year artifact, not a paged API) with an identifying User-Agent and conditional-request validators from node CONFIG. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "inputPorts": [
         {
           "portId": "tick",
@@ -102,7 +102,7 @@
     {
       "methodId": "parse",
       "displayName": "Parse M-Lab Per-ASN Statistics into $CNP",
-      "description": "Collapses the eight per-date log-bucket rows of the M-Lab per-ASN export into one $CNP aggregate per UTC day (WINDOW_START inclusive, WINDOW_STOP exclusive, AGGREGATION_PERIOD DAY) and emits a size-prefixed $CNP record stream plus the storage.ingest_with_source meta and the raw payload for archiving. Throughput stays in Mbps and RTT in ms — units are never silently converted — and the histogram columns and geometric means are recorded as unencoded in the batch provenance rather than forced into a CNPStatistic that would mean something else.",
+      "description": "Collapses the eight per-date log-bucket rows of the M-Lab per-ASN export into one $CNP aggregate per UTC day (WINDOW_START inclusive, WINDOW_STOP exclusive, AGGREGATION_PERIOD DAY) and emits a size-prefixed $CNP record stream plus the storage.ingest_with_source meta and the raw payload for archiving. Throughput stays in Mbps and RTT in ms — units are never silently converted — and the histogram columns and geometric means are recorded as unencoded in the batch provenance rather than forced into a CNPStatistic that would mean something else. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "inputPorts": [
         {
           "portId": "job",

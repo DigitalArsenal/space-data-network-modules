@@ -110,6 +110,71 @@ const plugin_input_frame_t* find_input(const char* port_id) {
     return index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// SURPLUS-FRAME REFUSAL — the class defect this guards.
+//
+// `space_data_module_runtime_begin_node_invocation` (SDK
+// src/flow/runtime-src/flow_runtime.cpp) fills an invocation by popping the
+// node's queue `while (count < budget && !queue.empty())`. It is PORT-BLIND
+// and the budget is 64, and `maxStreams` / `maxBatch` / `drainPolicy` are
+// purely DECLARATIVE in the compiled runtime — enforced at compose time and in
+// the JS-only reference runtime, never by the baked runtime.wasm. So a guest
+// that reads ordinal 0 of a port and returns DESTROYS every other frame it was
+// handed on that port: they are already dequeued, nothing re-delivers them and
+// nothing logs the loss. That single line was a live P1
+// (`cellular-multiprovider-returns-only-first-provider`: a two-provider
+// request performed exactly ONE outbound fetch and returned the first
+// provider's sites, byte-identical to that provider alone, with no error
+// anywhere).
+//
+// Every input port of `respond` is single-stream BY CONTRACT — this node
+// answers one HTTP exchange and emits exactly one $HTR envelope, so there is
+// no honest interpretation of two decisions or two bodies. Where a flow wires
+// TWO edges into one of these ports (cellular-network-aggregate wires
+// merge.decision + route.reply into `decision` and merge.records + route.catalog
+// into `body`; data-retrieval wires gate.not_found + branch.decision into
+// `decision`; latest-dataset and public-query both wire two producers into
+// `body`) the producers are mutually exclusive by construction — every one of
+// those branches returns before pushing the other. That exclusivity is a
+// PROPERTY OF THE UPSTREAM CODE, not something this node can verify, and until
+// now this node depended on it silently: if it ever broke, `respond` would pick
+// whichever frame the queue happened to hold first and answer the HTTP request
+// from it, with the other silently destroyed. Queue order is not semantic
+// order, so that answer would be arbitrary AND indistinguishable from a
+// correct one.
+//
+// So it is refused instead. A refusal is a named node error the flow surfaces;
+// picking one at random is a wrong HTTP response nobody can see. This costs
+// nothing when the contract holds (N == 1 on every port, which is what every
+// deployed flow delivers today) and converts the failure from silent to loud
+// the moment it does not.
+bool find_batched_input_port(char* message, size_t message_len) {
+    const uint32_t count = plugin_get_input_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id) continue;
+        for (uint32_t j = 0; j < i; j++) {
+            const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
+            if (!earlier || !earlier->port_id) continue;
+            if (std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
+            uint32_t on_port = 0;
+            for (uint32_t k = 0; k < count; k++) {
+                const plugin_input_frame_t* f = plugin_get_input_frame(k);
+                if (f && f->port_id && std::strcmp(f->port_id, frame->port_id) == 0) on_port++;
+            }
+            std::snprintf(message, message_len,
+                          "This invocation carries %u frames on single-stream input port \"%s\" "
+                          "(the compiled flow runtime drains a node's whole queue port-blind; "
+                          "maxStreams is declarative only). respond answers exactly one HTTP "
+                          "exchange, so the surplus frames are refused rather than silently "
+                          "discarded.",
+                          on_port, frame->port_id);
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string frame_as_string(const plugin_input_frame_t* frame) {
     if (!frame || !frame->payload || frame->payload_length == 0) return std::string();
     return std::string(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
@@ -344,6 +409,12 @@ extern "C" {
 
 // respond: decision (+ optional body / etag / error) -> one $HTR envelope.
 int respond(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
     const plugin_input_frame_t* decision_frame = find_input("decision");
     if (!decision_frame || !decision_frame->payload || decision_frame->payload_length == 0) {
         plugin_set_error("missing-decision-frame",

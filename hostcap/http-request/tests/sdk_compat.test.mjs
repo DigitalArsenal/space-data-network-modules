@@ -23,11 +23,19 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
+// SDS PIV/TAB aligned typeRefs REQUIRE requiredAlignment and byteLength: the
+// SDK invoke codec (src/invoke/codec.js normalizeFrameTypeRef) rejects a frame
+// without them and the invoke throws before the wasm is ever entered. This
+// suite omitted both, so every behavioural test in it was dead — failing
+// identically against old and new artifacts, which reads as "the harness is
+// broken" rather than "these fixtures are". Repaired under graph task
+// modules-guest-nodes-drop-batched-frames.
 function jsonInput(portId, value) {
+  const payload = encoder.encode(JSON.stringify(value));
   return {
     portId,
-    typeRef: { wireFormat: "aligned-binary" },
-    payload: encoder.encode(JSON.stringify(value)),
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
   };
 }
 
@@ -259,5 +267,25 @@ test("request surfaces host errors (origin denied) with the host message", async
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.errorCode, "http-request-failed");
   assert.match(String(response.errorMessage), /not permitted by this host/);
-  assert.equal(response.outputs.length, 0);
+
+  // A FAILED REQUEST STILL EMITS ITS SLOT. This assertion used to read
+  // `outputs.length === 0`, and it was stale from the moment 7fefaf4 landed —
+  // it was never caught because every behavioural test in this suite was dead
+  // (the fixtures omitted the aligned typeRef fields the SDK invoke codec
+  // requires, so the invoke threw before the wasm was entered; repaired under
+  // graph task modules-guest-nodes-drop-batched-frames).
+  //
+  // The contract this node now holds is ONE RESPONSE FRAME PER REQUEST FRAME,
+  // in input order, INCLUDING failures: a failure that emits nothing shifts
+  // every later body one slot left and silently misattributes it to the wrong
+  // request. Status 0 is outside 2xx, so a consumer filtering on status drops
+  // this exactly as it drops a 500, while the slot stays aligned.
+  assert.equal(response.outputs.length, 1, "a failed request must still occupy its slot");
+  const [frame] = response.outputs;
+  assert.equal(frame.portId, "response");
+  const slot = JSON.parse(decoder.decode(new Uint8Array(frame.payload)));
+  assert.equal(slot.status, 0);
+  assert.equal(slot.bodyB64, "");
+  assert.equal(slot.error, "http-request-failed");
+  assert.match(String(slot.errorMessage), /not permitted by this host/);
 });

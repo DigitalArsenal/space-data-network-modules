@@ -374,6 +374,64 @@ int fail_from_meta(const char* code, const std::string& meta, const char* fallba
     return 502;
 }
 
+// ---------------------------------------------------------------------------
+// SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`.
+//
+// `space_data_module_runtime_begin_node_invocation` (module-SDK
+// src/flow/runtime-src/flow_runtime.cpp) fills an invocation by popping the
+// node's queue `while (count < budget && !queue.empty())`: PORT-BLIND, with a
+// drain budget of 64. `maxStreams`, `maxBatch` and `drainPolicy` are purely
+// DECLARATIVE in the compiled runtime — enforced at compose time and in the
+// JS-only reference runtime, never by the baked runtime.wasm. So a guest that
+// reads ordinal 0 of a port and returns DESTROYS every other frame it was
+// handed on that port: they are already dequeued, nothing re-delivers them,
+// and nothing logs the loss.
+//
+// That is measured, not hypothetical. It was a live P1
+// (`cellular-multiprovider-returns-only-first-provider`) that survived four
+// passes precisely because a partial answer is indistinguishable from an
+// honest one: a two-provider request performed exactly ONE outbound fetch and
+// returned the first provider's records, byte-identical to that provider run
+// alone, with no error anywhere.
+//
+// Both methods answer ONE query. Note what was here before: `query` read
+// `plugin_get_input_frame(0)` with NO port filter at all, and `sandbox_query`
+// fell back to frame 0 when it could not find its `decision` port - and frame 0
+// is NOT promised to be on any particular port, so both could execute a frame
+// that belonged to a different port entirely. Port-blind reads are gone.
+//
+// So a surplus is REFUSED rather than silently dropped — a named node error
+// the flow surfaces, instead of an answer assembled from whichever frame the
+// queue happened to hold first (queue order is not semantic order, so such an
+// answer is arbitrary AND indistinguishable from a correct one). This costs
+// nothing while the contract holds: one frame per port is what every deployed
+// flow delivers today.
+bool find_batched_input_port(char* message, size_t message_len) {
+    const uint32_t count = plugin_get_input_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id) continue;
+        for (uint32_t j = 0; j < i; j++) {
+            const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
+            if (!earlier || !earlier->port_id) continue;
+            if (std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
+            uint32_t on_port = 0;
+            for (uint32_t k = 0; k < count; k++) {
+                const plugin_input_frame_t* f = plugin_get_input_frame(k);
+                if (f && f->port_id && std::strcmp(f->port_id, frame->port_id) == 0) on_port++;
+            }
+            std::snprintf(message, message_len,
+                          "This invocation carries %u frames on single-stream input port \"%s\" "
+                          "(the compiled flow runtime drains a node's whole queue port-blind; "
+                          "maxStreams is declarative only). The surplus frames are refused "
+                          "rather than silently discarded.",
+                          on_port, frame->port_id);
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 extern "C" {
@@ -381,9 +439,24 @@ extern "C" {
 // query: {"sql","params"} -> storage.flatsql_query_stream -> "stream"
 // verbatim aligned size-prefixed FlatBuffer bytes.
 int query(void) {
-    const plugin_input_frame_t* frame = plugin_get_input_frame(0);
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
+    // PORT-FILTERED, not frame 0. This read used to be
+    // `plugin_get_input_frame(0)` with no port filter at all, and frame 0 is
+    // NOT promised to be on any particular port — the runtime hands a node
+    // whatever is queued on it, in queue order. Executing SQL taken from a
+    // frame that belonged to a different port is the sharpest edge of the
+    // whole class (graph task modules-guest-nodes-drop-batched-frames).
+    const int32_t query_index = plugin_find_input_index("query", 0);
+    const plugin_input_frame_t* frame =
+        query_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(query_index)) : nullptr;
     if (!frame || !frame->payload || frame->payload_length == 0) {
-        plugin_set_error("missing-query-frame", "query requires a query JSON frame.");
+        plugin_set_error("missing-query-frame",
+                         "query requires a query JSON frame on port \"query\".");
         return 400;
     }
     const std::string request(reinterpret_cast<const char*>(frame->payload),
@@ -420,10 +493,22 @@ int query(void) {
 // sandbox_query: routing decision in -> response decision (+ body / etag /
 // stream) out. See the file header for the contract.
 int sandbox_query(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
+    // NO FRAME-0 FALLBACK. This used to fall back to `plugin_get_input_frame(0)`
+    // when the `decision` port could not be found, and frame 0 is NOT promised
+    // to be on any particular port — the fallback could parse a routing
+    // decision out of a frame that belonged to some other port and answer a
+    // query nobody asked for. An absent `decision` port is an error, not an
+    // invitation to guess (graph task modules-guest-nodes-drop-batched-frames).
     const int32_t decision_index = plugin_find_input_index("decision", 0);
     const plugin_input_frame_t* frame =
         decision_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(decision_index))
-                            : plugin_get_input_frame(0);
+                            : nullptr;
     if (!frame || !frame->payload || frame->payload_length == 0) {
         plugin_set_error("missing-decision-frame",
                          "sandbox_query requires a routing-decision JSON frame on port \"decision\".");

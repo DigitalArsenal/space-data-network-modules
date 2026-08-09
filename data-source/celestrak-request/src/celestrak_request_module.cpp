@@ -239,12 +239,75 @@ int emit_single(const char* request_port, const char* job_port, const char* conf
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// SURPLUS-FRAME REFUSAL — graph task `modules-guest-nodes-drop-batched-frames`.
+//
+// `space_data_module_runtime_begin_node_invocation` (module-SDK
+// src/flow/runtime-src/flow_runtime.cpp) fills an invocation by popping the
+// node's queue `while (count < budget && !queue.empty())`: PORT-BLIND, with a
+// drain budget of 64. `maxStreams`, `maxBatch` and `drainPolicy` are purely
+// DECLARATIVE in the compiled runtime — enforced at compose time and in the
+// JS-only reference runtime, never by the baked runtime.wasm. So a guest that
+// reads ordinal 0 of a port and returns DESTROYS every other frame it was
+// handed on that port: they are already dequeued, nothing re-delivers them,
+// and nothing logs the loss.
+//
+// That is measured, not hypothetical. It was a live P1
+// (`cellular-multiprovider-returns-only-first-provider`) that survived four
+// passes precisely because a partial answer is indistinguishable from an
+// honest one: a two-provider request performed exactly ONE outbound fetch and
+// returned the first provider's records, byte-identical to that provider run
+// alone, with no error anywhere.
+//
+// The tick methods turn ONE timer tick into one request/job pair, and
+// `publish_request` pairs ONE ingest result with ONE meta. A second tick in an
+// invocation would emit one fetch for two ticks; a second result would publish
+// one PNM for two ingests, attributing the wrong meta to the wrong result.
+//
+// So a surplus is REFUSED rather than silently dropped — a named node error
+// the flow surfaces, instead of an answer assembled from whichever frame the
+// queue happened to hold first (queue order is not semantic order, so such an
+// answer is arbitrary AND indistinguishable from a correct one). This costs
+// nothing while the contract holds: one frame per port is what every deployed
+// flow delivers today.
+bool find_batched_input_port(char* message, size_t message_len) {
+    const uint32_t count = plugin_get_input_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame || !frame->port_id) continue;
+        for (uint32_t j = 0; j < i; j++) {
+            const plugin_input_frame_t* earlier = plugin_get_input_frame(j);
+            if (!earlier || !earlier->port_id) continue;
+            if (std::strcmp(earlier->port_id, frame->port_id) != 0) continue;
+            uint32_t on_port = 0;
+            for (uint32_t k = 0; k < count; k++) {
+                const plugin_input_frame_t* f = plugin_get_input_frame(k);
+                if (f && f->port_id && std::strcmp(f->port_id, frame->port_id) == 0) on_port++;
+            }
+            std::snprintf(message, message_len,
+                          "This invocation carries %u frames on single-stream input port \"%s\" "
+                          "(the compiled flow runtime drains a node's whole queue port-blind; "
+                          "maxStreams is declarative only). The surplus frames are refused "
+                          "rather than silently discarded.",
+                          on_port, frame->port_id);
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 extern "C" {
 
 // gp: timer tick -> GP catalog fetch request + job.
 int gp(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
     return emit_single("request", "job", "celestrak_gp_url", kDefaultGPURL, "celestrak-gp",
                        "catalog.csv");
 }
@@ -252,6 +315,12 @@ int gp(void) {
 // satcat: timer tick -> BOTH the legacy fixed-width and CSV snapshot fetches
 // (the runner ingests both sources per satcat sync).
 int satcat(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
     const std::string config = load_config();
     const long timeout = config_timeout_ms(config);
     const std::string txt_url = config_url(config, "celestrak_satcat_url", kDefaultSatcatURL);
@@ -270,6 +339,12 @@ int satcat(void) {
 
 // spw: timer tick -> space weather fetch request + job.
 int spw(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
     return emit_single("request", "job", "celestrak_space_weather_url", kDefaultSpaceWeatherURL,
                        "celestrak-space-weather", "SW-All.csv");
 }
@@ -288,6 +363,12 @@ int spw(void) {
 // record — and the handler decodes with DisallowUnknownFields, so no other
 // key may appear.
 int publish_request(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
     const plugin_input_frame_t* result_frame = frame_for("result");
     if (!result_frame || !result_frame->payload || result_frame->payload_length == 0) {
         plugin_set_error("missing-result-frame",

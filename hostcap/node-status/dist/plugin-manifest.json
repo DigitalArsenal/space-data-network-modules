@@ -94,7 +94,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Forwards {} to the node_status_read.status hostcall when route==\"status\" and emits the raw result object verbatim on \"body\" plus the decision passthrough on \"decision\"; routes this method does not own pass through with no hostcall; hostcall failure or a missing result object rewrites the decision to an honest route=error status=503."
+      "description": "Forwards {} to the node_status_read.status hostcall when route==\"status\" and emits the raw result object verbatim on \"body\" plus the decision passthrough on \"decision\"; routes this method does not own pass through with no hostcall; hostcall failure or a missing result object rewrites the decision to an honest route=error status=503. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     }
   ],
   "buildArtifacts": [

@@ -37,11 +37,19 @@ function readWasm() {
   return fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH));
 }
 
+// SDS PIV/TAB aligned typeRefs REQUIRE requiredAlignment and byteLength: the
+// SDK invoke codec (src/invoke/codec.js normalizeFrameTypeRef) rejects a frame
+// without them and the invoke throws before the wasm is ever entered. This
+// suite omitted both, so every behavioural test in it was dead — failing
+// identically against old and new artifacts, which reads as "the harness is
+// broken" rather than "these fixtures are". Repaired under graph task
+// modules-guest-nodes-drop-batched-frames.
 function jsonInput(portId, value) {
+  const payload = encoder.encode(JSON.stringify(value));
   return {
     portId,
-    typeRef: { wireFormat: "aligned-binary" },
-    payload: encoder.encode(JSON.stringify(value)),
+    typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: payload.byteLength },
+    payload,
   };
 }
 

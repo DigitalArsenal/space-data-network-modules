@@ -22,7 +22,7 @@
     {
       "methodId": "request",
       "displayName": "SatNOGS Transmitters Fetch Request",
-      "description": "Builds the SatNOGS DB transmitters fetch request + parse job from a timer tick. ONE whole-table request per cycle with the source-policy.json identifying UA and conditional-request validators from node CONFIG.",
+      "description": "Builds the SatNOGS DB transmitters fetch request + parse job from a timer tick. ONE whole-table request per cycle with the source-policy.json identifying UA and conditional-request validators from node CONFIG. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "inputPorts": [
         {
           "portId": "tick",
@@ -102,7 +102,7 @@
     {
       "methodId": "parse",
       "displayName": "Parse SatNOGS Transmitters into $RFB",
-      "description": "Decodes the SatNOGS transmitters JSON table into a size-prefixed $RFB record stream (one record per link direction, Hz -> MHz, POLARIZATION explicitly UNKNOWN, CITATION carrying the CC-BY-SA-4.0 attribution) plus the storage.ingest_with_source meta and the raw payload for archiving.",
+      "description": "Decodes the SatNOGS transmitters JSON table into a size-prefixed $RFB record stream (one record per link direction, Hz -> MHz, POLARIZATION explicitly UNKNOWN, CITATION carrying the CC-BY-SA-4.0 attribution) plus the storage.ingest_with_source meta and the raw payload for archiving. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
       "inputPorts": [
         {
           "portId": "job",
