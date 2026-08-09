@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
   "name": "Cellular Base-Station Aggregation Nodes",
   "version": "0.1.0",
-  "description": "Many cellular/base-station registries -> one deconflicted SDS $TBS site stream. Three pure flow nodes: `route` turns one $HTQ request into N hostcap/http-request GET descriptors for the provider set the CALLER named plus the run contract; `parse` decodes each provider's native payload into normalized reports; `deconflict` merges reports across providers under the caller's chosen tbsMergeMethod and emits a size-prefixed $TBS record stream plus a run summary. Configuration is REQUEST-SCOPED, never node-global, so two callers can ask for different provider sets at once without either changing what the node is. No capabilities: this node performs no I/O \u2014 http is the generic hostcap connector node. Providers requiring a login are skipped with an explicit reason until the node can store a credential.",
+  "description": "Many cellular/base-station registries -> one deconflicted SDS $TBS site stream. Three pure flow nodes: `route` turns one $HTQ request into N hostcap/http-request GET descriptors for the provider set the CALLER named plus the run contract; `parse` decodes each provider native payload into normalized reports; `deconflict` merges reports across providers under the caller chosen tbsMergeMethod and emits a size-prefixed $TBS record stream plus a run summary. Configuration is REQUEST-SCOPED, never node-global, so two callers can ask for different provider sets at once without either changing what the node is. NO CAPABILITIES, deliberately: this plugin performs no I/O — http is the generic hostcap connector node, and the credential lane (keyslot.unwrap + secrets.put/clear) is a SEPARATE wasmedge-only plugin, cell-tower-credentials, so the grants an operator makes for credentials never attach to the code that parses provider bodies and stays browser-testable.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -15,14 +15,14 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "All three methods are single-pass transforms over frames the flow hands them: `route` formats fetch descriptors from the request, `parse` walks each provider body once, and `deconflict` groups reports and emits one record per group. There is no shared mutable state, no worker pool and no fan-out inside the guest \u2014 the fan-out is the flow's, across N http connector nodes. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
+    "detail": "All three methods are single-pass transforms over frames the flow hands them: `route` formats fetch descriptors from the request, `parse` walks each provider body once, and `deconflict` groups reports and emits one record per group. There is no shared mutable state, no worker pool and no fan-out inside the guest — the fan-out is the flow's, across N http connector nodes. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [
     {
       "methodId": "route",
       "displayName": "Route a cellular aggregation request",
-      "description": "Decodes the one $HTQ envelope the host delivers and dispatches on PATH, because the host mounts ONE http trigger per flow and all HTTP semantics live in-wasm. The catalog route answers the provider list; every other path is the aggregation, reading PROVIDERS/METHOD/LIMIT from the body and emitting one hostcap/http-request descriptor per selected provider plus the run contract. An unknown METHOD is REFUSED on the reply port rather than silently defaulted; providers requiring a login are skipped with an explicit reason.",
+      "description": "Decodes the one $HTQ envelope the host delivers and dispatches on METHOD+PATH, because the host mounts ONE http trigger per flow and all HTTP semantics live in-wasm. /providers builds the provider catalog and hands it to the credential mediator to finish (key slot + per-lane configured flags); /credentials/<providerId> validates the provider against the compiled registry, derives the lane id and forwards the sealed envelope to the mediator, refusing an unknown provider or a wrong verb here without any capability; every other path is the aggregation, reading PROVIDERS/METHOD/LIMIT from the body and emitting one hostcap/http-request descriptor per selected provider plus the run contract. An unknown METHOD is REFUSED on the reply port rather than silently defaulted; providers requiring a login are skipped with an explicit reason.",
       "inputPorts": [
         {
           "portId": "request",
@@ -140,6 +140,29 @@
           "maxStreams": 1,
           "required": false,
           "description": "Provider catalog, emitted when the request PATH is the catalog route."
+        },
+        {
+          "portId": "credential",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-credential-task-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON task for the credential mediator.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "One of {op:catalog, catalog:<the catalog this node built>}, {op:put, providerId, lane, envelope:<the browser keyslot envelope, verbatim and unread>} or {op:clear, providerId, lane}. Control routing between two nodes of one flow, not observation data; no SDS record describes a request-scoped instruction and inventing one would be worse than naming it what it is."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Task for the credential mediator, emitted when the request PATH is the catalog route or the credential route."
         }
       ],
       "maxBatch": 1,

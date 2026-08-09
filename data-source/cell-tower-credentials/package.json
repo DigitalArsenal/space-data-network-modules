@@ -1,0 +1,10 @@
+{
+  "name": "@digitalarsenal/cell-tower-credentials",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Credential mediator for the cellular aggregation flow: opens a browser-sealed provider credential and stores it in the node keystore.",
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

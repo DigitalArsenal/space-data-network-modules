@@ -1,0 +1,115 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
+  "name": "Cellular Provider Credential Mediator",
+  "version": "0.1.0",
+  "description": "The one node in the cellular-network-aggregate flow that holds a credential capability. It opens a browser-sealed provider credential with the host's keyslot oracle (keyslot.unwrap, gated by wallet_sign — the host has no separate keyslot capability name) and writes it to the node's machine-bound credential store (secrets.put), per lane, under a write grant that is SEPARATE from the read grant by Seal Council condition. It also finishes the provider catalog the router builds, appending the node's X25519 wrapping key slot and flipping the per-lane credentialConfigured flag it reads back with secrets.status. It exists as its own plugin so that cell-tower-source — which parses provider payloads and is instantiated by the SDK browser harness in its own tests — can stay capabilities:[] and browser-targeted: wallet_sign is browser-incompatible by SDK compliance and secrets.* has no browser host implementation. The blast radius of every credential grant an operator makes for this flow is therefore this one artifact. It carries NO plaintext branch, echoes NO value in any reply or log, invents NO key slot, and refuses any lane not prefixed cell_.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "wallet_sign",
+    "secrets:cell_opencellid",
+    "secrets:cell_opencellid:write",
+    "secrets:cell_wigle",
+    "secrets:cell_wigle:write"
+  ],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One method over one control frame: read the task, make at most a handful of synchronous hostcalls in a fixed order, emit one decision and one body. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "mediate",
+      "displayName": "Mediate a cellular provider credential",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Three operations, dispatched on the task frame the router emits. `catalog` finishes the provider catalog: it appends keySlot {slotId, publicKey, algorithm} from the ungated node.publicKey bridge operation (hex on the wire, published as base64 because that is what the browser's WebCrypto import takes) and flips credentialConfigured/defaultSelected for each lane secrets.status reports as held. `put` opens the browser's keyslot envelope with keyslot.unwrap and hands the result straight to secrets.put; the plaintext is never pushed to an output port, never logged and never returned, and there is no code path that accepts an unsealed credential. `clear` is secrets.clear, and answers identically whether or not a credential was there so a write grant does not become a presence oracle. Every lane is checked for the cell_ prefix before any host call, so a malformed frame cannot reach an operator lane belonging to some other subsystem.",
+      "inputPorts": [
+        {
+          "portId": "task",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-credential-task-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON task emitted by cell-tower-source `route`.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "One of {op:catalog, catalog:<the catalog the router built>}, {op:put, providerId, lane, envelope} or {op:clear, providerId, lane}. Request-scoped routing between two nodes of one flow, not observation data; no SDS record describes an instruction and inventing one would be worse than naming it what it is."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The credential task."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-route-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Routing-decision UTF-8 JSON for foundation/http-respond ({route,format,status}).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "foundation/http-respond's decision frame, whose shape is defined by that node and the host http mount, not by SDS. `route` is the string \"error\" for every non-200 because http-respond reads decision.status only in that branch."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Status and content type for the answer."
+        },
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-credential-body-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON answer: the finished provider catalog, or the credential lane's new state.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Source metadata and lane state (which provider, which lane, stored or cleared) handed to the flow's http-respond node. Never a credential value, and no SDS record type describes node-local configuration state."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The JSON answer body."
+        }
+      ]
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "target": "wasmedge",
+      "path": "dist/isomorphic/module.wasm"
+    }
+  ],
+  "abiVersion": 1
+}

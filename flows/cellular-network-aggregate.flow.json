@@ -2,7 +2,7 @@
   "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
   "version": "0.1.0",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
   "nodes": [
     {
       "nodeId": "route",
@@ -14,7 +14,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "79c480666383467f38e1298bb6ff783a63004a460654b481f2aeeef8ab8432f5"
+        "sha256": "b381cba327fe5f27dc88a17123da1d6f9ce358162a497a34405f3d5fdbb49a39"
       }
     },
     {
@@ -42,7 +42,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "79c480666383467f38e1298bb6ff783a63004a460654b481f2aeeef8ab8432f5"
+        "sha256": "b381cba327fe5f27dc88a17123da1d6f9ce358162a497a34405f3d5fdbb49a39"
       }
     },
     {
@@ -55,7 +55,26 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "79c480666383467f38e1298bb6ff783a63004a460654b481f2aeeef8ab8432f5"
+        "sha256": "b381cba327fe5f27dc88a17123da1d6f9ce358162a497a34405f3d5fdbb49a39"
+      }
+    },
+    {
+      "nodeId": "credentials",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
+      "methodId": "mediate",
+      "kind": "transform",
+      "capabilities": [
+        "wallet_sign",
+        "secrets:cell_opencellid",
+        "secrets:cell_opencellid:write",
+        "secrets:cell_wigle",
+        "secrets:cell_wigle:write"
+      ],
+      "drainPolicy": "single-shot",
+      "artifact": {
+        "path": "../data-source/cell-tower-credentials/dist/isomorphic/module.wasm",
+        "publisher": "../data-source/cell-tower-credentials/publisher.json",
+        "sha256": "ee64e6b50094c34709b0983d266d00defb51749b0c22766f2a4323db32ecb0c6"
       }
     },
     {
@@ -178,6 +197,36 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "route-credential-mediator",
+      "fromNodeId": "route",
+      "fromPortId": "credential",
+      "toNodeId": "credentials",
+      "toPortId": "task",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "credentials-body-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "credentials-decision-respond",
+      "fromNodeId": "credentials",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
     }
   ],
   "triggers": [
@@ -201,7 +250,8 @@
   "requiredPlugins": [
     "com.digitalarsenal.data-source.cell-tower-source",
     "com.digitalarsenal.hostcap.http-request",
-    "com.digitalarsenal.foundation.http-respond"
+    "com.digitalarsenal.foundation.http-respond",
+    "com.digitalarsenal.data-source.cell-tower-credentials"
   ],
   "api": {
     "tag": "cellular",
@@ -222,6 +272,44 @@
         "summary": "The provider catalog this node's module can reach",
         "description": "Provider ids, access posture and whether a credential is currently held. Anonymous for the same reason as aggregate: it is a public read of open-data source metadata and reveals no secret. Credential VALUES are never exposed by any route.",
         "anonymous": true
+      },
+      {
+        "path": "credentials/{providerId}",
+        "method": "PUT",
+        "operationId": "storeCellularProviderCredential",
+        "summary": "Store a browser-sealed provider credential in the node's credential store",
+        "description": "Takes the node's own keyslot envelope ({slotId, ephemeralPublicKey, nonce, ciphertext}), asks the host to open it, and writes the result to the machine-bound credential store under the lane cell_<providerId>. The value is never echoed, logged or readable back through any route. NOT ANONYMOUS, and deliberately so: an anonymous visitor overwriting this node's provider credentials would change what every other viewer's run does. There is no plaintext branch — a caller who cannot seal cannot store.",
+        "anonymous": false,
+        "params": [
+          {
+            "name": "providerId",
+            "in": "path",
+            "required": true,
+            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry — never a lane name the caller supplies.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      {
+        "path": "credentials/{providerId}",
+        "method": "DELETE",
+        "operationId": "clearCellularProviderCredential",
+        "summary": "Clear a stored provider credential",
+        "description": "Removes the cell_<providerId> lane from the node's credential store. Answers the same way whether or not anything was there, so a write grant does not become a presence oracle. NOT ANONYMOUS, for the same reason as the PUT.",
+        "anonymous": false,
+        "params": [
+          {
+            "name": "providerId",
+            "in": "path",
+            "required": true,
+            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry — never a lane name the caller supplies.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     ]
   }

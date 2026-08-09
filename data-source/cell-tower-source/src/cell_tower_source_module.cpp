@@ -60,14 +60,60 @@
  *   - Providers CONSULTED counts every provider asked, including ones that
  *     returned nothing. Absent is not zero.
  *
- * ─── CREDENTIALS (owner directive #2, deliberately NOT implemented here) ────
- * Providers needing a login are SKIPPED with an explicit reason until the node
- * can hand this module a credential: `secrets.put` does not exist yet and the
- * `provider-wrapping` key slot is declared X25519 but filled with a secp256k1
- * scalar, so `keyslot.unwrap` cannot open anything a browser seals. Both are
- * tracked by upstream-sdn-3 and turned on by
- * orbpro-cellular-credential-persistence. Skipping loudly is correct; inventing
- * an envelope or fetching unauthenticated and pretending would not be.
+ * ─── CREDENTIALS (owner directive #2, IMPLEMENTED HERE) ────────────────────
+ * "If it needs a login, it should have somewhere to put a username / password,
+ * and if those are entered, it should send them encrypted to the module, and
+ * then the module should store them securely using our plugin secure storage."
+ *
+ * THE PLAINTEXT NEVER CROSSES THE WIRE AND NEVER TOUCHES THIS MODULE'S OUTPUT.
+ * The browser seals `{"username","secret"}` to the node's `provider-wrapping`
+ * X25519 slot; the sealed envelope arrives on `PUT /credentials/<providerId>`;
+ * this module asks the HOST to open it (`keyslot.unwrap`, a crypto oracle that
+ * returns the plaintext but never the slot key) and immediately hands the
+ * result to the host keystore (`secrets.put`), which encrypts it at rest under
+ * the machine-bound root. Nothing is echoed back: the response says only that
+ * the lane is stored. `DELETE` is `secrets.clear`.
+ *
+ * FOUR THINGS THIS DELIBERATELY DOES NOT DO:
+ *   1. It never accepts an unsealed credential. There is no plaintext branch to
+ *      fall back to, so a browser that cannot seal cannot send.
+ *   2. It never logs, echoes or re-emits a value — not in the reply, not in the
+ *      catalog, not in a skip reason. `credentialConfigured` is presence only.
+ *   3. It never invents a key slot. `keySlot` is emitted ONLY when the host
+ *      answers `node.publicKey`; absent it, the catalog omits the field and the
+ *      GUI must (and does) refuse to collect a credential.
+ *   4. It does not fetch a credentialed provider yet. See below — that is an
+ *      account problem, not a code one, and pretending otherwise would ship a
+ *      guess compiled into a URL.
+ *
+ * CAPABILITY POSTURE. Three grants, each per-lane and each an explicit operator
+ * row in capability_policy.json keyed to this artifact's content hash:
+ *   - `wallet_sign`             gates keyslot.unwrap (the host has no separate
+ *                               `keyslot` capability name; caps/keyslot.go).
+ *   - `secrets:cell_<id>:write` gates secrets.put/secrets.clear. It is a
+ *                               SEPARATE grant from the read lane by Seal
+ *                               Council condition: capability_policy.json is an
+ *                               append-only ledger and rows approved for
+ *                               READING must never gain write on an upgrade.
+ *   - `secrets:cell_<id>`       gates secrets.get/secrets.status — needed so
+ *                               `credentialConfigured` can be TRUE rather than
+ *                               a guess, and so a stored credential can later
+ *                               reach the request that needs it. Holding write
+ *                               confers no read and vice versa.
+ *
+ * WHY THE CREDENTIALED PROVIDERS ARE STILL SKIPPED AT FETCH TIME. Both auth
+ * MECHANISMS were verified live on 2026-08-09 before anything was written here:
+ *   - OpenCelliD `GET https://opencellid.org/cell/getInArea?key=<token>&...`
+ *     answers 200 `{"error":"API Key not known: test","code":2}` — the token is
+ *     a query parameter and the endpoint is real.
+ *   - WiGLE `GET https://api.wigle.net/api/v2/cell/search?...` answers 401
+ *     "Not Authorized (WiGLE.net)" — HTTP Basic, and the endpoint is real.
+ * What could NOT be verified without an account is the ROW-QUERY shape (bbox
+ * parameter order, paging, field names), and this module's own history says
+ * what happens when that is guessed: `fcc-asr` was compiled in against a page
+ * that serves no rows and returned nothing for weeks. So a configured
+ * credential changes the skip REASON — proving the store round-trip end to end
+ * — and the query template lands when an account exists to verify it against.
  */
 
 #include <cstdint>
@@ -552,6 +598,43 @@ std::string url_encode(const std::string& in) {
     return out;
 }
 
+// The browser percent-encodes the provider id into the credential path
+// (`encodeURIComponent`), so it is decoded before it is compared against the
+// compiled registry. A malformed escape yields the literal characters rather
+// than a partial byte: the result is then simply not a known provider id, which
+// is the refusal we want, instead of a decode that fabricates one.
+std::string url_decode(const std::string& in) {
+    auto hex_value = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (in[i] == '%' && i + 2 < in.size()) {
+            const int hi = hex_value(in[i + 1]);
+            const int lo = hex_value(in[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out += static_cast<char>((hi << 4) | lo);
+                i += 2;
+                continue;
+            }
+        }
+        out += in[i];
+    }
+    return out;
+}
+
+std::string upper_ascii(const std::string& in) {
+    std::string out = in;
+    for (char& c : out) {
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    }
+    return out;
+}
+
 // ── report <-> JSON (the intra-flow "reports" frame) ────────────────────────
 std::string report_to_json(const Report& r) {
     std::string j = "{\"provider_id\":\"" + json_escape(r.provider_id) + "\"";
@@ -994,6 +1077,20 @@ std::string input_text(const char* port_id, uint32_t ordinal) {
 }
 
 // ---------------------------------------------------------------------------
+// Credential lanes.
+//
+// The lane id is derived, never supplied by the caller: `cell_<providerId>`
+// where the provider id came out of THIS module's compiled registry. A caller
+// therefore cannot name a lane — it names a provider, and an unknown provider
+// is refused before any host call. That is what stops a request from reaching
+// `secrets:spacetrack` or any other operator lane through this route, whatever
+// the policy rows happen to say.
+// ---------------------------------------------------------------------------
+std::string credential_lane(const std::string& provider_id) {
+    return "cell_" + provider_id;
+}
+
+// ---------------------------------------------------------------------------
 // catalog: the provider list this node can actually reach.
 //
 // The GUI calls this FIRST and renders exactly what it is told, so the catalog
@@ -1017,32 +1114,95 @@ int emit_catalog(void) {
         out += ",\"license\":\"" + json_escape(p.license) + "\"";
         out += ",\"attribution\":\"" + json_escape(p.attribution) + "\"";
         out += ",\"credentialRequired\":" + std::string(p.login_required ? "true" : "false");
-        // No credential store is reachable from this module yet
-        // (upstream-sdn-3), so this is honestly false rather than optimistic.
+        // FALSE HERE BY CONSTRUCTION, and finished downstream. This plugin holds
+        // no credential capability and must not: `secrets.status` has no
+        // browser-host implementation, so calling it from a method the browser
+        // harness instantiates would trap the very tests that keep the adapters
+        // honest (Janus ruling, 2026-08-09). The credential MEDIATOR — a
+        // wasmedge-only sibling plugin, the only node in this flow the operator
+        // grants secrets/keyslot to — flips this per lane and appends `keySlot`.
         out += ",\"credentialConfigured\":false";
-        out += ",\"credentialLane\":\"cell_" + std::string(p.id) + "\"";
+        out += ",\"credentialLane\":\"" + json_escape(credential_lane(p.id)) + "\"";
         out += ",\"authoritative\":" + std::string(p.authoritative ? "true" : "false");
-        // A provider needing a login cannot be selected by default: offering it
-        // pre-ticked would produce a run that silently skips it.
+        // A provider needing a login is not pre-ticked: offering it would
+        // produce a run that silently skips it. The mediator flips this too,
+        // for a provider whose credential IS held.
         out += ",\"defaultSelected\":" + std::string(p.login_required ? "false" : "true");
         out += "}";
     }
     out += "],\"methods\":[\"SINGLE_SOURCE\",\"HIGHEST_SAMPLE_COUNT\",\"MOST_RECENT\""
            ",\"AUTHORITY_PRECEDENCE\",\"CENTROID\"]";
-    // keySlot is deliberately OMITTED until the node can accept a credential.
     out += "}";
-    // ORDER MATTERS AND SO DOES THE PORT NAME. `decision` is NOT a declared
-    // output of `route`; pushing there orphaned the frame, the host never
-    // harvested it, and it survived in the pooled instance's queue to be served
-    // to a LATER, UNRELATED caller (host-01, 2026-08-08: two callers received a
-    // previous request's catalog body). The decision rides `reply`, which IS
-    // declared and IS wired to respond.decision.
-    if (push_json("reply",
-                  "{\"route\":\"cellular-providers\",\"format\":\"json\",\"status\":200}") < 0) {
+    // THE CATALOG IS NOT ANSWERED FROM HERE. It goes to the credential
+    // mediator, which is the node that can ask the host for the wrapping key
+    // slot and the per-lane configured flags, and which owns the reply.
+    // Emitting a `catalog`/`reply` pair here as well would race two bodies into
+    // one responder — and the port name matters for the reason recorded on the
+    // 2026-08-08 defect: `decision` is NOT a declared output of `route`, and a
+    // frame pushed to an undeclared port is not dropped, it survives in the
+    // pooled instance and is served to a later, unrelated caller.
+    return push_json("credential", "{\"op\":\"catalog\",\"catalog\":" + out + "}") < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// The credential route's REFUSALS — the ones decidable without any capability.
+//
+// An unknown provider, a provider that needs no login, and a wrong verb are all
+// answerable from the compiled registry alone, so they are answered here rather
+// than spent as a hop into the mediator. Everything that needs the host (open
+// the envelope, write the lane, clear the lane) goes to the mediator.
+//
+// `route` MUST be the string "error" for any non-200, because
+// foundation/http-respond reads decision.status ONLY in that branch
+// (http_respond_module.cpp:395-401); naming anything else turns a refusal into
+// a silent empty 200.
+// ---------------------------------------------------------------------------
+int emit_route_error(int status, const char* code, const std::string& message) {
+    if (push_json("reply", std::string("{\"route\":\"error\",\"format\":\"json\",\"status\":") +
+                               std::to_string(status) + "}") < 0) {
         return 500;
     }
-    if (push_json("catalog", out) < 0) return 500;
-    return 0;
+    return push_json("catalog", std::string("{\"code\":\"") + code + "\",\"error\":\"" +
+                                    json_escape(message) + "\"}") < 0
+               ? 500
+               : 0;
+}
+
+// PUT|DELETE /credentials/<providerId>. The lane id is DERIVED, never supplied:
+// `cell_<providerId>` where the provider id came out of THIS module's compiled
+// registry. A caller therefore cannot name a lane — it names a provider, and an
+// unknown provider is refused right here, before anything with a capability
+// sees it. That is what stops a request reaching `secrets:spacetrack` or any
+// other operator lane through this route, whatever the policy rows say.
+int dispatch_credential(const std::string& verb, const std::string& provider_id,
+                        const std::string& body) {
+    const ProviderSpec* spec = find_provider(provider_id);
+    if (!spec) {
+        return emit_route_error(404, "unknown-provider",
+                                "no provider \"" + provider_id + "\" in this node's registry");
+    }
+    if (!spec->login_required) {
+        return emit_route_error(400, "credential-not-required",
+                                std::string("provider \"") + spec->id +
+                                    "\" is reachable without a login; it has no credential lane");
+    }
+    const std::string lane = credential_lane(spec->id);
+    if (verb == "DELETE") {
+        return push_json("credential", std::string("{\"op\":\"clear\",\"providerId\":\"") +
+                                           json_escape(spec->id) + "\",\"lane\":\"" +
+                                           json_escape(lane) + "\"}") < 0
+                   ? 500
+                   : 0;
+    }
+    // The body is the browser's keyslot envelope, verbatim. It is NOT parsed
+    // here: this node cannot open it and has no business inspecting it. It is
+    // forwarded whole to the one node that can.
+    return push_json("credential", std::string("{\"op\":\"put\",\"providerId\":\"") +
+                                       json_escape(spec->id) + "\",\"lane\":\"" +
+                                       json_escape(lane) + "\",\"envelope\":" +
+                                       (body.empty() ? std::string("{}") : body) + "}") < 0
+               ? 500
+               : 0;
 }
 
 }  // namespace
@@ -1070,13 +1230,42 @@ int route(void) {
                   ",\"error\":\"request envelope is not a readable $HTQ frame\"}");
         return 0;
     }
+    // $HTQ vtable slots (HttpRequestAbi.fbs): 0 METHOD, 1 PATH, 2 QUERY,
+    // 3 HEADERS, 4 BODY, 5 REMOTE.
+    const std::string method_verb = upper_ascii(htq.str(0));
     const std::string path = htq.str(1);
     const std::string body = htq.bytes(4);
 
-    // ONE trigger, dispatched here. The catalog read and the aggregation are
-    // two routes of one flow, because the host mounts one trigger per flow.
+    // ONE trigger, dispatched here. The catalog read, the credential lane and
+    // the aggregation are three routes of one flow, because the host mounts one
+    // trigger per flow.
     if (path.size() >= 10 && path.compare(path.size() - 10, 10, "/providers") == 0) {
         return emit_catalog();
+    }
+
+    // /credentials/<providerId>. Matched on the SEGMENT, not with a suffix
+    // test: "/credentials" with no provider must be a 404, never a prefix match
+    // that silently addresses whatever the last segment happens to be.
+    {
+        constexpr const char* kCredentialsSegment = "/credentials/";
+        const size_t at = path.rfind(kCredentialsSegment);
+        if (at != std::string::npos) {
+            const std::string provider_id =
+                url_decode(path.substr(at + std::strlen(kCredentialsSegment)));
+            if (provider_id.empty() || provider_id.find('/') != std::string::npos) {
+                return emit_route_error(
+                    404, "no-provider",
+                    "the credential route addresses one provider: /credentials/<providerId>");
+            }
+            if (method_verb == "PUT" || method_verb == "POST" || method_verb == "DELETE") {
+                return dispatch_credential(method_verb == "DELETE" ? "DELETE" : "PUT", provider_id,
+                                           body);
+            }
+            return emit_route_error(
+                405, "method-not-allowed",
+                "the credential route takes PUT (store) and DELETE (clear); a credential is "
+                "never readable back");
+        }
     }
 
     std::vector<std::string> wanted = json_string_array(body, "PROVIDERS");
@@ -1155,11 +1344,18 @@ int route(void) {
             continue;
         }
         if (spec->login_required) {
-            // See the CREDENTIALS note at the top: skip loudly, never fetch
-            // unauthenticated and pretend the answer is complete.
+            // Skip loudly, never fetch unauthenticated and pretend the answer is
+            // complete — but say WHICH of the two situations this is. The two
+            // reasons are the observable difference a stored credential makes,
+            // and the only end-to-end proof of the store round trip that does
+            // not require an account with the provider. See the CREDENTIALS
+            // note at the top for why the query template is not compiled in.
             if (skipped_count++) skipped += ",";
             skipped += std::string("{\"provider_id\":\"") + spec->id +
-                       "\",\"reason\":\"credential required and the node cannot yet store one\"}";
+                       "\",\"credentialLane\":\"" + json_escape(credential_lane(spec->id)) +
+                       "\",\"reason\":\"this provider needs a login; its authenticated row-query "
+                       "endpoint is not verified against a live account yet, so it is not "
+                       "fetched even when a credential is stored\"}";
             continue;
         }
         if (emitted++) { consulted += ","; }
