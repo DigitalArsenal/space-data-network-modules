@@ -110,7 +110,13 @@ test("one bundle-scoped signature binds wasm, PLG, metadata, APP, and exact chil
     signatureEntry.decodedPayload.signedHashAlgorithm,
     BUNDLE_SIGNATURE_HASH_ALGORITHM,
   );
-  const runtime = await createFlowRuntimeHost({ wasmSource: artifactBytes });
+  // SDK 0.8.12: this host is runtime-agnostic, so the Node leg is a fact only
+  // when the caller states it. Without this the artifact's declared
+  // runtimeTargets are never checked here at all.
+  const runtime = await createFlowRuntimeHost({
+    wasmSource: artifactBytes,
+    runtimeTarget: "wasmedge",
+  });
   const declaredChildren = Array.from(
     { length: runtime.dependencyCount },
     (_, index) => runtime.getDependencyDescriptor(index),

@@ -300,6 +300,10 @@ async function pumpRequest(wasmURL, stub, request) {
   const host = await createFlowRuntimeHost({
     wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(wasmURL))),
     extraImports: stub.imports,
+    // SDK 0.8.12: this host is runtime-agnostic, so the Node leg is a fact only
+    // when the caller states it. Without this the artifact's declared
+    // runtimeTargets are never checked here at all.
+    runtimeTarget: "wasmedge",
   });
   stub.memoryRef.memory = host.memory;
 

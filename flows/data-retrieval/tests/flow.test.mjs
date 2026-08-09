@@ -252,6 +252,10 @@ async function createFlow() {
     wasmSource: readWasm(),
     extraImports: stub.imports,
     engineLink: { exports: engine._runtime.exports, dbHandle: db._handle },
+    // SDK 0.8.12: this host is runtime-agnostic, so the Node leg is a fact only
+    // when the caller states it. Without this the artifact's declared
+    // runtimeTargets are never checked here at all.
+    runtimeTarget: "wasmedge",
   });
   stub.memoryRef.memory = host.memory;
   return { host, stub, engine, db };

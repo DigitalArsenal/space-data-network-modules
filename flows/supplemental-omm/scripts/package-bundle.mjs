@@ -133,7 +133,14 @@ async function materializeApp(portableWasmSha256) {
 }
 
 async function loadParentDependencies(rawWasm) {
-  const runtime = await createFlowRuntimeHost({ wasmSource: rawWasm });
+  // SDK 0.8.12: this host is runtime-agnostic, so the Node leg is a fact only
+  // when the caller states it. Without this the artifact's declared
+  // runtimeTargets are never checked here at all. Packaging runs on the server
+  // leg, which is the leg this bundle is composed for.
+  const runtime = await createFlowRuntimeHost({
+    wasmSource: rawWasm,
+    runtimeTarget: "wasmedge",
+  });
   const dependencies = new Map();
   for (let index = 0; index < runtime.dependencyCount; index += 1) {
     const descriptor = runtime.getDependencyDescriptor(index);
