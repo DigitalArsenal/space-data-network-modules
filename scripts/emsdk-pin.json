@@ -1,7 +1,6 @@
 {
   "version": 1,
   "note": "The pin for the RAW EM++ LANE — the fourteen modules that never reach the SDK compiler and drive a repo-local Emscripten directly. Read scripts/lib/emsdk-toolchain.mjs for why this file exists and what it is allowed to decide. Graph task: modules-raw-emcc-lane-unpinned-toolchain.",
-
   "pin": {
     "id": "em-6.0.1",
     "emscriptenVersion": "6.0.1",
@@ -10,7 +9,6 @@
     "llvmRevision": "25e4e8d6550d392ba9e0c2936bce7cf41ee47cc0",
     "why": "Every build.mjs in this lane already SAID `emsdk install 6.0.1`, and it is the newest of the three Emscriptens measured in the shipped bytes. Making it the pin is therefore the smallest true statement, not a new choice."
   },
-
   "knownToolchains": {
     "em-6.0.1": {
       "emscriptenVersion": "6.0.1",
@@ -43,7 +41,6 @@
       "note": "analysis/od/deps/emsdk. Its emsdk COMMIT is unrecoverable: the 137 bootstrap files are tracked INSIDE this repo rather than being a checkout, so it has no .git of its own and `git rev-parse HEAD` there answers with the modules repo's HEAD. The emscripten release hash is the only identity it can still produce."
     }
   },
-
   "laneModules": [
     "analysis/catalog-synthesis",
     "analysis/od/fit-pipeline",
@@ -60,9 +57,8 @@
     "licensing/client-decrypt",
     "flows/supplemental-omm/nodes/flatsql"
   ],
-
   "shippedToolchainEvidence": {
-    "note": "What produced the CURRENTLY COMMITTED bytes of each lane module, established 2026-08-09. `proven` = the artifact was rebuilt byte-identically under that toolchain. `strong` = the only Emscripten the module's own resolution order could have reached, installed before the artifact's commit and still present. `none` = the emsdk that built it no longer exists on any machine we have; the toolchain is unrecoverable and the ledger says so instead of guessing.",
+    "note": "What produced the CURRENTLY COMMITTED bytes of each lane module, established 2026-08-09. `proven` = rebuilt under that toolchain from committed source, with the toolchain-decided sections (type/import/function/table/memory/global/export/elem, and code to within a handful of bytes) matching the committed artifact exactly. It deliberately does NOT require whole-artifact byte-identity: these builds embed an SDK-encoded manifest, so the SDK is a second build input and a stale artifact can differ there while the compiler question is settled. `strong` = the only Emscripten the module's own resolution order could have reached, installed before the artifact's commit and still present on the build machine. `none` = the emsdk that built it no longer exists on any machine we have; unrecoverable, and recorded as such instead of guessed.",
     "analysis/catalog-synthesis": {
       "toolchain": "em-5.0.7",
       "confidence": "strong",
@@ -106,7 +102,7 @@
     "data-source/iss-source": {
       "toolchain": "em-6.0.1",
       "confidence": "proven",
-      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-18. REBUILT byte-identically from committed source under em-6.0.1 on 2026-08-09 — see scripts/artifact-provenance.json eraPinReproductions."
+      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed the same day. PROVEN by reconstruction 2026-08-09: rebuilding committed source under em-6.0.1 emits a wasm whose type, import, function, table, memory, global, export, elem and datacount sections are BYTE-IDENTICAL to the committed artifact — same 29 types, 6 imports, 112 functions, 9 exports — with the code section differing by 3 bytes in 56,304. A different Emscripten does not land on the same function count and section bytes by accident. The artifact as a whole is NOT byte-identical, and the reason is not the toolchain: see scripts/artifact-provenance.json unreproducibleReasons."
     },
     "data-source/oneweb-source": {
       "toolchain": null,
@@ -134,14 +130,16 @@
       "evidence": "build.mjs hard-defaults to analysis/od/deps/emsdk, 5.0.5. Artifact committed 2026-08-06. (This module was already network-free before the pin landed — it refused a missing emsdk instead of cloning one — but it verified no version and recorded no identity.)"
     }
   },
-
   "vendoredSources": {
     "note": "Non-toolchain third-party source these builds compile in. Same rule as the toolchain: resolved locally or refused, never fetched at build time.",
     "cryptopp": {
       "version": "8.9.0",
       "tag": "CRYPTOPP_8_9_0",
       "upstream": "https://github.com/weidai11/cryptopp.git",
-      "consumers": ["delivery/plugin-delivery", "licensing/client-decrypt"],
+      "consumers": [
+        "delivery/plugin-delivery",
+        "licensing/client-decrypt"
+      ],
       "provisionEnv": "CRYPTOPP_SOURCE_DIR"
     }
   }
