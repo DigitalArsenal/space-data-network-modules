@@ -32,7 +32,18 @@
     "foundation/omm-json": "reproduced",
     "data-source/celestrak-parser": "reproduced",
     "flows/supplemental-omm/nodes/timer": "build-failed",
-    "flows/supplemental-omm/nodes/providers/starlink": "build-failed"
+    "flows/supplemental-omm/nodes/providers/starlink": "build-failed",
+    "hostcap/clock": "drifted",
+    "hostcap/random": "drifted",
+    "data-source/retrieval": "drifted",
+    "data-source/oem-source-iss": "drifted",
+    "foundation/time": "drifted",
+    "foundation/frames": "drifted",
+    "foundation/numerics": "drifted",
+    "foundation/math-bspline": "drifted",
+    "foundation/attitude-math": "drifted",
+    "foundation/orbits": "build-failed",
+    "analysis/lambert-izzo": "build-failed"
   },
   "unreproducibleReasons": {
     "foundation/time": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
