@@ -24,7 +24,8 @@
       "id": "tc-0386abf07580d473"
     }
   },
-  "inferenceHazardBaseline": 41,
+  "inferenceHazardBaseline": 0,
+  "undeclaredModuleBaseline": 0,
   "rebuildBaseline": {
     "hostcap/storage-ingest": "reproduced",
     "hostcap/http-request": "reproduced",
@@ -32,6 +33,47 @@
     "data-source/celestrak-parser": "reproduced",
     "flows/supplemental-omm/nodes/timer": "build-failed",
     "flows/supplemental-omm/nodes/providers/starlink": "build-failed"
+  },
+  "unreproducibleReasons": {
+    "foundation/time": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/frames": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/numerics": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/math-bspline": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/attitude-math": "Era pin needed, and the recorded pin is not it. The archaeology in sdkPinAtCommit resolves the super-repo gitlink AS OF THE ARTIFACT'S COMMIT DATE, which on a busy day is not the SDK the builder actually had linked: 2026-06-17 alone carries 20+ SDK commits. MEASURED at both b06faf5c (the recorded pin, SDK 0.8.4 / SDS 1.129.0) and aa5bf2e (the last commit of that day, SDK 0.8.4 / SDS 1.131.0) — both build cleanly from committed source and both DRIFT. The thread model is no longer the obstacle: these built at the current pin too (foundation/orbits excepted, below). Finding the exact pin is a bisect over a 20-commit interval crossed with two independent SDS roots, and belongs to modules-shipped-artifact-resign-wave.",
+    "foundation/orbits": "Era pin needed (same 2026-06-17 interval as the other foundation modules — measured at b06faf5c and aa5bf2e, both DRIFT), PLUS a manifest-contract move that blocks it at the CURRENT pin entirely: 58 x missing-canonical-file-identifier, 57 x missing-aligned-file-identifier, 57 x paired-type-identity-mismatch. It builds fine at its era pin, so this is the manifest schema tightening under it, not a defect in the module. Fixing the manifest would change the embedded $PLG bytes and is a contract change (Themis/Janus), not a reproducibility repair.",
+    "data-source/oem-source-iss": "Era pin needed. Builds cleanly at the current pin now that the lane is declared; bytes drift (recorded pin 68e67a0d, 2026-07-17). Not measured at its era pin.",
+    "analysis/lambert-izzo": "Manifest-contract move blocks it at the CURRENT pin: its allowedTypes carry fileIdentifier \"LMS\"/\"LMO\" (3 bytes) and no rootTypeName, and the SDK now requires exactly four printable ASCII bytes plus a rootTypeName (invalid-file-identifier, missing-canonical-root-type-name). The oldest artifact in the repo (recorded pin 5a054283, 2026-05-05). The thread model is declared and is no longer the obstacle; the manifest is a contract change, not a reproducibility repair.",
+    "flows/supplemental-omm/nodes/*": "NOT a thread-model problem — all seven declare, and their declarations agree with the shipped bytes. They shell out to a NATIVE flatc at <parent-of-repo>/flatbuffers/build/flatc, reached by a hard-coded ../../../../. repos/main-packages/flatbuffers is checked out but has NO build/ directory, so the binary does not exist on this machine at all and the build dies with ENOENT before it reaches a compiler. Of no recorded version even when present. Filed as modules-supplemental-omm-unpinned-native-flatc.",
+    "raw-emcc lane (14 modules)": "NOT a thread-model problem — all fourteen declare a THREAD_MODEL and assert it against the emitted wasm. They drive a vendored Emscripten directly, and the toolchain is NOT COMMITTED: only the emsdk bootstrap repo is tracked (137 files, no upstream/emscripten), so in a clean checkout build.mjs git-clones emsdk and runs `emsdk install 6.0.1` FROM THE NETWORK at build time. \"6.0.1\" pins emscripten but nothing records which emsdk build was fetched, and nothing records it in the artifact. Modules: analysis/{catalog-synthesis,od/fit-pipeline}, data-source/{bond-attestation-source,celestrak-supgp,cpf-source,glonass-source,gps-source,intelsat-source,iss-source,oneweb-source,spacex-starlink-source}, delivery/plugin-delivery, licensing/client-decrypt, flows/supplemental-omm/nodes/flatsql. Filed as modules-raw-emcc-lane-unpinned-toolchain."
+  },
+  "eraPinReproductions": {
+    "hostcap/clock": {
+      "sdkPin": "f65bad5c",
+      "sdkVersion": "0.8.5",
+      "sdsLockedInSdk": "1.136.0+1782872985528",
+      "sha256": "eae812b1666e23793764461f4dfe7dbe6e44a2891e8f54c9707b04c5a70b9fef",
+      "measured": "2026-08-09",
+      "task": "modules-undeclared-threadmodel-artifacts",
+      "note": "Rebuilt from committed source WITH the new explicit threadModel: \"single-thread\" and reproduced the shipped bytes exactly. That is the proof the declaration is the TRUTH of the artifact and not merely a value that compiles: explicit now equals what the era resolver inferred."
+    },
+    "hostcap/random": {
+      "sdkPin": "f65bad5c",
+      "sdkVersion": "0.8.5",
+      "sdsLockedInSdk": "1.136.0+1782872985528",
+      "sha256": "b4bbf69b45ff3551af1981af919c3f37bf2fa844e7891a0448962c76d0a0f5b3",
+      "measured": "2026-08-09",
+      "task": "modules-undeclared-threadmodel-artifacts",
+      "note": "Same experiment, same result, second module at the same era pin."
+    },
+    "data-source/retrieval": {
+      "sdkPin": "2cc72ffc",
+      "sdkVersion": "0.8.5",
+      "sdsLockedInSdk": "1.136.0+1782872985528",
+      "sha256": "56395f977af82f3ab78597dfeda96ec44a7b98bdcc5b59d8a0ca875a58fdbab8",
+      "measured": "2026-08-09",
+      "task": "modules-undeclared-threadmodel-artifacts",
+      "note": "Third module, a DIFFERENT era pin. Its build.mjs has two compileModuleFromSource calls; both declare, and the primary artifact reproduces."
+    }
   },
   "artifacts": {
     "analysis/access/dist/access.wasm": {
@@ -89,12 +131,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "analysis/catalog-synthesis/dist/isomorphic/module.wasm": {
@@ -110,12 +157,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "analysis/conjunction-assessment/dist/browser/module.wasm": {
@@ -201,12 +253,17 @@
         "sdkCommit": "5a0542836af3fd5c77faa7ce7cc503e1f9588d68"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "analysis/launch-ascent/dist/isomorphic/module.wasm": {
@@ -306,12 +363,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "analysis/od/fit-pipeline/dist/od-fit-pipeline.wasm": {
@@ -327,12 +389,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "analysis/reentry/dist/isomorphic/module.wasm": {
@@ -376,11 +443,16 @@
         "sdkCommit": "2a0fdc7d90b2be05f0135e8dfd795fd73d5404c7"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/bond-attestation-source/dist/isomorphic/module.wasm": {
@@ -396,11 +468,16 @@
         "sdkCommit": "2a0fdc7d90b2be05f0135e8dfd795fd73d5404c7"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/celestrak-parser/dist/isomorphic/module.wasm": {
@@ -417,6 +494,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -438,6 +520,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -458,12 +545,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/celestrak-supgp/dist/isomorphic/module.wasm": {
@@ -479,12 +571,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/cell-tower-source/dist/isomorphic/module.wasm": {
@@ -501,6 +598,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -521,12 +623,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/cpf-source/dist/isomorphic/module.wasm": {
@@ -542,12 +649,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/glonass-source/dist/glonass-source.wasm": {
@@ -563,12 +675,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/glonass-source/dist/isomorphic/module.wasm": {
@@ -584,12 +701,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/gps-source/dist/gps-source.wasm": {
@@ -605,12 +727,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/gps-source/dist/isomorphic/module.wasm": {
@@ -626,12 +753,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/intelsat-source/dist/intelsat-source.wasm": {
@@ -647,12 +779,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/intelsat-source/dist/isomorphic/module.wasm": {
@@ -668,12 +805,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/iss-source/dist/isomorphic/module.wasm": {
@@ -689,12 +831,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/iss-source/dist/iss-source.wasm": {
@@ -710,12 +857,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/mlab-starlink-connectivity/dist/isomorphic/module.wasm": {
@@ -732,6 +884,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -752,12 +909,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/oneweb-source/dist/isomorphic/module.wasm": {
@@ -773,12 +935,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/oneweb-source/dist/oneweb-source.wasm": {
@@ -794,12 +961,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/retrieval/dist/isomorphic/module.wasm": {
@@ -815,12 +987,17 @@
         "sdkCommit": "2cc72ffc062fd9b06e43c5997dd44dae0a1c8487"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/satnogs-source/dist/isomorphic/module.wasm": {
@@ -837,6 +1014,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -858,6 +1040,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -878,12 +1065,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "data-source/spacex-starlink-source/dist/spacex-starlink-source.wasm": {
@@ -899,12 +1091,17 @@
         "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "delivery/plugin-delivery/dist/isomorphic/module.wasm": {
@@ -920,7 +1117,12 @@
         "sdkCommit": "d31df307f08285e8794153bbc4d7faad3f48c761"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
       }
@@ -938,7 +1140,12 @@
         "sdkCommit": "d31df307f08285e8794153bbc4d7faad3f48c761"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
       }
@@ -1418,12 +1625,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/od/dist/isomorphic/module.wasm": {
@@ -1440,6 +1652,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "emscripten-pthreads"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1460,12 +1677,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": false,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/providers/glonass/dist/isomorphic/module.wasm": {
@@ -1481,12 +1703,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": false,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/providers/intelsat/dist/isomorphic/module.wasm": {
@@ -1502,12 +1729,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": false,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/providers/iss/dist/isomorphic/module.wasm": {
@@ -1523,12 +1755,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": false,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/providers/starlink/dist/isomorphic/module.wasm": {
@@ -1544,12 +1781,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "emscripten-pthreads"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": false,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/publication/dist/isomorphic/module.wasm": {
@@ -1565,12 +1807,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/status/dist/isomorphic/module.wasm": {
@@ -1586,12 +1833,17 @@
         "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "flows/supplemental-omm/nodes/timer/dist/isomorphic/module.wasm": {
@@ -1608,6 +1860,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1628,12 +1885,17 @@
         "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "foundation/decision-gate/dist/isomorphic/module.wasm": {
@@ -1650,6 +1912,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1671,6 +1938,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1691,12 +1963,17 @@
         "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "foundation/http-respond/dist/isomorphic/module.wasm": {
@@ -1713,6 +1990,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1734,6 +2016,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1754,12 +2041,17 @@
         "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "foundation/numerics/dist/isomorphic/module.wasm": {
@@ -1775,12 +2067,17 @@
         "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "foundation/omm-json/dist/isomorphic/module.wasm": {
@@ -1797,6 +2094,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1817,12 +2119,17 @@
         "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "foundation/time/dist/isomorphic/module.wasm": {
@@ -1838,12 +2145,17 @@
         "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "hostcap/clock/dist/isomorphic/module.wasm": {
@@ -1859,12 +2171,17 @@
         "sdkCommit": "f65bad5c21f1b0206002252c0fcc385bc72f2c92"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "hostcap/file/dist/isomorphic/module.wasm": {
@@ -1881,6 +2198,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1902,6 +2224,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1923,6 +2250,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1944,6 +2276,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1965,6 +2302,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -1986,6 +2328,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -2006,12 +2353,17 @@
         "sdkCommit": "f65bad5c21f1b0206002252c0fcc385bc72f2c92"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
-        "inferenceHazard": true
+        "inferenceHazard": false
       }
     },
     "hostcap/storage-ingest/dist/isomorphic/module.wasm": {
@@ -2028,6 +2380,11 @@
       },
       "declaration": {
         "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [
           "browser",
           "wasmedge"
@@ -2048,7 +2405,12 @@
         "sdkCommit": "24b5a7234f996485c63868aff5cdbd97fad8da1b"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
       }
@@ -2066,7 +2428,12 @@
         "sdkCommit": "24b5a7234f996485c63868aff5cdbd97fad8da1b"
       },
       "declaration": {
-        "declares": false,
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
         "runtimeTargets": [],
         "inferenceHazard": false
       }

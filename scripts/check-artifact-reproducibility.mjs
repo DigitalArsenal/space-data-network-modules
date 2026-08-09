@@ -293,6 +293,13 @@ async function writeLedger({ superRepo, withRebuild }) {
     // reader does not have to re-derive it, and every entry here was measured by
     // running the build, not predicted. Carried forward across regenerations.
     unreproducibleReasons: loadLedger()?.unreproducibleReasons ?? {},
+    // Modules PROVEN reproducible byte-for-byte at a named era SDK pin, from
+    // committed source. This is the strongest statement the repo can make about a
+    // stale artifact: not "it probably came from somewhere", but "these exact
+    // bytes come back when the toolchain is put back". Each entry was produced by
+    // an SDK `git worktree` at that pin + `npm ci` + that SDK's own locked
+    // spacedatastandards.org, never by argument.
+    eraPinReproductions: loadLedger()?.eraPinReproductions ?? {},
     artifacts,
   };
   fs.writeFileSync(LEDGER_PATH, `${JSON.stringify(ledger, null, 2)}\n`);
