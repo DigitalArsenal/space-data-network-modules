@@ -77,13 +77,13 @@
       "dependencyId": "com.digitalarsenal.hostcap.http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "version": "0.1.0",
-      "sha256": "574ad19601b2cd7954d34d60a7551a2b22e69f65f63279d935da1e7943aa6316",
+      "sha256": "e3270e443c57ead86cb07f1fe044c170d03ddbf33e8f2d5122505912ef11bd9c",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
       "methodSymbols": {
-        "request": "sdm_guest_636f6d2e6469676974616c61_request"
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
       }
     },
     {

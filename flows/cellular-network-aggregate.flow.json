@@ -29,7 +29,7 @@
       "artifact": {
         "path": "../hostcap/http-request/dist/isomorphic/module.wasm",
         "publisher": "../hostcap/http-request/publisher.json",
-        "sha256": "574ad19601b2cd7954d34d60a7551a2b22e69f65f63279d935da1e7943aa6316"
+        "sha256": "e3270e443c57ead86cb07f1fe044c170d03ddbf33e8f2d5122505912ef11bd9c"
       }
     },
     {

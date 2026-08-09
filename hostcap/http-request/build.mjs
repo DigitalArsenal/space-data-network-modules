@@ -24,6 +24,27 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
+  // THREAD MODEL — declared explicitly, never inferred.
+  //
+  // The artifact this repo has been SHIPPING since 018bc91 already carries
+  // `threadModel: single-thread` (dist/guest-link/metadata.json), as does every
+  // other node in the cellular flow (foundation/http-respond,
+  // data-source/cell-tower-source). It was never declared here, so it depended
+  // on the SDK's inference — and when that inference moved, this build started
+  // claiming the pthreads contract and the SDK's isomorphic-pthreads artifact
+  // guard REFUSED it ("does not import wasi thread-spawn ... must not ship").
+  // The guard was right: the emitted wasm has no wasi-threads contract and
+  // never did. Declaring the truth makes the build reproducible against the
+  // artifact on host-01 instead of against whatever the SDK last guessed —
+  // verified by rebuilding the UNMODIFIED source and reproducing the shipped
+  // sha 574ad19601b2cd7954d34d60a7551a2b22e69f65f63279d935da1e7943aa6316.
+  //
+  // Justified: this node's single method is one blocking hostcall per input
+  // frame. It spawns nothing, shares nothing, and holds only the frame it is
+  // fetching, so it carries no pthreads contract. Same single-thread
+  // STANDALONE_WASM lane (clang wasi, growable linear memory, NEVER
+  // `emcc -pthread`) the rest of this producer uses.
+  threadModel: "single-thread",
   // The module imports the sync space_data_module_host hostcall bridge; those
   // symbols resolve at instantiation (SDK harness bridge / Go node bridge).
   allowUndefinedImports: true,

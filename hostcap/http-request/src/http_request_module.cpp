@@ -218,13 +218,6 @@ std::string json_escape(const std::string& s) {
     return out;
 }
 
-int fail_from_meta(const char* code, const std::string& meta, const char* fallback) {
-    std::string message;
-    json_string_field(meta, "message", &message);
-    plugin_set_error(code, message.empty() ? fallback : message.c_str());
-    return 502;
-}
-
 // ---------------------------------------------------------------------------
 // Base64 (standard alphabet, padded).
 // ---------------------------------------------------------------------------
@@ -290,25 +283,62 @@ bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
     return true;
 }
 
-}  // namespace
-
-extern "C" {
-
-// request: {"method","url","headers","bodyB64","timeoutMs"} -> http.request
-// -> {"status","headers","bodyB64"} on "response".
-int request(void) {
-    const plugin_input_frame_t* frame = plugin_get_input_frame(0);
-    if (!frame || !frame->payload || frame->payload_length == 0) {
-        plugin_set_error("missing-request-frame", "request requires a request JSON frame.");
-        return 400;
+// Push one "response" frame. Every exit path of perform_one_request goes
+// through here, so the node emits EXACTLY ONE response per request frame.
+int push_response(int status, const std::string& headers_json, const std::string& body_b64,
+                  const std::string& error_code, const std::string& error_message) {
+    char status_buf[16];
+    std::snprintf(status_buf, sizeof(status_buf), "%d", status);
+    std::string response = std::string("{\"status\":") + status_buf +
+                           ",\"headers\":" + (headers_json.empty() ? "{}" : headers_json) +
+                           ",\"bodyB64\":\"" + body_b64 + "\"";
+    if (!error_code.empty()) {
+        response += ",\"error\":\"" + json_escape(error_code) + "\"" +
+                    ",\"errorMessage\":\"" + json_escape(error_message) + "\"";
     }
-    const std::string request_json(reinterpret_cast<const char*>(frame->payload),
-                                   frame->payload_length);
+    response += "}";
+    const int32_t pushed = plugin_push_output_ex(
+        "response", nullptr, nullptr,
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
+        0, 1,
+        reinterpret_cast<const uint8_t*>(response.data()),
+        static_cast<uint32_t>(response.size()));
+    return pushed < 0 ? 500 : 0;
+}
 
+// A request that could not be performed still occupies its slot. Status 0 is
+// outside 2xx, so a consumer that filters on status drops it exactly as it
+// would drop a 500 — but the FRAME EXISTS, which is what keeps request k and
+// response k aligned.
+//
+// This is not defensive padding, it is a correctness requirement ruled by
+// Janus (module-sdk-oracle, 2026-08-09) and paid for once already: this node
+// used to push NOTHING for a failed fetch, so a single dead mirror shifted
+// every later body one slot left and `cell-tower-source::parse` attributed
+// bodies to providers that never served them. That is the one failure this
+// record type cannot tolerate — a mast published under a regulator's name that
+// never asserted it — so parse had to add format corroboration to fail closed
+// against a hole this node was digging.
+int fail_slot(int return_status, const char* code, const std::string& message) {
+    plugin_set_error(code, message.c_str());
+    push_response(0, "{}", "", code, message);
+    return return_status;
+}
+
+// ---------------------------------------------------------------------------
+// One descriptor -> one hostcall -> one pushed "response" frame.
+//
+// Split out of `request` so the entry can run it once per INPUT FRAME. See the
+// comment on `request` for why that is not optional.
+//
+// Returns 0 on success, or the status this node would have returned as a
+// single-frame node (400 malformed, 502 transport). EITHER WAY it pushes
+// exactly one response frame.
+// ---------------------------------------------------------------------------
+int perform_one_request(const std::string& request_json) {
     std::string url;
     if (!json_string_field(request_json, "url", &url) || url.empty()) {
-        plugin_set_error("missing-url", "request requires {\"url\":\"...\"}.");
-        return 400;
+        return fail_slot(400, "missing-url", "request requires {\"url\":\"...\"}.");
     }
     std::string method = "GET";
     {
@@ -326,8 +356,7 @@ int request(void) {
         std::string body_b64;
         if (json_string_field(request_json, "bodyB64", &body_b64) && !body_b64.empty()) {
             if (!base64_decode(body_b64, &body)) {
-                plugin_set_error("invalid-body", "bodyB64 is not valid base64.");
-                return 400;
+                return fail_slot(400, "invalid-body", "bodyB64 is not valid base64.");
             }
             has_body = true;
         }
@@ -359,15 +388,17 @@ int request(void) {
                  : hostcall("http.request", payload);
     const std::string meta = envelope_meta_json(env);
     if (!meta_ok(meta)) {
-        return fail_from_meta("http-request-failed", meta, "http.request hostcall failed.");
+        std::string message;
+        json_string_field(meta, "message", &message);
+        return fail_slot(502, "http-request-failed",
+                         message.empty() ? "http.request hostcall failed." : message);
     }
 
     const std::string result = json_object_slice(meta, "result");
     double status = 0.0;
     if (result.empty() || !json_number_field(result, "status", &status)) {
-        plugin_set_error("http-request-failed",
+        return fail_slot(502, "http-request-failed",
                          "http.request response carried no status field.");
-        return 502;
     }
 
     std::string response_headers = json_object_slice(result, "headers");
@@ -394,18 +425,96 @@ int request(void) {
         }
     }
 
-    char status_buf[16];
-    std::snprintf(status_buf, sizeof(status_buf), "%d", static_cast<int>(status));
-    const std::string response = std::string("{\"status\":") + status_buf +
-                                 ",\"headers\":" + response_headers +
-                                 ",\"bodyB64\":\"" + body_b64 + "\"}";
-    const int32_t pushed = plugin_push_output_ex(
-        "response", nullptr, nullptr,
-        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-        0, 1,
-        reinterpret_cast<const uint8_t*>(response.data()),
-        static_cast<uint32_t>(response.size()));
-    return pushed < 0 ? 500 : 0;
+    return push_response(static_cast<int>(status), response_headers, body_b64, "", "");
+}
+
+}  // namespace
+
+extern "C" {
+
+// request: N x {"method","url","headers","bodyB64","timeoutMs"} -> http.request
+// -> N x {"status","headers","bodyB64"} on "response", one per input frame, in
+// input order.
+//
+// THIS NODE MUST DRAIN ITS WHOLE INPUT BATCH. It used to read
+// plugin_get_input_frame(0) and return, and that single line was a live P1:
+// `cellular-multiprovider-returns-only-first-provider`. The compiled flow
+// runtime does not enforce maxStreams or maxBatch when it fills an invocation —
+// space_data_module_runtime_begin_node_invocation (SDK
+// src/flow/runtime-src/flow_runtime.cpp) pops frames off the node's queue
+// `while (count < budget && !queue.empty())`, with budget 64 from
+// drain_linked. So when an upstream node fans out N descriptors, ALL N arrive
+// in ONE invocation, and a guest that looks only at frame 0 silently DESTROYS
+// the other N-1: they are already dequeued, so nothing re-delivers them and
+// nothing logs their loss.
+//
+// Measured live on host-01 (sdn-server 3bd7f449) from the host's OWN connector
+// ledger (fetch_events, written by caps.SetFetchObserver — not a harness):
+// POST /api/v1/cellular/aggregate PROVIDERS ["fcc-uls-3650","openstreetmap-overpass"]
+// incremented the FCC url's fetch_count by 1 and the Overpass url's by ZERO,
+// and the reverse order incremented Overpass by 1 and FCC by zero. Exactly one
+// outbound fetch per run, always the first descriptor's — so a two-provider
+// request returned precisely the first-named provider's sites and
+// multiProviderSites was 0 on every run.
+//
+// The declarations disagreed with each other AND with the runtime, which is why
+// this hid: plugin-manifest.json said maxBatch 1 / single-shot, the flow said
+// drain-until-yield, and the runtime enforced neither. The manifest is
+// corrected to match what this code now does; the code no longer depends on
+// either declaration being honoured.
+//
+// PARTIAL FAILURE IS NOT BATCH FAILURE. One dead mirror must not delete the
+// providers queued behind it, so a frame that fails emits its slot-preserving
+// response (status 0 + error) and the loop continues. A non-zero status is
+// returned only when NOTHING succeeded, which preserves this node's
+// single-frame behaviour exactly when N == 1.
+//
+// Fetches are SEQUENTIAL: hostcall("http.request") is synchronous, so a batch
+// costs the sum of its members. That is a real cost — a 2-provider cellular
+// request is 4 descriptors (FCC + 3 Overpass endpoints, measured 0.2 s / 3.1 s
+// / 4.4 s / 5.4 s from host-01) — and it is still the right shape here,
+// because the alternative is losing providers. Bounding a batch is the
+// upstream node's job: it decides how many descriptors to fan out.
+int request(void) {
+    const uint32_t input_count = plugin_get_input_count();
+
+    uint32_t considered = 0;
+    uint32_t succeeded = 0;
+    int first_failure = 0;
+
+    for (uint32_t i = 0; i < input_count; i++) {
+        const plugin_input_frame_t* frame = plugin_get_input_frame(i);
+        if (!frame) continue;
+        // Defensive: this method declares exactly one input port, but the
+        // runtime hands a node whatever is queued on it, so never assume the
+        // port of a frame that was handed over.
+        if (frame->port_id && std::strcmp(frame->port_id, "request") != 0) continue;
+        if (!frame->payload || frame->payload_length == 0) continue;
+
+        considered++;
+        const std::string request_json(reinterpret_cast<const char*>(frame->payload),
+                                       frame->payload_length);
+        const int status = perform_one_request(request_json);
+        if (status == 0) {
+            succeeded++;
+        } else if (first_failure == 0) {
+            first_failure = status;
+        }
+    }
+
+    if (considered == 0) {
+        plugin_set_error("missing-request-frame", "request requires a request JSON frame.");
+        return 400;
+    }
+    // At least one response was pushed: the batch is a partial success and the
+    // downstream node gets what was actually fetched. plugin_set_error may hold
+    // the last failure's text; clear it so a partial success is not reported as
+    // a node error.
+    if (succeeded > 0) {
+        plugin_set_error("", "");
+        return 0;
+    }
+    return first_failure != 0 ? first_failure : 502;
 }
 
 }  // extern "C"

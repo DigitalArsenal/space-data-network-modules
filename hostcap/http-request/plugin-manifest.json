@@ -39,9 +39,9 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 100000,
           "required": true,
-          "description": "The HTTP request description."
+          "description": "The HTTP request descriptions. THIS IS A FAN-IN PORT: the compiled flow runtime does not enforce maxStreams or maxBatch when it fills an invocation (space_data_module_runtime_begin_node_invocation pops the node's whole queue up to the drain budget), so an upstream node that fans out N descriptors delivers all N here in ONE invocation. The method drains every frame and emits one response per request, in input order. It was declared maxStreams 1 while the entry read only frame 0, and the N-1 frames the runtime had already dequeued were destroyed silently — live P1 cellular-multiprovider-returns-only-first-provider, where a two-provider request performed exactly one outbound fetch."
         }
       ],
       "outputPorts": [
@@ -59,14 +59,14 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 100000,
           "required": true,
-          "description": "The HTTP response as a JSON frame."
+          "description": "The HTTP responses: EXACTLY ONE frame per request frame consumed, pushed in input order, so response k answers request k. A request that could not be performed still emits its frame, carrying status 0 plus \"error\"/\"errorMessage\" and an empty bodyB64 — status 0 is outside 2xx so a consumer that filters on status drops it exactly as it would drop a 500, while the slot stays aligned. Emitting nothing for a failure is what previously shifted every later body one slot left and let a consumer attribute a payload to a provider that never served it."
         }
       ],
       "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "Performs one outbound HTTP request through the host http.request hostcall and emits the normalized response."
+      "drainPolicy": "drain-until-yield",
+      "description": "Performs one outbound HTTP request per input frame through the host http.request hostcall and emits the normalized responses in input order. Fetches within an invocation are SEQUENTIAL — the hostcall is synchronous — so a batch costs the sum of its members' latencies plus whatever the host's own per-destination egress pacing adds. A frame that fails is skipped and the batch continues; a non-zero status is returned only when no request in the batch succeeded."
     }
   ],
   "buildArtifacts": [
