@@ -30,6 +30,14 @@
       "endpoints": [{ "kind": "bulk", "url": "https://www.fcc.gov/wireless/data/public-access-files-database-downloads", "format": "csv-zip", "refresh": "daily/weekly" }]
     },
     {
+      "id": "fcc-uls-3650", "name": "FCC ULS 3650 MHz base-station locations", "authority": "United States Federal Communications Commission", "homepage": "https://opendata.fcc.gov/", "scope": "US licensed 3650 MHz fixed base-station locations with coordinates and licensee; a licensed site, NOT a cellular cell — no MCC/MNC/cell id is published, so records carry site identity and position only", "coverage": ["US"], "adapter": "socrata-soql-json", "verifiedAt": "2026-08-08",
+      "access": { "mode": "anonymous-api", "loginRequired": false, "termsUrl": "https://opendata.fcc.gov/", "notes": "Row API, no key required for modest volumes. Latitude/longitude are TEXT columns, so a numeric bbox filter must cast (`u_latitude::number`); comparing them as text silently matches nothing." },
+      "license": { "name": "US federal public data / FCC terms", "url": "https://www.fcc.gov/about/website-policies-notices", "attribution": "Federal Communications Commission" },
+      "endpoints": [{ "kind": "rows", "url": "https://opendata.fcc.gov/resource/euz5-46g2.json", "format": "json", "query": "$where=<bbox filter> AND u_yn_base_station='true'&$limit=<n>", "refresh": "as published" }],
+      "fieldMap": { "nativeId": "u_location_id", "latitude": "u_latitude", "longitude": "u_longitude", "siteName": "u_location_name", "operator": "u_license_name" },
+      "notes": "This is the FCC dataset that serves ROWS. `fcc-asr` and `fcc-uls` above are the same authority published only as bulk ZIP archives — documented here, but no query against them can return parseable rows, which is why the module fetches this one instead."
+    },
+    {
       "id": "anfr-cartoradio", "name": "ANFR radio installations >5W", "authority": "Agence nationale des fréquences", "homepage": "https://www.cartoradio.fr/", "scope": "French radio installations over 5 watts, including mobile-network supports and antennas", "coverage": ["FR"], "adapter": "anfr-csv", "verifiedAt": "2026-08-05",
       "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://www.data.gouv.fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1", "notes": "Monthly/current ZIP resources are published on data.gouv.fr." },
       "license": { "name": "Licence Ouverte 2.0", "url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/", "attribution": "Agence nationale des fréquences (ANFR)" },

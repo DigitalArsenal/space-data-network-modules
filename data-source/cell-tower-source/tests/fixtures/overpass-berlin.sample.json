@@ -1,0 +1,225 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-05-31T22:37:44Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 295076517,
+  "lat": 52.5387841,
+  "lon": 13.3430775,
+  "tags": {
+    "communication:mobile_phone": "yes",
+    "man_made": "antenna"
+  }
+},
+{
+  "type": "node",
+  "id": 1794568227,
+  "lat": 52.4957500,
+  "lon": 13.3577178,
+  "tags": {
+    "description": "Telekom Mast",
+    "man_made": "mast",
+    "operator": "Deutsche Telekom",
+    "operator:wikidata": "Q9396",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 2373552744,
+  "lat": 52.4974635,
+  "lon": 13.3731901,
+  "tags": {
+    "communication:gsm-r": "yes",
+    "description": "GSM-R-Basisstation",
+    "image": "https://commons.wikimedia.org/wiki/File:Berlin_-_Gleisdreieck-U2-Br%C3%BCcke_%26_Ausfahrt_Tiergartentunnel.jpg",
+    "man_made": "mast",
+    "mapillary": "a6M635_Heqn3_dUyhn7EIA#",
+    "note": "trägt einen Richtstrahler in südlicher Richtung",
+    "operator": "DB InfraGO",
+    "operator:wikidata": "Q122870674",
+    "railway": "radio",
+    "railway:position": "5",
+    "railway:radio": "gsm-r",
+    "source": "bing; estimate; survey",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 2810708636,
+  "lat": 52.5338197,
+  "lon": 13.3298131,
+  "tags": {
+    "man_made": "tower",
+    "source": "Bing",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 3166521537,
+  "lat": 52.4731654,
+  "lon": 13.4064807,
+  "tags": {
+    "abandoned:airmark": "beacon",
+    "abandoned:beacon:type": "TACAN",
+    "man_made": "mast",
+    "name": "TACAN TOF",
+    "tower:construction": "lattice",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 5412392097,
+  "lat": 52.5297466,
+  "lon": 13.3880192,
+  "tags": {
+    "man_made": "mast",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 5571770656,
+  "lat": 52.4777301,
+  "lon": 13.3656567,
+  "tags": {
+    "communication:gsm-r": "yes",
+    "man_made": "mast",
+    "mapillary": "743870042970117",
+    "note": "Mast trägt diverse Antennen, möglicherweise auch solche des öffentlichen Mobilfunks",
+    "operator": "DB Netz AG",
+    "railway": "radio",
+    "railway:radio": "gsm-r",
+    "source": "bing; estimate; extrapolate; survey",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 6129272106,
+  "lat": 52.5295924,
+  "lon": 13.3661436,
+  "tags": {
+    "communication:gsm-r": "yes",
+    "fixme": "Ist dies eine GSM-R-Basisstation?",
+    "man_made": "mast",
+    "mapillary": "3759764260812301",
+    "note": "trägt eine Antenne mit breitem Öffnungswinkel in nordwestlicher Richtung",
+    "operator": "DB InfraGO",
+    "operator:wikidata": "Q122870674",
+    "railway": "radio",
+    "railway:position": "1.8",
+    "railway:radio": "gsm-r",
+    "source": "bing; estimate; survey",
+    "tower:type": "communication",
+    "video": "https://youtu.be/TJRPZ8iMrSo?t=932"
+  }
+},
+{
+  "type": "node",
+  "id": 6230355368,
+  "lat": 52.5104189,
+  "lon": 13.3337643,
+  "tags": {
+    "communication:mobile_phone": "yes",
+    "man_made": "mast",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 6235455669,
+  "lat": 52.5054886,
+  "lon": 13.3021900,
+  "tags": {
+    "communication:mobile_phone": "yes",
+    "man_made": "mast",
+    "operator": "Telekom",
+    "operator:wikidata": "Q9396",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 6334134870,
+  "lat": 52.5487651,
+  "lon": 13.3984521,
+  "tags": {
+    "communication:gsm-r": "yes",
+    "description": "GSM-R-Basisstation",
+    "man_made": "mast",
+    "mapillary": "1372543159794862",
+    "note": "trägt zwei Rundstrahler",
+    "operator": "DB InfraGO",
+    "operator:wikidata": "Q122870674",
+    "railway": "radio",
+    "railway:radio": "gsm-r",
+    "source": "bing; estimate; survey",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 6639080262,
+  "lat": 52.4970785,
+  "lon": 13.3838336,
+  "tags": {
+    "communication:mobile": "yes",
+    "communication:mobile_phone": "yes",
+    "man_made": "antenna",
+    "material": "metal"
+  }
+},
+{
+  "type": "node",
+  "id": 6753929855,
+  "lat": 52.5367481,
+  "lon": 13.3809461,
+  "tags": {
+    "communication:gsm-r": "yes",
+    "description": "GSM-R-Basisstation",
+    "man_made": "mast",
+    "mapillary": "221067589493439",
+    "note": "trägt einen Richtstrahler in nördlicher Richtung",
+    "operator": "DB InfraGO",
+    "operator:wikidata": "Q122870674",
+    "railway": "radio",
+    "railway:radio": "gsm-r",
+    "source": "Esri World; estimate; extrapolate; survey",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 6758798687,
+  "lat": 52.5447473,
+  "lon": 13.3920353,
+  "tags": {
+    "communication:mobile_phone": "yes",
+    "man_made": "mast",
+    "tower:type": "communication"
+  }
+},
+{
+  "type": "node",
+  "id": 6760578451,
+  "lat": 52.5489894,
+  "lon": 13.4049617,
+  "tags": {
+    "communication:mobile_phone": "yes",
+    "man_made": "mast",
+    "tower:type": "communication"
+  }
+}
+
+  ]
+}

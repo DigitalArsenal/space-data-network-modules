@@ -275,7 +275,7 @@ async function runModule(t, providers, method) {
   };
 }
 
-const PROVIDERS = ["fcc-asr", "mls-archive"];
+const PROVIDERS = ["anfr-cartoradio", "mls-archive"];
 
 test("catalog answers the provider list the page renders", async (t) => {
   const harness = await harnessFor(t);
@@ -361,9 +361,9 @@ test("no branch emits a frame on an undeclared port", async (t) => {
 
   for (const request of [
     htqRequest({ method: "GET", path: "/api/v1/cellular/providers" }),
-    htqRequest({ body: JSON.stringify({ PROVIDERS: ["fcc-asr"], METHOD: "MOST_RECENT" }) }),
+    htqRequest({ body: JSON.stringify({ PROVIDERS: ["anfr-cartoradio"], METHOD: "MOST_RECENT" }) }),
     htqRequest({ body: JSON.stringify({ PROVIDERS: [] }) }),
-    htqRequest({ body: JSON.stringify({ PROVIDERS: ["fcc-asr"], METHOD: "BEST_GUESS" }) }),
+    htqRequest({ body: JSON.stringify({ PROVIDERS: ["anfr-cartoradio"], METHOD: "BEST_GUESS" }) }),
   ]) {
     const response = await harness.invoke({ methodId: "route", inputs: [request] });
     for (const frame of response.outputs) {
@@ -395,7 +395,7 @@ test("route refuses an unknown merge method instead of defaulting", async (t) =>
   const out = byPort(
     await harness.invoke({
       methodId: "route",
-      inputs: [htqRequest({ body: JSON.stringify({ PROVIDERS: ["fcc-asr"], METHOD: "BEST_GUESS" }) })],
+      inputs: [htqRequest({ body: JSON.stringify({ PROVIDERS: ["anfr-cartoradio"], METHOD: "BEST_GUESS" }) })],
     }),
   );
   const reply = jsonFrame(out, "reply");
@@ -457,7 +457,7 @@ test("route skips credentialed providers loudly and never fetches them", async (
       inputs: [
         htqRequest({
           body: JSON.stringify({
-            PROVIDERS: ["opencellid", "fcc-asr"],
+            PROVIDERS: ["opencellid", "anfr-cartoradio"],
             METHOD: "HIGHEST_SAMPLE_COUNT",
           }),
         }),
@@ -474,13 +474,13 @@ test("route skips credentialed providers loudly and never fetches them", async (
   const requests = framesFor(response, "requests").map((f) =>
     JSON.parse(decoder.decode(f.payload)),
   );
-  assert.deepEqual(requests.map((r) => r.provider_id), ["fcc-asr"]);
+  assert.deepEqual(requests.map((r) => r.provider_id), ["anfr-cartoradio"]);
   for (const descriptor of requests) {
     assert.equal(typeof descriptor.url, "string");
     assert.equal(descriptor.method, "GET");
     assert.equal(Array.isArray(descriptor), false);
   }
-  assert.deepEqual(job.providers_consulted, ["fcc-asr"]);
+  assert.deepEqual(job.providers_consulted, ["anfr-cartoradio"]);
   assert.equal(job.skipped.length, 1);
   assert.equal(job.skipped[0].provider_id, "opencellid");
   assert.match(job.skipped[0].reason, /credential/iu);
@@ -498,7 +498,7 @@ test("the emitted stream is $TBS and every record carries its sources", async (t
 });
 
 test("CELL_ID stays a string — a 36-bit NCI must not be coerced to an int", async (t) => {
-  const { records } = await runModule(t, ["fcc-asr"], "SINGLE_SOURCE");
+  const { records } = await runModule(t, ["anfr-cartoradio"], "SINGLE_SOURCE");
   const nr = records.find((r) => r.CELL_ID === "987654321");
   assert.ok(nr, "the NR row did not survive as a string cell id");
   assert.equal(typeof nr.CELL_ID, "string");
@@ -515,7 +515,7 @@ test("PARITY: the module and the reference agree, method by method", async (t) =
     const reference = deconflictReports(referenceReports(PROVIDERS), {
       method,
       providersConsulted: PROVIDERS,
-      isAuthority: (id) => id === "fcc-asr",
+      isAuthority: (id) => id === "anfr-cartoradio",
       mergedAt: "2026-08-08T00:00:00.000Z",
     });
 
@@ -598,8 +598,8 @@ test("PARITY: the duplicate really does collapse, and SINGLE_SOURCE really does 
   // Guards the parity test above from passing vacuously: if grouping silently
   // stopped working, both implementations would still "agree" on nothing
   // happening. The fixture's first two rows are the same cell.
-  const merged = await runModule(t, ["fcc-asr"], "HIGHEST_SAMPLE_COUNT");
-  const single = await runModule(t, ["fcc-asr"], "SINGLE_SOURCE");
+  const merged = await runModule(t, ["anfr-cartoradio"], "HIGHEST_SAMPLE_COUNT");
+  const single = await runModule(t, ["anfr-cartoradio"], "SINGLE_SOURCE");
   assert.ok(
     single.records.length > merged.records.length,
     `SINGLE_SOURCE (${single.records.length}) must emit more sites than a merge (${merged.records.length})`,
@@ -608,8 +608,8 @@ test("PARITY: the duplicate really does collapse, and SINGLE_SOURCE really does 
 });
 
 test("HIGHEST_SAMPLE_COUNT and MOST_RECENT can pick different winners", async (t) => {
-  const dense = await runModule(t, ["fcc-asr"], "HIGHEST_SAMPLE_COUNT");
-  const fresh = await runModule(t, ["fcc-asr"], "MOST_RECENT");
+  const dense = await runModule(t, ["anfr-cartoradio"], "HIGHEST_SAMPLE_COUNT");
+  const fresh = await runModule(t, ["anfr-cartoradio"], "MOST_RECENT");
   const pick = (run) =>
     run.records.find((r) => r.CELL_ID === "17811");
   assert.ok(pick(dense) && pick(fresh));

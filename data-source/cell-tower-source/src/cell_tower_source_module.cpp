@@ -245,7 +245,24 @@ struct ProviderSpec {
     const char* id;
     const char* authority;
     const char* url;
-    const char* format;       // "csv" | "json"
+    // Additional MIRRORS of the same service, fetched in the SAME run rather
+    // than as retry-on-failure. A flow node is stateless per invocation, so
+    // "try the next mirror" has nowhere to keep its place; issuing all of them
+    // and keeping whatever answers is redundancy that needs no state. They are
+    // ONE provider — same provider_id, counted once as consulted — and their
+    // duplicate rows collapse in deconfliction like any other agreement.
+    const char* mirrors[3];
+    // How this provider's query string is assembled. "" = bare GET, "overpass"
+    // = ?data=<program>, "soql" = ?$where=<filter>&$limit=<n>. The KIND decides
+    // the escaping, so it is declared rather than inferred from the template:
+    // an Overpass program and a SoQL filter need different encoding, and
+    // guessing wrong returns 200 carrying an error page — which parses to zero
+    // rows and is indistinguishable from a region that genuinely has none.
+    const char* query_kind;
+    // Query template. {{bbox}} substitutes south,west,north,east together;
+    // {{south}} {{west}} {{north}} {{east}} {{limit}} substitute individually.
+    const char* query_template;
+    const char* format;       // "csv" | "json" | "osm-json" | "soql-json"
     const char* license;
     const char* license_url;
     const char* attribution;
@@ -255,34 +272,74 @@ struct ProviderSpec {
 
 // clang-format off
 constexpr ProviderSpec kProviders[] = {
-  {"opencellid","OpenCelliD contributors","https://opencellid.org/downloads.php","csv",
+  {"opencellid","OpenCelliD contributors","https://opencellid.org/downloads.php",
+   {nullptr,nullptr,nullptr},
+   "","","csv",
    "CC BY-SA 4.0","https://wiki.opencellid.org/wiki/Menu_map_view","OpenCelliD Project",true,false},
-  {"openstreetmap-overpass","OpenStreetMap contributors","https://overpass-api.de/api/interpreter","json",
+  {"openstreetmap-overpass","OpenStreetMap contributors","https://overpass-api.de/api/interpreter",
+   {"https://maps.mail.ru/osm/tools/overpass/api/interpreter","https://overpass.kumi.systems/api/interpreter",nullptr},
+   "overpass",
+   "[out:json][timeout:25];("
+   "node[\"communication:mobile_phone\"]({{bbox}});"
+   "node[\"tower:type\"=\"communication\"]({{bbox}});"
+   "node[\"man_made\"=\"mast\"][\"communication:mobile_phone\"]({{bbox}});"
+   ");out center {{limit}};","osm-json",
    "ODbL 1.0","https://www.openstreetmap.org/copyright","OpenStreetMap contributors",false,false},
-  {"fcc-asr","Federal Communications Commission","https://www.fcc.gov/uls/transactions/daily-weekly","csv",
-   "Public domain (US Government work)","https://www.fcc.gov/","FCC Antenna Structure Registration",false,true},
-  {"anfr-cartoradio","Agence nationale des frequences","https://data.anfr.fr/api/records/2.0/downloadfile/","csv",
+  // Was `fcc-asr` pointed at the ULS bulk-download PAGE. The Antenna Structure
+  // Registration publishes no row endpoint at all — only daily ZIP archives —
+  // so no query against it could ever have returned parseable rows. This is the
+  // same authority reached through the dataset that DOES serve rows: ULS 3650
+  // MHz licensed base-station locations, over the open-data row API, verified
+  // against the live service before being compiled in. The id names what is
+  // actually fetched rather than what was originally hoped for.
+  {"fcc-uls-3650","Federal Communications Commission","https://opendata.fcc.gov/resource/euz5-46g2.json",
+   {nullptr,nullptr,nullptr},
+   "soql",
+   "u_latitude::number between {{south}} and {{north}}"
+   " AND u_longitude::number between {{west}} and {{east}}"
+   " AND u_yn_base_station='true'","soql-json",
+   "Public domain (US Government work)","https://www.fcc.gov/","FCC Universal Licensing System (3650 MHz base stations)",false,true},
+  {"anfr-cartoradio","Agence nationale des frequences","https://data.anfr.fr/api/records/2.0/downloadfile/",
+   {nullptr,nullptr,nullptr},
+   "","","csv",
    "Licence Ouverte 2.0","https://www.etalab.gouv.fr/licence-ouverte-open-licence","ANFR Cartoradio",false,true},
-  {"acma-rrl","Australian Communications and Media Authority","https://web.acma.gov.au/rrl/","csv",
+  {"acma-rrl","Australian Communications and Media Authority","https://web.acma.gov.au/rrl/",
+   {nullptr,nullptr,nullptr},
+   "","","csv",
    "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","ACMA Register of Radiocommunications Licences",false,true},
-  {"ised-sms-tafl","Innovation, Science and Economic Development Canada","https://sms-sgs.ic.gc.ca/","csv",
+  {"ised-sms-tafl","Innovation, Science and Economic Development Canada","https://sms-sgs.ic.gc.ca/",
+   {nullptr,nullptr,nullptr},
+   "","","csv",
    "Open Government Licence - Canada","https://open.canada.ca/en/open-government-licence-canada","ISED Spectrum Management System",false,true},
-  {"bnetza-emf","Bundesnetzagentur","https://www.bundesnetzagentur.de/","json",
+  {"bnetza-emf","Bundesnetzagentur","https://www.bundesnetzagentur.de/",
+   {nullptr,nullptr,nullptr},
+   "","","json",
    "DL-DE-BY-2.0","https://www.govdata.de/dl-de/by-2-0","Bundesnetzagentur EMF database",false,true},
-  {"nl-antenneregister","Agentschap Telecom","https://antenneregister.nl/","json",
+  {"nl-antenneregister","Agentschap Telecom","https://antenneregister.nl/",
+   {nullptr,nullptr,nullptr},
+   "","","json",
    "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","Antenneregister",false,true},
-  {"bakom-mobile-sites","Bundesamt fuer Kommunikation","https://www.bakom.admin.ch/","json",
+  {"bakom-mobile-sites","Bundesamt fuer Kommunikation","https://www.bakom.admin.ch/",
+   {nullptr,nullptr,nullptr},
+   "","","json",
    "opendata.swiss terms","https://opendata.swiss/en/terms-of-use","BAKOM mobile sites",false,true},
-  {"comreg-siteviewer","Commission for Communications Regulation","https://siteviewer.comreg.ie/","json",
+  {"comreg-siteviewer","Commission for Communications Regulation","https://siteviewer.comreg.ie/",
+   {nullptr,nullptr,nullptr},
+   "","","json",
    "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","ComReg SiteViewer",false,true},
-  {"nz-rsm-rrf","Radio Spectrum Management","https://www.rsm.govt.nz/","csv",
+  {"nz-rsm-rrf","Radio Spectrum Management","https://www.rsm.govt.nz/",
+   {nullptr,nullptr,nullptr},
+   "","","csv",
    "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","RSM Register of Radio Frequencies",false,true},
-  {"wigle","WiGLE.net contributors","https://api.wigle.net/api/v2/cell/search","json",
+  {"wigle","WiGLE.net contributors","https://api.wigle.net/api/v2/cell/search",
+   {nullptr,nullptr,nullptr},
+   "","","json",
    "WiGLE terms of use","https://wigle.net/tos","WiGLE.net",true,false},
-  {"mls-archive","Mozilla Location Service archive","https://d17pt8qph6ncyq.cloudfront.net/","csv",
+  {"mls-archive","Mozilla Location Service archive","https://d17pt8qph6ncyq.cloudfront.net/",
+   {nullptr,nullptr,nullptr},
+   "","","csv",
    "CC0 1.0","https://creativecommons.org/publicdomain/zero/1.0/","MLS historical archive",false,false},
 };
-// clang-format on
 constexpr size_t kProviderCount = sizeof(kProviders) / sizeof(kProviders[0]);
 
 const ProviderSpec* find_provider(const std::string& id) {
@@ -464,6 +521,37 @@ void decode_csv(const ProviderSpec& spec, const std::string& body, std::vector<R
     }
 }
 
+// Replace every occurrence of `token` in place. Written as a loop that advances
+// PAST the substitution rather than re-searching from the start, so a value that
+// happens to contain the token cannot loop forever.
+void substitute_all(std::string* s, const std::string& token, const std::string& value) {
+    size_t at = s->find(token);
+    while (at != std::string::npos) {
+        s->replace(at, token.size(), value);
+        at = s->find(token, at + value.size());
+    }
+}
+
+// Percent-encode for a query string. Overpass takes its program in `?data=`,
+// and the program is full of characters that would otherwise terminate or
+// re-key the query.
+std::string url_encode(const std::string& in) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(in.size() * 3);
+    for (unsigned char c : in) {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+            c == '-' || c == '_' || c == '.' || c == '~') {
+            out += static_cast<char>(c);
+        } else {
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 0x0f];
+        }
+    }
+    return out;
+}
+
 // ── report <-> JSON (the intra-flow "reports" frame) ────────────────────────
 std::string report_to_json(const Report& r) {
     std::string j = "{\"provider_id\":\"" + json_escape(r.provider_id) + "\"";
@@ -526,6 +614,91 @@ std::vector<std::string> split_json_objects(const std::string& src) {
         else if (c == '}') { if (--depth == 0) out.push_back(src.substr(start, i - start + 1)); }
     }
     return out;
+}
+
+// Decode an Overpass `elements` array into reports.
+//
+// OSM does not publish MCC/MNC/cell ids — these are MASTS, not cells — so the
+// records carry position, operator and radio class only, and their identity is
+// the OSM node id. That means they group GEOMETRICALLY, which is the correct
+// behaviour: a mast is not a cell and claiming otherwise would fabricate
+// network identifiers the source never stated.
+void decode_osm_json(const ProviderSpec& spec, const std::string& body, std::vector<Report>* out) {
+    // Split the ELEMENTS ARRAY, never the document. `split_json_objects` returns
+    // objects at bracket depth 0, and an Overpass response is ONE top-level
+    // object — so splitting the body yields exactly one "element": the whole
+    // document. Every field lookup then returned the FIRST match anywhere in the
+    // response, which decoded one site per fetch wearing another site's operator
+    // and name. Two failures at once, and both look like plausible data:
+    // 26 of 27 masts silently vanish, and the survivor carries an attribution
+    // the source never made about it. Scoping to the array makes each lookup
+    // element-local, which is the only reason the tag reads below are sound.
+    const std::string elements = json_string(body, "elements", "");
+    if (elements.empty()) return;
+    for (const std::string& element : split_json_objects(elements)) {
+        const double lat = json_number(element, "lat", 1e9);
+        const double lon = json_number(element, "lon", 1e9);
+        if (lat > 90 || lat < -90 || lon > 180 || lon < -180) continue;
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = lat;
+        r.longitude = lon;
+        const double id = json_number(element, "id", 0);
+        if (id > 0) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%.0f", id);
+            r.native_id = buf;
+        }
+        // `operator` and the radio generation live in the tags.
+        const std::string op = json_string(element, "operator", "");
+        if (!op.empty()) r.operator_name = op;
+        const std::string generation = json_string(element, "communication:mobile_phone", "");
+        const std::string mast = json_string(element, "man_made", "");
+        if (generation == "lte" || generation == "4g") r.radio = RC_LTE;
+        else if (generation == "5g" || generation == "nr") r.radio = RC_NR;
+        else if (generation == "umts" || generation == "3g") r.radio = RC_UMTS;
+        else if (generation == "gsm" || generation == "2g") r.radio = RC_GSM;
+        else r.radio = RC_UNKNOWN;
+        const std::string name = json_string(element, "name", "");
+        if (!name.empty()) r.site_name = name;
+        else if (!mast.empty()) r.site_name = mast;
+        out->push_back(r);
+    }
+    (void)elements;
+}
+
+
+// Decode an open-data row API response: a top-level ARRAY of flat objects, so
+// unlike the Overpass body these ARE the depth-0 objects and split directly.
+//
+// A licensed fixed base station is not a cellular cell: the register publishes
+// no MCC/MNC/cell id, so these records carry site identity and position only and
+// their radio class is OTHER, not a guessed generation. Claiming LTE here would
+// invent a fact the regulator never stated — and because these sites are the
+// AUTHORITATIVE half of the merge, that invention would then WIN deconfliction
+// against the crowd-sourced provider and be exported as though a regulator had
+// asserted it.
+void decode_soql_json(const ProviderSpec& spec, const std::string& body, std::vector<Report>* out) {
+    for (const std::string& row : split_json_objects(body)) {
+        const double lat = json_number(row, "u_latitude", 1e9);
+        const double lon = json_number(row, "u_longitude", 1e9);
+        if (lat > 90 || lat < -90 || lon > 180 || lon < -180) continue;
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = lat;
+        r.longitude = lon;
+        r.radio = RC_OTHER;
+        // The location id is unique per licensed site; the call sign is not.
+        const std::string loc_id = json_string(row, "u_location_id", "");
+        if (!loc_id.empty()) r.native_id = loc_id;
+        const std::string op = json_string(row, "u_license_name", "");
+        if (!op.empty()) r.operator_name = op;
+        const std::string name = json_string(row, "u_location_name", "");
+        if (!name.empty()) r.site_name = name;
+        out->push_back(r);
+    }
 }
 
 // ── deconfliction (mirror of deconflict.mjs; parity-gated) ─────────────────
@@ -879,6 +1052,34 @@ int route(void) {
     const std::string method_name = json_string(body, "METHOD", "HIGHEST_SAMPLE_COUNT");
     const double limit = json_number(body, "LIMIT", 2000);
 
+    // BBOX in Overpass order (south,west,north,east). Bounded by default: an
+    // unbounded query against a public mirror is both useless and rude, and
+    // several providers refuse one outright. The default is a small,
+    // dense urban box so a caller who names no area still sees real masts.
+    // Default box: Houston. Chosen because it is one of the few areas where BOTH
+    // a crowd-sourced and an authoritative provider genuinely hold records, so a
+    // caller who names no area still sees cross-provider deconfliction rather
+    // than a single source agreeing with itself.
+    double bb_south = 29.60, bb_west = -95.70, bb_north = 30.10, bb_east = -95.20;
+    const std::string bbox_raw = json_string(body, "BBOX", "");
+    if (!bbox_raw.empty()) {
+        const double south = json_number(bbox_raw, "south", 1e9);
+        const double west = json_number(bbox_raw, "west", 1e9);
+        const double north = json_number(bbox_raw, "north", 1e9);
+        const double east = json_number(bbox_raw, "east", 1e9);
+        if (south <= 90 && west <= 180 && north <= 90 && east <= 180 && south < north && west < east) {
+            bb_south = south; bb_west = west; bb_north = north; bb_east = east;
+        }
+    }
+    auto fmt_coord = [](double v) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.6f", v);
+        return std::string(buf);
+    };
+    // Overpass order is south,west,north,east.
+    const std::string bbox = fmt_coord(bb_south) + "," + fmt_coord(bb_west) + "," +
+                             fmt_coord(bb_north) + "," + fmt_coord(bb_east);
+
     int8_t method = MM_HIGHEST_SAMPLE_COUNT;
     if (method_name == "SINGLE_SOURCE") method = MM_SINGLE_SOURCE;
     else if (method_name == "MOST_RECENT") method = MM_MOST_RECENT;
@@ -928,10 +1129,52 @@ int route(void) {
             continue;
         }
         if (emitted++) { consulted += ","; }
-        descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
-                              "\",\"method\":\"GET\",\"url\":\"" + json_escape(spec->url) +
-                              "\",\"headers\":{\"accept\":\"*/*\"},\"timeoutMs\":30000}");
         consulted += std::string("\"") + spec->id + "\"";
+
+        // Build this provider's URL list: primary plus any mirrors. Mirrors are
+        // fetched in the SAME run, not as retry-on-failure — a flow node has no
+        // state between invocations to remember where a retry got to. All of
+        // them carry the SAME provider_id, so they count as one provider
+        // consulted and their overlapping rows collapse in deconfliction.
+        std::vector<std::string> urls;
+        urls.push_back(spec->url);
+        for (size_t m = 0; m < 3; ++m) {
+            if (spec->mirrors[m] && spec->mirrors[m][0]) urls.push_back(spec->mirrors[m]);
+        }
+
+        // Per-provider row cap. Bounds the work an anonymous caller can ask the
+        // node to do at the EXPENSIVE end — the fetch and the merge — where the
+        // job's LIMIT only caps records emitted at the cheap end.
+        double rows = limit;
+        if (rows < 1) rows = 1;
+        if (rows > 1000) rows = 1000;
+        char rows_buf[16];
+        std::snprintf(rows_buf, sizeof(rows_buf), "%.0f", rows);
+
+        for (const std::string& base : urls) {
+            std::string url = base;
+            if (spec->query_template && spec->query_template[0]) {
+                std::string q = spec->query_template;
+                substitute_all(&q, "{{bbox}}", bbox);
+                substitute_all(&q, "{{south}}", fmt_coord(bb_south));
+                substitute_all(&q, "{{west}}", fmt_coord(bb_west));
+                substitute_all(&q, "{{north}}", fmt_coord(bb_north));
+                substitute_all(&q, "{{east}}", fmt_coord(bb_east));
+                substitute_all(&q, "{{limit}}", rows_buf);
+                if (std::strcmp(spec->query_kind, "overpass") == 0) {
+                    url += "?data=" + url_encode(q);
+                } else if (std::strcmp(spec->query_kind, "soql") == 0) {
+                    // `$where`/`$limit` are the API's own parameter NAMES and
+                    // stay literal; only the filter value is encoded.
+                    url += "?$where=" + url_encode(q) + "&$limit=" + rows_buf;
+                }
+            }
+            descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
+                                  "\",\"method\":\"GET\",\"url\":\"" + json_escape(url) +
+                                  "\",\"headers\":{\"accept\":\"application/json\"" +
+                                  ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
+                                  ",\"timeoutMs\":40000}");
+        }
     }
     consulted += "]";
     skipped += "]";
@@ -1006,6 +1249,8 @@ int parse(void) {
         std::string payload;
         if (!base64_decode(body_b64, &payload) || payload.empty()) continue;
         if (std::strcmp(spec->format, "csv") == 0) decode_csv(*spec, payload, &reports);
+        else if (std::strcmp(spec->format, "osm-json") == 0) decode_osm_json(*spec, payload, &reports);
+        else if (std::strcmp(spec->format, "soql-json") == 0) decode_soql_json(*spec, payload, &reports);
         // JSON adapters land with the per-provider decoders; until each is
         // written and fixtured, an unsupported format contributes nothing
         // rather than a guess.
