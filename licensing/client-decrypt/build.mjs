@@ -27,6 +27,25 @@ import {
   signModuleArtifact,
   verifyModuleArtifact,
 } from "space-data-module-sdk/bundle";
+import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
+
+// THREAD MODEL — declared, never inferred (full rationale in
+// scripts/lib/thread-model.mjs; graph task modules-undeclared-threadmodel-artifacts).
+//
+// This build does NOT go through the SDK compiler — it drives a vendored
+// Emscripten `em++` directly — so `resolveThreadModel` never runs and there is no
+// `compileModuleFromSource` argument to carry a declaration. The module therefore
+// read as "undeclared" in the artifact-reproducibility census with no way to
+// answer, which is a reporting defect, not a build defect: the lane here is fixed
+// by the command line, `-sSTANDALONE_WASM=1 -sPURE_WASI=1` and no `-pthread`.
+//
+// Truth of the SHIPPED artifact 4ac3c6016f30…: unshared linear memory, no
+// `wasi.thread-spawn` import, no `wasi_thread_start` export.
+//
+// `assertArtifactThreadModel` re-reads the EMITTED wasm at the end of this build
+// and refuses the declaration if the bytes ever contradict it. A declaration
+// nothing verifies is a comment.
+const THREAD_MODEL = "single-thread";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMSDK_DIR = path.resolve(
@@ -330,6 +349,8 @@ uint32_t plugin_get_manifest_flatbuffer_size() { return 0; }
       `--no-entry -o ${shellQuote(outWasm)}`,
   );
 
+  // Refuse a declaration the emitted bytes contradict (see THREAD_MODEL above).
+  assertArtifactThreadModel(outWasm, THREAD_MODEL, "licensing/client-decrypt");
   fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
   await signBuiltModule(outWasm);
   await signBuiltModule(path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));

@@ -9,6 +9,7 @@ import { signModuleArtifact } from "space-data-module-sdk";
 
 import { resolveSupplementalSigning } from "./signing.mjs";
 import { compileUniversalAot } from "./universal-aot.mjs";
+import { THREAD_MODELS } from "../../../scripts/lib/thread-model.mjs";
 
 const nodesRoot = path.dirname(fileURLToPath(import.meta.url));
 const standardsRoot = path.resolve(nodesRoot, "../../../../spacedatastandards.org");
@@ -74,8 +75,18 @@ export async function buildSignedNode({
   signingEnvironmentPrefix,
   defaultSigningByte,
   defaultSigningKeyId,
-  threadModel = "wasi-sequential",
+  // NO DEFAULT — see the same note in providers/build-provider.mjs. A default
+  // here made `publication` and `status` read as undeclared in the artifact
+  // reproducibility census even though their lane was, in fact, repo-owned.
+  // Graph task: modules-undeclared-threadmodel-artifacts.
+  threadModel,
 }) {
+  if (!THREAD_MODELS.includes(threadModel)) {
+    throw new TypeError(
+      `buildSignedNode: threadModel must be declared explicitly as one of ${JSON.stringify(THREAD_MODELS)}, got ${JSON.stringify(threadModel)}. ` +
+        "Declare it as a string literal in the node's own build.mjs.",
+    );
+  }
   const buildRoot = path.join(nodeRoot, ".build");
   const unsignedRoot = path.join(nodeRoot, "dist/.unsigned");
   const distRoot = path.join(nodeRoot, "dist/isomorphic");

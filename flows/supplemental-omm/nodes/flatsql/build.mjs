@@ -13,6 +13,22 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { compileUniversalAot } from "../universal-aot.mjs";
+import {
+  assertArtifactThreadModel,
+} from "../../../../scripts/lib/thread-model.mjs";
+
+// THREAD MODEL — declared, never inferred (full rationale in
+// scripts/lib/thread-model.mjs; graph task modules-undeclared-threadmodel-artifacts).
+//
+// This node compiles through CMake + a vendored Emscripten, not through
+// `compileModuleFromSource`, so the SDK's `resolveThreadModel` never runs and
+// there is no compiler argument to carry a declaration. It read as "undeclared"
+// in the artifact-reproducibility census with no way to answer.
+//
+// Truth of the SHIPPED artifact bdd61ebd9b75… (12,830,577 B): unshared linear
+// memory, no `wasi.thread-spawn` import, no `wasi_thread_start` export. The
+// FlatSQL engine runs its btree on the calling thread; it spawns nothing.
+const THREAD_MODEL = "single-thread";
 
 const nodeDirectory = path.dirname(fileURLToPath(import.meta.url));
 const modulesDirectory = path.resolve(nodeDirectory, "../../../..");
@@ -342,6 +358,10 @@ async function main() {
     "flatsql-sdn-node.wasm",
   );
   const rawWasm = new Uint8Array(await readFile(rawWasmPath));
+  // Refuse a declaration the emitted bytes contradict. Checked on the RAW guest,
+  // before the manifest section and the WasmEdge AOT wrapper are attached — the
+  // threading contract is a property of the compile, not of the packaging.
+  assertArtifactThreadModel(rawWasm, THREAD_MODEL, "flows/supplemental-omm/nodes/flatsql");
   const manifestBytes = encodePluginManifest(manifest);
   const withManifest = bundle.appendWasmCustomSection(
     rawWasm,

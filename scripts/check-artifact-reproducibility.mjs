@@ -55,6 +55,7 @@ import {
   describeToolchain,
   resolveToolchain,
 } from "./build-provenance.mjs";
+import { THREAD_MODELS, assertArtifactThreadModel } from "./lib/thread-model.mjs";
 
 const LEDGER_PATH = path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
 
@@ -105,34 +106,48 @@ function owningModule(artifactPath) {
   return fs.existsSync(path.join(REPO_ROOT, dir, "build.mjs")) ? dir : null;
 }
 
-// Does this module DECLARE its thread model, or does it ride SDK inference?
-// Inference is the reproducibility hazard: it is a property of the SDK version,
-// not of the source, so the same source produces a different (or no) artifact as
-// the SDK moves.
-// Extract the argument text of every `compileModuleFromSource(...)` call by
-// bracket-matching. Grepping the whole file for `threadModel` is WRONG and was
-// wrong here first: every build.mjs writes `threadModel: compilation.guestLink
-// .threadModel` into dist/guest-link/metadata.json, which is a REPORT of what
-// the SDK decided, not a DECLARATION of what the module requires. Counting that
-// as a declaration hid three modules that then failed to rebuild at all.
-function compileCallArguments(source) {
-  const calls = [];
-  const needle = "compileModuleFromSource(";
-  for (let index = source.indexOf(needle); index !== -1; index = source.indexOf(needle, index + 1)) {
-    let depth = 0;
-    for (let cursor = index + needle.length - 1; cursor < source.length; cursor += 1) {
-      const ch = source[cursor];
-      if (ch === "(") depth += 1;
-      else if (ch === ")") {
-        depth -= 1;
-        if (depth === 0) {
-          calls.push(source.slice(index, cursor + 1));
-          break;
-        }
-      }
-    }
+// Does this module DECLARE its thread model, or does it ride an inference?
+//
+// Inference is the reproducibility hazard: the lane is then a property of the SDK
+// VERSION, not of the source, so the same source produces different bytes — or,
+// once the inference moved to EMSCRIPTEN_PTHREADS, NO bytes at all — as the SDK
+// moves. Eleven modules were in exactly that state and are not any more.
+//
+// A DECLARATION is a STRING LITERAL in the module's OWN build.mjs, in either of
+// the two forms the repo actually uses:
+//
+//   threadModel: "single-thread"     passed to compileModuleFromSource, or to a
+//                                    repo-owned build helper that forwards it
+//   const THREAD_MODEL = "…"         for the modules that drive a vendored `em++`
+//                                    directly and never reach the SDK compiler
+//
+// Three ways to get this WRONG, all of which were live here:
+//
+//   1. Grepping the file for `threadModel`. Every SDK-compiled build.mjs writes
+//      `threadModel: compilation.guestLink.threadModel` into
+//      dist/guest-link/metadata.json — a REPORT of what the SDK decided, not a
+//      declaration of what the module requires. That false positive hid three
+//      modules that then failed to rebuild at all. The literal-quote requirement
+//      is what excludes it.
+//   2. Bracket-matching only `compileModuleFromSource(...)`. That was the first
+//      fix, and it over-corrected: it counted eight `flows/supplemental-omm`
+//      nodes as undeclared when their lane was declared by a repo-owned helper
+//      default, and thirteen more that never call the SDK compiler at all. A
+//      module can only be judged by what its own build.mjs says, wherever it says
+//      it — which is why those helper defaults are now gone and each node states
+//      its own lane.
+//   3. Judging by `runtimeTargets`. That IS the bug; a deployment target says
+//      nothing about whether a guest threads.
+function declaredThreadModels(source) {
+  const found = new Set();
+  const patterns = [
+    /\bthreadModel\s*:\s*["'`]([^"'`]+)["'`]/g,
+    /\bTHREAD_MODEL\s*=\s*["'`]([^"'`]+)["'`]/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) found.add(match[1]);
   }
-  return calls;
+  return [...found];
 }
 
 function declarationAudit(moduleDir) {
@@ -142,16 +157,34 @@ function declarationAudit(moduleDir) {
   let runtimeTargets = [];
   try {
     runtimeTargets = JSON.parse(fs.readFileSync(manifestPath, "utf8")).runtimeTargets ?? [];
-  } catch { /* a module without a manifest cannot be inference-hazardous */ }
-  // A declaration is a STRING LITERAL passed to the compiler. Anything computed
-  // is, by definition, not a declaration of intent that survives an SDK bump.
-  const declares = compileCallArguments(build).some((call) => /threadModel\s*:\s*["'`]/.test(call));
-  const targets = runtimeTargets.map((t) => String(t).toLowerCase());
-  // resolveThreadModel(): wasmedge => EMSCRIPTEN_PTHREADS (guard then refuses a
-  // guest that does not actually thread); [browser] alone => hard throw. Only a
-  // manifest naming neither still falls through to SINGLE_THREAD.
-  const inferenceHazard = !declares && (targets.includes("wasmedge") || targets.includes("browser"));
-  return { declares, runtimeTargets: targets, inferenceHazard };
+  } catch { /* a module without a manifest still has to declare */ }
+  const declared = declaredThreadModels(build);
+  const unknown = declared.filter((model) => !THREAD_MODELS.includes(model));
+  // A build.mjs that emits no wasm has no thread model to declare. Everything in
+  // this repo does, but the check should say WHY it is demanding a declaration
+  // rather than demanding one from any file that happens to be named build.mjs.
+  const emitsWasm = /wasm/i.test(build);
+  return {
+    declares: declared.length > 0 && unknown.length === 0,
+    threadModels: declared,
+    unknownThreadModels: unknown,
+    emitsWasm,
+    runtimeTargets: runtimeTargets.map((t) => String(t).toLowerCase()),
+    inferenceHazard: emitsWasm && declared.length === 0,
+  };
+}
+
+// Every module that owns a build.mjs, whether or not it has a committed artifact.
+// The artifact-level census alone is not enough: a module with no dist/ yet still
+// gets to ship an undeclared lane the first time someone builds it.
+function allBuildModules() {
+  const listed = git(["ls-files", "*/build.mjs"]) ?? "";
+  return listed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.slice(0, -"/build.mjs".length))
+    .sort();
 }
 
 function loadLedger() {
@@ -229,6 +262,7 @@ async function writeLedger({ superRepo, withRebuild }) {
     ? await measureRebuildBaseline()
     : (loadLedger()?.rebuildBaseline ?? {});
   const inferenceHazards = Object.values(artifacts).filter((a) => a.declaration?.inferenceHazard).length;
+  const undeclaredModules = allBuildModules().filter((m) => declarationAudit(m).inferenceHazard);
   const ledger = {
     version: 1,
     note:
@@ -241,18 +275,31 @@ async function writeLedger({ superRepo, withRebuild }) {
       [toolchain.id]: toolchain,
     },
     // The inference-hazard census is a RATCHET: the check refuses an increase.
-    // These modules cannot be rebuilt at the current pin at all, so every one of
-    // them is an artifact whose signature anchors to nothing reproducible.
+    // An artifact here is one whose owning module never declared a thread model,
+    // so its lane was decided by whichever SDK last ran the build.
     inferenceHazardBaseline: inferenceHazards,
+    // The same ratchet, one level up and STRICTER: every module that owns a
+    // build.mjs must declare, artifact or no artifact. The artifact census can
+    // only see modules that already shipped; this one closes the door in front of
+    // the next module instead of behind it. Once at zero it stays at zero.
+    undeclaredModuleBaseline: undeclaredModules.length,
     // What the REBUILD lane currently achieves per representative module. Also a
     // ratchet: a module recorded as "reproduced" that stops reproducing is a hard
     // failure; one already recorded as unreproducible is reported, not re-counted.
     // Refresh with `--write --with-rebuild`.
     rebuildBaseline,
+    // WHY a module still does not reproduce, once its thread model is no longer
+    // the answer. Prose, deliberately: the value of this field is that the next
+    // reader does not have to re-derive it, and every entry here was measured by
+    // running the build, not predicted. Carried forward across regenerations.
+    unreproducibleReasons: loadLedger()?.unreproducibleReasons ?? {},
     artifacts,
   };
   fs.writeFileSync(LEDGER_PATH, `${JSON.stringify(ledger, null, 2)}\n`);
-  console.log(`wrote ${path.relative(REPO_ROOT, LEDGER_PATH)}: ${Object.keys(artifacts).length} artifacts, ${inferenceHazards} inference hazards`);
+  console.log(
+    `wrote ${path.relative(REPO_ROOT, LEDGER_PATH)}: ${Object.keys(artifacts).length} artifacts, ` +
+      `${inferenceHazards} undeclared-lane artifacts, ${undeclaredModules.length} undeclared modules`,
+  );
 }
 
 function checkLedger() {
@@ -289,6 +336,19 @@ function checkLedger() {
       if (audit.inferenceHazard) {
         inferenceHazards += 1;
         hazardList.push(`${rel} (${moduleDir}, runtimeTargets [${audit.runtimeTargets.join(", ")}])`);
+      } else if (audit.threadModels.length === 1) {
+        // THE DECLARATION IS CHECKED AGAINST THE COMMITTED BYTES, not merely
+        // required to exist. This is the difference between a declaration and a
+        // comment, and it costs milliseconds: the threading facts are in the
+        // import/memory/export sections, so no rebuild is involved. All 65
+        // owned artifacts agreed with their module's declaration when this
+        // landed — which is the evidence that the declarations are the TRUTH of
+        // the shipped bytes and not a guess that happens to compile.
+        try {
+          assertArtifactThreadModel(path.join(REPO_ROOT, rel), audit.threadModels[0], rel);
+        } catch (error) {
+          failures.push(`DECLARATION CONTRADICTS SHIPPED BYTES: ${error.message}`);
+        }
       }
     }
   }
@@ -310,9 +370,42 @@ function checkLedger() {
     );
   }
 
+  // MODULE-LEVEL DECLARATION, the strict lane. Every module that owns a build.mjs
+  // declares — not only the ones that already have committed bytes. This is what
+  // stops the class from being re-created by the next module rather than merely
+  // cleaned up behind the last one.
+  const undeclared = [];
+  const misdeclared = [];
+  for (const moduleDir of allBuildModules()) {
+    const audit = declarationAudit(moduleDir);
+    if (audit.unknownThreadModels.length) {
+      misdeclared.push(`${moduleDir} declares ${JSON.stringify(audit.unknownThreadModels)}`);
+    } else if (audit.inferenceHazard) {
+      undeclared.push(`${moduleDir} (runtimeTargets [${audit.runtimeTargets.join(", ")}])`);
+    }
+  }
+  const moduleBaseline = ledger.undeclaredModuleBaseline ?? 0;
+  if (undeclared.length > moduleBaseline) {
+    failures.push(
+      `MODULES WITH NO THREAD-MODEL DECLARATION: ${undeclared.length} (baseline ${moduleBaseline}).\n` +
+        `    Declare the lane as a string literal in the module's OWN build.mjs — ` +
+        `\`threadModel: "…"\` for an SDK-compiled module, \`const THREAD_MODEL = "…"\` for one that drives em++ directly.\n` +
+        `    Allowed: ${JSON.stringify(THREAD_MODELS)}. Rationale: scripts/lib/thread-model.mjs.\n` +
+        undeclared.map((m) => `      - ${m}`).join("\n"),
+    );
+  }
+  if (misdeclared.length) {
+    failures.push(
+      `UNRECOGNISED THREAD MODEL (expected one of ${JSON.stringify(THREAD_MODELS)}):\n` +
+        misdeclared.map((m) => `      - ${m}`).join("\n"),
+    );
+  }
+
+  const modules = allBuildModules().length;
   console.log(
     `ledger: ${tracked.length} artifacts checked against ${Object.keys(ledger.artifacts ?? {}).length} recorded; ` +
-      `${inferenceHazards} thread-model inference hazards (baseline ${baseline}).`,
+      `${inferenceHazards} undeclared-lane artifacts (baseline ${baseline}); ` +
+      `${modules - undeclared.length}/${modules} modules declare a thread model (baseline ${moduleBaseline} undeclared).`,
   );
   if (inferenceHazards > 0 && failures.length === 0) {
     console.log(`  (${inferenceHazards} artifacts are NOT rebuildable at the current pin — see graph task modules-dist-not-reproducible-at-sdk-pin)`);

@@ -27,6 +27,25 @@ import { fileURLToPath } from "node:url";
 import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/bundle";
 import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/manifest";
 import createOdFitPipelinePluginManifest from "./manifest.js";
+import { assertArtifactThreadModel } from "../../../scripts/lib/thread-model.mjs";
+
+// THREAD MODEL — declared, never inferred (full rationale in
+// scripts/lib/thread-model.mjs; graph task modules-undeclared-threadmodel-artifacts).
+//
+// This build does NOT go through the SDK compiler — it drives a vendored
+// Emscripten `em++` directly — so `resolveThreadModel` never runs and there is no
+// `compileModuleFromSource` argument to carry a declaration. The module therefore
+// read as "undeclared" in the artifact-reproducibility census with no way to
+// answer, which is a reporting defect, not a build defect: the lane here is fixed
+// by the command line, `-sSTANDALONE_WASM=1 -sPURE_WASI=1` and no `-pthread`.
+//
+// Truth of the SHIPPED artifact 15b7ace70066…: unshared linear memory, no
+// `wasi.thread-spawn` import, no `wasi_thread_start` export.
+//
+// `assertArtifactThreadModel` re-reads the EMITTED wasm at the end of this build
+// and refuses the declaration if the bytes ever contradict it. A declaration
+// nothing verifies is a comment.
+const THREAD_MODEL = "single-thread";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../..");           // space-data-network-modules
@@ -200,6 +219,8 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
   );
 
   // dist/isomorphic/module.wasm is the loadable (unsigned) runtime artifact.
+  // Refuse a declaration the emitted bytes contradict (see THREAD_MODEL above).
+  assertArtifactThreadModel(outWasm, THREAD_MODEL, "analysis/od/fit-pipeline");
   fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
   await signBuiltModule(outWasm);
   console.log(`  Runtime artifact (loadable, unsigned): ${path.join(ISOMORPHIC_DIST_DIR, "module.wasm")}`);

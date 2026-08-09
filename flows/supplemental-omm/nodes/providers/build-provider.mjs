@@ -8,6 +8,7 @@ import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { signModuleArtifact } from "space-data-module-sdk";
 
 import { compileUniversalAot } from "../universal-aot.mjs";
+import { THREAD_MODELS } from "../../../../scripts/lib/thread-model.mjs";
 
 const providersRoot = path.dirname(fileURLToPath(import.meta.url));
 const standardsRoot = path.resolve(
@@ -65,10 +66,22 @@ export async function buildProviderNode({
   nodeRoot,
   defaultSigningByte,
   defaultSigningKeyId,
-  threadModel = "single-thread",
+  // NO DEFAULT. A helper default is not a declaration: it makes the thread model
+  // a property of THIS FILE rather than of the node being built, so editing one
+  // line here silently re-shapes five artifacts, and a reader of a provider's
+  // build.mjs cannot see which toolchain lane it ships in. Four providers rode
+  // this default and read as undeclared in the reproducibility census.
+  // Graph task: modules-undeclared-threadmodel-artifacts.
+  threadModel,
   schemaCodes = ["FSB"],
   sourceFragments = [],
 }) {
+  if (!THREAD_MODELS.includes(threadModel)) {
+    throw new TypeError(
+      `buildProviderNode: threadModel must be declared explicitly as one of ${JSON.stringify(THREAD_MODELS)}, got ${JSON.stringify(threadModel)}. ` +
+        "Declare it as a string literal in the provider's own build.mjs.",
+    );
+  }
   if (
     !Array.isArray(sourceFragments) ||
     sourceFragments.some((fragment) => typeof fragment !== "string")

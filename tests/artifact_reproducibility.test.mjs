@@ -22,6 +22,7 @@ import {
   resolveToolchain,
   toolchainId,
 } from "../scripts/build-provenance.mjs";
+import { inspectWasmThreading } from "../scripts/lib/thread-model.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CHECKER = path.join(REPO_ROOT, "scripts", "check-artifact-reproducibility.mjs");
@@ -84,6 +85,94 @@ test("NEGATIVE CONTROL: an artifact missing from the ledger FAILS", () => {
   } finally {
     fs.writeFileSync(LEDGER, original);
   }
+});
+
+// THREAD-MODEL DECLARATION — the ratchet that took the "cannot be rebuilt at the
+// current pin" census from 41 artifacts to 0.
+//
+// Graph task: modules-undeclared-threadmodel-artifacts. The three controls below
+// are the three ways the declaration can rot, and each was a live state of this
+// repo at some point: absent (11 modules), present but contradicted by the bytes
+// (what the SDK's own guard caught when the inference moved), and present but not
+// a value the compiler understands.
+
+const DECLARATION_PROBE = "hostcap/clock/build.mjs";
+
+function withBuildScript(mutate, assertions) {
+  const abs = path.join(REPO_ROOT, DECLARATION_PROBE);
+  const original = fs.readFileSync(abs, "utf8");
+  try {
+    fs.writeFileSync(abs, mutate(original));
+    assertions();
+  } finally {
+    fs.writeFileSync(abs, original);
+  }
+  assert.equal(fs.readFileSync(abs, "utf8"), original, "the negative control must restore the build script");
+}
+
+test("every module with a build.mjs declares a thread model", () => {
+  const result = runChecker();
+  assert.equal(result.ok, true, result.output);
+  const match = /(\d+)\/(\d+) modules declare a thread model/.exec(result.output);
+  assert.ok(match, `the check must report the module census:\n${result.output}`);
+  assert.equal(match[1], match[2], "every module with a build.mjs must declare");
+});
+
+test("NEGATIVE CONTROL: a module that stops declaring its thread model FAILS", () => {
+  withBuildScript(
+    (source) => {
+      const stripped = source.replace('  threadModel: "single-thread",\n', "");
+      assert.notEqual(stripped, source, `${DECLARATION_PROBE} must contain the declaration to remove`);
+      return stripped;
+    },
+    () => {
+      const result = runChecker();
+      assert.equal(result.ok, false, "an undeclared module must fail the check");
+      assert.match(result.output, /MODULES WITH NO THREAD-MODEL DECLARATION/);
+      assert.ok(result.output.includes("hostcap/clock"), "the failure must name the module");
+    },
+  );
+});
+
+test("NEGATIVE CONTROL: a declaration the committed bytes contradict FAILS", () => {
+  // The artifact has unshared memory and no wasi.thread-spawn import, so claiming
+  // the pthreads contract is a lie the bytes can refute without a rebuild.
+  withBuildScript(
+    (source) => source.replace('threadModel: "single-thread"', 'threadModel: "emscripten-pthreads"'),
+    () => {
+      const result = runChecker();
+      assert.equal(result.ok, false, "a declaration contradicted by the bytes must fail");
+      assert.match(result.output, /DECLARATION CONTRADICTS SHIPPED BYTES/);
+      assert.match(result.output, /no wasi-threads contract/);
+    },
+  );
+});
+
+test("NEGATIVE CONTROL: a thread model the compiler does not understand FAILS", () => {
+  withBuildScript(
+    (source) => source.replace('threadModel: "single-thread"', 'threadModel: "mostly-single"'),
+    () => {
+      const result = runChecker();
+      assert.equal(result.ok, false, "an unrecognised thread model must fail");
+      assert.match(result.output, /UNRECOGNISED THREAD MODEL/);
+    },
+  );
+});
+
+test("the artifact inspector reads the module, not the appended signature", () => {
+  // signModuleArtifact APPENDS a detached payload after the last wasm section.
+  // A walker that keeps going reads garbage section ids and eventually runs off
+  // the end — measured on catalog-synthesis.wasm, where the module proper is the
+  // first 162,920 of 163,884 bytes.
+  const signed = path.join(REPO_ROOT, "analysis/catalog-synthesis/dist/catalog-synthesis.wasm");
+  const unsigned = path.join(REPO_ROOT, "analysis/catalog-synthesis/dist/isomorphic/module.wasm");
+  const signedFacts = inspectWasmThreading(signed);
+  const unsignedFacts = inspectWasmThreading(unsigned);
+  assert.ok(signedFacts.trailingBytes > 0, "the signed artifact must carry a detached payload");
+  assert.equal(unsignedFacts.trailingBytes, 0, "the unsigned artifact must be pure wasm");
+  assert.equal(signedFacts.sharedMemory, unsignedFacts.sharedMemory);
+  assert.equal(signedFacts.threadSpawnImport, unsignedFacts.threadSpawnImport);
+  assert.deepEqual(signedFacts.importModules, unsignedFacts.importModules);
 });
 
 test("the toolchain identity covers every input that can change the emitted bytes", () => {

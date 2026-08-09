@@ -105,13 +105,34 @@ export function inspectWasmThreading(input) {
   let sharedMemory = false;
   let threadSpawnImport = null;
   let threadStartExport = false;
+  let trailingBytes = 0;
   const importModules = new Set();
 
+  // The walk stops at the end of the WASM MODULE PROPER, which is not always the
+  // end of the file. `signModuleArtifact` produces artifacts that APPEND a
+  // signature envelope after the last section — measured: catalog-synthesis.wasm
+  // is 163,884 B, of which the module is the first 162,920 (byte-identical to the
+  // unsigned dist/isomorphic/module.wasm) and the rest is a detached payload that
+  // is not wasm at all. Walking into it yields garbage section ids and eventually
+  // an out-of-bounds name read. Section ids above 13 (tag) do not exist, so the
+  // first one is where the module ends. Nothing is lost: every threading fact
+  // lives in the import, memory and export sections, all of which precede code.
+  const MAX_SECTION_ID = 13;
+
   while (offset < bytes.length) {
-    const id = bytes[offset++];
+    const id = bytes[offset];
+    if (id > MAX_SECTION_ID) {
+      trailingBytes = bytes.length - offset;
+      break;
+    }
+    offset += 1;
     let size;
     [size, offset] = readVaruint(bytes, offset);
     const end = offset + size;
+    if (end > bytes.length) {
+      trailingBytes = bytes.length - (offset - 1);
+      break;
+    }
     if (id === 2) {
       // import
       let cursor = offset;
@@ -167,6 +188,9 @@ export function inspectWasmThreading(input) {
     sharedMemory,
     threadSpawnImport,
     threadStartExport,
+    // Non-zero on a signed artifact: the detached signature envelope. Reported
+    // rather than hidden, so a caller can tell "signed" from "corrupt".
+    trailingBytes,
     importModules: [...importModules].sort(),
   };
 }
