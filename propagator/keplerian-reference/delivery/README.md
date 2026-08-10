@@ -23,38 +23,127 @@ to admit it.
 which is the same digest the tri-runtime parity gate reported for the artifact
 it exercised.
 
-## Publishing
+## Publishing — the recipe below this line was WRONG, and here is the right one
+
+The first version of this file said to publish with `plugins publish-orbpro
+--grant-policy open`. That verb cannot publish this module, and it never could:
+
+- `buildModulePublishRequestFromPluginRoot` refuses an entry that is not
+  encrypted (`catalog entry %q is not encrypted`); the wire struct carries only
+  `EncryptedBundle` + `KeyMaterial`. This module is plaintext ON PURPOSE — it is
+  the one artifact everyone is invited to read.
+- that lane writes into the licensing plugin registry at
+  `<storage>/license/plugins`. It never touches `modules-catalog.json` and never
+  creates a `/modules/<id>/<version>/module.wasm` path, so nothing it publishes
+  is reachable by an anonymous browser.
+
+The lane that serves an ANONYMOUS plaintext wasm to a cold browser is the $PMM
+lane, and it has **no CLI verb and no HTTP endpoint**. It is deployed DATA:
+the artifact on disk plus a row in the catalog the node reads. That is not an
+oversight — `internal/pmm` is explicit that it is a connector and that every
+policy decision arrives as data.
 
 ```bash
-# 1. Assemble a plugin root: catalog.json plus the artifacts it names.
-#    (For open, unencrypted modules the artifact is copied in as-is.)
+SHA=d6b7044766ad268aad407180abcc8ab5c47901e9ce177d2e20200e1d76c49645
+ROOT=/opt/data/sdn-module-delivery/modules      # <storage.path>/modules
 
-# 2. Publish over libp2p from an admin HD-wallet identity.
-spacedatanetwork -c <node config> plugins publish-orbpro \
-  --plugin-root <root> \
-  --module com.orbpro.keplerian.reference \
-  --grant-policy open
+# 1. the artifact, content-addressed (the convention every other row uses)
+scp dist/isomorphic/module.wasm "$HOST:$ROOT/artifacts/$SHA.wasm"
+ssh "$HOST" "chown sdn:sdn $ROOT/artifacts/$SHA.wasm && chmod 0644 $ROOT/artifacts/$SHA.wasm"
+
+# 2. the row: append modules-catalog.entry.json to entries[], and a browse hint
+#    to browse[]. Back up first; write atomically (install + mv), never in place.
+
+# 3. nothing else. pmmRefreshInterval is 6 h and rebuild() re-reads the catalog
+#    and re-hashes every artifact from disk, so a staged row goes live with NO
+#    daemon restart.
 ```
 
-## Status — read this before claiming it is live
+**Validate before you write.** `pmmPlugin.Start` fails CLOSED: a catalog it
+cannot load means `RegisterRoutes` mounts nothing and the ENTIRE
+`/.well-known/sdn/modules.pmm` + `/modules/` surface 404s until someone
+notices. On host-01 that daemon also terminates TLS on :443. Run the daemon's
+own code over your candidate file rather than eyeballing it — a temporary test
+in `internal/pmm` calling `LoadCatalog` + `Manifest.Validate()` + `HashArtifact`
+takes two minutes and is the difference between a data edit and an outage.
 
-**This module has NOT been published to a production node from this task.**
+## Status — PUBLISHED AND LIVE 2026-08-10
 
-The publish verb requires a node config, an admin HD-wallet identity and a
-reachable target peer. None of those were verified available in the session
-that built this module, and a prod publish is a deploy-law operation: local
-full-stack verify first, then full deploy plus live verification. Recording a
-publish that did not happen is exactly the "pushed-but-unmerged is
-indistinguishable from work that never happened" failure in reverse.
+Published to `sdn.spaceaware.io` (host-01) by the wave-1 closeout lane.
+Staged **04:36Z** under `/run/sdn-deploy.lock` holder `w1-closeout` (released
+after staging, ledgered in `/var/log/sdn-deploy-lock.ledger`); **live 06:13Z**,
+on the plugin's own 6-hourly rebuild. **No daemon roll.** The 95-minute wait was
+the point: this box terminates TLS on :443 itself and `pmmPlugin.Start` fails
+CLOSED on a bad catalog, so restarting to save an hour and a half would have
+risked the whole storefront for a change the lane applies by itself.
 
-What IS verified here:
+Evidence, measured against the public origin.
+
+**The signed manifest** — `GET /.well-known/sdn/modules.pmm`, `Accept:
+application/json`: **67 -> 68 MODULES**, ed25519 signature present,
+`PROVIDER_DOMAIN sdn.spaceaware.io`. The entry reads back exactly as declared:
+
+```
+VERSION 1.0.0 · PLUGIN_TYPE Propagator · ACCESS_POLICY ANONYMOUS
+TRUST_TIER OPTIONAL · DEFAULT_ENABLED false · ENTRY_STATE ACTIVE
+RUNTIME_TARGETS [browser, wasmedge] · LICENSE MIT
+CONTENT_HASH d6b7044766ad268aad407180abcc8ab5c47901e9ce177d2e20200e1d76c49645
+ARTIFACT_SIZE_BYTES 82923
+ARTIFACT_PATH /modules/com.orbpro.keplerian.reference/1.0.0/module.wasm
+```
+
+**The artifact** — 404 before, after:
+
+```
+HTTP/2 200 · content-type: application/wasm · x-content-type-options: nosniff
+access-control-allow-origin: * · cache-control: public, max-age=31536000, immutable
+etag: "d6b7044766ad268aad407180abcc8ab5c47901e9ce177d2e20200e1d76c49645"
+```
+
+**Cold load in a real browser, first attempt.** A fresh Playwright context with
+no cache and no storage, from a DIFFERENT origin, given nothing but the provider
+domain: it read the manifest, took `ARTIFACT_PATH` from the signed record,
+fetched the bytes cross-origin, hashed them with SubtleCrypto and compiled them.
+
+```
+byteLength 82923 · sha256 d6b7044766ad268a…c49645 (== declared) · wasm magic ok
+imports  [wasi_snapshot_preview1]        <- pure WASI, no host-specific shim
+exports  plugin_init, plugin_init_omm, plugin_ingest_omm_one, plugin_propagate,
+         plugin_propagate_batch, plugin_entity_count, plugin_destroy,
+         plugin_alloc, plugin_free, plugin_invoke_stream,
+         plugin_get_manifest_flatbuffer(_size)
+```
+
+**The demo, installing from this node.** `gallery/keplerian-reference-propagator`
+(OrbPro `07e914025a`) now resolves the artifact from the live `$PMM` manifest
+instead of a repo-relative copy, and publishes where the bytes came from:
+
+```
+deliveredFromProvider  true
+deliveredArtifactUrl   https://sdn.spaceaware.io/modules/com.orbpro.keplerian.reference/1.0.0/module.wasm
+deliveredContentHash   d6b7044766ad268a…c49645
+referenceFrameValue    3 (ECEF)      validStateVectors 25/25
+reference (KEPLER)     831127.46 m   period 101.409 min
+baseline  (SGP4)       417058.46 m   period  93.003 min
+```
+
+and the port is real, not a label — forcing the reference lane onto SGP4 moves
+its altitude to **826133.57 m**, a ~5 km two-body-vs-SGP4 difference on the same
+element set.
+
+Pre-write validation, against the daemon's own code rather than by inspection:
+`pmm.LoadCatalog` + `Manifest.Validate()` over all 68 entries PASS, and
+`pmm.HashArtifact` — which strips the publication trailer and hashes the
+PORTABLE bytes — returned exactly the declared digest at exactly 82,923 bytes.
+
+Unchanged from before this task, and still true:
 
 - the artifact builds reproducibly through the SDK compiler lane
 - `parity-gate PASS` on all three real runtimes, `sha256=d6b7044766ad268a`
 - 17/17 module tests, including the lifecycle leak test with its negative
   control
-- the catalog row above is well-formed against `internal/pmm`'s `Entry` schema
-  and its enum validation (`validTiers` / `validAccess` / `validStates` /
-  `validPluginTypes`)
 
-The remaining step is an operator action.
+`TRUST_TIER: OPTIONAL` is deliberately unusual here — every other OPTIONAL row
+on this node is ENTITLED. It means the module is anonymous and readable but
+never pre-selected at first sign-in, which is the correct position for a
+two-body teaching propagator.

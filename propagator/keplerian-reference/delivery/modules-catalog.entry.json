@@ -17,5 +17,7 @@
     "wasmedge"
   ],
   "LICENSE": "MIT",
-  "source_artifact": "artifacts/keplerian-reference/module.wasm"
+  "source_artifact": "artifacts/d6b7044766ad268aad407180abcc8ab5c47901e9ce177d2e20200e1d76c49645.wasm",
+  "EPOCH": 1,
+  "UPDATED_AT": "2026-08-10T04:35:00.000Z"
 }
