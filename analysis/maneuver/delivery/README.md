@@ -147,11 +147,84 @@ Measured on `4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97`
 
 ## Status
 
-**NOT YET PUBLISHED.** Staging to `sdn.spaceaware.io` requires the deploy lock
-and host access; this file is the recipe and the row, ready to apply. 0.2.0 was
-never staged either, so the live catalog still carries the 0.1.0 row — a node
-admitting 0.3.0 goes straight from `6028c779…9cfe043` to `4e945bbf…19144c97`,
-and `SUPERSEDES_CONTENT_HASH` names the 0.2.0 artifact that was built and
-verified but never served. Update this section with the staged/live timestamps,
-the manifest module count before and after, and the artifact's
-`HTTP 200 / etag` when it lands.
+### PREMISE CORRECTION, 2026-08-10 — this file said 0.2.0 was never published
+
+It was. The section below used to read **NOT YET PUBLISHED**, and it was checked
+against the live host rather than believed:
+
+```
+GET https://sdn.spaceaware.io/modules/maneuver-planner/0.2.0/module.wasm
+  200, 200,879 bytes, etag "0746bb22…c2934ae"
+GET https://sdn.spaceaware.io/.well-known/sdn/modules.pmm
+  200 — module:maneuver-planner 0.2.0 0746bb22…c2934ae RECOMMENDED ANONYMOUS 0 ACTIVE
+```
+
+`maneuver-planner 0.2.0` has been live since 2026-08-10T07:06Z (deploy ledger,
+`holder=maneuver-rebuild`). The recipe below was followed and this section was
+not updated afterwards, so the file has been telling every subsequent reader
+that a published artifact was unpublished. The 0.1.0 row is gone from the live
+catalog; the lineage on the wire is `6028c779…` -> `0746bb22…` -> `4e945bbf…`,
+exactly as `SUPERSEDES_CONTENT_HASH` records it.
+
+### 0.3.0 — STAGED 2026-08-10T17:52Z
+
+Applied by `maneuver-lambert-0-3-0` under `/run/sdn-deploy.lock`, taken 17:51Z
+and released 17:54Z, both ends recorded in `/var/log/sdn-deploy-lock.ledger`.
+Catalog DATA only: no binary roll, no daemon restart, no unit file touched.
+
+- artifact `artifacts/4e945bbf…19144c97.wasm`, 205,798 B, `sdn:sdn` `0644`.
+  The uploaded bytes were re-hashed ON THE HOST before anything read them, and
+  again after `install`, against the digest this repo committed.
+- catalog row REPLACED in place (never appended — two ACTIVE rows for one
+  `MODULE_ID` is a state the catalog defines no ordering over, and the
+  storefront would list the module twice). 68 entries before and after, no
+  duplicate `MODULE_ID`. Backup `modules-catalog.json.bak-20260810T175206Z`.
+- validated BEFORE the write, because `pmmPlugin.Start` fails closed and that
+  daemon also terminates TLS on :443: the JSON parses back, the referenced
+  artifact exists, its sha256 and byte count match the declared ones, and
+  `SUPERSEDES_CONTENT_HASH` names the row being replaced.
+- `browse[]` needed no change: its maneuver row carries `module_id`, `family`,
+  `module_path` and visibility flags, and no version.
+- 0.2.0's artifact is left in place as the rollback. It is content-addressed, so
+  the two never collide; reverting is restoring one catalog row from the backup.
+
+The `$PMM` lane has **no CLI verb and no HTTP endpoint** — confirmed again here
+against the shipped binary's own help, where `plugins` exposes only
+`publish-orbpro` (the encrypted licensed lane, which refuses a plaintext entry).
+A staged row therefore goes live on the daemon's own `pmmRefreshInterval`
+rebuild, 6-hourly from its start at 2026-08-09T18:11:23Z — i.e. ~18:11Z, and
+the same rebuild picks up `janus-resign-wave`'s 12:57Z staging. Between the
+staging and that tick the manifest legitimately still advertised 0.2.0 and
+`/modules/maneuver-planner/0.3.0/module.wasm` legitimately 404'd; that window is
+not a failed deploy, and reporting it as one is how a correct staging gets
+"fixed" by a daemon restart nobody needed.
+
+### 0.3.0 — LIVE 2026-08-10T18:12:54Z
+
+The rebuild landed on schedule, with no restart and no intervention.
+
+```
+GET https://sdn.spaceaware.io/.well-known/sdn/modules.pmm
+  module:maneuver-planner 0.3.0 4e945bbf…19144c97 RECOMMENDED ANONYMOUS 0 ACTIVE
+  /modules/maneuver-planner/0.3.0/module.wasm
+
+GET https://sdn.spaceaware.io/modules/maneuver-planner/0.3.0/module.wasm
+  200, 205,798 bytes
+  sha256 4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97
+```
+
+The served digest equals the committed one, so the bytes on the wire are the
+bytes this repo built and tested.
+
+**The served artifact was then RUN, not merely hashed** — a matching digest
+proves delivery, not behaviour, and every defect this version closes lives in
+behaviour. The file was fetched from the public URL and driven through the SDK
+harness on browser AND WasmEdge:
+
+| probe | live response | reference |
+|---|---|---|
+| Curtis 5.3, 0 revs — `no-solution` at 0.2.0 | `v1 = [-2435.667, 267.419, 0]` | hapsira `[-2435.6, 267.41, 0]`, rtol 1e-4 |
+| Der Molniya, 1 rev, `branch: "high"` — unreachable at 0.2.0 | `branch "high"`, `v1 = [503.3577, 618.69408, -1571.76904]` | hapsira `lowpath=False`, exact to the printed digits |
+| Der Molniya, 0 revs — silent at 0.2.0 | `transferConic "elliptic"`, `perigeeRadius 909990.65`, `apogeeRadius 51387540.49` | the arc that dives 5,468 km BELOW the surface, now reported so a consumer can screen it |
+
+Identical on both runtimes.
