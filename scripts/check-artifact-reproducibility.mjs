@@ -30,6 +30,12 @@
 //     count is held at or below the recorded baseline so the class shrinks and
 //     never grows.
 //
+//   LOADABILITY (default, fast)
+//     Can a host on TODAY'S SDK read the artifact's own embedded `$PLG`
+//     declaration? Reproducibility and loadability turned out to be independent
+//     questions, and the second one had seven answers of "no" — six of them CORE,
+//     DEFAULT_ENABLED and live. See scripts/lib/manifest-readability.mjs.
+//
 //   REBUILD (opt-in: --rebuild <n|module,...>, or MODULES_REPRO_REBUILD)
 //     Actually recompile N representative modules from pinned source into a temp
 //     directory — never into the module's own dist/, because build.mjs rm -rf's
@@ -37,11 +43,21 @@
 //     sha256 against what is committed. ~16s per module, which is why it is not
 //     in the default lane.
 //
+//   CURRENT-PIN CENSUS (opt-in write: --write-current-pin-census)
+//     The same rebuild, over EVERY module that owns a builder, recording per
+//     artifact whether it reproduces at the current pin, and — when it does not —
+//     which class it falls in. This is what replaced the old "110 of 130 were
+//     built at a pin that is no longer current" number, which was ARCHAEOLOGY:
+//     `sdkPinAtCommit` resolves the super-repo gitlink as of the artifact's commit
+//     DATE, so it says which SDK the stack was pinned to that day, not whether the
+//     bytes still come back today. Measured, most of them do.
+//
 // Usage:
 //   node scripts/check-artifact-reproducibility.mjs
 //   node scripts/check-artifact-reproducibility.mjs --rebuild 3
 //   node scripts/check-artifact-reproducibility.mjs --rebuild hostcap/storage-ingest
 //   node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]
+//   node scripts/check-artifact-reproducibility.mjs --write-current-pin-census
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -57,6 +73,7 @@ import {
 } from "./build-provenance.mjs";
 import { THREAD_MODELS, assertArtifactThreadModel } from "./lib/thread-model.mjs";
 import { loadEmsdkPin } from "./lib/emsdk-toolchain.mjs";
+import { inspectEmbeddedManifest } from "./lib/manifest-readability.mjs";
 
 const LEDGER_PATH = path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
 
@@ -296,6 +313,81 @@ async function measureRebuildBaseline() {
   return baseline;
 }
 
+// EVERY module that owns a builder, and which builder it is.
+//
+// `owningModule` recognises only `build.mjs`, which is what the thread-model and
+// raw-em++ lanes are scoped to. The census has to be wider than that or it would
+// silently score 32 artifacts as "no builder": 26 are built by a `build.sh` and 6
+// by a `build.js`. Those lanes are NOT under the declaration ratchets — recorded
+// in the census as `unscored-lane` rather than quietly counted as flow bakes.
+const BUILDERS = Object.freeze(["build.mjs", "build.js", "build.sh"]);
+function builderFor(moduleDir) {
+  for (const name of BUILDERS) {
+    if (fs.existsSync(path.join(REPO_ROOT, moduleDir, name))) return name;
+  }
+  return null;
+}
+
+// THE CURRENT-PIN CENSUS. One throwaway checkout, every module with a builder,
+// dist/ wiped before each build — because the checkout is a checkout of HEAD and
+// therefore already holds the committed dist/, so a build that dies before its own
+// `rm -rf` would leave those bytes in place and be scored "reproduced" against
+// itself. That is not a hypothetical: it happened on the first run of this sweep
+// and made `analysis/catalog-synthesis` report two reproductions from a build that
+// never emitted anything.
+async function measureCurrentPinCensus() {
+  const dirs = [...new Set(trackedArtifacts().map((rel) => rel.slice(0, rel.indexOf("/dist/"))))]
+    .filter((dir) => builderFor(dir))
+    .sort();
+  const checkout = await createSourceCheckout("HEAD");
+  const artifacts = {};
+  const modules = {};
+  try {
+    for (const moduleDir of dirs) {
+      const result = await rebuildAndCompareAll(checkout, moduleDir);
+      modules[moduleDir] = { builder: builderFor(moduleDir), status: result.buildOk ? "built" : "build-failed" };
+      for (const [rel, status] of Object.entries(result.artifacts)) artifacts[rel] = status;
+      console.log(`  census ${moduleDir}: ${result.buildOk ? "built" : "build-failed"} — ${Object.values(result.artifacts).join(", ")}`);
+    }
+  } finally {
+    await checkout.dispose();
+  }
+  return { artifacts, modules };
+}
+
+async function writeCurrentPinCensus() {
+  const toolchain = resolveToolchain();
+  const previous = loadLedger();
+  const measured = await measureCurrentPinCensus();
+  const counts = {};
+  for (const status of Object.values(measured.artifacts)) counts[status] = (counts[status] ?? 0) + 1;
+  const tracked = trackedArtifacts();
+  const uncovered = tracked.filter((rel) => !measured.artifacts[rel]);
+  const ledger = {
+    ...previous,
+    currentPinCensus: {
+      measuredAt: new Date().toISOString(),
+      toolchain: toolchain.id,
+      method:
+        "One throwaway git worktree of HEAD; per module, dist/ is wiped and the module's own builder is run with " +
+        "the pinned standards root, the pinned emsdk and the dev signing keypair supplied by environment; the " +
+        "emitted artifact's sha256 is compared with the committed one. Never in place: build.mjs rm -rf's dist/ " +
+        "before the SDK's artifact guard runs, so a rejected build in the real tree leaves a truncated corpse.",
+      counts,
+      // Artifacts with no builder at all: the true flow bakes, whose provenance is
+      // the bake and which move when their flow is re-baked, not when a module is.
+      exceptions: {
+        ...(previous?.currentPinCensus?.exceptions ?? {}),
+        ...Object.fromEntries(uncovered.map((rel) => [rel, "no builder owns this path — flow bake; moves when its flow is re-baked"])),
+      },
+      artifacts: measured.artifacts,
+      modules: measured.modules,
+    },
+  };
+  fs.writeFileSync(LEDGER_PATH, `${JSON.stringify(ledger, null, 2)}\n`);
+  console.log(`\ncurrent-pin census at ${toolchain.id}: ${JSON.stringify(counts)}; ${uncovered.length} artifacts have no builder.`);
+}
+
 async function writeLedger({ superRepo, withRebuild }) {
   const toolchain = resolveToolchain();
   const artifacts = buildCensus({ superRepo });
@@ -324,6 +416,13 @@ async function writeLedger({ superRepo, withRebuild }) {
     // only see modules that already shipped; this one closes the door in front of
     // the next module instead of behind it. Once at zero it stays at zero.
     undeclaredModuleBaseline: undeclaredModules.length,
+    // LOADABILITY, the census reproducibility cannot see: artifacts whose embedded
+    // `$PLG` the CURRENT SDK decodes into garbage, so the loader gate admits no leg
+    // and no current host will run them. A ratchet at whatever is left after this
+    // wave; `unreproducibleReasons` names each survivor and why it could not move.
+    manifestUnreadableBaseline: Object.keys(artifacts).filter(
+      (rel) => !inspectEmbeddedManifest(fs.readFileSync(path.join(REPO_ROOT, rel)), rel).ok,
+    ).length,
     // What the REBUILD lane currently achieves per representative module. Also a
     // ratchet: a module recorded as "reproduced" that stops reproducing is a hard
     // failure; one already recorded as unreproducible is reported, not re-counted.
@@ -506,9 +605,48 @@ function checkLedger() {
     );
   }
 
+  // LOADABILITY. The question every other lane here skips: reproducibility says
+  // the bytes come back, and says nothing about whether any host will run them.
+  // Seven artifacts answered "no" when this was first run — six of them CORE,
+  // DEFAULT_ENABLED and serving live — because the `$PLG` manifest encoding moved
+  // and the loader gate decodes the older one into garbage rather than refusing
+  // it. A ratchet, like every other census here: it may shrink, never grow.
+  const unreadable = [];
+  for (const rel of tracked) {
+    const verdict = inspectEmbeddedManifest(fs.readFileSync(path.join(REPO_ROOT, rel)), rel);
+    if (!verdict.ok) unreadable.push(`${rel}: ${verdict.reason}`);
+  }
+  const unreadableBaseline = ledger.manifestUnreadableBaseline ?? unreadable.length;
+  if (unreadable.length > unreadableBaseline) {
+    failures.push(
+      `EMBEDDED MANIFEST UNREADABLE AT THE CURRENT SDK: ${unreadable.length} artifacts (baseline ${unreadableBaseline}).\n` +
+        `    Such an artifact is valid wasm with a valid signature and a matching sha256 — and no current host will\n` +
+        `    load it, because the loader gate cannot read the runtime targets it declares. Rebuild at the current pin.\n` +
+        unreadable.map((u) => `      - ${u}`).join("\n"),
+    );
+  }
+
+  // THE CURRENT-PIN CENSUS, checked for COVERAGE rather than for a count. The
+  // acceptance this wave was given was "every artifact at the current pin OR a
+  // recorded, reasoned exception", and that is exactly what is enforced: an
+  // artifact may be absent from the census only if an exception names it.
+  const census = ledger.currentPinCensus;
+  if (census) {
+    const uncovered = tracked.filter((rel) => !census.artifacts?.[rel] && !census.exceptions?.[rel]);
+    if (uncovered.length) {
+      failures.push(
+        `CURRENT-PIN CENSUS DOES NOT COVER ${uncovered.length} committed artifact(s).\n` +
+          `    Every artifact is either measured at the current pin or carries a written reason why not.\n` +
+          `    Re-measure: node scripts/check-artifact-reproducibility.mjs --write-current-pin-census\n` +
+          uncovered.map((u) => `      - ${u}`).join("\n"),
+      );
+    }
+  }
+
   const modules = allBuildModules().length;
   console.log(
     `ledger: ${tracked.length} artifacts checked against ${Object.keys(ledger.artifacts ?? {}).length} recorded; ` +
+      `${unreadable.length} with an unreadable embedded manifest (baseline ${unreadableBaseline}); ` +
       `${inferenceHazards} undeclared-lane artifacts (baseline ${baseline}); ` +
       `${modules - undeclared.length}/${modules} modules declare a thread model (baseline ${moduleBaseline} undeclared); ` +
       `raw-em++ lane pin ${EMSDK_PIN.pin.id}, ${laneUnknown.length} artifacts with no build-time toolchain record (baseline ${laneBaseline}).`,
@@ -609,6 +747,65 @@ async function rebuildAndCompare(checkout, moduleDir) {
   }
 }
 
+// The census form of `rebuildAndCompare`: EVERY committed artifact the module
+// owns, not just dist/isomorphic/module.wasm. Sixteen modules commit a second,
+// SIGNED copy beside the plain one (`<name>.wasm` = the isomorphic artifact plus a
+// 964-byte detached `$REC` publication trailer), and a census that looked only at
+// the isomorphic path would score half of this lane as unmeasured.
+//
+// The environment is supplied explicitly rather than inherited, because three
+// things in it resolve RELATIVE to the package and therefore cannot work from a
+// checkout in $TMPDIR: the SDS C++ headers, the FlatBuffers C++ headers, and the
+// dev module-signing keypair — which two lanes read under two different names.
+async function rebuildAndCompareAll(checkout, moduleDir) {
+  const builder = builderFor(moduleDir);
+  const owned = trackedArtifacts().filter((rel) => rel.startsWith(`${moduleDir}/dist/`));
+  const pkgDir = path.join(checkout.repo, moduleDir);
+  const sdkRoot = path.join(REPO_ROOT, "node_modules", "space-data-module-sdk");
+  const flatbuffers = path.join(REPO_ROOT, "..", "flatbuffers");
+  const env = {
+    ...process.env,
+    SPACE_DATA_STANDARDS_ROOT: checkout.standardsRoot,
+    SPACE_DATA_MODULE_SDK_ROOT: sdkRoot,
+    FLATBUFFERS_INCLUDE_DIR: process.env.FLATBUFFERS_INCLUDE_DIR ?? path.join(flatbuffers, "include"),
+    SDN_FLATBUFFERS_INCLUDE_DIR: process.env.SDN_FLATBUFFERS_INCLUDE_DIR ?? path.join(flatbuffers, "include"),
+    SDM_MODULE_SIGNING_KEYPAIR_PATH:
+      process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH
+      ?? path.join(sdkRoot, "test", "support", "dev-module-signing-keypair.json"),
+    SDN_MODULE_SIGNING_KEYPAIR:
+      process.env.SDN_MODULE_SIGNING_KEYPAIR
+      ?? path.join(sdkRoot, "test", "support", "dev-module-signing-keypair.json"),
+  };
+  await fsp.rm(path.join(pkgDir, "dist"), { recursive: true, force: true });
+  let buildOk = true;
+  try {
+    for (let dir = pkgDir; dir.startsWith(checkout.repo); dir = path.dirname(dir)) {
+      await fsp.symlink(checkout.standardsRoot, path.join(dir, "spacedatastandards.org")).catch(() => {});
+      await fsp.symlink(flatbuffers, path.join(dir, "flatbuffers")).catch(() => {});
+    }
+    const argv = builder === "build.sh" ? ["build.sh"] : [builder];
+    execFileSync(builder === "build.sh" ? "bash" : process.execPath, argv, {
+      cwd: pkgDir,
+      stdio: ["ignore", "ignore", "pipe"],
+      env,
+    });
+  } catch {
+    buildOk = false;
+  }
+  const artifacts = {};
+  for (const rel of owned) {
+    const rebuiltPath = path.join(checkout.repo, rel);
+    if (!fs.existsSync(rebuiltPath)) {
+      artifacts[rel] = buildOk ? "not-emitted" : "unbuildable-at-current-pin";
+      continue;
+    }
+    const rebuilt = sha256(await fsp.readFile(rebuiltPath));
+    const committed = sha256(await fsp.readFile(path.join(REPO_ROOT, rel)));
+    artifacts[rel] = rebuilt === committed ? "reproduces-at-current-pin" : "drifts-at-current-pin";
+  }
+  return { buildOk, artifacts };
+}
+
 function selectRebuildTargets(spec) {
   if (!spec || spec === "true") return REPRESENTATIVE_MODULES.slice(0, 2);
   const n = Number(spec);
@@ -625,6 +822,11 @@ async function main() {
 
   if (argv.includes("--write")) {
     await writeLedger({ superRepo: flag("super-repo"), withRebuild: argv.includes("--with-rebuild") });
+    return;
+  }
+
+  if (argv.includes("--write-current-pin-census")) {
+    await writeCurrentPinCensus();
     return;
   }
 

@@ -3,8 +3,8 @@
   "format": "wasm-object",
   "language": "c++",
   "threadModel": "single-thread",
-  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e636c6f636b_",
   "methodSymbols": {
-    "now": "sdm_guest_636f6d2e6469676974616c61_now"
+    "now": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e636c6f636b_now"
   }
 }
