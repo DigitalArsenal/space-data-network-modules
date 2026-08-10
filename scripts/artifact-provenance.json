@@ -2847,6 +2847,17 @@
       },
       "declaration": null
     },
+    "propagator/keplerian-reference/dist/isomorphic/module.wasm": {
+      "sha256": "d6b7044766ad268aad407180abcc8ab5c47901e9ce177d2e20200e1d76c49645",
+      "bytes": 82923,
+      "module": null,
+      "lastCommit": "87cb4b1bab084e4d1fb0eccda050dce780121ed5",
+      "lastCommitDate": "2026-08-09T22:43:37-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
     "propagator/sgp4/dist/browser-shared/module.wasm": {
       "sha256": "8d883e7bce30d4d94ff4162e15c5e4e58f525d49c96bbf258a3c7082ae37a15f",
       "bytes": 1172011,
