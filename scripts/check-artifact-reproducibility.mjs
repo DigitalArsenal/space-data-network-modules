@@ -775,6 +775,17 @@ async function rebuildAndCompareAll(checkout, moduleDir) {
     SDN_MODULE_SIGNING_KEYPAIR:
       process.env.SDN_MODULE_SIGNING_KEYPAIR
       ?? path.join(sdkRoot, "test", "support", "dev-module-signing-keypair.json"),
+    // SDN_LOCAL_EMSDK_DIR is passed THROUGH, never invented. The raw-em++
+    // resolver searches in-repo emsdk roots relative to ITS OWN REPO_ROOT, which
+    // in a throwaway checkout is the throwaway — and only the emsdk BOOTSTRAP is
+    // committed, so every candidate there is present-but-unpopulated. Pointing the
+    // variable at an unpopulated root would replace the resolver's precise "NO
+    // PINNED EMSCRIPTEN, provision it with …" with a silent skip. A census run
+    // that wants the 14 lane modules measured sets it at a POPULATED pinned
+    // checkout; `resolveLaneToolchain` still verifies version, release and LLVM
+    // revision against scripts/emsdk-pin.json and refuses anything that is not
+    // the pin, so naming one is not a bypass.
+    ORBPRO_ROOT: process.env.ORBPRO_ROOT ?? path.join(REPO_ROOT, "..", "OrbPro"),
   };
   await fsp.rm(path.join(pkgDir, "dist"), { recursive: true, force: true });
   let buildOk = true;
