@@ -132,7 +132,7 @@
   "emsdkLane": {
     "pin": "em-6.0.1",
     "emscriptenVersion": "6.0.1",
-    "modules": 14,
+    "modules": 15,
     "unknownToolchainBaseline": 27
   },
   "artifacts": {
@@ -1097,8 +1097,8 @@
       "sha256": "e384a80ab427417bca207b3eb7f45edda21e576849006383ba6592c5e9d42460",
       "bytes": 129453,
       "module": "data-source/oem-source-iss",
-      "lastCommit": "e7fa40618339c9fe66df89db8c145330e72957cb",
-      "lastCommitDate": "2026-07-17T16:22:06-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -1189,8 +1189,8 @@
       "sha256": "560fcd2bf7c88ac870b60320c168bfad21e07747329250ef3f27962c24cc75b0",
       "bytes": 139067,
       "module": "data-source/retrieval",
-      "lastCommit": "f881d48bbad2ef9c67fbf227b2fdd5c070ebe3a2",
-      "lastCommitDate": "2026-07-03T16:42:19-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2122,8 +2122,8 @@
       "sha256": "00b438a25a9433fbb82940ed96ff6b2d3bd49605074a79ba6edfacc2cb69a8ff",
       "bytes": 168496,
       "module": "foundation/attitude-math",
-      "lastCommit": "8978cd3435583707dc73a9a0840e75562fc4bc12",
-      "lastCommitDate": "2026-06-17T11:00:08-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2200,8 +2200,8 @@
       "sha256": "3aacab3222b6f91dcb15540688687aba6fcfe486c121fc3ac29e47d8ca15e58a",
       "bytes": 118891,
       "module": "foundation/frames",
-      "lastCommit": "8978cd3435583707dc73a9a0840e75562fc4bc12",
-      "lastCommitDate": "2026-06-17T11:00:08-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2278,8 +2278,8 @@
       "sha256": "e1b08ae0c76d542f61d9bee37e1a6ea55801a452a2aa9ab039f8b7ae6c10622f",
       "bytes": 123178,
       "module": "foundation/math-bspline",
-      "lastCommit": "8978cd3435583707dc73a9a0840e75562fc4bc12",
-      "lastCommitDate": "2026-06-17T11:00:08-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2304,8 +2304,8 @@
       "sha256": "c1149071c904abe69c5cb10f3ea858f1ae3cd933cb1d4f158734926986c53575",
       "bytes": 146401,
       "module": "foundation/numerics",
-      "lastCommit": "8978cd3435583707dc73a9a0840e75562fc4bc12",
-      "lastCommitDate": "2026-06-17T11:00:08-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2382,8 +2382,8 @@
       "sha256": "0aab68587074a9619e1976869016d8d61c2ff7255414fb8f20b4a9d3df17da96",
       "bytes": 147589,
       "module": "foundation/time",
-      "lastCommit": "8978cd3435583707dc73a9a0840e75562fc4bc12",
-      "lastCommitDate": "2026-06-17T11:00:08-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2408,8 +2408,8 @@
       "sha256": "4190dd52a9e7f78e486bedb4596c8813eaa5db7058991eb77f02ec2540092b97",
       "bytes": 123464,
       "module": "hostcap/clock",
-      "lastCommit": "f28d729156a9e91911d0a609278e0b84d1afb1c6",
-      "lastCommitDate": "2026-07-03T12:24:12-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2590,8 +2590,8 @@
       "sha256": "1af51a0389caf201bfb061d6afc644e9e5e251ee944f2c237827a4cb4283ea48",
       "bytes": 122232,
       "module": "hostcap/random",
-      "lastCommit": "f28d729156a9e91911d0a609278e0b84d1afb1c6",
-      "lastCommitDate": "2026-07-03T12:24:12-04:00",
+      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
+      "lastCommitDate": "2026-08-10T08:54:46-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2895,477 +2895,37 @@
       "declaration": null
     },
     "propagator/sgp4/dist/browser-shared/module.wasm": {
-      "sha256": "8d883e7bce30d4d94ff4162e15c5e4e58f525d49c96bbf258a3c7082ae37a15f",
-      "bytes": 1172011,
+      "sha256": "4db77cb6ab60ad3e3bdc5753694bf95642d08b399196dec03d8b34a72d5ad019",
+      "bytes": 1180647,
       "module": null,
-      "lastCommit": "495754ae05c11a35bb013301bd59b967bf9695e9",
-      "lastCommitDate": "2026-06-03T12:57:22-04:00",
+      "lastCommit": "cb49af9b3bbdb233a22ba13965171ed92686f3cd",
+      "lastCommitDate": "2026-08-10T09:38:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "a2a92d881d97d0bc0ae5e6cbfab3ee5c1ec4330d",
-        "sdkCommit": "78ef31673dd0682c17f3718e60616aa4cc7aa1e2"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "propagator/sgp4/dist/browser/module.wasm": {
-      "sha256": "e229f07dc75c8c1b85dde908c637ea0c349c69756b121cd8ab005e58aaa982e1",
-      "bytes": 1171602,
+      "sha256": "c767e1cbceefe14deec9623217ab13ceca135b4b0dcb5e19aeda7232be12384e",
+      "bytes": 1179389,
       "module": null,
-      "lastCommit": "1a89416b14282a6b30737d2f0ab6c69bc7240125",
-      "lastCommitDate": "2026-06-12T15:38:08-04:00",
+      "lastCommit": "cb49af9b3bbdb233a22ba13965171ed92686f3cd",
+      "lastCommitDate": "2026-08-10T09:38:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "30c094571c7903a0cc3ae826a4b16438221f3fe0",
-        "sdkCommit": "78ef31673dd0682c17f3718e60616aa4cc7aa1e2"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "propagator/sgp4/dist/isomorphic/module.wasm": {
-      "sha256": "e229f07dc75c8c1b85dde908c637ea0c349c69756b121cd8ab005e58aaa982e1",
-      "bytes": 1171602,
+      "sha256": "c767e1cbceefe14deec9623217ab13ceca135b4b0dcb5e19aeda7232be12384e",
+      "bytes": 1179389,
       "module": null,
-      "lastCommit": "1a89416b14282a6b30737d2f0ab6c69bc7240125",
-      "lastCommitDate": "2026-06-12T15:38:08-04:00",
+      "lastCommit": "cb49af9b3bbdb233a22ba13965171ed92686f3cd",
+      "lastCommitDate": "2026-08-10T09:38:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "30c094571c7903a0cc3ae826a4b16438221f3fe0",
-        "sdkCommit": "78ef31673dd0682c17f3718e60616aa4cc7aa1e2"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
-    }
-  },
-  "currentPinCensus": {
-    "measuredAt": "2026-08-10T13:16:47.342Z",
-    "toolchain": "tc-d587c50b889f4c91",
-    "method": "One throwaway git worktree of HEAD; per module, dist/ is wiped and the module's own builder is run with the pinned standards root, the pinned emsdk and the dev signing keypair supplied by environment; the emitted artifact's sha256 is compared with the committed one. Never in place: build.mjs rm -rf's dist/ before the SDK's artifact guard runs, so a rejected build in the real tree leaves a truncated corpse.",
-    "counts": {
-      "drifts-at-current-pin": 46,
-      "unbuildable-at-current-pin": 25,
-      "reproduces-at-current-pin": 27
-    },
-    "exceptions": {
-      "flows/celestrak-ingest/dist/gp/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/celestrak-ingest/dist/gp/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/celestrak-ingest/dist/satcat/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/celestrak-ingest/dist/satcat/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/celestrak-ingest/dist/spw/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/celestrak-ingest/dist/spw/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/cellular-network-aggregate/dist/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/cellular-network-aggregate/dist/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/data-retrieval/dist/flatsql-link-shim.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/data-retrieval/dist/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/data-retrieval/dist/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/latest/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/latest/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/peers/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/peers/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/pnm/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/pnm/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/standards/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/discovery/dist/standards/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/mlab-connectivity-ingest/dist/cnp/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/mlab-connectivity-ingest/dist/cnp/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/node-activity/dist/activity/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/node-activity/dist/activity/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/node-status/dist/status/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/node-status/dist/status/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/public-query/dist/query/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/public-query/dist/query/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/satnogs-ingest/dist/rf/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/satnogs-ingest/dist/rf/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/sigmf-captures-ingest/dist/iqc/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/sigmf-captures-ingest/dist/iqc/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/supplemental-omm/dist/isomorphic/module.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked",
-      "flows/supplemental-omm/dist/runtime.wasm": "no builder owns this path — flow bake; moves when its flow is re-baked"
-    },
-    "artifacts": {
-      "analysis/access/dist/access.wasm": "drifts-at-current-pin",
-      "analysis/access/dist/browser/module.wasm": "drifts-at-current-pin",
-      "analysis/access/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "analysis/catalog-synthesis/dist/catalog-synthesis.wasm": "drifts-at-current-pin",
-      "analysis/catalog-synthesis/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "analysis/conjunction-assessment/dist/browser/module.wasm": "drifts-at-current-pin",
-      "analysis/conjunction-assessment/dist/isomorphic-singlethread/module.wasm": "drifts-at-current-pin",
-      "analysis/conjunction-assessment/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "analysis/covariance/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "analysis/dop/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "analysis/lambert-izzo/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "analysis/launch-ascent/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "analysis/maneuver/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "analysis/od/dist/browser/module.wasm": "drifts-at-current-pin",
-      "analysis/od/dist/isomorphic/module.command.wasm": "drifts-at-current-pin",
-      "analysis/od/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "analysis/od/fit-pipeline/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "analysis/od/fit-pipeline/dist/od-fit-pipeline.wasm": "drifts-at-current-pin",
-      "analysis/reentry/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "basilisk/runtime/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "data-source/bond-attestation-source/dist/bond-attestation-source.wasm": "drifts-at-current-pin",
-      "data-source/bond-attestation-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/celestrak-parser/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "data-source/celestrak-request/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "data-source/celestrak-supgp/dist/celestrak-supgp.wasm": "drifts-at-current-pin",
-      "data-source/celestrak-supgp/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/cell-tower-credentials/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/cell-tower-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/cpf-source/dist/cpf-source.wasm": "drifts-at-current-pin",
-      "data-source/cpf-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/glonass-source/dist/glonass-source.wasm": "drifts-at-current-pin",
-      "data-source/glonass-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/gps-source/dist/gps-source.wasm": "drifts-at-current-pin",
-      "data-source/gps-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/intelsat-source/dist/intelsat-source.wasm": "drifts-at-current-pin",
-      "data-source/intelsat-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/iss-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/iss-source/dist/iss-source.wasm": "drifts-at-current-pin",
-      "data-source/mlab-starlink-connectivity/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "data-source/oem-source-iss/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "data-source/oneweb-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/oneweb-source/dist/oneweb-source.wasm": "drifts-at-current-pin",
-      "data-source/retrieval/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "data-source/satnogs-source/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "data-source/sigmf-captures/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "data-source/spacex-starlink-source/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "data-source/spacex-starlink-source/dist/spacex-starlink-source.wasm": "drifts-at-current-pin",
-      "delivery/plugin-delivery/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "delivery/plugin-delivery/dist/plugin-delivery.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/flatsql/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/od/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/providers/cpf/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/providers/glonass/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/providers/intelsat/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/providers/iss/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/providers/starlink/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/publication/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/status/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "flows/supplemental-omm/nodes/timer/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "foundation/attitude-math/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/decision-gate/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/discovery-shape/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/frames/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/http-respond/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/http-route/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/math-bspline/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/numerics/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/omm-json/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "foundation/orbits/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "foundation/time/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/clock/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/file/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/flatsql-query/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/http-request/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/node-activity/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/node-status/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/p2p-discovery/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/random/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "hostcap/storage-ingest/dist/isomorphic/module.wasm": "reproduces-at-current-pin",
-      "licensing/client-decrypt/dist/client-decrypt.wasm": "unbuildable-at-current-pin",
-      "licensing/client-decrypt/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "licensing/core/dist/browser/module.wasm": "unbuildable-at-current-pin",
-      "licensing/core/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "licensing/protection-key-server/dist/browser/module.wasm": "drifts-at-current-pin",
-      "licensing/protection-key-server/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "licensing/protection-license-client/dist/browser/module.wasm": "drifts-at-current-pin",
-      "licensing/protection-license-client/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "propagator/atmosphere/dist/browser/module.wasm": "drifts-at-current-pin",
-      "propagator/atmosphere/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "propagator/cislunar/dist/browser/module.wasm": "drifts-at-current-pin",
-      "propagator/cislunar/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "propagator/hpop/dist/browser/module.wasm": "drifts-at-current-pin",
-      "propagator/hpop/dist/isomorphic/module.wasm": "drifts-at-current-pin",
-      "propagator/hypersonics/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "propagator/keplerian-reference/dist/isomorphic/module.wasm": "unbuildable-at-current-pin",
-      "propagator/sgp4/dist/browser-shared/module.wasm": "unbuildable-at-current-pin",
-      "propagator/sgp4/dist/browser/module.wasm": "unbuildable-at-current-pin",
-      "propagator/sgp4/dist/isomorphic/module.wasm": "unbuildable-at-current-pin"
-    },
-    "modules": {
-      "analysis/access": {
-        "builder": "build.js",
-        "status": "built"
-      },
-      "analysis/catalog-synthesis": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "analysis/conjunction-assessment": {
-        "builder": "build.sh",
-        "status": "built"
-      },
-      "analysis/covariance": {
-        "builder": "build.sh",
-        "status": "build-failed"
-      },
-      "analysis/dop": {
-        "builder": "build.js",
-        "status": "build-failed"
-      },
-      "analysis/lambert-izzo": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "analysis/launch-ascent": {
-        "builder": "build.sh",
-        "status": "build-failed"
-      },
-      "analysis/maneuver": {
-        "builder": "build.js",
-        "status": "built"
-      },
-      "analysis/od": {
-        "builder": "build.sh",
-        "status": "built"
-      },
-      "analysis/od/fit-pipeline": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "analysis/reentry": {
-        "builder": "build.sh",
-        "status": "build-failed"
-      },
-      "basilisk/runtime": {
-        "builder": "build.sh",
-        "status": "build-failed"
-      },
-      "data-source/bond-attestation-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/celestrak-parser": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/celestrak-request": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/celestrak-supgp": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/cell-tower-credentials": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/cell-tower-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/cpf-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/glonass-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/gps-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/intelsat-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/iss-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/mlab-starlink-connectivity": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/oem-source-iss": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/oneweb-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/retrieval": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/satnogs-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/sigmf-captures": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "data-source/spacex-starlink-source": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "delivery/plugin-delivery": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/flatsql": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/od": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/providers/cpf": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/providers/glonass": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/providers/intelsat": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/providers/iss": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/providers/starlink": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/publication": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/status": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "flows/supplemental-omm/nodes/timer": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "foundation/attitude-math": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/decision-gate": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/discovery-shape": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/frames": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/http-respond": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/http-route": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/math-bspline": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/numerics": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/omm-json": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "foundation/orbits": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "foundation/time": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/clock": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/file": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/flatsql-query": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/http-request": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/node-activity": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/node-status": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/p2p-discovery": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/random": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "hostcap/storage-ingest": {
-        "builder": "build.mjs",
-        "status": "built"
-      },
-      "licensing/client-decrypt": {
-        "builder": "build.mjs",
-        "status": "build-failed"
-      },
-      "licensing/core": {
-        "builder": "build.sh",
-        "status": "build-failed"
-      },
-      "licensing/protection-key-server": {
-        "builder": "build.sh",
-        "status": "built"
-      },
-      "licensing/protection-license-client": {
-        "builder": "build.sh",
-        "status": "built"
-      },
-      "propagator/atmosphere": {
-        "builder": "build.sh",
-        "status": "built"
-      },
-      "propagator/cislunar": {
-        "builder": "build.sh",
-        "status": "built"
-      },
-      "propagator/hpop": {
-        "builder": "build.sh",
-        "status": "built"
-      },
-      "propagator/hypersonics": {
-        "builder": "build.sh",
-        "status": "build-failed"
-      },
-      "propagator/keplerian-reference": {
-        "builder": "build.js",
-        "status": "build-failed"
-      },
-      "propagator/sgp4": {
-        "builder": "build.sh",
-        "status": "build-failed"
-      }
     }
   }
 }

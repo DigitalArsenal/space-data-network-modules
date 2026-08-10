@@ -55,8 +55,7 @@
     "data-source/spacex-starlink-source",
     "delivery/plugin-delivery",
     "flows/supplemental-omm/nodes/flatsql",
-    "licensing/client-decrypt",
-    "propagator/sgp4"
+    "licensing/client-decrypt"
   ],
   "shippedToolchainEvidence": {
     "note": "What produced the CURRENTLY COMMITTED bytes of each lane module, established 2026-08-09. `proven` = rebuilt under that toolchain from committed source, with the toolchain-decided sections (type/import/function/table/memory/global/export/elem, and code to within a handful of bytes) matching the committed artifact exactly. It deliberately does NOT require whole-artifact byte-identity: these builds embed an SDK-encoded manifest, so the SDK is a second build input and a stale artifact can differ there while the compiler question is settled. `strong` = the only Emscripten the module's own resolution order could have reached, installed before the artifact's commit and still present on the build machine. `none` = the emsdk that built it no longer exists on any machine we have; unrecoverable, and recorded as such instead of guessed.",
@@ -133,7 +132,8 @@
     "propagator/sgp4": {
       "toolchain": "em-6.0.1",
       "status": "proven",
-      "note": "Rebuilt 2026-08-10 under the declared pin (SDN_LOCAL_EMSDK_DIR=data-source/iss-source/deps/emsdk) while adding plugin_entity_apply_impulsive_burn. Listing it here is the rest of that build: the module drove a repo-local Emscripten and was absent from laneModules, so nothing checked which compiler produced its bytes. See orbpro-propagators-have-no-native-burn-surface."
+      "inLaneModules": false,
+      "note": "Rebuilt 2026-08-10 under the declared pin (SDN_LOCAL_EMSDK_DIR pointed at data-source/iss-source/deps/emsdk) while adding plugin_entity_apply_impulsive_burn, so WHAT produced the committed bytes is now recorded. It is deliberately NOT in laneModules yet: adding it made three of this repo's own lane tests fail, and they were right to. propagator/sgp4 builds from build.SH, not build.mjs; it does not route through scripts/lib/emsdk-toolchain.mjs; and its ensure_emscripten `git clone`s emsdk and `curl`s the SQLite amalgamation when they are absent \u2014 exactly the two things the lane forbids, because a build that downloads its own compiler cannot be reproduced from committed source. Claiming the pin before the build obeys it would be a pin that lies. Filed as modules-sgp4-build-bypasses-the-pinned-emsdk-resolver."
     }
   },
   "vendoredSources": {
