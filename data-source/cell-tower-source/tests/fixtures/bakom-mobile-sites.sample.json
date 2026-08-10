@@ -1,0 +1,544 @@
+{
+ "name": "ch.bakom.mobil-antennenstandorte",
+ "type": "FeatureCollection",
+ "crs": {
+  "type": "name",
+  "properties": {
+   "name": "EPSG:2056"
+  }
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2732413,
+     1219730
+    ]
+   },
+   "properties": {
+    "station": "Swisscom STSB",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2732413,1219730",
+    "power_de": "Leistungsklasse : klein (bis 500 W)",
+    "power_fr": "Classe de puissance : faible (jusqu'à 500 W)",
+    "power_it": "Classe di potenza : bassa (fino a 500 W)",
+    "power_en": "Power class : low (up to 500 W)",
+    "techno_de": "Technologie 4G,5G",
+    "techno_fr": "Technologie 4G,5G",
+    "techno_it": "Technologie 4G,5G",
+    "techno_en": "Technology 4G,5G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Standortdatenblatt 2023-04-11",
+    "bewilligung_fr": "Fiche de données 2023-04-11",
+    "bewilligung_it": "Scheda dei dati sul sito 2023-04-11",
+    "bewilligung_en": "Site data sheet 2023-04-11",
+    "agw_de": "Anlagegrenzwert - V/m",
+    "agw_fr": "Valeur limite de l’installation - V/m",
+    "agw_it": "Valore limite dell’impianto - V/m",
+    "agw_en": "Installation limit value - V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2590008,
+     1198538
+    ]
+   },
+   "properties": {
+    "station": "Salt BE_1014A",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2590008,1198538",
+    "power_de": "Leistungsklasse : gross (über 5'000 W)",
+    "power_fr": "Classe de puissance : forte (plus de 5000 W)",
+    "power_it": "Classe di potenza : alta (oltre 5'000 W)",
+    "power_en": "Power class : high (over 5'000 W)",
+    "techno_de": "Technologie 3G,4G,5G",
+    "techno_fr": "Technologie 3G,4G,5G",
+    "techno_it": "Technologie 3G,4G,5G",
+    "techno_en": "Technology 3G,4G,5G",
+    "adaptiv_de": "Teilweise adaptiver Betrieb",
+    "adaptiv_fr": "Exploitation partiellement adaptative",
+    "adaptiv_it": "Funzionamento parzialmente adattativo",
+    "adaptiv_en": "Partially adaptive operation",
+    "bewilligung_de": "Standortdatenblatt 2023-08-08",
+    "bewilligung_fr": "Fiche de données 2023-08-08",
+    "bewilligung_it": "Scheda dei dati sul sito 2023-08-08",
+    "bewilligung_en": "Site data sheet 2023-08-08",
+    "agw_de": "Anlagegrenzwert 5.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 5.0 V/m",
+    "agw_it": "Valore limite dell’impianto 5.0 V/m",
+    "agw_en": "Installation limit value 5.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2503373,
+     1113542
+    ]
+   },
+   "properties": {
+    "station": "Salt GE_4716B",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2503373,1113542",
+    "power_de": "Leistungsklasse : mittel (bis 5'000 W)",
+    "power_fr": "Classe de puissance : moyenne (jusqu'à 5'000 W)",
+    "power_it": "Classe di potenza : media (fino a 5'000 W)",
+    "power_en": "Power class : medium (up to 5'000 W)",
+    "techno_de": "Technologie 3G,4G,5G",
+    "techno_fr": "Technologie 3G,4G,5G",
+    "techno_it": "Technologie 3G,4G,5G",
+    "techno_en": "Technology 3G,4G,5G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Standortdatenblatt 2019-03-27",
+    "bewilligung_fr": "Fiche de données 2019-03-27",
+    "bewilligung_it": "Scheda dei dati sul sito 2019-03-27",
+    "bewilligung_en": "Site data sheet 2019-03-27",
+    "agw_de": "Anlagegrenzwert 6.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 6.0 V/m",
+    "agw_it": "Valore limite dell’impianto 6.0 V/m",
+    "agw_en": "Installation limit value 6.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2599732,
+     1200155
+    ]
+   },
+   "properties": {
+    "station": "Sunrise BE113-1",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2599732,1200155",
+    "power_de": "Leistungsklasse : mittel (bis 5'000 W)",
+    "power_fr": "Classe de puissance : moyenne (jusqu'à 5'000 W)",
+    "power_it": "Classe di potenza : media (fino a 5'000 W)",
+    "power_en": "Power class : medium (up to 5'000 W)",
+    "techno_de": "Technologie 4G,5G",
+    "techno_fr": "Technologie 4G,5G",
+    "techno_it": "Technologie 4G,5G",
+    "techno_en": "Technology 4G,5G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Standortdatenblatt 2020-12-03",
+    "bewilligung_fr": "Fiche de données 2020-12-03",
+    "bewilligung_it": "Scheda dei dati sul sito 2020-12-03",
+    "bewilligung_en": "Site data sheet 2020-12-03",
+    "agw_de": "Anlagegrenzwert 5.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 5.0 V/m",
+    "agw_it": "Valore limite dell’impianto 5.0 V/m",
+    "agw_en": "Installation limit value 5.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2746519,
+     1256918
+    ]
+   },
+   "properties": {
+    "station": "Swisscom SGAN",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2746519,1256918",
+    "power_de": "Leistungsklasse : gross (über 5'000 W)",
+    "power_fr": "Classe de puissance : forte (plus de 5000 W)",
+    "power_it": "Classe di potenza : alta (oltre 5'000 W)",
+    "power_en": "Power class : high (over 5'000 W)",
+    "techno_de": "Technologie 4G,5G",
+    "techno_fr": "Technologie 4G,5G",
+    "techno_it": "Technologie 4G,5G",
+    "techno_en": "Technology 4G,5G",
+    "adaptiv_de": "Teilweise adaptiver Betrieb",
+    "adaptiv_fr": "Exploitation partiellement adaptative",
+    "adaptiv_it": "Funzionamento parzialmente adattativo",
+    "adaptiv_en": "Partially adaptive operation",
+    "bewilligung_de": "Standortdatenblatt 2025-12-12",
+    "bewilligung_fr": "Fiche de données 2025-12-12",
+    "bewilligung_it": "Scheda dei dati sul sito 2025-12-12",
+    "bewilligung_en": "Site data sheet 2025-12-12",
+    "agw_de": "Anlagegrenzwert 5.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 5.0 V/m",
+    "agw_it": "Valore limite dell’impianto 5.0 V/m",
+    "agw_en": "Installation limit value 5.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2660578,
+     1210769
+    ]
+   },
+   "properties": {
+    "station": "SBB MAL-LIT-08730",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2660578,1210769",
+    "power_de": "Leistungsklasse : klein (bis 500 W)",
+    "power_fr": "Classe de puissance : faible (jusqu'à 500 W)",
+    "power_it": "Classe di potenza : bassa (fino a 500 W)",
+    "power_en": "Power class : low (up to 500 W)",
+    "techno_de": "Technologie 2G",
+    "techno_fr": "Technologie 2G",
+    "techno_it": "Technologie 2G",
+    "techno_en": "Technology 2G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Standortdatenblatt 2017-03-14",
+    "bewilligung_fr": "Fiche de données 2017-03-14",
+    "bewilligung_it": "Scheda dei dati sul sito 2017-03-14",
+    "bewilligung_en": "Site data sheet 2017-03-14",
+    "agw_de": "Anlagegrenzwert 4.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 4.0 V/m",
+    "agw_it": "Valore limite dell’impianto 4.0 V/m",
+    "agw_en": "Installation limit value 4.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2719609,
+     1081045
+    ]
+   },
+   "properties": {
+    "station": "Sunrise TI242-1",
+    "typ_de": "Indoor ≤ 6 Werp",
+    "typ_fr": "Indoor ≤ 6 Werp",
+    "typ_it": "Indoor ≤ 6 Werp",
+    "typ_en": "Indoor ≤ 6 Werp",
+    "koord": "2719609,1081045",
+    "power_de": "Leistungsklasse : sehr klein (bis 6 W)",
+    "power_fr": "Classe de puissance : très faible (jusqu'à 6 W)",
+    "power_it": "Classe di potenza : molto bassa (fino a 6 W)",
+    "power_en": "Power class : very low (up to 6 W)",
+    "techno_de": "Technologie 4G",
+    "techno_fr": "Technologie 4G",
+    "techno_it": "Technologie 4G",
+    "techno_en": "Technology 4G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Die Anlage unterliegt aufgrund ihrer geringen Sendeleistung, ihres Standortes oder ihrer begrenzten Betriebsdauer nicht der vorsorglichen Emissionsbegrenzung gemäss NISV Anhang 1 Ziffer 64.",
+    "bewilligung_fr": "En raison de sa faible puissance d'émission, de son site ou de sa durée d'exploitation limitée, l'installation n'est pas soumise à la limitation préventive des émissions selon l'ORNI, annexe 1, ch. 64",
+    "bewilligung_it": "A causa della bassa potenza di trasmissione, del sito o del tempo di funzionamento limitato, l'impianto non è soggetto alla limitazione precauzionale delle emissioni ai sensi dell'allegato 1 n. 64 del ORNI.",
+    "bewilligung_en": "Due to its low transmitting power, its location or its limited operating time, the installation is not subject to the precautionary limitation of emissions in accordance with NISV Annex 1 No. 64.",
+    "agw_de": "",
+    "agw_fr": "",
+    "agw_it": "",
+    "agw_en": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2609761,
+     1213303
+    ]
+   },
+   "properties": {
+    "station": "Salt BE_0506A",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2609761,1213303",
+    "power_de": "Leistungsklasse : mittel (bis 5'000 W)",
+    "power_fr": "Classe de puissance : moyenne (jusqu'à 5'000 W)",
+    "power_it": "Classe di potenza : media (fino a 5'000 W)",
+    "power_en": "Power class : medium (up to 5'000 W)",
+    "techno_de": "Technologie 3G,4G,5G",
+    "techno_fr": "Technologie 3G,4G,5G",
+    "techno_it": "Technologie 3G,4G,5G",
+    "techno_en": "Technology 3G,4G,5G",
+    "adaptiv_de": "Teilweise adaptiver Betrieb",
+    "adaptiv_fr": "Exploitation partiellement adaptative",
+    "adaptiv_it": "Funzionamento parzialmente adattativo",
+    "adaptiv_en": "Partially adaptive operation",
+    "bewilligung_de": "Standortdatenblatt 2023-04-04",
+    "bewilligung_fr": "Fiche de données 2023-04-04",
+    "bewilligung_it": "Scheda dei dati sul sito 2023-04-04",
+    "bewilligung_en": "Site data sheet 2023-04-04",
+    "agw_de": "Anlagegrenzwert 5.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 5.0 V/m",
+    "agw_it": "Valore limite dell’impianto 5.0 V/m",
+    "agw_en": "Installation limit value 5.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2587760,
+     1210193
+    ]
+   },
+   "properties": {
+    "station": "SBB BRG-ABE-09527",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2587760,1210193",
+    "power_de": "Leistungsklasse : klein (bis 500 W)",
+    "power_fr": "Classe de puissance : faible (jusqu'à 500 W)",
+    "power_it": "Classe di potenza : bassa (fino a 500 W)",
+    "power_en": "Power class : low (up to 500 W)",
+    "techno_de": "Technologie 2G",
+    "techno_fr": "Technologie 2G",
+    "techno_it": "Technologie 2G",
+    "techno_en": "Technology 2G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Standortdatenblatt 2015-07-14",
+    "bewilligung_fr": "Fiche de données 2015-07-14",
+    "bewilligung_it": "Scheda dei dati sul sito 2015-07-14",
+    "bewilligung_en": "Site data sheet 2015-07-14",
+    "agw_de": "Anlagegrenzwert 4.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 4.0 V/m",
+    "agw_it": "Valore limite dell’impianto 4.0 V/m",
+    "agw_en": "Installation limit value 4.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2500029,
+     1113114
+    ]
+   },
+   "properties": {
+    "station": "Swisscom GSAC",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2500029,1113114",
+    "power_de": "Leistungsklasse : mittel (bis 5'000 W)",
+    "power_fr": "Classe de puissance : moyenne (jusqu'à 5'000 W)",
+    "power_it": "Classe di potenza : media (fino a 5'000 W)",
+    "power_en": "Power class : medium (up to 5'000 W)",
+    "techno_de": "Technologie 4G",
+    "techno_fr": "Technologie 4G",
+    "techno_it": "Technologie 4G",
+    "techno_en": "Technology 4G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Standortdatenblatt 2021-12-09",
+    "bewilligung_fr": "Fiche de données 2021-12-09",
+    "bewilligung_it": "Scheda dei dati sul sito 2021-12-09",
+    "bewilligung_en": "Site data sheet 2021-12-09",
+    "agw_de": "Anlagegrenzwert 6.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 6.0 V/m",
+    "agw_it": "Valore limite dell’impianto 6.0 V/m",
+    "agw_en": "Installation limit value 6.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2614544,
+     1266064
+    ]
+   },
+   "properties": {
+    "station": "Salt BL_1021A",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2614544,1266064",
+    "power_de": "Leistungsklasse : mittel (bis 5'000 W)",
+    "power_fr": "Classe de puissance : moyenne (jusqu'à 5'000 W)",
+    "power_it": "Classe di potenza : media (fino a 5'000 W)",
+    "power_en": "Power class : medium (up to 5'000 W)",
+    "techno_de": "Technologie 3G,4G,5G",
+    "techno_fr": "Technologie 3G,4G,5G",
+    "techno_it": "Technologie 3G,4G,5G",
+    "techno_en": "Technology 3G,4G,5G",
+    "adaptiv_de": "Teilweise adaptiver Betrieb",
+    "adaptiv_fr": "Exploitation partiellement adaptative",
+    "adaptiv_it": "Funzionamento parzialmente adattativo",
+    "adaptiv_en": "Partially adaptive operation",
+    "bewilligung_de": "Standortdatenblatt 2023-02-23",
+    "bewilligung_fr": "Fiche de données 2023-02-23",
+    "bewilligung_it": "Scheda dei dati sul sito 2023-02-23",
+    "bewilligung_en": "Site data sheet 2023-02-23",
+    "agw_de": "Anlagegrenzwert 5.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 5.0 V/m",
+    "agw_it": "Valore limite dell’impianto 5.0 V/m",
+    "agw_en": "Installation limit value 5.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2723348,
+     1118185
+    ]
+   },
+   "properties": {
+    "station": "Sunrise TI652-1",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2723348,1118185",
+    "power_de": "Leistungsklasse : mittel (bis 5'000 W)",
+    "power_fr": "Classe de puissance : moyenne (jusqu'à 5'000 W)",
+    "power_it": "Classe di potenza : media (fino a 5'000 W)",
+    "power_en": "Power class : medium (up to 5'000 W)",
+    "techno_de": "Technologie 4G,5G",
+    "techno_fr": "Technologie 4G,5G",
+    "techno_it": "Technologie 4G,5G",
+    "techno_en": "Technology 4G,5G",
+    "adaptiv_de": "Teilweise adaptiver Betrieb",
+    "adaptiv_fr": "Exploitation partiellement adaptative",
+    "adaptiv_it": "Funzionamento parzialmente adattativo",
+    "adaptiv_en": "Partially adaptive operation",
+    "bewilligung_de": "Standortdatenblatt 2024-08-30",
+    "bewilligung_fr": "Fiche de données 2024-08-30",
+    "bewilligung_it": "Scheda dei dati sul sito 2024-08-30",
+    "bewilligung_en": "Site data sheet 2024-08-30",
+    "agw_de": "Anlagegrenzwert 5.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 5.0 V/m",
+    "agw_it": "Valore limite dell’impianto 5.0 V/m",
+    "agw_en": "Installation limit value 5.0 V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2631145,
+     1184898
+    ]
+   },
+   "properties": {
+    "station": "Salt BE_4504A",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2631145,1184898",
+    "power_de": "Leistungsklasse : gross (über 5'000 W)",
+    "power_fr": "Classe de puissance : forte (plus de 5000 W)",
+    "power_it": "Classe di potenza : alta (oltre 5'000 W)",
+    "power_en": "Power class : high (over 5'000 W)",
+    "techno_de": "Technologie 3G,4G,5G",
+    "techno_fr": "Technologie 3G,4G,5G",
+    "techno_it": "Technologie 3G,4G,5G",
+    "techno_en": "Technology 3G,4G,5G",
+    "adaptiv_de": "",
+    "adaptiv_fr": "",
+    "adaptiv_it": "",
+    "adaptiv_en": "",
+    "bewilligung_de": "Standortdatenblatt 2021-09-29",
+    "bewilligung_fr": "Fiche de données 2021-09-29",
+    "bewilligung_it": "Scheda dei dati sul sito 2021-09-29",
+    "bewilligung_en": "Site data sheet 2021-09-29",
+    "agw_de": "Anlagegrenzwert - V/m",
+    "agw_fr": "Valeur limite de l’installation - V/m",
+    "agw_it": "Valore limite dell’impianto - V/m",
+    "agw_en": "Installation limit value - V/m"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     2642749,
+     1129806
+    ]
+   },
+   "properties": {
+    "station": "Swisscom BRPO",
+    "typ_de": "Outdoor > 6 Werp",
+    "typ_fr": "Outdoor > 6 Werp",
+    "typ_it": "Outdoor > 6 Werp",
+    "typ_en": "Outdoor > 6 Werp",
+    "koord": "2642749,1129806",
+    "power_de": "Leistungsklasse : mittel (bis 5'000 W)",
+    "power_fr": "Classe de puissance : moyenne (jusqu'à 5'000 W)",
+    "power_it": "Classe di potenza : media (fino a 5'000 W)",
+    "power_en": "Power class : medium (up to 5'000 W)",
+    "techno_de": "Technologie 4G,5G",
+    "techno_fr": "Technologie 4G,5G",
+    "techno_it": "Technologie 4G,5G",
+    "techno_en": "Technology 4G,5G",
+    "adaptiv_de": "Teilweise adaptiver Betrieb",
+    "adaptiv_fr": "Exploitation partiellement adaptative",
+    "adaptiv_it": "Funzionamento parzialmente adattativo",
+    "adaptiv_en": "Partially adaptive operation",
+    "bewilligung_de": "Standortdatenblatt 2022-05-10",
+    "bewilligung_fr": "Fiche de données 2022-05-10",
+    "bewilligung_it": "Scheda dei dati sul sito 2022-05-10",
+    "bewilligung_en": "Site data sheet 2022-05-10",
+    "agw_de": "Anlagegrenzwert 5.0 V/m",
+    "agw_fr": "Valeur limite de l’installation 5.0 V/m",
+    "agw_it": "Valore limite dell’impianto 5.0 V/m",
+    "agw_en": "Installation limit value 5.0 V/m"
+   }
+  }
+ ]
+}

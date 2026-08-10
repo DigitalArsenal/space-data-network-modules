@@ -308,20 +308,61 @@ struct ProviderSpec {
     // Query template. {{bbox}} substitutes south,west,north,east together;
     // {{south}} {{west}} {{north}} {{east}} {{limit}} substitute individually.
     const char* query_template;
-    const char* format;       // "csv" | "json" | "osm-json" | "soql-json"
+    const char* format;       // "csv" | "osm-json" | "soql-json" | "swiss-geojson"
     const char* license;
     const char* license_url;
     const char* attribution;
     bool login_required;
     bool authoritative;       // administration/regulator register, not a crowd
+    // HOW this provider can be reached, which decides whether a WORLDWIDE
+    // request can include it at all:
+    //   "bulk"        the endpoint serves its whole dataset in one file, so it
+    //                 answers a worldwide request in full.
+    //   "query"       the endpoint only answers a BOUNDED region. Included when
+    //                 the caller names a box; skipped WITH A REASON when the
+    //                 request is worldwide, because an unbounded query against
+    //                 a public interpreter either times out or is simply rude.
+    //   "unavailable" a real endpoint was found and verified live, but this
+    //                 module cannot consume its payload yet (see `blocked_by`).
+    //                 It is carried so the finding is not lost and so the
+    //                 catalog can say WHY, and it is never fetched. Marking it
+    //                 bulk-ingest-only is the honest alternative to compiling
+    //                 in a URL that would parse to nothing.
+    const char* lane;
+    // For `lane == "unavailable"`: the capability that is missing, named in the
+    // catalog and in the skip reason. Never a vague "unsupported".
+    const char* blocked_by;
 };
 
 // clang-format off
 constexpr ProviderSpec kProviders[] = {
-  {"opencellid","OpenCelliD contributors","https://opencellid.org/downloads.php",
+  // ── OpenCelliD ────────────────────────────────────────────────────────────
+  // The compiled-in `downloads.php` was a human download PAGE — the original
+  // defect this task was filed for. The row endpoint below was verified live
+  // against the owner's account on 2026-08-09 (200, `{"count":5,"cells":[...]}`)
+  // and re-verified unauthenticated on 2026-08-10 (200 with
+  // `{"error":"API Key not known","code":2}`, which proves the ROUTE is real).
+  //
+  // TWO TRAPS, both recorded because either one silently produces garbage:
+  //  1. `BBOX` here is lat,lon,lat,lon — NOT the south,west,north,east this
+  //     module uses everywhere else. They read identically for a square box and
+  //     differently for every real one, so the template converts explicitly.
+  //  2. The API's CSV header is NOT the bulk-export header `decode_csv` was
+  //     written for. `column_of` accepts both spellings (see decode_csv).
+  {"opencellid","OpenCelliD contributors","https://opencellid.org/cell/getInArea",
    {nullptr,nullptr,nullptr},
-   "","","csv",
-   "CC BY-SA 4.0","https://wiki.opencellid.org/wiki/Menu_map_view","OpenCelliD Project",true,false},
+   "opencellid",
+   "key={{credential}}&BBOX={{south}},{{west}},{{north}},{{east}}&format=csv&limit={{limit}}","csv",
+   "CC BY-SA 4.0","https://wiki.opencellid.org/wiki/Menu_map_view","OpenCelliD Project",true,false,
+   "query",nullptr},
+
+  // ── OpenStreetMap via Overpass ────────────────────────────────────────────
+  // Bounded-region only: an unbounded Overpass program against a public
+  // interpreter times out and is an abuse of a donated service. Three mirrors
+  // are issued in the SAME run rather than as retry-on-failure, because a
+  // stateless flow node has nowhere to remember where a retry got to; over one
+  // session the main endpoint 504'd while a mirror answered 200, and later the
+  // reverse.
   {"openstreetmap-overpass","OpenStreetMap contributors","https://overpass-api.de/api/interpreter",
    {"https://maps.mail.ru/osm/tools/overpass/api/interpreter","https://overpass.kumi.systems/api/interpreter",nullptr},
    "overpass",
@@ -330,62 +371,136 @@ constexpr ProviderSpec kProviders[] = {
    "node[\"tower:type\"=\"communication\"]({{bbox}});"
    "node[\"man_made\"=\"mast\"][\"communication:mobile_phone\"]({{bbox}});"
    ");out center {{limit}};","osm-json",
-   "ODbL 1.0","https://www.openstreetmap.org/copyright","OpenStreetMap contributors",false,false},
-  // Was `fcc-asr` pointed at the ULS bulk-download PAGE. The Antenna Structure
-  // Registration publishes no row endpoint at all — only daily ZIP archives —
-  // so no query against it could ever have returned parseable rows. This is the
-  // same authority reached through the dataset that DOES serve rows: ULS 3650
-  // MHz licensed base-station locations, over the open-data row API, verified
-  // against the live service before being compiled in. The id names what is
-  // actually fetched rather than what was originally hoped for.
+   "ODbL 1.0","https://www.openstreetmap.org/copyright","OpenStreetMap contributors",false,false,
+   "query",nullptr},
+
+  // ── FCC ULS 3650 MHz licensed base stations (United States) ───────────────
+  // Verified live 2026-08-10: `?$limit=3` -> 200 application/json with real
+  // rows; `$select=count(*)` -> 7,829 total, i.e. the WHOLE dataset is small
+  // enough to serve a worldwide request in full through $limit/$offset. That is
+  // why this is `bulk` and not `query`: the bbox filter is an optimisation, not
+  // a requirement.
+  //
+  // TRAP: u_latitude/u_longitude are TEXT columns, so a numeric comparison must
+  // cast (`::number`). Comparing them as text returns 200 and matches nothing —
+  // exactly the failure this task exists to prevent.
   {"fcc-uls-3650","Federal Communications Commission","https://opendata.fcc.gov/resource/euz5-46g2.json",
    {nullptr,nullptr,nullptr},
    "soql",
    "u_latitude::number between {{south}} and {{north}}"
    " AND u_longitude::number between {{west}} and {{east}}"
    " AND u_yn_base_station='true'","soql-json",
-   "Public domain (US Government work)","https://www.fcc.gov/","FCC Universal Licensing System (3650 MHz base stations)",false,true},
-  {"anfr-cartoradio","Agence nationale des frequences","https://data.anfr.fr/api/records/2.0/downloadfile/",
+   "Public domain (US Government work)","https://www.fcc.gov/","FCC Universal Licensing System (3650 MHz base stations)",false,true,
+   "bulk",nullptr},
+
+  // ── BAKOM mobile transmitter sites (Switzerland) ──────────────────────────
+  // The ledger recorded this provider as unreachable via the geo.admin
+  // `identify` endpoint ("No GeoTable was found"). That was the wrong lane AND
+  // the wrong layer id. The STAC collection is
+  // `ch.bakom.standorte-mobilfunkanlagen` (not `ch.bakom.mobil-antennenstandorte`,
+  // which is only the FeatureCollection's internal `name`), and it publishes a
+  // single national GeoJSON asset.
+  //
+  // Verified live 2026-08-10 by ranged GET: 206, `application/geo+json`,
+  // 27,261,289 bytes, last-modified the previous day. A whole country in one
+  // file, so it answers a worldwide request in full.
+  //
+  // TRAP: coordinates are EPSG:2056 (Swiss LV95) EASTING/NORTHING in metres,
+  // not degrees. Read as lat/lon they are silently out of range and every row
+  // is dropped by the range guard — a provider that fetches perfectly and
+  // contributes nothing. `decode_swiss_geojson` transforms them.
+  {"bakom-mobile-sites","Bundesamt fuer Kommunikation",
+   "https://data.geo.admin.ch/ch.bakom.standorte-mobilfunkanlagen/standorte-mobilfunkanlagen/standorte-mobilfunkanlagen_2056.json",
+   {nullptr,nullptr,nullptr},
+   "","","swiss-geojson",
+   "opendata.swiss terms","https://opendata.swiss/en/terms-of-use","BAKOM mobile transmitter sites",false,true,
+   "bulk",nullptr},
+
+  // ── Verified live, real, and NOT CONSUMABLE BY THIS MODULE YET ────────────
+  // Each of the four below was reached with a successful fetch on 2026-08-10.
+  // None is compiled in as a fetchable URL, because this module decodes only
+  // CSV, Overpass JSON, SoQL JSON and the Swiss GeoJSON above — it has no ZIP
+  // inflate and no protobuf decoder. Fetching them would return 200 and parse
+  // to zero rows, which is precisely the failure mode this task was filed
+  // about. They are carried as `unavailable` so the discovery is not lost and
+  // the catalog can state the reason, and they are never fetched.
+  // Follow-up: `cell-tower-bulk-archive-adapters`.
+  {"anfr-cartoradio","Agence nationale des frequences",
+   "https://static.data.gouv.fr/resources/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1/20260702-135014/20260630-export-etalab-data.zip",
    {nullptr,nullptr,nullptr},
    "","","csv",
-   "Licence Ouverte 2.0","https://www.etalab.gouv.fr/licence-ouverte-open-licence","ANFR Cartoradio",false,true},
-  {"acma-rrl","Australian Communications and Media Authority","https://web.acma.gov.au/rrl/",
+   "Licence Ouverte 2.0","https://www.etalab.gouv.fr/licence-ouverte-open-licence","ANFR Cartoradio",false,true,
+   "unavailable",
+   "verified live (206, application/zip, 65,696,863 B): a ZIP of five ';'-delimited "
+   "tables. Needs ZIP inflate, a STA_NM_ANFR join across SUP_STATION/SUP_SUPPORT, a "
+   "further ADM_ID join for the operator name, and DMS-to-decimal conversion "
+   "(coordinates are split across four degree/minute/second/hemisphere columns)"},
+
+  {"acma-rrl","Australian Communications and Media Authority","https://cdn.acma.gov.au/rrl/spectra_rrl.zip",
    {nullptr,nullptr,nullptr},
    "","","csv",
-   "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","ACMA Register of Radiocommunications Licences",false,true},
-  {"ised-sms-tafl","Innovation, Science and Economic Development Canada","https://sms-sgs.ic.gc.ca/",
+   // CORRECTED 2026-08-10. This registry declared CC BY 4.0; the LICENCE.TXT
+   // inside the live archive is ACMA's own non-transferable licence-to-use with
+   // IP retained. An attribution string that overstates the grant is a licence
+   // defect, not a cosmetic one — $TBS.SOURCES carries it into republication.
+   "ACMA Licence to Use the Register of Radiocommunications Licences",
+   "https://www.acma.gov.au/","ACMA Register of Radiocommunications Licences",false,true,
+   "unavailable",
+   "verified live (206, application/zip, 69,981,982 B, refreshed daily): 28 tables; "
+   "site.csv carries clean decimal LATITUDE/LONGITUDE. Needs ZIP inflate plus a "
+   "site-licence-client join for the operator name"},
+
+  {"ised-sms-tafl","Innovation, Science and Economic Development Canada",
+   "https://www.ic.gc.ca/engineering/SMS_TAFL_Files/TAFL_LTAF.zip",
    {nullptr,nullptr,nullptr},
    "","","csv",
-   "Open Government Licence - Canada","https://open.canada.ca/en/open-government-licence-canada","ISED Spectrum Management System",false,true},
-  {"bnetza-emf","Bundesnetzagentur","https://www.bundesnetzagentur.de/",
+   "Open Government Licence - Canada","https://open.canada.ca/en/open-government-licence-canada","ISED Spectrum Management System",false,true,
+   "unavailable",
+   "verified live (206, application/zip, 64,197,105 B): one HEADERLESS positional "
+   "CSV. Needs ZIP inflate plus a column map taken from the companion field "
+   "description document — there are no column names to look up"},
+
+  {"comreg-siteviewer","Commission for Communications Regulation",
+   "https://api-siteviewer.comreg.ie/mobile-masts/point",
    {nullptr,nullptr,nullptr},
    "","","json",
-   "DL-DE-BY-2.0","https://www.govdata.de/dl-de/by-2-0","Bundesnetzagentur EMF database",false,true},
-  {"nl-antenneregister","Agentschap Telecom","https://antenneregister.nl/",
-   {nullptr,nullptr,nullptr},
-   "","","json",
-   "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","Antenneregister",false,true},
-  {"bakom-mobile-sites","Bundesamt fuer Kommunikation","https://www.bakom.admin.ch/",
-   {nullptr,nullptr,nullptr},
-   "","","json",
-   "opendata.swiss terms","https://opendata.swiss/en/terms-of-use","BAKOM mobile sites",false,true},
-  {"comreg-siteviewer","Commission for Communications Regulation","https://siteviewer.comreg.ie/",
-   {nullptr,nullptr,nullptr},
-   "","","json",
-   "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","ComReg SiteViewer",false,true},
-  {"nz-rsm-rrf","Radio Spectrum Management","https://www.rsm.govt.nz/",
-   {nullptr,nullptr,nullptr},
-   "","","csv",
-   "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","RSM Register of Radio Frequencies",false,true},
+   "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","ComReg SiteViewer",false,true,
+   "unavailable",
+   "verified live and UNAUTHENTICATED (POST {} -> 200 with real national mast ids "
+   "in the body): a bespoke backend that answers application/x-protobuf and ignores "
+   "Accept: application/json. Needs a protobuf decoder and the schema; the best "
+   "candidate to unblock first"},
+
+  // ── WiGLE ─────────────────────────────────────────────────────────────────
+  // Endpoint real (401 "Not Authorized (WiGLE.net)" proves the route). Kept as
+  // credentialed and NOT default-selected. Note for whoever wires a key: WiGLE's
+  // terms restrict bulk redistribution, so this is not a grab-and-republish
+  // source even once authenticated, and $TBS.SOURCES would carry that
+  // obligation onward.
   {"wigle","WiGLE.net contributors","https://api.wigle.net/api/v2/cell/search",
    {nullptr,nullptr,nullptr},
    "","","json",
-   "WiGLE terms of use","https://wigle.net/tos","WiGLE.net",true,false},
-  {"mls-archive","Mozilla Location Service archive","https://d17pt8qph6ncyq.cloudfront.net/",
-   {nullptr,nullptr,nullptr},
-   "","","csv",
-   "CC0 1.0","https://creativecommons.org/publicdomain/zero/1.0/","MLS historical archive",false,false},
+   "WiGLE terms of use","https://wigle.net/tos","WiGLE.net",true,false,
+   "query",nullptr},
 };
+
+// REMOVED 2026-08-10, each with a live measurement rather than an assumption.
+// An honest smaller list beats twelve dead ones — the whole point of this task.
+//
+//   bnetza-emf         the EMF database is serving a maintenance page;
+//                      datenportal.bundesnetzagentur.de times out; the only
+//                      govdata.de hit is one municipal dataset, not a national
+//                      register. No successful data fetch by any route.
+//   nl-antenneregister the official viewer ships
+//                      "PUBLIC_EXPORT_DATA_ENABLED":"false" in its own config,
+//                      and every PDOK/WFS and own-domain API probe 404s.
+//   nz-rsm-rrf         both the CSV export and the bulk Data Extracts are
+//                      documented as requiring an APPROVED RSM account, and the
+//                      data.govt.nz catalogue is behind a bot challenge.
+//   mls-archive        Mozilla Location Service is shut down; the CloudFront
+//                      host does not resolve (dig @8.8.8.8 returns nothing).
+//                      A 2019 Wayback capture confirms it was once live.
+
 constexpr size_t kProviderCount = sizeof(kProviders) / sizeof(kProviders[0]);
 
 const ProviderSpec* find_provider(const std::string& id) {
@@ -512,6 +627,23 @@ int column_of(const std::vector<std::string>& header, const char* name) {
     return -1;
 }
 
+// The same column under EITHER of two spellings.
+//
+// OpenCelliD publishes TWO different CSV contracts and they disagree on five of
+// nine identity columns. The BULK export (which `decode_csv` was written for)
+// says `net, area, cell, averageSignal`; the getInArea API says
+// `mnc, lac, cellid, averageSignalStrength`, and has no `updated` at all.
+//
+// This matters more than a rename: fed the API's CSV, the bulk spellings all
+// miss, and the rows still parse — 200, real coordinates, no error — as towers
+// with EMPTY mcc/mnc/lac/cell_id. That silently breaks deconfliction (identity
+// is what groups reports across providers) and `native_id`. A tower with no
+// identity is worse than a missing tower, because it looks like data.
+int column_of_either(const std::vector<std::string>& header, const char* a, const char* b) {
+    const int at = column_of(header, a);
+    return at >= 0 ? at : column_of(header, b);
+}
+
 void decode_csv(const ProviderSpec& spec, const std::string& body, std::vector<Report>* out) {
     size_t pos = 0, line_no = 0;
     std::vector<std::string> header;
@@ -537,15 +669,17 @@ void decode_csv(const ProviderSpec& spec, const std::string& body, std::vector<R
         // clamped tower is a tower in the wrong place, silently.
         if (r.latitude < -90 || r.latitude > 90 || r.longitude < -180 || r.longitude > 180) continue;
 
+        // Both OpenCelliD contracts. See column_of_either.
         const int c_radio = column_of(header, "radio");
         const int c_mcc = column_of(header, "mcc");
-        const int c_net = column_of(header, "net");
-        const int c_area = column_of(header, "area");
-        const int c_cell = column_of(header, "cell");
+        const int c_net = column_of_either(header, "net", "mnc");
+        const int c_area = column_of_either(header, "area", "lac");
+        const int c_cell = column_of_either(header, "cell", "cellid");
         const int c_range = column_of(header, "range");
         const int c_samples = column_of(header, "samples");
         const int c_updated = column_of(header, "updated");
-        const int c_signal = column_of(header, "averageSignal");
+        const int c_signal =
+            column_of_either(header, "averageSignal", "averageSignalStrength");
 
         auto cell_at = [&](int idx) -> std::string {
             return (idx >= 0 && idx < static_cast<int>(cells.size())) ? cells[idx] : std::string();
@@ -711,11 +845,17 @@ const char* detect_body_format(const std::string& body) {
     if (i >= body.size()) return nullptr;
     // A top-level array is a row API answer (`soql-json`).
     if (body[i] == '[') return "soql-json";
-    // A top-level object carrying `elements` is an Overpass answer.
+    // A top-level object carrying `elements` is an Overpass answer; one
+    // carrying `features` is a GeoJSON FeatureCollection. The two keys are
+    // disjoint, so this stays a corroboration rather than a guess.
     if (body[i] == '{') {
         if (!json_string(body, "elements", "").empty()) return "osm-json";
+        if (!json_string(body, "features", "").empty()) return "swiss-geojson";
         return nullptr;
     }
+    // A CSV answer is not JSON and is deliberately NOT identified here. An
+    // unrecognised body must fall through to positional attribution, which is
+    // still corroborated downstream — never be vetoed by an unknown shape.
     return nullptr;
 }
 
@@ -793,6 +933,98 @@ void decode_osm_json(const ProviderSpec& spec, const std::string& body, std::vec
 // AUTHORITATIVE half of the merge, that invention would then WIN deconfliction
 // against the crowd-sourced provider and be exported as though a regulator had
 // asserted it.
+// ── EPSG:2056 (Swiss LV95) -> WGS84 ────────────────────────────────────────
+//
+// swisstopo's approximate formulas. Accurate to about a metre, which is far
+// inside a base-station position's own uncertainty, and they need no datum
+// grid file — a WASM module with no filesystem cannot carry one.
+//
+// This transform is NOT optional garnish. The published coordinates are
+// easting/northing in metres (e.g. 2732413, 1219730). Read as degrees they fail
+// the module's own -90/-180 range guard, so every Swiss row is DROPPED and the
+// provider fetches 27 MB perfectly and contributes exactly nothing — a failure
+// that looks identical to a country with no masts.
+//
+// Verified against known points before being compiled in: the LV95 origin
+// (2600000, 1200000) transforms to 46.95108, 7.43864, which is the Bern
+// reference point to five decimals; and a fixture feature whose station name
+// carries the canton code GE transforms into Geneva. A transform that lands the
+// right rows in the wrong country is the kind of error that renders beautifully.
+void lv95_to_wgs84(double easting, double northing, double* lat_out, double* lon_out) {
+    const double y = (easting - 2600000.0) / 1000000.0;
+    const double x = (northing - 1200000.0) / 1000000.0;
+    const double lambda = 2.6779094 + 4.728982 * y + 0.791484 * y * x +
+                          0.1306 * y * x * x - 0.0436 * y * y * y;
+    const double phi = 16.9023892 + 3.238272 * x - 0.270978 * y * y -
+                       0.002528 * x * x - 0.0447 * y * y * x - 0.0140 * x * x * x;
+    *lon_out = lambda * 100.0 / 36.0;
+    *lat_out = phi * 100.0 / 36.0;
+}
+
+// Radio class from BAKOM's free-text technology label, e.g. "Technology 4G,5G".
+// The HIGHEST generation present wins: a site carrying 4G and 5G is a 5G site
+// that also serves 4G, and reporting it as 4G would understate it against a
+// provider that reports NR for the same mast, which then loses deconfliction
+// for the wrong reason.
+int8_t swiss_radio_from_techno(const std::string& techno) {
+    if (techno.find("5G") != std::string::npos) return RC_NR;
+    if (techno.find("4G") != std::string::npos) return RC_LTE;
+    if (techno.find("3G") != std::string::npos) return RC_UMTS;
+    if (techno.find("2G") != std::string::npos) return RC_GSM;
+    return RC_UNKNOWN;
+}
+
+void decode_swiss_geojson(const ProviderSpec& spec, const std::string& body,
+                          std::vector<Report>* out) {
+    // Split the FEATURES ARRAY, not the document — same lesson the Overpass
+    // decoder records: a GeoJSON FeatureCollection is one top-level object, so
+    // splitting the body yields one "feature" (the whole file) and every field
+    // read returns the first match anywhere in 27 MB.
+    const std::string features = json_string(body, "features", "");
+    if (features.empty()) return;
+    for (const std::string& feature : split_json_objects(features)) {
+        // `coordinates` is a two-number ARRAY, so it is read positionally
+        // rather than by key. Order is [easting, northing].
+        const size_t at = feature.find("\"coordinates\"");
+        if (at == std::string::npos) continue;
+        const size_t open = feature.find('[', at);
+        if (open == std::string::npos) continue;
+        const size_t close = feature.find(']', open);
+        if (close == std::string::npos) continue;
+        const std::string pair = feature.substr(open + 1, close - open - 1);
+        const size_t comma = pair.find(',');
+        if (comma == std::string::npos) continue;
+        const double easting = std::atof(pair.substr(0, comma).c_str());
+        const double northing = std::atof(pair.substr(comma + 1).c_str());
+        // A plausibility guard on the SOURCE units. If these ever arrive as
+        // degrees the transform would produce confident nonsense, so a value
+        // that is not an LV95 metre coordinate is dropped rather than fed in.
+        if (easting < 2000000.0 || easting > 3000000.0 ||
+            northing < 1000000.0 || northing > 1400000.0) {
+            continue;
+        }
+        double lat = 0, lon = 0;
+        lv95_to_wgs84(easting, northing, &lat, &lon);
+        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = lat;
+        r.longitude = lon;
+        r.country_code = "CH";
+        // `station` is the operator's own site designator, e.g. "Salt BE_1014A".
+        // It is both the site name and the closest thing to a native id this
+        // register publishes; there is no cell id and none is invented.
+        const std::string station = json_string(feature, "station", "");
+        if (!station.empty()) {
+            r.site_name = station;
+            r.native_id = station;
+        }
+        r.radio = swiss_radio_from_techno(json_string(feature, "techno_en", ""));
+        out->push_back(r);
+    }
+}
+
 void decode_soql_json(const ProviderSpec& spec, const std::string& body, std::vector<Report>* out) {
     for (const std::string& row : split_json_objects(body)) {
         const double lat = json_number(row, "u_latitude", 1e9);
@@ -1272,25 +1504,43 @@ int route(void) {
     const std::string method_name = json_string(body, "METHOD", "HIGHEST_SAMPLE_COUNT");
     const double limit = json_number(body, "LIMIT", 2000);
 
-    // BBOX in Overpass order (south,west,north,east). Bounded by default: an
-    // unbounded query against a public mirror is both useless and rude, and
-    // several providers refuse one outright. The default is a small,
-    // dense urban box so a caller who names no area still sees real masts.
-    // Default box: Houston. Chosen because it is one of the few areas where BOTH
-    // a crowd-sourced and an authoritative provider genuinely hold records, so a
-    // caller who names no area still sees cross-provider deconfliction rather
-    // than a single source agreeing with itself.
-    double bb_south = 29.60, bb_west = -95.70, bb_north = 30.10, bb_east = -95.20;
+    // BBOX in Overpass order (south,west,north,east).
+    //
+    // THE DEFAULT IS THE WHOLE PLANET (owner 2026-08-10: "should not be
+    // viewport, should just be world-wide").
+    //
+    // It used to be a small box around Houston, and that single line is what
+    // the owner saw as "a square in Texas / Louisiana" on a world globe. The
+    // demo sent no BBOX, so every run silently answered for one US metro. The
+    // lesson is not "the box was too small" — it is that a DEFAULT WHICH CROPS
+    // IS INDISTINGUISHABLE FROM A COMPLETE ANSWER. Nothing in the response said
+    // a region had been chosen on the caller's behalf.
+    //
+    // Providers that genuinely cannot serve an unbounded region are not
+    // silently given a substitute box: they are skipped and SAY so (see the
+    // `lane` field and the skip below). A named region is still honoured
+    // exactly as before, which is what keeps the bounded providers usable.
+    double bb_south = -90.0, bb_west = -180.0, bb_north = 90.0, bb_east = 180.0;
+    bool bbox_named = false;
     const std::string bbox_raw = json_string(body, "BBOX", "");
     if (!bbox_raw.empty()) {
         const double south = json_number(bbox_raw, "south", 1e9);
         const double west = json_number(bbox_raw, "west", 1e9);
         const double north = json_number(bbox_raw, "north", 1e9);
         const double east = json_number(bbox_raw, "east", 1e9);
+        // An INVERTED box is rejected rather than compiled into a filter that
+        // matches nothing: `between 30 and 29` is valid SQL and returns zero
+        // rows, which reads exactly like an empty region.
         if (south <= 90 && west <= 180 && north <= 90 && east <= 180 && south < north && west < east) {
             bb_south = south; bb_west = west; bb_north = north; bb_east = east;
+            bbox_named = true;
         }
     }
+    // "Worldwide" for the purpose of provider eligibility means the caller did
+    // not name a workable region, OR named one that spans essentially the whole
+    // planet. Both are unbounded as far as a public interpreter is concerned.
+    const bool worldwide =
+        !bbox_named || (bb_north - bb_south > 170.0 && bb_east - bb_west > 340.0);
     auto fmt_coord = [](double v) {
         char buf[32];
         std::snprintf(buf, sizeof(buf), "%.6f", v);
@@ -1341,6 +1591,31 @@ int route(void) {
         if (!spec) {
             if (skipped_count++) skipped += ",";
             skipped += "{\"provider_id\":\"" + json_escape(id) + "\",\"reason\":\"unknown provider\"}";
+            continue;
+        }
+        // A provider whose real endpoint this module cannot decode yet is
+        // skipped WITH THE MISSING CAPABILITY NAMED. It is never fetched: its
+        // payload is a ZIP or a protobuf, and handing that to a CSV/JSON
+        // decoder returns 200 and parses to zero rows — the precise failure
+        // this task exists to prevent, reproduced one layer along.
+        if (std::strcmp(spec->lane, "unavailable") == 0) {
+            if (skipped_count++) skipped += ",";
+            skipped += std::string("{\"provider_id\":\"") + spec->id +
+                       "\",\"bulkIngestOnly\":true,\"reason\":\"" +
+                       json_escape(spec->blocked_by ? spec->blocked_by
+                                                    : "not consumable by this module yet") +
+                       "\"}";
+            continue;
+        }
+        // A bounded-region provider cannot answer a worldwide request. Say so
+        // instead of substituting a region the caller never asked for — the
+        // silent substitution is exactly what put one US metro on a world globe.
+        if (worldwide && std::strcmp(spec->lane, "query") == 0 && !spec->login_required) {
+            if (skipped_count++) skipped += ",";
+            skipped += std::string("{\"provider_id\":\"") + spec->id +
+                       "\",\"needsRegion\":true,\"reason\":\"this endpoint answers a BOUNDED "
+                       "region only; an unbounded query against a public interpreter times out "
+                       "and is an abuse of a donated service. Name a BBOX to include it.\"}";
             continue;
         }
         if (spec->login_required) {
@@ -1621,6 +1896,7 @@ int parse(void) {
         if (std::strcmp(spec->format, "csv") == 0) decode_csv(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "osm-json") == 0) decode_osm_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "soql-json") == 0) decode_soql_json(*spec, payload, &reports);
+        else if (std::strcmp(spec->format, "swiss-geojson") == 0) decode_swiss_geojson(*spec, payload, &reports);
         // JSON adapters land with the per-provider decoders; until each is
         // written and fixtured, an unsupported format contributes nothing
         // rather than a guess.

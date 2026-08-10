@@ -100,9 +100,18 @@ const httpResponse = (providerId, body) => ({
 async function routeFor(t, body) {
   const harness = await harnessFor(t);
   const response = await harness.invoke({ methodId: "route", inputs: [htqRequest(JSON.stringify(body))] });
+  const ports = byPort(response);
+  // When NOTHING is fetchable, route answers on `reply` and emits no `job` —
+  // the run is over before it starts, and stalling the chain instead would be a
+  // silent 502. Both frames carry the same `skipped` ledger, so a caller that
+  // only wants to know what was refused reads whichever arrived.
+  const jobFrame = ports.get("job");
+  const replyFrame = ports.get("reply");
   return {
     harness,
-    job: jsonFrame(byPort(response), "job"),
+    job: jobFrame ? jsonFrame(ports, "job") : undefined,
+    reply: replyFrame ? jsonFrame(ports, "reply") : undefined,
+    outcome: jobFrame ? jsonFrame(ports, "job") : jsonFrame(ports, "reply"),
     descriptors: framesFor(response, "requests").map((f) => JSON.parse(decoder.decode(f.payload))),
   };
 }
@@ -130,7 +139,14 @@ async function drainParse(harness, inputs, maxTicks = 8) {
 const FAILED_FETCH = { status: 0, headers: {}, bodyB64: "" };
 
 async function parseWith(t, providers, responses, body = {}) {
-  const { harness, job, descriptors } = await routeFor(t, { PROVIDERS: providers, METHOD: "CENTROID", LIMIT: 400, ...body });
+  const { harness, job, descriptors } = await routeFor(t, {
+    PROVIDERS: providers,
+    METHOD: "CENTROID",
+    LIMIT: 400,
+    // Bounded providers are only eligible when a region is named.
+    BBOX: { south: 29.6, west: -95.7, north: 30.1, east: -95.2 },
+    ...body,
+  });
   const padded = [...responses];
   while (padded.length < descriptors.length) padded.push(FAILED_FETCH);
   const parsed = await drainParse(harness, [
@@ -258,7 +274,15 @@ test("a malformed BBOX is refused rather than silently inverted", async (t) => {
   });
   // south>north would compile into a filter matching nothing, which reads as
   // "this area has no towers" instead of "you sent the corners backwards".
-  assert.match(descriptors[0].url, /29\.600000%20and%2030\.100000/u, "inverted bbox was not rejected");
+  // The rejected box falls back to the WORLDWIDE default (owner 2026-08-10),
+  // not to a substituted region — a silent regional substitute is the defect
+  // this whole task was filed about.
+  assert.match(
+    descriptors[0].url,
+    /-90\.000000%20and%2090\.000000/u,
+    "an inverted bbox must fall back to worldwide, not be compiled in",
+  );
+  assert.doesNotMatch(descriptors[0].url, /29\.600000/u, "the inverted corners reached the query");
 });
 
 // --- correlation: how parse knows WHICH provider a response body came from ---
@@ -341,4 +365,129 @@ test("a failed fetch does not shift every provider after it onto the wrong body"
     reports.every((r) => r.provider_id === "openstreetmap-overpass"),
     "the surviving body was attributed to the provider that failed",
   );
+});
+
+// --- the 2026-08-10 endpoint sweep -----------------------------------------
+//
+// These pin the three behaviours that replaced the compiled-in download pages.
+// Every provider named here was reached with a successful live fetch before it
+// was compiled in; the ones that could not be are gone (see the REMOVED block
+// in the module source, each with its measurement).
+
+const BAKOM = fs.readFileSync(
+  new URL("./fixtures/bakom-mobile-sites.sample.json", import.meta.url),
+);
+
+test("swiss-geojson: LV95 easting/northing become real WGS84 degrees", async (t) => {
+  const captured = JSON.parse(BAKOM.toString("utf8"));
+  const reports = await parseWith(t, ["bakom-mobile-sites"], [
+    httpResponse("bakom-mobile-sites", BAKOM),
+  ]);
+  assert.equal(
+    reports.length,
+    captured.features.length,
+    `decoded ${reports.length} of ${captured.features.length} features`,
+  );
+  // The published coordinates are metres (e.g. 2732413, 1219730). Read as
+  // degrees they fail the module's own range guard and EVERY row is dropped —
+  // a provider that fetches 27 MB perfectly and contributes nothing, which
+  // looks identical to a country with no masts.
+  for (const r of reports) {
+    assert.ok(
+      r.latitude > 45.7 && r.latitude < 47.9,
+      `latitude ${r.latitude} is not in Switzerland`,
+    );
+    assert.ok(
+      r.longitude > 5.8 && r.longitude < 10.6,
+      `longitude ${r.longitude} is not in Switzerland`,
+    );
+  }
+  // A canton code in the operator's own site designator is an INDEPENDENT
+  // check on the transform: a rotation or a swapped axis would still land
+  // inside the country box above, but it would put the Geneva site somewhere
+  // else. GE is Geneva, in the south-west corner.
+  const geneva = reports.find((r) => (r.site_name ?? "").includes("GE_"));
+  if (geneva) {
+    assert.ok(
+      geneva.latitude < 46.6 && geneva.longitude < 6.9,
+      `a GE_ site landed at ${geneva.latitude},${geneva.longitude}, which is not Geneva`,
+    );
+  }
+});
+
+test("swiss-geojson: the highest generation present wins the radio class", async (t) => {
+  const reports = await parseWith(t, ["bakom-mobile-sites"], [
+    httpResponse("bakom-mobile-sites", BAKOM),
+  ]);
+  const captured = JSON.parse(BAKOM.toString("utf8"));
+  for (const feature of captured.features) {
+    const techno = feature.properties.techno_en ?? "";
+    if (!techno.includes("5G")) continue;
+    const report = reports.find((r) => r.site_name === feature.properties.station);
+    // A site carrying 4G and 5G is a 5G site that also serves 4G. Reporting it
+    // as LTE would understate it against a provider that reports NR for the
+    // same mast, which then loses deconfliction for the wrong reason.
+    assert.ok(report, `${feature.properties.station} did not decode`);
+    assert.equal(report.radio, 4, "a 4G,5G site must report as NR");
+  }
+});
+
+test("a WORLDWIDE request skips bounded providers instead of substituting a region", async (t) => {
+  // The compiled-in default used to be a small box around Houston, so a caller
+  // who named no region silently received one US metro drawn on a world globe.
+  // That is the defect the owner reported as "a square in Texas / Louisiana".
+  const { descriptors, job } = await routeFor(t, {
+    PROVIDERS: ["openstreetmap-overpass", "fcc-uls-3650"],
+    METHOD: "CENTROID",
+    LIMIT: 400,
+  });
+  const asked = descriptors.map((d) => d.provider_id);
+  assert.ok(!asked.includes("openstreetmap-overpass"), "a bounded provider was fetched worldwide");
+  assert.ok(asked.includes("fcc-uls-3650"), "the bulk provider was not fetched worldwide");
+  const skip = job.skipped.find((s) => s.provider_id === "openstreetmap-overpass");
+  assert.ok(skip, "the bounded provider vanished instead of being reported");
+  assert.equal(skip.needsRegion, true);
+  assert.match(skip.reason, /BOUNDED region/u);
+  // And the query it DID send must carry the whole planet, not a substitute.
+  const fcc = descriptors.find((d) => d.provider_id === "fcc-uls-3650");
+  assert.match(fcc.url, /-90\.000000%20and%2090\.000000/u);
+});
+
+test("a bulk-ingest-only provider names the missing capability and is never fetched", async (t) => {
+  const { descriptors, outcome } = await routeFor(t, {
+    PROVIDERS: ["anfr-cartoradio", "acma-rrl", "ised-sms-tafl", "comreg-siteviewer"],
+    METHOD: "CENTROID",
+    LIMIT: 400,
+  });
+  // Each of these was verified LIVE and is real. None is fetchable by this
+  // module, because it decodes no ZIP and no protobuf — and handing a ZIP to a
+  // CSV decoder returns 200 and parses to zero rows, which is precisely the
+  // failure this task exists to prevent, reproduced one layer along.
+  assert.equal(descriptors.length, 0, "a provider this module cannot decode was fetched");
+  for (const id of ["anfr-cartoradio", "acma-rrl", "ised-sms-tafl", "comreg-siteviewer"]) {
+    const skip = outcome.skipped.find((s) => s.provider_id === id);
+    assert.ok(skip, `${id} vanished instead of being reported`);
+    assert.equal(skip.bulkIngestOnly, true);
+    assert.match(skip.reason, /verified live/u, `${id} does not say what was measured`);
+  }
+});
+
+test("the providers that could not be reached at all are GONE, not carried dead", async (t) => {
+  // Measured dead on 2026-08-10: a maintenance page, an export switched off in
+  // the viewer's own config, an approvals-gated bulk lane, and a host that no
+  // longer resolves. An honest smaller list beats twelve dead ones, and the
+  // proof that one is really gone is that the registry no longer KNOWS it —
+  // not merely that it is skipped, which is a different and weaker claim.
+  const gone = ["bnetza-emf", "nl-antenneregister", "nz-rsm-rrf", "mls-archive"];
+  const { descriptors, outcome } = await routeFor(t, {
+    PROVIDERS: gone,
+    METHOD: "CENTROID",
+    LIMIT: 400,
+  });
+  assert.equal(descriptors.length, 0, "a removed provider was fetched");
+  for (const id of gone) {
+    const skip = outcome.skipped.find((s) => s.provider_id === id);
+    assert.ok(skip, `${id} vanished silently`);
+    assert.equal(skip.reason, "unknown provider", `${id} is still in the registry`);
+  }
 });
