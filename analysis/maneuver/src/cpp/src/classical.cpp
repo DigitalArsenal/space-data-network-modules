@@ -1,4 +1,5 @@
 #include "maneuver/classical.h"
+#include "maneuver/fault.h"
 #include "maneuver/math.h"
 
 #include <cmath>
@@ -14,12 +15,12 @@ namespace maneuver {
 
 HohmannResult computeHohmannTransfer(double r1, double r2, double mu) {
     if (r1 <= 0.0 || r2 <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<HohmannResult>(fault_code::INVALID_PARAMETER,
             "[classical]: Orbit radii must be positive (r1=" +
             std::to_string(r1) + ", r2=" + std::to_string(r2) + ")");
     }
     if (mu <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<HohmannResult>(fault_code::INVALID_PARAMETER,
             "[classical]: Gravitational parameter must be positive");
     }
 
@@ -56,11 +57,11 @@ HohmannResult computeHohmannTransfer(double r1, double r2, double mu) {
 BiEllipticResult computeBiEllipticTransfer(double r1, double r2, double rInt,
                                             double mu) {
     if (r1 <= 0.0 || r2 <= 0.0 || rInt <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<BiEllipticResult>(fault_code::INVALID_PARAMETER,
             "[classical]: All radii must be positive");
     }
     if (rInt <= r1 && rInt <= r2) {
-        throw std::runtime_error(
+        return fault::fail<BiEllipticResult>(fault_code::INVALID_PARAMETER,
             "[classical]: Intermediate radius must be >= max(r1, r2)");
     }
 

@@ -1,4 +1,5 @@
 #include "maneuver/maneuver_plugin.h"
+#include "maneuver/fault.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -151,7 +152,14 @@ ManeuverPluginResult executeManeuverPlugin(const StateVector& initialState,
                                            const ManeuverPluginConfig& config) {
     ManeuverPluginResult result;
 
-    try {
+    // This body was wrapped in `try { ... } catch (const std::exception& ex) {
+    // result.errorMessage = ex.what(); }`. Under the sanctioned toolchain there
+    // are no exceptions, so that handler could never run: a validator refusal
+    // inside was a trap, not a populated errorMessage. The same intent is now
+    // expressed against the fault latch, and the message the validator wrote
+    // reaches `result.errorMessage` for real.
+    const bool faultedBefore = fault::raised();
+    {
         double mu = MU_EARTH;
         ClassicalOrbitalElements oe = stateToElements(initialState, mu);
 
@@ -340,9 +348,11 @@ ManeuverPluginResult executeManeuverPlugin(const StateVector& initialState,
                 break;
             }
         }
-    } catch (const std::exception& ex) {
-        result.errorMessage = ex.what();
+    }
+    if (!faultedBefore && fault::raised()) {
+        result.errorMessage = fault::message();
         result.success = false;
+        fault::reset();
     }
 
     return result;

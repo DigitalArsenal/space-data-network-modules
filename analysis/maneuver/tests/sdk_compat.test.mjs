@@ -13,8 +13,7 @@ import {
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
-const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
+const DIST_MANIFEST_PATH = new URL("../dist/plugin-manifest.json", import.meta.url);
 const REQUEST_FIXTURE_PATH = new URL(
   "../tests/fixtures/request.hohmann.json",
   import.meta.url,
@@ -64,10 +63,35 @@ function assertSuccessfulResponse(response) {
   assert.ok(payload.totalDeltaV > 0);
 }
 
-test("build publishes canonical browser and isomorphic artifact paths", () => {
+test("build publishes ONE artifact, and the manifest beside it", () => {
+  // There is no dist/browser lane any more. 0.1.0 shipped an emcc
+  // `dist/browser/module.js` + `.wasm` PAIR beside the isomorphic wasm, which
+  // is two artifacts that can differ from one set of sources — the shape the
+  // isomorphic law exists to refuse. The single wasi artifact loads in the
+  // browser, under WasmEdge and under Docker WasmEdge, so a second copy bought
+  // nothing but the opportunity to diverge.
   assert.equal(fs.existsSync(fileURLToPath(ISOMORPHIC_WASM_PATH)), true);
-  assert.equal(fs.existsSync(fileURLToPath(BROWSER_MODULE_PATH)), true);
-  assert.equal(fs.existsSync(fileURLToPath(BROWSER_WASM_PATH)), true);
+  assert.equal(fs.existsSync(fileURLToPath(DIST_MANIFEST_PATH)), true);
+  assert.equal(
+    fs.existsSync(fileURLToPath(new URL("../dist/browser", import.meta.url))),
+    false,
+    "dist/browser is the retired emcc lane and must not come back",
+  );
+  const shipped = JSON.parse(fs.readFileSync(fileURLToPath(DIST_MANIFEST_PATH), "utf8"));
+  const source = JSON.parse(fs.readFileSync(fileURLToPath(MANIFEST_PATH), "utf8"));
+  assert.deepEqual(shipped, source, "dist manifest drifted from plugin-manifest.json");
+});
+
+test("the manifest declares the sequential thread model and justifies it", () => {
+  // The compile OPTION is what `resolveThreadModel` actually reads; the
+  // manifest field is what a reviewer reads. build.js passes the manifest's
+  // value explicitly and fails on drift, and this asserts the manifest half so
+  // the declaration cannot quietly become "whatever runtimeTargets infers".
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+  assert.equal(manifest.threadModel, "wasi-sequential");
+  assert.equal(manifest.pluginFamily, "maneuver");
+  assert.ok(manifest.sequentialJustification?.kind);
+  assert.ok(String(manifest.sequentialJustification?.detail ?? "").length > 200);
 });
 
 test("built artifact passes SDK compliance checks", async () => {
@@ -116,7 +140,11 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
     harness = await loadModule({
       wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
       runtimeKind: "wasmedge",
-      enableThreads: false,
+      // See tests/vectors.test.mjs: the wasi-sequential lane's declared shared
+      // memory needs the threads proposal to LOAD, which is a wasm-ld property
+      // of the wasm32-wasip1-threads triple, not a threading claim by this
+      // module (its manifest declares wasi-sequential and it spawns nothing).
+      enableThreads: true,
     });
   } catch (error) {
     if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {

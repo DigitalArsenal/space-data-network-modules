@@ -124,6 +124,16 @@ struct PhasingResult {
     double phaseAngle   = 0.0;    // phase angle corrected [rad]
     Vector3 dv1_ric     = {};
     Vector3 dv2_ric     = {};
+    /// True when the requested phase shift would have driven the phasing
+    /// orbit's far apse below the Earth-collision floor and the semi-major
+    /// axis was raised to the floor instead. The maneuver that comes back is
+    /// then NOT the one that was asked for.
+    bool   clampedToEarthFloor = false;
+    double farApse              = 0.0;  // 2a - r, the apse opposite the burn [m]
+    double earthFloorRadius     = 0.0;  // the floor applied [m]
+    double requestedPhasingSMA  = 0.0;  // unclamped SMA [m]
+    double requestedPhasingPeriod = 0.0;  // unclamped period [s]
+    double achievedPhaseAngle   = 0.0;  // phase shift actually delivered [rad]
 };
 
 /// Compute a phasing maneuver to adjust along-track position.
@@ -169,16 +179,41 @@ HohmannResult computeCombinedManeuver(
 // Lambert Solver (full, not CW approximation)
 // ---------------------------------------------------------------------------
 
-/// Lambert solution
+/// Lambert solution.
+///
+/// NOTE ON THE RENAMED FIELDS. 0.1.0 called `norm3(v1)` and `norm3(v2)`
+/// "dv1"/"dv2" and their sum "totalDV". They are TRANSFER SPEEDS, not delta-v
+/// — the code comment said as much — so `totalDV` was not a cost and
+/// `solveLambertMinDV` was minimising a quantity with no meaning. They are now
+/// named for what they are. Real delta-v appears only when the caller states
+/// the velocities of the orbits being left and joined, and is flagged as
+/// present rather than silently zero.
 struct LambertResult {
-    Vector3 v1      = {};     // departure velocity [m/s]
-    Vector3 v2      = {};     // arrival velocity [m/s]
-    double  dv1     = 0.0;    // departure delta-v magnitude [m/s]
-    double  dv2     = 0.0;    // arrival delta-v magnitude [m/s]
-    double  totalDV = 0.0;    // total delta-v [m/s]
+    Vector3 v1      = {};     // departure velocity on the transfer arc [m/s]
+    Vector3 v2      = {};     // arrival velocity on the transfer arc [m/s]
+    double  v1Magnitude = 0.0;  // |v1| [m/s]
+    double  v2Magnitude = 0.0;  // |v2| [m/s]
     double  tof     = 0.0;    // time of flight [s]
+    /// TRUE ONLY WHEN THE RESIDUAL WAS MEASURED AND MET. Never a literal.
     bool    converged = false;
     int     revolutions = 0;  // number of complete revolutions
+    /// Why the solve ended: "converged", "no-solution", "residual-not-met",
+    /// "degenerate-geometry", "empty-domain", "non-finite-solution",
+    /// "invalid-input", "endpoint-velocities-required".
+    const char* status = "no-solution";
+    double  residual = 0.0;        // |F(z)| at the returned z
+    double  residualBudget = 0.0;  // the gate `residual` had to meet
+    double  z = 0.0;               // the universal variable at the solution
+    int     iterations = 0;
+
+    /// Delta-v against STATED endpoint orbits. Present only when the caller
+    /// supplied departure and arrival velocities.
+    bool    hasDeltaV = false;
+    double  dv1 = 0.0;
+    double  dv2 = 0.0;
+    double  totalDeltaV = 0.0;
+    Vector3 dv1_vec = {};
+    Vector3 dv2_vec = {};
 };
 
 /// Solve Lambert's problem: find the orbit connecting two position vectors
@@ -198,14 +233,23 @@ LambertResult solveLambert(
     bool prograde = true,
     int nRevs = 0);
 
-/// Solve Lambert for multiple revolution counts and return the minimum-ΔV solution.
+/// Solve Lambert for multiple revolution counts and return the minimum-delta-v
+/// solution, ranked on REAL delta-v against the stated endpoint orbits.
+/// @param haveEndpoints  false => there is nothing to minimise; the call is
+///                       refused with status "endpoint-velocities-required"
+///                       rather than ranking on a meaningless quantity.
+/// @param vDepart  inertial velocity of the departure orbit at r1 [m/s]
+/// @param vArrive  inertial velocity of the arrival orbit at r2 [m/s]
 LambertResult solveLambertMinDV(
     const Vector3& r1,
     const Vector3& r2,
     double tof,
     double mu = MU_EARTH,
     bool prograde = true,
-    int maxRevs = 5);
+    int maxRevs = 5,
+    bool haveEndpoints = false,
+    const Vector3& vDepart = {},
+    const Vector3& vArrive = {});
 
 }  // namespace maneuver
 

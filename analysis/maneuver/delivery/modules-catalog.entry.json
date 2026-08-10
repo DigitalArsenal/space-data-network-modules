@@ -1,0 +1,25 @@
+{
+  "MODULE_ID": "maneuver-planner",
+  "PLUGIN_ID": "maneuver-planner",
+  "NAME": "Maneuver Planning Plugin",
+  "DESCRIPTION": "Classical orbital maneuver and ROE targeting operations over a JSON command bridge: Hohmann, bi-elliptic, plane change, combined, phasing, Lambert, CAM, ROE state transition, waypoint missions and closed-loop rendezvous.",
+  "VERSION": "0.2.0",
+  "CONTENT_HASH": "0746bb2201281178f984cfd6a16a9dc52dbbb5ed6e09c67171334e01fc2934ae",
+  "ARTIFACT_SIZE_BYTES": 200879,
+  "ARTIFACT_PATH": "/modules/maneuver-planner/0.2.0/module.wasm",
+  "SUPERSEDES_CONTENT_HASH": "6028c779c759f161bb476957f9c4d3d1a0471b597336fd191f425989a9cfe043",
+  "TRUST_TIER": "RECOMMENDED",
+  "DEFAULT_ENABLED": false,
+  "ACCESS_POLICY": "ANONYMOUS",
+  "ENTRY_STATE": "ACTIVE",
+  "PLUGIN_TYPE": "Maneuver",
+  "RUNTIME_TARGETS": [
+    "browser",
+    "wasi",
+    "wasmedge"
+  ],
+  "LICENSE": "Apache-2.0",
+  "source_artifact": "artifacts/0746bb2201281178f984cfd6a16a9dc52dbbb5ed6e09c67171334e01fc2934ae.wasm",
+  "EPOCH": 2,
+  "UPDATED_AT": "2026-08-10T07:40:00.000Z"
+}

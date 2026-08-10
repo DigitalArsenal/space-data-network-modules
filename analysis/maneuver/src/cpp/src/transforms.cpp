@@ -1,4 +1,5 @@
 #include "maneuver/transforms.h"
+#include "maneuver/fault.h"
 #include "maneuver/math.h"
 #include "maneuver/constants.h"
 
@@ -113,7 +114,7 @@ Matrix2x2 invert2x2(const Matrix2x2& M) {
     double det = a * d - b * c;
 
     if (std::abs(det) < 1e-15) {
-        throw std::runtime_error(
+        return fault::fail<Matrix2x2>(fault_code::SINGULAR,
             "ROE<->RIC: Out-of-plane matrix is singular.");
     }
 
@@ -140,7 +141,7 @@ Matrix4x4 invert4x4(const Matrix4x4& M) {
             }
         }
         if (maxVal < 1e-15) {
-            throw std::runtime_error(
+            return fault::fail<Matrix4x4>(fault_code::SINGULAR,
                 "ROE<->RIC: In-plane matrix is singular.");
         }
         if (maxRow != col) std::swap(aug[col], aug[maxRow]);

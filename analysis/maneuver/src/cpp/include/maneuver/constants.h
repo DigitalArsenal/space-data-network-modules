@@ -13,6 +13,21 @@ constexpr double J2 = 1.08263e-3;
 /// Mean equatorial radius of Earth [meters]
 constexpr double R_EARTH = 6.3781e6;
 
+/// WGS-84 equatorial radius [meters].
+///
+/// Distinct from R_EARTH above ON PURPOSE: R_EARTH is the value the J2 secular
+/// rates were tuned against and changing it would move every propagated ROE.
+/// The physical-plausibility floor below is pinned to WGS-84 because that is
+/// what the seam and the parity vectors are pinned to — the conformance model
+/// in analysis/maneuver/vectors/index.mjs states RE = 6378137 exactly.
+constexpr double R_EARTH_WGS84 = 6378137.0;
+
+/// Perigee floor for any orbit this module hands back: 100 km altitude on the
+/// WGS-84 equatorial radius. An orbit whose apse sits below this is not a
+/// maneuver, it is an impact.
+constexpr double MIN_SAFE_ALTITUDE = 100000.0;
+constexpr double PHASING_FLOOR_RADIUS = R_EARTH_WGS84 + MIN_SAFE_ALTITUDE;
+
 /// Earth gravitational parameter [m^3/s^2]
 constexpr double MU_EARTH = 3.986004418e14;
 

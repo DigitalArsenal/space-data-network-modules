@@ -1,4 +1,5 @@
 #include "maneuver/targeting.h"
+#include "maneuver/fault.h"
 #include "maneuver/math.h"
 #include "maneuver/stm.h"
 #include "maneuver/transforms.h"
@@ -359,14 +360,23 @@ double evaluateDeltaV(const RelativeState& initialState,
                       const Vector3& targetPosition,
                       const ClassicalOrbitalElements& chief, double tof,
                       const TargetingOptions& options) {
-    try {
-        ManeuverLeg leg =
-            solveRendezvous(initialState, targetPosition, chief, tof, options);
-        if (!leg.converged) return std::numeric_limits<double>::infinity();
-        return leg.totalDeltaV;
-    } catch (...) {
+    // This used to be a `try`/`catch (...)` around solveRendezvous, treating a
+    // throw as "this time of flight is infinitely expensive" so the golden
+    // search could step over it. The catch was DEAD in the shipped artifact —
+    // exceptions are compiled out, so a throw inside was a trap that killed the
+    // call rather than a rejected candidate. The same intent now reads the
+    // fault latch: a refused candidate scores infinity and the latch is
+    // cleared, because a time of flight this search declines to use is not an
+    // error the CALLER made.
+    const bool faultedBefore = fault::raised();
+    ManeuverLeg leg =
+        solveRendezvous(initialState, targetPosition, chief, tof, options);
+    if (!faultedBefore && fault::raised()) {
+        fault::reset();
         return std::numeric_limits<double>::infinity();
     }
+    if (!leg.converged) return std::numeric_limits<double>::infinity();
+    return leg.totalDeltaV;
 }
 
 }  // anonymous namespace

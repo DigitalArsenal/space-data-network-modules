@@ -1,4 +1,6 @@
 #include "maneuver/approach.h"
+#include "maneuver/constants.h"
+#include "maneuver/fault.h"
 #include "maneuver/math.h"
 #include "maneuver/targeting.h"
 #include "maneuver/transforms.h"
@@ -290,11 +292,11 @@ CAMResult computeCAM(
 PhasingResult computePhasingManeuver(
     double currentRadius, double phaseAngle, int numRevs, double mu) {
     if (currentRadius <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<PhasingResult>(fault_code::INVALID_PARAMETER,
             "[phasing]: Orbit radius must be positive");
     }
     if (numRevs < 1) {
-        throw std::runtime_error(
+        return fault::fail<PhasingResult>(fault_code::INVALID_PARAMETER,
             "[phasing]: Number of revolutions must be >= 1");
     }
 
@@ -311,6 +313,33 @@ PhasingResult computePhasingManeuver(
     // Phasing orbit SMA from period
     double a_phasing = std::pow(mu * T_phasing * T_phasing /
                                 (4.0 * M_PI * M_PI), 1.0 / 3.0);
+
+    // ---------------------------------------------------------------------
+    // EARTH-COLLISION FLOOR.
+    //
+    // The burn point stays at `currentRadius`, so the phasing orbit's OTHER
+    // apse is `2*a - r`. Nothing above constrains it: at +170 deg in one
+    // revolution the unclamped solution puts that apse ~4,300 km BELOW the
+    // surface and 0.1.0 returned it with no error and no flag (graph:
+    // modules-maneuver-planner-rebuild-batch item 2).
+    //
+    // The floor is Re + 100 km on the WGS-84 equatorial radius, matching the
+    // command-card spec (maneuver-command-cards.md section 4.8) and the
+    // conformance model the parity vectors pin. The clamp is REPORTED rather
+    // than silent: a caller that asked for a phase shift it cannot have in the
+    // revolutions it offered needs to know that what came back is a different
+    // maneuver, so it can tell an operator to use more revolutions.
+    // ---------------------------------------------------------------------
+    const double a_floor = (PHASING_FLOOR_RADIUS + currentRadius) / 2.0;
+    bool clamped = false;
+    double requested_a = a_phasing;
+    double requested_T = T_phasing;
+    if (a_phasing < a_floor) {
+        clamped = true;
+        a_phasing = a_floor;
+        T_phasing = TWO_PI * std::sqrt(
+            a_phasing * a_phasing * a_phasing / mu);
+    }
 
     // Delta-v: transfer to/from phasing orbit (Hohmann-like)
     double v_current = std::sqrt(mu / currentRadius);
@@ -336,6 +365,16 @@ PhasingResult computePhasingManeuver(
     result.phaseAngle = phaseAngle;
     result.dv1_ric = {0.0, dv1, 0.0};
     result.dv2_ric = {0.0, dv2, 0.0};
+    result.clampedToEarthFloor = clamped;
+    result.farApse = 2.0 * a_phasing - currentRadius;
+    result.earthFloorRadius = PHASING_FLOOR_RADIUS;
+    result.requestedPhasingSMA = requested_a;
+    result.requestedPhasingPeriod = requested_T;
+    // The phase shift the CLAMPED orbit actually delivers over numRevs. Equal
+    // to the request when nothing was clamped; the honest number to show an
+    // operator when something was.
+    result.achievedPhaseAngle =
+        clamped ? (1.0 - T_phasing / T_current) * TWO_PI * numRevs : phaseAngle;
     return result;
 }
 
@@ -396,39 +435,128 @@ HohmannResult computeCombinedManeuver(
 }
 
 // ===========================================================================
-// Lambert Solver (Izzo's method)
+// Lambert Solver — Bate-Mueller-White / Curtis Algorithm 5.2 universal variable
+//
+// 0.1.0's version of this function was section-headed "Izzo's method" (it is
+// not Izzo's) and returned departure velocities that do not fly from r1 to r2,
+// while reporting `converged: true` on every path — 50 of 52 sampled prograde
+// LEO geometries plus every hyperbolic, retrograde and near-pi case
+// (graph: modules-maneuver-lambert-returns-non-solutions). Four things were
+// wrong and all four are fixed here:
+//
+//   1. The small-|z| derivative was (sqrt(2)/40)*y^3.5 where BMW/Curtis give
+//      y^1.5. At y ~ 1e7 that is too large by y^2 ~ 1e14, so the Newton step
+//      out of the z = 0 start was effectively zero and the solver returned its
+//      starting guess.
+//   2. The z != 0 derivative was also not the Curtis expression.
+//   3. `converged` was the literal `true`, assigned on every path including
+//      MAX_ITER exhaustion and the y < 0 bail-out.
+//   4. The residual was never re-evaluated after the loop.
+//
+// Two conditioning choices here are not in the textbook and are load-bearing:
+//
+//   * The transfer angle's sine comes from |r1 x r2| and its "1 - cos" from a
+//     unit-vector CHORD, never from sin(acos(.)). acos has an infinite
+//     derivative at +-1, which is exactly the near-pi geometry the solver has
+//     to survive; going through it costs five orders of magnitude of arrival
+//     accuracy on Tudat's 179.999-degree case (4.5e-6 -> 3.0e-11 of |r2|).
+//   * The root is BRACKETED and then found by Newton safeguarded with
+//     bisection, rather than by unguarded Newton from a fixed start. F(z) is
+//     monotone on the zero-revolution branch, so the bracket is exact; a
+//     multi-revolution branch is not monotone and is scanned instead. This is
+//     also what makes "no solution" a REPORTABLE answer rather than a silent
+//     wrong one: a geometry with no N-revolution arc returns converged=false.
 // ===========================================================================
 
 namespace {
 
-// Stumpff functions for universal variable formulation
-double stumpffC(double psi) {
-    if (std::abs(psi) < 1e-6) return 1.0 / 6.0;
-    if (psi > 0) return (1.0 - std::cos(std::sqrt(psi))) / psi;
-    return (std::cosh(std::sqrt(-psi)) - 1.0) / (-psi);
+// Stumpff functions. The near-zero branches are SERIES, not constants: the
+// 0.1.0 code returned the leading term only (1/6, 1/120 — themselves the
+// z -> 0 limits of the OTHER function), which is both wrong by a factor of 3
+// and non-continuous with the branches on either side.
+double stumpffC(double z) {
+    if (z > 1e-6) {
+        return (1.0 - std::cos(std::sqrt(z))) / z;
+    }
+    if (z < -1e-6) {
+        return (std::cosh(std::sqrt(-z)) - 1.0) / (-z);
+    }
+    return 0.5 - z / 24.0 + (z * z) / 720.0 - (z * z * z) / 40320.0;
 }
 
-double stumpffS(double psi) {
-    if (std::abs(psi) < 1e-6) return 1.0 / 120.0;
-    if (psi > 0) {
-        double sqrtPsi = std::sqrt(psi);
-        return (sqrtPsi - std::sin(sqrtPsi)) / (sqrtPsi * sqrtPsi * sqrtPsi);
+double stumpffS(double z) {
+    if (z > 1e-6) {
+        const double s = std::sqrt(z);
+        return (s - std::sin(s)) / (s * s * s);
     }
-    double sqrtNPsi = std::sqrt(-psi);
-    return (std::sinh(sqrtNPsi) - sqrtNPsi) / (sqrtNPsi * sqrtNPsi * sqrtNPsi);
+    if (z < -1e-6) {
+        const double s = std::sqrt(-z);
+        return (std::sinh(s) - s) / (s * s * s);
+    }
+    return 1.0 / 6.0 - z / 120.0 + (z * z) / 5040.0 - (z * z * z) / 362880.0;
 }
 
 // Cross product for 3-vectors
-Vector3 cross3(const Vector3& a, const Vector3& b) {
+Vector3 lambertCross3(const Vector3& a, const Vector3& b) {
     return {a[1]*b[2] - a[2]*b[1],
             a[2]*b[0] - a[0]*b[2],
             a[0]*b[1] - a[1]*b[0]};
 }
 
 // Scale a 3-vector
-Vector3 scale3(const Vector3& v, double s) {
+Vector3 lambertScale3(const Vector3& v, double s) {
     return {v[0]*s, v[1]*s, v[2]*s};
 }
+
+/// The universal-variable problem for one (geometry, tof) pair.
+struct LambertProblem {
+    double r1n = 0.0;
+    double r2n = 0.0;
+    double A = 0.0;
+    double sqrtMu = 0.0;
+    double tof = 0.0;
+
+    double y(double z) const {
+        const double C = stumpffC(z);
+        if (!(C > 0.0)) return -1.0;
+        return r1n + r2n + A * (z * stumpffS(z) - 1.0) / std::sqrt(C);
+    }
+
+    /// F(z) = (y/C)^1.5 * S + A*sqrt(y) - sqrt(mu)*tof. Zero at the solution.
+    /// Returns NaN outside the domain (y <= 0) so callers can treat "no value
+    /// here" and "value with the wrong sign" differently.
+    double F(double z) const {
+        const double C = stumpffC(z);
+        const double S = stumpffS(z);
+        if (!(C > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+        const double yy = r1n + r2n + A * (z * S - 1.0) / std::sqrt(C);
+        if (!(yy > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+        return std::pow(yy / C, 1.5) * S + A * std::sqrt(yy) - sqrtMu * tof;
+    }
+
+    /// dF/dz, Curtis eq. 5.43. Both branches, both correct.
+    double dF(double z) const {
+        const double C = stumpffC(z);
+        const double S = stumpffS(z);
+        const double yy = y(z);
+        if (!(yy > 0.0) || !(C > 0.0)) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+        if (std::abs(z) < 1e-6) {
+            return (std::sqrt(2.0) / 40.0) * std::pow(yy, 1.5) +
+                   (A / 8.0) * (std::sqrt(yy) + A * std::sqrt(1.0 / (2.0 * yy)));
+        }
+        return std::pow(yy / C, 1.5) *
+                   ((1.0 / (2.0 * z)) * (C - 3.0 * S / (2.0 * C)) +
+                    3.0 * S * S / (4.0 * C)) +
+               (A / 8.0) * (3.0 * S * std::sqrt(yy) / C + A * std::sqrt(C / yy));
+    }
+};
+
+constexpr int LAMBERT_MAX_ITER = 200;
+/// Residual gate, relative to the natural scale of F (which carries units of
+/// sqrt(mu)*time). This is what `converged` now MEANS.
+constexpr double LAMBERT_RESIDUAL_TOL = 1e-10;
 
 }  // anonymous namespace
 
@@ -436,125 +564,269 @@ LambertResult solveLambert(
     const Vector3& r1, const Vector3& r2, double tof,
     double mu, bool prograde, int nRevs) {
 
-    double r1_mag = norm3(r1);
-    double r2_mag = norm3(r2);
+    LambertResult result;
+    result.tof = tof;
+    result.revolutions = nRevs;
+    result.converged = false;
 
-    // Cross product to determine transfer direction
-    Vector3 cross = cross3(r1, r2);
-    double dot = r1[0]*r2[0] + r1[1]*r2[1] + r1[2]*r2[2];
+    const double r1_mag = norm3(r1);
+    const double r2_mag = norm3(r2);
+    if (!(r1_mag > 0.0) || !(r2_mag > 0.0) || !(mu > 0.0) || !(tof > 0.0) ||
+        nRevs < 0) {
+        result.status = "invalid-input";
+        return result;
+    }
 
-    // Transfer angle
-    double cosTheta = dot / (r1_mag * r2_mag);
-    cosTheta = std::max(-1.0, std::min(1.0, cosTheta));
-    double theta = std::acos(cosTheta);
+    // Unit position vectors: every angular quantity below is derived from
+    // these, which is what keeps the near-pi geometry conditioned.
+    const Vector3 u1 = lambertScale3(r1, 1.0 / r1_mag);
+    const Vector3 u2 = lambertScale3(r2, 1.0 / r2_mag);
+    double cosdt = u1[0]*u2[0] + u1[1]*u2[1] + u1[2]*u2[2];
+    cosdt = std::max(-1.0, std::min(1.0, cosdt));
 
-    // Adjust for prograde/retrograde
-    if (prograde) {
-        if (cross[2] < 0) theta = TWO_PI - theta;
+    // 1 - cos, taken from whichever half-angle chord keeps full precision:
+    // |u1 - u2|^2 = 2(1 - cos) is accurate for SMALL angles, |u1 + u2|^2 =
+    // 2(1 + cos) for angles near pi. Computing 1 - cos directly loses the
+    // significant digits at exactly the ends where the solver is hardest.
+    const Vector3 chordMinus = sub3(u1, u2);
+    const Vector3 chordPlus = {u1[0]+u2[0], u1[1]+u2[1], u1[2]+u2[2]};
+    const double dMinus = norm3(chordMinus);
+    const double dPlus = norm3(chordPlus);
+    const double oneMinusCos =
+        (cosdt > 0.0) ? (dMinus * dMinus) / 2.0 : 2.0 - (dPlus * dPlus) / 2.0;
+
+    // |sin| from the cross product, NEVER from sin(acos(cos)).
+    const Vector3 crossU = lambertCross3(u1, u2);
+    const double sinMag = norm3(crossU);
+    // Direction: the "short way" is the one whose angular momentum agrees with
+    // the requested sense. r1 x r2 pointing +z is a prograde (counterclockwise)
+    // sweep of less than pi.
+    const Vector3 crossR = lambertCross3(r1, r2);
+    const bool shortWay = prograde ? (crossR[2] >= 0.0) : (crossR[2] < 0.0);
+    const double sindt = shortWay ? sinMag : -sinMag;
+
+    if (!(oneMinusCos > 0.0)) {
+        // r1 and r2 are collinear and same-sense: the transfer plane is
+        // undefined. This is a real "no solution", not a failure to find one.
+        result.status = "degenerate-geometry";
+        return result;
+    }
+
+    LambertProblem problem;
+    problem.r1n = r1_mag;
+    problem.r2n = r2_mag;
+    problem.A = sindt * std::sqrt(r1_mag * r2_mag / oneMinusCos);
+    problem.sqrtMu = std::sqrt(mu);
+    problem.tof = tof;
+
+    if (!(std::abs(problem.A) > 0.0)) {
+        result.status = "degenerate-geometry";
+        return result;
+    }
+
+    // -----------------------------------------------------------------------
+    // Bracket the root.
+    // -----------------------------------------------------------------------
+    const double zCeiling = TWO_PI * (nRevs + 1) * TWO_PI * (nRevs + 1);
+    double a = 0.0;
+    double b = 0.0;
+    double fa = 0.0;
+    bool bracketed = false;
+
+    if (nRevs == 0) {
+        // The zero-revolution branch is monotone in z (tof -> 0 as z -> -inf,
+        // tof -> +inf as z -> (2*pi)^2), so MARCH from z = 0 in the direction
+        // F(0) points instead of scanning. Scanning a huge interval is not
+        // merely slower: at z ~ -1500 the two terms of F are each ~1e14 and
+        // cancel to pure round-off, and a scan over that region brackets noise.
+        double z0 = 0.0;
+        double f0 = problem.F(0.0);
+        if (!std::isfinite(f0)) {
+            // y(0) < 0: climb until the domain opens.
+            for (int guard = 0; guard < 4000 && !std::isfinite(f0); ++guard) {
+                z0 += 0.05 * zCeiling;
+                if (z0 >= zCeiling) break;
+                f0 = problem.F(z0);
+            }
+            if (!std::isfinite(f0)) {
+                result.status = "empty-domain";
+                return result;
+            }
+        }
+        if (f0 <= 0.0) {
+            a = z0;
+            fa = f0;
+            for (int i = 0; i < 200; ++i) {
+                const double hi = zCeiling - (zCeiling - z0) * std::pow(0.5, i + 1);
+                const double f = problem.F(hi);
+                if (std::isfinite(f) && f > 0.0) {
+                    b = hi;
+                    bracketed = true;
+                    break;
+                }
+            }
+        } else {
+            b = z0;
+            double step = std::max(1.0, std::abs(z0));
+            for (int i = 0; i < 200 && step <= 1e6; ++i) {
+                const double lo = z0 - step;
+                const double f = problem.F(lo);
+                if (std::isfinite(f) && f < 0.0) {
+                    a = lo;
+                    fa = f;
+                    bracketed = true;
+                    break;
+                }
+                step *= 2.0;
+            }
+        }
     } else {
-        if (cross[2] >= 0) theta = TWO_PI - theta;
+        // A multi-revolution branch lives on ((2*pi*N)^2, (2*pi*(N+1))^2) and
+        // is NOT monotone there — it dips to a minimum and rises, so a given
+        // tof has two solutions or none. The interval is bounded and
+        // well-conditioned, so scan it and take the first sign change (the
+        // low-energy / long-transfer branch).
+        const double zFloor = TWO_PI * nRevs * TWO_PI * nRevs;
+        constexpr int SCAN = 2048;
+        double prevZ = zFloor;
+        double prevF = problem.F(zFloor);
+        for (int i = 1; i <= SCAN; ++i) {
+            const double z = zFloor + (zCeiling - zFloor) * i / SCAN;
+            const double f = problem.F(z);
+            if (std::isfinite(prevF) && std::isfinite(f) && prevF * f <= 0.0) {
+                a = prevZ;
+                b = z;
+                fa = prevF;
+                bracketed = true;
+                break;
+            }
+            prevZ = z;
+            prevF = f;
+        }
     }
 
-    // Add full revolutions
-    theta += nRevs * TWO_PI;
-
-    // Universal variable Lambert solver (Bate, Mueller, White)
-    double A = std::sin(theta) * std::sqrt(r1_mag * r2_mag / (1.0 - cosTheta));
-
-    if (std::abs(A) < 1e-15) {
-        return {{}, {}, 0, 0, 0, tof, false, nRevs};
+    if (!bracketed) {
+        // There is no arc of this revolution count that flies this geometry in
+        // this time. Saying so is the whole point of this task.
+        result.status = "no-solution";
+        return result;
     }
 
-    // Newton-Raphson iteration on universal variable z
-    double z = 0.0;
-    if (nRevs > 0) {
-        z = 4.0 * M_PI * M_PI;  // Start above first revolution
-    }
-
-    constexpr int MAX_ITER = 200;
-    constexpr double TOL = 1e-10;
-
-    for (int iter = 0; iter < MAX_ITER; ++iter) {
-        double C = stumpffC(z);
-        double S = stumpffS(z);
-
-        double y = r1_mag + r2_mag + A * (z * S - 1.0) / std::sqrt(C);
-
-        if (y < 0.0) {
-            // Adjust z to make y positive
-            z = z + 0.1;
+    // -----------------------------------------------------------------------
+    // Safeguarded Newton: take the Newton step when it stays inside the
+    // bracket, bisect when it does not. Cannot diverge, cannot leave the
+    // domain, and terminates.
+    // -----------------------------------------------------------------------
+    double z = 0.5 * (a + b);
+    int iterations = 0;
+    for (; iterations < LAMBERT_MAX_ITER; ++iterations) {
+        const double f = problem.F(z);
+        if (!std::isfinite(f)) {
+            z = 0.5 * (a + b);
             continue;
         }
-
-        double chi = std::sqrt(y / C);
-        double F = chi * chi * chi * S + A * std::sqrt(y) - std::sqrt(mu) * tof;
-
-        // Derivative dF/dz
-        double dF;
-        if (std::abs(z) < 1e-6) {
-            dF = (std::sqrt(2.0) / 40.0) * y * y * y *
-                 std::sqrt(y) + (A / 8.0) * (std::sqrt(y) + A * std::sqrt(1.0 / (2.0 * y)));
+        if (f * fa > 0.0) {
+            a = z;
+            fa = f;
         } else {
-            dF = (chi * chi * chi * (S - 3.0 * S * z / (2.0 * C) +
-                  1.0 / (2.0 * C)) + (A / 8.0) * (3.0 * S * std::sqrt(y) / C +
-                  A * std::sqrt(C / y)));
+            b = z;
         }
-
-        if (std::abs(dF) < 1e-30) break;
-
-        double z_new = z - F / dF;
-        if (std::abs(z_new - z) < TOL) {
-            z = z_new;
+        const double df = problem.dF(z);
+        double next = (std::isfinite(df) && df != 0.0) ? z - f / df
+                                                       : std::numeric_limits<double>::quiet_NaN();
+        const double lo = std::min(a, b);
+        const double hi = std::max(a, b);
+        if (!std::isfinite(next) || next <= lo || next >= hi) {
+            next = 0.5 * (a + b);
+        }
+        const double step = std::abs(next - z);
+        z = next;
+        if (step <= 1e-14 * std::max(1.0, std::abs(z))) {
+            ++iterations;
             break;
         }
-        z = z_new;
     }
 
-    // Compute Lagrange coefficients
-    double C = stumpffC(z);
-    double S = stumpffS(z);
-    double y = r1_mag + r2_mag + A * (z * S - 1.0) / std::sqrt(C);
+    const double y = problem.y(z);
+    const double residual = std::abs(problem.F(z));
+    const double budget = LAMBERT_RESIDUAL_TOL * problem.sqrtMu * std::abs(tof);
 
-    double f = 1.0 - y / r1_mag;
-    double g_dot = 1.0 - y / r2_mag;
-    double g = A * std::sqrt(y / mu);
+    if (!(y > 0.0) || !std::isfinite(residual)) {
+        result.status = "empty-domain";
+        return result;
+    }
 
-    // Velocities
-    Vector3 v1_vec = scale3(sub3(r2, scale3(r1, f)), 1.0 / g);
-    Vector3 v2_vec = scale3(sub3(scale3(r2, g_dot), r1), 1.0 / g);
+    const double f_lagrange = 1.0 - y / r1_mag;
+    const double g_dot = 1.0 - y / r2_mag;
+    const double g = problem.A * std::sqrt(y / mu);
+    if (!std::isfinite(g) || g == 0.0) {
+        result.status = "degenerate-geometry";
+        return result;
+    }
 
-    LambertResult result;
+    const Vector3 v1_vec = lambertScale3(sub3(r2, lambertScale3(r1, f_lagrange)), 1.0 / g);
+    const Vector3 v2_vec = lambertScale3(sub3(lambertScale3(r2, g_dot), r1), 1.0 / g);
+    if (!std::isfinite(v1_vec[0]) || !std::isfinite(v1_vec[1]) ||
+        !std::isfinite(v1_vec[2]) || !std::isfinite(v2_vec[0]) ||
+        !std::isfinite(v2_vec[1]) || !std::isfinite(v2_vec[2])) {
+        result.status = "non-finite-solution";
+        return result;
+    }
+
     result.v1 = v1_vec;
     result.v2 = v2_vec;
-    result.tof = tof;
-    result.converged = true;
-    result.revolutions = nRevs;
-    // Note: dv1 and dv2 require initial/final velocities to compute
-    // Here we return the transfer velocities; the user subtracts their initial/final
-    result.dv1 = norm3(v1_vec);
-    result.dv2 = norm3(v2_vec);
-    result.totalDV = result.dv1 + result.dv2;
+    result.z = z;
+    result.iterations = iterations;
+    result.residual = residual;
+    result.residualBudget = budget;
+    // `converged` is now a MEASUREMENT, not a literal.
+    result.converged = residual <= budget;
+    result.status = result.converged ? "converged" : "residual-not-met";
+    result.v1Magnitude = norm3(v1_vec);
+    result.v2Magnitude = norm3(v2_vec);
     return result;
 }
 
 LambertResult solveLambertMinDV(
     const Vector3& r1, const Vector3& r2, double tof,
-    double mu, bool prograde, int maxRevs) {
+    double mu, bool prograde, int maxRevs,
+    bool haveEndpoints, const Vector3& vDepart, const Vector3& vArrive) {
 
+    // WHY THIS SIGNATURE CHANGED.
+    //
+    // 0.1.0 ranked revolution counts by `|v1| + |v2|` — the sum of the TRANSFER
+    // SPEEDS, which is not a cost of anything. Minimising it selects an arc for
+    // no reason connected to propellant. Real delta-v needs the velocities of
+    // the orbits being departed and arrived at, so the caller must state them;
+    // without them there is nothing to minimise and this refuses rather than
+    // pretending. (The `catch (...)` that used to wrap the loop was dead code
+    // in the shipped artifact anyway: exceptions are compiled out, so a trap
+    // inside killed the call instead of skipping a revolution count.)
     LambertResult best;
-    best.totalDV = std::numeric_limits<double>::infinity();
-
-    for (int rev = 0; rev <= maxRevs; ++rev) {
-        try {
-            auto result = solveLambert(r1, r2, tof, mu, prograde, rev);
-            if (result.converged && result.totalDV < best.totalDV) {
-                best = result;
-            }
-        } catch (...) {
-            continue;
-        }
+    best.converged = false;
+    best.status = "no-solution";
+    if (!haveEndpoints) {
+        best.status = "endpoint-velocities-required";
+        return best;
     }
 
+    double bestCost = std::numeric_limits<double>::infinity();
+    for (int rev = 0; rev >= 0 && rev <= maxRevs; ++rev) {
+        LambertResult candidate = solveLambert(r1, r2, tof, mu, prograde, rev);
+        if (!candidate.converged) continue;
+        const Vector3 dv1 = sub3(candidate.v1, vDepart);
+        const Vector3 dv2 = sub3(vArrive, candidate.v2);
+        candidate.dv1 = norm3(dv1);
+        candidate.dv2 = norm3(dv2);
+        candidate.totalDeltaV = candidate.dv1 + candidate.dv2;
+        candidate.dv1_vec = dv1;
+        candidate.dv2_vec = dv2;
+        candidate.hasDeltaV = true;
+        if (candidate.totalDeltaV < bestCost) {
+            bestCost = candidate.totalDeltaV;
+            best = candidate;
+        }
+    }
     return best;
 }
 

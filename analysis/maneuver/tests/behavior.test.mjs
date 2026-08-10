@@ -31,7 +31,9 @@ const MU_EARTH = 398600441800000.0;
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`collision-avoidance maneuvers honor miss-distance and timing config on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {
+      enableThreads: true,
+    });
     if (!harness) {
       return;
     }
@@ -70,7 +72,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`KGD ROE STM propagation returns finite J2 state transition data on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {
+      enableThreads: true,
+    });
     if (!harness) {
       return;
     }
@@ -106,7 +110,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`closed-loop rendezvous simulation tracks the combined-case profile on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {
+      enableThreads: true,
+    });
     if (!harness) {
       return;
     }
@@ -150,7 +156,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`relative waypoint mission planning returns finite burns and trajectory on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {
+      enableThreads: true,
+    });
     if (!harness) {
       return;
     }

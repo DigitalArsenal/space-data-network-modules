@@ -25,6 +25,7 @@ import {
 } from "../../../tests/lib/isomorphicHarness.mjs";
 import {
   BANDS,
+  INVARIANTS,
   bandFor,
   compareValue,
   formatWorst,
@@ -109,7 +110,23 @@ function describe(testCase, evaluation) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`maneuver vectors on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    // WasmEdge MUST be given the threads proposal for this artifact, and that is
+// not a threading claim. On `wasm32-wasip1-threads` — the triple the SDK's
+// wasi-sequential lane compiles for — wasm-ld DECLARES a shared memory (limits
+// flags 0x03) even with no atomics and no thread-spawn contract, because the
+// target features say so. The SDK's own artifact guard documents this as the
+// expected driver output and checks the property that actually matters: the
+// guest OWNS its memory rather than importing one. The published reference
+// propagator has the identical memory section.
+//
+// A bare `wasmedge` without --enable-threads refuses to LOAD such a module
+// ("integer too large / At AST node: limit"), which reads like a defect in the
+// artifact and is not one. The shared repo harness defaults `enableThreads` to
+// false, so every module off this lane must ask for it explicitly — filed as
+// `modules-isomorphic-harness-wasmedge-threads-default`.
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {
+      enableThreads: true,
+    });
     if (!harness) return;
     t.after(async () => {
       await harness.destroy();
@@ -192,55 +209,105 @@ test("every vector file row carries provenance", () => {
 });
 
 /**
- * THE MODULE'S ERROR PATH IS COMPILED AWAY — pinned as a test so the day it is
- * repaired is a visible event.
+ * THE LEO SWEEP — the invariant that found the Lambert defect, run as a suite.
  *
- * `invoke_json_request` wraps its dispatch in try/catch, but the emcc link line
- * carries no exception flags, so every `throw` lowers to `abort()`. The trap
- * POISONS THE INSTANCE: subsequent calls on the same harness fail too, which is
- * why each case below gets a fresh one. This is the load-bearing justification
- * for the console-side wrapper validating every parameter BEFORE the call.
+ * The four Tudat rows above are a foreign reference. This is the other half of
+ * the adjudication and needs no reference at all: for a grid of routine
+ * prograde LEO-to-LEO geometries, every solution the module CLAIMS must
+ * actually fly. The claim is checked by propagating the returned departure
+ * velocity forward by the stated time of flight with the independent
+ * universal-variable Kepler propagator in vectors/index.mjs.
+ *
+ * On the 0.1.0 artifact this sweep failed 50 of 52 sampled cases, every one of
+ * them reporting `converged: true`, with misses from 5.4e-3 to 41x the target
+ * radius.
+ *
+ * The assertion is deliberately two-sided, and the second side is the one that
+ * matters: a solver may legitimately answer "there is no zero-revolution arc
+ * that flies this" — a reflex transfer angle has a bounded maximum time of
+ * flight — but it may NEVER claim convergence for an arc that does not arrive.
+ * "Refuses more than it should" is a capability gap; "answers a burn that
+ * misses" is the defect this task exists to close.
  */
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
-  test(`bad input traps rather than erroring on ${runtimeKind}`, async (t) => {
-    const probes = [
-      { id: "unknown-operation", request: { operation: "noSuchOperation", params: {} } },
-      { id: "missing-required-param", request: { operation: "hohmannTransfer", params: { r1: 7e6 } } },
-      { id: "misspelled-param", request: { operation: "hohmannTransfer", params: { R1: 7e6, r2: 4e7 } } },
-      {
-        id: "validator-range-violation",
-        request: { operation: "phasingManeuver", params: { currentRadius: 7e6, phaseAngle: 0.5, numRevs: 0 } },
-      },
-      {
-        id: "validator-negative-radius",
-        request: { operation: "hohmannTransfer", params: { r1: -7e6, r2: 4e7 } },
-      },
-      { id: "missing-operation-key", request: { params: {} } },
-    ];
+  test(`every Lambert solution that claims convergence actually arrives on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {
+      enableThreads: true,
+    });
+    if (!harness) return;
+    t.after(async () => {
+      await harness.destroy();
+    });
 
-    for (const probe of probes) {
-      await t.test(probe.id, async (subtest) => {
-        const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, subtest);
-        if (!harness) return;
-        try {
-          let outcome = "returned";
-          try {
-            await invokeJsonRequest(harness, probe.request);
-          } catch {
-            outcome = "threw";
-          }
-          assert.equal(
-            outcome,
-            "threw",
-            `${probe.id} returned a value. If the module now produces a clean ` +
-              "JSON error result, the exceptions-disabled link line has been " +
-              "repaired — update modules-maneuver-planner-rebuild-batch and " +
-              "relax the console wrapper's defensive validation accordingly.",
-          );
-        } finally {
-          await harness.destroy();
+    const mu = 3.986004418e14;
+    const r1Magnitude = 6678137;
+    const r2Magnitude = 7378137;
+    const period = 2 * Math.PI * Math.sqrt(r1Magnitude ** 3 / mu);
+
+    let claimed = 0;
+    let refused = 0;
+    let worstRelativeMiss = 0;
+    const misses = [];
+
+    for (let degrees = 10; degrees <= 350; degrees += 20) {
+      for (const orbits of [0.25, 0.5, 1.0, 2.0]) {
+        const theta = (degrees * Math.PI) / 180;
+        const params = {
+          r1: [r1Magnitude, 0, 0],
+          r2: [r2Magnitude * Math.cos(theta), r2Magnitude * Math.sin(theta), 0],
+          tof: orbits * period,
+          mu,
+          prograde: true,
+          nRevs: 0,
+        };
+        const raw = await harness.invoke({
+          methodId: "invoke",
+          inputs: [
+            {
+              portId: "request",
+              payload: Buffer.from(
+                JSON.stringify({ operation: "solveLambert", params }),
+                "utf8",
+              ),
+            },
+          ],
+        });
+        if (raw.statusCode !== 0) {
+          // A structured refusal. Under 0.1.0 this would have been a TRAP that
+          // killed the harness for every remaining case in the grid.
+          refused += 1;
+          continue;
         }
-      });
+        const frame = raw.outputs.find((entry) => entry.portId === "response");
+        const response = JSON.parse(new TextDecoder().decode(frame.payload));
+        assert.equal(
+          response.converged,
+          true,
+          `${degrees}deg/${orbits}P returned a success status with converged=false`,
+        );
+        claimed += 1;
+
+        const closure = INVARIANTS.lambertClosure({
+          operation: "solveLambert",
+          params,
+          response,
+        });
+        misses.push({ id: `${degrees}deg/${orbits}P`, closure });
+        worstRelativeMiss = Math.max(worstRelativeMiss, closure.relativeMiss);
+      }
     }
+
+    const failures = misses.filter((entry) => !entry.closure.ok);
+    assert.deepEqual(
+      failures.map((entry) => `${entry.id}: ${entry.closure.detail}`),
+      [],
+      `${failures.length} of ${claimed} claimed solutions do not arrive`,
+    );
+    assert.ok(claimed >= 60, `only ${claimed} of 72 geometries produced a solution`);
+    console.error(
+      `[${runtimeKind}] Lambert LEO sweep: ${claimed} claimed + ${refused} refused = ` +
+        `${claimed + refused} geometries; worst arrival miss ` +
+        `${worstRelativeMiss.toExponential(3)} of |r2|`,
+    );
   });
 }

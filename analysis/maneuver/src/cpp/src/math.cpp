@@ -1,4 +1,5 @@
 #include "maneuver/math.h"
+#include "maneuver/fault.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -20,7 +21,7 @@ const ROEVector ZERO_ROE = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 double trueAnomalyFromMean(double meanAnomaly, double eccentricity,
                            double tolerance) {
     if (eccentricity < 0.0 || eccentricity >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[kepler]: Eccentricity must be in [0, 1) for elliptical orbits (e=" +
             std::to_string(eccentricity) + ")");
     }
@@ -47,12 +48,12 @@ double trueAnomalyFromMean(double meanAnomaly, double eccentricity,
 
 double meanMotion(double semiMajorAxis, double gravitationalParameter) {
     if (semiMajorAxis <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[kepler]: Semi-major axis must be positive (a=" +
             std::to_string(semiMajorAxis) + ")");
     }
     if (gravitationalParameter <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[kepler]: Gravitational parameter must be positive (mu=" +
             std::to_string(gravitationalParameter) + ")");
     }
@@ -63,7 +64,7 @@ double meanMotion(double semiMajorAxis, double gravitationalParameter) {
 double orbitalRadius(double semiMajorAxis, double eccentricity,
                      double trueAnomaly) {
     if (eccentricity < 0.0 || eccentricity >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[kepler]: Eccentricity must be in [0, 1) (e=" +
             std::to_string(eccentricity) + ")");
     }
@@ -75,7 +76,7 @@ double orbitalRadius(double semiMajorAxis, double eccentricity,
 double radialVelocity(double semiMajorAxis, double eccentricity,
                       double trueAnomaly, double gravitationalParameter) {
     if (eccentricity < 0.0 || eccentricity >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[kepler]: Eccentricity must be in [0, 1) (e=" +
             std::to_string(eccentricity) + ")");
     }
@@ -87,7 +88,7 @@ double radialVelocity(double semiMajorAxis, double eccentricity,
 double angularVelocity(double semiMajorAxis, double eccentricity,
                        double trueAnomaly, double gravitationalParameter) {
     if (eccentricity < 0.0 || eccentricity >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[kepler]: Eccentricity must be in [0, 1) (e=" +
             std::to_string(eccentricity) + ")");
     }
@@ -103,17 +104,17 @@ double angularVelocity(double semiMajorAxis, double eccentricity,
 
 double computeKappa(double a, double e, double mu, double j2, double re) {
     if (a <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[orbital-factors]: Semi-major axis must be positive (a=" +
             std::to_string(a) + ")");
     }
     if (e < 0.0 || e >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[orbital-factors]: Eccentricity must be in [0, 1) (e=" +
             std::to_string(e) + ")");
     }
     if (mu <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
             "[orbital-factors]: Gravitational parameter must be positive (mu=" +
             std::to_string(mu) + ")");
     }
@@ -124,7 +125,7 @@ double computeKappa(double a, double e, double mu, double j2, double re) {
 
 OrbitalFactors computeOrbitalFactors(double e, double i) {
     if (e < 0.0 || e >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<OrbitalFactors>(fault_code::INVALID_PARAMETER,
             "[orbital-factors]: Eccentricity must be in [0, 1) (e=" +
             std::to_string(e) + ")");
     }
@@ -149,7 +150,7 @@ OrbitalFactors computeOrbitalFactors(double e, double i) {
 ApsidalState computeApsidalState(double e, double omega, double kappa,
                                  double Q, double tau) {
     if (e < 0.0 || e >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<ApsidalState>(fault_code::INVALID_PARAMETER,
             "[orbital-factors]: Eccentricity must be in [0, 1) (e=" +
             std::to_string(e) + ")");
     }
@@ -243,7 +244,7 @@ Matrix3x3 invert3x3(const Matrix3x3& A) {
                  c * (d * h - e * g);
 
     if (std::abs(det) < 1e-15) {
-        throw std::runtime_error(
+        return fault::fail<Matrix3x3>(fault_code::SINGULAR,
             "[math]: Jacobian matrix is singular. "
             "The problem may be ill-conditioned at this configuration.");
     }

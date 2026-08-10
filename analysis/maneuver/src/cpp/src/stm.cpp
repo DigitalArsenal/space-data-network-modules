@@ -1,4 +1,5 @@
 #include "maneuver/stm.h"
+#include "maneuver/fault.h"
 #include "maneuver/math.h"
 #include "maneuver/constants.h"
 
@@ -274,7 +275,7 @@ DragConfig estimateDragDerivativesWithJ2Correction(
     const ROEVector& roe1, const ROEVector& roe2,
     const ClassicalOrbitalElements& chief, double dt) {
     if (dt <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<DragConfig>(fault_code::INVALID_PARAMETER,
             "[estimateDragDerivatives]: dt must be positive (dt=" +
             std::to_string(dt) + ")");
     }
@@ -295,7 +296,8 @@ DragConfig estimateDragDerivativesWithJ2Correction(
 
 double estimateDaDot(double da1, double da2, double dt) {
     if (dt <= 0.0) {
-        throw std::runtime_error("[estimateDaDot]: dt must be positive (dt=" +
+        return fault::fail<double>(fault_code::INVALID_PARAMETER,
+                                 "[estimateDaDot]: dt must be positive (dt=" +
                                  std::to_string(dt) + ")");
     }
     return (da2 - da1) / dt;

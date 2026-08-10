@@ -3,6 +3,8 @@
 #include "maneuver/approach.h"
 #include "maneuver/classical.h"
 #include "maneuver/constants.h"
+#include "maneuver/fault.h"
+#include "maneuver/json_lite.h"
 #include "maneuver/math.h"
 #include "maneuver/propagation.h"
 #include "maneuver/rendezvous.h"
@@ -11,467 +13,826 @@
 #include "maneuver/transforms.h"
 #include "maneuver/types.h"
 
-#include <nlohmann/json.hpp>
-
 #include <cmath>
-#include <stdexcept>
 #include <string>
+#include <vector>
+
+/**
+ * THE JSON BOUNDARY.
+ *
+ * Everything a hostile caller can reach goes through this file, and the rule
+ * here is absolute: NO input may trap. 0.1.0 could not honour that rule even in
+ * principle — it linked without exception support, so its `try`/`catch` was
+ * compiled away and every `throw` (including every `j.at()`) lowered to
+ * `unreachable`, poisoning the instance for all subsequent calls. Seven
+ * distinct error classes were measured trapping identically.
+ *
+ * The replacement has three parts and no exceptions anywhere:
+ *
+ *   1. `json_lite` parses with a depth cap and a real JSON number grammar,
+ *      returning false rather than throwing.
+ *   2. Every parameter read is a guarded call that LATCHES a fault
+ *      (maneuver/fault.h) and returns false. The physics functions latch the
+ *      same way, so the validator messages their authors wrote — "[phasing]:
+ *      Number of revolutions must be >= 1" and the rest — reach a caller for
+ *      the first time.
+ *   3. The boundary checks the latch once and emits a structured error result,
+ *      which `invoke` turns into `plugin_set_error` + a non-zero status. The
+ *      instance is untouched and the next call works.
+ */
 
 namespace maneuver {
 
-using json = nlohmann::json;
+using json_lite::ObjectWriter;
+using json_lite::Value;
 
 namespace {
 
 std::string version() { return "1.0.0"; }
 
-json vec3_to_json(const Vector3& v) {
-    return json::array({v[0], v[1], v[2]});
+// ---------------------------------------------------------------------------
+// Small conversions
+// ---------------------------------------------------------------------------
+
+Vector3 toVector3(const double v[3]) { return {v[0], v[1], v[2]}; }
+
+/// Emit a Vector3 under `key`. Used for every RIC array.
+void writeVec3(ObjectWriter& out, const char* key, const Vector3& v) {
+    const double values[3] = {v[0], v[1], v[2]};
+    out.vec3(key, values);
 }
 
-Vector3 json_to_vec3(const json& j) {
-    return {j[0].get<double>(), j[1].get<double>(), j[2].get<double>()};
-}
-
-json roe_to_json(const ROEVector& roe) {
-    return json::array({roe[0], roe[1], roe[2], roe[3], roe[4], roe[5]});
-}
-
-json stm6_to_json(const STM6& stm) {
-    json rows = json::array();
-    for (const auto& row : stm) {
-        rows.push_back(json::array(
-            {row[0], row[1], row[2], row[3], row[4], row[5]}));
+bool readChief(const Value& object, const char* key, const char* operation,
+               ClassicalOrbitalElements* out) {
+    const Value* chief = nullptr;
+    if (!json_lite::requireObject(object, key, operation, &chief)) return false;
+    ClassicalOrbitalElements elements{};
+    if (!json_lite::requirePositive(*chief, "semiMajorAxis", operation,
+                                    &elements.semiMajorAxis)) {
+        return false;
     }
-    return rows;
-}
-
-json trajectory_to_json(const std::vector<TrajectoryPoint>& trajectory) {
-    json out = json::array();
-    for (const auto& point : trajectory) {
-        out.push_back({
-            {"time", point.time},
-            {"position", vec3_to_json(point.position)},
-            {"velocity", vec3_to_json(point.velocity)},
-        });
+    elements.gravitationalParameter = MU_EARTH;
+    if (!json_lite::optionalNumber(*chief, "eccentricity", operation,
+                                   &elements.eccentricity) ||
+        !json_lite::optionalNumber(*chief, "inclination", operation,
+                                   &elements.inclination) ||
+        !json_lite::optionalNumber(*chief, "raan", operation, &elements.raan) ||
+        !json_lite::optionalNumber(*chief, "argumentOfPerigee", operation,
+                                   &elements.argumentOfPerigee) ||
+        !json_lite::optionalNumber(*chief, "meanAnomaly", operation,
+                                   &elements.meanAnomaly) ||
+        !json_lite::optionalPositive(*chief, "mu", operation,
+                                     &elements.gravitationalParameter)) {
+        return false;
     }
-    return out;
+    if (elements.eccentricity < 0.0 || elements.eccentricity >= 1.0) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     std::string("[") + operation +
+                         "]: chief eccentricity must be in [0, 1) (e=" +
+                         json_lite::numberToString(elements.eccentricity) + ")");
+        return false;
+    }
+    elements.angularMomentum = std::sqrt(
+        elements.gravitationalParameter * elements.semiMajorAxis *
+        (1.0 - elements.eccentricity * elements.eccentricity));
+    if (!json_lite::optionalPositive(*chief, "angularMomentum", operation,
+                                     &elements.angularMomentum)) {
+        return false;
+    }
+    *out = elements;
+    return true;
 }
 
-json maneuver_to_json(const Maneuver& maneuver) {
-    return json({
-        {"deltaV", vec3_to_json(maneuver.deltaV)},
-        {"magnitude", maneuver.magnitude},
-        {"chief", {
-            {"semiMajorAxis", maneuver.chief.semiMajorAxis},
-            {"eccentricity", maneuver.chief.eccentricity},
-            {"inclination", maneuver.chief.inclination},
-            {"raan", maneuver.chief.raan},
-            {"argumentOfPerigee", maneuver.chief.argumentOfPerigee},
-            {"meanAnomaly", maneuver.chief.meanAnomaly},
-            {"mu", maneuver.chief.gravitationalParameter},
-        }},
-    });
-}
-
-json leg_to_json(const ManeuverLeg& leg, int index) {
-    return json({
-        {"index", index},
-        {"from", vec3_to_json(leg.from)},
-        {"to", vec3_to_json(leg.to)},
-        {"targetVelocity", vec3_to_json(leg.targetVelocity)},
-        {"tof", leg.tof},
-        {"burn1", maneuver_to_json(leg.burn1)},
-        {"burn2", maneuver_to_json(leg.burn2)},
-        {"totalDeltaV", leg.totalDeltaV},
-        {"converged", leg.converged},
-        {"iterations", leg.iterations},
-        {"positionError", leg.positionError},
-    });
-}
-
-ClassicalOrbitalElements json_to_chief(const json& j) {
-    ClassicalOrbitalElements chief{};
-    chief.semiMajorAxis = j.at("semiMajorAxis").get<double>();
-    chief.eccentricity = j.value("eccentricity", 0.0);
-    chief.inclination = j.value("inclination", 0.0);
-    chief.raan = j.value("raan", 0.0);
-    chief.argumentOfPerigee = j.value("argumentOfPerigee", 0.0);
-    chief.meanAnomaly = j.value("meanAnomaly", 0.0);
-    chief.gravitationalParameter = j.value("mu", MU_EARTH);
-    chief.angularMomentum = j.value(
-        "angularMomentum",
-        std::sqrt(chief.gravitationalParameter * chief.semiMajorAxis *
-                  (1.0 - chief.eccentricity * chief.eccentricity)));
-    return chief;
-}
-
-ROEVector json_to_roe_vector(const json& j) {
-    return {
-        j[0].get<double>(),
-        j[1].get<double>(),
-        j[2].get<double>(),
-        j[3].get<double>(),
-        j[4].get<double>(),
-        j[5].get<double>(),
-    };
-}
-
-TargetingOptions json_to_targeting_options(const json& j) {
+bool readTargetingOptions(const Value& object, const char* operation,
+                          TargetingOptions* out) {
     TargetingOptions options{};
-    options.includeJ2 = j.value("includeJ2", true);
-    options.includeDrag = j.value("includeDrag", false);
-    options.maxIterations = j.value("maxIterations", 50);
-    options.positionTolerance = j.value("positionTolerance", 1.0);
-    options.velocityTolerance = j.value("velocityTolerance", 0.001);
-    options.tofMinOrbits = j.value("tofMinOrbits", 0.5);
-    options.tofMaxOrbits = j.value("tofMaxOrbits", 3.0);
-    if (j.contains("targetVelocity")) {
-        options.targetVelocity = json_to_vec3(j.at("targetVelocity"));
+    double maxIterations = 50.0;
+    if (!json_lite::optionalBool(object, "includeJ2", operation, &options.includeJ2) ||
+        !json_lite::optionalBool(object, "includeDrag", operation, &options.includeDrag) ||
+        !json_lite::optionalNumber(object, "maxIterations", operation, &maxIterations) ||
+        !json_lite::optionalNumber(object, "positionTolerance", operation,
+                                   &options.positionTolerance) ||
+        !json_lite::optionalNumber(object, "velocityTolerance", operation,
+                                   &options.velocityTolerance) ||
+        !json_lite::optionalNumber(object, "tofMinOrbits", operation,
+                                   &options.tofMinOrbits) ||
+        !json_lite::optionalNumber(object, "tofMaxOrbits", operation,
+                                   &options.tofMaxOrbits)) {
+        return false;
     }
-    if (j.contains("dragConfig")) {
-        const auto& drag = j.at("dragConfig");
-        const auto type = drag.value("type", std::string("eccentric"));
+    // Clamped, not merely read: an iteration budget of 1e12 is a hang, and a
+    // hang inside a wasm guest is indistinguishable from a trap to the caller.
+    if (!(maxIterations >= 1.0)) maxIterations = 1.0;
+    if (maxIterations > 10000.0) maxIterations = 10000.0;
+    options.maxIterations = static_cast<int>(maxIterations);
+
+    bool present = false;
+    double target[3] = {0.0, 0.0, 0.0};
+    if (!json_lite::optionalVec3(object, "targetVelocity", operation, target,
+                                 &present)) {
+        return false;
+    }
+    if (present) options.targetVelocity = toVector3(target);
+
+    const Value* drag = object.find("dragConfig");
+    if (drag != nullptr && drag->isObject()) {
+        std::string type = "eccentric";
+        if (!json_lite::optionalString(*drag, "type", operation, &type) ||
+            !json_lite::optionalNumber(*drag, "daDotDrag", operation,
+                                       &options.dragConfig.daDotDrag) ||
+            !json_lite::optionalNumber(*drag, "dexDotDrag", operation,
+                                       &options.dragConfig.dexDotDrag) ||
+            !json_lite::optionalNumber(*drag, "deyDotDrag", operation,
+                                       &options.dragConfig.deyDotDrag)) {
+            return false;
+        }
         options.dragConfig.type =
-            type == "arbitrary" ? DragType::ARBITRARY : DragType::ECCENTRIC;
-        options.dragConfig.daDotDrag = drag.value("daDotDrag", 0.0);
-        options.dragConfig.dexDotDrag = drag.value("dexDotDrag", 0.0);
-        options.dragConfig.deyDotDrag = drag.value("deyDotDrag", 0.0);
+            (type == "arbitrary") ? DragType::ARBITRARY : DragType::ECCENTRIC;
     }
-    return options;
+    *out = options;
+    return true;
 }
 
-ROEPropagationOptions json_to_propagation_options(const json& j) {
+bool readPropagationOptions(const Value& object, const char* operation,
+                            ROEPropagationOptions* out) {
     ROEPropagationOptions options{};
-    options.includeJ2 = j.value("includeJ2", true);
-    options.includeDrag = j.value("includeDrag", false);
-    if (j.contains("dragConfig")) {
-        const auto& drag = j.at("dragConfig");
-        const auto type = drag.value("type", std::string("eccentric"));
-        options.dragConfig.type =
-            type == "arbitrary" ? DragType::ARBITRARY : DragType::ECCENTRIC;
-        options.dragConfig.daDotDrag = drag.value("daDotDrag", 0.0);
-        options.dragConfig.dexDotDrag = drag.value("dexDotDrag", 0.0);
-        options.dragConfig.deyDotDrag = drag.value("deyDotDrag", 0.0);
+    if (!json_lite::optionalBool(object, "includeJ2", operation, &options.includeJ2) ||
+        !json_lite::optionalBool(object, "includeDrag", operation,
+                                 &options.includeDrag)) {
+        return false;
     }
-    return options;
+    const Value* drag = object.find("dragConfig");
+    if (drag != nullptr && drag->isObject()) {
+        std::string type = "eccentric";
+        if (!json_lite::optionalString(*drag, "type", operation, &type) ||
+            !json_lite::optionalNumber(*drag, "daDotDrag", operation,
+                                       &options.dragConfig.daDotDrag) ||
+            !json_lite::optionalNumber(*drag, "dexDotDrag", operation,
+                                       &options.dragConfig.dexDotDrag) ||
+            !json_lite::optionalNumber(*drag, "deyDotDrag", operation,
+                                       &options.dragConfig.deyDotDrag)) {
+            return false;
+        }
+        options.dragConfig.type =
+            (type == "arbitrary") ? DragType::ARBITRARY : DragType::ECCENTRIC;
+    }
+    *out = options;
+    return true;
 }
 
-PluginInvokeResult make_error_result(
-    std::string error_code,
-    std::string error_message) {
-    PluginInvokeResult result{};
-    result.ok = false;
-    result.error_code = std::move(error_code);
-    result.error_message = std::move(error_message);
-    result.json = json({
-        {"error", result.error_message},
-        {"errorCode", result.error_code},
-    }).dump();
-    return result;
+bool readRelativeState(const Value& object, const char* key,
+                       const char* operation, RelativeState* out) {
+    const Value* state = nullptr;
+    if (!json_lite::requireObject(object, key, operation, &state)) return false;
+    double position[3];
+    double velocity[3];
+    if (!json_lite::requireVec3(*state, "position", operation, position) ||
+        !json_lite::requireVec3(*state, "velocity", operation, velocity)) {
+        return false;
+    }
+    out->position = toVector3(position);
+    out->velocity = toVector3(velocity);
+    return true;
 }
 
-std::string hohmann_transfer_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const double r1 = j.at("r1").get<double>();
-    const double r2 = j.at("r2").get<double>();
-    const double mu = j.value("mu", MU_EARTH);
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
 
+std::string hohmannTransfer(const Value& params) {
+    const char* op = "hohmannTransfer";
+    double r1 = 0.0, r2 = 0.0, mu = MU_EARTH;
+    if (!json_lite::requirePositive(params, "r1", op, &r1) ||
+        !json_lite::requirePositive(params, "r2", op, &r2) ||
+        !json_lite::optionalPositive(params, "mu", op, &mu)) {
+        return {};
+    }
     const auto result = computeHohmannTransfer(r1, r2, mu);
-    return json({
-        {"dv1", result.dv1},
-        {"dv2", result.dv2},
-        {"totalDeltaV", result.totalDeltaV},
-        {"tof", result.tof},
-        {"aTransfer", result.aTransfer},
-        {"dv1_ric", vec3_to_json(result.dv1_ric)},
-        {"dv2_ric", vec3_to_json(result.dv2_ric)},
-    }).dump();
+    if (fault::raised()) return {};
+
+    ObjectWriter out;
+    out.number("dv1", result.dv1)
+        .number("dv2", result.dv2)
+        .number("totalDeltaV", result.totalDeltaV)
+        .number("tof", result.tof)
+        .number("aTransfer", result.aTransfer);
+    writeVec3(out, "dv1_ric", result.dv1_ric);
+    writeVec3(out, "dv2_ric", result.dv2_ric);
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-std::string bi_elliptic_transfer_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const double r1 = j.at("r1").get<double>();
-    const double r2 = j.at("r2").get<double>();
-    const double r_intermediate = j.at("rIntermediate").get<double>();
-    const double mu = j.value("mu", MU_EARTH);
+std::string biEllipticTransfer(const Value& params) {
+    const char* op = "biEllipticTransfer";
+    double r1 = 0.0, r2 = 0.0, rInt = 0.0, mu = MU_EARTH;
+    if (!json_lite::requirePositive(params, "r1", op, &r1) ||
+        !json_lite::requirePositive(params, "r2", op, &r2) ||
+        !json_lite::requirePositive(params, "rIntermediate", op, &rInt) ||
+        !json_lite::optionalPositive(params, "mu", op, &mu)) {
+        return {};
+    }
+    const auto result = computeBiEllipticTransfer(r1, r2, rInt, mu);
+    if (fault::raised()) return {};
 
-    const auto result = computeBiEllipticTransfer(r1, r2, r_intermediate, mu);
-    return json({
-        {"dv1", result.dv1},
-        {"dv2", result.dv2},
-        {"dv3", result.dv3},
-        {"totalDeltaV", result.totalDeltaV},
-        {"tof", result.tof},
-    }).dump();
+    // The RIC arrays and both transfer semi-major axes were COMPUTED by 0.1.0
+    // and then dropped three lines before they reached a caller, forcing the
+    // console to recover the burn signs from monotone comparisons. They are
+    // serialised here (graph: rebuild-batch item 6).
+    ObjectWriter out;
+    out.number("dv1", result.dv1)
+        .number("dv2", result.dv2)
+        .number("dv3", result.dv3)
+        .number("totalDeltaV", result.totalDeltaV)
+        .number("tof", result.tof)
+        .number("aTransfer1", result.aTransfer1)
+        .number("aTransfer2", result.aTransfer2);
+    writeVec3(out, "dv1_ric", result.dv1_ric);
+    writeVec3(out, "dv2_ric", result.dv2_ric);
+    writeVec3(out, "dv3_ric", result.dv3_ric);
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-std::string solve_lambert_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const auto r1 = json_to_vec3(j.at("r1"));
-    const auto r2 = json_to_vec3(j.at("r2"));
-    const double tof = j.at("tof").get<double>();
-    const double mu = j.value("mu", MU_EARTH);
-    const bool prograde = j.value("prograde", true);
-    const int n_revs = j.value("nRevs", 0);
-
-    const auto result = solveLambert(r1, r2, tof, mu, prograde, n_revs);
-    return json({
-        {"v1", vec3_to_json(result.v1)},
-        {"v2", vec3_to_json(result.v2)},
-        {"dv1", result.dv1},
-        {"dv2", result.dv2},
-        {"totalDV", result.totalDV},
-        {"tof", result.tof},
-        {"converged", result.converged},
-        {"revolutions", result.revolutions},
-    }).dump();
+/// Shared serialisation for both Lambert entry points.
+std::string writeLambert(const LambertResult& result, const char* op) {
+    if (!result.converged) {
+        // A Lambert solve that did not converge is not a partial answer to be
+        // decorated with velocities a caller might use. It is a refusal.
+        fault::raise(fault_code::NO_SOLUTION,
+                     std::string("[") + op + "]: no solution (" + result.status +
+                         "): there is no " + std::to_string(result.revolutions) +
+                         "-revolution arc connecting these positions in the "
+                         "stated time of flight");
+        return {};
+    }
+    ObjectWriter out;
+    writeVec3(out, "v1", result.v1);
+    writeVec3(out, "v2", result.v2);
+    out.number("v1Magnitude", result.v1Magnitude)
+        .number("v2Magnitude", result.v2Magnitude)
+        .number("tof", result.tof)
+        .boolean("converged", result.converged)
+        .string("status", result.status)
+        .number("residual", result.residual)
+        .number("residualBudget", result.residualBudget)
+        .number("z", result.z)
+        .integer("iterations", result.iterations)
+        .integer("revolutions", result.revolutions);
+    if (result.hasDeltaV) {
+        out.number("dv1", result.dv1)
+            .number("dv2", result.dv2)
+            .number("totalDeltaV", result.totalDeltaV);
+        writeVec3(out, "dv1_vec", result.dv1_vec);
+        writeVec3(out, "dv2_vec", result.dv2_vec);
+    }
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-std::string solve_lambert_min_dv_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const auto r1 = json_to_vec3(j.at("r1"));
-    const auto r2 = json_to_vec3(j.at("r2"));
-    const double tof = j.at("tof").get<double>();
-    const double mu = j.value("mu", MU_EARTH);
-    const bool prograde = j.value("prograde", true);
-    const int max_revs = j.value("maxRevs", 5);
-
-    const auto result = solveLambertMinDV(r1, r2, tof, mu, prograde, max_revs);
-    return json({
-        {"v1", vec3_to_json(result.v1)},
-        {"v2", vec3_to_json(result.v2)},
-        {"dv1", result.dv1},
-        {"dv2", result.dv2},
-        {"totalDV", result.totalDV},
-        {"converged", result.converged},
-        {"revolutions", result.revolutions},
-    }).dump();
+bool readLambertEndpoints(const Value& params, const char* op,
+                          bool* have, Vector3* vDepart, Vector3* vArrive) {
+    double depart[3] = {0.0, 0.0, 0.0};
+    double arrive[3] = {0.0, 0.0, 0.0};
+    bool hasDepart = false;
+    bool hasArrive = false;
+    if (!json_lite::optionalVec3(params, "departureVelocity", op, depart, &hasDepart) ||
+        !json_lite::optionalVec3(params, "arrivalVelocity", op, arrive, &hasArrive)) {
+        return false;
+    }
+    if (hasDepart != hasArrive) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     std::string("[") + op +
+                         "]: departureVelocity and arrivalVelocity must be "
+                         "supplied together — a delta-v needs both endpoints");
+        return false;
+    }
+    *have = hasDepart;
+    *vDepart = toVector3(depart);
+    *vArrive = toVector3(arrive);
+    return true;
 }
 
-std::string phasing_maneuver_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const double current_radius = j.at("currentRadius").get<double>();
-    const double phase_angle = j.at("phaseAngle").get<double>();
-    const int num_revs = j.value("numRevs", 1);
-    const double mu = j.value("mu", MU_EARTH);
+std::string solveLambertOp(const Value& params) {
+    const char* op = "solveLambert";
+    double r1[3], r2[3];
+    double tof = 0.0, mu = MU_EARTH;
+    bool prograde = true;
+    int nRevs = 0;
+    if (!json_lite::requireVec3(params, "r1", op, r1) ||
+        !json_lite::requireVec3(params, "r2", op, r2) ||
+        !json_lite::requirePositive(params, "tof", op, &tof) ||
+        !json_lite::optionalPositive(params, "mu", op, &mu) ||
+        !json_lite::optionalBool(params, "prograde", op, &prograde) ||
+        !json_lite::optionalInt(params, "nRevs", op, &nRevs)) {
+        return {};
+    }
+    if (nRevs < 0 || nRevs > 20) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     "[solveLambert]: nRevs must be in [0, 20] (got " +
+                         std::to_string(nRevs) + ")");
+        return {};
+    }
 
-    const auto result = computePhasingManeuver(
-        current_radius, phase_angle, num_revs, mu);
-    return json({
-        {"dv1", result.dv1},
-        {"dv2", result.dv2},
-        {"totalDeltaV", result.totalDeltaV},
-        {"phasingPeriod", result.phasingPeriod},
-        {"phasingSMA", result.phasingSMA},
-        {"totalTime", result.totalTime},
-        {"numRevs", result.numRevs},
-    }).dump();
+    bool haveEndpoints = false;
+    Vector3 vDepart{};
+    Vector3 vArrive{};
+    if (!readLambertEndpoints(params, op, &haveEndpoints, &vDepart, &vArrive)) {
+        return {};
+    }
+
+    auto result = solveLambert(toVector3(r1), toVector3(r2), tof, mu, prograde, nRevs);
+    if (fault::raised()) return {};
+    if (result.converged && haveEndpoints) {
+        const Vector3 dv1 = sub3(result.v1, vDepart);
+        const Vector3 dv2 = sub3(vArrive, result.v2);
+        result.dv1 = norm3(dv1);
+        result.dv2 = norm3(dv2);
+        result.totalDeltaV = result.dv1 + result.dv2;
+        result.dv1_vec = dv1;
+        result.dv2_vec = dv2;
+        result.hasDeltaV = true;
+    }
+    return writeLambert(result, op);
 }
 
-std::string plane_change_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const double orbital_radius = j.at("orbitalRadius").get<double>();
-    const double velocity = j.at("velocity").get<double>();
-    const double delta_inclination = j.at("deltaInclination").get<double>();
-
-    const auto result = computePlaneChange(
-        orbital_radius, velocity, delta_inclination);
-    return json({
-        {"dv", result.dv},
-        {"optimalTrueAnomaly", result.optimalTrueAnomaly},
-        {"dv_ric", vec3_to_json(result.dv_ric)},
-    }).dump();
+std::string solveLambertMinDVOp(const Value& params) {
+    const char* op = "solveLambertMinDV";
+    double r1[3], r2[3];
+    double tof = 0.0, mu = MU_EARTH;
+    bool prograde = true;
+    int maxRevs = 5;
+    if (!json_lite::requireVec3(params, "r1", op, r1) ||
+        !json_lite::requireVec3(params, "r2", op, r2) ||
+        !json_lite::requirePositive(params, "tof", op, &tof) ||
+        !json_lite::optionalPositive(params, "mu", op, &mu) ||
+        !json_lite::optionalBool(params, "prograde", op, &prograde) ||
+        !json_lite::optionalInt(params, "maxRevs", op, &maxRevs)) {
+        return {};
+    }
+    if (maxRevs < 0 || maxRevs > 20) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     "[solveLambertMinDV]: maxRevs must be in [0, 20] (got " +
+                         std::to_string(maxRevs) + ")");
+        return {};
+    }
+    bool haveEndpoints = false;
+    Vector3 vDepart{};
+    Vector3 vArrive{};
+    if (!readLambertEndpoints(params, op, &haveEndpoints, &vDepart, &vArrive)) {
+        return {};
+    }
+    if (!haveEndpoints) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     "[solveLambertMinDV]: departureVelocity and arrivalVelocity "
+                     "are required. Ranking revolution counts needs a real cost; "
+                     "0.1.0 minimised |v1| + |v2|, the sum of the transfer "
+                     "SPEEDS, which is not the cost of anything.");
+        return {};
+    }
+    const auto result = solveLambertMinDV(toVector3(r1), toVector3(r2), tof, mu,
+                                          prograde, maxRevs, true, vDepart, vArrive);
+    if (fault::raised()) return {};
+    return writeLambert(result, op);
 }
 
-std::string combined_maneuver_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const double r1 = j.at("r1").get<double>();
-    const double r2 = j.at("r2").get<double>();
-    const double delta_inclination = j.at("deltaInclination").get<double>();
-    const double mu = j.value("mu", MU_EARTH);
+std::string phasingManeuver(const Value& params) {
+    const char* op = "phasingManeuver";
+    double currentRadius = 0.0, phaseAngle = 0.0, mu = MU_EARTH;
+    int numRevs = 1;
+    if (!json_lite::requireNumber(params, "currentRadius", op, &currentRadius) ||
+        !json_lite::requireNumber(params, "phaseAngle", op, &phaseAngle) ||
+        !json_lite::optionalInt(params, "numRevs", op, &numRevs) ||
+        !json_lite::optionalPositive(params, "mu", op, &mu)) {
+        return {};
+    }
+    const auto result = computePhasingManeuver(currentRadius, phaseAngle, numRevs, mu);
+    if (fault::raised()) return {};
 
-    const auto result = computeCombinedManeuver(r1, r2, delta_inclination, mu);
-    return json({
-        {"dv1", result.dv1},
-        {"dv2", result.dv2},
-        {"totalDeltaV", result.totalDeltaV},
-        {"tof", result.tof},
-        {"aTransfer", result.aTransfer},
-    }).dump();
+    ObjectWriter out;
+    out.number("dv1", result.dv1)
+        .number("dv2", result.dv2)
+        .number("totalDeltaV", result.totalDeltaV)
+        .number("phasingPeriod", result.phasingPeriod)
+        .number("phasingSMA", result.phasingSMA)
+        .number("totalTime", result.totalTime)
+        .integer("numRevs", result.numRevs)
+        .number("phaseAngle", result.phaseAngle);
+    // The SIGNED burns. 0.1.0 computed these and serialised only std::abs of
+    // their in-track component, so the console had to recover the sign from
+    // sign(phasingSMA - currentRadius).
+    writeVec3(out, "dv1_ric", result.dv1_ric);
+    writeVec3(out, "dv2_ric", result.dv2_ric);
+    // The Earth-collision guard, reported rather than silent.
+    out.number("farApse", result.farApse)
+        .number("earthFloorRadius", result.earthFloorRadius)
+        .boolean("clampedToEarthFloor", result.clampedToEarthFloor)
+        .number("achievedPhaseAngle", result.achievedPhaseAngle)
+        .number("requestedPhasingSMA", result.requestedPhasingSMA)
+        .number("requestedPhasingPeriod", result.requestedPhasingPeriod);
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-std::string compute_roe_state_transition_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const auto chief = json_to_chief(j.at("chief"));
-    const double delta_time = j.at("deltaTime").get<double>();
-    const auto model = j.value("model", std::string("j2"));
+std::string planeChange(const Value& params) {
+    const char* op = "planeChange";
+    double orbitalRadius = 0.0, velocity = 0.0, deltaInclination = 0.0;
+    if (!json_lite::requirePositive(params, "orbitalRadius", op, &orbitalRadius) ||
+        !json_lite::requireNumber(params, "velocity", op, &velocity) ||
+        !json_lite::requireNumber(params, "deltaInclination", op, &deltaInclination)) {
+        return {};
+    }
+    const auto result = computePlaneChange(orbitalRadius, velocity, deltaInclination);
+    if (fault::raised()) return {};
+
+    ObjectWriter out;
+    out.number("dv", result.dv).number("optimalTrueAnomaly", result.optimalTrueAnomaly);
+    writeVec3(out, "dv_ric", result.dv_ric);
+    if (!out.ok()) return {};
+    return out.finish();
+}
+
+std::string combinedManeuver(const Value& params) {
+    const char* op = "combinedManeuver";
+    double r1 = 0.0, r2 = 0.0, deltaInclination = 0.0, mu = MU_EARTH;
+    if (!json_lite::requirePositive(params, "r1", op, &r1) ||
+        !json_lite::requirePositive(params, "r2", op, &r2) ||
+        !json_lite::requireNumber(params, "deltaInclination", op, &deltaInclination) ||
+        !json_lite::optionalPositive(params, "mu", op, &mu)) {
+        return {};
+    }
+    const auto result = computeCombinedManeuver(r1, r2, deltaInclination, mu);
+    if (fault::raised()) return {};
+
+    ObjectWriter out;
+    out.number("dv1", result.dv1)
+        .number("dv2", result.dv2)
+        .number("totalDeltaV", result.totalDeltaV)
+        .number("tof", result.tof)
+        .number("aTransfer", result.aTransfer);
+    // Burn 2 carries the in-track/cross-track split of the combined
+    // circularisation + plane change. 0.1.0 computed both components and
+    // emitted neither, so the console reconstructed them from aTransfer.
+    writeVec3(out, "dv1_ric", result.dv1_ric);
+    writeVec3(out, "dv2_ric", result.dv2_ric);
+    if (!out.ok()) return {};
+    return out.finish();
+}
+
+std::string computeRoeStateTransition(const Value& params) {
+    const char* op = "computeRoeStateTransition";
+    ClassicalOrbitalElements chief{};
+    if (!readChief(params, "chief", op, &chief)) return {};
+    double deltaTime = 0.0;
+    std::string model = "j2";
+    if (!json_lite::requireNumber(params, "deltaTime", op, &deltaTime) ||
+        !json_lite::optionalString(params, "model", op, &model)) {
+        return {};
+    }
 
     STM6 stm{};
-    json extras = json::object();
+    std::string dragExtra;
     if (model == "keplerian") {
-        stm = computeKeplerianSTM(chief, delta_time);
+        stm = computeKeplerianSTM(chief, deltaTime);
     } else if (model == "j2") {
-        stm = computeJ2STM(chief, delta_time);
+        stm = computeJ2STM(chief, deltaTime);
     } else if (model == "j2-drag-eccentric") {
-        const auto result = computeJ2DragSTMEccentric(chief, delta_time);
+        const auto result = computeJ2DragSTMEccentric(chief, deltaTime);
         for (int r = 0; r < 6; ++r) {
-            for (int c = 0; c < 6; ++c) {
-                stm[r][c] = result.stm[r][c];
-            }
+            for (int c = 0; c < 6; ++c) stm[r][c] = result.stm[r][c];
         }
-        extras["dragColumn"] = roe_to_json(result.dragColumn);
+        std::string column = "[";
+        for (int i = 0; i < 6; ++i) {
+            if (i != 0) column.push_back(',');
+            if (!std::isfinite(result.dragColumn[i])) return {};
+            column += json_lite::numberToString(result.dragColumn[i]);
+        }
+        column.push_back(']');
+        dragExtra = column;
     } else if (model == "j2-drag-arbitrary") {
-        const auto result = computeJ2DragSTMArbitrary(chief, delta_time);
+        const auto result = computeJ2DragSTMArbitrary(chief, deltaTime);
         for (int r = 0; r < 6; ++r) {
-            for (int c = 0; c < 6; ++c) {
-                stm[r][c] = result.stm[r][c];
-            }
+            for (int c = 0; c < 6; ++c) stm[r][c] = result.stm[r][c];
         }
-        json columns = json::array();
+        std::string columns = "[";
+        bool firstRow = true;
         for (const auto& row : result.dragColumns) {
-            columns.push_back(json::array({row[0], row[1], row[2]}));
+            if (!firstRow) columns.push_back(',');
+            firstRow = false;
+            columns.push_back('[');
+            for (int i = 0; i < 3; ++i) {
+                if (i != 0) columns.push_back(',');
+                if (!std::isfinite(row[i])) return {};
+                columns += json_lite::numberToString(row[i]);
+            }
+            columns.push_back(']');
         }
-        extras["dragColumns"] = columns;
+        columns.push_back(']');
+        dragExtra = columns;
     } else {
-        throw std::runtime_error("Unsupported ROE STM model: " + model);
+        fault::raise(fault_code::UNKNOWN_OPERATION,
+                     "[computeRoeStateTransition]: unsupported ROE STM model \"" +
+                         model +
+                         "\". Supported: keplerian, j2, j2-drag-eccentric, "
+                         "j2-drag-arbitrary");
+        return {};
     }
+    if (fault::raised()) return {};
 
-    json response({
-        {"reference", "Koenig-Guffanti-D'Amico ROE STM"},
-        {"model", model},
-        {"deltaTime", delta_time},
-        {"stm", stm6_to_json(stm)},
-    });
-
-    if (j.contains("initialRoe")) {
-        const auto initial_roe = json_to_roe_vector(j.at("initialRoe"));
-        const auto options = json_to_propagation_options(j);
-        const auto propagated =
-            propagateROE(vectorToROE(initial_roe), chief, delta_time, options);
-        response["initialRoe"] = roe_to_json(initial_roe);
-        response["propagatedRoe"] = roe_to_json(roeToVector(propagated));
+    std::string matrix = "[";
+    for (int r = 0; r < 6; ++r) {
+        if (r != 0) matrix.push_back(',');
+        matrix.push_back('[');
+        for (int c = 0; c < 6; ++c) {
+            if (c != 0) matrix.push_back(',');
+            if (!std::isfinite(stm[r][c])) return {};
+            matrix += json_lite::numberToString(stm[r][c]);
+        }
+        matrix.push_back(']');
     }
+    matrix.push_back(']');
 
-    for (auto it = extras.begin(); it != extras.end(); ++it) {
-        response[it.key()] = it.value();
+    ObjectWriter out;
+    out.string("reference", "Koenig-Guffanti-D'Amico ROE STM")
+        .string("model", model)
+        .number("deltaTime", deltaTime)
+        .raw("stm", matrix);
+
+    const Value* initialRoe = params.find("initialRoe");
+    if (initialRoe != nullptr && !initialRoe->isNull()) {
+        const Value* array = nullptr;
+        if (!json_lite::requireArray(params, "initialRoe", op, &array)) return {};
+        if (array->items.size() != 6) {
+            fault::raise(fault_code::INVALID_PARAMETER,
+                         "[computeRoeStateTransition]: initialRoe must be an "
+                         "array of exactly 6 numbers");
+            return {};
+        }
+        ROEVector roe{};
+        for (int i = 0; i < 6; ++i) {
+            if (!array->items[static_cast<std::size_t>(i)].isNumber()) {
+                fault::raise(fault_code::INVALID_PARAMETER,
+                             "[computeRoeStateTransition]: initialRoe component " +
+                                 std::to_string(i) + " must be a number");
+                return {};
+            }
+            roe[static_cast<std::size_t>(i)] =
+                array->items[static_cast<std::size_t>(i)].number;
+        }
+        ROEPropagationOptions options{};
+        if (!readPropagationOptions(params, op, &options)) return {};
+        const auto propagated = propagateROE(vectorToROE(roe), chief, deltaTime, options);
+        if (fault::raised()) return {};
+        const ROEVector propagatedVector = roeToVector(propagated);
+        out.numbers("initialRoe", roe.data(), roe.size());
+        out.numbers("propagatedRoe", propagatedVector.data(), propagatedVector.size());
     }
-    return response.dump();
+    if (!dragExtra.empty()) {
+        out.raw(model == "j2-drag-eccentric" ? "dragColumn" : "dragColumns", dragExtra);
+    }
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-std::string plan_relative_waypoint_mission_json(const std::string& input) {
-    const auto j = json::parse(input);
-
+std::string planRelativeWaypointMission(const Value& params) {
+    const char* op = "planRelativeWaypointMission";
     RelativeState state{};
-    state.position = json_to_vec3(j.at("initialState").at("position"));
-    state.velocity = json_to_vec3(j.at("initialState").at("velocity"));
+    if (!readRelativeState(params, "initialState", op, &state)) return {};
+    ClassicalOrbitalElements chief{};
+    if (!readChief(params, "chief", op, &chief)) return {};
 
-    const auto chief = json_to_chief(j.at("chief"));
-    const auto options_json =
-        j.contains("options") ? j.at("options") : json::object();
-    const auto options = json_to_targeting_options(options_json);
-    const int points_per_leg = options_json.value("pointsPerLeg", 48);
+    const Value emptyObject = [] {
+        Value value;
+        value.kind = json_lite::Kind::Object;
+        return value;
+    }();
+    const Value* optionsJson = params.find("options");
+    if (optionsJson != nullptr && !optionsJson->isObject()) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     "[planRelativeWaypointMission]: parameter \"options\" must be an object");
+        return {};
+    }
+    const Value& options_source = optionsJson != nullptr ? *optionsJson : emptyObject;
+    TargetingOptions options{};
+    if (!readTargetingOptions(options_source, op, &options)) return {};
+    int pointsPerLeg = 48;
+    if (!json_lite::optionalInt(options_source, "pointsPerLeg", op, &pointsPerLeg)) {
+        return {};
+    }
+    if (pointsPerLeg < 1 || pointsPerLeg > 2048) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     "[planRelativeWaypointMission]: pointsPerLeg must be in "
+                     "[1, 2048] (got " + std::to_string(pointsPerLeg) + ")");
+        return {};
+    }
 
+    const Value* waypointArray = nullptr;
+    if (!json_lite::requireArray(params, "waypoints", op, &waypointArray)) return {};
+    if (waypointArray->items.empty() || waypointArray->items.size() > 256) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     "[planRelativeWaypointMission]: waypoints must carry between "
+                     "1 and 256 entries (got " +
+                         std::to_string(waypointArray->items.size()) + ")");
+        return {};
+    }
     std::vector<Waypoint> waypoints;
-    for (const auto& item : j.at("waypoints")) {
+    waypoints.reserve(waypointArray->items.size());
+    for (const Value& item : waypointArray->items) {
+        if (!item.isObject()) {
+            fault::raise(fault_code::INVALID_PARAMETER,
+                         "[planRelativeWaypointMission]: every waypoint must be an object");
+            return {};
+        }
         Waypoint waypoint{};
-        waypoint.position = json_to_vec3(item.at("position"));
-        if (item.contains("velocity")) {
-            waypoint.velocity = json_to_vec3(item.at("velocity"));
+        double position[3];
+        if (!json_lite::requireVec3(item, "position", op, position)) return {};
+        waypoint.position = toVector3(position);
+        double velocity[3];
+        bool hasVelocity = false;
+        if (!json_lite::optionalVec3(item, "velocity", op, velocity, &hasVelocity)) {
+            return {};
+        }
+        if (hasVelocity) {
+            waypoint.velocity = toVector3(velocity);
             waypoint.hasVelocity = true;
         }
-        if (item.contains("tof")) {
-            waypoint.tofHint = item.at("tof").get<double>();
+        if (item.has("tof")) {
+            if (!json_lite::requirePositive(item, "tof", op, &waypoint.tofHint)) {
+                return {};
+            }
             waypoint.hasTofHint = true;
         }
         waypoints.push_back(waypoint);
     }
 
     const auto plan = planMission(state, waypoints, chief, options);
+    if (fault::raised()) return {};
     const auto trajectory = generateMissionTrajectory(
-        plan,
-        chief,
-        state.position,
-        state.velocity,
-        options,
-        points_per_leg);
+        plan, chief, state.position, state.velocity, options, pointsPerLeg);
+    if (fault::raised()) return {};
 
-    json legs = json::array();
-    for (size_t index = 0; index < plan.legs.size(); ++index) {
-        legs.push_back(leg_to_json(plan.legs[index], static_cast<int>(index)));
+    ObjectWriter out;
+    out.string("reference", "Koenig-Guffanti-D'Amico ROE STM")
+        .string("model", options.includeJ2 ? "j2" : "keplerian")
+        .boolean("includeDrag", options.includeDrag)
+        .boolean("converged", plan.converged)
+        .number("totalDeltaV", plan.totalDeltaV)
+        .number("totalTime", plan.totalTime);
+
+    std::string legs = "[";
+    for (std::size_t index = 0; index < plan.legs.size(); ++index) {
+        if (index != 0) legs.push_back(',');
+        const auto& leg = plan.legs[index];
+        ObjectWriter legOut;
+        legOut.integer("index", static_cast<long long>(index));
+        writeVec3(legOut, "from", leg.from);
+        writeVec3(legOut, "to", leg.to);
+        writeVec3(legOut, "targetVelocity", leg.targetVelocity);
+        legOut.number("tof", leg.tof);
+        for (int burn = 0; burn < 2; ++burn) {
+            const Maneuver& maneuver = burn == 0 ? leg.burn1 : leg.burn2;
+            ObjectWriter burnOut;
+            writeVec3(burnOut, "deltaV", maneuver.deltaV);
+            burnOut.number("magnitude", maneuver.magnitude);
+            ObjectWriter chiefOut;
+            chiefOut.number("semiMajorAxis", maneuver.chief.semiMajorAxis)
+                .number("eccentricity", maneuver.chief.eccentricity)
+                .number("inclination", maneuver.chief.inclination)
+                .number("raan", maneuver.chief.raan)
+                .number("argumentOfPerigee", maneuver.chief.argumentOfPerigee)
+                .number("meanAnomaly", maneuver.chief.meanAnomaly)
+                .number("mu", maneuver.chief.gravitationalParameter);
+            if (!chiefOut.ok() || !burnOut.ok()) return {};
+            burnOut.raw("chief", chiefOut.finish());
+            legOut.raw(burn == 0 ? "burn1" : "burn2", burnOut.finish());
+        }
+        legOut.number("totalDeltaV", leg.totalDeltaV)
+            .boolean("converged", leg.converged)
+            .integer("iterations", leg.iterations)
+            .number("positionError", leg.positionError);
+        if (!legOut.ok()) return {};
+        legs += legOut.finish();
     }
+    legs.push_back(']');
+    out.raw("legs", legs);
 
-    return json({
-        {"reference", "Koenig-Guffanti-D'Amico ROE STM"},
-        {"model", options.includeJ2 ? "j2" : "keplerian"},
-        {"includeDrag", options.includeDrag},
-        {"converged", plan.converged},
-        {"totalDeltaV", plan.totalDeltaV},
-        {"totalTime", plan.totalTime},
-        {"legs", legs},
-        {"trajectory", trajectory_to_json(trajectory)},
-    }).dump();
+    std::string points = "[";
+    bool firstPoint = true;
+    for (const auto& point : trajectory) {
+        if (!firstPoint) points.push_back(',');
+        firstPoint = false;
+        ObjectWriter pointOut;
+        pointOut.number("time", point.time);
+        writeVec3(pointOut, "position", point.position);
+        writeVec3(pointOut, "velocity", point.velocity);
+        if (!pointOut.ok()) return {};
+        points += pointOut.finish();
+    }
+    points.push_back(']');
+    out.raw("trajectory", points);
+
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-std::string compute_cam_json(const std::string& input) {
-    const auto j = json::parse(input);
-
+std::string computeCAMOp(const Value& params) {
+    const char* op = "computeCAM";
     RelativeState state{};
-    state.position = json_to_vec3(j.at("initialState").at("position"));
-    state.velocity = json_to_vec3(j.at("initialState").at("velocity"));
-
-    const auto chief = json_to_chief(j.at("chief"));
+    if (!readRelativeState(params, "initialState", op, &state)) return {};
+    ClassicalOrbitalElements chief{};
+    if (!readChief(params, "chief", op, &chief)) return {};
 
     CAMConfig config{};
-    if (j.contains("config")) {
-        const auto& config_json = j.at("config");
-        config.minMissDistance = config_json.value("minMissDistance", 1000.0);
-        config.timeToTCA = config_json.value("timeToTCA", 0.0);
-        config.maxDeltaV = config_json.value("maxDeltaV", 10.0);
-        config.preferRadial = config_json.value("preferRadial", false);
+    const Value* configJson = params.find("config");
+    if (configJson != nullptr && !configJson->isNull()) {
+        if (!configJson->isObject()) {
+            fault::raise(fault_code::INVALID_PARAMETER,
+                         "[computeCAM]: parameter \"config\" must be an object");
+            return {};
+        }
+        if (!json_lite::optionalNumber(*configJson, "minMissDistance", op,
+                                       &config.minMissDistance) ||
+            !json_lite::optionalNumber(*configJson, "timeToTCA", op, &config.timeToTCA) ||
+            !json_lite::optionalNumber(*configJson, "maxDeltaV", op, &config.maxDeltaV) ||
+            !json_lite::optionalBool(*configJson, "preferRadial", op, &config.preferRadial)) {
+            return {};
+        }
     }
-
     const auto result = computeCAM(state, chief, config);
-    return json({
-        {"deltaV", vec3_to_json(result.deltaV)},
-        {"magnitude", result.magnitude},
-        {"achievedMiss", result.achievedMiss},
-        {"feasible", result.feasible},
-        {"optimalBurnTime", result.optimalBurnTime},
-    }).dump();
+    if (fault::raised()) return {};
+
+    ObjectWriter out;
+    writeVec3(out, "deltaV", result.deltaV);
+    out.number("magnitude", result.magnitude)
+        .number("achievedMiss", result.achievedMiss)
+        .boolean("feasible", result.feasible)
+        .number("optimalBurnTime", result.optimalBurnTime);
+    if (!out.ok()) {
+        // A CAM whose sensitivity denominator vanished yields a non-finite
+        // burn. Refusing is the honest answer; emitting NaN is not JSON and
+        // would explode at the consumer's parse instead of here.
+        fault::raise(fault_code::INFEASIBLE,
+                     "[computeCAM]: the requested miss distance is not reachable "
+                     "at this geometry — the burn sensitivity is degenerate and "
+                     "the solution is not a finite delta-v");
+        return {};
+    }
+    return out.finish();
 }
 
-std::string compute_approach_json(const std::string& input) {
-    const auto j = json::parse(input);
-
+std::string computeApproachOp(const Value& params) {
+    const char* op = "computeApproach";
     RelativeState state{};
-    state.position = json_to_vec3(j.at("initialState").at("position"));
-    state.velocity = json_to_vec3(j.at("initialState").at("velocity"));
-
-    const auto chief = json_to_chief(j.at("chief"));
+    if (!readRelativeState(params, "initialState", op, &state)) return {};
+    ClassicalOrbitalElements chief{};
+    if (!readChief(params, "chief", op, &chief)) return {};
 
     ApproachConfig config{};
-    if (j.contains("config")) {
-        const auto& config_json = j.at("config");
-        config.axis = static_cast<ApproachAxis>(config_json.value("axis", 0));
-        if (config_json.contains("targetPosition")) {
-            config.targetPosition = json_to_vec3(config_json.at("targetPosition"));
+    const Value* configJson = params.find("config");
+    if (configJson != nullptr && !configJson->isNull()) {
+        if (!configJson->isObject()) {
+            fault::raise(fault_code::INVALID_PARAMETER,
+                         "[computeApproach]: parameter \"config\" must be an object");
+            return {};
         }
-        config.approachSpeed = config_json.value("approachSpeed", 0.1);
-        config.safetyCorridorWidth =
-            config_json.value("safetyCorridorWidth", 10.0);
+        int axis = 0;
+        if (!json_lite::optionalInt(*configJson, "axis", op, &axis)) return {};
+        if (axis < 0 || axis > 2) {
+            fault::raise(fault_code::INVALID_PARAMETER,
+                         "[computeApproach]: axis must be 0 (V-bar), 1 (R-bar) "
+                         "or 2 (H-bar) (got " + std::to_string(axis) + ")");
+            return {};
+        }
+        config.axis = static_cast<ApproachAxis>(axis);
+        double target[3];
+        bool hasTarget = false;
+        if (!json_lite::optionalVec3(*configJson, "targetPosition", op, target, &hasTarget)) {
+            return {};
+        }
+        if (hasTarget) config.targetPosition = toVector3(target);
+        if (!json_lite::optionalNumber(*configJson, "approachSpeed", op,
+                                       &config.approachSpeed) ||
+            !json_lite::optionalNumber(*configJson, "safetyCorridorWidth", op,
+                                       &config.safetyCorridorWidth)) {
+            return {};
+        }
     }
-
     const auto result = computeApproach(state, chief, config);
-    return json({
-        {"corridorDeviation", result.corridorDeviation},
-        {"withinCorridor", result.withinCorridor},
-        {"axis", static_cast<int>(result.axis)},
-        {"leg", {{"totalDeltaV", result.leg.totalDeltaV}}},
-    }).dump();
+    if (fault::raised()) return {};
+
+    ObjectWriter legOut;
+    legOut.number("totalDeltaV", result.leg.totalDeltaV);
+    if (!legOut.ok()) return {};
+
+    ObjectWriter out;
+    out.number("corridorDeviation", result.corridorDeviation)
+        .boolean("withinCorridor", result.withinCorridor)
+        .integer("axis", static_cast<long long>(result.axis))
+        .raw("leg", legOut.finish());
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-const char* phase_name(RendezvousPhase phase) {
+const char* phaseName(RendezvousPhase phase) {
     switch (phase) {
         case RendezvousPhase::DRIFT: return "drift";
         case RendezvousPhase::BRAKE: return "brake";
@@ -480,160 +841,253 @@ const char* phase_name(RendezvousPhase phase) {
     return "unknown";
 }
 
-std::string simulate_rendezvous_json(const std::string& input) {
-    const auto j = json::parse(input);
-    const auto chief = json_to_chief(j.at("chief"));
+std::string simulateRendezvousOp(const Value& params) {
+    const char* op = "simulateRendezvous";
+    ClassicalOrbitalElements chief{};
+    if (!readChief(params, "chief", op, &chief)) return {};
 
     RendezvousConfig config{};
-    config.initialPosition = json_to_vec3(j.at("initialPosition"));
-    if (j.contains("initialVelocity")) {
-        config.initialVelocity = json_to_vec3(j.at("initialVelocity"));
+    double initialPosition[3], brakePoint[3], holdPoint[3];
+    if (!json_lite::requireVec3(params, "initialPosition", op, initialPosition) ||
+        !json_lite::requireVec3(params, "brakePoint", op, brakePoint) ||
+        !json_lite::requireVec3(params, "holdPoint", op, holdPoint)) {
+        return {};
+    }
+    config.initialPosition = toVector3(initialPosition);
+    config.brakePoint = toVector3(brakePoint);
+    config.holdPoint = toVector3(holdPoint);
+
+    double initialVelocity[3];
+    bool hasInitialVelocity = false;
+    if (!json_lite::optionalVec3(params, "initialVelocity", op, initialVelocity,
+                                 &hasInitialVelocity)) {
+        return {};
+    }
+    if (hasInitialVelocity) {
+        config.initialVelocity = toVector3(initialVelocity);
         config.solveInitialVelocity = false;
     }
-    config.solveInitialVelocity =
-        j.value("solveInitialVelocity", config.solveInitialVelocity);
-    config.brakePoint = json_to_vec3(j.at("brakePoint"));
-    config.holdPoint = json_to_vec3(j.at("holdPoint"));
-    config.driftDuration = j.at("driftDuration").get<double>();
-    config.brakeDuration = j.at("brakeDuration").get<double>();
-    config.holdDuration = j.value("holdDuration", 0.0);
-
-    if (j.contains("control")) {
-        const auto& control = j.at("control");
-        config.controlBandwidth = control.value("bandwidth", 0.0);
-        config.dampingRatio = control.value("dampingRatio", 1.0);
-        config.kp = control.value("kp", 0.0);
-        config.kd = control.value("kd", 0.0);
-        config.useFeedforward = control.value("useFeedforward", true);
-        config.compensateCoriolis =
-            control.value("compensateCoriolis", true);
-        config.compensateGravityGradient =
-            control.value("compensateGravityGradient", true);
-        config.maxAccel = control.value("maxAccel", 0.0);
+    if (!json_lite::optionalBool(params, "solveInitialVelocity", op,
+                                 &config.solveInitialVelocity) ||
+        !json_lite::requirePositive(params, "driftDuration", op, &config.driftDuration) ||
+        !json_lite::requirePositive(params, "brakeDuration", op, &config.brakeDuration) ||
+        !json_lite::optionalNumber(params, "holdDuration", op, &config.holdDuration)) {
+        return {};
     }
-    if (j.contains("integration")) {
-        const auto& integration = j.at("integration");
-        config.timeStep = integration.value("timeStep", 1.0);
-        config.outputEvery = integration.value("outputEvery", 10);
-        config.includeJ2 = integration.value("includeJ2", false);
+
+    const Value* control = params.find("control");
+    if (control != nullptr && control->isObject()) {
+        if (!json_lite::optionalNumber(*control, "bandwidth", op, &config.controlBandwidth) ||
+            !json_lite::optionalNumber(*control, "dampingRatio", op, &config.dampingRatio) ||
+            !json_lite::optionalNumber(*control, "kp", op, &config.kp) ||
+            !json_lite::optionalNumber(*control, "kd", op, &config.kd) ||
+            !json_lite::optionalBool(*control, "useFeedforward", op, &config.useFeedforward) ||
+            !json_lite::optionalBool(*control, "compensateCoriolis", op,
+                                     &config.compensateCoriolis) ||
+            !json_lite::optionalBool(*control, "compensateGravityGradient", op,
+                                     &config.compensateGravityGradient) ||
+            !json_lite::optionalNumber(*control, "maxAccel", op, &config.maxAccel)) {
+            return {};
+        }
+    }
+    const Value* integration = params.find("integration");
+    if (integration != nullptr && integration->isObject()) {
+        if (!json_lite::optionalPositive(*integration, "timeStep", op, &config.timeStep) ||
+            !json_lite::optionalInt(*integration, "outputEvery", op, &config.outputEvery) ||
+            !json_lite::optionalBool(*integration, "includeJ2", op, &config.includeJ2)) {
+            return {};
+        }
+        if (config.outputEvery < 1) {
+            fault::raise(fault_code::INVALID_PARAMETER,
+                         "[simulateRendezvous]: integration.outputEvery must be >= 1");
+            return {};
+        }
+    }
+    // Step-count guard: `timeStep` and the durations together decide how many
+    // integration steps run inside the guest. Unbounded, a request of
+    // driftDuration=1e12 with timeStep=1e-6 is a hang, and a hung guest is a
+    // dead instance to every caller sharing it.
+    const double totalDuration =
+        config.driftDuration + config.brakeDuration + config.holdDuration;
+    if (!(config.timeStep > 0.0) || totalDuration / config.timeStep > 5.0e6) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     "[simulateRendezvous]: (driftDuration + brakeDuration + "
+                     "holdDuration) / integration.timeStep must not exceed 5e6 "
+                     "steps");
+        return {};
     }
 
     const auto result = simulateRendezvous(config, chief);
+    if (fault::raised()) return {};
     if (!result.valid) {
-        throw std::runtime_error(result.message);
+        fault::raise(fault_code::INFEASIBLE,
+                     std::string("[simulateRendezvous]: ") + result.message);
+        return {};
     }
 
-    json trajectory = json::array();
+    ObjectWriter out;
+    out.string("reference",
+               "HCW combined-case drift + quintic brake + feedback-linearized PD")
+        .number("meanMotion", result.meanMotion);
+    writeVec3(out, "solvedInitialVelocity", result.solvedInitialVelocity);
+
+    ObjectWriter gains;
+    writeVec3(gains, "kp", result.gainKp);
+    writeVec3(gains, "kd", result.gainKd);
+    if (!gains.ok()) return {};
+    out.raw("gains", gains.finish());
+
+    ObjectWriter phases;
+    phases.number("driftEnd", result.driftEnd)
+        .number("brakeEnd", result.brakeEnd)
+        .number("totalTime", result.totalTime);
+    if (!phases.ok()) return {};
+    out.raw("phases", phases.finish());
+
+    ObjectWriter metrics;
+    metrics.number("totalDeltaV", result.metrics.totalDeltaV)
+        .number("maxControlAccel", result.metrics.maxControlAccel)
+        .integer("saturatedSteps", result.metrics.saturatedSteps)
+        .number("maxPositionError", result.metrics.maxPositionError)
+        .number("rmsPositionError", result.metrics.rmsPositionError)
+        .number("maxPositionErrorDrift", result.metrics.maxPositionErrorDrift)
+        .number("maxPositionErrorBrake", result.metrics.maxPositionErrorBrake)
+        .number("maxPositionErrorHold", result.metrics.maxPositionErrorHold)
+        .number("finalPositionError", result.metrics.finalPositionError)
+        .number("finalVelocityError", result.metrics.finalVelocityError);
+    if (!metrics.ok()) return {};
+    out.raw("metrics", metrics.finish());
+
+    std::string samples = "[";
+    bool firstSample = true;
     for (const auto& sample : result.trajectory) {
-        trajectory.push_back({
-            {"time", sample.time},
-            {"phase", phase_name(sample.phase)},
-            {"position", vec3_to_json(sample.position)},
-            {"velocity", vec3_to_json(sample.velocity)},
-            {"referencePosition", vec3_to_json(sample.referencePosition)},
-            {"referenceVelocity", vec3_to_json(sample.referenceVelocity)},
-            {"referenceAcceleration",
-             vec3_to_json(sample.referenceAcceleration)},
-            {"controlAccel", vec3_to_json(sample.controlAccel)},
-            {"positionError", sample.positionError},
-            {"velocityError", sample.velocityError},
-        });
+        if (!firstSample) samples.push_back(',');
+        firstSample = false;
+        ObjectWriter sampleOut;
+        sampleOut.number("time", sample.time).string("phase", phaseName(sample.phase));
+        writeVec3(sampleOut, "position", sample.position);
+        writeVec3(sampleOut, "velocity", sample.velocity);
+        writeVec3(sampleOut, "referencePosition", sample.referencePosition);
+        writeVec3(sampleOut, "referenceVelocity", sample.referenceVelocity);
+        writeVec3(sampleOut, "referenceAcceleration", sample.referenceAcceleration);
+        writeVec3(sampleOut, "controlAccel", sample.controlAccel);
+        sampleOut.number("positionError", sample.positionError)
+            .number("velocityError", sample.velocityError);
+        if (!sampleOut.ok()) return {};
+        samples += sampleOut.finish();
     }
+    samples.push_back(']');
+    out.raw("trajectory", samples);
 
-    return json({
-        {"reference",
-         "HCW combined-case drift + quintic brake + feedback-linearized PD"},
-        {"meanMotion", result.meanMotion},
-        {"solvedInitialVelocity", vec3_to_json(result.solvedInitialVelocity)},
-        {"gains", {
-            {"kp", vec3_to_json(result.gainKp)},
-            {"kd", vec3_to_json(result.gainKd)},
-        }},
-        {"phases", {
-            {"driftEnd", result.driftEnd},
-            {"brakeEnd", result.brakeEnd},
-            {"totalTime", result.totalTime},
-        }},
-        {"metrics", {
-            {"totalDeltaV", result.metrics.totalDeltaV},
-            {"maxControlAccel", result.metrics.maxControlAccel},
-            {"saturatedSteps", result.metrics.saturatedSteps},
-            {"maxPositionError", result.metrics.maxPositionError},
-            {"rmsPositionError", result.metrics.rmsPositionError},
-            {"maxPositionErrorDrift", result.metrics.maxPositionErrorDrift},
-            {"maxPositionErrorBrake", result.metrics.maxPositionErrorBrake},
-            {"maxPositionErrorHold", result.metrics.maxPositionErrorHold},
-            {"finalPositionError", result.metrics.finalPositionError},
-            {"finalVelocityError", result.metrics.finalVelocityError},
-        }},
-        {"trajectory", trajectory},
-    }).dump();
+    if (!out.ok()) return {};
+    return out.finish();
 }
 
-std::string dispatch_operation(const std::string& operation, const json& params) {
-    const std::string payload = params.dump();
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
 
+std::string dispatch(const std::string& operation, const Value& params) {
     if (operation == "version") {
-        return json({{"version", version()}}).dump();
+        ObjectWriter out;
+        out.string("version", version());
+        return out.finish();
     }
-    if (operation == "hohmannTransfer") {
-        return hohmann_transfer_json(payload);
-    }
-    if (operation == "biEllipticTransfer") {
-        return bi_elliptic_transfer_json(payload);
-    }
-    if (operation == "solveLambert") {
-        return solve_lambert_json(payload);
-    }
-    if (operation == "solveLambertMinDV") {
-        return solve_lambert_min_dv_json(payload);
-    }
-    if (operation == "phasingManeuver") {
-        return phasing_maneuver_json(payload);
-    }
-    if (operation == "planeChange") {
-        return plane_change_json(payload);
-    }
-    if (operation == "combinedManeuver") {
-        return combined_maneuver_json(payload);
-    }
-    if (operation == "computeRoeStateTransition") {
-        return compute_roe_state_transition_json(payload);
-    }
-    if (operation == "planRelativeWaypointMission") {
-        return plan_relative_waypoint_mission_json(payload);
-    }
-    if (operation == "computeCAM") {
-        return compute_cam_json(payload);
-    }
-    if (operation == "computeApproach") {
-        return compute_approach_json(payload);
-    }
-    if (operation == "simulateRendezvous") {
-        return simulate_rendezvous_json(payload);
-    }
+    if (operation == "hohmannTransfer") return hohmannTransfer(params);
+    if (operation == "biEllipticTransfer") return biEllipticTransfer(params);
+    if (operation == "solveLambert") return solveLambertOp(params);
+    if (operation == "solveLambertMinDV") return solveLambertMinDVOp(params);
+    if (operation == "phasingManeuver") return phasingManeuver(params);
+    if (operation == "planeChange") return planeChange(params);
+    if (operation == "combinedManeuver") return combinedManeuver(params);
+    if (operation == "computeRoeStateTransition") return computeRoeStateTransition(params);
+    if (operation == "planRelativeWaypointMission") return planRelativeWaypointMission(params);
+    if (operation == "computeCAM") return computeCAMOp(params);
+    if (operation == "computeApproach") return computeApproachOp(params);
+    if (operation == "simulateRendezvous") return simulateRendezvousOp(params);
 
-    throw std::runtime_error("Unknown maneuver operation: " + operation);
+    fault::raise(fault_code::UNKNOWN_OPERATION,
+                 "Unknown maneuver operation: \"" + operation +
+                     "\". Supported: version, hohmannTransfer, "
+                     "biEllipticTransfer, solveLambert, solveLambertMinDV, "
+                     "phasingManeuver, planeChange, combinedManeuver, "
+                     "computeRoeStateTransition, planRelativeWaypointMission, "
+                     "computeCAM, computeApproach, simulateRendezvous");
+    return {};
+}
+
+PluginInvokeResult errorResult(const char* code, std::string message) {
+    PluginInvokeResult result{};
+    result.ok = false;
+    result.error_code = code;
+    result.error_message = std::move(message);
+    ObjectWriter out;
+    out.string("error", result.error_message).string("errorCode", result.error_code);
+    result.json = out.finish();
+    return result;
 }
 
 }  // namespace
 
 PluginInvokeResult invoke_json_request(std::string_view request_json) {
-    try {
-        const auto request = json::parse(request_json);
-        const auto operation = request.at("operation").get<std::string>();
-        const auto params =
-            request.contains("params") ? request.at("params") : json::object();
+    // A fault latched by a PREVIOUS call must never fail this one. This one
+    // line is what makes "the instance is still usable for the next call" true.
+    fault::reset();
 
-        PluginInvokeResult result{};
-        result.ok = true;
-        result.json = dispatch_operation(operation, params);
-        return result;
-    } catch (const std::exception& ex) {
-        return make_error_result("invoke-failed", ex.what());
-    } catch (...) {
-        return make_error_result("invoke-failed", "Unknown plugin error.");
+    if (request_json.size() > (8u << 20)) {
+        return errorResult(fault_code::MALFORMED_REQUEST,
+                           "Request body exceeds the 8 MiB ceiling.");
     }
+
+    Value request;
+    std::string parseError;
+    if (!json_lite::parse(request_json, &request, &parseError)) {
+        return errorResult(fault_code::MALFORMED_REQUEST,
+                           "Request body is not valid JSON: " + parseError);
+    }
+    if (!request.isObject()) {
+        return errorResult(fault_code::MALFORMED_REQUEST,
+                           "Request body must be a JSON object of the form "
+                           "{\"operation\": \"...\", \"params\": { ... }}.");
+    }
+    const Value* operationValue = request.find("operation");
+    if (operationValue == nullptr) {
+        return errorResult(fault_code::MALFORMED_REQUEST,
+                           "Request is missing the required \"operation\" key.");
+    }
+    if (!operationValue->isString()) {
+        return errorResult(fault_code::MALFORMED_REQUEST,
+                           "Request key \"operation\" must be a string.");
+    }
+
+    Value emptyParams;
+    emptyParams.kind = json_lite::Kind::Object;
+    const Value* paramsValue = request.find("params");
+    if (paramsValue != nullptr && !paramsValue->isNull() && !paramsValue->isObject()) {
+        return errorResult(fault_code::MALFORMED_REQUEST,
+                           "Request key \"params\" must be an object when present.");
+    }
+    const Value& params =
+        (paramsValue != nullptr && paramsValue->isObject()) ? *paramsValue : emptyParams;
+
+    const std::string body = dispatch(operationValue->text, params);
+    if (fault::raised()) {
+        return errorResult(fault::code(), fault::message());
+    }
+    if (body.empty()) {
+        // A dispatcher returned nothing without latching a reason. That is a
+        // defect in THIS file rather than in the request, and it is reported as
+        // one instead of being emitted as an empty response body.
+        return errorResult("internal-error",
+                           "Operation \"" + operationValue->text +
+                               "\" produced no response and reported no reason. "
+                               "This is a module defect, not a bad request.");
+    }
+
+    PluginInvokeResult result{};
+    result.ok = true;
+    result.json = body;
+    return result;
 }
 
 }  // namespace maneuver

@@ -262,10 +262,18 @@ void testLambertSimple() {
 
     auto result = maneuver::solveLambert(r1, r2, tof, maneuver::MU_EARTH, true, 0);
 
-    assert(result.converged);
-    std::cout << "  Lambert (180deg): v1=" << maneuver::norm3(result.v1)
-              << " v2=" << maneuver::norm3(result.v2)
-              << " converged=" << result.converged << "\n";
+    // EXACTLY 180 degrees has no unique Lambert solution: r1 and r2 are
+    // antiparallel, so every plane containing the line is a valid transfer
+    // plane and the orbit is not determined by the boundary conditions. The
+    // universal-variable formulation says so algebraically — A = sin(dtheta) *
+    // sqrt(...) is identically zero — and the honest answer is a refusal.
+    //
+    // 0.1.0 answered `converged: true` here, which is what this assertion used
+    // to check. It was checking that the solver lied.
+    assert(!result.converged);
+    assert(std::string(result.status) == "degenerate-geometry");
+    std::cout << "  Lambert (180deg): correctly refused, status=" << result.status
+              << "\n";
 }
 
 void testLambertEarthMars() {

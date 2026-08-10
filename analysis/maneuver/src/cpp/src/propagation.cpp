@@ -1,4 +1,5 @@
 #include "maneuver/propagation.h"
+#include "maneuver/fault.h"
 #include "maneuver/math.h"
 #include "maneuver/stm.h"
 #include "maneuver/transforms.h"
@@ -21,7 +22,7 @@ ROEVector propagateWithDrag(const ROEVector& roe,
                             const DragConfig& dragConfig) {
     if (dragConfig.type == DragType::ECCENTRIC) {
         if (chief.eccentricity < ECCENTRICITY_THRESHOLD) {
-            throw std::runtime_error(
+            return fault::fail<ROEVector>(fault_code::INVALID_PARAMETER,
                 "[drag]: Eccentric model requires e >= " +
                 std::to_string(ECCENTRICITY_THRESHOLD) +
                 " (e=" + std::to_string(chief.eccentricity) +
@@ -47,45 +48,45 @@ QuasiNonsingularROE propagateROE(const QuasiNonsingularROE& initialROE,
                                  const ROEPropagationOptions& options) {
     // Validate orbital elements
     if (chief.semiMajorAxis <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<QuasiNonsingularROE>(fault_code::INVALID_PARAMETER,
             "[propagate]: Semi-major axis must be positive (a=" +
             std::to_string(chief.semiMajorAxis) + ")");
     }
     if (chief.eccentricity < 0.0 || chief.eccentricity >= 1.0) {
-        throw std::runtime_error(
+        return fault::fail<QuasiNonsingularROE>(fault_code::INVALID_PARAMETER,
             "[propagate]: Eccentricity must be in [0, 1) (e=" +
             std::to_string(chief.eccentricity) + ")");
     }
     if (chief.gravitationalParameter <= 0.0) {
-        throw std::runtime_error(
+        return fault::fail<QuasiNonsingularROE>(fault_code::INVALID_PARAMETER,
             "[propagate]: Gravitational parameter must be positive (mu=" +
             std::to_string(chief.gravitationalParameter) + ")");
     }
 
     double incDeg = chief.inclination * RAD_TO_DEG;
     if (std::abs(incDeg) < 0.1 || std::abs(incDeg - 180.0) < 0.1) {
-        throw std::runtime_error(
+        return fault::fail<QuasiNonsingularROE>(fault_code::INVALID_PARAMETER,
             "[propagate]: Near-equatorial orbit not supported for "
             "quasi-nonsingular ROE (i=" +
             std::to_string(incDeg) + " deg).");
     }
 
     if (deltaTime < 0.0) {
-        throw std::runtime_error(
+        return fault::fail<QuasiNonsingularROE>(fault_code::INVALID_PARAMETER,
             "[propagate]: Negative deltaTime not allowed (dt=" +
             std::to_string(deltaTime) + ").");
     }
 
     // Validate drag coupling
     if (options.includeDrag && !options.includeJ2) {
-        throw std::runtime_error(
+        return fault::fail<QuasiNonsingularROE>(fault_code::INVALID_PARAMETER,
             "[propagate]: Cannot disable J2 when drag is enabled.");
     }
 
     if (options.includeDrag) {
         if (options.dragConfig.type == DragType::ECCENTRIC &&
             chief.eccentricity < 0.05) {
-            throw std::runtime_error(
+            return fault::fail<QuasiNonsingularROE>(fault_code::INVALID_PARAMETER,
                 "[propagate]: Eccentric drag model requires e >= 0.05 (e=" +
                 std::to_string(chief.eccentricity) + ").");
         }
