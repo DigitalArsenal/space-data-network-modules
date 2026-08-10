@@ -19,6 +19,58 @@ struct PUR;
 struct PURBuilder;
 struct PURT;
 
+/// Purchase lifecycle status tracked by the provider.
+enum class purchaseLifecycleStatus : int8_t {
+  Pending = 0,
+  PaymentDetected = 1,
+  PaymentConfirmed = 2,
+  Completed = 3,
+  Failed = 4,
+  Cancelled = 5,
+  RefundRequested = 6,
+  Refunded = 7,
+  Expired = 8,
+  MIN = Pending,
+  MAX = Expired
+};
+
+inline const purchaseLifecycleStatus (&EnumValuespurchaseLifecycleStatus())[9] {
+  static const purchaseLifecycleStatus values[] = {
+    purchaseLifecycleStatus::Pending,
+    purchaseLifecycleStatus::PaymentDetected,
+    purchaseLifecycleStatus::PaymentConfirmed,
+    purchaseLifecycleStatus::Completed,
+    purchaseLifecycleStatus::Failed,
+    purchaseLifecycleStatus::Cancelled,
+    purchaseLifecycleStatus::RefundRequested,
+    purchaseLifecycleStatus::Refunded,
+    purchaseLifecycleStatus::Expired
+  };
+  return values;
+}
+
+inline const char * const *EnumNamespurchaseLifecycleStatus() {
+  static const char * const names[10] = {
+    "Pending",
+    "PaymentDetected",
+    "PaymentConfirmed",
+    "Completed",
+    "Failed",
+    "Cancelled",
+    "RefundRequested",
+    "Refunded",
+    "Expired",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamepurchaseLifecycleStatus(purchaseLifecycleStatus e) {
+  if (::flatbuffers::IsOutRange(e, purchaseLifecycleStatus::Pending, purchaseLifecycleStatus::Expired)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamespurchaseLifecycleStatus()[index];
+}
+
 struct PURT : public ::flatbuffers::NativeTable {
   typedef PUR TableType;
   std::string REQUEST_ID{};
@@ -34,6 +86,25 @@ struct PURT : public ::flatbuffers::NativeTable {
   std::string PAYMENT_REFERENCE{};
   std::vector<uint8_t> BUYER_SIGNATURE{};
   uint64_t TIMESTAMP = 0;
+  std::string KEY_ALGORITHM{};
+  std::string BUYER_EMAIL{};
+  std::string SENDER_ADDRESS{};
+  uint64_t CONFIRMATION_BLOCK = 0;
+  std::string PAYMENT_INTENT_ID{};
+  std::string CREDITS_TRANSACTION_ID{};
+  purchaseLifecycleStatus STATUS = purchaseLifecycleStatus::Pending;
+  std::string STATUS_MESSAGE{};
+  uint64_t CREATED_AT = 0;
+  uint64_t UPDATED_AT = 0;
+  uint64_t PAYMENT_DEADLINE = 0;
+  uint64_t PAYMENT_CONFIRMED_AT = 0;
+  uint64_t GRANT_ISSUED_AT = 0;
+  std::string GRANT_ID{};
+  std::string PROVIDER_PEER_ID{};
+  uint64_t PROVIDER_ACKNOWLEDGED_AT = 0;
+  std::string PREFERRED_DELIVERY_METHOD{};
+  std::string WEBHOOK_URL{};
+  std::vector<uint8_t> PROVIDER_SIGNATURE{};
 };
 
 /// Purchase Request - Request to purchase data from a storefront listing
@@ -54,7 +125,26 @@ struct PUR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PAYMENT_CHAIN = 22,
     VT_PAYMENT_REFERENCE = 24,
     VT_BUYER_SIGNATURE = 26,
-    VT_TIMESTAMP = 28
+    VT_TIMESTAMP = 28,
+    VT_KEY_ALGORITHM = 30,
+    VT_BUYER_EMAIL = 32,
+    VT_SENDER_ADDRESS = 34,
+    VT_CONFIRMATION_BLOCK = 36,
+    VT_PAYMENT_INTENT_ID = 38,
+    VT_CREDITS_TRANSACTION_ID = 40,
+    VT_STATUS = 42,
+    VT_STATUS_MESSAGE = 44,
+    VT_CREATED_AT = 46,
+    VT_UPDATED_AT = 48,
+    VT_PAYMENT_DEADLINE = 50,
+    VT_PAYMENT_CONFIRMED_AT = 52,
+    VT_GRANT_ISSUED_AT = 54,
+    VT_GRANT_ID = 56,
+    VT_PROVIDER_PEER_ID = 58,
+    VT_PROVIDER_ACKNOWLEDGED_AT = 60,
+    VT_PREFERRED_DELIVERY_METHOD = 62,
+    VT_WEBHOOK_URL = 64,
+    VT_PROVIDER_SIGNATURE = 66
   };
   /// Unique identifier for this purchase request
   const ::flatbuffers::String *REQUEST_ID() const {
@@ -108,6 +198,82 @@ struct PUR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t TIMESTAMP() const {
     return GetField<uint64_t>(VT_TIMESTAMP, 0);
   }
+  /// Key algorithm for buyer encryption public key
+  const ::flatbuffers::String *KEY_ALGORITHM() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_KEY_ALGORITHM);
+  }
+  /// Buyer contact email
+  const ::flatbuffers::String *BUYER_EMAIL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_BUYER_EMAIL);
+  }
+  /// On-chain sender address or fiat payment source reference
+  const ::flatbuffers::String *SENDER_ADDRESS() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SENDER_ADDRESS);
+  }
+  /// Confirmation block for on-chain payments
+  uint64_t CONFIRMATION_BLOCK() const {
+    return GetField<uint64_t>(VT_CONFIRMATION_BLOCK, 0);
+  }
+  /// Fiat processor payment intent identifier
+  const ::flatbuffers::String *PAYMENT_INTENT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PAYMENT_INTENT_ID);
+  }
+  /// SDN credits transaction identifier
+  const ::flatbuffers::String *CREDITS_TRANSACTION_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CREDITS_TRANSACTION_ID);
+  }
+  /// Provider-side purchase status
+  purchaseLifecycleStatus STATUS() const {
+    return static_cast<purchaseLifecycleStatus>(GetField<int8_t>(VT_STATUS, 0));
+  }
+  /// Human-readable status message
+  const ::flatbuffers::String *STATUS_MESSAGE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_STATUS_MESSAGE);
+  }
+  /// Unix timestamp when the purchase record was created
+  uint64_t CREATED_AT() const {
+    return GetField<uint64_t>(VT_CREATED_AT, 0);
+  }
+  /// Unix timestamp when the purchase record was updated
+  uint64_t UPDATED_AT() const {
+    return GetField<uint64_t>(VT_UPDATED_AT, 0);
+  }
+  /// Unix timestamp when payment must be received
+  uint64_t PAYMENT_DEADLINE() const {
+    return GetField<uint64_t>(VT_PAYMENT_DEADLINE, 0);
+  }
+  /// Unix timestamp when payment was confirmed
+  uint64_t PAYMENT_CONFIRMED_AT() const {
+    return GetField<uint64_t>(VT_PAYMENT_CONFIRMED_AT, 0);
+  }
+  /// Unix timestamp when the grant was issued
+  uint64_t GRANT_ISSUED_AT() const {
+    return GetField<uint64_t>(VT_GRANT_ISSUED_AT, 0);
+  }
+  /// Issued grant identifier
+  const ::flatbuffers::String *GRANT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_GRANT_ID);
+  }
+  /// Provider peer ID
+  const ::flatbuffers::String *PROVIDER_PEER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROVIDER_PEER_ID);
+  }
+  /// Unix timestamp when provider acknowledged the request
+  uint64_t PROVIDER_ACKNOWLEDGED_AT() const {
+    return GetField<uint64_t>(VT_PROVIDER_ACKNOWLEDGED_AT, 0);
+  }
+  /// Preferred delivery method
+  const ::flatbuffers::String *PREFERRED_DELIVERY_METHOD() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PREFERRED_DELIVERY_METHOD);
+  }
+  /// Buyer webhook URL for delivery callbacks
+  const ::flatbuffers::String *WEBHOOK_URL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_WEBHOOK_URL);
+  }
+  /// Ed25519 signature from provider
+  const ::flatbuffers::Vector<uint8_t> *PROVIDER_SIGNATURE() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PROVIDER_SIGNATURE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -134,6 +300,36 @@ struct PUR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_BUYER_SIGNATURE) &&
            verifier.VerifyVector(BUYER_SIGNATURE()) &&
            VerifyField<uint64_t>(verifier, VT_TIMESTAMP, 8) &&
+           VerifyOffset(verifier, VT_KEY_ALGORITHM) &&
+           verifier.VerifyString(KEY_ALGORITHM()) &&
+           VerifyOffset(verifier, VT_BUYER_EMAIL) &&
+           verifier.VerifyString(BUYER_EMAIL()) &&
+           VerifyOffset(verifier, VT_SENDER_ADDRESS) &&
+           verifier.VerifyString(SENDER_ADDRESS()) &&
+           VerifyField<uint64_t>(verifier, VT_CONFIRMATION_BLOCK, 8) &&
+           VerifyOffset(verifier, VT_PAYMENT_INTENT_ID) &&
+           verifier.VerifyString(PAYMENT_INTENT_ID()) &&
+           VerifyOffset(verifier, VT_CREDITS_TRANSACTION_ID) &&
+           verifier.VerifyString(CREDITS_TRANSACTION_ID()) &&
+           VerifyField<int8_t>(verifier, VT_STATUS, 1) &&
+           VerifyOffset(verifier, VT_STATUS_MESSAGE) &&
+           verifier.VerifyString(STATUS_MESSAGE()) &&
+           VerifyField<uint64_t>(verifier, VT_CREATED_AT, 8) &&
+           VerifyField<uint64_t>(verifier, VT_UPDATED_AT, 8) &&
+           VerifyField<uint64_t>(verifier, VT_PAYMENT_DEADLINE, 8) &&
+           VerifyField<uint64_t>(verifier, VT_PAYMENT_CONFIRMED_AT, 8) &&
+           VerifyField<uint64_t>(verifier, VT_GRANT_ISSUED_AT, 8) &&
+           VerifyOffset(verifier, VT_GRANT_ID) &&
+           verifier.VerifyString(GRANT_ID()) &&
+           VerifyOffset(verifier, VT_PROVIDER_PEER_ID) &&
+           verifier.VerifyString(PROVIDER_PEER_ID()) &&
+           VerifyField<uint64_t>(verifier, VT_PROVIDER_ACKNOWLEDGED_AT, 8) &&
+           VerifyOffset(verifier, VT_PREFERRED_DELIVERY_METHOD) &&
+           verifier.VerifyString(PREFERRED_DELIVERY_METHOD()) &&
+           VerifyOffset(verifier, VT_WEBHOOK_URL) &&
+           verifier.VerifyString(WEBHOOK_URL()) &&
+           VerifyOffset(verifier, VT_PROVIDER_SIGNATURE) &&
+           verifier.VerifyVector(PROVIDER_SIGNATURE()) &&
            verifier.EndTable();
   }
   PURT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -184,6 +380,63 @@ struct PURBuilder {
   void add_TIMESTAMP(uint64_t TIMESTAMP) {
     fbb_.AddElement<uint64_t>(PUR::VT_TIMESTAMP, TIMESTAMP, 0);
   }
+  void add_KEY_ALGORITHM(::flatbuffers::Offset<::flatbuffers::String> KEY_ALGORITHM) {
+    fbb_.AddOffset(PUR::VT_KEY_ALGORITHM, KEY_ALGORITHM);
+  }
+  void add_BUYER_EMAIL(::flatbuffers::Offset<::flatbuffers::String> BUYER_EMAIL) {
+    fbb_.AddOffset(PUR::VT_BUYER_EMAIL, BUYER_EMAIL);
+  }
+  void add_SENDER_ADDRESS(::flatbuffers::Offset<::flatbuffers::String> SENDER_ADDRESS) {
+    fbb_.AddOffset(PUR::VT_SENDER_ADDRESS, SENDER_ADDRESS);
+  }
+  void add_CONFIRMATION_BLOCK(uint64_t CONFIRMATION_BLOCK) {
+    fbb_.AddElement<uint64_t>(PUR::VT_CONFIRMATION_BLOCK, CONFIRMATION_BLOCK, 0);
+  }
+  void add_PAYMENT_INTENT_ID(::flatbuffers::Offset<::flatbuffers::String> PAYMENT_INTENT_ID) {
+    fbb_.AddOffset(PUR::VT_PAYMENT_INTENT_ID, PAYMENT_INTENT_ID);
+  }
+  void add_CREDITS_TRANSACTION_ID(::flatbuffers::Offset<::flatbuffers::String> CREDITS_TRANSACTION_ID) {
+    fbb_.AddOffset(PUR::VT_CREDITS_TRANSACTION_ID, CREDITS_TRANSACTION_ID);
+  }
+  void add_STATUS(purchaseLifecycleStatus STATUS) {
+    fbb_.AddElement<int8_t>(PUR::VT_STATUS, static_cast<int8_t>(STATUS), 0);
+  }
+  void add_STATUS_MESSAGE(::flatbuffers::Offset<::flatbuffers::String> STATUS_MESSAGE) {
+    fbb_.AddOffset(PUR::VT_STATUS_MESSAGE, STATUS_MESSAGE);
+  }
+  void add_CREATED_AT(uint64_t CREATED_AT) {
+    fbb_.AddElement<uint64_t>(PUR::VT_CREATED_AT, CREATED_AT, 0);
+  }
+  void add_UPDATED_AT(uint64_t UPDATED_AT) {
+    fbb_.AddElement<uint64_t>(PUR::VT_UPDATED_AT, UPDATED_AT, 0);
+  }
+  void add_PAYMENT_DEADLINE(uint64_t PAYMENT_DEADLINE) {
+    fbb_.AddElement<uint64_t>(PUR::VT_PAYMENT_DEADLINE, PAYMENT_DEADLINE, 0);
+  }
+  void add_PAYMENT_CONFIRMED_AT(uint64_t PAYMENT_CONFIRMED_AT) {
+    fbb_.AddElement<uint64_t>(PUR::VT_PAYMENT_CONFIRMED_AT, PAYMENT_CONFIRMED_AT, 0);
+  }
+  void add_GRANT_ISSUED_AT(uint64_t GRANT_ISSUED_AT) {
+    fbb_.AddElement<uint64_t>(PUR::VT_GRANT_ISSUED_AT, GRANT_ISSUED_AT, 0);
+  }
+  void add_GRANT_ID(::flatbuffers::Offset<::flatbuffers::String> GRANT_ID) {
+    fbb_.AddOffset(PUR::VT_GRANT_ID, GRANT_ID);
+  }
+  void add_PROVIDER_PEER_ID(::flatbuffers::Offset<::flatbuffers::String> PROVIDER_PEER_ID) {
+    fbb_.AddOffset(PUR::VT_PROVIDER_PEER_ID, PROVIDER_PEER_ID);
+  }
+  void add_PROVIDER_ACKNOWLEDGED_AT(uint64_t PROVIDER_ACKNOWLEDGED_AT) {
+    fbb_.AddElement<uint64_t>(PUR::VT_PROVIDER_ACKNOWLEDGED_AT, PROVIDER_ACKNOWLEDGED_AT, 0);
+  }
+  void add_PREFERRED_DELIVERY_METHOD(::flatbuffers::Offset<::flatbuffers::String> PREFERRED_DELIVERY_METHOD) {
+    fbb_.AddOffset(PUR::VT_PREFERRED_DELIVERY_METHOD, PREFERRED_DELIVERY_METHOD);
+  }
+  void add_WEBHOOK_URL(::flatbuffers::Offset<::flatbuffers::String> WEBHOOK_URL) {
+    fbb_.AddOffset(PUR::VT_WEBHOOK_URL, WEBHOOK_URL);
+  }
+  void add_PROVIDER_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PROVIDER_SIGNATURE) {
+    fbb_.AddOffset(PUR::VT_PROVIDER_SIGNATURE, PROVIDER_SIGNATURE);
+  }
   explicit PURBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -213,10 +466,47 @@ inline ::flatbuffers::Offset<PUR> CreatePUR(
     ::flatbuffers::Offset<::flatbuffers::String> PAYMENT_CHAIN = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PAYMENT_REFERENCE = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> BUYER_SIGNATURE = 0,
-    uint64_t TIMESTAMP = 0) {
+    uint64_t TIMESTAMP = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> KEY_ALGORITHM = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> BUYER_EMAIL = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SENDER_ADDRESS = 0,
+    uint64_t CONFIRMATION_BLOCK = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PAYMENT_INTENT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CREDITS_TRANSACTION_ID = 0,
+    purchaseLifecycleStatus STATUS = purchaseLifecycleStatus::Pending,
+    ::flatbuffers::Offset<::flatbuffers::String> STATUS_MESSAGE = 0,
+    uint64_t CREATED_AT = 0,
+    uint64_t UPDATED_AT = 0,
+    uint64_t PAYMENT_DEADLINE = 0,
+    uint64_t PAYMENT_CONFIRMED_AT = 0,
+    uint64_t GRANT_ISSUED_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> GRANT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROVIDER_PEER_ID = 0,
+    uint64_t PROVIDER_ACKNOWLEDGED_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PREFERRED_DELIVERY_METHOD = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> WEBHOOK_URL = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PROVIDER_SIGNATURE = 0) {
   PURBuilder builder_(_fbb);
+  builder_.add_PROVIDER_ACKNOWLEDGED_AT(PROVIDER_ACKNOWLEDGED_AT);
+  builder_.add_GRANT_ISSUED_AT(GRANT_ISSUED_AT);
+  builder_.add_PAYMENT_CONFIRMED_AT(PAYMENT_CONFIRMED_AT);
+  builder_.add_PAYMENT_DEADLINE(PAYMENT_DEADLINE);
+  builder_.add_UPDATED_AT(UPDATED_AT);
+  builder_.add_CREATED_AT(CREATED_AT);
+  builder_.add_CONFIRMATION_BLOCK(CONFIRMATION_BLOCK);
   builder_.add_TIMESTAMP(TIMESTAMP);
   builder_.add_PAYMENT_AMOUNT(PAYMENT_AMOUNT);
+  builder_.add_PROVIDER_SIGNATURE(PROVIDER_SIGNATURE);
+  builder_.add_WEBHOOK_URL(WEBHOOK_URL);
+  builder_.add_PREFERRED_DELIVERY_METHOD(PREFERRED_DELIVERY_METHOD);
+  builder_.add_PROVIDER_PEER_ID(PROVIDER_PEER_ID);
+  builder_.add_GRANT_ID(GRANT_ID);
+  builder_.add_STATUS_MESSAGE(STATUS_MESSAGE);
+  builder_.add_CREDITS_TRANSACTION_ID(CREDITS_TRANSACTION_ID);
+  builder_.add_PAYMENT_INTENT_ID(PAYMENT_INTENT_ID);
+  builder_.add_SENDER_ADDRESS(SENDER_ADDRESS);
+  builder_.add_BUYER_EMAIL(BUYER_EMAIL);
+  builder_.add_KEY_ALGORITHM(KEY_ALGORITHM);
   builder_.add_BUYER_SIGNATURE(BUYER_SIGNATURE);
   builder_.add_PAYMENT_REFERENCE(PAYMENT_REFERENCE);
   builder_.add_PAYMENT_CHAIN(PAYMENT_CHAIN);
@@ -227,6 +517,7 @@ inline ::flatbuffers::Offset<PUR> CreatePUR(
   builder_.add_TIER_NAME(TIER_NAME);
   builder_.add_LISTING_ID(LISTING_ID);
   builder_.add_REQUEST_ID(REQUEST_ID);
+  builder_.add_STATUS(STATUS);
   builder_.add_PAYMENT_METHOD(PAYMENT_METHOD);
   return builder_.Finish();
 }
@@ -250,7 +541,26 @@ inline ::flatbuffers::Offset<PUR> CreatePURDirect(
     const char *PAYMENT_CHAIN = nullptr,
     const char *PAYMENT_REFERENCE = nullptr,
     const std::vector<uint8_t> *BUYER_SIGNATURE = nullptr,
-    uint64_t TIMESTAMP = 0) {
+    uint64_t TIMESTAMP = 0,
+    const char *KEY_ALGORITHM = nullptr,
+    const char *BUYER_EMAIL = nullptr,
+    const char *SENDER_ADDRESS = nullptr,
+    uint64_t CONFIRMATION_BLOCK = 0,
+    const char *PAYMENT_INTENT_ID = nullptr,
+    const char *CREDITS_TRANSACTION_ID = nullptr,
+    purchaseLifecycleStatus STATUS = purchaseLifecycleStatus::Pending,
+    const char *STATUS_MESSAGE = nullptr,
+    uint64_t CREATED_AT = 0,
+    uint64_t UPDATED_AT = 0,
+    uint64_t PAYMENT_DEADLINE = 0,
+    uint64_t PAYMENT_CONFIRMED_AT = 0,
+    uint64_t GRANT_ISSUED_AT = 0,
+    const char *GRANT_ID = nullptr,
+    const char *PROVIDER_PEER_ID = nullptr,
+    uint64_t PROVIDER_ACKNOWLEDGED_AT = 0,
+    const char *PREFERRED_DELIVERY_METHOD = nullptr,
+    const char *WEBHOOK_URL = nullptr,
+    const std::vector<uint8_t> *PROVIDER_SIGNATURE = nullptr) {
   auto REQUEST_ID__ = REQUEST_ID ? _fbb.CreateString(REQUEST_ID) : 0;
   auto LISTING_ID__ = LISTING_ID ? _fbb.CreateString(LISTING_ID) : 0;
   auto TIER_NAME__ = TIER_NAME ? _fbb.CreateString(TIER_NAME) : 0;
@@ -261,6 +571,17 @@ inline ::flatbuffers::Offset<PUR> CreatePURDirect(
   auto PAYMENT_CHAIN__ = PAYMENT_CHAIN ? _fbb.CreateString(PAYMENT_CHAIN) : 0;
   auto PAYMENT_REFERENCE__ = PAYMENT_REFERENCE ? _fbb.CreateString(PAYMENT_REFERENCE) : 0;
   auto BUYER_SIGNATURE__ = BUYER_SIGNATURE ? _fbb.CreateVector<uint8_t>(*BUYER_SIGNATURE) : 0;
+  auto KEY_ALGORITHM__ = KEY_ALGORITHM ? _fbb.CreateString(KEY_ALGORITHM) : 0;
+  auto BUYER_EMAIL__ = BUYER_EMAIL ? _fbb.CreateString(BUYER_EMAIL) : 0;
+  auto SENDER_ADDRESS__ = SENDER_ADDRESS ? _fbb.CreateString(SENDER_ADDRESS) : 0;
+  auto PAYMENT_INTENT_ID__ = PAYMENT_INTENT_ID ? _fbb.CreateString(PAYMENT_INTENT_ID) : 0;
+  auto CREDITS_TRANSACTION_ID__ = CREDITS_TRANSACTION_ID ? _fbb.CreateString(CREDITS_TRANSACTION_ID) : 0;
+  auto STATUS_MESSAGE__ = STATUS_MESSAGE ? _fbb.CreateString(STATUS_MESSAGE) : 0;
+  auto GRANT_ID__ = GRANT_ID ? _fbb.CreateString(GRANT_ID) : 0;
+  auto PROVIDER_PEER_ID__ = PROVIDER_PEER_ID ? _fbb.CreateString(PROVIDER_PEER_ID) : 0;
+  auto PREFERRED_DELIVERY_METHOD__ = PREFERRED_DELIVERY_METHOD ? _fbb.CreateString(PREFERRED_DELIVERY_METHOD) : 0;
+  auto WEBHOOK_URL__ = WEBHOOK_URL ? _fbb.CreateString(WEBHOOK_URL) : 0;
+  auto PROVIDER_SIGNATURE__ = PROVIDER_SIGNATURE ? _fbb.CreateVector<uint8_t>(*PROVIDER_SIGNATURE) : 0;
   return CreatePUR(
       _fbb,
       REQUEST_ID__,
@@ -275,7 +596,26 @@ inline ::flatbuffers::Offset<PUR> CreatePURDirect(
       PAYMENT_CHAIN__,
       PAYMENT_REFERENCE__,
       BUYER_SIGNATURE__,
-      TIMESTAMP);
+      TIMESTAMP,
+      KEY_ALGORITHM__,
+      BUYER_EMAIL__,
+      SENDER_ADDRESS__,
+      CONFIRMATION_BLOCK,
+      PAYMENT_INTENT_ID__,
+      CREDITS_TRANSACTION_ID__,
+      STATUS,
+      STATUS_MESSAGE__,
+      CREATED_AT,
+      UPDATED_AT,
+      PAYMENT_DEADLINE,
+      PAYMENT_CONFIRMED_AT,
+      GRANT_ISSUED_AT,
+      GRANT_ID__,
+      PROVIDER_PEER_ID__,
+      PROVIDER_ACKNOWLEDGED_AT,
+      PREFERRED_DELIVERY_METHOD__,
+      WEBHOOK_URL__,
+      PROVIDER_SIGNATURE__);
 }
 
 ::flatbuffers::Offset<PUR> CreatePUR(::flatbuffers::FlatBufferBuilder &_fbb, const PURT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -302,6 +642,25 @@ inline void PUR::UnPackTo(PURT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = PAYMENT_REFERENCE(); if (_e) _o->PAYMENT_REFERENCE = _e->str(); }
   { auto _e = BUYER_SIGNATURE(); if (_e) { _o->BUYER_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->BUYER_SIGNATURE.begin()); } }
   { auto _e = TIMESTAMP(); _o->TIMESTAMP = _e; }
+  { auto _e = KEY_ALGORITHM(); if (_e) _o->KEY_ALGORITHM = _e->str(); }
+  { auto _e = BUYER_EMAIL(); if (_e) _o->BUYER_EMAIL = _e->str(); }
+  { auto _e = SENDER_ADDRESS(); if (_e) _o->SENDER_ADDRESS = _e->str(); }
+  { auto _e = CONFIRMATION_BLOCK(); _o->CONFIRMATION_BLOCK = _e; }
+  { auto _e = PAYMENT_INTENT_ID(); if (_e) _o->PAYMENT_INTENT_ID = _e->str(); }
+  { auto _e = CREDITS_TRANSACTION_ID(); if (_e) _o->CREDITS_TRANSACTION_ID = _e->str(); }
+  { auto _e = STATUS(); _o->STATUS = _e; }
+  { auto _e = STATUS_MESSAGE(); if (_e) _o->STATUS_MESSAGE = _e->str(); }
+  { auto _e = CREATED_AT(); _o->CREATED_AT = _e; }
+  { auto _e = UPDATED_AT(); _o->UPDATED_AT = _e; }
+  { auto _e = PAYMENT_DEADLINE(); _o->PAYMENT_DEADLINE = _e; }
+  { auto _e = PAYMENT_CONFIRMED_AT(); _o->PAYMENT_CONFIRMED_AT = _e; }
+  { auto _e = GRANT_ISSUED_AT(); _o->GRANT_ISSUED_AT = _e; }
+  { auto _e = GRANT_ID(); if (_e) _o->GRANT_ID = _e->str(); }
+  { auto _e = PROVIDER_PEER_ID(); if (_e) _o->PROVIDER_PEER_ID = _e->str(); }
+  { auto _e = PROVIDER_ACKNOWLEDGED_AT(); _o->PROVIDER_ACKNOWLEDGED_AT = _e; }
+  { auto _e = PREFERRED_DELIVERY_METHOD(); if (_e) _o->PREFERRED_DELIVERY_METHOD = _e->str(); }
+  { auto _e = WEBHOOK_URL(); if (_e) _o->WEBHOOK_URL = _e->str(); }
+  { auto _e = PROVIDER_SIGNATURE(); if (_e) { _o->PROVIDER_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->PROVIDER_SIGNATURE.begin()); } }
 }
 
 inline ::flatbuffers::Offset<PUR> CreatePUR(::flatbuffers::FlatBufferBuilder &_fbb, const PURT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -325,6 +684,25 @@ inline ::flatbuffers::Offset<PUR> PUR::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _PAYMENT_REFERENCE = _o->PAYMENT_REFERENCE.empty() ? 0 : _fbb.CreateString(_o->PAYMENT_REFERENCE);
   auto _BUYER_SIGNATURE = _o->BUYER_SIGNATURE.size() ? _fbb.CreateVector(_o->BUYER_SIGNATURE) : 0;
   auto _TIMESTAMP = _o->TIMESTAMP;
+  auto _KEY_ALGORITHM = _o->KEY_ALGORITHM.empty() ? 0 : _fbb.CreateString(_o->KEY_ALGORITHM);
+  auto _BUYER_EMAIL = _o->BUYER_EMAIL.empty() ? 0 : _fbb.CreateString(_o->BUYER_EMAIL);
+  auto _SENDER_ADDRESS = _o->SENDER_ADDRESS.empty() ? 0 : _fbb.CreateString(_o->SENDER_ADDRESS);
+  auto _CONFIRMATION_BLOCK = _o->CONFIRMATION_BLOCK;
+  auto _PAYMENT_INTENT_ID = _o->PAYMENT_INTENT_ID.empty() ? 0 : _fbb.CreateString(_o->PAYMENT_INTENT_ID);
+  auto _CREDITS_TRANSACTION_ID = _o->CREDITS_TRANSACTION_ID.empty() ? 0 : _fbb.CreateString(_o->CREDITS_TRANSACTION_ID);
+  auto _STATUS = _o->STATUS;
+  auto _STATUS_MESSAGE = _o->STATUS_MESSAGE.empty() ? 0 : _fbb.CreateString(_o->STATUS_MESSAGE);
+  auto _CREATED_AT = _o->CREATED_AT;
+  auto _UPDATED_AT = _o->UPDATED_AT;
+  auto _PAYMENT_DEADLINE = _o->PAYMENT_DEADLINE;
+  auto _PAYMENT_CONFIRMED_AT = _o->PAYMENT_CONFIRMED_AT;
+  auto _GRANT_ISSUED_AT = _o->GRANT_ISSUED_AT;
+  auto _GRANT_ID = _o->GRANT_ID.empty() ? 0 : _fbb.CreateString(_o->GRANT_ID);
+  auto _PROVIDER_PEER_ID = _o->PROVIDER_PEER_ID.empty() ? 0 : _fbb.CreateString(_o->PROVIDER_PEER_ID);
+  auto _PROVIDER_ACKNOWLEDGED_AT = _o->PROVIDER_ACKNOWLEDGED_AT;
+  auto _PREFERRED_DELIVERY_METHOD = _o->PREFERRED_DELIVERY_METHOD.empty() ? 0 : _fbb.CreateString(_o->PREFERRED_DELIVERY_METHOD);
+  auto _WEBHOOK_URL = _o->WEBHOOK_URL.empty() ? 0 : _fbb.CreateString(_o->WEBHOOK_URL);
+  auto _PROVIDER_SIGNATURE = _o->PROVIDER_SIGNATURE.size() ? _fbb.CreateVector(_o->PROVIDER_SIGNATURE) : 0;
   return CreatePUR(
       _fbb,
       _REQUEST_ID,
@@ -339,7 +717,26 @@ inline ::flatbuffers::Offset<PUR> PUR::Pack(::flatbuffers::FlatBufferBuilder &_f
       _PAYMENT_CHAIN,
       _PAYMENT_REFERENCE,
       _BUYER_SIGNATURE,
-      _TIMESTAMP);
+      _TIMESTAMP,
+      _KEY_ALGORITHM,
+      _BUYER_EMAIL,
+      _SENDER_ADDRESS,
+      _CONFIRMATION_BLOCK,
+      _PAYMENT_INTENT_ID,
+      _CREDITS_TRANSACTION_ID,
+      _STATUS,
+      _STATUS_MESSAGE,
+      _CREATED_AT,
+      _UPDATED_AT,
+      _PAYMENT_DEADLINE,
+      _PAYMENT_CONFIRMED_AT,
+      _GRANT_ISSUED_AT,
+      _GRANT_ID,
+      _PROVIDER_PEER_ID,
+      _PROVIDER_ACKNOWLEDGED_AT,
+      _PREFERRED_DELIVERY_METHOD,
+      _WEBHOOK_URL,
+      _PROVIDER_SIGNATURE);
 }
 
 inline const PUR *GetPUR(const void *buf) {

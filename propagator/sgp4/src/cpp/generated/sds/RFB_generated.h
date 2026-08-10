@@ -13,6 +13,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+#include "LKS_generated.h"
+
 struct RFB;
 struct RFBBuilder;
 struct RFBT;
@@ -125,6 +127,43 @@ inline const char *EnumNamerfPolarization(rfPolarization e) {
   return EnumNamesrfPolarization()[index];
 }
 
+/// Operational state of a single emitter.
+enum class rfTransmitterState : int8_t {
+  UNKNOWN = 0,
+  ACTIVE = 1,
+  INACTIVE = 2,
+  INVALID = 3,
+  MIN = UNKNOWN,
+  MAX = INVALID
+};
+
+inline const rfTransmitterState (&EnumValuesrfTransmitterState())[4] {
+  static const rfTransmitterState values[] = {
+    rfTransmitterState::UNKNOWN,
+    rfTransmitterState::ACTIVE,
+    rfTransmitterState::INACTIVE,
+    rfTransmitterState::INVALID
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesrfTransmitterState() {
+  static const char * const names[5] = {
+    "UNKNOWN",
+    "ACTIVE",
+    "INACTIVE",
+    "INVALID",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamerfTransmitterState(rfTransmitterState e) {
+  if (::flatbuffers::IsOutRange(e, rfTransmitterState::UNKNOWN, rfTransmitterState::INVALID)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesrfTransmitterState()[index];
+}
+
 struct RFBT : public ::flatbuffers::NativeTable {
   typedef RFB TableType;
   std::string ID{};
@@ -143,9 +182,29 @@ struct RFBT : public ::flatbuffers::NativeTable {
   rfPolarization POLARIZATION = rfPolarization::LHCP;
   double ERP = 0.0;
   double EIRP = 0.0;
+  uint32_t NORAD_CAT_ID = 0;
+  std::string ID_TRANSMITTER{};
+  linkCategory LINK_DIRECTION = linkCategory::UPLINK;
+  double BAUD = 0.0;
+  std::string SERVICE{};
+  rfTransmitterState XMT_STATUS = rfTransmitterState::UNKNOWN;
+  bool INVERT = false;
+  std::string IARU_COORDINATION{};
+  std::string CITATION{};
 };
 
 /// RF Band Specification
+///
+/// UNITS ARE NORMATIVE. Every frequency field in this table is MHz. Sources
+/// that publish Hz (SatNOGS DB) MUST divide by 1e6 before encoding; sources
+/// that publish kHz MUST divide by 1e3. BAUD is baud (symbols per second),
+/// never kilobaud. Encoding a Hz value into a MHz field is a defect, not a
+/// convention.
+///
+/// One RFB record carries exactly one LINK_DIRECTION. A transceiver or
+/// transponder is therefore represented as TWO RFB records — one UPLINK and
+/// one DOWNLINK — sharing ID_TRANSMITTER, each carrying its own MODE,
+/// FREQ_MIN, FREQ_MAX and CENTER_FREQ.
 struct RFB FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef RFBT NativeTableType;
   typedef RFBBuilder Builder;
@@ -166,7 +225,16 @@ struct RFB FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_BEAMWIDTH = 28,
     VT_POLARIZATION = 30,
     VT_ERP = 32,
-    VT_EIRP = 34
+    VT_EIRP = 34,
+    VT_NORAD_CAT_ID = 36,
+    VT_ID_TRANSMITTER = 38,
+    VT_LINK_DIRECTION = 40,
+    VT_BAUD = 42,
+    VT_SERVICE = 44,
+    VT_XMT_STATUS = 46,
+    VT_INVERT = 48,
+    VT_IARU_COORDINATION = 50,
+    VT_CITATION = 52
   };
   /// Unique identifier
   const ::flatbuffers::String *ID() const {
@@ -232,6 +300,46 @@ struct RFB FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double EIRP() const {
     return GetField<double>(VT_EIRP, 0.0);
   }
+  /// NORAD catalog number of the spacecraft carrying this emitter. Joins to
+  /// CAT.NORAD_CAT_ID. 0 when unbound.
+  uint32_t NORAD_CAT_ID() const {
+    return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
+  }
+  /// Identifier of the physical transmitter, transceiver or transponder this
+  /// record describes (e.g. a SatNOGS transmitter UUID). Uplink and downlink
+  /// records of the same device share this value.
+  const ::flatbuffers::String *ID_TRANSMITTER() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ID_TRANSMITTER);
+  }
+  /// Direction of this emission relative to the spacecraft.
+  linkCategory LINK_DIRECTION() const {
+    return static_cast<linkCategory>(GetField<int8_t>(VT_LINK_DIRECTION, 0));
+  }
+  /// Symbol rate in baud (symbols per second), NOT kilobaud.
+  double BAUD() const {
+    return GetField<double>(VT_BAUD, 0.0);
+  }
+  /// Regulatory/ITU service designation (e.g. Amateur, Earth Exploration).
+  const ::flatbuffers::String *SERVICE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SERVICE);
+  }
+  /// Operational state of this emitter.
+  rfTransmitterState XMT_STATUS() const {
+    return static_cast<rfTransmitterState>(GetField<int8_t>(VT_XMT_STATUS, 0));
+  }
+  /// True when the modulation sideband is inverted.
+  bool INVERT() const {
+    return GetField<uint8_t>(VT_INVERT, 0) != 0;
+  }
+  /// IARU frequency-coordination state (e.g. IARU Coordinated, Uncoordinated).
+  const ::flatbuffers::String *IARU_COORDINATION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_IARU_COORDINATION);
+  }
+  /// Attribution/citation string the source license requires this record to
+  /// carry downstream.
+  const ::flatbuffers::String *CITATION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CITATION);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -256,6 +364,19 @@ struct RFB FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<int8_t>(verifier, VT_POLARIZATION, 1) &&
            VerifyField<double>(verifier, VT_ERP, 8) &&
            VerifyField<double>(verifier, VT_EIRP, 8) &&
+           VerifyField<uint32_t>(verifier, VT_NORAD_CAT_ID, 4) &&
+           VerifyOffset(verifier, VT_ID_TRANSMITTER) &&
+           verifier.VerifyString(ID_TRANSMITTER()) &&
+           VerifyField<int8_t>(verifier, VT_LINK_DIRECTION, 1) &&
+           VerifyField<double>(verifier, VT_BAUD, 8) &&
+           VerifyOffset(verifier, VT_SERVICE) &&
+           verifier.VerifyString(SERVICE()) &&
+           VerifyField<int8_t>(verifier, VT_XMT_STATUS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_INVERT, 1) &&
+           VerifyOffset(verifier, VT_IARU_COORDINATION) &&
+           verifier.VerifyString(IARU_COORDINATION()) &&
+           VerifyOffset(verifier, VT_CITATION) &&
+           verifier.VerifyString(CITATION()) &&
            verifier.EndTable();
   }
   RFBT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -315,6 +436,33 @@ struct RFBBuilder {
   void add_EIRP(double EIRP) {
     fbb_.AddElement<double>(RFB::VT_EIRP, EIRP, 0.0);
   }
+  void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
+    fbb_.AddElement<uint32_t>(RFB::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
+  }
+  void add_ID_TRANSMITTER(::flatbuffers::Offset<::flatbuffers::String> ID_TRANSMITTER) {
+    fbb_.AddOffset(RFB::VT_ID_TRANSMITTER, ID_TRANSMITTER);
+  }
+  void add_LINK_DIRECTION(linkCategory LINK_DIRECTION) {
+    fbb_.AddElement<int8_t>(RFB::VT_LINK_DIRECTION, static_cast<int8_t>(LINK_DIRECTION), 0);
+  }
+  void add_BAUD(double BAUD) {
+    fbb_.AddElement<double>(RFB::VT_BAUD, BAUD, 0.0);
+  }
+  void add_SERVICE(::flatbuffers::Offset<::flatbuffers::String> SERVICE) {
+    fbb_.AddOffset(RFB::VT_SERVICE, SERVICE);
+  }
+  void add_XMT_STATUS(rfTransmitterState XMT_STATUS) {
+    fbb_.AddElement<int8_t>(RFB::VT_XMT_STATUS, static_cast<int8_t>(XMT_STATUS), 0);
+  }
+  void add_INVERT(bool INVERT) {
+    fbb_.AddElement<uint8_t>(RFB::VT_INVERT, static_cast<uint8_t>(INVERT), 0);
+  }
+  void add_IARU_COORDINATION(::flatbuffers::Offset<::flatbuffers::String> IARU_COORDINATION) {
+    fbb_.AddOffset(RFB::VT_IARU_COORDINATION, IARU_COORDINATION);
+  }
+  void add_CITATION(::flatbuffers::Offset<::flatbuffers::String> CITATION) {
+    fbb_.AddOffset(RFB::VT_CITATION, CITATION);
+  }
   explicit RFBBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -343,8 +491,18 @@ inline ::flatbuffers::Offset<RFB> CreateRFB(
     double BEAMWIDTH = 0.0,
     rfPolarization POLARIZATION = rfPolarization::LHCP,
     double ERP = 0.0,
-    double EIRP = 0.0) {
+    double EIRP = 0.0,
+    uint32_t NORAD_CAT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ID_TRANSMITTER = 0,
+    linkCategory LINK_DIRECTION = linkCategory::UPLINK,
+    double BAUD = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> SERVICE = 0,
+    rfTransmitterState XMT_STATUS = rfTransmitterState::UNKNOWN,
+    bool INVERT = false,
+    ::flatbuffers::Offset<::flatbuffers::String> IARU_COORDINATION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CITATION = 0) {
   RFBBuilder builder_(_fbb);
+  builder_.add_BAUD(BAUD);
   builder_.add_EIRP(EIRP);
   builder_.add_ERP(ERP);
   builder_.add_BEAMWIDTH(BEAMWIDTH);
@@ -354,11 +512,19 @@ inline ::flatbuffers::Offset<RFB> CreateRFB(
   builder_.add_CENTER_FREQ(CENTER_FREQ);
   builder_.add_FREQ_MAX(FREQ_MAX);
   builder_.add_FREQ_MIN(FREQ_MIN);
+  builder_.add_CITATION(CITATION);
+  builder_.add_IARU_COORDINATION(IARU_COORDINATION);
+  builder_.add_SERVICE(SERVICE);
+  builder_.add_ID_TRANSMITTER(ID_TRANSMITTER);
+  builder_.add_NORAD_CAT_ID(NORAD_CAT_ID);
   builder_.add_PURPOSE(PURPOSE);
   builder_.add_MODE(MODE);
   builder_.add_NAME(NAME);
   builder_.add_ID_ENTITY(ID_ENTITY);
   builder_.add_ID(ID);
+  builder_.add_INVERT(INVERT);
+  builder_.add_XMT_STATUS(XMT_STATUS);
+  builder_.add_LINK_DIRECTION(LINK_DIRECTION);
   builder_.add_POLARIZATION(POLARIZATION);
   builder_.add_BAND(BAND);
   return builder_.Finish();
@@ -386,12 +552,25 @@ inline ::flatbuffers::Offset<RFB> CreateRFBDirect(
     double BEAMWIDTH = 0.0,
     rfPolarization POLARIZATION = rfPolarization::LHCP,
     double ERP = 0.0,
-    double EIRP = 0.0) {
+    double EIRP = 0.0,
+    uint32_t NORAD_CAT_ID = 0,
+    const char *ID_TRANSMITTER = nullptr,
+    linkCategory LINK_DIRECTION = linkCategory::UPLINK,
+    double BAUD = 0.0,
+    const char *SERVICE = nullptr,
+    rfTransmitterState XMT_STATUS = rfTransmitterState::UNKNOWN,
+    bool INVERT = false,
+    const char *IARU_COORDINATION = nullptr,
+    const char *CITATION = nullptr) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto ID_ENTITY__ = ID_ENTITY ? _fbb.CreateString(ID_ENTITY) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto MODE__ = MODE ? _fbb.CreateString(MODE) : 0;
   auto PURPOSE__ = PURPOSE ? _fbb.CreateString(PURPOSE) : 0;
+  auto ID_TRANSMITTER__ = ID_TRANSMITTER ? _fbb.CreateString(ID_TRANSMITTER) : 0;
+  auto SERVICE__ = SERVICE ? _fbb.CreateString(SERVICE) : 0;
+  auto IARU_COORDINATION__ = IARU_COORDINATION ? _fbb.CreateString(IARU_COORDINATION) : 0;
+  auto CITATION__ = CITATION ? _fbb.CreateString(CITATION) : 0;
   return CreateRFB(
       _fbb,
       ID__,
@@ -409,7 +588,16 @@ inline ::flatbuffers::Offset<RFB> CreateRFBDirect(
       BEAMWIDTH,
       POLARIZATION,
       ERP,
-      EIRP);
+      EIRP,
+      NORAD_CAT_ID,
+      ID_TRANSMITTER__,
+      LINK_DIRECTION,
+      BAUD,
+      SERVICE__,
+      XMT_STATUS,
+      INVERT,
+      IARU_COORDINATION__,
+      CITATION__);
 }
 
 ::flatbuffers::Offset<RFB> CreateRFB(::flatbuffers::FlatBufferBuilder &_fbb, const RFBT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -439,6 +627,15 @@ inline void RFB::UnPackTo(RFBT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = POLARIZATION(); _o->POLARIZATION = _e; }
   { auto _e = ERP(); _o->ERP = _e; }
   { auto _e = EIRP(); _o->EIRP = _e; }
+  { auto _e = NORAD_CAT_ID(); _o->NORAD_CAT_ID = _e; }
+  { auto _e = ID_TRANSMITTER(); if (_e) _o->ID_TRANSMITTER = _e->str(); }
+  { auto _e = LINK_DIRECTION(); _o->LINK_DIRECTION = _e; }
+  { auto _e = BAUD(); _o->BAUD = _e; }
+  { auto _e = SERVICE(); if (_e) _o->SERVICE = _e->str(); }
+  { auto _e = XMT_STATUS(); _o->XMT_STATUS = _e; }
+  { auto _e = INVERT(); _o->INVERT = _e; }
+  { auto _e = IARU_COORDINATION(); if (_e) _o->IARU_COORDINATION = _e->str(); }
+  { auto _e = CITATION(); if (_e) _o->CITATION = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<RFB> CreateRFB(::flatbuffers::FlatBufferBuilder &_fbb, const RFBT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -465,6 +662,15 @@ inline ::flatbuffers::Offset<RFB> RFB::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _POLARIZATION = _o->POLARIZATION;
   auto _ERP = _o->ERP;
   auto _EIRP = _o->EIRP;
+  auto _NORAD_CAT_ID = _o->NORAD_CAT_ID;
+  auto _ID_TRANSMITTER = _o->ID_TRANSMITTER.empty() ? 0 : _fbb.CreateString(_o->ID_TRANSMITTER);
+  auto _LINK_DIRECTION = _o->LINK_DIRECTION;
+  auto _BAUD = _o->BAUD;
+  auto _SERVICE = _o->SERVICE.empty() ? 0 : _fbb.CreateString(_o->SERVICE);
+  auto _XMT_STATUS = _o->XMT_STATUS;
+  auto _INVERT = _o->INVERT;
+  auto _IARU_COORDINATION = _o->IARU_COORDINATION.empty() ? 0 : _fbb.CreateString(_o->IARU_COORDINATION);
+  auto _CITATION = _o->CITATION.empty() ? 0 : _fbb.CreateString(_o->CITATION);
   return CreateRFB(
       _fbb,
       _ID,
@@ -482,7 +688,16 @@ inline ::flatbuffers::Offset<RFB> RFB::Pack(::flatbuffers::FlatBufferBuilder &_f
       _BEAMWIDTH,
       _POLARIZATION,
       _ERP,
-      _EIRP);
+      _EIRP,
+      _NORAD_CAT_ID,
+      _ID_TRANSMITTER,
+      _LINK_DIRECTION,
+      _BAUD,
+      _SERVICE,
+      _XMT_STATUS,
+      _INVERT,
+      _IARU_COORDINATION,
+      _CITATION);
 }
 
 inline const RFB *GetRFB(const void *buf) {

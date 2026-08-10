@@ -57,25 +57,17 @@
 #include <limits>
 
 // =============================================================================
-// Binary OMM Record — written directly into linear memory by JavaScript.
-// Matches SpaceDataStandards OMM schema fields needed for SGP4 initialization.
-// All angular values are in DEGREES, mean motion in REV/DAY.
-// JS parses OMM JSON and packs these structs into WASM heap.
+// `OrbProOMMRecord` comes from the GENERATED ABI header, which
+// `orbpro_propagator.h` includes: one source of truth
+// (space-data-module-sdk `schemas/orbpro/Propagator.fbs`), one set of size and
+// offset locks, no hand-written mirror.
+//
+// A duplicate definition lived here until 2026-08-10. Harness W1.2 (`87cb4b1`)
+// removed the copy from the HEADER and left this one, so from that commit
+// onward the module DID NOT COMPILE — the shipped artifact predates it and
+// nobody rebuilt sgp4 to find out. Deleting it is the rest of that commit.
+// The generated struct names the trailing padding `_reserved[4]`, not `_pad`.
 // =============================================================================
-struct OrbProOMMRecord {
-    double epoch_jd;          //  0: Epoch as Julian Date (JS converts ISO 8601 → JD)
-    double mean_motion;       //  8: Mean motion (rev/day)
-    double eccentricity;      // 16: Eccentricity (unitless)
-    double inclination;       // 24: Inclination (degrees)
-    double ra_of_asc_node;    // 32: RA of ascending node (degrees)
-    double arg_of_pericenter; // 40: Argument of pericenter (degrees)
-    double mean_anomaly;      // 48: Mean anomaly (degrees)
-    double bstar;             // 56: B* drag term (1/earth radii)
-    double mean_motion_dot;   // 64: First deriv of mean motion (rev/day²)
-    double mean_motion_ddot;  // 72: Second deriv of mean motion (rev/day³)
-    uint32_t norad_cat_id;    // 80: NORAD catalog ID
-    uint32_t _pad;            // 84: Padding for 8-byte alignment
-};                            // Total: 88 bytes
 
 static constexpr size_t ORBPRO_NAME_BUFFER_BYTES = 96;
 
@@ -1250,7 +1242,7 @@ bool parseOmmFlatBufferTable(
     if (!readFlatBufferF64Field(payload, payloadLen, tablePos, vtablePos, vtableLen, OMM_FB_MEAN_MOTION_DOT_VT_OFFSET, 0.0, out.mean_motion_dot)) return false;
     if (!readFlatBufferF64Field(payload, payloadLen, tablePos, vtablePos, vtableLen, OMM_FB_MEAN_MOTION_DDOT_VT_OFFSET, 0.0, out.mean_motion_ddot)) return false;
     if (!readFlatBufferU32Field(payload, payloadLen, tablePos, vtablePos, vtableLen, OMM_FB_NORAD_CAT_ID_VT_OFFSET, 0, out.norad_cat_id)) return false;
-    out._pad = 0;
+    std::memset(out._reserved, 0, sizeof(out._reserved));
 
     return true;
 }
@@ -4458,6 +4450,340 @@ double plugin_entity_get_omm_pointer(uint32_t entity_index) {
     return entity.currentOmmPointer > 0
         ? static_cast<double>(entity.currentOmmPointer)
         : -1.0;
+}
+
+// =============================================================================
+// IMPULSIVE BURNS
+//
+// Owner law 2026-08-10: "There is no JS physics at all." A maneuver's delta-v
+// is stated in RIC, and rotating RIC into an inertial frame is orbit
+// mechanics — so it happens HERE, against the module's own TEME state, and
+// never in the engine's JavaScript.
+//
+// The triad is the same one HPOP applies (`hpop_plugin.cpp:322`,
+// `lvlhDeltaVToECI`) and the same one `ManeuverFrame.RIC` declares:
+//
+//     R = r_hat            radial, along the position vector
+//     C = (r x v)_hat      cross-track, along the angular momentum
+//     I = C x R            in-track, completing the right-handed set
+//
+// and it is built from the INERTIAL state, never the Earth-fixed one. The two
+// differ by degrees in LEO and by the entire in-track axis at GEO, which is
+// exactly the class of error that produced defect D1.
+// =============================================================================
+
+/// Structured error classes for the burn surface. Negative, distinct, and
+/// stable: "it returned -1" is not a diagnosis, and a harness cannot test a
+/// refusal it cannot name (graph/findings/official-harness-shapes.md §5).
+enum : int32_t {
+    BURN_ERROR_INVALID_ENTITY            = -1,
+    BURN_ERROR_INVALID_ARGUMENT          = -2,
+    BURN_ERROR_PROPAGATION_FAILED        = -3,
+    BURN_ERROR_TARGET_PROPAGATION_FAILED = -4,
+    BURN_ERROR_ELEMENT_RECOVERY_FAILED   = -5,
+    BURN_ERROR_UNSUPPORTED_BURN_RECORD   = -6,
+};
+
+/// Field count of the impulsive burn record — the layout `plugin_set_burns`
+/// has taken since HPOP shipped. The record is versioned BY LENGTH so it can
+/// grow (a finite-burn model would append duration) without an ABI break.
+static constexpr uint32_t ORBPRO_BURN_FIELDS_IMPULSIVE = 5;
+
+/// Build the RIC (RTN/RSW/LVLH/Hill) triad from an inertial state.
+/// Bit-for-bit the same construction as HPOP's, deliberately: two propagators
+/// disagreeing about which way "in-track" points is not a difference anybody
+/// would ever see in a number, only in a trajectory.
+static void ricTriadFromInertialState(const double r[3], const double v[3],
+                                      double R[3], double I[3], double C[3]) {
+    const double rMag = std::sqrt(r[0]*r[0] + r[1]*r[1] + r[2]*r[2]);
+    R[0] = r[0]/rMag; R[1] = r[1]/rMag; R[2] = r[2]/rMag;
+
+    const double h[3] = { r[1]*v[2] - r[2]*v[1],
+                          r[2]*v[0] - r[0]*v[2],
+                          r[0]*v[1] - r[1]*v[0] };
+    const double hMag = std::sqrt(h[0]*h[0] + h[1]*h[1] + h[2]*h[2]);
+    C[0] = h[0]/hMag; C[1] = h[1]/hMag; C[2] = h[2]/hMag;
+
+    I[0] = C[1]*R[2] - C[2]*R[1];
+    I[1] = C[2]*R[0] - C[0]*R[2];
+    I[2] = C[0]*R[1] - C[1]*R[0];
+}
+
+static inline double wrapDegrees360(double degrees) {
+    double wrapped = std::fmod(degrees, 360.0);
+    if (wrapped < 0.0) wrapped += 360.0;
+    return wrapped;
+}
+
+/// Seed an OMM from a TEME state by osculating-element conversion.
+/// This is a SEED, not the answer: SGP4's elements are the ones whose SGP4
+/// propagation reproduces a state, not the Keplerian elements read off it.
+/// `deriveMeanElementsFromState` below corrects it.
+static bool seedOmmFromTemeState(const double r[3], const double v[3],
+                                 double epochJD, uint32_t noradCatId,
+                                 double bstar, OrbProOMMRecord& out) {
+    double rr[3] = { r[0], r[1], r[2] };
+    double vv[3] = { v[0], v[1], v[2] };
+    const double mus = g_satellites.empty() ? 398600.8 : g_satellites[0].satrec.mus;
+
+    double p, a, ecc, incl, omega, argp, nu, m, arglat, truelon, lonper;
+    SGP4Funcs::rv2coe_SGP4(rr, vv, mus, p, a, ecc, incl, omega, argp,
+                           nu, m, arglat, truelon, lonper);
+
+    if (!std::isfinite(a) || a <= 0.0 || !std::isfinite(ecc) ||
+        ecc < 0.0 || ecc >= 1.0 || !std::isfinite(m)) {
+        return false;
+    }
+
+    std::memset(&out, 0, sizeof(out));
+    out.epoch_jd          = epochJD;
+    out.mean_motion       = std::sqrt(mus / (a*a*a)) * 86400.0 / TWOPI; // rev/day
+    out.eccentricity      = ecc;
+    out.inclination       = wrapDegrees360(incl  / DEG_TO_RAD);
+    out.ra_of_asc_node    = wrapDegrees360(omega / DEG_TO_RAD);
+    out.arg_of_pericenter = wrapDegrees360(argp  / DEG_TO_RAD);
+    out.mean_anomaly      = wrapDegrees360(m     / DEG_TO_RAD);
+    out.bstar             = bstar;
+    out.mean_motion_dot   = 0.0;
+    out.mean_motion_ddot  = 0.0;
+    out.norad_cat_id      = noradCatId;
+    return true;
+}
+
+/// Recover the MEAN element set whose SGP4 propagation reproduces a target
+/// TEME state at a given epoch.
+///
+/// The correction is a fixed point on the STATE, not on the elements. Whatever
+/// the element set means to SGP4 — Kozai mean motion, Brouwer short-period
+/// terms, the WGS-72 gravity model baked into `sgp4init` — the seed state is
+/// shifted by the error SGP4's own propagation made, and the elements are
+/// re-derived from the corrected seed. It converges because the map from seed
+/// state to achieved state is close to the identity.
+///
+/// A `converged` flag is not the evidence and is not returned as one: the
+/// achieved residual is written back so the caller can adjudicate by
+/// propagation, per graph/findings/official-harness-shapes.md §5.
+static bool deriveMeanElementsFromState(const double targetR[3],
+                                        const double targetV[3],
+                                        double epochJD, uint32_t noradCatId,
+                                        double bstar,
+                                        OrbProOMMRecord& out,
+                                        double* outPositionResidualKm,
+                                        double* outVelocityResidualKmS) {
+    constexpr int    MAX_ITERATIONS       = 12;
+    constexpr double POSITION_TOLERANCE_KM = 1.0e-6;   // 1 mm
+    constexpr double VELOCITY_TOLERANCE_KMS = 1.0e-9;  // 1 um/s
+
+    double seedR[3] = { targetR[0], targetR[1], targetR[2] };
+    double seedV[3] = { targetV[0], targetV[1], targetV[2] };
+
+    OrbProOMMRecord best;
+    double bestPositionResidual = std::numeric_limits<double>::infinity();
+    double bestVelocityResidual = std::numeric_limits<double>::infinity();
+    bool haveBest = false;
+
+    for (int iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        OrbProOMMRecord candidate;
+        if (!seedOmmFromTemeState(seedR, seedV, epochJD, noradCatId, bstar, candidate)) {
+            break;
+        }
+
+        elsetrec satrec;
+        if (!initSatrecFromOMM(candidate, satrec)) {
+            break;
+        }
+
+        // tsince is measured from the satrec's own epoch, which
+        // initSatrecFromOMM rounds through invjday/jday. Use that epoch rather
+        // than assuming it is exactly epochJD, or the residual absorbs a
+        // sub-second epoch shift and the correction chases it forever.
+        const double satrecEpoch = satrec.jdsatepoch + satrec.jdsatepochF;
+        double achievedR[3], achievedV[3];
+        if (!SGP4Funcs::sgp4(satrec, (epochJD - satrecEpoch) * 1440.0,
+                             achievedR, achievedV) || satrec.error != 0) {
+            break;
+        }
+
+        const double dR[3] = { targetR[0] - achievedR[0],
+                               targetR[1] - achievedR[1],
+                               targetR[2] - achievedR[2] };
+        const double dV[3] = { targetV[0] - achievedV[0],
+                               targetV[1] - achievedV[1],
+                               targetV[2] - achievedV[2] };
+        const double positionResidual =
+            std::sqrt(dR[0]*dR[0] + dR[1]*dR[1] + dR[2]*dR[2]);
+        const double velocityResidual =
+            std::sqrt(dV[0]*dV[0] + dV[1]*dV[1] + dV[2]*dV[2]);
+
+        if (!haveBest || positionResidual < bestPositionResidual) {
+            best = candidate;
+            bestPositionResidual = positionResidual;
+            bestVelocityResidual = velocityResidual;
+            haveBest = true;
+        } else {
+            // The step did not help. Stop rather than wander: a diverging
+            // correction is a defect, and hiding it behind more iterations
+            // makes it unreadable.
+            break;
+        }
+
+        if (positionResidual <= POSITION_TOLERANCE_KM &&
+            velocityResidual <= VELOCITY_TOLERANCE_KMS) {
+            break;
+        }
+
+        for (int axis = 0; axis < 3; axis++) {
+            seedR[axis] += dR[axis];
+            seedV[axis] += dV[axis];
+        }
+    }
+
+    if (!haveBest) return false;
+    out = best;
+    if (outPositionResidualKm)  *outPositionResidualKm  = bestPositionResidual;
+    if (outVelocityResidualKmS) *outVelocityResidualKmS = bestVelocityResidual;
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// plugin_entity_apply_impulsive_burn — apply a delta-v to an entity INSIDE the
+// module and derive the post-burn mean element set.
+//
+// This is the SGP4 native burn surface. It reads the entity's own state, does
+// every piece of orbit mechanics here, and writes back two things: the
+// post-burn state and the OMM that reproduces it. It MUTATES NOTHING —
+// the entity table is untouched — so the same call is safe to make on every
+// keystroke of a delta-v the operator is still dialling. Composing it with
+// `ingest_omm` is what creates the post-burn entity, and that composition is
+// the caller's, not this function's.
+//
+// THE BURN RECORD IS THE ONE HPOP ALREADY SHIPS.
+// ---------------------------------------------------------------------------
+// `burn` points at a flat array of doubles laid out exactly as
+// `plugin_set_burns` has taken them since HPOP shipped
+// (`hpop_plugin.cpp:1846`, JS mirror `propagator.hpop/index.js` BURN_STRIDE):
+//
+//   [0] timeJD             burn epoch, UTC Julian date
+//   [1] targetEntityIdx    entity whose state defines the RIC triad;
+//                          NEGATIVE (or out of range) = the burning entity
+//   [2] dv_r               radial     delta-V, KILOMETRES PER SECOND, SIGNED
+//   [3] dv_t               in-track   delta-V, KILOMETRES PER SECOND, SIGNED
+//   [4] dv_n               cross-track delta-V, KILOMETRES PER SECOND, SIGNED
+//
+// Two propagators, ONE burn wire, ONE unit. Adopting HPOP's layout rather than
+// inventing a second one is the whole point: a burn record that means km/s in
+// one module and m/s in the next is the 1000x class of defect
+// graph/findings/official-harness-shapes.md §4.1 exists to stop.
+//
+// `field_count` VERSIONS THE RECORD BY LENGTH, which is how it grows without an
+// ABI break. 5 is the impulsive record above. A longer record is a later
+// revision — a finite-burn model would append duration and thrust at [5], [6]
+// — and this function accepts any count >= 5, reading only the fields it knows
+// and REFUSING to silently ignore ones it does not (a record it cannot fully
+// honour is a refusal, never a partial burn).
+//
+//   out_state     post-burn ECEF state, METRES and m/s          (may be null)
+//   out_omm       post-burn mean elements                       (may be null)
+//   out_residual  [position_m, velocity_m_s] of the element recovery,
+//                 measured by PROPAGATING what was produced     (may be null)
+//
+// Returns 0 on success, or a negative BURN_ERROR_* code.
+// -----------------------------------------------------------------------------
+ORBPRO_EXPORT
+int32_t plugin_entity_apply_impulsive_burn(
+    uint32_t entity_index,
+    const double* burn,
+    uint32_t field_count,
+    OrbProStateVector* out_state,
+    OrbProOMMRecord* out_omm,
+    double* out_residual
+) {
+    if (!g_initialized || entity_index >= g_satellites.size() || !burn) {
+        return BURN_ERROR_INVALID_ENTITY;
+    }
+    if (field_count < ORBPRO_BURN_FIELDS_IMPULSIVE) {
+        return BURN_ERROR_INVALID_ARGUMENT;
+    }
+    if (field_count > ORBPRO_BURN_FIELDS_IMPULSIVE) {
+        // A longer record carries fields this build does not implement. Flying
+        // it as if the extra fields were zero would turn, say, a 90-second
+        // finite burn into an impulse and report success.
+        return BURN_ERROR_UNSUPPORTED_BURN_RECORD;
+    }
+    for (uint32_t i = 0; i < field_count; i++) {
+        if (!std::isfinite(burn[i])) return BURN_ERROR_INVALID_ARGUMENT;
+    }
+
+    const double burnJD              = burn[0];
+    const int32_t targetEntityIndex  = static_cast<int32_t>(burn[1]);
+    const double dv_r                = burn[2];
+    const double dv_t                = burn[3];
+    const double dv_n                = burn[4];
+
+    SatelliteEntity& entity = g_satellites[entity_index];
+    double r[3], v[3];
+    if (!propagateEntityTEME(entity, burnJD, r, v)) {
+        return BURN_ERROR_PROPAGATION_FAILED;
+    }
+
+    // The triad's reference state. A rendezvous burn is written in the
+    // TARGET's frame; everything else in the burning object's own.
+    double refR[3] = { r[0], r[1], r[2] };
+    double refV[3] = { v[0], v[1], v[2] };
+    if (targetEntityIndex >= 0 &&
+        static_cast<uint32_t>(targetEntityIndex) < g_satellites.size() &&
+        static_cast<uint32_t>(targetEntityIndex) != entity_index) {
+        double tr[3], tv[3];
+        if (!propagateEntityTEME(g_satellites[targetEntityIndex], burnJD, tr, tv)) {
+            return BURN_ERROR_TARGET_PROPAGATION_FAILED;
+        }
+        refR[0] = tr[0]; refR[1] = tr[1]; refR[2] = tr[2];
+        refV[0] = tv[0]; refV[1] = tv[1]; refV[2] = tv[2];
+    }
+
+    double R[3], I[3], C[3];
+    ricTriadFromInertialState(refR, refV, R, I, C);
+
+    double postV[3];
+    for (int axis = 0; axis < 3; axis++) {
+        postV[axis] = v[axis] + dv_r*R[axis] + dv_t*I[axis] + dv_n*C[axis];
+    }
+
+    OrbProOMMRecord postBurn;
+    double positionResidualKm = 0.0;
+    double velocityResidualKmS = 0.0;
+    if (!deriveMeanElementsFromState(r, postV, burnJD, entity.noradId,
+                                     entity.satrec.bstar, postBurn,
+                                     &positionResidualKm, &velocityResidualKmS)) {
+        return BURN_ERROR_ELEMENT_RECOVERY_FAILED;
+    }
+
+    if (out_omm) {
+        *out_omm = postBurn;
+    }
+    if (out_state) {
+        // ECEF metres — the SAME frame and units `plugin_propagate` answers in
+        // (`writeStateVector`), through the SAME `temeToEcef`. A burn surface
+        // that answered in TEME while the propagate surface answered in ECEF
+        // would put the frame conversion back in JavaScript, one seam later.
+        double posEcef[3], velEcef[3];
+        temeToEcef(r, postV, SGP4Funcs::gstime_SGP4(burnJD), posEcef, velEcef);
+        orbpro_state_init(out_state);
+        out_state->epoch = burnJD;
+        out_state->position[0] = posEcef[0];
+        out_state->position[1] = posEcef[1];
+        out_state->position[2] = posEcef[2];
+        out_state->velocity[0] = velEcef[0];
+        out_state->velocity[1] = velEcef[1];
+        out_state->velocity[2] = velEcef[2];
+        orbpro_state_set_frame(out_state, ORBPRO_FRAME_ECEF);
+        out_state->flags = ORBPRO_STATE_VALID | ORBPRO_STATE_MANEUVERING;
+    }
+    if (out_residual) {
+        out_residual[0] = positionResidualKm * 1000.0;
+        out_residual[1] = velocityResidualKmS * 1000.0;
+    }
+    return 0;
 }
 
 }  // extern "C"

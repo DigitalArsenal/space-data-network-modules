@@ -55,6 +55,26 @@ struct EntryFunction;
 struct EntryFunctionBuilder;
 struct EntryFunctionT;
 
+struct PLGFlowNode;
+struct PLGFlowNodeBuilder;
+struct PLGFlowNodeT;
+
+struct PLGFlowEdgeContract;
+struct PLGFlowEdgeContractBuilder;
+struct PLGFlowEdgeContractT;
+
+struct PLGFlowEdge;
+struct PLGFlowEdgeBuilder;
+struct PLGFlowEdgeT;
+
+struct PLGFlowTrigger;
+struct PLGFlowTriggerBuilder;
+struct PLGFlowTriggerT;
+
+struct PLGFlowTriggerBinding;
+struct PLGFlowTriggerBindingBuilder;
+struct PLGFlowTriggerBindingT;
+
 struct PLG;
 struct PLGBuilder;
 struct PLGT;
@@ -79,11 +99,42 @@ enum class pluginCategory : int8_t {
   Physics = 7,
   /// GLSL shader plugins for custom visualization
   Shader = 8,
+  /// Parses raw upstream bytes into canonical SDS records
+  Parser = 9,
+  /// Validates records (integrity, physical bounds, continuity)
+  Validator = 10,
+  /// Interpolates ephemeris / state-vector records
+  Interpolator = 11,
+  /// Exports records to external formats (CSV, etc.)
+  Exporter = 12,
+  /// Foundational math / utility library module
+  Foundation = 13,
+  /// Node infrastructure (runtime, delivery, registry)
+  Infrastructure = 14,
+  /// Module-delivery licensing / key authority
+  Licensing = 15,
+  /// Storefront listing / discovery
+  Storefront = 16,
+  /// Publication: PNM signing + pub/sub announcement
+  Publisher = 17,
+  /// Basilisk astrodynamics simulation module
+  Basilisk = 18,
+  /// Maneuver planning, targeting and trajectory optimization
+  Maneuver = 19,
+  /// A composed flow published as a single loadable module. The unit is a
+  /// graph of other modules, not a leaf algorithm.
+  Flow = 20,
+  /// No family stated. Sits at the end of the enum rather than at 0 because
+  /// this enum is append-only and `Sensor` already holds 0; it exists so a
+  /// record can distinguish "the provider did not say" from "Sensor". A
+  /// consumer MUST render an `Unspecified` module as ungrouped, never as a
+  /// member of any family.
+  Unspecified = 21,
   MIN = Sensor,
-  MAX = Shader
+  MAX = Unspecified
 };
 
-inline const pluginCategory (&EnumValuespluginCategory())[9] {
+inline const pluginCategory (&EnumValuespluginCategory())[22] {
   static const pluginCategory values[] = {
     pluginCategory::Sensor,
     pluginCategory::Propagator,
@@ -93,13 +144,26 @@ inline const pluginCategory (&EnumValuespluginCategory())[9] {
     pluginCategory::EW,
     pluginCategory::Comms,
     pluginCategory::Physics,
-    pluginCategory::Shader
+    pluginCategory::Shader,
+    pluginCategory::Parser,
+    pluginCategory::Validator,
+    pluginCategory::Interpolator,
+    pluginCategory::Exporter,
+    pluginCategory::Foundation,
+    pluginCategory::Infrastructure,
+    pluginCategory::Licensing,
+    pluginCategory::Storefront,
+    pluginCategory::Publisher,
+    pluginCategory::Basilisk,
+    pluginCategory::Maneuver,
+    pluginCategory::Flow,
+    pluginCategory::Unspecified
   };
   return values;
 }
 
 inline const char * const *EnumNamespluginCategory() {
-  static const char * const names[10] = {
+  static const char * const names[23] = {
     "Sensor",
     "Propagator",
     "Renderer",
@@ -109,13 +173,26 @@ inline const char * const *EnumNamespluginCategory() {
     "Comms",
     "Physics",
     "Shader",
+    "Parser",
+    "Validator",
+    "Interpolator",
+    "Exporter",
+    "Foundation",
+    "Infrastructure",
+    "Licensing",
+    "Storefront",
+    "Publisher",
+    "Basilisk",
+    "Maneuver",
+    "Flow",
+    "Unspecified",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamepluginCategory(pluginCategory e) {
-  if (::flatbuffers::IsOutRange(e, pluginCategory::Sensor, pluginCategory::Shader)) return "";
+  if (::flatbuffers::IsOutRange(e, pluginCategory::Sensor, pluginCategory::Unspecified)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamespluginCategory()[index];
 }
@@ -307,11 +384,16 @@ enum class hostCapabilityKind : uint16_t {
   CRYPTO_KEY_AGREEMENT = 33,
   CRYPTO_KDF = 34,
   SCHEDULE_CRON = 35,
+  /// Batch record ingest with source provenance tags (provider id, source
+  /// name/url, batch id) — distinct from STORAGE_WRITE, which stores a
+  /// single record without source attribution. Hosts gate
+  /// storage.ingest_with_source on this capability specifically.
+  STORAGE_INGEST = 36,
   MIN = CLOCK,
-  MAX = SCHEDULE_CRON
+  MAX = STORAGE_INGEST
 };
 
-inline const hostCapabilityKind (&EnumValueshostCapabilityKind())[36] {
+inline const hostCapabilityKind (&EnumValueshostCapabilityKind())[37] {
   static const hostCapabilityKind values[] = {
     hostCapabilityKind::CLOCK,
     hostCapabilityKind::RANDOM,
@@ -348,13 +430,14 @@ inline const hostCapabilityKind (&EnumValueshostCapabilityKind())[36] {
     hostCapabilityKind::CRYPTO_DECRYPT,
     hostCapabilityKind::CRYPTO_KEY_AGREEMENT,
     hostCapabilityKind::CRYPTO_KDF,
-    hostCapabilityKind::SCHEDULE_CRON
+    hostCapabilityKind::SCHEDULE_CRON,
+    hostCapabilityKind::STORAGE_INGEST
   };
   return values;
 }
 
 inline const char * const *EnumNameshostCapabilityKind() {
-  static const char * const names[37] = {
+  static const char * const names[38] = {
     "CLOCK",
     "RANDOM",
     "LOGGING",
@@ -391,15 +474,49 @@ inline const char * const *EnumNameshostCapabilityKind() {
     "CRYPTO_KEY_AGREEMENT",
     "CRYPTO_KDF",
     "SCHEDULE_CRON",
+    "STORAGE_INGEST",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamehostCapabilityKind(hostCapabilityKind e) {
-  if (::flatbuffers::IsOutRange(e, hostCapabilityKind::CLOCK, hostCapabilityKind::SCHEDULE_CRON)) return "";
+  if (::flatbuffers::IsOutRange(e, hostCapabilityKind::CLOCK, hostCapabilityKind::STORAGE_INGEST)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNameshostCapabilityKind()[index];
+}
+
+/// Compile-time routing decision for an edge. The aligned option is legal only
+/// when the producer and consumer share the declared arena and the runtime can
+/// prove bounds, alignment, ownership, mutability, and lifetime.
+enum class flowEdgeRoutePolicy : uint8_t {
+  CANONICAL_ONLY = 0,
+  ALIGNED_SHARED_ARENA_OR_CANONICAL = 1,
+  MIN = CANONICAL_ONLY,
+  MAX = ALIGNED_SHARED_ARENA_OR_CANONICAL
+};
+
+inline const flowEdgeRoutePolicy (&EnumValuesflowEdgeRoutePolicy())[2] {
+  static const flowEdgeRoutePolicy values[] = {
+    flowEdgeRoutePolicy::CANONICAL_ONLY,
+    flowEdgeRoutePolicy::ALIGNED_SHARED_ARENA_OR_CANONICAL
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesflowEdgeRoutePolicy() {
+  static const char * const names[3] = {
+    "CANONICAL_ONLY",
+    "ALIGNED_SHARED_ARENA_OR_CANONICAL",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameflowEdgeRoutePolicy(flowEdgeRoutePolicy e) {
+  if (::flatbuffers::IsOutRange(e, flowEdgeRoutePolicy::CANONICAL_ONLY, flowEdgeRoutePolicy::ALIGNED_SHARED_ARENA_OR_CANONICAL)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesflowEdgeRoutePolicy()[index];
 }
 
 struct PluginCapabilityT : public ::flatbuffers::NativeTable {
@@ -1821,6 +1938,730 @@ inline ::flatbuffers::Offset<EntryFunction> CreateEntryFunctionDirect(
 
 ::flatbuffers::Offset<EntryFunction> CreateEntryFunction(::flatbuffers::FlatBufferBuilder &_fbb, const EntryFunctionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct PLGFlowNodeT : public ::flatbuffers::NativeTable {
+  typedef PLGFlowNode TableType;
+  std::string NODE_ID{};
+  std::string PLUGIN_ID{};
+  std::string METHOD_ID{};
+  std::string KIND{};
+  std::string DISPATCH_MODEL{};
+  std::vector<uint8_t> CONFIG{};
+  float UI_X = 0.0f;
+  float UI_Y = 0.0f;
+};
+
+/// One node in a composed flow graph. A degenerate flow IS a module: a leaf
+/// module leaves the flow-graph fields on PLG empty; a composed flow populates
+/// them. This is how flows reuse the module schema rather than a separate one.
+struct PLGFlowNode FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PLGFlowNodeT NativeTableType;
+  typedef PLGFlowNodeBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_NODE_ID = 4,
+    VT_PLUGIN_ID = 6,
+    VT_METHOD_ID = 8,
+    VT_KIND = 10,
+    VT_DISPATCH_MODEL = 12,
+    VT_CONFIG = 14,
+    VT_UI_X = 16,
+    VT_UI_Y = 18
+  };
+  /// Stable node identifier within this flow
+  const ::flatbuffers::String *NODE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NODE_ID);
+  }
+  /// Plugin id of the module this node invokes
+  const ::flatbuffers::String *PLUGIN_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PLUGIN_ID);
+  }
+  /// Method id invoked on the module
+  const ::flatbuffers::String *METHOD_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_METHOD_ID);
+  }
+  /// Node kind, e.g. "transform", "trigger", "capability"
+  const ::flatbuffers::String *KIND() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_KIND);
+  }
+  /// Dispatch model: empty = linked-direct (in-wasm), "isomorphic" = an
+  /// independently instantiated signed WASM node, and "host-capability" = a
+  /// generic host adapter.
+  const ::flatbuffers::String *DISPATCH_MODEL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DISPATCH_MODEL);
+  }
+  /// Opaque per-node configuration (FlatBuffer or raw bytes; never JSON)
+  const ::flatbuffers::Vector<uint8_t> *CONFIG() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_CONFIG);
+  }
+  /// Editor layout X position
+  float UI_X() const {
+    return GetField<float>(VT_UI_X, 0.0f);
+  }
+  /// Editor layout Y position
+  float UI_Y() const {
+    return GetField<float>(VT_UI_Y, 0.0f);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_NODE_ID) &&
+           verifier.VerifyString(NODE_ID()) &&
+           VerifyOffsetRequired(verifier, VT_PLUGIN_ID) &&
+           verifier.VerifyString(PLUGIN_ID()) &&
+           VerifyOffset(verifier, VT_METHOD_ID) &&
+           verifier.VerifyString(METHOD_ID()) &&
+           VerifyOffset(verifier, VT_KIND) &&
+           verifier.VerifyString(KIND()) &&
+           VerifyOffset(verifier, VT_DISPATCH_MODEL) &&
+           verifier.VerifyString(DISPATCH_MODEL()) &&
+           VerifyOffset(verifier, VT_CONFIG) &&
+           verifier.VerifyVector(CONFIG()) &&
+           VerifyField<float>(verifier, VT_UI_X, 4) &&
+           VerifyField<float>(verifier, VT_UI_Y, 4) &&
+           verifier.EndTable();
+  }
+  PLGFlowNodeT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PLGFlowNodeT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PLGFlowNode> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowNodeT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PLGFlowNodeBuilder {
+  typedef PLGFlowNode Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_NODE_ID(::flatbuffers::Offset<::flatbuffers::String> NODE_ID) {
+    fbb_.AddOffset(PLGFlowNode::VT_NODE_ID, NODE_ID);
+  }
+  void add_PLUGIN_ID(::flatbuffers::Offset<::flatbuffers::String> PLUGIN_ID) {
+    fbb_.AddOffset(PLGFlowNode::VT_PLUGIN_ID, PLUGIN_ID);
+  }
+  void add_METHOD_ID(::flatbuffers::Offset<::flatbuffers::String> METHOD_ID) {
+    fbb_.AddOffset(PLGFlowNode::VT_METHOD_ID, METHOD_ID);
+  }
+  void add_KIND(::flatbuffers::Offset<::flatbuffers::String> KIND) {
+    fbb_.AddOffset(PLGFlowNode::VT_KIND, KIND);
+  }
+  void add_DISPATCH_MODEL(::flatbuffers::Offset<::flatbuffers::String> DISPATCH_MODEL) {
+    fbb_.AddOffset(PLGFlowNode::VT_DISPATCH_MODEL, DISPATCH_MODEL);
+  }
+  void add_CONFIG(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CONFIG) {
+    fbb_.AddOffset(PLGFlowNode::VT_CONFIG, CONFIG);
+  }
+  void add_UI_X(float UI_X) {
+    fbb_.AddElement<float>(PLGFlowNode::VT_UI_X, UI_X, 0.0f);
+  }
+  void add_UI_Y(float UI_Y) {
+    fbb_.AddElement<float>(PLGFlowNode::VT_UI_Y, UI_Y, 0.0f);
+  }
+  explicit PLGFlowNodeBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PLGFlowNode> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PLGFlowNode>(end);
+    fbb_.Required(o, PLGFlowNode::VT_NODE_ID);
+    fbb_.Required(o, PLGFlowNode::VT_PLUGIN_ID);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PLGFlowNode> CreatePLGFlowNode(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> NODE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PLUGIN_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> METHOD_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> KIND = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DISPATCH_MODEL = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CONFIG = 0,
+    float UI_X = 0.0f,
+    float UI_Y = 0.0f) {
+  PLGFlowNodeBuilder builder_(_fbb);
+  builder_.add_UI_Y(UI_Y);
+  builder_.add_UI_X(UI_X);
+  builder_.add_CONFIG(CONFIG);
+  builder_.add_DISPATCH_MODEL(DISPATCH_MODEL);
+  builder_.add_KIND(KIND);
+  builder_.add_METHOD_ID(METHOD_ID);
+  builder_.add_PLUGIN_ID(PLUGIN_ID);
+  builder_.add_NODE_ID(NODE_ID);
+  return builder_.Finish();
+}
+
+struct PLGFlowNode::Traits {
+  using type = PLGFlowNode;
+  static auto constexpr Create = CreatePLGFlowNode;
+};
+
+inline ::flatbuffers::Offset<PLGFlowNode> CreatePLGFlowNodeDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *NODE_ID = nullptr,
+    const char *PLUGIN_ID = nullptr,
+    const char *METHOD_ID = nullptr,
+    const char *KIND = nullptr,
+    const char *DISPATCH_MODEL = nullptr,
+    const std::vector<uint8_t> *CONFIG = nullptr,
+    float UI_X = 0.0f,
+    float UI_Y = 0.0f) {
+  auto NODE_ID__ = NODE_ID ? _fbb.CreateString(NODE_ID) : 0;
+  auto PLUGIN_ID__ = PLUGIN_ID ? _fbb.CreateString(PLUGIN_ID) : 0;
+  auto METHOD_ID__ = METHOD_ID ? _fbb.CreateString(METHOD_ID) : 0;
+  auto KIND__ = KIND ? _fbb.CreateString(KIND) : 0;
+  auto DISPATCH_MODEL__ = DISPATCH_MODEL ? _fbb.CreateString(DISPATCH_MODEL) : 0;
+  auto CONFIG__ = CONFIG ? _fbb.CreateVector<uint8_t>(*CONFIG) : 0;
+  return CreatePLGFlowNode(
+      _fbb,
+      NODE_ID__,
+      PLUGIN_ID__,
+      METHOD_ID__,
+      KIND__,
+      DISPATCH_MODEL__,
+      CONFIG__,
+      UI_X,
+      UI_Y);
+}
+
+::flatbuffers::Offset<PLGFlowNode> CreatePLGFlowNode(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowNodeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PLGFlowEdgeContractT : public ::flatbuffers::NativeTable {
+  typedef PLGFlowEdgeContract TableType;
+  std::unique_ptr<FlatBufferTypeRefT> CANONICAL_TYPE{};
+  std::unique_ptr<FlatBufferTypeRefT> ALIGNED_TYPE{};
+  bool CANONICAL_FALLBACK_AVAILABLE = true;
+  bool ALIGNED_ELIGIBLE = false;
+  flowEdgeRoutePolicy ROUTE_POLICY = flowEdgeRoutePolicy::CANONICAL_ONLY;
+  bool OPAQUE = false;
+  PLGFlowEdgeContractT() = default;
+  PLGFlowEdgeContractT(const PLGFlowEdgeContractT &o);
+  PLGFlowEdgeContractT(PLGFlowEdgeContractT&&) FLATBUFFERS_NOEXCEPT = default;
+  PLGFlowEdgeContractT &operator=(PLGFlowEdgeContractT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Exact validated SDS and representation contract bound into a signed flow
+/// edge. CANONICAL_TYPE and ALIGNED_TYPE describe the same logical schema;
+/// ALIGNED_TYPE carries its fixed layout in TAB.FlatBufferTypeRef.
+struct PLGFlowEdgeContract FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PLGFlowEdgeContractT NativeTableType;
+  typedef PLGFlowEdgeContractBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_CANONICAL_TYPE = 4,
+    VT_ALIGNED_TYPE = 6,
+    VT_CANONICAL_FALLBACK_AVAILABLE = 8,
+    VT_ALIGNED_ELIGIBLE = 10,
+    VT_ROUTE_POLICY = 12,
+    VT_OPAQUE = 14
+  };
+  /// Canonical SDS identity carried by the edge. NOT `required`: an edge may
+  /// be opaque by design (see OPAQUE), and a signer must never be forced to
+  /// invent an identity to satisfy the schema. A contract MUST carry exactly
+  /// one of CANONICAL_TYPE or OPAQUE = true; a contract with neither, or with
+  /// both, is invalid and MUST be rejected by the compiler that signs the flow.
+  const FlatBufferTypeRef *CANONICAL_TYPE() const {
+    return GetPointer<const FlatBufferTypeRef *>(VT_CANONICAL_TYPE);
+  }
+  const FlatBufferTypeRef *ALIGNED_TYPE() const {
+    return GetPointer<const FlatBufferTypeRef *>(VT_ALIGNED_TYPE);
+  }
+  bool CANONICAL_FALLBACK_AVAILABLE() const {
+    return GetField<uint8_t>(VT_CANONICAL_FALLBACK_AVAILABLE, 1) != 0;
+  }
+  bool ALIGNED_ELIGIBLE() const {
+    return GetField<uint8_t>(VT_ALIGNED_ELIGIBLE, 0) != 0;
+  }
+  flowEdgeRoutePolicy ROUTE_POLICY() const {
+    return static_cast<flowEdgeRoutePolicy>(GetField<uint8_t>(VT_ROUTE_POLICY, 0));
+  }
+  /// The edge carries bytes with no SDS identity BY DESIGN — an
+  /// application-blind host-capability adapter (an HTTP body, a raw file
+  /// chunk) or a timer TICK frame with no payload at all. This is a deliberate
+  /// signed assertion of opacity, which is why it is an explicit flag rather
+  /// than an absent CANONICAL_TYPE: a missing type must stay distinguishable
+  /// from a declared-opaque one. An opaque edge is ineligible for the aligned
+  /// route, so ALIGNED_ELIGIBLE MUST be false when OPAQUE is true.
+  bool OPAQUE() const {
+    return GetField<uint8_t>(VT_OPAQUE, 0) != 0;
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_CANONICAL_TYPE) &&
+           verifier.VerifyTable(CANONICAL_TYPE()) &&
+           VerifyOffset(verifier, VT_ALIGNED_TYPE) &&
+           verifier.VerifyTable(ALIGNED_TYPE()) &&
+           VerifyField<uint8_t>(verifier, VT_CANONICAL_FALLBACK_AVAILABLE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ALIGNED_ELIGIBLE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ROUTE_POLICY, 1) &&
+           VerifyField<uint8_t>(verifier, VT_OPAQUE, 1) &&
+           verifier.EndTable();
+  }
+  PLGFlowEdgeContractT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PLGFlowEdgeContractT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PLGFlowEdgeContract> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeContractT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PLGFlowEdgeContractBuilder {
+  typedef PLGFlowEdgeContract Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_CANONICAL_TYPE(::flatbuffers::Offset<FlatBufferTypeRef> CANONICAL_TYPE) {
+    fbb_.AddOffset(PLGFlowEdgeContract::VT_CANONICAL_TYPE, CANONICAL_TYPE);
+  }
+  void add_ALIGNED_TYPE(::flatbuffers::Offset<FlatBufferTypeRef> ALIGNED_TYPE) {
+    fbb_.AddOffset(PLGFlowEdgeContract::VT_ALIGNED_TYPE, ALIGNED_TYPE);
+  }
+  void add_CANONICAL_FALLBACK_AVAILABLE(bool CANONICAL_FALLBACK_AVAILABLE) {
+    fbb_.AddElement<uint8_t>(PLGFlowEdgeContract::VT_CANONICAL_FALLBACK_AVAILABLE, static_cast<uint8_t>(CANONICAL_FALLBACK_AVAILABLE), 1);
+  }
+  void add_ALIGNED_ELIGIBLE(bool ALIGNED_ELIGIBLE) {
+    fbb_.AddElement<uint8_t>(PLGFlowEdgeContract::VT_ALIGNED_ELIGIBLE, static_cast<uint8_t>(ALIGNED_ELIGIBLE), 0);
+  }
+  void add_ROUTE_POLICY(flowEdgeRoutePolicy ROUTE_POLICY) {
+    fbb_.AddElement<uint8_t>(PLGFlowEdgeContract::VT_ROUTE_POLICY, static_cast<uint8_t>(ROUTE_POLICY), 0);
+  }
+  void add_OPAQUE(bool OPAQUE) {
+    fbb_.AddElement<uint8_t>(PLGFlowEdgeContract::VT_OPAQUE, static_cast<uint8_t>(OPAQUE), 0);
+  }
+  explicit PLGFlowEdgeContractBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PLGFlowEdgeContract> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PLGFlowEdgeContract>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PLGFlowEdgeContract> CreatePLGFlowEdgeContract(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<FlatBufferTypeRef> CANONICAL_TYPE = 0,
+    ::flatbuffers::Offset<FlatBufferTypeRef> ALIGNED_TYPE = 0,
+    bool CANONICAL_FALLBACK_AVAILABLE = true,
+    bool ALIGNED_ELIGIBLE = false,
+    flowEdgeRoutePolicy ROUTE_POLICY = flowEdgeRoutePolicy::CANONICAL_ONLY,
+    bool OPAQUE = false) {
+  PLGFlowEdgeContractBuilder builder_(_fbb);
+  builder_.add_ALIGNED_TYPE(ALIGNED_TYPE);
+  builder_.add_CANONICAL_TYPE(CANONICAL_TYPE);
+  builder_.add_OPAQUE(OPAQUE);
+  builder_.add_ROUTE_POLICY(ROUTE_POLICY);
+  builder_.add_ALIGNED_ELIGIBLE(ALIGNED_ELIGIBLE);
+  builder_.add_CANONICAL_FALLBACK_AVAILABLE(CANONICAL_FALLBACK_AVAILABLE);
+  return builder_.Finish();
+}
+
+struct PLGFlowEdgeContract::Traits {
+  using type = PLGFlowEdgeContract;
+  static auto constexpr Create = CreatePLGFlowEdgeContract;
+};
+
+::flatbuffers::Offset<PLGFlowEdgeContract> CreatePLGFlowEdgeContract(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeContractT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PLGFlowEdgeT : public ::flatbuffers::NativeTable {
+  typedef PLGFlowEdge TableType;
+  std::string EDGE_ID{};
+  std::string FROM_NODE_ID{};
+  std::string FROM_PORT_ID{};
+  std::string TO_NODE_ID{};
+  std::string TO_PORT_ID{};
+  std::unique_ptr<PLGFlowEdgeContractT> CONTRACT{};
+  PLGFlowEdgeT() = default;
+  PLGFlowEdgeT(const PLGFlowEdgeT &o);
+  PLGFlowEdgeT(PLGFlowEdgeT&&) FLATBUFFERS_NOEXCEPT = default;
+  PLGFlowEdgeT &operator=(PLGFlowEdgeT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One directed edge wiring a producer output port to a consumer input port.
+struct PLGFlowEdge FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PLGFlowEdgeT NativeTableType;
+  typedef PLGFlowEdgeBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EDGE_ID = 4,
+    VT_FROM_NODE_ID = 6,
+    VT_FROM_PORT_ID = 8,
+    VT_TO_NODE_ID = 10,
+    VT_TO_PORT_ID = 12,
+    VT_CONTRACT = 14
+  };
+  /// Stable edge identifier
+  const ::flatbuffers::String *EDGE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EDGE_ID);
+  }
+  /// Source node id
+  const ::flatbuffers::String *FROM_NODE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_FROM_NODE_ID);
+  }
+  /// Source output port id
+  const ::flatbuffers::String *FROM_PORT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_FROM_PORT_ID);
+  }
+  /// Destination node id
+  const ::flatbuffers::String *TO_NODE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TO_NODE_ID);
+  }
+  /// Destination input port id
+  const ::flatbuffers::String *TO_PORT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TO_PORT_ID);
+  }
+  /// Exact identity/layout and compile-time representation policy. NOT
+  /// `required`: marking a NEW field of an EXISTING table required makes the
+  /// FlatBuffers verifier reject every $PLG buffer written before 1.0.13,
+  /// which is a breaking change to a ratified standard. Presence is enforced
+  /// where it belongs — the flow compiler MUST refuse to SIGN a flow whose
+  /// edges lack a CONTRACT, and a verifier MUST reject a signed flow edge
+  /// without one. Buffers predating 1.0.13 stay readable and stay unsigned.
+  const PLGFlowEdgeContract *CONTRACT() const {
+    return GetPointer<const PLGFlowEdgeContract *>(VT_CONTRACT);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_EDGE_ID) &&
+           verifier.VerifyString(EDGE_ID()) &&
+           VerifyOffsetRequired(verifier, VT_FROM_NODE_ID) &&
+           verifier.VerifyString(FROM_NODE_ID()) &&
+           VerifyOffsetRequired(verifier, VT_FROM_PORT_ID) &&
+           verifier.VerifyString(FROM_PORT_ID()) &&
+           VerifyOffsetRequired(verifier, VT_TO_NODE_ID) &&
+           verifier.VerifyString(TO_NODE_ID()) &&
+           VerifyOffsetRequired(verifier, VT_TO_PORT_ID) &&
+           verifier.VerifyString(TO_PORT_ID()) &&
+           VerifyOffset(verifier, VT_CONTRACT) &&
+           verifier.VerifyTable(CONTRACT()) &&
+           verifier.EndTable();
+  }
+  PLGFlowEdgeT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PLGFlowEdgeT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PLGFlowEdge> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PLGFlowEdgeBuilder {
+  typedef PLGFlowEdge Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_EDGE_ID(::flatbuffers::Offset<::flatbuffers::String> EDGE_ID) {
+    fbb_.AddOffset(PLGFlowEdge::VT_EDGE_ID, EDGE_ID);
+  }
+  void add_FROM_NODE_ID(::flatbuffers::Offset<::flatbuffers::String> FROM_NODE_ID) {
+    fbb_.AddOffset(PLGFlowEdge::VT_FROM_NODE_ID, FROM_NODE_ID);
+  }
+  void add_FROM_PORT_ID(::flatbuffers::Offset<::flatbuffers::String> FROM_PORT_ID) {
+    fbb_.AddOffset(PLGFlowEdge::VT_FROM_PORT_ID, FROM_PORT_ID);
+  }
+  void add_TO_NODE_ID(::flatbuffers::Offset<::flatbuffers::String> TO_NODE_ID) {
+    fbb_.AddOffset(PLGFlowEdge::VT_TO_NODE_ID, TO_NODE_ID);
+  }
+  void add_TO_PORT_ID(::flatbuffers::Offset<::flatbuffers::String> TO_PORT_ID) {
+    fbb_.AddOffset(PLGFlowEdge::VT_TO_PORT_ID, TO_PORT_ID);
+  }
+  void add_CONTRACT(::flatbuffers::Offset<PLGFlowEdgeContract> CONTRACT) {
+    fbb_.AddOffset(PLGFlowEdge::VT_CONTRACT, CONTRACT);
+  }
+  explicit PLGFlowEdgeBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PLGFlowEdge> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PLGFlowEdge>(end);
+    fbb_.Required(o, PLGFlowEdge::VT_FROM_NODE_ID);
+    fbb_.Required(o, PLGFlowEdge::VT_FROM_PORT_ID);
+    fbb_.Required(o, PLGFlowEdge::VT_TO_NODE_ID);
+    fbb_.Required(o, PLGFlowEdge::VT_TO_PORT_ID);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PLGFlowEdge> CreatePLGFlowEdge(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> EDGE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> FROM_NODE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> FROM_PORT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TO_NODE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TO_PORT_ID = 0,
+    ::flatbuffers::Offset<PLGFlowEdgeContract> CONTRACT = 0) {
+  PLGFlowEdgeBuilder builder_(_fbb);
+  builder_.add_CONTRACT(CONTRACT);
+  builder_.add_TO_PORT_ID(TO_PORT_ID);
+  builder_.add_TO_NODE_ID(TO_NODE_ID);
+  builder_.add_FROM_PORT_ID(FROM_PORT_ID);
+  builder_.add_FROM_NODE_ID(FROM_NODE_ID);
+  builder_.add_EDGE_ID(EDGE_ID);
+  return builder_.Finish();
+}
+
+struct PLGFlowEdge::Traits {
+  using type = PLGFlowEdge;
+  static auto constexpr Create = CreatePLGFlowEdge;
+};
+
+inline ::flatbuffers::Offset<PLGFlowEdge> CreatePLGFlowEdgeDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *EDGE_ID = nullptr,
+    const char *FROM_NODE_ID = nullptr,
+    const char *FROM_PORT_ID = nullptr,
+    const char *TO_NODE_ID = nullptr,
+    const char *TO_PORT_ID = nullptr,
+    ::flatbuffers::Offset<PLGFlowEdgeContract> CONTRACT = 0) {
+  auto EDGE_ID__ = EDGE_ID ? _fbb.CreateString(EDGE_ID) : 0;
+  auto FROM_NODE_ID__ = FROM_NODE_ID ? _fbb.CreateString(FROM_NODE_ID) : 0;
+  auto FROM_PORT_ID__ = FROM_PORT_ID ? _fbb.CreateString(FROM_PORT_ID) : 0;
+  auto TO_NODE_ID__ = TO_NODE_ID ? _fbb.CreateString(TO_NODE_ID) : 0;
+  auto TO_PORT_ID__ = TO_PORT_ID ? _fbb.CreateString(TO_PORT_ID) : 0;
+  return CreatePLGFlowEdge(
+      _fbb,
+      EDGE_ID__,
+      FROM_NODE_ID__,
+      FROM_PORT_ID__,
+      TO_NODE_ID__,
+      TO_PORT_ID__,
+      CONTRACT);
+}
+
+::flatbuffers::Offset<PLGFlowEdge> CreatePLGFlowEdge(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PLGFlowTriggerT : public ::flatbuffers::NativeTable {
+  typedef PLGFlowTrigger TableType;
+  std::string TRIGGER_ID{};
+  std::string KIND{};
+  std::string SOURCE{};
+  uint64_t DEFAULT_INTERVAL_MS = 0;
+  std::string HTTP_PATH{};
+};
+
+/// One flow trigger (e.g. a host timer or HTTP route) that starts a drain.
+struct PLGFlowTrigger FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PLGFlowTriggerT NativeTableType;
+  typedef PLGFlowTriggerBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TRIGGER_ID = 4,
+    VT_KIND = 6,
+    VT_SOURCE = 8,
+    VT_DEFAULT_INTERVAL_MS = 10,
+    VT_HTTP_PATH = 12
+  };
+  /// Stable trigger identifier
+  const ::flatbuffers::String *TRIGGER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TRIGGER_ID);
+  }
+  /// Trigger kind, e.g. "timer", "http"
+  const ::flatbuffers::String *KIND() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_KIND);
+  }
+  /// Trigger source, e.g. "host-cron"
+  const ::flatbuffers::String *SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE);
+  }
+  /// Default firing interval in milliseconds (timer triggers)
+  uint64_t DEFAULT_INTERVAL_MS() const {
+    return GetField<uint64_t>(VT_DEFAULT_INTERVAL_MS, 0);
+  }
+  /// Mounted HTTP path (http triggers)
+  const ::flatbuffers::String *HTTP_PATH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_HTTP_PATH);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_TRIGGER_ID) &&
+           verifier.VerifyString(TRIGGER_ID()) &&
+           VerifyOffset(verifier, VT_KIND) &&
+           verifier.VerifyString(KIND()) &&
+           VerifyOffset(verifier, VT_SOURCE) &&
+           verifier.VerifyString(SOURCE()) &&
+           VerifyField<uint64_t>(verifier, VT_DEFAULT_INTERVAL_MS, 8) &&
+           VerifyOffset(verifier, VT_HTTP_PATH) &&
+           verifier.VerifyString(HTTP_PATH()) &&
+           verifier.EndTable();
+  }
+  PLGFlowTriggerT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PLGFlowTriggerT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PLGFlowTrigger> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PLGFlowTriggerBuilder {
+  typedef PLGFlowTrigger Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_TRIGGER_ID(::flatbuffers::Offset<::flatbuffers::String> TRIGGER_ID) {
+    fbb_.AddOffset(PLGFlowTrigger::VT_TRIGGER_ID, TRIGGER_ID);
+  }
+  void add_KIND(::flatbuffers::Offset<::flatbuffers::String> KIND) {
+    fbb_.AddOffset(PLGFlowTrigger::VT_KIND, KIND);
+  }
+  void add_SOURCE(::flatbuffers::Offset<::flatbuffers::String> SOURCE) {
+    fbb_.AddOffset(PLGFlowTrigger::VT_SOURCE, SOURCE);
+  }
+  void add_DEFAULT_INTERVAL_MS(uint64_t DEFAULT_INTERVAL_MS) {
+    fbb_.AddElement<uint64_t>(PLGFlowTrigger::VT_DEFAULT_INTERVAL_MS, DEFAULT_INTERVAL_MS, 0);
+  }
+  void add_HTTP_PATH(::flatbuffers::Offset<::flatbuffers::String> HTTP_PATH) {
+    fbb_.AddOffset(PLGFlowTrigger::VT_HTTP_PATH, HTTP_PATH);
+  }
+  explicit PLGFlowTriggerBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PLGFlowTrigger> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PLGFlowTrigger>(end);
+    fbb_.Required(o, PLGFlowTrigger::VT_TRIGGER_ID);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PLGFlowTrigger> CreatePLGFlowTrigger(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> TRIGGER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> KIND = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE = 0,
+    uint64_t DEFAULT_INTERVAL_MS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> HTTP_PATH = 0) {
+  PLGFlowTriggerBuilder builder_(_fbb);
+  builder_.add_DEFAULT_INTERVAL_MS(DEFAULT_INTERVAL_MS);
+  builder_.add_HTTP_PATH(HTTP_PATH);
+  builder_.add_SOURCE(SOURCE);
+  builder_.add_KIND(KIND);
+  builder_.add_TRIGGER_ID(TRIGGER_ID);
+  return builder_.Finish();
+}
+
+struct PLGFlowTrigger::Traits {
+  using type = PLGFlowTrigger;
+  static auto constexpr Create = CreatePLGFlowTrigger;
+};
+
+inline ::flatbuffers::Offset<PLGFlowTrigger> CreatePLGFlowTriggerDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *TRIGGER_ID = nullptr,
+    const char *KIND = nullptr,
+    const char *SOURCE = nullptr,
+    uint64_t DEFAULT_INTERVAL_MS = 0,
+    const char *HTTP_PATH = nullptr) {
+  auto TRIGGER_ID__ = TRIGGER_ID ? _fbb.CreateString(TRIGGER_ID) : 0;
+  auto KIND__ = KIND ? _fbb.CreateString(KIND) : 0;
+  auto SOURCE__ = SOURCE ? _fbb.CreateString(SOURCE) : 0;
+  auto HTTP_PATH__ = HTTP_PATH ? _fbb.CreateString(HTTP_PATH) : 0;
+  return CreatePLGFlowTrigger(
+      _fbb,
+      TRIGGER_ID__,
+      KIND__,
+      SOURCE__,
+      DEFAULT_INTERVAL_MS,
+      HTTP_PATH__);
+}
+
+::flatbuffers::Offset<PLGFlowTrigger> CreatePLGFlowTrigger(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PLGFlowTriggerBindingT : public ::flatbuffers::NativeTable {
+  typedef PLGFlowTriggerBinding TableType;
+  std::string TRIGGER_ID{};
+  std::string TARGET_NODE_ID{};
+  std::string TARGET_PORT_ID{};
+};
+
+/// Binds a trigger to the node + input port it delivers its frame to.
+struct PLGFlowTriggerBinding FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PLGFlowTriggerBindingT NativeTableType;
+  typedef PLGFlowTriggerBindingBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TRIGGER_ID = 4,
+    VT_TARGET_NODE_ID = 6,
+    VT_TARGET_PORT_ID = 8
+  };
+  /// Trigger identifier
+  const ::flatbuffers::String *TRIGGER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TRIGGER_ID);
+  }
+  /// Target node id
+  const ::flatbuffers::String *TARGET_NODE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TARGET_NODE_ID);
+  }
+  /// Target input port id
+  const ::flatbuffers::String *TARGET_PORT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TARGET_PORT_ID);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_TRIGGER_ID) &&
+           verifier.VerifyString(TRIGGER_ID()) &&
+           VerifyOffsetRequired(verifier, VT_TARGET_NODE_ID) &&
+           verifier.VerifyString(TARGET_NODE_ID()) &&
+           VerifyOffsetRequired(verifier, VT_TARGET_PORT_ID) &&
+           verifier.VerifyString(TARGET_PORT_ID()) &&
+           verifier.EndTable();
+  }
+  PLGFlowTriggerBindingT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PLGFlowTriggerBindingT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PLGFlowTriggerBinding> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerBindingT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PLGFlowTriggerBindingBuilder {
+  typedef PLGFlowTriggerBinding Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_TRIGGER_ID(::flatbuffers::Offset<::flatbuffers::String> TRIGGER_ID) {
+    fbb_.AddOffset(PLGFlowTriggerBinding::VT_TRIGGER_ID, TRIGGER_ID);
+  }
+  void add_TARGET_NODE_ID(::flatbuffers::Offset<::flatbuffers::String> TARGET_NODE_ID) {
+    fbb_.AddOffset(PLGFlowTriggerBinding::VT_TARGET_NODE_ID, TARGET_NODE_ID);
+  }
+  void add_TARGET_PORT_ID(::flatbuffers::Offset<::flatbuffers::String> TARGET_PORT_ID) {
+    fbb_.AddOffset(PLGFlowTriggerBinding::VT_TARGET_PORT_ID, TARGET_PORT_ID);
+  }
+  explicit PLGFlowTriggerBindingBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PLGFlowTriggerBinding> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PLGFlowTriggerBinding>(end);
+    fbb_.Required(o, PLGFlowTriggerBinding::VT_TRIGGER_ID);
+    fbb_.Required(o, PLGFlowTriggerBinding::VT_TARGET_NODE_ID);
+    fbb_.Required(o, PLGFlowTriggerBinding::VT_TARGET_PORT_ID);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PLGFlowTriggerBinding> CreatePLGFlowTriggerBinding(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> TRIGGER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TARGET_NODE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TARGET_PORT_ID = 0) {
+  PLGFlowTriggerBindingBuilder builder_(_fbb);
+  builder_.add_TARGET_PORT_ID(TARGET_PORT_ID);
+  builder_.add_TARGET_NODE_ID(TARGET_NODE_ID);
+  builder_.add_TRIGGER_ID(TRIGGER_ID);
+  return builder_.Finish();
+}
+
+struct PLGFlowTriggerBinding::Traits {
+  using type = PLGFlowTriggerBinding;
+  static auto constexpr Create = CreatePLGFlowTriggerBinding;
+};
+
+inline ::flatbuffers::Offset<PLGFlowTriggerBinding> CreatePLGFlowTriggerBindingDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *TRIGGER_ID = nullptr,
+    const char *TARGET_NODE_ID = nullptr,
+    const char *TARGET_PORT_ID = nullptr) {
+  auto TRIGGER_ID__ = TRIGGER_ID ? _fbb.CreateString(TRIGGER_ID) : 0;
+  auto TARGET_NODE_ID__ = TARGET_NODE_ID ? _fbb.CreateString(TARGET_NODE_ID) : 0;
+  auto TARGET_PORT_ID__ = TARGET_PORT_ID ? _fbb.CreateString(TARGET_PORT_ID) : 0;
+  return CreatePLGFlowTriggerBinding(
+      _fbb,
+      TRIGGER_ID__,
+      TARGET_NODE_ID__,
+      TARGET_PORT_ID__);
+}
+
+::flatbuffers::Offset<PLGFlowTriggerBinding> CreatePLGFlowTriggerBinding(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerBindingT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct PLGT : public ::flatbuffers::NativeTable {
   typedef PLG TableType;
   std::string PLUGIN_ID{};
@@ -1852,7 +2693,6 @@ struct PLGT : public ::flatbuffers::NativeTable {
   bool ENCRYPTED = true;
   std::string REQUIRED_SCOPE{};
   std::string KEY_ID{};
-  std::vector<std::string> ALLOWED_DOMAINS{};
   uint64_t MAX_GRANT_TIMEOUT_MS = 0;
   std::vector<std::string> MIN_PERMISSIONS{};
   uint64_t CREATED_AT = 0;
@@ -1875,6 +2715,11 @@ struct PLGT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<FlatBufferTypeRefT>> SCHEMAS_USED{};
   std::vector<std::unique_ptr<PLGBuildArtifactT>> BUILD_ARTIFACTS{};
   std::vector<std::string> RUNTIME_TARGETS{};
+  std::vector<std::string> ALLOWED_XPUBS{};
+  std::vector<std::unique_ptr<PLGFlowNodeT>> FLOW_NODES{};
+  std::vector<std::unique_ptr<PLGFlowEdgeT>> FLOW_EDGES{};
+  std::vector<std::unique_ptr<PLGFlowTriggerT>> FLOW_TRIGGERS{};
+  std::vector<std::unique_ptr<PLGFlowTriggerBindingT>> FLOW_TRIGGER_BINDINGS{};
   PLGT() = default;
   PLGT(const PLGT &o);
   PLGT(PLGT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1916,29 +2761,33 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ENCRYPTED = 56,
     VT_REQUIRED_SCOPE = 58,
     VT_KEY_ID = 60,
-    VT_ALLOWED_DOMAINS = 62,
-    VT_MAX_GRANT_TIMEOUT_MS = 64,
-    VT_MIN_PERMISSIONS = 66,
-    VT_CREATED_AT = 68,
-    VT_UPDATED_AT = 70,
-    VT_DOCUMENTATION_URL = 72,
-    VT_CHANGELOG_URL = 74,
-    VT_ICON_URL = 76,
-    VT_LICENSE = 78,
-    VT_PAYMENT_MODEL = 80,
-    VT_PRICE_USD_CENTS = 82,
-    VT_SUBSCRIPTION_PERIOD_DAYS = 84,
-    VT_ACCEPTED_PAYMENT_METHODS = 86,
-    VT_LISTING_STATUS = 88,
-    VT_SIGNATURE = 90,
-    VT_INVOKE_SURFACES = 92,
-    VT_METHODS = 94,
-    VT_HOST_CAPABILITIES = 96,
-    VT_TIMERS = 98,
-    VT_PROTOCOLS = 100,
-    VT_SCHEMAS_USED = 102,
-    VT_BUILD_ARTIFACTS = 104,
-    VT_RUNTIME_TARGETS = 106
+    VT_MAX_GRANT_TIMEOUT_MS = 62,
+    VT_MIN_PERMISSIONS = 64,
+    VT_CREATED_AT = 66,
+    VT_UPDATED_AT = 68,
+    VT_DOCUMENTATION_URL = 70,
+    VT_CHANGELOG_URL = 72,
+    VT_ICON_URL = 74,
+    VT_LICENSE = 76,
+    VT_PAYMENT_MODEL = 78,
+    VT_PRICE_USD_CENTS = 80,
+    VT_SUBSCRIPTION_PERIOD_DAYS = 82,
+    VT_ACCEPTED_PAYMENT_METHODS = 84,
+    VT_LISTING_STATUS = 86,
+    VT_SIGNATURE = 88,
+    VT_INVOKE_SURFACES = 90,
+    VT_METHODS = 92,
+    VT_HOST_CAPABILITIES = 94,
+    VT_TIMERS = 96,
+    VT_PROTOCOLS = 98,
+    VT_SCHEMAS_USED = 100,
+    VT_BUILD_ARTIFACTS = 102,
+    VT_RUNTIME_TARGETS = 104,
+    VT_ALLOWED_XPUBS = 106,
+    VT_FLOW_NODES = 108,
+    VT_FLOW_EDGES = 110,
+    VT_FLOW_TRIGGERS = 112,
+    VT_FLOW_TRIGGER_BINDINGS = 114
   };
   /// Unique identifier for the plugin
   const ::flatbuffers::String *PLUGIN_ID() const {
@@ -2056,10 +2905,6 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *KEY_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_KEY_ID);
   }
-  /// Allowed requester domains for module grants
-  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_DOMAINS() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_ALLOWED_DOMAINS);
-  }
   /// Maximum grant timeout allowed for this module publication
   uint64_t MAX_GRANT_TIMEOUT_MS() const {
     return GetField<uint64_t>(VT_MAX_GRANT_TIMEOUT_MS, 0);
@@ -2153,6 +2998,30 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *RUNTIME_TARGETS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_RUNTIME_TARGETS);
   }
+  /// Allowed requester xpub identities (BIP-32 account xpubs) for module grants:
+  /// a requester whose verified EPM binds an xpub in this list is granted (PKI
+  /// identity authorization). Empty list = no xpub allowlist gate.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_XPUBS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_ALLOWED_XPUBS);
+  }
+  /// Composition graph (a degenerate flow is a module): the nodes this flow
+  /// invokes. Empty for a leaf module; populated for a composed flow. The flow
+  /// definition is this PLG FlatBuffer, not a bespoke JSON graph.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowNode>> *FLOW_NODES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowNode>> *>(VT_FLOW_NODES);
+  }
+  /// Composition-graph edges wiring node output ports to input ports.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowEdge>> *FLOW_EDGES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowEdge>> *>(VT_FLOW_EDGES);
+  }
+  /// Flow triggers (timer/http) that start a drain.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTrigger>> *FLOW_TRIGGERS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTrigger>> *>(VT_FLOW_TRIGGERS);
+  }
+  /// Bindings from triggers to the node + input port they deliver to.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTriggerBinding>> *FLOW_TRIGGER_BINDINGS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTriggerBinding>> *>(VT_FLOW_TRIGGER_BINDINGS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2216,9 +3085,6 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(REQUIRED_SCOPE()) &&
            VerifyOffset(verifier, VT_KEY_ID) &&
            verifier.VerifyString(KEY_ID()) &&
-           VerifyOffset(verifier, VT_ALLOWED_DOMAINS) &&
-           verifier.VerifyVector(ALLOWED_DOMAINS()) &&
-           verifier.VerifyVectorOfStrings(ALLOWED_DOMAINS()) &&
            VerifyField<uint64_t>(verifier, VT_MAX_GRANT_TIMEOUT_MS, 8) &&
            VerifyOffset(verifier, VT_MIN_PERMISSIONS) &&
            verifier.VerifyVector(MIN_PERMISSIONS()) &&
@@ -2265,6 +3131,21 @@ struct PLG FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_RUNTIME_TARGETS) &&
            verifier.VerifyVector(RUNTIME_TARGETS()) &&
            verifier.VerifyVectorOfStrings(RUNTIME_TARGETS()) &&
+           VerifyOffset(verifier, VT_ALLOWED_XPUBS) &&
+           verifier.VerifyVector(ALLOWED_XPUBS()) &&
+           verifier.VerifyVectorOfStrings(ALLOWED_XPUBS()) &&
+           VerifyOffset(verifier, VT_FLOW_NODES) &&
+           verifier.VerifyVector(FLOW_NODES()) &&
+           verifier.VerifyVectorOfTables(FLOW_NODES()) &&
+           VerifyOffset(verifier, VT_FLOW_EDGES) &&
+           verifier.VerifyVector(FLOW_EDGES()) &&
+           verifier.VerifyVectorOfTables(FLOW_EDGES()) &&
+           VerifyOffset(verifier, VT_FLOW_TRIGGERS) &&
+           verifier.VerifyVector(FLOW_TRIGGERS()) &&
+           verifier.VerifyVectorOfTables(FLOW_TRIGGERS()) &&
+           VerifyOffset(verifier, VT_FLOW_TRIGGER_BINDINGS) &&
+           verifier.VerifyVector(FLOW_TRIGGER_BINDINGS()) &&
+           verifier.VerifyVectorOfTables(FLOW_TRIGGER_BINDINGS()) &&
            verifier.EndTable();
   }
   PLGT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2363,9 +3244,6 @@ struct PLGBuilder {
   void add_KEY_ID(::flatbuffers::Offset<::flatbuffers::String> KEY_ID) {
     fbb_.AddOffset(PLG::VT_KEY_ID, KEY_ID);
   }
-  void add_ALLOWED_DOMAINS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_DOMAINS) {
-    fbb_.AddOffset(PLG::VT_ALLOWED_DOMAINS, ALLOWED_DOMAINS);
-  }
   void add_MAX_GRANT_TIMEOUT_MS(uint64_t MAX_GRANT_TIMEOUT_MS) {
     fbb_.AddElement<uint64_t>(PLG::VT_MAX_GRANT_TIMEOUT_MS, MAX_GRANT_TIMEOUT_MS, 0);
   }
@@ -2432,6 +3310,21 @@ struct PLGBuilder {
   void add_RUNTIME_TARGETS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> RUNTIME_TARGETS) {
     fbb_.AddOffset(PLG::VT_RUNTIME_TARGETS, RUNTIME_TARGETS);
   }
+  void add_ALLOWED_XPUBS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_XPUBS) {
+    fbb_.AddOffset(PLG::VT_ALLOWED_XPUBS, ALLOWED_XPUBS);
+  }
+  void add_FLOW_NODES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowNode>>> FLOW_NODES) {
+    fbb_.AddOffset(PLG::VT_FLOW_NODES, FLOW_NODES);
+  }
+  void add_FLOW_EDGES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowEdge>>> FLOW_EDGES) {
+    fbb_.AddOffset(PLG::VT_FLOW_EDGES, FLOW_EDGES);
+  }
+  void add_FLOW_TRIGGERS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTrigger>>> FLOW_TRIGGERS) {
+    fbb_.AddOffset(PLG::VT_FLOW_TRIGGERS, FLOW_TRIGGERS);
+  }
+  void add_FLOW_TRIGGER_BINDINGS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTriggerBinding>>> FLOW_TRIGGER_BINDINGS) {
+    fbb_.AddOffset(PLG::VT_FLOW_TRIGGER_BINDINGS, FLOW_TRIGGER_BINDINGS);
+  }
   explicit PLGBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2477,7 +3370,6 @@ inline ::flatbuffers::Offset<PLG> CreatePLG(
     bool ENCRYPTED = true,
     ::flatbuffers::Offset<::flatbuffers::String> REQUIRED_SCOPE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> KEY_ID = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_DOMAINS = 0,
     uint64_t MAX_GRANT_TIMEOUT_MS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> MIN_PERMISSIONS = 0,
     uint64_t CREATED_AT = 0,
@@ -2499,13 +3391,23 @@ inline ::flatbuffers::Offset<PLG> CreatePLG(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGProtocolSpec>>> PROTOCOLS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<FlatBufferTypeRef>>> SCHEMAS_USED = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGBuildArtifact>>> BUILD_ARTIFACTS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> RUNTIME_TARGETS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> RUNTIME_TARGETS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_XPUBS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowNode>>> FLOW_NODES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowEdge>>> FLOW_EDGES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTrigger>>> FLOW_TRIGGERS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLGFlowTriggerBinding>>> FLOW_TRIGGER_BINDINGS = 0) {
   PLGBuilder builder_(_fbb);
   builder_.add_UPDATED_AT(UPDATED_AT);
   builder_.add_CREATED_AT(CREATED_AT);
   builder_.add_MAX_GRANT_TIMEOUT_MS(MAX_GRANT_TIMEOUT_MS);
   builder_.add_ENCRYPTED_WASM_SIZE(ENCRYPTED_WASM_SIZE);
   builder_.add_WASM_SIZE(WASM_SIZE);
+  builder_.add_FLOW_TRIGGER_BINDINGS(FLOW_TRIGGER_BINDINGS);
+  builder_.add_FLOW_TRIGGERS(FLOW_TRIGGERS);
+  builder_.add_FLOW_EDGES(FLOW_EDGES);
+  builder_.add_FLOW_NODES(FLOW_NODES);
+  builder_.add_ALLOWED_XPUBS(ALLOWED_XPUBS);
   builder_.add_RUNTIME_TARGETS(RUNTIME_TARGETS);
   builder_.add_BUILD_ARTIFACTS(BUILD_ARTIFACTS);
   builder_.add_SCHEMAS_USED(SCHEMAS_USED);
@@ -2523,7 +3425,6 @@ inline ::flatbuffers::Offset<PLG> CreatePLG(
   builder_.add_CHANGELOG_URL(CHANGELOG_URL);
   builder_.add_DOCUMENTATION_URL(DOCUMENTATION_URL);
   builder_.add_MIN_PERMISSIONS(MIN_PERMISSIONS);
-  builder_.add_ALLOWED_DOMAINS(ALLOWED_DOMAINS);
   builder_.add_KEY_ID(KEY_ID);
   builder_.add_REQUIRED_SCOPE(REQUIRED_SCOPE);
   builder_.add_PROVIDER_EPM_CID(PROVIDER_EPM_CID);
@@ -2592,7 +3493,6 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
     bool ENCRYPTED = true,
     const char *REQUIRED_SCOPE = nullptr,
     const char *KEY_ID = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_DOMAINS = nullptr,
     uint64_t MAX_GRANT_TIMEOUT_MS = 0,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *MIN_PERMISSIONS = nullptr,
     uint64_t CREATED_AT = 0,
@@ -2614,7 +3514,12 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
     const std::vector<::flatbuffers::Offset<PLGProtocolSpec>> *PROTOCOLS = nullptr,
     const std::vector<::flatbuffers::Offset<FlatBufferTypeRef>> *SCHEMAS_USED = nullptr,
     const std::vector<::flatbuffers::Offset<PLGBuildArtifact>> *BUILD_ARTIFACTS = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *RUNTIME_TARGETS = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *RUNTIME_TARGETS = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_XPUBS = nullptr,
+    const std::vector<::flatbuffers::Offset<PLGFlowNode>> *FLOW_NODES = nullptr,
+    const std::vector<::flatbuffers::Offset<PLGFlowEdge>> *FLOW_EDGES = nullptr,
+    const std::vector<::flatbuffers::Offset<PLGFlowTrigger>> *FLOW_TRIGGERS = nullptr,
+    const std::vector<::flatbuffers::Offset<PLGFlowTriggerBinding>> *FLOW_TRIGGER_BINDINGS = nullptr) {
   auto PLUGIN_ID__ = PLUGIN_ID ? _fbb.CreateString(PLUGIN_ID) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto VERSION__ = VERSION ? _fbb.CreateString(VERSION) : 0;
@@ -2639,7 +3544,6 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
   auto PROVIDER_EPM_CID__ = PROVIDER_EPM_CID ? _fbb.CreateString(PROVIDER_EPM_CID) : 0;
   auto REQUIRED_SCOPE__ = REQUIRED_SCOPE ? _fbb.CreateString(REQUIRED_SCOPE) : 0;
   auto KEY_ID__ = KEY_ID ? _fbb.CreateString(KEY_ID) : 0;
-  auto ALLOWED_DOMAINS__ = ALLOWED_DOMAINS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*ALLOWED_DOMAINS) : 0;
   auto MIN_PERMISSIONS__ = MIN_PERMISSIONS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*MIN_PERMISSIONS) : 0;
   auto DOCUMENTATION_URL__ = DOCUMENTATION_URL ? _fbb.CreateString(DOCUMENTATION_URL) : 0;
   auto CHANGELOG_URL__ = CHANGELOG_URL ? _fbb.CreateString(CHANGELOG_URL) : 0;
@@ -2655,6 +3559,11 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
   auto SCHEMAS_USED__ = SCHEMAS_USED ? _fbb.CreateVector<::flatbuffers::Offset<FlatBufferTypeRef>>(*SCHEMAS_USED) : 0;
   auto BUILD_ARTIFACTS__ = BUILD_ARTIFACTS ? _fbb.CreateVector<::flatbuffers::Offset<PLGBuildArtifact>>(*BUILD_ARTIFACTS) : 0;
   auto RUNTIME_TARGETS__ = RUNTIME_TARGETS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*RUNTIME_TARGETS) : 0;
+  auto ALLOWED_XPUBS__ = ALLOWED_XPUBS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*ALLOWED_XPUBS) : 0;
+  auto FLOW_NODES__ = FLOW_NODES ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowNode>>(*FLOW_NODES) : 0;
+  auto FLOW_EDGES__ = FLOW_EDGES ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowEdge>>(*FLOW_EDGES) : 0;
+  auto FLOW_TRIGGERS__ = FLOW_TRIGGERS ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowTrigger>>(*FLOW_TRIGGERS) : 0;
+  auto FLOW_TRIGGER_BINDINGS__ = FLOW_TRIGGER_BINDINGS ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowTriggerBinding>>(*FLOW_TRIGGER_BINDINGS) : 0;
   return CreatePLG(
       _fbb,
       PLUGIN_ID__,
@@ -2686,7 +3595,6 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
       ENCRYPTED,
       REQUIRED_SCOPE__,
       KEY_ID__,
-      ALLOWED_DOMAINS__,
       MAX_GRANT_TIMEOUT_MS,
       MIN_PERMISSIONS__,
       CREATED_AT,
@@ -2708,7 +3616,12 @@ inline ::flatbuffers::Offset<PLG> CreatePLGDirect(
       PROTOCOLS__,
       SCHEMAS_USED__,
       BUILD_ARTIFACTS__,
-      RUNTIME_TARGETS__);
+      RUNTIME_TARGETS__,
+      ALLOWED_XPUBS__,
+      FLOW_NODES__,
+      FLOW_EDGES__,
+      FLOW_TRIGGERS__,
+      FLOW_TRIGGER_BINDINGS__);
 }
 
 ::flatbuffers::Offset<PLG> CreatePLG(::flatbuffers::FlatBufferBuilder &_fbb, const PLGT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3172,6 +4085,243 @@ inline ::flatbuffers::Offset<EntryFunction> EntryFunction::Pack(::flatbuffers::F
       _OUTPUT_SCHEMA);
 }
 
+inline PLGFlowNodeT *PLGFlowNode::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PLGFlowNodeT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PLGFlowNode::UnPackTo(PLGFlowNodeT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = NODE_ID(); if (_e) _o->NODE_ID = _e->str(); }
+  { auto _e = PLUGIN_ID(); if (_e) _o->PLUGIN_ID = _e->str(); }
+  { auto _e = METHOD_ID(); if (_e) _o->METHOD_ID = _e->str(); }
+  { auto _e = KIND(); if (_e) _o->KIND = _e->str(); }
+  { auto _e = DISPATCH_MODEL(); if (_e) _o->DISPATCH_MODEL = _e->str(); }
+  { auto _e = CONFIG(); if (_e) { _o->CONFIG.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->CONFIG.begin()); } }
+  { auto _e = UI_X(); _o->UI_X = _e; }
+  { auto _e = UI_Y(); _o->UI_Y = _e; }
+}
+
+inline ::flatbuffers::Offset<PLGFlowNode> CreatePLGFlowNode(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowNodeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PLGFlowNode::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PLGFlowNode> PLGFlowNode::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowNodeT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PLGFlowNodeT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _NODE_ID = _fbb.CreateString(_o->NODE_ID);
+  auto _PLUGIN_ID = _fbb.CreateString(_o->PLUGIN_ID);
+  auto _METHOD_ID = _o->METHOD_ID.empty() ? 0 : _fbb.CreateString(_o->METHOD_ID);
+  auto _KIND = _o->KIND.empty() ? 0 : _fbb.CreateString(_o->KIND);
+  auto _DISPATCH_MODEL = _o->DISPATCH_MODEL.empty() ? 0 : _fbb.CreateString(_o->DISPATCH_MODEL);
+  auto _CONFIG = _o->CONFIG.size() ? _fbb.CreateVector(_o->CONFIG) : 0;
+  auto _UI_X = _o->UI_X;
+  auto _UI_Y = _o->UI_Y;
+  return CreatePLGFlowNode(
+      _fbb,
+      _NODE_ID,
+      _PLUGIN_ID,
+      _METHOD_ID,
+      _KIND,
+      _DISPATCH_MODEL,
+      _CONFIG,
+      _UI_X,
+      _UI_Y);
+}
+
+inline PLGFlowEdgeContractT::PLGFlowEdgeContractT(const PLGFlowEdgeContractT &o)
+      : CANONICAL_TYPE((o.CANONICAL_TYPE) ? new FlatBufferTypeRefT(*o.CANONICAL_TYPE) : nullptr),
+        ALIGNED_TYPE((o.ALIGNED_TYPE) ? new FlatBufferTypeRefT(*o.ALIGNED_TYPE) : nullptr),
+        CANONICAL_FALLBACK_AVAILABLE(o.CANONICAL_FALLBACK_AVAILABLE),
+        ALIGNED_ELIGIBLE(o.ALIGNED_ELIGIBLE),
+        ROUTE_POLICY(o.ROUTE_POLICY),
+        OPAQUE(o.OPAQUE) {
+}
+
+inline PLGFlowEdgeContractT &PLGFlowEdgeContractT::operator=(PLGFlowEdgeContractT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(CANONICAL_TYPE, o.CANONICAL_TYPE);
+  std::swap(ALIGNED_TYPE, o.ALIGNED_TYPE);
+  std::swap(CANONICAL_FALLBACK_AVAILABLE, o.CANONICAL_FALLBACK_AVAILABLE);
+  std::swap(ALIGNED_ELIGIBLE, o.ALIGNED_ELIGIBLE);
+  std::swap(ROUTE_POLICY, o.ROUTE_POLICY);
+  std::swap(OPAQUE, o.OPAQUE);
+  return *this;
+}
+
+inline PLGFlowEdgeContractT *PLGFlowEdgeContract::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PLGFlowEdgeContractT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PLGFlowEdgeContract::UnPackTo(PLGFlowEdgeContractT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = CANONICAL_TYPE(); if (_e) { if(_o->CANONICAL_TYPE) { _e->UnPackTo(_o->CANONICAL_TYPE.get(), _resolver); } else { _o->CANONICAL_TYPE = std::unique_ptr<FlatBufferTypeRefT>(_e->UnPack(_resolver)); } } else if (_o->CANONICAL_TYPE) { _o->CANONICAL_TYPE.reset(); } }
+  { auto _e = ALIGNED_TYPE(); if (_e) { if(_o->ALIGNED_TYPE) { _e->UnPackTo(_o->ALIGNED_TYPE.get(), _resolver); } else { _o->ALIGNED_TYPE = std::unique_ptr<FlatBufferTypeRefT>(_e->UnPack(_resolver)); } } else if (_o->ALIGNED_TYPE) { _o->ALIGNED_TYPE.reset(); } }
+  { auto _e = CANONICAL_FALLBACK_AVAILABLE(); _o->CANONICAL_FALLBACK_AVAILABLE = _e; }
+  { auto _e = ALIGNED_ELIGIBLE(); _o->ALIGNED_ELIGIBLE = _e; }
+  { auto _e = ROUTE_POLICY(); _o->ROUTE_POLICY = _e; }
+  { auto _e = OPAQUE(); _o->OPAQUE = _e; }
+}
+
+inline ::flatbuffers::Offset<PLGFlowEdgeContract> CreatePLGFlowEdgeContract(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeContractT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PLGFlowEdgeContract::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PLGFlowEdgeContract> PLGFlowEdgeContract::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeContractT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PLGFlowEdgeContractT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _CANONICAL_TYPE = _o->CANONICAL_TYPE ? CreateFlatBufferTypeRef(_fbb, _o->CANONICAL_TYPE.get(), _rehasher) : 0;
+  auto _ALIGNED_TYPE = _o->ALIGNED_TYPE ? CreateFlatBufferTypeRef(_fbb, _o->ALIGNED_TYPE.get(), _rehasher) : 0;
+  auto _CANONICAL_FALLBACK_AVAILABLE = _o->CANONICAL_FALLBACK_AVAILABLE;
+  auto _ALIGNED_ELIGIBLE = _o->ALIGNED_ELIGIBLE;
+  auto _ROUTE_POLICY = _o->ROUTE_POLICY;
+  auto _OPAQUE = _o->OPAQUE;
+  return CreatePLGFlowEdgeContract(
+      _fbb,
+      _CANONICAL_TYPE,
+      _ALIGNED_TYPE,
+      _CANONICAL_FALLBACK_AVAILABLE,
+      _ALIGNED_ELIGIBLE,
+      _ROUTE_POLICY,
+      _OPAQUE);
+}
+
+inline PLGFlowEdgeT::PLGFlowEdgeT(const PLGFlowEdgeT &o)
+      : EDGE_ID(o.EDGE_ID),
+        FROM_NODE_ID(o.FROM_NODE_ID),
+        FROM_PORT_ID(o.FROM_PORT_ID),
+        TO_NODE_ID(o.TO_NODE_ID),
+        TO_PORT_ID(o.TO_PORT_ID),
+        CONTRACT((o.CONTRACT) ? new PLGFlowEdgeContractT(*o.CONTRACT) : nullptr) {
+}
+
+inline PLGFlowEdgeT &PLGFlowEdgeT::operator=(PLGFlowEdgeT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(EDGE_ID, o.EDGE_ID);
+  std::swap(FROM_NODE_ID, o.FROM_NODE_ID);
+  std::swap(FROM_PORT_ID, o.FROM_PORT_ID);
+  std::swap(TO_NODE_ID, o.TO_NODE_ID);
+  std::swap(TO_PORT_ID, o.TO_PORT_ID);
+  std::swap(CONTRACT, o.CONTRACT);
+  return *this;
+}
+
+inline PLGFlowEdgeT *PLGFlowEdge::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PLGFlowEdgeT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PLGFlowEdge::UnPackTo(PLGFlowEdgeT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = EDGE_ID(); if (_e) _o->EDGE_ID = _e->str(); }
+  { auto _e = FROM_NODE_ID(); if (_e) _o->FROM_NODE_ID = _e->str(); }
+  { auto _e = FROM_PORT_ID(); if (_e) _o->FROM_PORT_ID = _e->str(); }
+  { auto _e = TO_NODE_ID(); if (_e) _o->TO_NODE_ID = _e->str(); }
+  { auto _e = TO_PORT_ID(); if (_e) _o->TO_PORT_ID = _e->str(); }
+  { auto _e = CONTRACT(); if (_e) { if(_o->CONTRACT) { _e->UnPackTo(_o->CONTRACT.get(), _resolver); } else { _o->CONTRACT = std::unique_ptr<PLGFlowEdgeContractT>(_e->UnPack(_resolver)); } } else if (_o->CONTRACT) { _o->CONTRACT.reset(); } }
+}
+
+inline ::flatbuffers::Offset<PLGFlowEdge> CreatePLGFlowEdge(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PLGFlowEdge::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PLGFlowEdge> PLGFlowEdge::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowEdgeT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PLGFlowEdgeT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _EDGE_ID = _o->EDGE_ID.empty() ? 0 : _fbb.CreateString(_o->EDGE_ID);
+  auto _FROM_NODE_ID = _fbb.CreateString(_o->FROM_NODE_ID);
+  auto _FROM_PORT_ID = _fbb.CreateString(_o->FROM_PORT_ID);
+  auto _TO_NODE_ID = _fbb.CreateString(_o->TO_NODE_ID);
+  auto _TO_PORT_ID = _fbb.CreateString(_o->TO_PORT_ID);
+  auto _CONTRACT = _o->CONTRACT ? CreatePLGFlowEdgeContract(_fbb, _o->CONTRACT.get(), _rehasher) : 0;
+  return CreatePLGFlowEdge(
+      _fbb,
+      _EDGE_ID,
+      _FROM_NODE_ID,
+      _FROM_PORT_ID,
+      _TO_NODE_ID,
+      _TO_PORT_ID,
+      _CONTRACT);
+}
+
+inline PLGFlowTriggerT *PLGFlowTrigger::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PLGFlowTriggerT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PLGFlowTrigger::UnPackTo(PLGFlowTriggerT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = TRIGGER_ID(); if (_e) _o->TRIGGER_ID = _e->str(); }
+  { auto _e = KIND(); if (_e) _o->KIND = _e->str(); }
+  { auto _e = SOURCE(); if (_e) _o->SOURCE = _e->str(); }
+  { auto _e = DEFAULT_INTERVAL_MS(); _o->DEFAULT_INTERVAL_MS = _e; }
+  { auto _e = HTTP_PATH(); if (_e) _o->HTTP_PATH = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PLGFlowTrigger> CreatePLGFlowTrigger(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PLGFlowTrigger::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PLGFlowTrigger> PLGFlowTrigger::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PLGFlowTriggerT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _TRIGGER_ID = _fbb.CreateString(_o->TRIGGER_ID);
+  auto _KIND = _o->KIND.empty() ? 0 : _fbb.CreateString(_o->KIND);
+  auto _SOURCE = _o->SOURCE.empty() ? 0 : _fbb.CreateString(_o->SOURCE);
+  auto _DEFAULT_INTERVAL_MS = _o->DEFAULT_INTERVAL_MS;
+  auto _HTTP_PATH = _o->HTTP_PATH.empty() ? 0 : _fbb.CreateString(_o->HTTP_PATH);
+  return CreatePLGFlowTrigger(
+      _fbb,
+      _TRIGGER_ID,
+      _KIND,
+      _SOURCE,
+      _DEFAULT_INTERVAL_MS,
+      _HTTP_PATH);
+}
+
+inline PLGFlowTriggerBindingT *PLGFlowTriggerBinding::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PLGFlowTriggerBindingT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PLGFlowTriggerBinding::UnPackTo(PLGFlowTriggerBindingT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = TRIGGER_ID(); if (_e) _o->TRIGGER_ID = _e->str(); }
+  { auto _e = TARGET_NODE_ID(); if (_e) _o->TARGET_NODE_ID = _e->str(); }
+  { auto _e = TARGET_PORT_ID(); if (_e) _o->TARGET_PORT_ID = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PLGFlowTriggerBinding> CreatePLGFlowTriggerBinding(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerBindingT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PLGFlowTriggerBinding::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PLGFlowTriggerBinding> PLGFlowTriggerBinding::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PLGFlowTriggerBindingT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PLGFlowTriggerBindingT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _TRIGGER_ID = _fbb.CreateString(_o->TRIGGER_ID);
+  auto _TARGET_NODE_ID = _fbb.CreateString(_o->TARGET_NODE_ID);
+  auto _TARGET_PORT_ID = _fbb.CreateString(_o->TARGET_PORT_ID);
+  return CreatePLGFlowTriggerBinding(
+      _fbb,
+      _TRIGGER_ID,
+      _TARGET_NODE_ID,
+      _TARGET_PORT_ID);
+}
+
 inline PLGT::PLGT(const PLGT &o)
       : PLUGIN_ID(o.PLUGIN_ID),
         NAME(o.NAME),
@@ -3199,7 +4349,6 @@ inline PLGT::PLGT(const PLGT &o)
         ENCRYPTED(o.ENCRYPTED),
         REQUIRED_SCOPE(o.REQUIRED_SCOPE),
         KEY_ID(o.KEY_ID),
-        ALLOWED_DOMAINS(o.ALLOWED_DOMAINS),
         MAX_GRANT_TIMEOUT_MS(o.MAX_GRANT_TIMEOUT_MS),
         MIN_PERMISSIONS(o.MIN_PERMISSIONS),
         CREATED_AT(o.CREATED_AT),
@@ -3215,7 +4364,8 @@ inline PLGT::PLGT(const PLGT &o)
         LISTING_STATUS(o.LISTING_STATUS),
         SIGNATURE(o.SIGNATURE),
         INVOKE_SURFACES(o.INVOKE_SURFACES),
-        RUNTIME_TARGETS(o.RUNTIME_TARGETS) {
+        RUNTIME_TARGETS(o.RUNTIME_TARGETS),
+        ALLOWED_XPUBS(o.ALLOWED_XPUBS) {
   ENTRY_FUNCTIONS.reserve(o.ENTRY_FUNCTIONS.size());
   for (const auto &ENTRY_FUNCTIONS_ : o.ENTRY_FUNCTIONS) { ENTRY_FUNCTIONS.emplace_back((ENTRY_FUNCTIONS_) ? new EntryFunctionT(*ENTRY_FUNCTIONS_) : nullptr); }
   DEPENDENCIES.reserve(o.DEPENDENCIES.size());
@@ -3234,6 +4384,14 @@ inline PLGT::PLGT(const PLGT &o)
   for (const auto &SCHEMAS_USED_ : o.SCHEMAS_USED) { SCHEMAS_USED.emplace_back((SCHEMAS_USED_) ? new FlatBufferTypeRefT(*SCHEMAS_USED_) : nullptr); }
   BUILD_ARTIFACTS.reserve(o.BUILD_ARTIFACTS.size());
   for (const auto &BUILD_ARTIFACTS_ : o.BUILD_ARTIFACTS) { BUILD_ARTIFACTS.emplace_back((BUILD_ARTIFACTS_) ? new PLGBuildArtifactT(*BUILD_ARTIFACTS_) : nullptr); }
+  FLOW_NODES.reserve(o.FLOW_NODES.size());
+  for (const auto &FLOW_NODES_ : o.FLOW_NODES) { FLOW_NODES.emplace_back((FLOW_NODES_) ? new PLGFlowNodeT(*FLOW_NODES_) : nullptr); }
+  FLOW_EDGES.reserve(o.FLOW_EDGES.size());
+  for (const auto &FLOW_EDGES_ : o.FLOW_EDGES) { FLOW_EDGES.emplace_back((FLOW_EDGES_) ? new PLGFlowEdgeT(*FLOW_EDGES_) : nullptr); }
+  FLOW_TRIGGERS.reserve(o.FLOW_TRIGGERS.size());
+  for (const auto &FLOW_TRIGGERS_ : o.FLOW_TRIGGERS) { FLOW_TRIGGERS.emplace_back((FLOW_TRIGGERS_) ? new PLGFlowTriggerT(*FLOW_TRIGGERS_) : nullptr); }
+  FLOW_TRIGGER_BINDINGS.reserve(o.FLOW_TRIGGER_BINDINGS.size());
+  for (const auto &FLOW_TRIGGER_BINDINGS_ : o.FLOW_TRIGGER_BINDINGS) { FLOW_TRIGGER_BINDINGS.emplace_back((FLOW_TRIGGER_BINDINGS_) ? new PLGFlowTriggerBindingT(*FLOW_TRIGGER_BINDINGS_) : nullptr); }
 }
 
 inline PLGT &PLGT::operator=(PLGT o) FLATBUFFERS_NOEXCEPT {
@@ -3266,7 +4424,6 @@ inline PLGT &PLGT::operator=(PLGT o) FLATBUFFERS_NOEXCEPT {
   std::swap(ENCRYPTED, o.ENCRYPTED);
   std::swap(REQUIRED_SCOPE, o.REQUIRED_SCOPE);
   std::swap(KEY_ID, o.KEY_ID);
-  std::swap(ALLOWED_DOMAINS, o.ALLOWED_DOMAINS);
   std::swap(MAX_GRANT_TIMEOUT_MS, o.MAX_GRANT_TIMEOUT_MS);
   std::swap(MIN_PERMISSIONS, o.MIN_PERMISSIONS);
   std::swap(CREATED_AT, o.CREATED_AT);
@@ -3289,6 +4446,11 @@ inline PLGT &PLGT::operator=(PLGT o) FLATBUFFERS_NOEXCEPT {
   std::swap(SCHEMAS_USED, o.SCHEMAS_USED);
   std::swap(BUILD_ARTIFACTS, o.BUILD_ARTIFACTS);
   std::swap(RUNTIME_TARGETS, o.RUNTIME_TARGETS);
+  std::swap(ALLOWED_XPUBS, o.ALLOWED_XPUBS);
+  std::swap(FLOW_NODES, o.FLOW_NODES);
+  std::swap(FLOW_EDGES, o.FLOW_EDGES);
+  std::swap(FLOW_TRIGGERS, o.FLOW_TRIGGERS);
+  std::swap(FLOW_TRIGGER_BINDINGS, o.FLOW_TRIGGER_BINDINGS);
   return *this;
 }
 
@@ -3330,7 +4492,6 @@ inline void PLG::UnPackTo(PLGT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = ENCRYPTED(); _o->ENCRYPTED = _e; }
   { auto _e = REQUIRED_SCOPE(); if (_e) _o->REQUIRED_SCOPE = _e->str(); }
   { auto _e = KEY_ID(); if (_e) _o->KEY_ID = _e->str(); }
-  { auto _e = ALLOWED_DOMAINS(); if (_e) { _o->ALLOWED_DOMAINS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ALLOWED_DOMAINS[_i] = _e->Get(_i)->str(); } } else { _o->ALLOWED_DOMAINS.resize(0); } }
   { auto _e = MAX_GRANT_TIMEOUT_MS(); _o->MAX_GRANT_TIMEOUT_MS = _e; }
   { auto _e = MIN_PERMISSIONS(); if (_e) { _o->MIN_PERMISSIONS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->MIN_PERMISSIONS[_i] = _e->Get(_i)->str(); } } else { _o->MIN_PERMISSIONS.resize(0); } }
   { auto _e = CREATED_AT(); _o->CREATED_AT = _e; }
@@ -3353,6 +4514,11 @@ inline void PLG::UnPackTo(PLGT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = SCHEMAS_USED(); if (_e) { _o->SCHEMAS_USED.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SCHEMAS_USED[_i]) { _e->Get(_i)->UnPackTo(_o->SCHEMAS_USED[_i].get(), _resolver); } else { _o->SCHEMAS_USED[_i] = std::unique_ptr<FlatBufferTypeRefT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SCHEMAS_USED.resize(0); } }
   { auto _e = BUILD_ARTIFACTS(); if (_e) { _o->BUILD_ARTIFACTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->BUILD_ARTIFACTS[_i]) { _e->Get(_i)->UnPackTo(_o->BUILD_ARTIFACTS[_i].get(), _resolver); } else { _o->BUILD_ARTIFACTS[_i] = std::unique_ptr<PLGBuildArtifactT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->BUILD_ARTIFACTS.resize(0); } }
   { auto _e = RUNTIME_TARGETS(); if (_e) { _o->RUNTIME_TARGETS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->RUNTIME_TARGETS[_i] = _e->Get(_i)->str(); } } else { _o->RUNTIME_TARGETS.resize(0); } }
+  { auto _e = ALLOWED_XPUBS(); if (_e) { _o->ALLOWED_XPUBS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ALLOWED_XPUBS[_i] = _e->Get(_i)->str(); } } else { _o->ALLOWED_XPUBS.resize(0); } }
+  { auto _e = FLOW_NODES(); if (_e) { _o->FLOW_NODES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->FLOW_NODES[_i]) { _e->Get(_i)->UnPackTo(_o->FLOW_NODES[_i].get(), _resolver); } else { _o->FLOW_NODES[_i] = std::unique_ptr<PLGFlowNodeT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->FLOW_NODES.resize(0); } }
+  { auto _e = FLOW_EDGES(); if (_e) { _o->FLOW_EDGES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->FLOW_EDGES[_i]) { _e->Get(_i)->UnPackTo(_o->FLOW_EDGES[_i].get(), _resolver); } else { _o->FLOW_EDGES[_i] = std::unique_ptr<PLGFlowEdgeT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->FLOW_EDGES.resize(0); } }
+  { auto _e = FLOW_TRIGGERS(); if (_e) { _o->FLOW_TRIGGERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->FLOW_TRIGGERS[_i]) { _e->Get(_i)->UnPackTo(_o->FLOW_TRIGGERS[_i].get(), _resolver); } else { _o->FLOW_TRIGGERS[_i] = std::unique_ptr<PLGFlowTriggerT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->FLOW_TRIGGERS.resize(0); } }
+  { auto _e = FLOW_TRIGGER_BINDINGS(); if (_e) { _o->FLOW_TRIGGER_BINDINGS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->FLOW_TRIGGER_BINDINGS[_i]) { _e->Get(_i)->UnPackTo(_o->FLOW_TRIGGER_BINDINGS[_i].get(), _resolver); } else { _o->FLOW_TRIGGER_BINDINGS[_i] = std::unique_ptr<PLGFlowTriggerBindingT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->FLOW_TRIGGER_BINDINGS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<PLG> CreatePLG(::flatbuffers::FlatBufferBuilder &_fbb, const PLGT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3392,7 +4558,6 @@ inline ::flatbuffers::Offset<PLG> PLG::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _ENCRYPTED = _o->ENCRYPTED;
   auto _REQUIRED_SCOPE = _o->REQUIRED_SCOPE.empty() ? 0 : _fbb.CreateString(_o->REQUIRED_SCOPE);
   auto _KEY_ID = _o->KEY_ID.empty() ? 0 : _fbb.CreateString(_o->KEY_ID);
-  auto _ALLOWED_DOMAINS = _o->ALLOWED_DOMAINS.size() ? _fbb.CreateVectorOfStrings(_o->ALLOWED_DOMAINS) : 0;
   auto _MAX_GRANT_TIMEOUT_MS = _o->MAX_GRANT_TIMEOUT_MS;
   auto _MIN_PERMISSIONS = _o->MIN_PERMISSIONS.size() ? _fbb.CreateVectorOfStrings(_o->MIN_PERMISSIONS) : 0;
   auto _CREATED_AT = _o->CREATED_AT;
@@ -3415,6 +4580,11 @@ inline ::flatbuffers::Offset<PLG> PLG::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _SCHEMAS_USED = _o->SCHEMAS_USED.size() ? _fbb.CreateVector<::flatbuffers::Offset<FlatBufferTypeRef>> (_o->SCHEMAS_USED.size(), [](size_t i, _VectorArgs *__va) { return CreateFlatBufferTypeRef(*__va->__fbb, __va->__o->SCHEMAS_USED[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _BUILD_ARTIFACTS = _o->BUILD_ARTIFACTS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLGBuildArtifact>> (_o->BUILD_ARTIFACTS.size(), [](size_t i, _VectorArgs *__va) { return CreatePLGBuildArtifact(*__va->__fbb, __va->__o->BUILD_ARTIFACTS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _RUNTIME_TARGETS = _o->RUNTIME_TARGETS.size() ? _fbb.CreateVectorOfStrings(_o->RUNTIME_TARGETS) : 0;
+  auto _ALLOWED_XPUBS = _o->ALLOWED_XPUBS.size() ? _fbb.CreateVectorOfStrings(_o->ALLOWED_XPUBS) : 0;
+  auto _FLOW_NODES = _o->FLOW_NODES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowNode>> (_o->FLOW_NODES.size(), [](size_t i, _VectorArgs *__va) { return CreatePLGFlowNode(*__va->__fbb, __va->__o->FLOW_NODES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _FLOW_EDGES = _o->FLOW_EDGES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowEdge>> (_o->FLOW_EDGES.size(), [](size_t i, _VectorArgs *__va) { return CreatePLGFlowEdge(*__va->__fbb, __va->__o->FLOW_EDGES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _FLOW_TRIGGERS = _o->FLOW_TRIGGERS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowTrigger>> (_o->FLOW_TRIGGERS.size(), [](size_t i, _VectorArgs *__va) { return CreatePLGFlowTrigger(*__va->__fbb, __va->__o->FLOW_TRIGGERS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _FLOW_TRIGGER_BINDINGS = _o->FLOW_TRIGGER_BINDINGS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLGFlowTriggerBinding>> (_o->FLOW_TRIGGER_BINDINGS.size(), [](size_t i, _VectorArgs *__va) { return CreatePLGFlowTriggerBinding(*__va->__fbb, __va->__o->FLOW_TRIGGER_BINDINGS[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreatePLG(
       _fbb,
       _PLUGIN_ID,
@@ -3446,7 +4616,6 @@ inline ::flatbuffers::Offset<PLG> PLG::Pack(::flatbuffers::FlatBufferBuilder &_f
       _ENCRYPTED,
       _REQUIRED_SCOPE,
       _KEY_ID,
-      _ALLOWED_DOMAINS,
       _MAX_GRANT_TIMEOUT_MS,
       _MIN_PERMISSIONS,
       _CREATED_AT,
@@ -3468,7 +4637,12 @@ inline ::flatbuffers::Offset<PLG> PLG::Pack(::flatbuffers::FlatBufferBuilder &_f
       _PROTOCOLS,
       _SCHEMAS_USED,
       _BUILD_ARTIFACTS,
-      _RUNTIME_TARGETS);
+      _RUNTIME_TARGETS,
+      _ALLOWED_XPUBS,
+      _FLOW_NODES,
+      _FLOW_EDGES,
+      _FLOW_TRIGGERS,
+      _FLOW_TRIGGER_BINDINGS);
 }
 
 inline const PLG *GetPLG(const void *buf) {

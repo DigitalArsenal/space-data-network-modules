@@ -19,6 +19,46 @@ struct ACL;
 struct ACLBuilder;
 struct ACLT;
 
+/// Grant lifecycle status tracked by the provider.
+enum class grantLifecycleStatus : int8_t {
+  Active = 0,
+  Revoked = 1,
+  Expired = 2,
+  Suspended = 3,
+  Pending = 4,
+  MIN = Active,
+  MAX = Pending
+};
+
+inline const grantLifecycleStatus (&EnumValuesgrantLifecycleStatus())[5] {
+  static const grantLifecycleStatus values[] = {
+    grantLifecycleStatus::Active,
+    grantLifecycleStatus::Revoked,
+    grantLifecycleStatus::Expired,
+    grantLifecycleStatus::Suspended,
+    grantLifecycleStatus::Pending
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesgrantLifecycleStatus() {
+  static const char * const names[6] = {
+    "Active",
+    "Revoked",
+    "Expired",
+    "Suspended",
+    "Pending",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamegrantLifecycleStatus(grantLifecycleStatus e) {
+  if (::flatbuffers::IsOutRange(e, grantLifecycleStatus::Active, grantLifecycleStatus::Pending)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesgrantLifecycleStatus()[index];
+}
+
 struct ACLT : public ::flatbuffers::NativeTable {
   typedef ACL TableType;
   std::string GRANT_ID{};
@@ -32,6 +72,30 @@ struct ACLT : public ::flatbuffers::NativeTable {
   std::string PAYMENT_TX_HASH{};
   paymentMethod PAYMENT_METHOD = paymentMethod::Crypto_ETH;
   std::vector<uint8_t> PROVIDER_SIGNATURE{};
+  std::string KEY_ALGORITHM{};
+  uint32_t RATE_LIMIT = 0;
+  uint32_t MAX_RECORDS_PER_REQUEST = 0;
+  grantLifecycleStatus STATUS = grantLifecycleStatus::Active;
+  uint64_t PAYMENT_AMOUNT = 0;
+  std::string PAYMENT_CURRENCY{};
+  std::string PAYMENT_CHAIN{};
+  uint64_t NEXT_RENEWAL = 0;
+  bool AUTO_RENEW = false;
+  uint32_t RENEWAL_COUNT = 0;
+  uint64_t TOTAL_REQUESTS = 0;
+  uint64_t TOTAL_RECORDS = 0;
+  uint64_t LAST_ACCESS = 0;
+  std::string DELIVERY_TOPIC{};
+  uint64_t CREATED_AT = 0;
+  uint64_t UPDATED_AT = 0;
+  std::string NOTES{};
+  std::string PROVIDER_PEER_ID{};
+  std::string GRANT_RESPONSE_BASE64{};
+  std::unique_ptr<GrantFieldStreamPolicyT> FIELD_STREAM_POLICY{};
+  ACLT() = default;
+  ACLT(const ACLT &o);
+  ACLT(ACLT&&) FLATBUFFERS_NOEXCEPT = default;
+  ACLT &operator=(ACLT o) FLATBUFFERS_NOEXCEPT;
 };
 
 /// Access Control Grant - Permission to access purchased data
@@ -50,7 +114,27 @@ struct ACL FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_EXPIRES_AT = 18,
     VT_PAYMENT_TX_HASH = 20,
     VT_PAYMENT_METHOD = 22,
-    VT_PROVIDER_SIGNATURE = 24
+    VT_PROVIDER_SIGNATURE = 24,
+    VT_KEY_ALGORITHM = 26,
+    VT_RATE_LIMIT = 28,
+    VT_MAX_RECORDS_PER_REQUEST = 30,
+    VT_STATUS = 32,
+    VT_PAYMENT_AMOUNT = 34,
+    VT_PAYMENT_CURRENCY = 36,
+    VT_PAYMENT_CHAIN = 38,
+    VT_NEXT_RENEWAL = 40,
+    VT_AUTO_RENEW = 42,
+    VT_RENEWAL_COUNT = 44,
+    VT_TOTAL_REQUESTS = 46,
+    VT_TOTAL_RECORDS = 48,
+    VT_LAST_ACCESS = 50,
+    VT_DELIVERY_TOPIC = 52,
+    VT_CREATED_AT = 54,
+    VT_UPDATED_AT = 56,
+    VT_NOTES = 58,
+    VT_PROVIDER_PEER_ID = 60,
+    VT_GRANT_RESPONSE_BASE64 = 62,
+    VT_FIELD_STREAM_POLICY = 64
   };
   /// Unique identifier for this grant
   const ::flatbuffers::String *GRANT_ID() const {
@@ -96,6 +180,86 @@ struct ACL FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<uint8_t> *PROVIDER_SIGNATURE() const {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PROVIDER_SIGNATURE);
   }
+  /// Key algorithm for buyer encryption public key
+  const ::flatbuffers::String *KEY_ALGORITHM() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_KEY_ALGORITHM);
+  }
+  /// Request rate limit
+  uint32_t RATE_LIMIT() const {
+    return GetField<uint32_t>(VT_RATE_LIMIT, 0);
+  }
+  /// Maximum records returned per request
+  uint32_t MAX_RECORDS_PER_REQUEST() const {
+    return GetField<uint32_t>(VT_MAX_RECORDS_PER_REQUEST, 0);
+  }
+  /// Provider-side grant status
+  grantLifecycleStatus STATUS() const {
+    return static_cast<grantLifecycleStatus>(GetField<int8_t>(VT_STATUS, 0));
+  }
+  /// Payment amount in smallest unit
+  uint64_t PAYMENT_AMOUNT() const {
+    return GetField<uint64_t>(VT_PAYMENT_AMOUNT, 0);
+  }
+  /// Payment currency
+  const ::flatbuffers::String *PAYMENT_CURRENCY() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PAYMENT_CURRENCY);
+  }
+  /// Payment chain or processor
+  const ::flatbuffers::String *PAYMENT_CHAIN() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PAYMENT_CHAIN);
+  }
+  /// Unix timestamp of next renewal
+  uint64_t NEXT_RENEWAL() const {
+    return GetField<uint64_t>(VT_NEXT_RENEWAL, 0);
+  }
+  /// Whether renewal is automatic
+  bool AUTO_RENEW() const {
+    return GetField<uint8_t>(VT_AUTO_RENEW, 0) != 0;
+  }
+  /// Renewal count
+  uint32_t RENEWAL_COUNT() const {
+    return GetField<uint32_t>(VT_RENEWAL_COUNT, 0);
+  }
+  /// Total requests made under this grant
+  uint64_t TOTAL_REQUESTS() const {
+    return GetField<uint64_t>(VT_TOTAL_REQUESTS, 0);
+  }
+  /// Total records delivered under this grant
+  uint64_t TOTAL_RECORDS() const {
+    return GetField<uint64_t>(VT_TOTAL_RECORDS, 0);
+  }
+  /// Unix timestamp of last access
+  uint64_t LAST_ACCESS() const {
+    return GetField<uint64_t>(VT_LAST_ACCESS, 0);
+  }
+  /// PubSub or direct delivery topic
+  const ::flatbuffers::String *DELIVERY_TOPIC() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DELIVERY_TOPIC);
+  }
+  /// Unix timestamp when the grant record was created
+  uint64_t CREATED_AT() const {
+    return GetField<uint64_t>(VT_CREATED_AT, 0);
+  }
+  /// Unix timestamp when the grant record was updated
+  uint64_t UPDATED_AT() const {
+    return GetField<uint64_t>(VT_UPDATED_AT, 0);
+  }
+  /// Provider notes
+  const ::flatbuffers::String *NOTES() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NOTES);
+  }
+  /// Provider peer ID
+  const ::flatbuffers::String *PROVIDER_PEER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROVIDER_PEER_ID);
+  }
+  /// Base64-encoded signed grant response bytes
+  const ::flatbuffers::String *GRANT_RESPONSE_BASE64() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_GRANT_RESPONSE_BASE64);
+  }
+  /// Field-level stream policy bound to this grant
+  const GrantFieldStreamPolicy *FIELD_STREAM_POLICY() const {
+    return GetPointer<const GrantFieldStreamPolicy *>(VT_FIELD_STREAM_POLICY);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -117,6 +281,34 @@ struct ACL FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<int8_t>(verifier, VT_PAYMENT_METHOD, 1) &&
            VerifyOffset(verifier, VT_PROVIDER_SIGNATURE) &&
            verifier.VerifyVector(PROVIDER_SIGNATURE()) &&
+           VerifyOffset(verifier, VT_KEY_ALGORITHM) &&
+           verifier.VerifyString(KEY_ALGORITHM()) &&
+           VerifyField<uint32_t>(verifier, VT_RATE_LIMIT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_MAX_RECORDS_PER_REQUEST, 4) &&
+           VerifyField<int8_t>(verifier, VT_STATUS, 1) &&
+           VerifyField<uint64_t>(verifier, VT_PAYMENT_AMOUNT, 8) &&
+           VerifyOffset(verifier, VT_PAYMENT_CURRENCY) &&
+           verifier.VerifyString(PAYMENT_CURRENCY()) &&
+           VerifyOffset(verifier, VT_PAYMENT_CHAIN) &&
+           verifier.VerifyString(PAYMENT_CHAIN()) &&
+           VerifyField<uint64_t>(verifier, VT_NEXT_RENEWAL, 8) &&
+           VerifyField<uint8_t>(verifier, VT_AUTO_RENEW, 1) &&
+           VerifyField<uint32_t>(verifier, VT_RENEWAL_COUNT, 4) &&
+           VerifyField<uint64_t>(verifier, VT_TOTAL_REQUESTS, 8) &&
+           VerifyField<uint64_t>(verifier, VT_TOTAL_RECORDS, 8) &&
+           VerifyField<uint64_t>(verifier, VT_LAST_ACCESS, 8) &&
+           VerifyOffset(verifier, VT_DELIVERY_TOPIC) &&
+           verifier.VerifyString(DELIVERY_TOPIC()) &&
+           VerifyField<uint64_t>(verifier, VT_CREATED_AT, 8) &&
+           VerifyField<uint64_t>(verifier, VT_UPDATED_AT, 8) &&
+           VerifyOffset(verifier, VT_NOTES) &&
+           verifier.VerifyString(NOTES()) &&
+           VerifyOffset(verifier, VT_PROVIDER_PEER_ID) &&
+           verifier.VerifyString(PROVIDER_PEER_ID()) &&
+           VerifyOffset(verifier, VT_GRANT_RESPONSE_BASE64) &&
+           verifier.VerifyString(GRANT_RESPONSE_BASE64()) &&
+           VerifyOffset(verifier, VT_FIELD_STREAM_POLICY) &&
+           verifier.VerifyTable(FIELD_STREAM_POLICY()) &&
            verifier.EndTable();
   }
   ACLT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -161,6 +353,66 @@ struct ACLBuilder {
   void add_PROVIDER_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PROVIDER_SIGNATURE) {
     fbb_.AddOffset(ACL::VT_PROVIDER_SIGNATURE, PROVIDER_SIGNATURE);
   }
+  void add_KEY_ALGORITHM(::flatbuffers::Offset<::flatbuffers::String> KEY_ALGORITHM) {
+    fbb_.AddOffset(ACL::VT_KEY_ALGORITHM, KEY_ALGORITHM);
+  }
+  void add_RATE_LIMIT(uint32_t RATE_LIMIT) {
+    fbb_.AddElement<uint32_t>(ACL::VT_RATE_LIMIT, RATE_LIMIT, 0);
+  }
+  void add_MAX_RECORDS_PER_REQUEST(uint32_t MAX_RECORDS_PER_REQUEST) {
+    fbb_.AddElement<uint32_t>(ACL::VT_MAX_RECORDS_PER_REQUEST, MAX_RECORDS_PER_REQUEST, 0);
+  }
+  void add_STATUS(grantLifecycleStatus STATUS) {
+    fbb_.AddElement<int8_t>(ACL::VT_STATUS, static_cast<int8_t>(STATUS), 0);
+  }
+  void add_PAYMENT_AMOUNT(uint64_t PAYMENT_AMOUNT) {
+    fbb_.AddElement<uint64_t>(ACL::VT_PAYMENT_AMOUNT, PAYMENT_AMOUNT, 0);
+  }
+  void add_PAYMENT_CURRENCY(::flatbuffers::Offset<::flatbuffers::String> PAYMENT_CURRENCY) {
+    fbb_.AddOffset(ACL::VT_PAYMENT_CURRENCY, PAYMENT_CURRENCY);
+  }
+  void add_PAYMENT_CHAIN(::flatbuffers::Offset<::flatbuffers::String> PAYMENT_CHAIN) {
+    fbb_.AddOffset(ACL::VT_PAYMENT_CHAIN, PAYMENT_CHAIN);
+  }
+  void add_NEXT_RENEWAL(uint64_t NEXT_RENEWAL) {
+    fbb_.AddElement<uint64_t>(ACL::VT_NEXT_RENEWAL, NEXT_RENEWAL, 0);
+  }
+  void add_AUTO_RENEW(bool AUTO_RENEW) {
+    fbb_.AddElement<uint8_t>(ACL::VT_AUTO_RENEW, static_cast<uint8_t>(AUTO_RENEW), 0);
+  }
+  void add_RENEWAL_COUNT(uint32_t RENEWAL_COUNT) {
+    fbb_.AddElement<uint32_t>(ACL::VT_RENEWAL_COUNT, RENEWAL_COUNT, 0);
+  }
+  void add_TOTAL_REQUESTS(uint64_t TOTAL_REQUESTS) {
+    fbb_.AddElement<uint64_t>(ACL::VT_TOTAL_REQUESTS, TOTAL_REQUESTS, 0);
+  }
+  void add_TOTAL_RECORDS(uint64_t TOTAL_RECORDS) {
+    fbb_.AddElement<uint64_t>(ACL::VT_TOTAL_RECORDS, TOTAL_RECORDS, 0);
+  }
+  void add_LAST_ACCESS(uint64_t LAST_ACCESS) {
+    fbb_.AddElement<uint64_t>(ACL::VT_LAST_ACCESS, LAST_ACCESS, 0);
+  }
+  void add_DELIVERY_TOPIC(::flatbuffers::Offset<::flatbuffers::String> DELIVERY_TOPIC) {
+    fbb_.AddOffset(ACL::VT_DELIVERY_TOPIC, DELIVERY_TOPIC);
+  }
+  void add_CREATED_AT(uint64_t CREATED_AT) {
+    fbb_.AddElement<uint64_t>(ACL::VT_CREATED_AT, CREATED_AT, 0);
+  }
+  void add_UPDATED_AT(uint64_t UPDATED_AT) {
+    fbb_.AddElement<uint64_t>(ACL::VT_UPDATED_AT, UPDATED_AT, 0);
+  }
+  void add_NOTES(::flatbuffers::Offset<::flatbuffers::String> NOTES) {
+    fbb_.AddOffset(ACL::VT_NOTES, NOTES);
+  }
+  void add_PROVIDER_PEER_ID(::flatbuffers::Offset<::flatbuffers::String> PROVIDER_PEER_ID) {
+    fbb_.AddOffset(ACL::VT_PROVIDER_PEER_ID, PROVIDER_PEER_ID);
+  }
+  void add_GRANT_RESPONSE_BASE64(::flatbuffers::Offset<::flatbuffers::String> GRANT_RESPONSE_BASE64) {
+    fbb_.AddOffset(ACL::VT_GRANT_RESPONSE_BASE64, GRANT_RESPONSE_BASE64);
+  }
+  void add_FIELD_STREAM_POLICY(::flatbuffers::Offset<GrantFieldStreamPolicy> FIELD_STREAM_POLICY) {
+    fbb_.AddOffset(ACL::VT_FIELD_STREAM_POLICY, FIELD_STREAM_POLICY);
+  }
   explicit ACLBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -187,10 +439,48 @@ inline ::flatbuffers::Offset<ACL> CreateACL(
     uint64_t EXPIRES_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PAYMENT_TX_HASH = 0,
     paymentMethod PAYMENT_METHOD = paymentMethod::Crypto_ETH,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PROVIDER_SIGNATURE = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> PROVIDER_SIGNATURE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> KEY_ALGORITHM = 0,
+    uint32_t RATE_LIMIT = 0,
+    uint32_t MAX_RECORDS_PER_REQUEST = 0,
+    grantLifecycleStatus STATUS = grantLifecycleStatus::Active,
+    uint64_t PAYMENT_AMOUNT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PAYMENT_CURRENCY = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PAYMENT_CHAIN = 0,
+    uint64_t NEXT_RENEWAL = 0,
+    bool AUTO_RENEW = false,
+    uint32_t RENEWAL_COUNT = 0,
+    uint64_t TOTAL_REQUESTS = 0,
+    uint64_t TOTAL_RECORDS = 0,
+    uint64_t LAST_ACCESS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DELIVERY_TOPIC = 0,
+    uint64_t CREATED_AT = 0,
+    uint64_t UPDATED_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROVIDER_PEER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> GRANT_RESPONSE_BASE64 = 0,
+    ::flatbuffers::Offset<GrantFieldStreamPolicy> FIELD_STREAM_POLICY = 0) {
   ACLBuilder builder_(_fbb);
+  builder_.add_UPDATED_AT(UPDATED_AT);
+  builder_.add_CREATED_AT(CREATED_AT);
+  builder_.add_LAST_ACCESS(LAST_ACCESS);
+  builder_.add_TOTAL_RECORDS(TOTAL_RECORDS);
+  builder_.add_TOTAL_REQUESTS(TOTAL_REQUESTS);
+  builder_.add_NEXT_RENEWAL(NEXT_RENEWAL);
+  builder_.add_PAYMENT_AMOUNT(PAYMENT_AMOUNT);
   builder_.add_EXPIRES_AT(EXPIRES_AT);
   builder_.add_GRANTED_AT(GRANTED_AT);
+  builder_.add_FIELD_STREAM_POLICY(FIELD_STREAM_POLICY);
+  builder_.add_GRANT_RESPONSE_BASE64(GRANT_RESPONSE_BASE64);
+  builder_.add_PROVIDER_PEER_ID(PROVIDER_PEER_ID);
+  builder_.add_NOTES(NOTES);
+  builder_.add_DELIVERY_TOPIC(DELIVERY_TOPIC);
+  builder_.add_RENEWAL_COUNT(RENEWAL_COUNT);
+  builder_.add_PAYMENT_CHAIN(PAYMENT_CHAIN);
+  builder_.add_PAYMENT_CURRENCY(PAYMENT_CURRENCY);
+  builder_.add_MAX_RECORDS_PER_REQUEST(MAX_RECORDS_PER_REQUEST);
+  builder_.add_RATE_LIMIT(RATE_LIMIT);
+  builder_.add_KEY_ALGORITHM(KEY_ALGORITHM);
   builder_.add_PROVIDER_SIGNATURE(PROVIDER_SIGNATURE);
   builder_.add_PAYMENT_TX_HASH(PAYMENT_TX_HASH);
   builder_.add_TIER_NAME(TIER_NAME);
@@ -198,6 +488,8 @@ inline ::flatbuffers::Offset<ACL> CreateACL(
   builder_.add_BUYER_PEER_ID(BUYER_PEER_ID);
   builder_.add_LISTING_ID(LISTING_ID);
   builder_.add_GRANT_ID(GRANT_ID);
+  builder_.add_AUTO_RENEW(AUTO_RENEW);
+  builder_.add_STATUS(STATUS);
   builder_.add_PAYMENT_METHOD(PAYMENT_METHOD);
   builder_.add_ACCESS_TYPE(ACCESS_TYPE);
   return builder_.Finish();
@@ -220,7 +512,27 @@ inline ::flatbuffers::Offset<ACL> CreateACLDirect(
     uint64_t EXPIRES_AT = 0,
     const char *PAYMENT_TX_HASH = nullptr,
     paymentMethod PAYMENT_METHOD = paymentMethod::Crypto_ETH,
-    const std::vector<uint8_t> *PROVIDER_SIGNATURE = nullptr) {
+    const std::vector<uint8_t> *PROVIDER_SIGNATURE = nullptr,
+    const char *KEY_ALGORITHM = nullptr,
+    uint32_t RATE_LIMIT = 0,
+    uint32_t MAX_RECORDS_PER_REQUEST = 0,
+    grantLifecycleStatus STATUS = grantLifecycleStatus::Active,
+    uint64_t PAYMENT_AMOUNT = 0,
+    const char *PAYMENT_CURRENCY = nullptr,
+    const char *PAYMENT_CHAIN = nullptr,
+    uint64_t NEXT_RENEWAL = 0,
+    bool AUTO_RENEW = false,
+    uint32_t RENEWAL_COUNT = 0,
+    uint64_t TOTAL_REQUESTS = 0,
+    uint64_t TOTAL_RECORDS = 0,
+    uint64_t LAST_ACCESS = 0,
+    const char *DELIVERY_TOPIC = nullptr,
+    uint64_t CREATED_AT = 0,
+    uint64_t UPDATED_AT = 0,
+    const char *NOTES = nullptr,
+    const char *PROVIDER_PEER_ID = nullptr,
+    const char *GRANT_RESPONSE_BASE64 = nullptr,
+    ::flatbuffers::Offset<GrantFieldStreamPolicy> FIELD_STREAM_POLICY = 0) {
   auto GRANT_ID__ = GRANT_ID ? _fbb.CreateString(GRANT_ID) : 0;
   auto LISTING_ID__ = LISTING_ID ? _fbb.CreateString(LISTING_ID) : 0;
   auto BUYER_PEER_ID__ = BUYER_PEER_ID ? _fbb.CreateString(BUYER_PEER_ID) : 0;
@@ -228,6 +540,13 @@ inline ::flatbuffers::Offset<ACL> CreateACLDirect(
   auto TIER_NAME__ = TIER_NAME ? _fbb.CreateString(TIER_NAME) : 0;
   auto PAYMENT_TX_HASH__ = PAYMENT_TX_HASH ? _fbb.CreateString(PAYMENT_TX_HASH) : 0;
   auto PROVIDER_SIGNATURE__ = PROVIDER_SIGNATURE ? _fbb.CreateVector<uint8_t>(*PROVIDER_SIGNATURE) : 0;
+  auto KEY_ALGORITHM__ = KEY_ALGORITHM ? _fbb.CreateString(KEY_ALGORITHM) : 0;
+  auto PAYMENT_CURRENCY__ = PAYMENT_CURRENCY ? _fbb.CreateString(PAYMENT_CURRENCY) : 0;
+  auto PAYMENT_CHAIN__ = PAYMENT_CHAIN ? _fbb.CreateString(PAYMENT_CHAIN) : 0;
+  auto DELIVERY_TOPIC__ = DELIVERY_TOPIC ? _fbb.CreateString(DELIVERY_TOPIC) : 0;
+  auto NOTES__ = NOTES ? _fbb.CreateString(NOTES) : 0;
+  auto PROVIDER_PEER_ID__ = PROVIDER_PEER_ID ? _fbb.CreateString(PROVIDER_PEER_ID) : 0;
+  auto GRANT_RESPONSE_BASE64__ = GRANT_RESPONSE_BASE64 ? _fbb.CreateString(GRANT_RESPONSE_BASE64) : 0;
   return CreateACL(
       _fbb,
       GRANT_ID__,
@@ -240,10 +559,99 @@ inline ::flatbuffers::Offset<ACL> CreateACLDirect(
       EXPIRES_AT,
       PAYMENT_TX_HASH__,
       PAYMENT_METHOD,
-      PROVIDER_SIGNATURE__);
+      PROVIDER_SIGNATURE__,
+      KEY_ALGORITHM__,
+      RATE_LIMIT,
+      MAX_RECORDS_PER_REQUEST,
+      STATUS,
+      PAYMENT_AMOUNT,
+      PAYMENT_CURRENCY__,
+      PAYMENT_CHAIN__,
+      NEXT_RENEWAL,
+      AUTO_RENEW,
+      RENEWAL_COUNT,
+      TOTAL_REQUESTS,
+      TOTAL_RECORDS,
+      LAST_ACCESS,
+      DELIVERY_TOPIC__,
+      CREATED_AT,
+      UPDATED_AT,
+      NOTES__,
+      PROVIDER_PEER_ID__,
+      GRANT_RESPONSE_BASE64__,
+      FIELD_STREAM_POLICY);
 }
 
 ::flatbuffers::Offset<ACL> CreateACL(::flatbuffers::FlatBufferBuilder &_fbb, const ACLT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline ACLT::ACLT(const ACLT &o)
+      : GRANT_ID(o.GRANT_ID),
+        LISTING_ID(o.LISTING_ID),
+        BUYER_PEER_ID(o.BUYER_PEER_ID),
+        BUYER_ENCRYPTION_PUBKEY(o.BUYER_ENCRYPTION_PUBKEY),
+        ACCESS_TYPE(o.ACCESS_TYPE),
+        TIER_NAME(o.TIER_NAME),
+        GRANTED_AT(o.GRANTED_AT),
+        EXPIRES_AT(o.EXPIRES_AT),
+        PAYMENT_TX_HASH(o.PAYMENT_TX_HASH),
+        PAYMENT_METHOD(o.PAYMENT_METHOD),
+        PROVIDER_SIGNATURE(o.PROVIDER_SIGNATURE),
+        KEY_ALGORITHM(o.KEY_ALGORITHM),
+        RATE_LIMIT(o.RATE_LIMIT),
+        MAX_RECORDS_PER_REQUEST(o.MAX_RECORDS_PER_REQUEST),
+        STATUS(o.STATUS),
+        PAYMENT_AMOUNT(o.PAYMENT_AMOUNT),
+        PAYMENT_CURRENCY(o.PAYMENT_CURRENCY),
+        PAYMENT_CHAIN(o.PAYMENT_CHAIN),
+        NEXT_RENEWAL(o.NEXT_RENEWAL),
+        AUTO_RENEW(o.AUTO_RENEW),
+        RENEWAL_COUNT(o.RENEWAL_COUNT),
+        TOTAL_REQUESTS(o.TOTAL_REQUESTS),
+        TOTAL_RECORDS(o.TOTAL_RECORDS),
+        LAST_ACCESS(o.LAST_ACCESS),
+        DELIVERY_TOPIC(o.DELIVERY_TOPIC),
+        CREATED_AT(o.CREATED_AT),
+        UPDATED_AT(o.UPDATED_AT),
+        NOTES(o.NOTES),
+        PROVIDER_PEER_ID(o.PROVIDER_PEER_ID),
+        GRANT_RESPONSE_BASE64(o.GRANT_RESPONSE_BASE64),
+        FIELD_STREAM_POLICY((o.FIELD_STREAM_POLICY) ? new GrantFieldStreamPolicyT(*o.FIELD_STREAM_POLICY) : nullptr) {
+}
+
+inline ACLT &ACLT::operator=(ACLT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(GRANT_ID, o.GRANT_ID);
+  std::swap(LISTING_ID, o.LISTING_ID);
+  std::swap(BUYER_PEER_ID, o.BUYER_PEER_ID);
+  std::swap(BUYER_ENCRYPTION_PUBKEY, o.BUYER_ENCRYPTION_PUBKEY);
+  std::swap(ACCESS_TYPE, o.ACCESS_TYPE);
+  std::swap(TIER_NAME, o.TIER_NAME);
+  std::swap(GRANTED_AT, o.GRANTED_AT);
+  std::swap(EXPIRES_AT, o.EXPIRES_AT);
+  std::swap(PAYMENT_TX_HASH, o.PAYMENT_TX_HASH);
+  std::swap(PAYMENT_METHOD, o.PAYMENT_METHOD);
+  std::swap(PROVIDER_SIGNATURE, o.PROVIDER_SIGNATURE);
+  std::swap(KEY_ALGORITHM, o.KEY_ALGORITHM);
+  std::swap(RATE_LIMIT, o.RATE_LIMIT);
+  std::swap(MAX_RECORDS_PER_REQUEST, o.MAX_RECORDS_PER_REQUEST);
+  std::swap(STATUS, o.STATUS);
+  std::swap(PAYMENT_AMOUNT, o.PAYMENT_AMOUNT);
+  std::swap(PAYMENT_CURRENCY, o.PAYMENT_CURRENCY);
+  std::swap(PAYMENT_CHAIN, o.PAYMENT_CHAIN);
+  std::swap(NEXT_RENEWAL, o.NEXT_RENEWAL);
+  std::swap(AUTO_RENEW, o.AUTO_RENEW);
+  std::swap(RENEWAL_COUNT, o.RENEWAL_COUNT);
+  std::swap(TOTAL_REQUESTS, o.TOTAL_REQUESTS);
+  std::swap(TOTAL_RECORDS, o.TOTAL_RECORDS);
+  std::swap(LAST_ACCESS, o.LAST_ACCESS);
+  std::swap(DELIVERY_TOPIC, o.DELIVERY_TOPIC);
+  std::swap(CREATED_AT, o.CREATED_AT);
+  std::swap(UPDATED_AT, o.UPDATED_AT);
+  std::swap(NOTES, o.NOTES);
+  std::swap(PROVIDER_PEER_ID, o.PROVIDER_PEER_ID);
+  std::swap(GRANT_RESPONSE_BASE64, o.GRANT_RESPONSE_BASE64);
+  std::swap(FIELD_STREAM_POLICY, o.FIELD_STREAM_POLICY);
+  return *this;
+}
 
 inline ACLT *ACL::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<ACLT>();
@@ -265,6 +673,26 @@ inline void ACL::UnPackTo(ACLT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = PAYMENT_TX_HASH(); if (_e) _o->PAYMENT_TX_HASH = _e->str(); }
   { auto _e = PAYMENT_METHOD(); _o->PAYMENT_METHOD = _e; }
   { auto _e = PROVIDER_SIGNATURE(); if (_e) { _o->PROVIDER_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->PROVIDER_SIGNATURE.begin()); } }
+  { auto _e = KEY_ALGORITHM(); if (_e) _o->KEY_ALGORITHM = _e->str(); }
+  { auto _e = RATE_LIMIT(); _o->RATE_LIMIT = _e; }
+  { auto _e = MAX_RECORDS_PER_REQUEST(); _o->MAX_RECORDS_PER_REQUEST = _e; }
+  { auto _e = STATUS(); _o->STATUS = _e; }
+  { auto _e = PAYMENT_AMOUNT(); _o->PAYMENT_AMOUNT = _e; }
+  { auto _e = PAYMENT_CURRENCY(); if (_e) _o->PAYMENT_CURRENCY = _e->str(); }
+  { auto _e = PAYMENT_CHAIN(); if (_e) _o->PAYMENT_CHAIN = _e->str(); }
+  { auto _e = NEXT_RENEWAL(); _o->NEXT_RENEWAL = _e; }
+  { auto _e = AUTO_RENEW(); _o->AUTO_RENEW = _e; }
+  { auto _e = RENEWAL_COUNT(); _o->RENEWAL_COUNT = _e; }
+  { auto _e = TOTAL_REQUESTS(); _o->TOTAL_REQUESTS = _e; }
+  { auto _e = TOTAL_RECORDS(); _o->TOTAL_RECORDS = _e; }
+  { auto _e = LAST_ACCESS(); _o->LAST_ACCESS = _e; }
+  { auto _e = DELIVERY_TOPIC(); if (_e) _o->DELIVERY_TOPIC = _e->str(); }
+  { auto _e = CREATED_AT(); _o->CREATED_AT = _e; }
+  { auto _e = UPDATED_AT(); _o->UPDATED_AT = _e; }
+  { auto _e = NOTES(); if (_e) _o->NOTES = _e->str(); }
+  { auto _e = PROVIDER_PEER_ID(); if (_e) _o->PROVIDER_PEER_ID = _e->str(); }
+  { auto _e = GRANT_RESPONSE_BASE64(); if (_e) _o->GRANT_RESPONSE_BASE64 = _e->str(); }
+  { auto _e = FIELD_STREAM_POLICY(); if (_e) { if(_o->FIELD_STREAM_POLICY) { _e->UnPackTo(_o->FIELD_STREAM_POLICY.get(), _resolver); } else { _o->FIELD_STREAM_POLICY = std::unique_ptr<GrantFieldStreamPolicyT>(_e->UnPack(_resolver)); } } else if (_o->FIELD_STREAM_POLICY) { _o->FIELD_STREAM_POLICY.reset(); } }
 }
 
 inline ::flatbuffers::Offset<ACL> CreateACL(::flatbuffers::FlatBufferBuilder &_fbb, const ACLT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -286,6 +714,26 @@ inline ::flatbuffers::Offset<ACL> ACL::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _PAYMENT_TX_HASH = _o->PAYMENT_TX_HASH.empty() ? 0 : _fbb.CreateString(_o->PAYMENT_TX_HASH);
   auto _PAYMENT_METHOD = _o->PAYMENT_METHOD;
   auto _PROVIDER_SIGNATURE = _o->PROVIDER_SIGNATURE.size() ? _fbb.CreateVector(_o->PROVIDER_SIGNATURE) : 0;
+  auto _KEY_ALGORITHM = _o->KEY_ALGORITHM.empty() ? 0 : _fbb.CreateString(_o->KEY_ALGORITHM);
+  auto _RATE_LIMIT = _o->RATE_LIMIT;
+  auto _MAX_RECORDS_PER_REQUEST = _o->MAX_RECORDS_PER_REQUEST;
+  auto _STATUS = _o->STATUS;
+  auto _PAYMENT_AMOUNT = _o->PAYMENT_AMOUNT;
+  auto _PAYMENT_CURRENCY = _o->PAYMENT_CURRENCY.empty() ? 0 : _fbb.CreateString(_o->PAYMENT_CURRENCY);
+  auto _PAYMENT_CHAIN = _o->PAYMENT_CHAIN.empty() ? 0 : _fbb.CreateString(_o->PAYMENT_CHAIN);
+  auto _NEXT_RENEWAL = _o->NEXT_RENEWAL;
+  auto _AUTO_RENEW = _o->AUTO_RENEW;
+  auto _RENEWAL_COUNT = _o->RENEWAL_COUNT;
+  auto _TOTAL_REQUESTS = _o->TOTAL_REQUESTS;
+  auto _TOTAL_RECORDS = _o->TOTAL_RECORDS;
+  auto _LAST_ACCESS = _o->LAST_ACCESS;
+  auto _DELIVERY_TOPIC = _o->DELIVERY_TOPIC.empty() ? 0 : _fbb.CreateString(_o->DELIVERY_TOPIC);
+  auto _CREATED_AT = _o->CREATED_AT;
+  auto _UPDATED_AT = _o->UPDATED_AT;
+  auto _NOTES = _o->NOTES.empty() ? 0 : _fbb.CreateString(_o->NOTES);
+  auto _PROVIDER_PEER_ID = _o->PROVIDER_PEER_ID.empty() ? 0 : _fbb.CreateString(_o->PROVIDER_PEER_ID);
+  auto _GRANT_RESPONSE_BASE64 = _o->GRANT_RESPONSE_BASE64.empty() ? 0 : _fbb.CreateString(_o->GRANT_RESPONSE_BASE64);
+  auto _FIELD_STREAM_POLICY = _o->FIELD_STREAM_POLICY ? CreateGrantFieldStreamPolicy(_fbb, _o->FIELD_STREAM_POLICY.get(), _rehasher) : 0;
   return CreateACL(
       _fbb,
       _GRANT_ID,
@@ -298,7 +746,27 @@ inline ::flatbuffers::Offset<ACL> ACL::Pack(::flatbuffers::FlatBufferBuilder &_f
       _EXPIRES_AT,
       _PAYMENT_TX_HASH,
       _PAYMENT_METHOD,
-      _PROVIDER_SIGNATURE);
+      _PROVIDER_SIGNATURE,
+      _KEY_ALGORITHM,
+      _RATE_LIMIT,
+      _MAX_RECORDS_PER_REQUEST,
+      _STATUS,
+      _PAYMENT_AMOUNT,
+      _PAYMENT_CURRENCY,
+      _PAYMENT_CHAIN,
+      _NEXT_RENEWAL,
+      _AUTO_RENEW,
+      _RENEWAL_COUNT,
+      _TOTAL_REQUESTS,
+      _TOTAL_RECORDS,
+      _LAST_ACCESS,
+      _DELIVERY_TOPIC,
+      _CREATED_AT,
+      _UPDATED_AT,
+      _NOTES,
+      _PROVIDER_PEER_ID,
+      _GRANT_RESPONSE_BASE64,
+      _FIELD_STREAM_POLICY);
 }
 
 inline const ACL *GetACL(const void *buf) {

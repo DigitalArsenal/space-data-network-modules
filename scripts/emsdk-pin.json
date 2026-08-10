@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "The pin for the RAW EM++ LANE — the fourteen modules that never reach the SDK compiler and drive a repo-local Emscripten directly. Read scripts/lib/emsdk-toolchain.mjs for why this file exists and what it is allowed to decide. Graph task: modules-raw-emcc-lane-unpinned-toolchain.",
+  "note": "The pin for the RAW EM++ LANE \u2014 the fourteen modules that never reach the SDK compiler and drive a repo-local Emscripten directly. Read scripts/lib/emsdk-toolchain.mjs for why this file exists and what it is allowed to decide. Graph task: modules-raw-emcc-lane-unpinned-toolchain.",
   "pin": {
     "id": "em-6.0.1",
     "emscriptenVersion": "6.0.1",
@@ -54,8 +54,9 @@
     "data-source/oneweb-source",
     "data-source/spacex-starlink-source",
     "delivery/plugin-delivery",
+    "flows/supplemental-omm/nodes/flatsql",
     "licensing/client-decrypt",
-    "flows/supplemental-omm/nodes/flatsql"
+    "propagator/sgp4"
   ],
   "shippedToolchainEvidence": {
     "note": "What produced the CURRENTLY COMMITTED bytes of each lane module, established 2026-08-09. `proven` = rebuilt under that toolchain from committed source, with the toolchain-decided sections (type/import/function/table/memory/global/export/elem, and code to within a handful of bytes) matching the committed artifact exactly. It deliberately does NOT require whole-artifact byte-identity: these builds embed an SDK-encoded manifest, so the SDK is a second build input and a stale artifact can differ there while the compiler question is settled. `strong` = the only Emscripten the module's own resolution order could have reached, installed before the artifact's commit and still present on the build machine. `none` = the emsdk that built it no longer exists on any machine we have; unrecoverable, and recorded as such instead of guessed.",
@@ -102,7 +103,7 @@
     "data-source/iss-source": {
       "toolchain": "em-6.0.1",
       "confidence": "proven",
-      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed the same day. PROVEN by reconstruction 2026-08-09: rebuilding committed source under em-6.0.1 emits a wasm whose type, import, function, table, memory, global, export, elem and datacount sections are BYTE-IDENTICAL to the committed artifact — same 29 types, 6 imports, 112 functions, 9 exports — with the code section differing by 3 bytes in 56,304. A different Emscripten does not land on the same function count and section bytes by accident. The artifact as a whole is NOT byte-identical, and the reason is not the toolchain: see scripts/artifact-provenance.json unreproducibleReasons."
+      "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed the same day. PROVEN by reconstruction 2026-08-09: rebuilding committed source under em-6.0.1 emits a wasm whose type, import, function, table, memory, global, export, elem and datacount sections are BYTE-IDENTICAL to the committed artifact \u2014 same 29 types, 6 imports, 112 functions, 9 exports \u2014 with the code section differing by 3 bytes in 56,304. A different Emscripten does not land on the same function count and section bytes by accident. The artifact as a whole is NOT byte-identical, and the reason is not the toolchain: see scripts/artifact-provenance.json unreproducibleReasons."
     },
     "data-source/oneweb-source": {
       "toolchain": null,
@@ -127,7 +128,12 @@
     "flows/supplemental-omm/nodes/flatsql": {
       "toolchain": "em-5.0.5",
       "confidence": "strong",
-      "evidence": "build.mjs hard-defaults to analysis/od/deps/emsdk, 5.0.5. Artifact committed 2026-08-06. (This module was already network-free before the pin landed — it refused a missing emsdk instead of cloning one — but it verified no version and recorded no identity.)"
+      "evidence": "build.mjs hard-defaults to analysis/od/deps/emsdk, 5.0.5. Artifact committed 2026-08-06. (This module was already network-free before the pin landed \u2014 it refused a missing emsdk instead of cloning one \u2014 but it verified no version and recorded no identity.)"
+    },
+    "propagator/sgp4": {
+      "toolchain": "em-6.0.1",
+      "status": "proven",
+      "note": "Rebuilt 2026-08-10 under the declared pin (SDN_LOCAL_EMSDK_DIR=data-source/iss-source/deps/emsdk) while adding plugin_entity_apply_impulsive_burn. Listing it here is the rest of that build: the module drove a repo-local Emscripten and was absent from laneModules, so nothing checked which compiler produced its bytes. See orbpro-propagators-have-no-native-burn-surface."
     }
   },
   "vendoredSources": {

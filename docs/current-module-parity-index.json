@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T02:41:40.124Z",
+  "generatedAt": "2026-08-10T13:37:53.731Z",
   "moduleCount": 71,
   "parityScopeModuleCount": 29,
   "isomorphicWasmCount": 69,
@@ -409,7 +409,7 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "invoke"
       ],
@@ -426,16 +426,17 @@
       ],
       "cxxSourceFileCount": 20,
       "cSourceFileCount": 0,
-      "testFileCount": 13,
+      "testFileCount": 14,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "src/cpp/src/approach.cpp",
         "src/cpp/src/classical.cpp",
+        "src/cpp/src/fault.cpp",
+        "src/cpp/src/json_lite.cpp",
         "src/cpp/src/maneuver_plugin.cpp",
         "src/cpp/src/math.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
         "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/propagation.cpp",
         "src/cpp/src/rendezvous.cpp",
@@ -448,8 +449,7 @@
         "src/cpp/tests/test_rendezvous.cpp",
         "src/cpp/tests/test_sixdof.cpp",
         "src/cpp/tests/test_stm.cpp",
-        "src/cpp/tests/test_targeting.cpp",
-        "src/cpp/wasm_api.cpp"
+        "src/cpp/tests/test_targeting.cpp"
       ],
       "testFiles": [
         "src/cpp/tests/test_approach.cpp",
@@ -460,6 +460,7 @@
         "src/cpp/tests/test_stm.cpp",
         "src/cpp/tests/test_targeting.cpp",
         "tests/behavior.test.mjs",
+        "tests/error_path.test.mjs",
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
         "tests/fixtures/request.hohmann.json",
         "tests/fixtures/request.rendezvous.json",

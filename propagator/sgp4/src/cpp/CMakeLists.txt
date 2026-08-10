@@ -27,6 +27,15 @@ set(CMAKE_EXE_LINKER_FLAGS
 find_path(
     FLATBUFFERS_INCLUDE_DIR
     NAMES flatbuffers/flatbuffers.h
+    HINTS
+        # An explicit checkout wins over whatever the host package manager has,
+        # which is what makes this build reproducible on a box where
+        # `brew install flatbuffers` was never run or has since been removed.
+        # (Measured 2026-08-10: `brew --prefix flatbuffers` answered with a
+        # path that does not exist, and the build died at configure time with
+        # "install flatbuffers and retry" — advice that names no version.)
+        $ENV{FLATBUFFERS_INCLUDE_DIR}
+        $ENV{FLATBUFFERS_ROOT}/include
     PATHS
         /opt/homebrew/include
         /opt/homebrew/opt/flatbuffers/include
@@ -35,7 +44,10 @@ find_path(
     NO_CMAKE_FIND_ROOT_PATH
 )
 if(NOT FLATBUFFERS_INCLUDE_DIR)
-    message(FATAL_ERROR "flatbuffers headers not found. Install flatbuffers and retry.")
+    message(FATAL_ERROR
+        "flatbuffers headers not found. Point FLATBUFFERS_ROOT at a flatbuffers "
+        "checkout (FLATBUFFERS_ROOT=<repo> so that <repo>/include/flatbuffers/"
+        "flatbuffers.h resolves), or set FLATBUFFERS_INCLUDE_DIR directly.")
 endif()
 
 # -------- SQLite3 amalgamation ------------------------------------------------
@@ -165,6 +177,7 @@ set(SGP4_EXPORTED_FUNCTIONS "\
 \"_plugin_entity_set_mode\",\
 \"_plugin_entity_get_mode\",\
 \"_plugin_entity_get_omm_pointer\",\
+\"_plugin_entity_apply_impulsive_burn\",\
 \"_plugin_get_omm_record_by_pointer\",\
 \"_malloc\",\
 \"_free\"\

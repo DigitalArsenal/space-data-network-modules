@@ -13,6 +13,18 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+struct GrantFieldStreamPolicy;
+struct GrantFieldStreamPolicyBuilder;
+struct GrantFieldStreamPolicyT;
+
+struct ProtectedDeliveryBinding;
+struct ProtectedDeliveryBindingBuilder;
+struct ProtectedDeliveryBindingT;
+
+struct ProviderReputation;
+struct ProviderReputationBuilder;
+struct ProviderReputationT;
+
 struct SpatialCoverage;
 struct SpatialCoverageBuilder;
 struct SpatialCoverageT;
@@ -88,46 +100,629 @@ enum class paymentMethod : int8_t {
   Fiat_Stripe = 4,
   /// Free/open data
   Free = 5,
+  /// Usage-based billing settled after metered delivery
+  UsageBased = 6,
+  /// Enterprise/offline invoicing
+  Enterprise = 7,
   MIN = Crypto_ETH,
-  MAX = Free
+  MAX = Enterprise
 };
 
-inline const paymentMethod (&EnumValuespaymentMethod())[6] {
+inline const paymentMethod (&EnumValuespaymentMethod())[8] {
   static const paymentMethod values[] = {
     paymentMethod::Crypto_ETH,
     paymentMethod::Crypto_SOL,
     paymentMethod::Crypto_BTC,
     paymentMethod::SDN_Credits,
     paymentMethod::Fiat_Stripe,
-    paymentMethod::Free
+    paymentMethod::Free,
+    paymentMethod::UsageBased,
+    paymentMethod::Enterprise
   };
   return values;
 }
 
 inline const char * const *EnumNamespaymentMethod() {
-  static const char * const names[7] = {
+  static const char * const names[9] = {
     "Crypto_ETH",
     "Crypto_SOL",
     "Crypto_BTC",
     "SDN_Credits",
     "Fiat_Stripe",
     "Free",
+    "UsageBased",
+    "Enterprise",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamepaymentMethod(paymentMethod e) {
-  if (::flatbuffers::IsOutRange(e, paymentMethod::Crypto_ETH, paymentMethod::Free)) return "";
+  if (::flatbuffers::IsOutRange(e, paymentMethod::Crypto_ETH, paymentMethod::Enterprise)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamespaymentMethod()[index];
 }
+
+/// Listing kind for marketplace entries.
+enum class listingCategory : int8_t {
+  DataStream = 0,
+  WasmModule = 1,
+  MIN = DataStream,
+  MAX = WasmModule
+};
+
+inline const listingCategory (&EnumValueslistingCategory())[2] {
+  static const listingCategory values[] = {
+    listingCategory::DataStream,
+    listingCategory::WasmModule
+  };
+  return values;
+}
+
+inline const char * const *EnumNameslistingCategory() {
+  static const char * const names[3] = {
+    "DataStream",
+    "WasmModule",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamelistingCategory(listingCategory e) {
+  if (::flatbuffers::IsOutRange(e, listingCategory::DataStream, listingCategory::WasmModule)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNameslistingCategory()[index];
+}
+
+struct GrantFieldStreamPolicyT : public ::flatbuffers::NativeTable {
+  typedef GrantFieldStreamPolicy TableType;
+  std::string POLICY_ID{};
+  uint32_t POLICY_VERSION = 0;
+  std::string STREAM_ID{};
+  std::string SCHEMA_CODE{};
+  std::vector<std::string> ALLOWED_FIELD_PATHS{};
+  std::vector<std::string> REDACTED_FIELD_PATHS{};
+  std::string KEY_EPOCH{};
+  std::string GRANT_SCOPE{};
+  std::vector<std::string> ALLOWED_OPERATIONS{};
+};
+
+/// Field-level stream policy bound into protected delivery and grants.
+struct GrantFieldStreamPolicy FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef GrantFieldStreamPolicyT NativeTableType;
+  typedef GrantFieldStreamPolicyBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_POLICY_ID = 4,
+    VT_POLICY_VERSION = 6,
+    VT_STREAM_ID = 8,
+    VT_SCHEMA_CODE = 10,
+    VT_ALLOWED_FIELD_PATHS = 12,
+    VT_REDACTED_FIELD_PATHS = 14,
+    VT_KEY_EPOCH = 16,
+    VT_GRANT_SCOPE = 18,
+    VT_ALLOWED_OPERATIONS = 20
+  };
+  const ::flatbuffers::String *POLICY_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_POLICY_ID);
+  }
+  uint32_t POLICY_VERSION() const {
+    return GetField<uint32_t>(VT_POLICY_VERSION, 0);
+  }
+  const ::flatbuffers::String *STREAM_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_STREAM_ID);
+  }
+  const ::flatbuffers::String *SCHEMA_CODE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SCHEMA_CODE);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_FIELD_PATHS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_ALLOWED_FIELD_PATHS);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *REDACTED_FIELD_PATHS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_REDACTED_FIELD_PATHS);
+  }
+  const ::flatbuffers::String *KEY_EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_KEY_EPOCH);
+  }
+  const ::flatbuffers::String *GRANT_SCOPE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_GRANT_SCOPE);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_OPERATIONS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_ALLOWED_OPERATIONS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_POLICY_ID) &&
+           verifier.VerifyString(POLICY_ID()) &&
+           VerifyField<uint32_t>(verifier, VT_POLICY_VERSION, 4) &&
+           VerifyOffset(verifier, VT_STREAM_ID) &&
+           verifier.VerifyString(STREAM_ID()) &&
+           VerifyOffset(verifier, VT_SCHEMA_CODE) &&
+           verifier.VerifyString(SCHEMA_CODE()) &&
+           VerifyOffset(verifier, VT_ALLOWED_FIELD_PATHS) &&
+           verifier.VerifyVector(ALLOWED_FIELD_PATHS()) &&
+           verifier.VerifyVectorOfStrings(ALLOWED_FIELD_PATHS()) &&
+           VerifyOffset(verifier, VT_REDACTED_FIELD_PATHS) &&
+           verifier.VerifyVector(REDACTED_FIELD_PATHS()) &&
+           verifier.VerifyVectorOfStrings(REDACTED_FIELD_PATHS()) &&
+           VerifyOffset(verifier, VT_KEY_EPOCH) &&
+           verifier.VerifyString(KEY_EPOCH()) &&
+           VerifyOffset(verifier, VT_GRANT_SCOPE) &&
+           verifier.VerifyString(GRANT_SCOPE()) &&
+           VerifyOffset(verifier, VT_ALLOWED_OPERATIONS) &&
+           verifier.VerifyVector(ALLOWED_OPERATIONS()) &&
+           verifier.VerifyVectorOfStrings(ALLOWED_OPERATIONS()) &&
+           verifier.EndTable();
+  }
+  GrantFieldStreamPolicyT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(GrantFieldStreamPolicyT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<GrantFieldStreamPolicy> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const GrantFieldStreamPolicyT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct GrantFieldStreamPolicyBuilder {
+  typedef GrantFieldStreamPolicy Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_POLICY_ID(::flatbuffers::Offset<::flatbuffers::String> POLICY_ID) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_POLICY_ID, POLICY_ID);
+  }
+  void add_POLICY_VERSION(uint32_t POLICY_VERSION) {
+    fbb_.AddElement<uint32_t>(GrantFieldStreamPolicy::VT_POLICY_VERSION, POLICY_VERSION, 0);
+  }
+  void add_STREAM_ID(::flatbuffers::Offset<::flatbuffers::String> STREAM_ID) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_STREAM_ID, STREAM_ID);
+  }
+  void add_SCHEMA_CODE(::flatbuffers::Offset<::flatbuffers::String> SCHEMA_CODE) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_SCHEMA_CODE, SCHEMA_CODE);
+  }
+  void add_ALLOWED_FIELD_PATHS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_FIELD_PATHS) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_ALLOWED_FIELD_PATHS, ALLOWED_FIELD_PATHS);
+  }
+  void add_REDACTED_FIELD_PATHS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> REDACTED_FIELD_PATHS) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_REDACTED_FIELD_PATHS, REDACTED_FIELD_PATHS);
+  }
+  void add_KEY_EPOCH(::flatbuffers::Offset<::flatbuffers::String> KEY_EPOCH) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_KEY_EPOCH, KEY_EPOCH);
+  }
+  void add_GRANT_SCOPE(::flatbuffers::Offset<::flatbuffers::String> GRANT_SCOPE) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_GRANT_SCOPE, GRANT_SCOPE);
+  }
+  void add_ALLOWED_OPERATIONS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_OPERATIONS) {
+    fbb_.AddOffset(GrantFieldStreamPolicy::VT_ALLOWED_OPERATIONS, ALLOWED_OPERATIONS);
+  }
+  explicit GrantFieldStreamPolicyBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<GrantFieldStreamPolicy> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<GrantFieldStreamPolicy>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<GrantFieldStreamPolicy> CreateGrantFieldStreamPolicy(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> POLICY_ID = 0,
+    uint32_t POLICY_VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> STREAM_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SCHEMA_CODE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_FIELD_PATHS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> REDACTED_FIELD_PATHS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> KEY_EPOCH = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> GRANT_SCOPE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> ALLOWED_OPERATIONS = 0) {
+  GrantFieldStreamPolicyBuilder builder_(_fbb);
+  builder_.add_ALLOWED_OPERATIONS(ALLOWED_OPERATIONS);
+  builder_.add_GRANT_SCOPE(GRANT_SCOPE);
+  builder_.add_KEY_EPOCH(KEY_EPOCH);
+  builder_.add_REDACTED_FIELD_PATHS(REDACTED_FIELD_PATHS);
+  builder_.add_ALLOWED_FIELD_PATHS(ALLOWED_FIELD_PATHS);
+  builder_.add_SCHEMA_CODE(SCHEMA_CODE);
+  builder_.add_STREAM_ID(STREAM_ID);
+  builder_.add_POLICY_VERSION(POLICY_VERSION);
+  builder_.add_POLICY_ID(POLICY_ID);
+  return builder_.Finish();
+}
+
+struct GrantFieldStreamPolicy::Traits {
+  using type = GrantFieldStreamPolicy;
+  static auto constexpr Create = CreateGrantFieldStreamPolicy;
+};
+
+inline ::flatbuffers::Offset<GrantFieldStreamPolicy> CreateGrantFieldStreamPolicyDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *POLICY_ID = nullptr,
+    uint32_t POLICY_VERSION = 0,
+    const char *STREAM_ID = nullptr,
+    const char *SCHEMA_CODE = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_FIELD_PATHS = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *REDACTED_FIELD_PATHS = nullptr,
+    const char *KEY_EPOCH = nullptr,
+    const char *GRANT_SCOPE = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *ALLOWED_OPERATIONS = nullptr) {
+  auto POLICY_ID__ = POLICY_ID ? _fbb.CreateString(POLICY_ID) : 0;
+  auto STREAM_ID__ = STREAM_ID ? _fbb.CreateString(STREAM_ID) : 0;
+  auto SCHEMA_CODE__ = SCHEMA_CODE ? _fbb.CreateString(SCHEMA_CODE) : 0;
+  auto ALLOWED_FIELD_PATHS__ = ALLOWED_FIELD_PATHS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*ALLOWED_FIELD_PATHS) : 0;
+  auto REDACTED_FIELD_PATHS__ = REDACTED_FIELD_PATHS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*REDACTED_FIELD_PATHS) : 0;
+  auto KEY_EPOCH__ = KEY_EPOCH ? _fbb.CreateString(KEY_EPOCH) : 0;
+  auto GRANT_SCOPE__ = GRANT_SCOPE ? _fbb.CreateString(GRANT_SCOPE) : 0;
+  auto ALLOWED_OPERATIONS__ = ALLOWED_OPERATIONS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*ALLOWED_OPERATIONS) : 0;
+  return CreateGrantFieldStreamPolicy(
+      _fbb,
+      POLICY_ID__,
+      POLICY_VERSION,
+      STREAM_ID__,
+      SCHEMA_CODE__,
+      ALLOWED_FIELD_PATHS__,
+      REDACTED_FIELD_PATHS__,
+      KEY_EPOCH__,
+      GRANT_SCOPE__,
+      ALLOWED_OPERATIONS__);
+}
+
+::flatbuffers::Offset<GrantFieldStreamPolicy> CreateGrantFieldStreamPolicy(::flatbuffers::FlatBufferBuilder &_fbb, const GrantFieldStreamPolicyT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ProtectedDeliveryBindingT : public ::flatbuffers::NativeTable {
+  typedef ProtectedDeliveryBinding TableType;
+  std::string ENCRYPTED_CID{};
+  std::string MANIFEST_CID{};
+  std::string CONTENT_HASH{};
+  std::string CONTENT_KEY_ID{};
+  std::string LICENSE_MODULE_ID{};
+  std::string MODULE_ID{};
+  std::string MODULE_VERSION{};
+  std::vector<std::string> REQUIRED_SCOPES{};
+  std::string GRANT_SCOPE{};
+  std::string DELIVERY_PROTOCOL{};
+  std::unique_ptr<GrantFieldStreamPolicyT> FIELD_STREAM_POLICY{};
+  ProtectedDeliveryBindingT() = default;
+  ProtectedDeliveryBindingT(const ProtectedDeliveryBindingT &o);
+  ProtectedDeliveryBindingT(ProtectedDeliveryBindingT&&) FLATBUFFERS_NOEXCEPT = default;
+  ProtectedDeliveryBindingT &operator=(ProtectedDeliveryBindingT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Immutable encrypted artifact/window metadata for protected delivery.
+struct ProtectedDeliveryBinding FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ProtectedDeliveryBindingT NativeTableType;
+  typedef ProtectedDeliveryBindingBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ENCRYPTED_CID = 4,
+    VT_MANIFEST_CID = 6,
+    VT_CONTENT_HASH = 8,
+    VT_CONTENT_KEY_ID = 10,
+    VT_LICENSE_MODULE_ID = 12,
+    VT_MODULE_ID = 14,
+    VT_MODULE_VERSION = 16,
+    VT_REQUIRED_SCOPES = 18,
+    VT_GRANT_SCOPE = 20,
+    VT_DELIVERY_PROTOCOL = 22,
+    VT_FIELD_STREAM_POLICY = 24
+  };
+  const ::flatbuffers::String *ENCRYPTED_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ENCRYPTED_CID);
+  }
+  const ::flatbuffers::String *MANIFEST_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MANIFEST_CID);
+  }
+  const ::flatbuffers::String *CONTENT_HASH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CONTENT_HASH);
+  }
+  const ::flatbuffers::String *CONTENT_KEY_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CONTENT_KEY_ID);
+  }
+  const ::flatbuffers::String *LICENSE_MODULE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LICENSE_MODULE_ID);
+  }
+  const ::flatbuffers::String *MODULE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_ID);
+  }
+  const ::flatbuffers::String *MODULE_VERSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_VERSION);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *REQUIRED_SCOPES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_REQUIRED_SCOPES);
+  }
+  const ::flatbuffers::String *GRANT_SCOPE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_GRANT_SCOPE);
+  }
+  const ::flatbuffers::String *DELIVERY_PROTOCOL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DELIVERY_PROTOCOL);
+  }
+  const GrantFieldStreamPolicy *FIELD_STREAM_POLICY() const {
+    return GetPointer<const GrantFieldStreamPolicy *>(VT_FIELD_STREAM_POLICY);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_ENCRYPTED_CID) &&
+           verifier.VerifyString(ENCRYPTED_CID()) &&
+           VerifyOffset(verifier, VT_MANIFEST_CID) &&
+           verifier.VerifyString(MANIFEST_CID()) &&
+           VerifyOffset(verifier, VT_CONTENT_HASH) &&
+           verifier.VerifyString(CONTENT_HASH()) &&
+           VerifyOffset(verifier, VT_CONTENT_KEY_ID) &&
+           verifier.VerifyString(CONTENT_KEY_ID()) &&
+           VerifyOffset(verifier, VT_LICENSE_MODULE_ID) &&
+           verifier.VerifyString(LICENSE_MODULE_ID()) &&
+           VerifyOffset(verifier, VT_MODULE_ID) &&
+           verifier.VerifyString(MODULE_ID()) &&
+           VerifyOffset(verifier, VT_MODULE_VERSION) &&
+           verifier.VerifyString(MODULE_VERSION()) &&
+           VerifyOffset(verifier, VT_REQUIRED_SCOPES) &&
+           verifier.VerifyVector(REQUIRED_SCOPES()) &&
+           verifier.VerifyVectorOfStrings(REQUIRED_SCOPES()) &&
+           VerifyOffset(verifier, VT_GRANT_SCOPE) &&
+           verifier.VerifyString(GRANT_SCOPE()) &&
+           VerifyOffset(verifier, VT_DELIVERY_PROTOCOL) &&
+           verifier.VerifyString(DELIVERY_PROTOCOL()) &&
+           VerifyOffset(verifier, VT_FIELD_STREAM_POLICY) &&
+           verifier.VerifyTable(FIELD_STREAM_POLICY()) &&
+           verifier.EndTable();
+  }
+  ProtectedDeliveryBindingT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ProtectedDeliveryBindingT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ProtectedDeliveryBinding> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ProtectedDeliveryBindingT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ProtectedDeliveryBindingBuilder {
+  typedef ProtectedDeliveryBinding Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ENCRYPTED_CID(::flatbuffers::Offset<::flatbuffers::String> ENCRYPTED_CID) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_ENCRYPTED_CID, ENCRYPTED_CID);
+  }
+  void add_MANIFEST_CID(::flatbuffers::Offset<::flatbuffers::String> MANIFEST_CID) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_MANIFEST_CID, MANIFEST_CID);
+  }
+  void add_CONTENT_HASH(::flatbuffers::Offset<::flatbuffers::String> CONTENT_HASH) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_CONTENT_HASH, CONTENT_HASH);
+  }
+  void add_CONTENT_KEY_ID(::flatbuffers::Offset<::flatbuffers::String> CONTENT_KEY_ID) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_CONTENT_KEY_ID, CONTENT_KEY_ID);
+  }
+  void add_LICENSE_MODULE_ID(::flatbuffers::Offset<::flatbuffers::String> LICENSE_MODULE_ID) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_LICENSE_MODULE_ID, LICENSE_MODULE_ID);
+  }
+  void add_MODULE_ID(::flatbuffers::Offset<::flatbuffers::String> MODULE_ID) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_MODULE_ID, MODULE_ID);
+  }
+  void add_MODULE_VERSION(::flatbuffers::Offset<::flatbuffers::String> MODULE_VERSION) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_MODULE_VERSION, MODULE_VERSION);
+  }
+  void add_REQUIRED_SCOPES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> REQUIRED_SCOPES) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_REQUIRED_SCOPES, REQUIRED_SCOPES);
+  }
+  void add_GRANT_SCOPE(::flatbuffers::Offset<::flatbuffers::String> GRANT_SCOPE) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_GRANT_SCOPE, GRANT_SCOPE);
+  }
+  void add_DELIVERY_PROTOCOL(::flatbuffers::Offset<::flatbuffers::String> DELIVERY_PROTOCOL) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_DELIVERY_PROTOCOL, DELIVERY_PROTOCOL);
+  }
+  void add_FIELD_STREAM_POLICY(::flatbuffers::Offset<GrantFieldStreamPolicy> FIELD_STREAM_POLICY) {
+    fbb_.AddOffset(ProtectedDeliveryBinding::VT_FIELD_STREAM_POLICY, FIELD_STREAM_POLICY);
+  }
+  explicit ProtectedDeliveryBindingBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ProtectedDeliveryBinding> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ProtectedDeliveryBinding>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ProtectedDeliveryBinding> CreateProtectedDeliveryBinding(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> ENCRYPTED_CID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MANIFEST_CID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CONTENT_HASH = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CONTENT_KEY_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LICENSE_MODULE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> REQUIRED_SCOPES = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> GRANT_SCOPE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DELIVERY_PROTOCOL = 0,
+    ::flatbuffers::Offset<GrantFieldStreamPolicy> FIELD_STREAM_POLICY = 0) {
+  ProtectedDeliveryBindingBuilder builder_(_fbb);
+  builder_.add_FIELD_STREAM_POLICY(FIELD_STREAM_POLICY);
+  builder_.add_DELIVERY_PROTOCOL(DELIVERY_PROTOCOL);
+  builder_.add_GRANT_SCOPE(GRANT_SCOPE);
+  builder_.add_REQUIRED_SCOPES(REQUIRED_SCOPES);
+  builder_.add_MODULE_VERSION(MODULE_VERSION);
+  builder_.add_MODULE_ID(MODULE_ID);
+  builder_.add_LICENSE_MODULE_ID(LICENSE_MODULE_ID);
+  builder_.add_CONTENT_KEY_ID(CONTENT_KEY_ID);
+  builder_.add_CONTENT_HASH(CONTENT_HASH);
+  builder_.add_MANIFEST_CID(MANIFEST_CID);
+  builder_.add_ENCRYPTED_CID(ENCRYPTED_CID);
+  return builder_.Finish();
+}
+
+struct ProtectedDeliveryBinding::Traits {
+  using type = ProtectedDeliveryBinding;
+  static auto constexpr Create = CreateProtectedDeliveryBinding;
+};
+
+inline ::flatbuffers::Offset<ProtectedDeliveryBinding> CreateProtectedDeliveryBindingDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *ENCRYPTED_CID = nullptr,
+    const char *MANIFEST_CID = nullptr,
+    const char *CONTENT_HASH = nullptr,
+    const char *CONTENT_KEY_ID = nullptr,
+    const char *LICENSE_MODULE_ID = nullptr,
+    const char *MODULE_ID = nullptr,
+    const char *MODULE_VERSION = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *REQUIRED_SCOPES = nullptr,
+    const char *GRANT_SCOPE = nullptr,
+    const char *DELIVERY_PROTOCOL = nullptr,
+    ::flatbuffers::Offset<GrantFieldStreamPolicy> FIELD_STREAM_POLICY = 0) {
+  auto ENCRYPTED_CID__ = ENCRYPTED_CID ? _fbb.CreateString(ENCRYPTED_CID) : 0;
+  auto MANIFEST_CID__ = MANIFEST_CID ? _fbb.CreateString(MANIFEST_CID) : 0;
+  auto CONTENT_HASH__ = CONTENT_HASH ? _fbb.CreateString(CONTENT_HASH) : 0;
+  auto CONTENT_KEY_ID__ = CONTENT_KEY_ID ? _fbb.CreateString(CONTENT_KEY_ID) : 0;
+  auto LICENSE_MODULE_ID__ = LICENSE_MODULE_ID ? _fbb.CreateString(LICENSE_MODULE_ID) : 0;
+  auto MODULE_ID__ = MODULE_ID ? _fbb.CreateString(MODULE_ID) : 0;
+  auto MODULE_VERSION__ = MODULE_VERSION ? _fbb.CreateString(MODULE_VERSION) : 0;
+  auto REQUIRED_SCOPES__ = REQUIRED_SCOPES ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*REQUIRED_SCOPES) : 0;
+  auto GRANT_SCOPE__ = GRANT_SCOPE ? _fbb.CreateString(GRANT_SCOPE) : 0;
+  auto DELIVERY_PROTOCOL__ = DELIVERY_PROTOCOL ? _fbb.CreateString(DELIVERY_PROTOCOL) : 0;
+  return CreateProtectedDeliveryBinding(
+      _fbb,
+      ENCRYPTED_CID__,
+      MANIFEST_CID__,
+      CONTENT_HASH__,
+      CONTENT_KEY_ID__,
+      LICENSE_MODULE_ID__,
+      MODULE_ID__,
+      MODULE_VERSION__,
+      REQUIRED_SCOPES__,
+      GRANT_SCOPE__,
+      DELIVERY_PROTOCOL__,
+      FIELD_STREAM_POLICY);
+}
+
+::flatbuffers::Offset<ProtectedDeliveryBinding> CreateProtectedDeliveryBinding(::flatbuffers::FlatBufferBuilder &_fbb, const ProtectedDeliveryBindingT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ProviderReputationT : public ::flatbuffers::NativeTable {
+  typedef ProviderReputation TableType;
+  uint64_t TOTAL_SALES = 0;
+  uint16_t AVERAGE_RATING_X10 = 0;
+  uint32_t TOTAL_RATINGS = 0;
+  uint16_t UPTIME_PERCENTAGE_X100 = 0;
+  uint32_t AVG_DELIVERY_LATENCY_MS = 0;
+  uint32_t DISPUTE_COUNT = 0;
+  uint64_t PROVIDER_SINCE = 0;
+};
+
+/// Provider reputation summary surfaced in marketplace listings.
+struct ProviderReputation FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ProviderReputationT NativeTableType;
+  typedef ProviderReputationBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TOTAL_SALES = 4,
+    VT_AVERAGE_RATING_X10 = 6,
+    VT_TOTAL_RATINGS = 8,
+    VT_UPTIME_PERCENTAGE_X100 = 10,
+    VT_AVG_DELIVERY_LATENCY_MS = 12,
+    VT_DISPUTE_COUNT = 14,
+    VT_PROVIDER_SINCE = 16
+  };
+  uint64_t TOTAL_SALES() const {
+    return GetField<uint64_t>(VT_TOTAL_SALES, 0);
+  }
+  uint16_t AVERAGE_RATING_X10() const {
+    return GetField<uint16_t>(VT_AVERAGE_RATING_X10, 0);
+  }
+  uint32_t TOTAL_RATINGS() const {
+    return GetField<uint32_t>(VT_TOTAL_RATINGS, 0);
+  }
+  uint16_t UPTIME_PERCENTAGE_X100() const {
+    return GetField<uint16_t>(VT_UPTIME_PERCENTAGE_X100, 0);
+  }
+  uint32_t AVG_DELIVERY_LATENCY_MS() const {
+    return GetField<uint32_t>(VT_AVG_DELIVERY_LATENCY_MS, 0);
+  }
+  uint32_t DISPUTE_COUNT() const {
+    return GetField<uint32_t>(VT_DISPUTE_COUNT, 0);
+  }
+  uint64_t PROVIDER_SINCE() const {
+    return GetField<uint64_t>(VT_PROVIDER_SINCE, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_TOTAL_SALES, 8) &&
+           VerifyField<uint16_t>(verifier, VT_AVERAGE_RATING_X10, 2) &&
+           VerifyField<uint32_t>(verifier, VT_TOTAL_RATINGS, 4) &&
+           VerifyField<uint16_t>(verifier, VT_UPTIME_PERCENTAGE_X100, 2) &&
+           VerifyField<uint32_t>(verifier, VT_AVG_DELIVERY_LATENCY_MS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_DISPUTE_COUNT, 4) &&
+           VerifyField<uint64_t>(verifier, VT_PROVIDER_SINCE, 8) &&
+           verifier.EndTable();
+  }
+  ProviderReputationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ProviderReputationT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ProviderReputation> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ProviderReputationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ProviderReputationBuilder {
+  typedef ProviderReputation Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_TOTAL_SALES(uint64_t TOTAL_SALES) {
+    fbb_.AddElement<uint64_t>(ProviderReputation::VT_TOTAL_SALES, TOTAL_SALES, 0);
+  }
+  void add_AVERAGE_RATING_X10(uint16_t AVERAGE_RATING_X10) {
+    fbb_.AddElement<uint16_t>(ProviderReputation::VT_AVERAGE_RATING_X10, AVERAGE_RATING_X10, 0);
+  }
+  void add_TOTAL_RATINGS(uint32_t TOTAL_RATINGS) {
+    fbb_.AddElement<uint32_t>(ProviderReputation::VT_TOTAL_RATINGS, TOTAL_RATINGS, 0);
+  }
+  void add_UPTIME_PERCENTAGE_X100(uint16_t UPTIME_PERCENTAGE_X100) {
+    fbb_.AddElement<uint16_t>(ProviderReputation::VT_UPTIME_PERCENTAGE_X100, UPTIME_PERCENTAGE_X100, 0);
+  }
+  void add_AVG_DELIVERY_LATENCY_MS(uint32_t AVG_DELIVERY_LATENCY_MS) {
+    fbb_.AddElement<uint32_t>(ProviderReputation::VT_AVG_DELIVERY_LATENCY_MS, AVG_DELIVERY_LATENCY_MS, 0);
+  }
+  void add_DISPUTE_COUNT(uint32_t DISPUTE_COUNT) {
+    fbb_.AddElement<uint32_t>(ProviderReputation::VT_DISPUTE_COUNT, DISPUTE_COUNT, 0);
+  }
+  void add_PROVIDER_SINCE(uint64_t PROVIDER_SINCE) {
+    fbb_.AddElement<uint64_t>(ProviderReputation::VT_PROVIDER_SINCE, PROVIDER_SINCE, 0);
+  }
+  explicit ProviderReputationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ProviderReputation> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ProviderReputation>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ProviderReputation> CreateProviderReputation(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t TOTAL_SALES = 0,
+    uint16_t AVERAGE_RATING_X10 = 0,
+    uint32_t TOTAL_RATINGS = 0,
+    uint16_t UPTIME_PERCENTAGE_X100 = 0,
+    uint32_t AVG_DELIVERY_LATENCY_MS = 0,
+    uint32_t DISPUTE_COUNT = 0,
+    uint64_t PROVIDER_SINCE = 0) {
+  ProviderReputationBuilder builder_(_fbb);
+  builder_.add_PROVIDER_SINCE(PROVIDER_SINCE);
+  builder_.add_TOTAL_SALES(TOTAL_SALES);
+  builder_.add_DISPUTE_COUNT(DISPUTE_COUNT);
+  builder_.add_AVG_DELIVERY_LATENCY_MS(AVG_DELIVERY_LATENCY_MS);
+  builder_.add_TOTAL_RATINGS(TOTAL_RATINGS);
+  builder_.add_UPTIME_PERCENTAGE_X100(UPTIME_PERCENTAGE_X100);
+  builder_.add_AVERAGE_RATING_X10(AVERAGE_RATING_X10);
+  return builder_.Finish();
+}
+
+struct ProviderReputation::Traits {
+  using type = ProviderReputation;
+  static auto constexpr Create = CreateProviderReputation;
+};
+
+::flatbuffers::Offset<ProviderReputation> CreateProviderReputation(::flatbuffers::FlatBufferBuilder &_fbb, const ProviderReputationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct SpatialCoverageT : public ::flatbuffers::NativeTable {
   typedef SpatialCoverage TableType;
   std::string TYPE{};
   std::vector<std::string> REGIONS{};
   std::vector<std::string> OBJECT_IDS{};
+  double MIN_ALTITUDE_KM = 0.0;
+  double MAX_ALTITUDE_KM = 0.0;
+  std::vector<double> GEO_BOUNDS{};
 };
 
 /// Spatial coverage definition
@@ -138,7 +733,10 @@ struct SpatialCoverage FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_TYPE = 4,
     VT_REGIONS = 6,
-    VT_OBJECT_IDS = 8
+    VT_OBJECT_IDS = 8,
+    VT_MIN_ALTITUDE_KM = 10,
+    VT_MAX_ALTITUDE_KM = 12,
+    VT_GEO_BOUNDS = 14
   };
   /// Type of coverage: "global", "region", "object_list"
   const ::flatbuffers::String *TYPE() const {
@@ -152,6 +750,18 @@ struct SpatialCoverage FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *OBJECT_IDS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_OBJECT_IDS);
   }
+  /// Minimum altitude in kilometers for altitude-bounded offerings
+  double MIN_ALTITUDE_KM() const {
+    return GetField<double>(VT_MIN_ALTITUDE_KM, 0.0);
+  }
+  /// Maximum altitude in kilometers for altitude-bounded offerings
+  double MAX_ALTITUDE_KM() const {
+    return GetField<double>(VT_MAX_ALTITUDE_KM, 0.0);
+  }
+  /// Bounding box as [min_lat, min_lon, max_lat, max_lon]
+  const ::flatbuffers::Vector<double> *GEO_BOUNDS() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_GEO_BOUNDS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -163,6 +773,10 @@ struct SpatialCoverage FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_OBJECT_IDS) &&
            verifier.VerifyVector(OBJECT_IDS()) &&
            verifier.VerifyVectorOfStrings(OBJECT_IDS()) &&
+           VerifyField<double>(verifier, VT_MIN_ALTITUDE_KM, 8) &&
+           VerifyField<double>(verifier, VT_MAX_ALTITUDE_KM, 8) &&
+           VerifyOffset(verifier, VT_GEO_BOUNDS) &&
+           verifier.VerifyVector(GEO_BOUNDS()) &&
            verifier.EndTable();
   }
   SpatialCoverageT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -183,6 +797,15 @@ struct SpatialCoverageBuilder {
   void add_OBJECT_IDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> OBJECT_IDS) {
     fbb_.AddOffset(SpatialCoverage::VT_OBJECT_IDS, OBJECT_IDS);
   }
+  void add_MIN_ALTITUDE_KM(double MIN_ALTITUDE_KM) {
+    fbb_.AddElement<double>(SpatialCoverage::VT_MIN_ALTITUDE_KM, MIN_ALTITUDE_KM, 0.0);
+  }
+  void add_MAX_ALTITUDE_KM(double MAX_ALTITUDE_KM) {
+    fbb_.AddElement<double>(SpatialCoverage::VT_MAX_ALTITUDE_KM, MAX_ALTITUDE_KM, 0.0);
+  }
+  void add_GEO_BOUNDS(::flatbuffers::Offset<::flatbuffers::Vector<double>> GEO_BOUNDS) {
+    fbb_.AddOffset(SpatialCoverage::VT_GEO_BOUNDS, GEO_BOUNDS);
+  }
   explicit SpatialCoverageBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -198,8 +821,14 @@ inline ::flatbuffers::Offset<SpatialCoverage> CreateSpatialCoverage(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> TYPE = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> REGIONS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> OBJECT_IDS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> OBJECT_IDS = 0,
+    double MIN_ALTITUDE_KM = 0.0,
+    double MAX_ALTITUDE_KM = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> GEO_BOUNDS = 0) {
   SpatialCoverageBuilder builder_(_fbb);
+  builder_.add_MAX_ALTITUDE_KM(MAX_ALTITUDE_KM);
+  builder_.add_MIN_ALTITUDE_KM(MIN_ALTITUDE_KM);
+  builder_.add_GEO_BOUNDS(GEO_BOUNDS);
   builder_.add_OBJECT_IDS(OBJECT_IDS);
   builder_.add_REGIONS(REGIONS);
   builder_.add_TYPE(TYPE);
@@ -215,15 +844,22 @@ inline ::flatbuffers::Offset<SpatialCoverage> CreateSpatialCoverageDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *TYPE = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *REGIONS = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *OBJECT_IDS = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *OBJECT_IDS = nullptr,
+    double MIN_ALTITUDE_KM = 0.0,
+    double MAX_ALTITUDE_KM = 0.0,
+    const std::vector<double> *GEO_BOUNDS = nullptr) {
   auto TYPE__ = TYPE ? _fbb.CreateString(TYPE) : 0;
   auto REGIONS__ = REGIONS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*REGIONS) : 0;
   auto OBJECT_IDS__ = OBJECT_IDS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*OBJECT_IDS) : 0;
+  auto GEO_BOUNDS__ = GEO_BOUNDS ? _fbb.CreateVector<double>(*GEO_BOUNDS) : 0;
   return CreateSpatialCoverage(
       _fbb,
       TYPE__,
       REGIONS__,
-      OBJECT_IDS__);
+      OBJECT_IDS__,
+      MIN_ALTITUDE_KM,
+      MAX_ALTITUDE_KM,
+      GEO_BOUNDS__);
 }
 
 ::flatbuffers::Offset<SpatialCoverage> CreateSpatialCoverage(::flatbuffers::FlatBufferBuilder &_fbb, const SpatialCoverageT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -234,6 +870,7 @@ struct TemporalCoverageT : public ::flatbuffers::NativeTable {
   std::string END_EPOCH{};
   std::string UPDATE_FREQUENCY{};
   uint32_t HISTORICAL_DEPTH = 0;
+  uint32_t LATENCY_SECONDS = 0;
 };
 
 /// Temporal coverage definition
@@ -245,7 +882,8 @@ struct TemporalCoverage FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_START_EPOCH = 4,
     VT_END_EPOCH = 6,
     VT_UPDATE_FREQUENCY = 8,
-    VT_HISTORICAL_DEPTH = 10
+    VT_HISTORICAL_DEPTH = 10,
+    VT_LATENCY_SECONDS = 12
   };
   /// Start epoch in ISO 8601 format
   const ::flatbuffers::String *START_EPOCH() const {
@@ -263,6 +901,10 @@ struct TemporalCoverage FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t HISTORICAL_DEPTH() const {
     return GetField<uint32_t>(VT_HISTORICAL_DEPTH, 0);
   }
+  /// Typical provider latency in seconds
+  uint32_t LATENCY_SECONDS() const {
+    return GetField<uint32_t>(VT_LATENCY_SECONDS, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -273,6 +915,7 @@ struct TemporalCoverage FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_UPDATE_FREQUENCY) &&
            verifier.VerifyString(UPDATE_FREQUENCY()) &&
            VerifyField<uint32_t>(verifier, VT_HISTORICAL_DEPTH, 4) &&
+           VerifyField<uint32_t>(verifier, VT_LATENCY_SECONDS, 4) &&
            verifier.EndTable();
   }
   TemporalCoverageT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -296,6 +939,9 @@ struct TemporalCoverageBuilder {
   void add_HISTORICAL_DEPTH(uint32_t HISTORICAL_DEPTH) {
     fbb_.AddElement<uint32_t>(TemporalCoverage::VT_HISTORICAL_DEPTH, HISTORICAL_DEPTH, 0);
   }
+  void add_LATENCY_SECONDS(uint32_t LATENCY_SECONDS) {
+    fbb_.AddElement<uint32_t>(TemporalCoverage::VT_LATENCY_SECONDS, LATENCY_SECONDS, 0);
+  }
   explicit TemporalCoverageBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -312,8 +958,10 @@ inline ::flatbuffers::Offset<TemporalCoverage> CreateTemporalCoverage(
     ::flatbuffers::Offset<::flatbuffers::String> START_EPOCH = 0,
     ::flatbuffers::Offset<::flatbuffers::String> END_EPOCH = 0,
     ::flatbuffers::Offset<::flatbuffers::String> UPDATE_FREQUENCY = 0,
-    uint32_t HISTORICAL_DEPTH = 0) {
+    uint32_t HISTORICAL_DEPTH = 0,
+    uint32_t LATENCY_SECONDS = 0) {
   TemporalCoverageBuilder builder_(_fbb);
+  builder_.add_LATENCY_SECONDS(LATENCY_SECONDS);
   builder_.add_HISTORICAL_DEPTH(HISTORICAL_DEPTH);
   builder_.add_UPDATE_FREQUENCY(UPDATE_FREQUENCY);
   builder_.add_END_EPOCH(END_EPOCH);
@@ -331,7 +979,8 @@ inline ::flatbuffers::Offset<TemporalCoverage> CreateTemporalCoverageDirect(
     const char *START_EPOCH = nullptr,
     const char *END_EPOCH = nullptr,
     const char *UPDATE_FREQUENCY = nullptr,
-    uint32_t HISTORICAL_DEPTH = 0) {
+    uint32_t HISTORICAL_DEPTH = 0,
+    uint32_t LATENCY_SECONDS = 0) {
   auto START_EPOCH__ = START_EPOCH ? _fbb.CreateString(START_EPOCH) : 0;
   auto END_EPOCH__ = END_EPOCH ? _fbb.CreateString(END_EPOCH) : 0;
   auto UPDATE_FREQUENCY__ = UPDATE_FREQUENCY ? _fbb.CreateString(UPDATE_FREQUENCY) : 0;
@@ -340,7 +989,8 @@ inline ::flatbuffers::Offset<TemporalCoverage> CreateTemporalCoverageDirect(
       START_EPOCH__,
       END_EPOCH__,
       UPDATE_FREQUENCY__,
-      HISTORICAL_DEPTH);
+      HISTORICAL_DEPTH,
+      LATENCY_SECONDS);
 }
 
 ::flatbuffers::Offset<TemporalCoverage> CreateTemporalCoverage(::flatbuffers::FlatBufferBuilder &_fbb, const TemporalCoverageT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -432,6 +1082,8 @@ struct PricingTierT : public ::flatbuffers::NativeTable {
   uint32_t DURATION_DAYS = 0;
   uint32_t RATE_LIMIT = 0;
   std::vector<std::string> FEATURES{};
+  uint32_t MAX_RECORDS_PER_REQUEST = 0;
+  std::string DESCRIPTION{};
 };
 
 /// Pricing tier for a listing
@@ -445,7 +1097,9 @@ struct PricingTier FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PRICE_CURRENCY = 8,
     VT_DURATION_DAYS = 10,
     VT_RATE_LIMIT = 12,
-    VT_FEATURES = 14
+    VT_FEATURES = 14,
+    VT_MAX_RECORDS_PER_REQUEST = 16,
+    VT_DESCRIPTION = 18
   };
   /// Tier name, e.g., "Basic", "Pro", "Enterprise"
   const ::flatbuffers::String *NAME() const {
@@ -471,6 +1125,14 @@ struct PricingTier FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *FEATURES() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_FEATURES);
   }
+  /// Maximum records returned per request
+  uint32_t MAX_RECORDS_PER_REQUEST() const {
+    return GetField<uint32_t>(VT_MAX_RECORDS_PER_REQUEST, 0);
+  }
+  /// Human-readable tier description
+  const ::flatbuffers::String *DESCRIPTION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DESCRIPTION);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -484,6 +1146,9 @@ struct PricingTier FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_FEATURES) &&
            verifier.VerifyVector(FEATURES()) &&
            verifier.VerifyVectorOfStrings(FEATURES()) &&
+           VerifyField<uint32_t>(verifier, VT_MAX_RECORDS_PER_REQUEST, 4) &&
+           VerifyOffset(verifier, VT_DESCRIPTION) &&
+           verifier.VerifyString(DESCRIPTION()) &&
            verifier.EndTable();
   }
   PricingTierT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -513,6 +1178,12 @@ struct PricingTierBuilder {
   void add_FEATURES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> FEATURES) {
     fbb_.AddOffset(PricingTier::VT_FEATURES, FEATURES);
   }
+  void add_MAX_RECORDS_PER_REQUEST(uint32_t MAX_RECORDS_PER_REQUEST) {
+    fbb_.AddElement<uint32_t>(PricingTier::VT_MAX_RECORDS_PER_REQUEST, MAX_RECORDS_PER_REQUEST, 0);
+  }
+  void add_DESCRIPTION(::flatbuffers::Offset<::flatbuffers::String> DESCRIPTION) {
+    fbb_.AddOffset(PricingTier::VT_DESCRIPTION, DESCRIPTION);
+  }
   explicit PricingTierBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -531,9 +1202,13 @@ inline ::flatbuffers::Offset<PricingTier> CreatePricingTier(
     ::flatbuffers::Offset<::flatbuffers::String> PRICE_CURRENCY = 0,
     uint32_t DURATION_DAYS = 0,
     uint32_t RATE_LIMIT = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> FEATURES = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> FEATURES = 0,
+    uint32_t MAX_RECORDS_PER_REQUEST = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DESCRIPTION = 0) {
   PricingTierBuilder builder_(_fbb);
   builder_.add_PRICE_AMOUNT(PRICE_AMOUNT);
+  builder_.add_DESCRIPTION(DESCRIPTION);
+  builder_.add_MAX_RECORDS_PER_REQUEST(MAX_RECORDS_PER_REQUEST);
   builder_.add_FEATURES(FEATURES);
   builder_.add_RATE_LIMIT(RATE_LIMIT);
   builder_.add_DURATION_DAYS(DURATION_DAYS);
@@ -554,10 +1229,13 @@ inline ::flatbuffers::Offset<PricingTier> CreatePricingTierDirect(
     const char *PRICE_CURRENCY = nullptr,
     uint32_t DURATION_DAYS = 0,
     uint32_t RATE_LIMIT = 0,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *FEATURES = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *FEATURES = nullptr,
+    uint32_t MAX_RECORDS_PER_REQUEST = 0,
+    const char *DESCRIPTION = nullptr) {
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto PRICE_CURRENCY__ = PRICE_CURRENCY ? _fbb.CreateString(PRICE_CURRENCY) : 0;
   auto FEATURES__ = FEATURES ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*FEATURES) : 0;
+  auto DESCRIPTION__ = DESCRIPTION ? _fbb.CreateString(DESCRIPTION) : 0;
   return CreatePricingTier(
       _fbb,
       NAME__,
@@ -565,7 +1243,9 @@ inline ::flatbuffers::Offset<PricingTier> CreatePricingTierDirect(
       PRICE_CURRENCY__,
       DURATION_DAYS,
       RATE_LIMIT,
-      FEATURES__);
+      FEATURES__,
+      MAX_RECORDS_PER_REQUEST,
+      DESCRIPTION__);
 }
 
 ::flatbuffers::Offset<PricingTier> CreatePricingTier(::flatbuffers::FlatBufferBuilder &_fbb, const PricingTierT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -588,6 +1268,17 @@ struct STFT : public ::flatbuffers::NativeTable {
   uint64_t UPDATED_AT = 0;
   bool ACTIVE = false;
   std::vector<uint8_t> SIGNATURE{};
+  listingCategory LISTING_KIND = listingCategory::DataStream;
+  std::vector<std::string> TAGS{};
+  uint32_t SAMPLE_RECORD_COUNT = 0;
+  std::vector<std::string> DELIVERY_METHODS{};
+  std::unique_ptr<ProtectedDeliveryBindingT> PROTECTED_DELIVERY{};
+  std::unique_ptr<ProviderReputationT> REPUTATION{};
+  uint32_t VERSION = 0;
+  uint64_t EXPIRES_AT = 0;
+  std::string TERMS_CID{};
+  std::string LICENSE{};
+  std::string SOURCE_PEER_ID{};
   STFT() = default;
   STFT(const STFT &o);
   STFT(STFT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -615,7 +1306,18 @@ struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CREATED_AT = 28,
     VT_UPDATED_AT = 30,
     VT_ACTIVE = 32,
-    VT_SIGNATURE = 34
+    VT_SIGNATURE = 34,
+    VT_LISTING_KIND = 36,
+    VT_TAGS = 38,
+    VT_SAMPLE_RECORD_COUNT = 40,
+    VT_DELIVERY_METHODS = 42,
+    VT_PROTECTED_DELIVERY = 44,
+    VT_REPUTATION = 46,
+    VT_VERSION = 48,
+    VT_EXPIRES_AT = 50,
+    VT_TERMS_CID = 52,
+    VT_LICENSE = 54,
+    VT_SOURCE_PEER_ID = 56
   };
   /// Unique identifier for the listing
   const ::flatbuffers::String *LISTING_ID() const {
@@ -681,6 +1383,50 @@ struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<uint8_t> *SIGNATURE() const {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_SIGNATURE);
   }
+  /// Listing category: data stream or WASM module
+  listingCategory LISTING_KIND() const {
+    return static_cast<listingCategory>(GetField<int8_t>(VT_LISTING_KIND, 0));
+  }
+  /// Search tags
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_TAGS);
+  }
+  /// Number of records in sample data, when available
+  uint32_t SAMPLE_RECORD_COUNT() const {
+    return GetField<uint32_t>(VT_SAMPLE_RECORD_COUNT, 0);
+  }
+  /// Supported delivery methods
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *DELIVERY_METHODS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_DELIVERY_METHODS);
+  }
+  /// Protected delivery metadata for encrypted artifacts or streams
+  const ProtectedDeliveryBinding *PROTECTED_DELIVERY() const {
+    return GetPointer<const ProtectedDeliveryBinding *>(VT_PROTECTED_DELIVERY);
+  }
+  /// Provider reputation summary
+  const ProviderReputation *REPUTATION() const {
+    return GetPointer<const ProviderReputation *>(VT_REPUTATION);
+  }
+  /// Listing version
+  uint32_t VERSION() const {
+    return GetField<uint32_t>(VT_VERSION, 0);
+  }
+  /// Unix timestamp when the listing expires, or 0 for no expiry
+  uint64_t EXPIRES_AT() const {
+    return GetField<uint64_t>(VT_EXPIRES_AT, 0);
+  }
+  /// Terms document CID
+  const ::flatbuffers::String *TERMS_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TERMS_CID);
+  }
+  /// License label or SPDX-style identifier
+  const ::flatbuffers::String *LICENSE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LICENSE);
+  }
+  /// Peer ID this listing was sourced from when discovered remotely
+  const ::flatbuffers::String *SOURCE_PEER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_PEER_ID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -713,6 +1459,26 @@ struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_ACTIVE, 1) &&
            VerifyOffset(verifier, VT_SIGNATURE) &&
            verifier.VerifyVector(SIGNATURE()) &&
+           VerifyField<int8_t>(verifier, VT_LISTING_KIND, 1) &&
+           VerifyOffset(verifier, VT_TAGS) &&
+           verifier.VerifyVector(TAGS()) &&
+           verifier.VerifyVectorOfStrings(TAGS()) &&
+           VerifyField<uint32_t>(verifier, VT_SAMPLE_RECORD_COUNT, 4) &&
+           VerifyOffset(verifier, VT_DELIVERY_METHODS) &&
+           verifier.VerifyVector(DELIVERY_METHODS()) &&
+           verifier.VerifyVectorOfStrings(DELIVERY_METHODS()) &&
+           VerifyOffset(verifier, VT_PROTECTED_DELIVERY) &&
+           verifier.VerifyTable(PROTECTED_DELIVERY()) &&
+           VerifyOffset(verifier, VT_REPUTATION) &&
+           verifier.VerifyTable(REPUTATION()) &&
+           VerifyField<uint32_t>(verifier, VT_VERSION, 4) &&
+           VerifyField<uint64_t>(verifier, VT_EXPIRES_AT, 8) &&
+           VerifyOffset(verifier, VT_TERMS_CID) &&
+           verifier.VerifyString(TERMS_CID()) &&
+           VerifyOffset(verifier, VT_LICENSE) &&
+           verifier.VerifyString(LICENSE()) &&
+           VerifyOffset(verifier, VT_SOURCE_PEER_ID) &&
+           verifier.VerifyString(SOURCE_PEER_ID()) &&
            verifier.EndTable();
   }
   STFT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -772,6 +1538,39 @@ struct STFBuilder {
   void add_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE) {
     fbb_.AddOffset(STF::VT_SIGNATURE, SIGNATURE);
   }
+  void add_LISTING_KIND(listingCategory LISTING_KIND) {
+    fbb_.AddElement<int8_t>(STF::VT_LISTING_KIND, static_cast<int8_t>(LISTING_KIND), 0);
+  }
+  void add_TAGS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS) {
+    fbb_.AddOffset(STF::VT_TAGS, TAGS);
+  }
+  void add_SAMPLE_RECORD_COUNT(uint32_t SAMPLE_RECORD_COUNT) {
+    fbb_.AddElement<uint32_t>(STF::VT_SAMPLE_RECORD_COUNT, SAMPLE_RECORD_COUNT, 0);
+  }
+  void add_DELIVERY_METHODS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> DELIVERY_METHODS) {
+    fbb_.AddOffset(STF::VT_DELIVERY_METHODS, DELIVERY_METHODS);
+  }
+  void add_PROTECTED_DELIVERY(::flatbuffers::Offset<ProtectedDeliveryBinding> PROTECTED_DELIVERY) {
+    fbb_.AddOffset(STF::VT_PROTECTED_DELIVERY, PROTECTED_DELIVERY);
+  }
+  void add_REPUTATION(::flatbuffers::Offset<ProviderReputation> REPUTATION) {
+    fbb_.AddOffset(STF::VT_REPUTATION, REPUTATION);
+  }
+  void add_VERSION(uint32_t VERSION) {
+    fbb_.AddElement<uint32_t>(STF::VT_VERSION, VERSION, 0);
+  }
+  void add_EXPIRES_AT(uint64_t EXPIRES_AT) {
+    fbb_.AddElement<uint64_t>(STF::VT_EXPIRES_AT, EXPIRES_AT, 0);
+  }
+  void add_TERMS_CID(::flatbuffers::Offset<::flatbuffers::String> TERMS_CID) {
+    fbb_.AddOffset(STF::VT_TERMS_CID, TERMS_CID);
+  }
+  void add_LICENSE(::flatbuffers::Offset<::flatbuffers::String> LICENSE) {
+    fbb_.AddOffset(STF::VT_LICENSE, LICENSE);
+  }
+  void add_SOURCE_PEER_ID(::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID) {
+    fbb_.AddOffset(STF::VT_SOURCE_PEER_ID, SOURCE_PEER_ID);
+  }
   explicit STFBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -803,10 +1602,31 @@ inline ::flatbuffers::Offset<STF> CreateSTF(
     uint64_t CREATED_AT = 0,
     uint64_t UPDATED_AT = 0,
     bool ACTIVE = false,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE = 0,
+    listingCategory LISTING_KIND = listingCategory::DataStream,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> TAGS = 0,
+    uint32_t SAMPLE_RECORD_COUNT = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> DELIVERY_METHODS = 0,
+    ::flatbuffers::Offset<ProtectedDeliveryBinding> PROTECTED_DELIVERY = 0,
+    ::flatbuffers::Offset<ProviderReputation> REPUTATION = 0,
+    uint32_t VERSION = 0,
+    uint64_t EXPIRES_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TERMS_CID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LICENSE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID = 0) {
   STFBuilder builder_(_fbb);
+  builder_.add_EXPIRES_AT(EXPIRES_AT);
   builder_.add_UPDATED_AT(UPDATED_AT);
   builder_.add_CREATED_AT(CREATED_AT);
+  builder_.add_SOURCE_PEER_ID(SOURCE_PEER_ID);
+  builder_.add_LICENSE(LICENSE);
+  builder_.add_TERMS_CID(TERMS_CID);
+  builder_.add_VERSION(VERSION);
+  builder_.add_REPUTATION(REPUTATION);
+  builder_.add_PROTECTED_DELIVERY(PROTECTED_DELIVERY);
+  builder_.add_DELIVERY_METHODS(DELIVERY_METHODS);
+  builder_.add_SAMPLE_RECORD_COUNT(SAMPLE_RECORD_COUNT);
+  builder_.add_TAGS(TAGS);
   builder_.add_SIGNATURE(SIGNATURE);
   builder_.add_ACCEPTED_PAYMENTS(ACCEPTED_PAYMENTS);
   builder_.add_PRICING(PRICING);
@@ -818,6 +1638,7 @@ inline ::flatbuffers::Offset<STF> CreateSTF(
   builder_.add_PROVIDER_EPM_CID(PROVIDER_EPM_CID);
   builder_.add_PROVIDER_PEER_ID(PROVIDER_PEER_ID);
   builder_.add_LISTING_ID(LISTING_ID);
+  builder_.add_LISTING_KIND(LISTING_KIND);
   builder_.add_ACTIVE(ACTIVE);
   builder_.add_ENCRYPTION_REQUIRED(ENCRYPTION_REQUIRED);
   builder_.add_ACCESS_TYPE(ACCESS_TYPE);
@@ -846,7 +1667,18 @@ inline ::flatbuffers::Offset<STF> CreateSTFDirect(
     uint64_t CREATED_AT = 0,
     uint64_t UPDATED_AT = 0,
     bool ACTIVE = false,
-    const std::vector<uint8_t> *SIGNATURE = nullptr) {
+    const std::vector<uint8_t> *SIGNATURE = nullptr,
+    listingCategory LISTING_KIND = listingCategory::DataStream,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *TAGS = nullptr,
+    uint32_t SAMPLE_RECORD_COUNT = 0,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *DELIVERY_METHODS = nullptr,
+    ::flatbuffers::Offset<ProtectedDeliveryBinding> PROTECTED_DELIVERY = 0,
+    ::flatbuffers::Offset<ProviderReputation> REPUTATION = 0,
+    uint32_t VERSION = 0,
+    uint64_t EXPIRES_AT = 0,
+    const char *TERMS_CID = nullptr,
+    const char *LICENSE = nullptr,
+    const char *SOURCE_PEER_ID = nullptr) {
   auto LISTING_ID__ = LISTING_ID ? _fbb.CreateString(LISTING_ID) : 0;
   auto PROVIDER_PEER_ID__ = PROVIDER_PEER_ID ? _fbb.CreateString(PROVIDER_PEER_ID) : 0;
   auto PROVIDER_EPM_CID__ = PROVIDER_EPM_CID ? _fbb.CreateString(PROVIDER_EPM_CID) : 0;
@@ -857,6 +1689,11 @@ inline ::flatbuffers::Offset<STF> CreateSTFDirect(
   auto PRICING__ = PRICING ? _fbb.CreateVector<::flatbuffers::Offset<PricingTier>>(*PRICING) : 0;
   auto ACCEPTED_PAYMENTS__ = ACCEPTED_PAYMENTS ? _fbb.CreateVector<paymentMethod>(*ACCEPTED_PAYMENTS) : 0;
   auto SIGNATURE__ = SIGNATURE ? _fbb.CreateVector<uint8_t>(*SIGNATURE) : 0;
+  auto TAGS__ = TAGS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*TAGS) : 0;
+  auto DELIVERY_METHODS__ = DELIVERY_METHODS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*DELIVERY_METHODS) : 0;
+  auto TERMS_CID__ = TERMS_CID ? _fbb.CreateString(TERMS_CID) : 0;
+  auto LICENSE__ = LICENSE ? _fbb.CreateString(LICENSE) : 0;
+  auto SOURCE_PEER_ID__ = SOURCE_PEER_ID ? _fbb.CreateString(SOURCE_PEER_ID) : 0;
   return CreateSTF(
       _fbb,
       LISTING_ID__,
@@ -874,10 +1711,200 @@ inline ::flatbuffers::Offset<STF> CreateSTFDirect(
       CREATED_AT,
       UPDATED_AT,
       ACTIVE,
-      SIGNATURE__);
+      SIGNATURE__,
+      LISTING_KIND,
+      TAGS__,
+      SAMPLE_RECORD_COUNT,
+      DELIVERY_METHODS__,
+      PROTECTED_DELIVERY,
+      REPUTATION,
+      VERSION,
+      EXPIRES_AT,
+      TERMS_CID__,
+      LICENSE__,
+      SOURCE_PEER_ID__);
 }
 
 ::flatbuffers::Offset<STF> CreateSTF(::flatbuffers::FlatBufferBuilder &_fbb, const STFT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline GrantFieldStreamPolicyT *GrantFieldStreamPolicy::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<GrantFieldStreamPolicyT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void GrantFieldStreamPolicy::UnPackTo(GrantFieldStreamPolicyT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = POLICY_ID(); if (_e) _o->POLICY_ID = _e->str(); }
+  { auto _e = POLICY_VERSION(); _o->POLICY_VERSION = _e; }
+  { auto _e = STREAM_ID(); if (_e) _o->STREAM_ID = _e->str(); }
+  { auto _e = SCHEMA_CODE(); if (_e) _o->SCHEMA_CODE = _e->str(); }
+  { auto _e = ALLOWED_FIELD_PATHS(); if (_e) { _o->ALLOWED_FIELD_PATHS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ALLOWED_FIELD_PATHS[_i] = _e->Get(_i)->str(); } } else { _o->ALLOWED_FIELD_PATHS.resize(0); } }
+  { auto _e = REDACTED_FIELD_PATHS(); if (_e) { _o->REDACTED_FIELD_PATHS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->REDACTED_FIELD_PATHS[_i] = _e->Get(_i)->str(); } } else { _o->REDACTED_FIELD_PATHS.resize(0); } }
+  { auto _e = KEY_EPOCH(); if (_e) _o->KEY_EPOCH = _e->str(); }
+  { auto _e = GRANT_SCOPE(); if (_e) _o->GRANT_SCOPE = _e->str(); }
+  { auto _e = ALLOWED_OPERATIONS(); if (_e) { _o->ALLOWED_OPERATIONS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ALLOWED_OPERATIONS[_i] = _e->Get(_i)->str(); } } else { _o->ALLOWED_OPERATIONS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<GrantFieldStreamPolicy> CreateGrantFieldStreamPolicy(::flatbuffers::FlatBufferBuilder &_fbb, const GrantFieldStreamPolicyT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return GrantFieldStreamPolicy::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<GrantFieldStreamPolicy> GrantFieldStreamPolicy::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const GrantFieldStreamPolicyT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const GrantFieldStreamPolicyT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _POLICY_ID = _o->POLICY_ID.empty() ? 0 : _fbb.CreateString(_o->POLICY_ID);
+  auto _POLICY_VERSION = _o->POLICY_VERSION;
+  auto _STREAM_ID = _o->STREAM_ID.empty() ? 0 : _fbb.CreateString(_o->STREAM_ID);
+  auto _SCHEMA_CODE = _o->SCHEMA_CODE.empty() ? 0 : _fbb.CreateString(_o->SCHEMA_CODE);
+  auto _ALLOWED_FIELD_PATHS = _o->ALLOWED_FIELD_PATHS.size() ? _fbb.CreateVectorOfStrings(_o->ALLOWED_FIELD_PATHS) : 0;
+  auto _REDACTED_FIELD_PATHS = _o->REDACTED_FIELD_PATHS.size() ? _fbb.CreateVectorOfStrings(_o->REDACTED_FIELD_PATHS) : 0;
+  auto _KEY_EPOCH = _o->KEY_EPOCH.empty() ? 0 : _fbb.CreateString(_o->KEY_EPOCH);
+  auto _GRANT_SCOPE = _o->GRANT_SCOPE.empty() ? 0 : _fbb.CreateString(_o->GRANT_SCOPE);
+  auto _ALLOWED_OPERATIONS = _o->ALLOWED_OPERATIONS.size() ? _fbb.CreateVectorOfStrings(_o->ALLOWED_OPERATIONS) : 0;
+  return CreateGrantFieldStreamPolicy(
+      _fbb,
+      _POLICY_ID,
+      _POLICY_VERSION,
+      _STREAM_ID,
+      _SCHEMA_CODE,
+      _ALLOWED_FIELD_PATHS,
+      _REDACTED_FIELD_PATHS,
+      _KEY_EPOCH,
+      _GRANT_SCOPE,
+      _ALLOWED_OPERATIONS);
+}
+
+inline ProtectedDeliveryBindingT::ProtectedDeliveryBindingT(const ProtectedDeliveryBindingT &o)
+      : ENCRYPTED_CID(o.ENCRYPTED_CID),
+        MANIFEST_CID(o.MANIFEST_CID),
+        CONTENT_HASH(o.CONTENT_HASH),
+        CONTENT_KEY_ID(o.CONTENT_KEY_ID),
+        LICENSE_MODULE_ID(o.LICENSE_MODULE_ID),
+        MODULE_ID(o.MODULE_ID),
+        MODULE_VERSION(o.MODULE_VERSION),
+        REQUIRED_SCOPES(o.REQUIRED_SCOPES),
+        GRANT_SCOPE(o.GRANT_SCOPE),
+        DELIVERY_PROTOCOL(o.DELIVERY_PROTOCOL),
+        FIELD_STREAM_POLICY((o.FIELD_STREAM_POLICY) ? new GrantFieldStreamPolicyT(*o.FIELD_STREAM_POLICY) : nullptr) {
+}
+
+inline ProtectedDeliveryBindingT &ProtectedDeliveryBindingT::operator=(ProtectedDeliveryBindingT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ENCRYPTED_CID, o.ENCRYPTED_CID);
+  std::swap(MANIFEST_CID, o.MANIFEST_CID);
+  std::swap(CONTENT_HASH, o.CONTENT_HASH);
+  std::swap(CONTENT_KEY_ID, o.CONTENT_KEY_ID);
+  std::swap(LICENSE_MODULE_ID, o.LICENSE_MODULE_ID);
+  std::swap(MODULE_ID, o.MODULE_ID);
+  std::swap(MODULE_VERSION, o.MODULE_VERSION);
+  std::swap(REQUIRED_SCOPES, o.REQUIRED_SCOPES);
+  std::swap(GRANT_SCOPE, o.GRANT_SCOPE);
+  std::swap(DELIVERY_PROTOCOL, o.DELIVERY_PROTOCOL);
+  std::swap(FIELD_STREAM_POLICY, o.FIELD_STREAM_POLICY);
+  return *this;
+}
+
+inline ProtectedDeliveryBindingT *ProtectedDeliveryBinding::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<ProtectedDeliveryBindingT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ProtectedDeliveryBinding::UnPackTo(ProtectedDeliveryBindingT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ENCRYPTED_CID(); if (_e) _o->ENCRYPTED_CID = _e->str(); }
+  { auto _e = MANIFEST_CID(); if (_e) _o->MANIFEST_CID = _e->str(); }
+  { auto _e = CONTENT_HASH(); if (_e) _o->CONTENT_HASH = _e->str(); }
+  { auto _e = CONTENT_KEY_ID(); if (_e) _o->CONTENT_KEY_ID = _e->str(); }
+  { auto _e = LICENSE_MODULE_ID(); if (_e) _o->LICENSE_MODULE_ID = _e->str(); }
+  { auto _e = MODULE_ID(); if (_e) _o->MODULE_ID = _e->str(); }
+  { auto _e = MODULE_VERSION(); if (_e) _o->MODULE_VERSION = _e->str(); }
+  { auto _e = REQUIRED_SCOPES(); if (_e) { _o->REQUIRED_SCOPES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->REQUIRED_SCOPES[_i] = _e->Get(_i)->str(); } } else { _o->REQUIRED_SCOPES.resize(0); } }
+  { auto _e = GRANT_SCOPE(); if (_e) _o->GRANT_SCOPE = _e->str(); }
+  { auto _e = DELIVERY_PROTOCOL(); if (_e) _o->DELIVERY_PROTOCOL = _e->str(); }
+  { auto _e = FIELD_STREAM_POLICY(); if (_e) { if(_o->FIELD_STREAM_POLICY) { _e->UnPackTo(_o->FIELD_STREAM_POLICY.get(), _resolver); } else { _o->FIELD_STREAM_POLICY = std::unique_ptr<GrantFieldStreamPolicyT>(_e->UnPack(_resolver)); } } else if (_o->FIELD_STREAM_POLICY) { _o->FIELD_STREAM_POLICY.reset(); } }
+}
+
+inline ::flatbuffers::Offset<ProtectedDeliveryBinding> CreateProtectedDeliveryBinding(::flatbuffers::FlatBufferBuilder &_fbb, const ProtectedDeliveryBindingT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ProtectedDeliveryBinding::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ProtectedDeliveryBinding> ProtectedDeliveryBinding::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ProtectedDeliveryBindingT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ProtectedDeliveryBindingT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ENCRYPTED_CID = _o->ENCRYPTED_CID.empty() ? 0 : _fbb.CreateString(_o->ENCRYPTED_CID);
+  auto _MANIFEST_CID = _o->MANIFEST_CID.empty() ? 0 : _fbb.CreateString(_o->MANIFEST_CID);
+  auto _CONTENT_HASH = _o->CONTENT_HASH.empty() ? 0 : _fbb.CreateString(_o->CONTENT_HASH);
+  auto _CONTENT_KEY_ID = _o->CONTENT_KEY_ID.empty() ? 0 : _fbb.CreateString(_o->CONTENT_KEY_ID);
+  auto _LICENSE_MODULE_ID = _o->LICENSE_MODULE_ID.empty() ? 0 : _fbb.CreateString(_o->LICENSE_MODULE_ID);
+  auto _MODULE_ID = _o->MODULE_ID.empty() ? 0 : _fbb.CreateString(_o->MODULE_ID);
+  auto _MODULE_VERSION = _o->MODULE_VERSION.empty() ? 0 : _fbb.CreateString(_o->MODULE_VERSION);
+  auto _REQUIRED_SCOPES = _o->REQUIRED_SCOPES.size() ? _fbb.CreateVectorOfStrings(_o->REQUIRED_SCOPES) : 0;
+  auto _GRANT_SCOPE = _o->GRANT_SCOPE.empty() ? 0 : _fbb.CreateString(_o->GRANT_SCOPE);
+  auto _DELIVERY_PROTOCOL = _o->DELIVERY_PROTOCOL.empty() ? 0 : _fbb.CreateString(_o->DELIVERY_PROTOCOL);
+  auto _FIELD_STREAM_POLICY = _o->FIELD_STREAM_POLICY ? CreateGrantFieldStreamPolicy(_fbb, _o->FIELD_STREAM_POLICY.get(), _rehasher) : 0;
+  return CreateProtectedDeliveryBinding(
+      _fbb,
+      _ENCRYPTED_CID,
+      _MANIFEST_CID,
+      _CONTENT_HASH,
+      _CONTENT_KEY_ID,
+      _LICENSE_MODULE_ID,
+      _MODULE_ID,
+      _MODULE_VERSION,
+      _REQUIRED_SCOPES,
+      _GRANT_SCOPE,
+      _DELIVERY_PROTOCOL,
+      _FIELD_STREAM_POLICY);
+}
+
+inline ProviderReputationT *ProviderReputation::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<ProviderReputationT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ProviderReputation::UnPackTo(ProviderReputationT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = TOTAL_SALES(); _o->TOTAL_SALES = _e; }
+  { auto _e = AVERAGE_RATING_X10(); _o->AVERAGE_RATING_X10 = _e; }
+  { auto _e = TOTAL_RATINGS(); _o->TOTAL_RATINGS = _e; }
+  { auto _e = UPTIME_PERCENTAGE_X100(); _o->UPTIME_PERCENTAGE_X100 = _e; }
+  { auto _e = AVG_DELIVERY_LATENCY_MS(); _o->AVG_DELIVERY_LATENCY_MS = _e; }
+  { auto _e = DISPUTE_COUNT(); _o->DISPUTE_COUNT = _e; }
+  { auto _e = PROVIDER_SINCE(); _o->PROVIDER_SINCE = _e; }
+}
+
+inline ::flatbuffers::Offset<ProviderReputation> CreateProviderReputation(::flatbuffers::FlatBufferBuilder &_fbb, const ProviderReputationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ProviderReputation::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ProviderReputation> ProviderReputation::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ProviderReputationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ProviderReputationT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _TOTAL_SALES = _o->TOTAL_SALES;
+  auto _AVERAGE_RATING_X10 = _o->AVERAGE_RATING_X10;
+  auto _TOTAL_RATINGS = _o->TOTAL_RATINGS;
+  auto _UPTIME_PERCENTAGE_X100 = _o->UPTIME_PERCENTAGE_X100;
+  auto _AVG_DELIVERY_LATENCY_MS = _o->AVG_DELIVERY_LATENCY_MS;
+  auto _DISPUTE_COUNT = _o->DISPUTE_COUNT;
+  auto _PROVIDER_SINCE = _o->PROVIDER_SINCE;
+  return CreateProviderReputation(
+      _fbb,
+      _TOTAL_SALES,
+      _AVERAGE_RATING_X10,
+      _TOTAL_RATINGS,
+      _UPTIME_PERCENTAGE_X100,
+      _AVG_DELIVERY_LATENCY_MS,
+      _DISPUTE_COUNT,
+      _PROVIDER_SINCE);
+}
 
 inline SpatialCoverageT *SpatialCoverage::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<SpatialCoverageT>();
@@ -891,6 +1918,9 @@ inline void SpatialCoverage::UnPackTo(SpatialCoverageT *_o, const ::flatbuffers:
   { auto _e = TYPE(); if (_e) _o->TYPE = _e->str(); }
   { auto _e = REGIONS(); if (_e) { _o->REGIONS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->REGIONS[_i] = _e->Get(_i)->str(); } } else { _o->REGIONS.resize(0); } }
   { auto _e = OBJECT_IDS(); if (_e) { _o->OBJECT_IDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->OBJECT_IDS[_i] = _e->Get(_i)->str(); } } else { _o->OBJECT_IDS.resize(0); } }
+  { auto _e = MIN_ALTITUDE_KM(); _o->MIN_ALTITUDE_KM = _e; }
+  { auto _e = MAX_ALTITUDE_KM(); _o->MAX_ALTITUDE_KM = _e; }
+  { auto _e = GEO_BOUNDS(); if (_e) { _o->GEO_BOUNDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->GEO_BOUNDS[_i] = _e->Get(_i); } } else { _o->GEO_BOUNDS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SpatialCoverage> CreateSpatialCoverage(::flatbuffers::FlatBufferBuilder &_fbb, const SpatialCoverageT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -904,11 +1934,17 @@ inline ::flatbuffers::Offset<SpatialCoverage> SpatialCoverage::Pack(::flatbuffer
   auto _TYPE = _o->TYPE.empty() ? 0 : _fbb.CreateString(_o->TYPE);
   auto _REGIONS = _o->REGIONS.size() ? _fbb.CreateVectorOfStrings(_o->REGIONS) : 0;
   auto _OBJECT_IDS = _o->OBJECT_IDS.size() ? _fbb.CreateVectorOfStrings(_o->OBJECT_IDS) : 0;
+  auto _MIN_ALTITUDE_KM = _o->MIN_ALTITUDE_KM;
+  auto _MAX_ALTITUDE_KM = _o->MAX_ALTITUDE_KM;
+  auto _GEO_BOUNDS = _o->GEO_BOUNDS.size() ? _fbb.CreateVector(_o->GEO_BOUNDS) : 0;
   return CreateSpatialCoverage(
       _fbb,
       _TYPE,
       _REGIONS,
-      _OBJECT_IDS);
+      _OBJECT_IDS,
+      _MIN_ALTITUDE_KM,
+      _MAX_ALTITUDE_KM,
+      _GEO_BOUNDS);
 }
 
 inline TemporalCoverageT *TemporalCoverage::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -924,6 +1960,7 @@ inline void TemporalCoverage::UnPackTo(TemporalCoverageT *_o, const ::flatbuffer
   { auto _e = END_EPOCH(); if (_e) _o->END_EPOCH = _e->str(); }
   { auto _e = UPDATE_FREQUENCY(); if (_e) _o->UPDATE_FREQUENCY = _e->str(); }
   { auto _e = HISTORICAL_DEPTH(); _o->HISTORICAL_DEPTH = _e; }
+  { auto _e = LATENCY_SECONDS(); _o->LATENCY_SECONDS = _e; }
 }
 
 inline ::flatbuffers::Offset<TemporalCoverage> CreateTemporalCoverage(::flatbuffers::FlatBufferBuilder &_fbb, const TemporalCoverageT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -938,12 +1975,14 @@ inline ::flatbuffers::Offset<TemporalCoverage> TemporalCoverage::Pack(::flatbuff
   auto _END_EPOCH = _o->END_EPOCH.empty() ? 0 : _fbb.CreateString(_o->END_EPOCH);
   auto _UPDATE_FREQUENCY = _o->UPDATE_FREQUENCY.empty() ? 0 : _fbb.CreateString(_o->UPDATE_FREQUENCY);
   auto _HISTORICAL_DEPTH = _o->HISTORICAL_DEPTH;
+  auto _LATENCY_SECONDS = _o->LATENCY_SECONDS;
   return CreateTemporalCoverage(
       _fbb,
       _START_EPOCH,
       _END_EPOCH,
       _UPDATE_FREQUENCY,
-      _HISTORICAL_DEPTH);
+      _HISTORICAL_DEPTH,
+      _LATENCY_SECONDS);
 }
 
 inline DataCoverageT::DataCoverageT(const DataCoverageT &o)
@@ -1001,6 +2040,8 @@ inline void PricingTier::UnPackTo(PricingTierT *_o, const ::flatbuffers::resolve
   { auto _e = DURATION_DAYS(); _o->DURATION_DAYS = _e; }
   { auto _e = RATE_LIMIT(); _o->RATE_LIMIT = _e; }
   { auto _e = FEATURES(); if (_e) { _o->FEATURES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->FEATURES[_i] = _e->Get(_i)->str(); } } else { _o->FEATURES.resize(0); } }
+  { auto _e = MAX_RECORDS_PER_REQUEST(); _o->MAX_RECORDS_PER_REQUEST = _e; }
+  { auto _e = DESCRIPTION(); if (_e) _o->DESCRIPTION = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<PricingTier> CreatePricingTier(::flatbuffers::FlatBufferBuilder &_fbb, const PricingTierT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1017,6 +2058,8 @@ inline ::flatbuffers::Offset<PricingTier> PricingTier::Pack(::flatbuffers::FlatB
   auto _DURATION_DAYS = _o->DURATION_DAYS;
   auto _RATE_LIMIT = _o->RATE_LIMIT;
   auto _FEATURES = _o->FEATURES.size() ? _fbb.CreateVectorOfStrings(_o->FEATURES) : 0;
+  auto _MAX_RECORDS_PER_REQUEST = _o->MAX_RECORDS_PER_REQUEST;
+  auto _DESCRIPTION = _o->DESCRIPTION.empty() ? 0 : _fbb.CreateString(_o->DESCRIPTION);
   return CreatePricingTier(
       _fbb,
       _NAME,
@@ -1024,7 +2067,9 @@ inline ::flatbuffers::Offset<PricingTier> PricingTier::Pack(::flatbuffers::FlatB
       _PRICE_CURRENCY,
       _DURATION_DAYS,
       _RATE_LIMIT,
-      _FEATURES);
+      _FEATURES,
+      _MAX_RECORDS_PER_REQUEST,
+      _DESCRIPTION);
 }
 
 inline STFT::STFT(const STFT &o)
@@ -1042,7 +2087,18 @@ inline STFT::STFT(const STFT &o)
         CREATED_AT(o.CREATED_AT),
         UPDATED_AT(o.UPDATED_AT),
         ACTIVE(o.ACTIVE),
-        SIGNATURE(o.SIGNATURE) {
+        SIGNATURE(o.SIGNATURE),
+        LISTING_KIND(o.LISTING_KIND),
+        TAGS(o.TAGS),
+        SAMPLE_RECORD_COUNT(o.SAMPLE_RECORD_COUNT),
+        DELIVERY_METHODS(o.DELIVERY_METHODS),
+        PROTECTED_DELIVERY((o.PROTECTED_DELIVERY) ? new ProtectedDeliveryBindingT(*o.PROTECTED_DELIVERY) : nullptr),
+        REPUTATION((o.REPUTATION) ? new ProviderReputationT(*o.REPUTATION) : nullptr),
+        VERSION(o.VERSION),
+        EXPIRES_AT(o.EXPIRES_AT),
+        TERMS_CID(o.TERMS_CID),
+        LICENSE(o.LICENSE),
+        SOURCE_PEER_ID(o.SOURCE_PEER_ID) {
   PRICING.reserve(o.PRICING.size());
   for (const auto &PRICING_ : o.PRICING) { PRICING.emplace_back((PRICING_) ? new PricingTierT(*PRICING_) : nullptr); }
 }
@@ -1064,6 +2120,17 @@ inline STFT &STFT::operator=(STFT o) FLATBUFFERS_NOEXCEPT {
   std::swap(UPDATED_AT, o.UPDATED_AT);
   std::swap(ACTIVE, o.ACTIVE);
   std::swap(SIGNATURE, o.SIGNATURE);
+  std::swap(LISTING_KIND, o.LISTING_KIND);
+  std::swap(TAGS, o.TAGS);
+  std::swap(SAMPLE_RECORD_COUNT, o.SAMPLE_RECORD_COUNT);
+  std::swap(DELIVERY_METHODS, o.DELIVERY_METHODS);
+  std::swap(PROTECTED_DELIVERY, o.PROTECTED_DELIVERY);
+  std::swap(REPUTATION, o.REPUTATION);
+  std::swap(VERSION, o.VERSION);
+  std::swap(EXPIRES_AT, o.EXPIRES_AT);
+  std::swap(TERMS_CID, o.TERMS_CID);
+  std::swap(LICENSE, o.LICENSE);
+  std::swap(SOURCE_PEER_ID, o.SOURCE_PEER_ID);
   return *this;
 }
 
@@ -1092,6 +2159,17 @@ inline void STF::UnPackTo(STFT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = UPDATED_AT(); _o->UPDATED_AT = _e; }
   { auto _e = ACTIVE(); _o->ACTIVE = _e; }
   { auto _e = SIGNATURE(); if (_e) { _o->SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->SIGNATURE.begin()); } }
+  { auto _e = LISTING_KIND(); _o->LISTING_KIND = _e; }
+  { auto _e = TAGS(); if (_e) { _o->TAGS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->TAGS[_i] = _e->Get(_i)->str(); } } else { _o->TAGS.resize(0); } }
+  { auto _e = SAMPLE_RECORD_COUNT(); _o->SAMPLE_RECORD_COUNT = _e; }
+  { auto _e = DELIVERY_METHODS(); if (_e) { _o->DELIVERY_METHODS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DELIVERY_METHODS[_i] = _e->Get(_i)->str(); } } else { _o->DELIVERY_METHODS.resize(0); } }
+  { auto _e = PROTECTED_DELIVERY(); if (_e) { if(_o->PROTECTED_DELIVERY) { _e->UnPackTo(_o->PROTECTED_DELIVERY.get(), _resolver); } else { _o->PROTECTED_DELIVERY = std::unique_ptr<ProtectedDeliveryBindingT>(_e->UnPack(_resolver)); } } else if (_o->PROTECTED_DELIVERY) { _o->PROTECTED_DELIVERY.reset(); } }
+  { auto _e = REPUTATION(); if (_e) { if(_o->REPUTATION) { _e->UnPackTo(_o->REPUTATION.get(), _resolver); } else { _o->REPUTATION = std::unique_ptr<ProviderReputationT>(_e->UnPack(_resolver)); } } else if (_o->REPUTATION) { _o->REPUTATION.reset(); } }
+  { auto _e = VERSION(); _o->VERSION = _e; }
+  { auto _e = EXPIRES_AT(); _o->EXPIRES_AT = _e; }
+  { auto _e = TERMS_CID(); if (_e) _o->TERMS_CID = _e->str(); }
+  { auto _e = LICENSE(); if (_e) _o->LICENSE = _e->str(); }
+  { auto _e = SOURCE_PEER_ID(); if (_e) _o->SOURCE_PEER_ID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<STF> CreateSTF(::flatbuffers::FlatBufferBuilder &_fbb, const STFT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1118,6 +2196,17 @@ inline ::flatbuffers::Offset<STF> STF::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _UPDATED_AT = _o->UPDATED_AT;
   auto _ACTIVE = _o->ACTIVE;
   auto _SIGNATURE = _o->SIGNATURE.size() ? _fbb.CreateVector(_o->SIGNATURE) : 0;
+  auto _LISTING_KIND = _o->LISTING_KIND;
+  auto _TAGS = _o->TAGS.size() ? _fbb.CreateVectorOfStrings(_o->TAGS) : 0;
+  auto _SAMPLE_RECORD_COUNT = _o->SAMPLE_RECORD_COUNT;
+  auto _DELIVERY_METHODS = _o->DELIVERY_METHODS.size() ? _fbb.CreateVectorOfStrings(_o->DELIVERY_METHODS) : 0;
+  auto _PROTECTED_DELIVERY = _o->PROTECTED_DELIVERY ? CreateProtectedDeliveryBinding(_fbb, _o->PROTECTED_DELIVERY.get(), _rehasher) : 0;
+  auto _REPUTATION = _o->REPUTATION ? CreateProviderReputation(_fbb, _o->REPUTATION.get(), _rehasher) : 0;
+  auto _VERSION = _o->VERSION;
+  auto _EXPIRES_AT = _o->EXPIRES_AT;
+  auto _TERMS_CID = _o->TERMS_CID.empty() ? 0 : _fbb.CreateString(_o->TERMS_CID);
+  auto _LICENSE = _o->LICENSE.empty() ? 0 : _fbb.CreateString(_o->LICENSE);
+  auto _SOURCE_PEER_ID = _o->SOURCE_PEER_ID.empty() ? 0 : _fbb.CreateString(_o->SOURCE_PEER_ID);
   return CreateSTF(
       _fbb,
       _LISTING_ID,
@@ -1135,7 +2224,18 @@ inline ::flatbuffers::Offset<STF> STF::Pack(::flatbuffers::FlatBufferBuilder &_f
       _CREATED_AT,
       _UPDATED_AT,
       _ACTIVE,
-      _SIGNATURE);
+      _SIGNATURE,
+      _LISTING_KIND,
+      _TAGS,
+      _SAMPLE_RECORD_COUNT,
+      _DELIVERY_METHODS,
+      _PROTECTED_DELIVERY,
+      _REPUTATION,
+      _VERSION,
+      _EXPIRES_AT,
+      _TERMS_CID,
+      _LICENSE,
+      _SOURCE_PEER_ID);
 }
 
 inline const STF *GetSTF(const void *buf) {

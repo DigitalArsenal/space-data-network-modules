@@ -15,9 +15,194 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 
 #include "RFM_generated.h"
 
+struct TDMTransmitRamp;
+struct TDMTransmitRampBuilder;
+struct TDMTransmitRampT;
+
 struct TDM;
 struct TDMBuilder;
 struct TDMT;
+
+struct TDMTransmitRampT : public ::flatbuffers::NativeTable {
+  typedef TDMTransmitRamp TableType;
+  std::string START_TIME{};
+  std::string END_TIME{};
+  std::string REFERENCE_TIME{};
+  double FREQUENCY_HZ = 0.0;
+  double FREQUENCY_RATE_HZ_PER_S = 0.0;
+  std::string TRANSMITTING_STATION_ID{};
+  std::string TRANSMIT_BAND{};
+};
+
+/// One uplink transmitter frequency ramp applying over a closed time interval.
+///
+/// SDS EXTENSION beyond CCSDS 503.0-B-1: the base standard carries a single
+/// TRANSMIT_FREQ_1 per segment, which cannot express a ramped uplink. Deep-space
+/// radiometric archives carry an explicit ramp table and the Doppler observables
+/// are NOT reconstructible without it. Ramps are optional; a record that omits
+/// TRANSMIT_RAMPS is exactly a CCSDS-conformant TDM.
+///
+/// Frequency over the interval is the linear polynomial
+///   f(t) = FREQUENCY_HZ + FREQUENCY_RATE_HZ_PER_S * (t - REFERENCE_TIME)
+/// which is the common form of the two archive representations: DSN ODF
+/// (TRK-2-18, table 3-5) supplies ramp start frequency, ramp rate, and ramp
+/// start/end time, so REFERENCE_TIME equals START_TIME; ESA IFMS supplies a
+/// ramp reference time with constant and linear transmission-frequency terms,
+/// so REFERENCE_TIME is that reference time and may precede START_TIME.
+/// Producers MUST set REFERENCE_TIME explicitly rather than letting a consumer
+/// assume which convention was used.
+struct TDMTransmitRamp FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef TDMTransmitRampT NativeTableType;
+  typedef TDMTransmitRampBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_START_TIME = 4,
+    VT_END_TIME = 6,
+    VT_REFERENCE_TIME = 8,
+    VT_FREQUENCY_HZ = 10,
+    VT_FREQUENCY_RATE_HZ_PER_S = 12,
+    VT_TRANSMITTING_STATION_ID = 14,
+    VT_TRANSMIT_BAND = 16
+  };
+  /// Start of the interval over which this ramp applies, ISO 8601.
+  const ::flatbuffers::String *START_TIME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_START_TIME);
+  }
+  /// End of the interval over which this ramp applies, ISO 8601.
+  const ::flatbuffers::String *END_TIME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_END_TIME);
+  }
+  /// Epoch at which FREQUENCY_HZ is the instantaneous value, ISO 8601.
+  const ::flatbuffers::String *REFERENCE_TIME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REFERENCE_TIME);
+  }
+  /// Transmitted frequency at REFERENCE_TIME, Hz.
+  double FREQUENCY_HZ() const {
+    return GetField<double>(VT_FREQUENCY_HZ, 0.0);
+  }
+  /// Constant ramp rate over the interval, Hz per second.
+  double FREQUENCY_RATE_HZ_PER_S() const {
+    return GetField<double>(VT_FREQUENCY_RATE_HZ_PER_S, 0.0);
+  }
+  /// Identifier of the transmitting station the ramp applies to. Must match
+  /// the PARTICIPANT_n naming used by the segment when both are present.
+  const ::flatbuffers::String *TRANSMITTING_STATION_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TRANSMITTING_STATION_ID);
+  }
+  /// Uplink band the ramp applies to, using the same vocabulary as
+  /// TRANSMIT_BAND (e.g. "S", "X", "Ka", "Ku").
+  const ::flatbuffers::String *TRANSMIT_BAND() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TRANSMIT_BAND);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_START_TIME) &&
+           verifier.VerifyString(START_TIME()) &&
+           VerifyOffset(verifier, VT_END_TIME) &&
+           verifier.VerifyString(END_TIME()) &&
+           VerifyOffset(verifier, VT_REFERENCE_TIME) &&
+           verifier.VerifyString(REFERENCE_TIME()) &&
+           VerifyField<double>(verifier, VT_FREQUENCY_HZ, 8) &&
+           VerifyField<double>(verifier, VT_FREQUENCY_RATE_HZ_PER_S, 8) &&
+           VerifyOffset(verifier, VT_TRANSMITTING_STATION_ID) &&
+           verifier.VerifyString(TRANSMITTING_STATION_ID()) &&
+           VerifyOffset(verifier, VT_TRANSMIT_BAND) &&
+           verifier.VerifyString(TRANSMIT_BAND()) &&
+           verifier.EndTable();
+  }
+  TDMTransmitRampT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(TDMTransmitRampT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<TDMTransmitRamp> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TDMTransmitRampT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct TDMTransmitRampBuilder {
+  typedef TDMTransmitRamp Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_START_TIME(::flatbuffers::Offset<::flatbuffers::String> START_TIME) {
+    fbb_.AddOffset(TDMTransmitRamp::VT_START_TIME, START_TIME);
+  }
+  void add_END_TIME(::flatbuffers::Offset<::flatbuffers::String> END_TIME) {
+    fbb_.AddOffset(TDMTransmitRamp::VT_END_TIME, END_TIME);
+  }
+  void add_REFERENCE_TIME(::flatbuffers::Offset<::flatbuffers::String> REFERENCE_TIME) {
+    fbb_.AddOffset(TDMTransmitRamp::VT_REFERENCE_TIME, REFERENCE_TIME);
+  }
+  void add_FREQUENCY_HZ(double FREQUENCY_HZ) {
+    fbb_.AddElement<double>(TDMTransmitRamp::VT_FREQUENCY_HZ, FREQUENCY_HZ, 0.0);
+  }
+  void add_FREQUENCY_RATE_HZ_PER_S(double FREQUENCY_RATE_HZ_PER_S) {
+    fbb_.AddElement<double>(TDMTransmitRamp::VT_FREQUENCY_RATE_HZ_PER_S, FREQUENCY_RATE_HZ_PER_S, 0.0);
+  }
+  void add_TRANSMITTING_STATION_ID(::flatbuffers::Offset<::flatbuffers::String> TRANSMITTING_STATION_ID) {
+    fbb_.AddOffset(TDMTransmitRamp::VT_TRANSMITTING_STATION_ID, TRANSMITTING_STATION_ID);
+  }
+  void add_TRANSMIT_BAND(::flatbuffers::Offset<::flatbuffers::String> TRANSMIT_BAND) {
+    fbb_.AddOffset(TDMTransmitRamp::VT_TRANSMIT_BAND, TRANSMIT_BAND);
+  }
+  explicit TDMTransmitRampBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<TDMTransmitRamp> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<TDMTransmitRamp>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<TDMTransmitRamp> CreateTDMTransmitRamp(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> START_TIME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> END_TIME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REFERENCE_TIME = 0,
+    double FREQUENCY_HZ = 0.0,
+    double FREQUENCY_RATE_HZ_PER_S = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> TRANSMITTING_STATION_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TRANSMIT_BAND = 0) {
+  TDMTransmitRampBuilder builder_(_fbb);
+  builder_.add_FREQUENCY_RATE_HZ_PER_S(FREQUENCY_RATE_HZ_PER_S);
+  builder_.add_FREQUENCY_HZ(FREQUENCY_HZ);
+  builder_.add_TRANSMIT_BAND(TRANSMIT_BAND);
+  builder_.add_TRANSMITTING_STATION_ID(TRANSMITTING_STATION_ID);
+  builder_.add_REFERENCE_TIME(REFERENCE_TIME);
+  builder_.add_END_TIME(END_TIME);
+  builder_.add_START_TIME(START_TIME);
+  return builder_.Finish();
+}
+
+struct TDMTransmitRamp::Traits {
+  using type = TDMTransmitRamp;
+  static auto constexpr Create = CreateTDMTransmitRamp;
+};
+
+inline ::flatbuffers::Offset<TDMTransmitRamp> CreateTDMTransmitRampDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *START_TIME = nullptr,
+    const char *END_TIME = nullptr,
+    const char *REFERENCE_TIME = nullptr,
+    double FREQUENCY_HZ = 0.0,
+    double FREQUENCY_RATE_HZ_PER_S = 0.0,
+    const char *TRANSMITTING_STATION_ID = nullptr,
+    const char *TRANSMIT_BAND = nullptr) {
+  auto START_TIME__ = START_TIME ? _fbb.CreateString(START_TIME) : 0;
+  auto END_TIME__ = END_TIME ? _fbb.CreateString(END_TIME) : 0;
+  auto REFERENCE_TIME__ = REFERENCE_TIME ? _fbb.CreateString(REFERENCE_TIME) : 0;
+  auto TRANSMITTING_STATION_ID__ = TRANSMITTING_STATION_ID ? _fbb.CreateString(TRANSMITTING_STATION_ID) : 0;
+  auto TRANSMIT_BAND__ = TRANSMIT_BAND ? _fbb.CreateString(TRANSMIT_BAND) : 0;
+  return CreateTDMTransmitRamp(
+      _fbb,
+      START_TIME__,
+      END_TIME__,
+      REFERENCE_TIME__,
+      FREQUENCY_HZ,
+      FREQUENCY_RATE_HZ_PER_S,
+      TRANSMITTING_STATION_ID__,
+      TRANSMIT_BAND__);
+}
+
+::flatbuffers::Offset<TDMTransmitRamp> CreateTDMTransmitRamp(::flatbuffers::FlatBufferBuilder &_fbb, const TDMTransmitRampT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct TDMT : public ::flatbuffers::NativeTable {
   typedef TDM TableType;
@@ -82,6 +267,10 @@ struct TDMT : public ::flatbuffers::NativeTable {
   std::vector<double> TEMPERATURE{};
   std::vector<double> CLOCK_BIAS{};
   std::vector<double> CLOCK_DRIFT{};
+  std::vector<double> SIGNAL_TO_NOISE{};
+  std::vector<double> SPECTRAL_MAX{};
+  std::vector<double> DOPPLER_NOISE_HZ{};
+  std::vector<std::unique_ptr<TDMTransmitRampT>> TRANSMIT_RAMPS{};
   TDMT() = default;
   TDMT(const TDMT &o);
   TDMT(TDMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -154,7 +343,11 @@ struct TDM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_RHUMIDITY = 118,
     VT_TEMPERATURE = 120,
     VT_CLOCK_BIAS = 122,
-    VT_CLOCK_DRIFT = 124
+    VT_CLOCK_DRIFT = 124,
+    VT_SIGNAL_TO_NOISE = 126,
+    VT_SPECTRAL_MAX = 128,
+    VT_DOPPLER_NOISE_HZ = 130,
+    VT_TRANSMIT_RAMPS = 132
   };
   /// Unique identifier for the observation OBSERVER -  [Specific CCSDS Document]
   const ::flatbuffers::String *OBSERVER_ID() const {
@@ -403,6 +596,33 @@ struct TDM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<double> *CLOCK_DRIFT() const {
     return GetPointer<const ::flatbuffers::Vector<double> *>(VT_CLOCK_DRIFT);
   }
+  /// SDS EXTENSION beyond CCSDS 503.0-B-1. Open-loop (non-coherent) Doppler
+  /// quality metrics, one entry per observation, parallel to the other
+  /// observation arrays and reconstructed on the same OBSERVATION_START_TIME +
+  /// i * OBSERVATION_STEP_SIZE grid.
+  ///
+  /// Signal-to-noise ratio of the detection.
+  const ::flatbuffers::Vector<double> *SIGNAL_TO_NOISE() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SIGNAL_TO_NOISE);
+  }
+  /// SDS EXTENSION. Normalised spectral maximum of the detection.
+  const ::flatbuffers::Vector<double> *SPECTRAL_MAX() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SPECTRAL_MAX);
+  }
+  /// SDS EXTENSION. 1-sigma noise on the measured Doppler frequency, Hz. The
+  /// measured sky frequency itself is carried by RECEIVE_FREQ; this is its
+  /// uncertainty, which CCSDS 503.0-B-1 has no field for.
+  const ::flatbuffers::Vector<double> *DOPPLER_NOISE_HZ() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DOPPLER_NOISE_HZ);
+  }
+  /// SDS EXTENSION beyond CCSDS 503.0-B-1. Uplink transmitter frequency ramp
+  /// table covering this segment, ordered by START_TIME and non-overlapping.
+  /// Required in practice for ramped uplinks, where TRANSMIT_FREQ_1 alone
+  /// cannot reconstruct the observables. Absent for unramped tracking, which
+  /// leaves the record exactly CCSDS-conformant.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<TDMTransmitRamp>> *TRANSMIT_RAMPS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<TDMTransmitRamp>> *>(VT_TRANSMIT_RAMPS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -509,6 +729,15 @@ struct TDM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVector(CLOCK_BIAS()) &&
            VerifyOffset(verifier, VT_CLOCK_DRIFT) &&
            verifier.VerifyVector(CLOCK_DRIFT()) &&
+           VerifyOffset(verifier, VT_SIGNAL_TO_NOISE) &&
+           verifier.VerifyVector(SIGNAL_TO_NOISE()) &&
+           VerifyOffset(verifier, VT_SPECTRAL_MAX) &&
+           verifier.VerifyVector(SPECTRAL_MAX()) &&
+           VerifyOffset(verifier, VT_DOPPLER_NOISE_HZ) &&
+           verifier.VerifyVector(DOPPLER_NOISE_HZ()) &&
+           VerifyOffset(verifier, VT_TRANSMIT_RAMPS) &&
+           verifier.VerifyVector(TRANSMIT_RAMPS()) &&
+           verifier.VerifyVectorOfTables(TRANSMIT_RAMPS()) &&
            verifier.EndTable();
   }
   TDMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -703,6 +932,18 @@ struct TDMBuilder {
   void add_CLOCK_DRIFT(::flatbuffers::Offset<::flatbuffers::Vector<double>> CLOCK_DRIFT) {
     fbb_.AddOffset(TDM::VT_CLOCK_DRIFT, CLOCK_DRIFT);
   }
+  void add_SIGNAL_TO_NOISE(::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGNAL_TO_NOISE) {
+    fbb_.AddOffset(TDM::VT_SIGNAL_TO_NOISE, SIGNAL_TO_NOISE);
+  }
+  void add_SPECTRAL_MAX(::flatbuffers::Offset<::flatbuffers::Vector<double>> SPECTRAL_MAX) {
+    fbb_.AddOffset(TDM::VT_SPECTRAL_MAX, SPECTRAL_MAX);
+  }
+  void add_DOPPLER_NOISE_HZ(::flatbuffers::Offset<::flatbuffers::Vector<double>> DOPPLER_NOISE_HZ) {
+    fbb_.AddOffset(TDM::VT_DOPPLER_NOISE_HZ, DOPPLER_NOISE_HZ);
+  }
+  void add_TRANSMIT_RAMPS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<TDMTransmitRamp>>> TRANSMIT_RAMPS) {
+    fbb_.AddOffset(TDM::VT_TRANSMIT_RAMPS, TRANSMIT_RAMPS);
+  }
   explicit TDMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -776,7 +1017,11 @@ inline ::flatbuffers::Offset<TDM> CreateTDM(
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> RHUMIDITY = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> TEMPERATURE = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> CLOCK_BIAS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<double>> CLOCK_DRIFT = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> CLOCK_DRIFT = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGNAL_TO_NOISE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SPECTRAL_MAX = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DOPPLER_NOISE_HZ = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<TDMTransmitRamp>>> TRANSMIT_RAMPS = 0) {
   TDMBuilder builder_(_fbb);
   builder_.add_RANGE_MODULUS(RANGE_MODULUS);
   builder_.add_RANGE_UNCERTAINTY(RANGE_UNCERTAINTY);
@@ -791,6 +1036,10 @@ inline ::flatbuffers::Offset<TDM> CreateTDM(
   builder_.add_OBSERVER_Z(OBSERVER_Z);
   builder_.add_OBSERVER_Y(OBSERVER_Y);
   builder_.add_OBSERVER_X(OBSERVER_X);
+  builder_.add_TRANSMIT_RAMPS(TRANSMIT_RAMPS);
+  builder_.add_DOPPLER_NOISE_HZ(DOPPLER_NOISE_HZ);
+  builder_.add_SPECTRAL_MAX(SPECTRAL_MAX);
+  builder_.add_SIGNAL_TO_NOISE(SIGNAL_TO_NOISE);
   builder_.add_CLOCK_DRIFT(CLOCK_DRIFT);
   builder_.add_CLOCK_BIAS(CLOCK_BIAS);
   builder_.add_TEMPERATURE(TEMPERATURE);
@@ -909,7 +1158,11 @@ inline ::flatbuffers::Offset<TDM> CreateTDMDirect(
     const std::vector<double> *RHUMIDITY = nullptr,
     const std::vector<double> *TEMPERATURE = nullptr,
     const std::vector<double> *CLOCK_BIAS = nullptr,
-    const std::vector<double> *CLOCK_DRIFT = nullptr) {
+    const std::vector<double> *CLOCK_DRIFT = nullptr,
+    const std::vector<double> *SIGNAL_TO_NOISE = nullptr,
+    const std::vector<double> *SPECTRAL_MAX = nullptr,
+    const std::vector<double> *DOPPLER_NOISE_HZ = nullptr,
+    const std::vector<::flatbuffers::Offset<TDMTransmitRamp>> *TRANSMIT_RAMPS = nullptr) {
   auto OBSERVER_ID__ = OBSERVER_ID ? _fbb.CreateString(OBSERVER_ID) : 0;
   auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
   auto OBSERVATION_START_TIME__ = OBSERVATION_START_TIME ? _fbb.CreateString(OBSERVATION_START_TIME) : 0;
@@ -949,6 +1202,10 @@ inline ::flatbuffers::Offset<TDM> CreateTDMDirect(
   auto TEMPERATURE__ = TEMPERATURE ? _fbb.CreateVector<double>(*TEMPERATURE) : 0;
   auto CLOCK_BIAS__ = CLOCK_BIAS ? _fbb.CreateVector<double>(*CLOCK_BIAS) : 0;
   auto CLOCK_DRIFT__ = CLOCK_DRIFT ? _fbb.CreateVector<double>(*CLOCK_DRIFT) : 0;
+  auto SIGNAL_TO_NOISE__ = SIGNAL_TO_NOISE ? _fbb.CreateVector<double>(*SIGNAL_TO_NOISE) : 0;
+  auto SPECTRAL_MAX__ = SPECTRAL_MAX ? _fbb.CreateVector<double>(*SPECTRAL_MAX) : 0;
+  auto DOPPLER_NOISE_HZ__ = DOPPLER_NOISE_HZ ? _fbb.CreateVector<double>(*DOPPLER_NOISE_HZ) : 0;
+  auto TRANSMIT_RAMPS__ = TRANSMIT_RAMPS ? _fbb.CreateVector<::flatbuffers::Offset<TDMTransmitRamp>>(*TRANSMIT_RAMPS) : 0;
   return CreateTDM(
       _fbb,
       OBSERVER_ID__,
@@ -1011,10 +1268,58 @@ inline ::flatbuffers::Offset<TDM> CreateTDMDirect(
       RHUMIDITY__,
       TEMPERATURE__,
       CLOCK_BIAS__,
-      CLOCK_DRIFT__);
+      CLOCK_DRIFT__,
+      SIGNAL_TO_NOISE__,
+      SPECTRAL_MAX__,
+      DOPPLER_NOISE_HZ__,
+      TRANSMIT_RAMPS__);
 }
 
 ::flatbuffers::Offset<TDM> CreateTDM(::flatbuffers::FlatBufferBuilder &_fbb, const TDMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline TDMTransmitRampT *TDMTransmitRamp::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<TDMTransmitRampT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void TDMTransmitRamp::UnPackTo(TDMTransmitRampT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = START_TIME(); if (_e) _o->START_TIME = _e->str(); }
+  { auto _e = END_TIME(); if (_e) _o->END_TIME = _e->str(); }
+  { auto _e = REFERENCE_TIME(); if (_e) _o->REFERENCE_TIME = _e->str(); }
+  { auto _e = FREQUENCY_HZ(); _o->FREQUENCY_HZ = _e; }
+  { auto _e = FREQUENCY_RATE_HZ_PER_S(); _o->FREQUENCY_RATE_HZ_PER_S = _e; }
+  { auto _e = TRANSMITTING_STATION_ID(); if (_e) _o->TRANSMITTING_STATION_ID = _e->str(); }
+  { auto _e = TRANSMIT_BAND(); if (_e) _o->TRANSMIT_BAND = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<TDMTransmitRamp> CreateTDMTransmitRamp(::flatbuffers::FlatBufferBuilder &_fbb, const TDMTransmitRampT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return TDMTransmitRamp::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<TDMTransmitRamp> TDMTransmitRamp::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TDMTransmitRampT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const TDMTransmitRampT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _START_TIME = _o->START_TIME.empty() ? 0 : _fbb.CreateString(_o->START_TIME);
+  auto _END_TIME = _o->END_TIME.empty() ? 0 : _fbb.CreateString(_o->END_TIME);
+  auto _REFERENCE_TIME = _o->REFERENCE_TIME.empty() ? 0 : _fbb.CreateString(_o->REFERENCE_TIME);
+  auto _FREQUENCY_HZ = _o->FREQUENCY_HZ;
+  auto _FREQUENCY_RATE_HZ_PER_S = _o->FREQUENCY_RATE_HZ_PER_S;
+  auto _TRANSMITTING_STATION_ID = _o->TRANSMITTING_STATION_ID.empty() ? 0 : _fbb.CreateString(_o->TRANSMITTING_STATION_ID);
+  auto _TRANSMIT_BAND = _o->TRANSMIT_BAND.empty() ? 0 : _fbb.CreateString(_o->TRANSMIT_BAND);
+  return CreateTDMTransmitRamp(
+      _fbb,
+      _START_TIME,
+      _END_TIME,
+      _REFERENCE_TIME,
+      _FREQUENCY_HZ,
+      _FREQUENCY_RATE_HZ_PER_S,
+      _TRANSMITTING_STATION_ID,
+      _TRANSMIT_BAND);
+}
 
 inline TDMT::TDMT(const TDMT &o)
       : OBSERVER_ID(o.OBSERVER_ID),
@@ -1077,7 +1382,12 @@ inline TDMT::TDMT(const TDMT &o)
         RHUMIDITY(o.RHUMIDITY),
         TEMPERATURE(o.TEMPERATURE),
         CLOCK_BIAS(o.CLOCK_BIAS),
-        CLOCK_DRIFT(o.CLOCK_DRIFT) {
+        CLOCK_DRIFT(o.CLOCK_DRIFT),
+        SIGNAL_TO_NOISE(o.SIGNAL_TO_NOISE),
+        SPECTRAL_MAX(o.SPECTRAL_MAX),
+        DOPPLER_NOISE_HZ(o.DOPPLER_NOISE_HZ) {
+  TRANSMIT_RAMPS.reserve(o.TRANSMIT_RAMPS.size());
+  for (const auto &TRANSMIT_RAMPS_ : o.TRANSMIT_RAMPS) { TRANSMIT_RAMPS.emplace_back((TRANSMIT_RAMPS_) ? new TDMTransmitRampT(*TRANSMIT_RAMPS_) : nullptr); }
 }
 
 inline TDMT &TDMT::operator=(TDMT o) FLATBUFFERS_NOEXCEPT {
@@ -1142,6 +1452,10 @@ inline TDMT &TDMT::operator=(TDMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(TEMPERATURE, o.TEMPERATURE);
   std::swap(CLOCK_BIAS, o.CLOCK_BIAS);
   std::swap(CLOCK_DRIFT, o.CLOCK_DRIFT);
+  std::swap(SIGNAL_TO_NOISE, o.SIGNAL_TO_NOISE);
+  std::swap(SPECTRAL_MAX, o.SPECTRAL_MAX);
+  std::swap(DOPPLER_NOISE_HZ, o.DOPPLER_NOISE_HZ);
+  std::swap(TRANSMIT_RAMPS, o.TRANSMIT_RAMPS);
   return *this;
 }
 
@@ -1215,6 +1529,10 @@ inline void TDM::UnPackTo(TDMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = TEMPERATURE(); if (_e) { _o->TEMPERATURE.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->TEMPERATURE[_i] = _e->Get(_i); } } else { _o->TEMPERATURE.resize(0); } }
   { auto _e = CLOCK_BIAS(); if (_e) { _o->CLOCK_BIAS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->CLOCK_BIAS[_i] = _e->Get(_i); } } else { _o->CLOCK_BIAS.resize(0); } }
   { auto _e = CLOCK_DRIFT(); if (_e) { _o->CLOCK_DRIFT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->CLOCK_DRIFT[_i] = _e->Get(_i); } } else { _o->CLOCK_DRIFT.resize(0); } }
+  { auto _e = SIGNAL_TO_NOISE(); if (_e) { _o->SIGNAL_TO_NOISE.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SIGNAL_TO_NOISE[_i] = _e->Get(_i); } } else { _o->SIGNAL_TO_NOISE.resize(0); } }
+  { auto _e = SPECTRAL_MAX(); if (_e) { _o->SPECTRAL_MAX.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SPECTRAL_MAX[_i] = _e->Get(_i); } } else { _o->SPECTRAL_MAX.resize(0); } }
+  { auto _e = DOPPLER_NOISE_HZ(); if (_e) { _o->DOPPLER_NOISE_HZ.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DOPPLER_NOISE_HZ[_i] = _e->Get(_i); } } else { _o->DOPPLER_NOISE_HZ.resize(0); } }
+  { auto _e = TRANSMIT_RAMPS(); if (_e) { _o->TRANSMIT_RAMPS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->TRANSMIT_RAMPS[_i]) { _e->Get(_i)->UnPackTo(_o->TRANSMIT_RAMPS[_i].get(), _resolver); } else { _o->TRANSMIT_RAMPS[_i] = std::unique_ptr<TDMTransmitRampT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->TRANSMIT_RAMPS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<TDM> CreateTDM(::flatbuffers::FlatBufferBuilder &_fbb, const TDMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1286,6 +1604,10 @@ inline ::flatbuffers::Offset<TDM> TDM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _TEMPERATURE = _o->TEMPERATURE.size() ? _fbb.CreateVector(_o->TEMPERATURE) : 0;
   auto _CLOCK_BIAS = _o->CLOCK_BIAS.size() ? _fbb.CreateVector(_o->CLOCK_BIAS) : 0;
   auto _CLOCK_DRIFT = _o->CLOCK_DRIFT.size() ? _fbb.CreateVector(_o->CLOCK_DRIFT) : 0;
+  auto _SIGNAL_TO_NOISE = _o->SIGNAL_TO_NOISE.size() ? _fbb.CreateVector(_o->SIGNAL_TO_NOISE) : 0;
+  auto _SPECTRAL_MAX = _o->SPECTRAL_MAX.size() ? _fbb.CreateVector(_o->SPECTRAL_MAX) : 0;
+  auto _DOPPLER_NOISE_HZ = _o->DOPPLER_NOISE_HZ.size() ? _fbb.CreateVector(_o->DOPPLER_NOISE_HZ) : 0;
+  auto _TRANSMIT_RAMPS = _o->TRANSMIT_RAMPS.size() ? _fbb.CreateVector<::flatbuffers::Offset<TDMTransmitRamp>> (_o->TRANSMIT_RAMPS.size(), [](size_t i, _VectorArgs *__va) { return CreateTDMTransmitRamp(*__va->__fbb, __va->__o->TRANSMIT_RAMPS[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreateTDM(
       _fbb,
       _OBSERVER_ID,
@@ -1348,7 +1670,11 @@ inline ::flatbuffers::Offset<TDM> TDM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _RHUMIDITY,
       _TEMPERATURE,
       _CLOCK_BIAS,
-      _CLOCK_DRIFT);
+      _CLOCK_DRIFT,
+      _SIGNAL_TO_NOISE,
+      _SPECTRAL_MAX,
+      _DOPPLER_NOISE_HZ,
+      _TRANSMIT_RAMPS);
 }
 
 inline const TDM *GetTDM(const void *buf) {

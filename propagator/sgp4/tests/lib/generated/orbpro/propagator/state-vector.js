@@ -15,13 +15,13 @@ class StateVector {
     return this.bb.readFloat64(this.bb_pos);
   }
   /**
-   * Position [x, y, z] in km (reference frame specified below)
+   * Position [x, y, z] in METERS (reference frame specified below)
    */
   position(obj) {
     return (obj || new Vec3()).__init(this.bb_pos + 8, this.bb);
   }
   /**
-   * Velocity [vx, vy, vz] in km/s
+   * Velocity [vx, vy, vz] in METERS/SECOND
    */
   velocity(obj) {
     return (obj || new Vec3()).__init(this.bb_pos + 32, this.bb);
