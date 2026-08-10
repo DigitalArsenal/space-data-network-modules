@@ -3,7 +3,7 @@
   "name": "Supplemental OMM Status",
   "version": "1.0.0",
   "description": "Signed Supplemental OMM status node. It owns per-lane application progress aggregation and emits canonical DSS records inside dual-representation FSB transport envelopes on exact opaque APP route keys.",
-  "pluginFamily": "transform",
+  "pluginFamily": "flow",
   "capabilities": [],
   "externalInterfaces": [],
   "invokeSurfaces": [

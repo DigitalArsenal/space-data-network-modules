@@ -3,7 +3,7 @@
   "name": "OD Fit Pipeline",
   "version": "0.1.0",
   "description": "Executable pipeline (App 2, A2.3): on a timer, reads stored operator-ephemeris OEM records (storage_query), fits SGP4 SupGP/OMM mean elements per object with the existing OD fit (od::fit_sgp4_series), and ingests (storage_ingest_with_source) + signs + publishes schema-exact fitted OMM records with SourceTags provenance (SourceName 'od-fit-pipeline', deterministic per-pass batch_id). Provider set and per-provider fit config are data-driven (request payload > plugin.getConfig > compiled fallback). Records that cannot be fitted (unsupported frame/time/center, undecodable shells, too few samples, non-converged) are skipped with an honest reason.",
-  "pluginFamily": "analysis",
+  "pluginFamily": "orbit_determination",
   "capabilities": [
     "storage_query",
     "storage_ingest",

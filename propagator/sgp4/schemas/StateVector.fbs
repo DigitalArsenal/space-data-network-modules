@@ -61,26 +61,33 @@ enum StateFlags : uint32 {
 /// Binary layout (64 bytes total):
 ///   Offset  Size  Field
 ///   0       8     epoch (Julian date as float64)
-///   8       24    position [x, y, z] in km
-///   32      24    velocity [vx, vy, vz] in km/s
+///   8       24    position [x, y, z] in METERS
+///   32      24    velocity [vx, vy, vz] in METERS/SECOND
 ///   56      1     reference_frame (ReferenceFrame enum)
-///   57      3     _reserved (padding)
+///   57      3     _reserved (padding, MUST be zero)
 ///   60      4     flags (StateFlags bitfield)
 ///
-/// Units:
-///   - Position: kilometers (km)
-///   - Velocity: kilometers per second (km/s)
+/// NORMATIVE UNITS:
+///   - Position: METERS (m)
+///   - Velocity: METERS PER SECOND (m/s)
 ///   - Epoch: Julian date (days since J2000)
 ///
-/// The host converts km → meters for Cesium.
+/// There is NO unit conversion on this seam. The host does not scale; it
+/// hands these numbers straight to Cesium Cartesian3, whose unit is metres,
+/// and both shipped propagators (propagator.sgp4, propagator.hpop) document
+/// and emit "ECEF positions in meters". This block previously said kilometres
+/// and claimed "the host converts km → meters for Cesium" — a 1000x error
+/// that renders satellites inside the Earth.
+///
+/// Ruling: graph/findings/official-harness-shapes.md §4.1 / §8.1
 struct StateVector {
   /// Julian date of this state
   epoch: double;
 
-  /// Position [x, y, z] in km (reference frame specified below)
+  /// Position [x, y, z] in METERS (reference frame specified below)
   position: Vec3;
 
-  /// Velocity [vx, vy, vz] in km/s
+  /// Velocity [vx, vy, vz] in METERS/SECOND
   velocity: Vec3;
 
   /// Reference frame for position/velocity

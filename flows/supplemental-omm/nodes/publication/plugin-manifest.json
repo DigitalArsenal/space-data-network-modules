@@ -3,7 +3,7 @@
   "name": "Supplemental OMM Publication",
   "version": "1.0.0",
   "description": "Signed Supplemental OMM publication node. It owns publication policy and forwards exact typed record bytes through one application-blind host adapter.",
-  "pluginFamily": "publication",
+  "pluginFamily": "publisher",
   "capabilities": [
     "pubsub"
   ],

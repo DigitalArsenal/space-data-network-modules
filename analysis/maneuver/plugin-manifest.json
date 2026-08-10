@@ -3,7 +3,7 @@
   "name": "Maneuver Planning Plugin",
   "version": "0.1.0",
   "description": "Classical orbital maneuver and ROE targeting operations exposed through a canonical SDK command bridge.",
-  "pluginFamily": "analysis",
+  "pluginFamily": "maneuver",
   "capabilities": [],
   "externalInterfaces": [],
   "invokeSurfaces": ["command"],

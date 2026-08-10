@@ -1772,7 +1772,10 @@ void writeStateVector(const SatelliteEntity& entity, double epochJulian,
     out->velocity[0] = velEcef[0];
     out->velocity[1] = velEcef[1];
     out->velocity[2] = velEcef[2];
-    out->reference_frame = ORBPRO_FRAME_ECEF;
+    // Setter, not a direct assignment: `reference_frame` is a single byte
+    // followed by three IDL-reserved bytes, and `out` is a JS-owned scratch
+    // buffer reused across every propagate call. See orbpro_propagator.h.
+    orbpro_state_set_frame(out, ORBPRO_FRAME_ECEF);
     out->flags = entity.valid ? ORBPRO_STATE_VALID : 0;
 }
 
@@ -2919,7 +2922,7 @@ uint8_t* sgp4_dispatch_piv(
                     OrbProStateVector state;
                     orbpro_state_init(&state);
                     state.epoch = batchRequest->epoch();
-                    state.reference_frame = ORBPRO_FRAME_ECEF;
+                    orbpro_state_set_frame(&state, ORBPRO_FRAME_ECEF);
 
                     const int32_t propagateResult = plugin_propagate(batchRequest->epoch(), entityIndex, &state);
                     const bool valid = propagateResult == 0 &&

@@ -3,7 +3,7 @@
   "name": "FlatSQL Store (in-wasm OD-flow write lane)",
   "version": "0.1.0",
   "description": "In-wasm FlatSQL store terminal for the supplemental-OMM OD flow. Reads fitted $OMM/$OCM/$OBD record frames, derives the per-SDS-type route from each record's FlatBuffer file_identifier in C++, computes the CIDv1 content id, and (in C++) builds a wrapper FlatBuffer { cid:string(key); provider:string; source_name:string; batch_id:string; data:[ubyte] } stamped with a store-local file_identifier SOMM/SOCM/SOBD, then INGESTS it into the FlatSQL arena via import_module('flatsql')/import_name('ingest_record') — the only persistable substrate (arena -> ExportData snapshots through the host filesystem connector). Content-addressed dedup is in-wasm: a read-only SELECT COUNT(*) WHERE cid=? over the arena vtab via import_module('flatsql')/import_name('exec_envelope') skips records already stored (INSERT-OR-IGNORE semantics). Replaces the repudiated Go storage sink: no Go orchestration, no SDS-aware Go decode, no per-record Go loop — both host trampolines are pure byte-movers over this module's memory; all record/type/route/wrapper/CID semantics stay in wasm. $OEM is structurally unstorable (the input port carries only $OMM/$OCM/$OBD; route_for_record skips anything else; and the store-local wrapper ids SOMM/SOCM/SOBD are distinct from the raw SDS ids so a raw record can never masquerade as a wrapper). FlatBuffers/aligned-binary only, no JSON, no caps.",
-  "pluginFamily": "hostcap",
+  "pluginFamily": "infrastructure",
   "capabilities": [],
   "externalInterfaces": [],
   "invokeSurfaces": [

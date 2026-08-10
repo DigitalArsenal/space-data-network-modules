@@ -3,7 +3,7 @@
   "name": "Orbit Determination Plugin",
   "version": "0.1.0",
   "description": "Fits near-term SGP4 supplemental-GP mean elements ($OMM) to operator ephemeris ($OEM). Primary flow path is aligned-binary FlatBuffers ($OEM in -> fit -> $OMM out); a text command path (SpaceX MEME / CCSDS OEM KVN -> JSON) is retained for command back-compat.",
-  "pluginFamily": "analysis",
+  "pluginFamily": "orbit_determination",
   "capabilities": [],
   "externalInterfaces": [],
   "invokeSurfaces": [

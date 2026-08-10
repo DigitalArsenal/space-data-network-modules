@@ -3,7 +3,7 @@
   "name": "Supplemental OMM Native Orbit Determination",
   "version": "1.0.0",
   "description": "Reassembles complete provider-native response chunks inside WASM, parses each provider format, fits the complete ephemeris with the OD core, and emits multiple epoch-specific OMM, OCM, and OBD record streams.",
-  "pluginFamily": "analysis",
+  "pluginFamily": "orbit_determination",
   "capabilities": [],
   "externalInterfaces": [],
   "invokeSurfaces": [
