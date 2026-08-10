@@ -163,6 +163,28 @@ const REFUSALS = [
     errorCode: "invalid-parameter",
     messageIncludes: "departureVelocity",
   },
+  {
+    // 0.3.0's branch selector. A multi-revolution Lambert problem has exactly
+    // two arcs per revolution count, so a third name is an INPUT error and must
+    // read as one — never a silent fall back to the default, which would hand a
+    // caller who asked for something specific a different arc without saying so.
+    id: "lambert-branch-must-name-one-of-the-two-arcs",
+    body: '{"operation":"solveLambert","params":{"r1":[22592145.603,-1599915.239,-19783950.506],"r2":[1922067.697,4054157.051,-8925727.465],"tof":36000,"mu":398600441800000,"nRevs":1,"branch":"middle"}}',
+    errorCode: "invalid-parameter",
+    messageIncludes: 'branch must be "low" or "high"',
+  },
+  {
+    id: "lambert-branch-must-be-a-string",
+    body: '{"operation":"solveLambert","params":{"r1":[22592145.603,-1599915.239,-19783950.506],"r2":[1922067.697,4054157.051,-8925727.465],"tof":36000,"mu":398600441800000,"nRevs":1,"branch":1}}',
+    errorCode: "invalid-parameter",
+    messageIncludes: "branch",
+  },
+  {
+    id: "lambert-mindv-branch-must-name-one-of-the-two-arcs",
+    body: '{"operation":"solveLambertMinDV","params":{"r1":[6678137,0,0],"r2":[0,7078137,0],"tof":3000,"mu":398600441800000,"maxRevs":2,"departureVelocity":[0,7725.8,0],"arrivalVelocity":[-7503.4,0,0],"branch":"lowest"}}',
+    errorCode: "invalid-parameter",
+    messageIncludes: 'branch must be "low" or "high"',
+  },
 ];
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
@@ -248,8 +270,11 @@ const OPERATIONS = [
   ["combinedManeuver", { r1: 6678137, r2: 42164000, deltaInclination: 0.497, mu: MU }],
   ["phasingManeuver", { currentRadius: 6778137, phaseAngle: 0.5236, numRevs: 3, mu: MU }],
   [
+    // `branch` is listed so the fuzz MUTATES it: every parameter of every wired
+    // operation gets the sixteen hostile values, and a parameter added in 0.3.0
+    // that is not in this set is a parameter nothing hostile has ever been sent.
     "solveLambert",
-    { r1: [12756272, 0, 0], r2: [12756272, 22094511.219168257, 0], tof: 4033.9, mu: MU, prograde: true, nRevs: 0 },
+    { r1: [12756272, 0, 0], r2: [12756272, 22094511.219168257, 0], tof: 4033.9, mu: MU, prograde: true, nRevs: 0, branch: "low" },
   ],
   [
     "solveLambertMinDV",
@@ -261,6 +286,7 @@ const OPERATIONS = [
       maxRevs: 2,
       departureVelocity: [0, 7725.8, 0],
       arrivalVelocity: [-7503.4, 0, 0],
+      branch: "high",
     },
   ],
   [

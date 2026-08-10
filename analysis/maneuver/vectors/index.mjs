@@ -112,6 +112,29 @@ export function bandFor(path) {
  * single most common way a numeric harness certifies a broken solver.
  */
 export function compareValue(observed, expected, band) {
+  /**
+   * NON-NUMERIC EXPECTATIONS are compared EXACTLY, and they have to go first.
+   *
+   * 0.3.0 added two discrete fields to the Lambert responses — `branch`
+   * ("low"/"high") and `transferConic` ("elliptic"/"parabolic"/"hyperbolic") —
+   * and a discrete answer has no tolerance: either the module returned the arc
+   * that was asked for or it returned the other one. Falling through to the
+   * numeric path would send a string into `Number.isFinite` and report every
+   * such row as "non-finite", which is a true statement about the wrong
+   * question. One instrument, two kinds of quantity, no second code path.
+   */
+  if (typeof expected === "string" || typeof expected === "boolean") {
+    const ok = Object.is(observed, expected);
+    return {
+      ok,
+      kind: ok ? "ok" : "exact-mismatch",
+      observed,
+      expected,
+      error: ok ? 0 : Number.POSITIVE_INFINITY,
+      budget: 0,
+      ratio: ok ? 0 : Number.POSITIVE_INFINITY,
+    };
+  }
   if (!Number.isFinite(observed)) {
     return {
       ok: false,
@@ -660,18 +683,29 @@ export const INVARIANTS = Object.freeze({
   /**
    * LAMBERT EARTH FLOOR — the transfer that flies through the planet.
    *
-   * A Lambert solution is a claim about an arc, and an arc whose perigee is
-   * inside the Earth is not a transfer anybody can fly. The module reports
-   * neither the perigee radius nor a flag, so this invariant CLASSIFIES rather
-   * than fails — the same construction `phasingEarthFloor` uses, and for the
-   * same reason: the module is behaving as built, and the harness's job is to
-   * make the gap visible and countable rather than to pretend it is a
-   * regression.
+   * WHAT THIS INVARIANT DOES CHANGED AT 0.3.0, and the change is the whole
+   * point of `modules-maneuver-lambert-publishes-no-transfer-perigee`.
    *
-   * It is here because the owner hit exactly this live on 2026-08-10, and
-   * because Curtis example 5.3 solved the retrograde way round produces it from
-   * a published, foreign geometry: a converged arc whose perigee is 5.9 km from
-   * the Earth's CENTRE, returned with `converged: true` and no further comment.
+   * Against 0.2.0 it could only CLASSIFY: it reconstructed the transfer conic
+   * from the returned `v1` and reported whether the arc passed through the
+   * planet, because the module published no perigee of its own and there was
+   * nothing to check. Six of the published conformance geometries classified
+   * THROUGH-EARTH — Vallado 7-5 at 3,186 km from the centre, Der's Molniya at
+   * 909 km — and every one of them is a CORRECT answer that hapsira and Orekit
+   * assert in their own suites, so refusing them was never the fix. Publishing
+   * the evidence was, and an operator met the consequence of not publishing it
+   * live on 2026-08-10.
+   *
+   * 0.3.0 publishes `perigeeRadius`, so this now CHECKS: the module's own
+   * reported conic must reproduce the independent reconstruction from the same
+   * `v1`. That is a strictly stronger instrument — it runs on every Lambert row
+   * on every runtime, so the field is pinned across the whole vector set rather
+   * than at the single row that names it — and a module that stopped reporting
+   * it, or reported a stale one, fails here rather than going quiet.
+   *
+   * The classification survives alongside the check, because the count of
+   * conformance geometries that fly through the planet is a number worth
+   * watching whether or not anything is wrong.
    */
   lambertEarthFloor({ operation, params, response }) {
     if (operation !== "solveLambert" && operation !== "solveLambertMinDV") return null;
@@ -687,17 +721,156 @@ export const INVARIANTS = Object.freeze({
     // including the parabolic limit, unlike a form that divides by (1 - e^2).
     const eccentricity = Math.sqrt(Math.max(0, 1 + (2 * energy * h * h) / (mu * mu)));
     const perigeeRadius = semiLatusRectum / (1 + eccentricity);
+    const classification = perigeeRadius >= RE ? "above-surface" : "THROUGH-EARTH";
+    const conic = energy < 0 ? "elliptic" : energy > 0 ? "hyperbolic" : "parabolic";
+
+    const checks = [];
+    if (response.perigeeRadius === undefined) {
+      checks.push({
+        field: "perigeeRadius",
+        ok: false,
+        detail:
+          "the response publishes no perigeeRadius. A converged Lambert answer " +
+          "that does not say how low the arc goes leaves the consumer nothing " +
+          "to screen with, and the no-JS-physics law forbids re-deriving it at " +
+          "the far end (graph: modules-maneuver-lambert-publishes-no-transfer-perigee).",
+      });
+    } else {
+      // Both sides evaluate the SAME conic algebra on the SAME v1 doubles, so
+      // the only admissible difference is association order and the last bit of
+      // a square root. BANDS.distance (1 micrometre absolute) is four decades
+      // looser than the agreement measured at 0.3.0 (worst row 5.2e-5 m over a
+      // 9.1e5 m perigee, i.e. ~6e-11 relative) and still far tighter than any
+      // difference a real defect could hide in.
+      const comparison = compareValue(response.perigeeRadius, perigeeRadius, BANDS.distance);
+      checks.push({
+        field: "perigeeRadius",
+        ok: comparison.ok,
+        detail: `reported ${response.perigeeRadius} vs reconstructed ${perigeeRadius}`,
+        comparison,
+      });
+    }
+    if (response.transferConic !== undefined && response.transferConic !== conic) {
+      checks.push({
+        field: "transferConic",
+        ok: false,
+        detail: `reported ${response.transferConic}, energy says ${conic}`,
+      });
+    }
+    // An apoapsis exists on a bound arc and nowhere else, and the module's own
+    // conic label is what a consumer reads to tell the two apart — so the label
+    // and the presence of the field have to agree.
+    if (response.transferConic === "elliptic" && response.apogeeRadius !== undefined) {
+      const expectedApogee = semiMajorAxis * (1 + eccentricity);
+      const comparison = compareValue(response.apogeeRadius, expectedApogee, BANDS.distance);
+      checks.push({
+        field: "apogeeRadius",
+        ok: comparison.ok,
+        detail: `reported ${response.apogeeRadius} vs reconstructed ${expectedApogee}`,
+        comparison,
+      });
+    }
+    if (response.transferConic === "hyperbolic" && response.apogeeRadius !== undefined) {
+      checks.push({
+        field: "apogeeRadius",
+        ok: false,
+        detail: "a hyperbolic transfer has no apoapsis, and this response reports one",
+      });
+    }
+    if (response.transferEccentricity !== undefined) {
+      const comparison = compareValue(response.transferEccentricity, eccentricity, {
+        abs: 1e-12,
+        rel: 1e-12,
+      });
+      checks.push({
+        field: "transferEccentricity",
+        ok: comparison.ok,
+        detail: `reported ${response.transferEccentricity} vs reconstructed ${eccentricity}`,
+        comparison,
+      });
+    }
+
+    const bad = checks.filter((check) => !check.ok);
     return {
       id: "lambert-earth-floor",
-      ok: true,
-      classification: perigeeRadius >= RE ? "above-surface" : "THROUGH-EARTH",
+      ok: bad.length === 0,
+      classification,
       perigeeRadius,
       floor: RE,
       semiMajorAxis,
       eccentricity,
+      checks,
       detail:
-        `transfer perigee ${perigeeRadius.toFixed(1)} m vs Earth radius ${RE} m ` +
-        `(${perigeeRadius >= RE ? "flyable" : "THROUGH THE PLANET — module returns it as converged"})`,
+        bad.length > 0
+          ? bad.map((check) => `${check.field}: ${check.detail}`).join("; ")
+          : `transfer perigee ${perigeeRadius.toFixed(1)} m vs Earth radius ${RE} m ` +
+            `(${classification === "above-surface" ? "flyable" : "THROUGH THE PLANET — reported, so the consumer can screen"})`,
+    };
+  },
+
+  /**
+   * MIN-DV RANKS ITS OWN SET — the invariant that makes "it considers both
+   * branches" checkable instead of asserted.
+   *
+   * A multi-revolution Lambert problem has two arcs per revolution count.
+   * 0.2.0's `solveLambertMinDV` could only ever see one of them, so it
+   * minimised over half its own domain and presented the winner as a global
+   * answer; nothing in a response distinguished that from a real minimum.
+   * 0.3.0 publishes the candidate set it ranked, and this invariant holds it to
+   * three things a genuine ranking must satisfy:
+   *
+   *   1. the winner's cost IS the minimum of the published set;
+   *   2. the winner's (revolutions, branch) is IN the published set;
+   *   3. the set is in canonical order — revolutions ascending, low before
+   *      high — so that a diff between two runs is a diff of costs and never of
+   *      an ordering, and so a missing branch is visible by inspection.
+   */
+  lambertMinDVRanking({ operation, response }) {
+    if (operation !== "solveLambertMinDV") return null;
+    if (!Array.isArray(response.branches)) return null;
+    const set = response.branches;
+    const failures = [];
+    const best = set.reduce(
+      (worst, entry) => (entry.totalDeltaV < worst ? entry.totalDeltaV : worst),
+      Number.POSITIVE_INFINITY,
+    );
+    const winner = compareValue(response.totalDeltaV, best, BANDS.deltaV);
+    if (!winner.ok) {
+      failures.push(
+        `the returned totalDeltaV ${response.totalDeltaV} is not the minimum ${best} of its own published set`,
+      );
+    }
+    const named = set.some(
+      (entry) =>
+        entry.revolutions === response.revolutions &&
+        (entry.branch ?? undefined) === (response.branch ?? undefined),
+    );
+    if (!named) {
+      failures.push(
+        `the returned arc (revolutions ${response.revolutions}, branch ${response.branch ?? "-"}) is absent from the published set`,
+      );
+    }
+    const rank = (entry) => entry.revolutions * 2 + (entry.branch === "high" ? 1 : 0);
+    for (let i = 1; i < set.length; i += 1) {
+      if (rank(set[i]) <= rank(set[i - 1])) {
+        failures.push(
+          `the published set is not in canonical order at index ${i}: ` +
+            `rev ${set[i - 1].revolutions}/${set[i - 1].branch ?? "-"} then ` +
+            `rev ${set[i].revolutions}/${set[i].branch ?? "-"}`,
+        );
+        break;
+      }
+    }
+    return {
+      id: "lambert-mindv-ranks-its-own-set",
+      ok: failures.length === 0,
+      worst: winner,
+      candidates: set.length,
+      detail:
+        failures.length > 0
+          ? failures.join("; ")
+          : `${set.length} candidate(s) ranked; winner rev ${response.revolutions}` +
+            `${response.branch ? `/${response.branch}` : ""} at ${response.totalDeltaV} m/s`,
     };
   },
 

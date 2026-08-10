@@ -1,4 +1,4 @@
-# Delivering maneuver-planner 0.2.0 to an SDN node
+# Delivering maneuver-planner 0.3.0 to an SDN node
 
 `modules-catalog.entry.json` is this module's row for a node's
 `<storage>/modules/modules-catalog.json`. It is committed here because the
@@ -8,7 +8,33 @@ CORE, which is browsable, which is entitled) arrives as data rather than as Go
 code. The module ships the row it wants; the node operator decides whether to
 admit it.
 
-## What changed from the live 0.1.0 row
+## What changed from the 0.2.0 row
+
+| Field | 0.2.0 | 0.3.0 | Why |
+|---|---|---|---|
+| `VERSION` | `0.2.0` | `0.3.0` | Three Lambert changes, all ADDITIVE on the wire: a bracketing repair that stops the zero-revolution search stepping over its own domain boundary, a `branch` selector that exposes the second multi-revolution arc, and the transfer arc's own conic (`perigeeRadius` and companions) on every converged response. |
+| `CONTENT_HASH` | `0746bb22…c2934ae` | `4e945bbf…19144c97` | The bytes. The node RECOMPUTES this from disk and refuses a declared hash that disagrees. |
+| `ARTIFACT_SIZE_BYTES` | 200,879 | 205,798 | +4,919 bytes: the conic report, the branch scan's second-crossing path, the candidate-set writer, and their messages. |
+| `ARTIFACT_PATH` | `/modules/maneuver-planner/0.2.0/module.wasm` | `/modules/maneuver-planner/0.3.0/module.wasm` | Version-addressed path, per the convention every other row uses. |
+| `SUPERSEDES_CONTENT_HASH` | `6028c779…9cfe043` | `0746bb22…c2934ae` | Names the artifact this replaces, so a reader of the signed manifest can follow the lineage without a changelog. |
+| `EPOCH` | 2 | 3 | Third publication of this module id. |
+
+`abiVersion` stays **1** and the manifest's methods and ports are untouched.
+The three changes live entirely inside the JSON payload and are additive: every
+0.2.0 response field keeps its value and meaning, the default `branch` is the
+arc 0.2.0 returned, and a consumer written against 0.2.0 reads a 0.3.0 response
+unchanged. `TRUST_TIER` stays `RECOMMENDED`, `DEFAULT_ENABLED` stays `false`,
+`ACCESS_POLICY` stays `ANONYMOUS`.
+
+Two response keys are CONDITIONAL, and the condition is contract rather than
+implementation detail (SDK ruling, 2026-08-10): `branch` appears only when
+`revolutions >= 1`, and `apogeeRadius` / `transferSemiMajorAxis` only where the
+quantity exists and is representable — with the always-present `transferConic`
+discriminant beside them, so an absent key is never ambiguous. Emitting an
+infinity instead would fail the writer's finiteness gate and turn a converged
+solve into an error, which would not be additive.
+
+## What changed from the live 0.1.0 row (historical, at 0.2.0)
 
 | Field | 0.1.0 (live) | 0.2.0 | Why |
 |---|---|---|---|
@@ -45,7 +71,7 @@ never touches `modules-catalog.json`, and never creates a
 `/modules/<id>/<version>/module.wasm` path.
 
 ```bash
-SHA=0746bb2201281178f984cfd6a16a9dc52dbbb5ed6e09c67171334e01fc2934ae
+SHA=4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97
 ROOT=/opt/data/sdn-module-delivery/modules      # <storage.path>/modules
 
 # 1. the artifact, content-addressed (the convention every other row uses)
@@ -64,7 +90,7 @@ ssh "$HOST" "chown sdn:sdn $ROOT/artifacts/$SHA.wasm && chmod 0644 $ROOT/artifac
 #    and re-hashes every artifact from disk, so a staged row goes live with NO
 #    daemon restart.
 
-# 4. leave 0.1.0's artifact in place until 0.2.0 is verified live. It is
+# 4. leave 0.2.0's artifact in place until 0.3.0 is verified live. It is
 #    content-addressed, so the two never collide, and it is the rollback.
 ```
 
@@ -77,32 +103,55 @@ file rather than eyeballing it.
 
 ## Evidence carried by this artifact
 
-Measured on `0746bb2201281178f984cfd6a16a9dc52dbbb5ed6e09c67171334e01fc2934ae`:
+Measured on `4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97`
+(reproducible: two clean `node build.js` runs produced the identical digest):
 
 - **Tri-runtime parity** — `parity PASS fixture=maneuver-command-parity
-  module=0746bb2201281178 lanes=[browser(60 runs), wasmedge(60 runs)]
-  comparisons=218`, 15 cases byte-identical at 1/2/4/8 threads. The
-  `docker-wasmedge` lane could NOT be exercised on the build box (Docker
-  Desktop is in an error state and `docker info` does not return); the native
-  lane IS the pinned WasmEdge 0.16.4, so the pin is honoured, but the third
-  lane is UNRUN and is reported as unrun.
-- **Vectors** — 12 rows across three tiers on browser AND WasmEdge, including
-  all four Tudat Lambert cases, which were 3-of-4 `expectedToFail` against
-  0.1.0. Worst healthy row uses 2.4% of its budget.
+  module=4e945bbf81a5a897 lanes=[browser(84 runs), wasmedge(84 runs)]
+  comparisons=308`, 21 cases byte-identical at 1/2/4/8 threads. Six of those
+  cases are NEW and exist because 0.3.0 changed the response bytes: the Curtis
+  5.3 domain-boundary bracket, the multi-revolution high branch, the same
+  geometry with no branch stated (the default must not move), the hyperbolic
+  conic report with its CONDITIONAL missing `apogeeRadius`, the min-dv
+  candidate set as an ordered composite, and the branch-selector refusal. The
+  `docker-wasmedge` lane could NOT be exercised on the build box (the Docker
+  daemon does not come up: `Cannot connect to the Docker daemon at
+  unix:///Users/tj/.docker/run/docker.sock`, unchanged from the 0.2.0 build);
+  the native lane IS the pinned WasmEdge 0.16.4, so the pin is honoured, but the
+  third lane is UNRUN and is reported as unrun.
+- **Vectors** — 33 rows across three tiers on browser AND WasmEdge (28 at
+  0.2.0), 30 of them green (22 at 0.2.0), 125 tests passing. Worst healthy row
+  uses 59.0% of its budget — the tier-D margin watermark, unchanged from 0.2.0.
+  The three rows that went green are the three defects this artifact closes:
+  `hapsira-curtis-5-3`, `hapsira-der-molniya-1rev-highpath` and
+  `lambert-perigee-radius-not-published-SCREENING`. Five rows are new:
+  three forward-constructed march/boundary geometries, one min-dv case where the
+  high branch wins by a factor of thirty-six, and the low branch asked for by
+  name rather than by default.
+- **Ratchet** — raised 28 -> 33 vectors, 22 -> 30 green;
+  `solveLambert` 15 -> 19 rows with **zero** known-red (three at 0.2.0), and
+  `solveLambertMinDV` gains its first row.
 - **Lambert sweep** — 72 LEO geometries, every claimed solution arrives; worst
-  arrival miss `3.539e-11` of `|r2|`, identical on both runtimes.
-- **Fuzz** — 664 hostile inputs (16 values × every parameter of every wired
-  operation, plus 18 structural payloads including 5,000-deep nesting), zero
-  traps, one instance throughout, still computing the correct Hohmann answer at
-  the end.
+  arrival miss `3.539e-11` of `|r2|`, identical on both runtimes and
+  BIT-IDENTICAL to 0.2.0. The bracketing repair is a change to the search only:
+  no geometry 0.2.0 solved moved by a bit.
+- **Fuzz** — 698 hostile inputs (16 values × every parameter of every wired
+  operation including the new `branch`, plus 18 structural payloads including
+  5,000-deep nesting), zero traps on both runtimes, one instance throughout,
+  still computing the correct Hohmann answer at the end.
 - **Native C++** — 7/7 suites, compiled `-fno-exceptions` to match the shipped
   dialect.
 - **SDK compliance** — `validatePluginArtifact` ok, imports
-  `[wasi_snapshot_preview1]` only.
+  `[wasi_snapshot_preview1]` only, `threadModel=wasi-sequential` resolved by
+  the compiler and re-checked against the manifest.
 
 ## Status
 
 **NOT YET PUBLISHED.** Staging to `sdn.spaceaware.io` requires the deploy lock
-and host access; this file is the recipe and the row, ready to apply. Update
-this section with the staged/live timestamps, the manifest module count before
-and after, and the artifact's `HTTP 200 / etag` when it lands.
+and host access; this file is the recipe and the row, ready to apply. 0.2.0 was
+never staged either, so the live catalog still carries the 0.1.0 row — a node
+admitting 0.3.0 goes straight from `6028c779…9cfe043` to `4e945bbf…19144c97`,
+and `SUPERSEDES_CONTENT_HASH` names the 0.2.0 artifact that was built and
+verified but never served. Update this section with the staged/live timestamps,
+the manifest module count before and after, and the artifact's
+`HTTP 200 / etag` when it lands.

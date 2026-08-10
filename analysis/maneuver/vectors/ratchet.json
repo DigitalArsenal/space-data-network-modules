@@ -1,13 +1,13 @@
 {
   "//": "THE RATCHET. Vector counts may only grow, and the GREEN count may only grow — a row demoted to expected-to-fail fails tests/ratchet.test.mjs even though the total is unchanged. Raise with vectors/tools/update-ratchet.mjs.",
-  "updated": "2026-08-10T16:54:36.374Z",
-  "total": 28,
-  "green": 22,
+  "updated": "2026-08-10T17:32:32.384Z",
+  "total": 33,
+  "green": 30,
   "byOperation": {
     "solveLambert": {
-      "total": 15,
-      "green": 12,
-      "knownRed": 3
+      "total": 19,
+      "green": 19,
+      "knownRed": 0
     },
     "hohmannTransfer": {
       "total": 4,
@@ -34,6 +34,11 @@
       "green": 2,
       "knownRed": 0
     },
+    "solveLambertMinDV": {
+      "total": 1,
+      "green": 1,
+      "knownRed": 0
+    },
     "ricFrameAlgebra": {
       "total": 1,
       "green": 1,
@@ -47,14 +52,14 @@
       "knownRed": 0
     },
     "in-repo": {
-      "total": 8,
-      "green": 7,
+      "total": 12,
+      "green": 11,
       "knownRed": 1
     },
     "hapsira": {
-      "total": 14,
-      "green": 9,
-      "knownRed": 5
+      "total": 15,
+      "green": 13,
+      "knownRed": 2
     },
     "orekit": {
       "total": 2,

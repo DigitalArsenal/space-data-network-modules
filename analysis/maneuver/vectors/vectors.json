@@ -61,6 +61,17 @@
       "statement": "propagating (r1, v1) forward by tof with an independent universal-variable Kepler propagator arrives at r2, per component, within 1e-6 of |r2|."
     },
     {
+      "id": "lambert-earth-floor",
+      "applies": "solveLambert, solveLambertMinDV",
+      "statement": "the transfer conic the module REPORTS (perigeeRadius, apogeeRadius, transferEccentricity, transferConic) reproduces an independent reconstruction from the same returned v1, and the presence of an apoapsis agrees with the conic type the module named. Also classifies each arc above-surface / THROUGH-EARTH: six published conformance geometries pass through the planet and are correct answers, which is why the module REPORTS the perigee instead of refusing them.",
+      "changedAt": "0.3.0 — against 0.2.0 this invariant could only classify, because the module published no perigee to check (graph: modules-maneuver-lambert-publishes-no-transfer-perigee)."
+    },
+    {
+      "id": "lambert-mindv-ranks-its-own-set",
+      "applies": "solveLambertMinDV",
+      "statement": "the returned cost is the minimum of the candidate set the response publishes, the returned (revolutions, branch) is a member of that set, and the set is in canonical order (revolutions ascending, low before high). This is what makes 'it ranked over BOTH branches' checkable rather than asserted: 0.2.0 ranked over half its domain and no field of a response distinguished that from a real minimum."
+    },
+    {
       "id": "phasing-earth-floor",
       "applies": "phasingManeuver",
       "statement": "classifies whether the phasing orbit's far apse clears Re + 100 km. The module does not clamp it, so this invariant records rather than fails — and the wrapper's guard is tested against exactly the cases it classifies BELOW-FLOOR."
@@ -588,6 +599,319 @@
       ]
     },
     {
+      "id": "lambert-march-root-inside-first-step",
+      "tier": "B",
+      "operation": "solveLambert",
+      "source": {
+        "work": "this repo — modules-maneuver-lambert-refuses-a-solvable-arc",
+        "example": "forward-constructed hyperbolic fall whose universal-variable root (z = -0.113) AND domain boundary (z = -0.398) both lie inside the first march step",
+        "inputs": "r1 = 300,000 km on +x, departure velocity (-2000, 500, 0) m/s, 17 h of flight"
+      },
+      "params": {
+        "r1": [
+          300000000,
+          0,
+          0
+        ],
+        "r2": [
+          165850840.0444268,
+          29968662.9674529,
+          0
+        ],
+        "tof": 61200,
+        "mu": 398600441800000,
+        "prograde": true,
+        "nRevs": 0
+      },
+      "expect": {
+        "v1.0": -2000,
+        "v2.0": -2472.5191106888697,
+        "v1.1": 500,
+        "v2.1": 457.65163487171276,
+        "v1.2": 0,
+        "v2.2": 0,
+        "transferConic": "hyperbolic",
+        "perigeeRadius": 26789917.33550458,
+        "transferEccentricity": 1.1070428553593668,
+        "transferSemiMajorAxis": -250272820.5966184
+      },
+      "fieldBands": {
+        "v1": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        },
+        "v2": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        }
+      },
+      "anchors": [],
+      "construction": {
+        "method": "forward: (r1, v1) chosen here, r2 = propagateKepler(r1, v1, tof) from vectors/index.mjs. Lambert is never solved to produce this row.",
+        "departureVelocity": [
+          -2000,
+          500,
+          0
+        ],
+        "adjudicator": "universal-variable",
+        "certified": true,
+        "residual": 0.00048828125,
+        "marchClass": "root INSIDE the first march step, boundary inside it too — the class that made the first probe at z = -1 land in the empty domain",
+        "wasRefusedBy020": true,
+        "transferConic": {
+          "energy": 796331.8606666666,
+          "eccentricity": 1.1070428553593668,
+          "semiMajorAxis": -250272820.5966184,
+          "perigeeRadius": 26789917.33550458,
+          "apogeeRadius": null,
+          "conic": "hyperbolic"
+        }
+      },
+      "note": "Curtis example 5.3's class, reconstructed independently so the repair is pinned by a row this repo owns rather than only by a foreign one. 0.2.0 answers `no-solution` here; the arc is a 17-hour hyperbolic fall from 300,000 km whose perigee clears the Earth by 20,000 km."
+    },
+    {
+      "id": "lambert-march-root-just-outside-first-step",
+      "tier": "B",
+      "operation": "solveLambert",
+      "source": {
+        "work": "this repo — modules-maneuver-lambert-refuses-a-solvable-arc",
+        "example": "forward-constructed hyperbolic fall whose root (z = -1.199) is just BEYOND the first march step, with the domain boundary (z = -1.909) between the root and the second probe",
+        "inputs": "r1 = 300,000 km on +x, departure velocity (-3400, 500, 0) m/s, 17 h of flight"
+      },
+      "params": {
+        "r1": [
+          300000000,
+          0,
+          0
+        ],
+        "r2": [
+          74471324.84414831,
+          28928761.34820062,
+          0
+        ],
+        "tof": 61200,
+        "mu": 398600441800000,
+        "prograde": true,
+        "nRevs": 0
+      },
+      "expect": {
+        "v1.0": -3400,
+        "v2.0": -4362.208051428048,
+        "v1.1": 500,
+        "v2.1": 319.67639059545183,
+        "v1.2": 0,
+        "v2.2": 0,
+        "transferConic": "hyperbolic",
+        "perigeeRadius": 22441618.730291963,
+        "transferEccentricity": 1.5153044704947891,
+        "transferSemiMajorAxis": -43550211.60352791
+      },
+      "fieldBands": {
+        "v1": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        },
+        "v2": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        }
+      },
+      "anchors": [],
+      "construction": {
+        "method": "forward: (r1, v1) chosen here, r2 = propagateKepler(r1, v1, tof) from vectors/index.mjs. Lambert is never solved to produce this row.",
+        "departureVelocity": [
+          -3400,
+          500,
+          0
+        ],
+        "adjudicator": "universal-variable",
+        "certified": true,
+        "residual": 0.0009765625,
+        "marchClass": "root just OUTSIDE the first march step — the probe at z = -1 is inside the domain and above the root, and doubling to z = -2 overshoots the boundary at z = -1.909",
+        "wasRefusedBy020": true,
+        "transferConic": {
+          "energy": 4576331.860666668,
+          "eccentricity": 1.5153044704947891,
+          "semiMajorAxis": -43550211.60352791,
+          "perigeeRadius": 22441618.730291963,
+          "apogeeRadius": null,
+          "conic": "hyperbolic"
+        }
+      },
+      "note": "The companion to the row above, and the one that shows the defect was never about the number 1: here the first probe lands correctly and it is the SECOND that falls off the branch. A repair that only widened the initial step would pass the other row and fail this one."
+    },
+    {
+      "id": "lambert-march-root-reached-by-doubling",
+      "tier": "B",
+      "operation": "solveLambert",
+      "source": {
+        "work": "this repo — modules-maneuver-lambert-refuses-a-solvable-arc (the no-regression half)",
+        "example": "forward-constructed hyperbolic fall whose root (z = -1.149) is outside the first march step with the domain boundary far beyond it (z = -3.765)",
+        "inputs": "r1 = 300,000 km on +x, departure velocity (-2200, 800, 0) m/s, 28 h of flight"
+      },
+      "params": {
+        "r1": [
+          300000000,
+          0,
+          0
+        ],
+        "r2": [
+          29238649.498891562,
+          66021430.30776826,
+          0
+        ],
+        "tof": 100800,
+        "mu": 398600441800000,
+        "prograde": true,
+        "nRevs": 0
+      },
+      "expect": {
+        "v1.0": -2200,
+        "v2.0": -3718.5786245100844,
+        "v1.1": 800,
+        "v2.1": -188.3082699239564,
+        "v1.2": 0,
+        "v2.2": 0,
+        "transferConic": "hyperbolic",
+        "perigeeRadius": 59653160.620056644,
+        "transferEccentricity": 1.4224300695321113,
+        "transferSemiMajorAxis": -141214285.91986656
+      },
+      "fieldBands": {
+        "v1": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        },
+        "v2": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        }
+      },
+      "anchors": [],
+      "construction": {
+        "method": "forward: (r1, v1) chosen here, r2 = propagateKepler(r1, v1, tof) from vectors/index.mjs. Lambert is never solved to produce this row.",
+        "departureVelocity": [
+          -2200,
+          800,
+          0
+        ],
+        "adjudicator": "universal-variable",
+        "certified": true,
+        "residual": 0,
+        "marchClass": "root outside the first march step, boundary far beyond it — the OUTWARD doubling path, which 0.2.0 already walked correctly",
+        "wasRefusedBy020": false,
+        "transferConic": {
+          "energy": 1411331.860666667,
+          "eccentricity": 1.4224300695321113,
+          "semiMajorAxis": -141214285.91986656,
+          "perigeeRadius": 59653160.620056644,
+          "apogeeRadius": null,
+          "conic": "hyperbolic"
+        }
+      },
+      "note": "This row was GREEN against 0.2.0 and must stay green. It is here because the other two are: a bracketing change that traded the outward march for the inward one would fix the refusals and break this, and nothing else in the set would notice."
+    },
+    {
+      "id": "lambert-mindv-high-branch-wins",
+      "tier": "B",
+      "operation": "solveLambertMinDV",
+      "source": {
+        "work": "this repo — modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two",
+        "example": "one-revolution transfer between two circular orbits where the HIGH branch is the cheapest arc in the whole domain — the answer 0.2.0 could not reach",
+        "inputs": "r1 = 6678.137 km on +x, departure velocity (0, 7800, 0) m/s (a 300 km circular orbit plus 74.24 m/s), 9000 s of flight, endpoints circular and coplanar"
+      },
+      "params": {
+        "r1": [
+          6678137,
+          0,
+          0
+        ],
+        "r2": [
+          -5448333.68981192,
+          -4253906.917106518,
+          0
+        ],
+        "tof": 9000,
+        "mu": 398600441800000,
+        "prograde": true,
+        "maxRevs": 3,
+        "departureVelocity": [
+          0,
+          7725.760232077137,
+          0
+        ],
+        "arrivalVelocity": [
+          4673.28023768147,
+          -5985.460109270804,
+          0
+        ]
+      },
+      "expect": {
+        "v1.0": 0,
+        "v2.0": 4709.257819067039,
+        "v1.1": 7800,
+        "v2.1": -5883.766673281599,
+        "v1.2": 0,
+        "v2.2": 0,
+        "revolutions": 1,
+        "branch": "high",
+        "dv1": 74.2397679228634,
+        "dv2": 107.87002032838387,
+        "totalDeltaV": 182.10978825124727,
+        "transferConic": "elliptic",
+        "perigeeRadius": 6678137.000000025,
+        "apogeeRadius": 6941140.234454726
+      },
+      "fieldBands": {
+        "v1": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        },
+        "v2": {
+          "abs": 1e-8,
+          "rel": 1e-12,
+          "alarmRel": 1e-11,
+          "rationale": "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march rows; the gate is ~450x that and the watermark ~3 decades inside the gate."
+        }
+      },
+      "anchors": [],
+      "construction": {
+        "method": "forward: (r1, v1) chosen here, r2 = propagateKepler(r1, v1, tof); endpoint orbits circular in the transfer's own plane. Lambert is never solved to produce this row.",
+        "departureVelocity": [
+          0,
+          7800,
+          0
+        ],
+        "adjudicator": "universal-variable",
+        "certified": true
+      },
+      "rankingAtLanding": {
+        "rev 0": 6682.707347969772,
+        "rev 1 / low": 9143.961620932241,
+        "rev 1 / high": 182.10978825122217,
+        "winner": "rev 1 / high",
+        "reachableBy020": [
+          "rev 0",
+          "rev 1 / low"
+        ]
+      },
+      "note": "A one-revolution Lambert problem has two arcs and 0.2.0 could only see the first, so `solveLambertMinDV` minimised over half its own domain and presented the winner as global. Here the half it could not see is cheaper by a factor of thirty-six."
+    },
+    {
       "id": "hapsira-vallado-7-5",
       "tier": "D",
       "operation": "solveLambert",
@@ -657,7 +981,8 @@
           "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
         }
       },
-      "branch": null
+      "branch": null,
+      "requestBranch": null
     },
     {
       "id": "hapsira-curtis-5-2",
@@ -729,7 +1054,8 @@
           "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
         }
       },
-      "branch": null
+      "branch": null,
+      "requestBranch": null
     },
     {
       "id": "hapsira-curtis-5-3",
@@ -766,8 +1092,10 @@
           "publishedHalfUlp": 0.05
         }
       },
-      "expectedToFail": {
-        "defect": "modules-maneuver-lambert-refuses-a-solvable-arc — solveLambert answers `no-solution` for Curtis example 5.3, a geometry hapsira solves and whose solution this repo's own independent propagator confirms arrives. The zero-revolution downward march starts at |step| = max(1, |z0|) and only DOUBLES; this root sits at z = -0.173, so the first probe lands at z = -1 where y < 0 and F is not finite, and every probe after it is deeper in the empty domain. A whole class of short-transfer-angle hyperbolic arcs is unreachable, reported as if no arc existed."
+      "repairedBy": {
+        "task": "modules-maneuver-lambert-refuses-a-solvable-arc",
+        "landedWith": "maneuver-planner 0.3.0",
+        "note": "Held open from the tier-D suite's first run. The row is unchanged — same hapsira source, same 1e-4 tolerance, same adjudicating invariant. What changed is the SEARCH: the zero-revolution downward march started at |step| = max(1, |z0|) and only doubled, so for this geometry — root at z = -0.173, domain boundary at z = -0.398 — the first probe at z = -1 landed outside the domain and every later probe landed further outside. The march now keeps a bracket in step space and bisects TOWARD the boundary on a non-finite probe. No expression in the formulation was touched, and the 72-geometry LEO sweep plus every other Lambert row is bit-identical."
       },
       "source": {
         "library": "hapsira",
@@ -792,7 +1120,8 @@
           "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
         }
       },
-      "branch": null
+      "branch": null,
+      "requestBranch": null
     },
     {
       "id": "hapsira-der-molniya-0rev",
@@ -864,7 +1193,8 @@
           "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
         }
       },
-      "branch": null
+      "branch": null,
+      "requestBranch": null
     },
     {
       "id": "lambert-perigee-radius-not-published-SCREENING",
@@ -887,7 +1217,11 @@
         "nRevs": 0
       },
       "expect": {
-        "perigeeRadius": 909990.648349044
+        "perigeeRadius": 909990.648349044,
+        "apogeeRadius": 51387540.492523305,
+        "transferEccentricity": 0.9651994796504704,
+        "transferSemiMajorAxis": 26148765.570436176,
+        "transferConic": "elliptic"
       },
       "fieldBands": {
         "perigeeRadius": {
@@ -896,15 +1230,38 @@
           "alarmBudgetFraction": 0.8,
           "sourceTolerance": 0.000001,
           "sourceToleranceKind": "derived from the published v1 tolerance"
+        },
+        "apogeeRadius": {
+          "abs": 1,
+          "rel": 0.000001,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 0.000001,
+          "sourceToleranceKind": "derived from the published v1 tolerance"
+        },
+        "transferSemiMajorAxis": {
+          "abs": 1,
+          "rel": 0.000001,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 0.000001,
+          "sourceToleranceKind": "derived from the published v1 tolerance"
+        },
+        "transferEccentricity": {
+          "abs": 0,
+          "rel": 0.000001,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 0.000001,
+          "sourceToleranceKind": "derived from the published v1 tolerance"
         }
       },
-      "expectedToFail": {
-        "defect": "modules-maneuver-lambert-publishes-no-transfer-perigee — solveLambert returns a converged arc without saying how low it goes. Five of the eight published conformance geometries in this tier produce transfers that pass THROUGH the Earth, so refusing them is not the answer and the tier-C `lambert-earth-floor` classification proves it; publishing `perigeeRadius` is. Without it the only place to screen is the console, in JavaScript, which the no-JS-physics law forbids — and an operator met the consequence live on 2026-08-10.",
-        "classification": {
-          "perigeeRadius": 909990.648349044,
-          "earthRadius": 6378137,
-          "note": "this published, foreign, entirely correct Lambert solution dives to 909991 m from the Earth's CENTRE. The module returns it as converged and says nothing about that, which is the whole defect."
-        }
+      "repairedBy": {
+        "task": "modules-maneuver-lambert-publishes-no-transfer-perigee",
+        "landedWith": "maneuver-planner 0.3.0",
+        "note": "Held open from the tier-D suite's first run. The module now publishes the transfer arc's own conic — perigeeRadius, transferEccentricity, transferConic, and apogeeRadius/transferSemiMajorAxis where they exist — so a consumer can screen a through-Earth arc without computing orbital mechanics in JavaScript. It still SOLVES this geometry and the five others that pass through the planet, because they are correct answers that hapsira, Orekit and Vallado assert; the fix was a report, never a refusal. The tier-C `lambert-earth-floor` invariant was upgraded in the same commit from classifying its own reconstruction to CHECKING the module's reported field against it, on every Lambert row."
+      },
+      "classification": {
+        "perigeeRadius": 909990.648349044,
+        "earthRadius": 6378137,
+        "note": "this published, foreign, entirely correct Lambert solution dives to 909991 m from the Earth's CENTRE. Against 0.2.0 the module returned it as converged and said nothing about that, which was the whole defect; 0.3.0 still returns it — it is a correct answer three libraries publish — and now says how low it goes, so the consumer that cares can refuse it and the consumer solving an IOD problem need not."
       },
       "source": {
         "library": "hapsira",
@@ -950,7 +1307,8 @@
         "tof": 36000,
         "mu": 398600441800000,
         "prograde": true,
-        "nRevs": 1
+        "nRevs": 1,
+        "branch": "high"
       },
       "expect": {
         "v1.0": 503.3577,
@@ -958,7 +1316,8 @@
         "v1.2": -1571.76904,
         "v2.0": -4183.34626,
         "v2.1": -1132.62727,
-        "v2.2": 6133.0709099999995
+        "v2.2": 6133.0709099999995,
+        "branch": "high"
       },
       "fieldBands": {
         "v1": {
@@ -978,8 +1337,10 @@
           "publishedHalfUlp": 0.000005
         }
       },
-      "expectedToFail": {
-        "defect": "modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two — a multi-revolution Lambert problem has TWO arcs for a given revolution count. solveLambert scans the bounded interval and returns the FIRST sign change, and the JSON surface carries no way to ask for the other branch."
+      "repairedBy": {
+        "task": "modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two",
+        "landedWith": "maneuver-planner 0.3.0",
+        "note": "Held open from the tier-D suite's first run, and never a wrong ANSWER — a missing half of a surface. A one-revolution Lambert problem has two arcs; the scan took the first sign change and the JSON surface carried no way to ask for the second. The request now takes `branch: \"low\" | \"high\"` (default low = 0.2.0's arc, so no existing caller moves) and the response names the branch it returned. This row asks for the high path explicitly; its low-path twin still passes with the default AND with the selector stated."
       },
       "source": {
         "library": "hapsira",
@@ -1005,7 +1366,12 @@
           "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
         }
       },
-      "branch": "high-path (hapsira lowpath=False)"
+      "branch": "high-path (hapsira lowpath=False)",
+      "requestBranch": {
+        "value": "high",
+        "stated": true,
+        "rule": "0.3.0 request surface: branch?: \"low\" | \"high\", default \"low\". hapsira's own spelling is lowpath=True/False; the mapping is in requestBranchOf()."
+      }
     },
     {
       "id": "hapsira-der-molniya-1rev-lowpath",
@@ -1033,7 +1399,8 @@
         "v1.2": 431.61258000000004,
         "v2.0": -5538.4137,
         "v2.1": 18.2222,
-        "v2.2": 5496.41054
+        "v2.2": 5496.41054,
+        "branch": "low"
       },
       "fieldBands": {
         "v1": {
@@ -1077,7 +1444,91 @@
           "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
         }
       },
-      "branch": "low-path (hapsira lowpath=True)"
+      "branch": "low-path (hapsira lowpath=True)",
+      "requestBranch": {
+        "value": "low",
+        "stated": false,
+        "rule": "0.3.0 request surface: branch?: \"low\" | \"high\", default \"low\". hapsira's own spelling is lowpath=True/False; the mapping is in requestBranchOf()."
+      }
+    },
+    {
+      "id": "hapsira-der-molniya-1rev-lowpath-selector",
+      "tier": "D",
+      "operation": "solveLambert",
+      "params": {
+        "r1": [
+          22592145.603,
+          -1599915.2389999998,
+          -19783950.506
+        ],
+        "r2": [
+          1922067.697,
+          4054157.051,
+          -8925727.465
+        ],
+        "tof": 36000,
+        "mu": 398600441800000,
+        "prograde": true,
+        "nRevs": 1,
+        "branch": "low"
+      },
+      "expect": {
+        "v1.0": -2457.59553,
+        "v1.1": 1169.45801,
+        "v1.2": 431.61258000000004,
+        "v2.0": -5538.4137,
+        "v2.1": 18.2222,
+        "v2.2": 5496.41054,
+        "branch": "low"
+      },
+      "fieldBands": {
+        "v1": {
+          "abs": 0.000005,
+          "rel": 0.00001,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 0.00001,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 0.000005
+        },
+        "v2": {
+          "abs": 0.00005,
+          "rel": 0.0001,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 0.0001,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 0.00005
+        }
+      },
+      "source": {
+        "library": "hapsira",
+        "head": "5d25e627fdbb3192b912c2ed7fa5e647b07088ba",
+        "version": "0.19.dev0",
+        "license": "MIT",
+        "file": "tests/test_iod.py",
+        "testCase": "test_molniya_der_one_full_revolution",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof",
+          "v1": "expected_va_r",
+          "v2": "expected_vb_r"
+        },
+        "upstream": "Der, \"Superior Lambert Algorithm\" — Molniya geometry, ONE full revolution"
+      },
+      "note": "The same upstream arc as hapsira-der-molniya-1rev-lowpath, asked for by name instead of by default. Both rows must agree, and the pair is what pins the selector without loosening the default (graph: modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two).",
+      "derived": {
+        "prograde": {
+          "prograde": true,
+          "momentumZ": 22488621098.769352,
+          "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+        }
+      },
+      "branch": "low-path (hapsira lowpath=True)",
+      "requestBranch": {
+        "value": "low",
+        "stated": true,
+        "rule": "0.3.0 request surface: branch?: \"low\" | \"high\", default \"low\". hapsira's own spelling is lowpath=True/False; the mapping is in requestBranchOf()."
+      }
     },
     {
       "id": "hapsira-issue840-retrograde",
@@ -1149,7 +1600,8 @@
           "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
         }
       },
-      "branch": null
+      "branch": null,
+      "requestBranch": null
     },
     {
       "id": "hapsira-der-molniya-1rev-infeasible",

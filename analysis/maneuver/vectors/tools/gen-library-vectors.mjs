@@ -126,9 +126,62 @@ function bandFrom(tolerance, values, extra = {}) {
  * the generator, and never by hand in `vectors.json` — a hand-edited marker
  * survives no regeneration and the file's own `--check` would reject it.
  */
-const TIER_D_KNOWN_RED = {
-  "hapsira-curtis-5-3": "lambertRefusesSolvableArc",
-  "hapsira-der-molniya-1rev-highpath": "lambertMultiRevBranch",
+const TIER_D_KNOWN_RED = {};
+
+/**
+ * ROWS THAT WERE HELD OPEN AND ARE NOW GREEN, with what closed them.
+ *
+ * The marker comes off in the SAME commit as the fix — the runner asserts that
+ * a marked row still fails, so a repaired defect turns the suite red until a
+ * human takes the marker off deliberately. That is the mechanism working, and
+ * the repair record is what stops the row from looking like it was never
+ * broken. Compare `TIER_A_REPAIRED` in build-vectors.mjs, which does the same
+ * for the three Tudat rows 0.2.0 fixed.
+ */
+export const TIER_D_REPAIRED = {
+  "hapsira-curtis-5-3": {
+    task: "modules-maneuver-lambert-refuses-a-solvable-arc",
+    landedWith: "maneuver-planner 0.3.0",
+    note:
+      "Held open from the tier-D suite's first run. The row is unchanged — same " +
+      "hapsira source, same 1e-4 tolerance, same adjudicating invariant. What " +
+      "changed is the SEARCH: the zero-revolution downward march started at " +
+      "|step| = max(1, |z0|) and only doubled, so for this geometry — root at " +
+      "z = -0.173, domain boundary at z = -0.398 — the first probe at z = -1 " +
+      "landed outside the domain and every later probe landed further outside. " +
+      "The march now keeps a bracket in step space and bisects TOWARD the " +
+      "boundary on a non-finite probe. No expression in the formulation was " +
+      "touched, and the 72-geometry LEO sweep plus every other Lambert row is " +
+      "bit-identical.",
+  },
+  "hapsira-der-molniya-1rev-highpath": {
+    task: "modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two",
+    landedWith: "maneuver-planner 0.3.0",
+    note:
+      "Held open from the tier-D suite's first run, and never a wrong ANSWER — " +
+      "a missing half of a surface. A one-revolution Lambert problem has two " +
+      "arcs; the scan took the first sign change and the JSON surface carried " +
+      "no way to ask for the second. The request now takes `branch: \"low\" | " +
+      "\"high\"` (default low = 0.2.0's arc, so no existing caller moves) and " +
+      "the response names the branch it returned. This row asks for the high " +
+      "path explicitly; its low-path twin still passes with the default AND " +
+      "with the selector stated.",
+  },
+  "lambert-perigee-radius-not-published-SCREENING": {
+    task: "modules-maneuver-lambert-publishes-no-transfer-perigee",
+    landedWith: "maneuver-planner 0.3.0",
+    note:
+      "Held open from the tier-D suite's first run. The module now publishes " +
+      "the transfer arc's own conic — perigeeRadius, transferEccentricity, " +
+      "transferConic, and apogeeRadius/transferSemiMajorAxis where they exist — " +
+      "so a consumer can screen a through-Earth arc without computing orbital " +
+      "mechanics in JavaScript. It still SOLVES this geometry and the five " +
+      "others that pass through the planet, because they are correct answers " +
+      "that hapsira, Orekit and Vallado assert; the fix was a report, never a " +
+      "refusal. The tier-C `lambert-earth-floor` invariant was upgraded in the " +
+      "same commit from classifying its own reconstruction to CHECKING the " +
+      "module's reported field against it, on every Lambert row.",
+  },
 };
 
 /** The defect ledger for tier D. Every known-red row names one of these. */
@@ -180,8 +233,40 @@ function commonSource(extract, entry, library) {
   };
 }
 
-/** hapsira Lambert rows -> solveLambert vectors. */
-function hapsiraLambertCase(extract, entry) {
+/**
+ * Which arc of a multi-revolution row the upstream case is, on OUR request
+ * surface.
+ *
+ * hapsira spells the choice `lowpath=True/False` and records it in the
+ * extract's prose `branch` field; 0.3.0's request surface spells it
+ * `branch: "low" | "high"`. Mapping it HERE — from the extract's own words, by
+ * a rule with no default — is what keeps the two vocabularies reconciled in one
+ * place. A row whose prose says neither is a dumper defect and throws rather
+ * than silently defaulting to the arc that happens to pass.
+ */
+function requestBranchOf(entry) {
+  if (entry.nRevs === 0 || !entry.branch) return null;
+  if (/low-path/.test(entry.branch)) return "low";
+  if (/high-path/.test(entry.branch)) return "high";
+  throw new Error(
+    `${entry.id}: multi-revolution row whose branch prose ("${entry.branch}") ` +
+      "names neither the low nor the high path. A one-revolution Lambert " +
+      "problem has exactly two arcs; a vector that cannot say which one it " +
+      "asserts is asserting nothing.",
+  );
+}
+
+/**
+ * hapsira Lambert rows -> solveLambert vectors.
+ *
+ * `explicitBranch` selects how the branch reaches the request: `null` sends no
+ * `branch` param at all (the DEFAULT path, which must keep returning 0.2.0's
+ * arc), while a string states it. Both forms exist in the vector set for the
+ * low path on purpose — "the default still returns the low arc" and "asking for
+ * the low arc returns the low arc" are two different claims, and only the pair
+ * of them pins the selector without loosening the default.
+ */
+function hapsiraLambertCase(extract, entry, options = {}) {
   const expect = {};
   const fieldBands = {};
   for (const field of ["v1", "v2"]) {
@@ -190,9 +275,16 @@ function hapsiraLambertCase(extract, entry) {
     for (let axis = 0; axis < 3; axis += 1) expect[`${field}.${axis}`] = values[axis];
     fieldBands[field] = bandFrom(entry.tolerances[field], values);
   }
+  const requestBranch = requestBranchOf(entry);
+  // A multi-revolution response must NAME the arc it returned, whether or not
+  // the request named one — otherwise a caller cannot tell which of the two it
+  // was given, which is the surface half that was missing.
+  if (requestBranch) expect.branch = requestBranch;
   const knownRed = TIER_D_KNOWN_RED[entry.id];
+  const repaired = TIER_D_REPAIRED[entry.id];
+  const stateBranch = options.stateBranch ?? false;
   return {
-    id: entry.id,
+    id: options.id ?? entry.id,
     tier: "D",
     operation: "solveLambert",
     params: {
@@ -202,14 +294,30 @@ function hapsiraLambertCase(extract, entry) {
       mu: entry.values.mu,
       prograde: entry.prograde,
       nRevs: entry.nRevs,
+      // The HIGH path is unreachable without stating it, so its row always
+      // states it; the LOW path is the default and gets both forms.
+      ...(requestBranch && (stateBranch || requestBranch === "high")
+        ? { branch: requestBranch }
+        : {}),
     },
     expect,
     fieldBands,
     ...(knownRed ? { expectedToFail: { defect: TIER_D_DEFECTS[knownRed] } } : {}),
+    ...(repaired && !options.id ? { repairedBy: repaired } : {}),
     source: commonSource(extract, entry, "hapsira"),
-    note: entry.note,
+    note: options.note ?? entry.note,
     derived: { prograde: entry.progradeDerivation },
     branch: entry.branch ?? null,
+    requestBranch: requestBranch
+      ? {
+          value: requestBranch,
+          stated: Boolean(stateBranch || requestBranch === "high"),
+          rule:
+            "0.3.0 request surface: branch?: \"low\" | \"high\", default \"low\". " +
+            "hapsira's own spelling is lowpath=True/False; the mapping is in " +
+            "requestBranchOf().",
+        }
+      : null,
   };
 }
 
@@ -230,12 +338,14 @@ function hapsiraLambertCase(extract, entry) {
  * So the requirement is not a refusal, it is a REPORT: `solveLambert` must
  * publish the transfer arc's perigee radius, so the consumer that knows whether
  * it is planning a spacecraft manoeuvre or solving an orbit-determination
- * problem can screen on it. Today it publishes neither the perigee nor a flag,
- * and the only way for the console to screen is to re-derive the conic from the
+ * problem can screen on it. 0.2.0 published neither the perigee nor a flag, so
+ * the only way for the console to screen was to re-derive the conic from the
  * returned velocity IN JAVASCRIPT — which the no-JS-physics law forbids. That
- * is the defect, and it is a one-field defect rather than a behaviour change.
+ * was the defect, and it was a report defect rather than a behaviour change:
+ * 0.3.0 still solves this geometry and the five others that pass through the
+ * planet, and now says how low each one goes.
  *
- * The expected number is derived from hapsira's OWN published r1 and v1 by the
+ * The expected numbers are derived from hapsira's OWN published r1 and v1 by the
  * standard conic relations, which is the same class of derivation the
  * eccentric-departure rows already declare. The module is never consulted.
  */
@@ -256,6 +366,9 @@ function perigeeReportingCase(extract, source) {
   const eccentricity = Math.sqrt(Math.max(0, 1 + (2 * energy * h * h) / (mu * mu)));
   const perigeeRadius = semiLatusRectum / (1 + eccentricity);
 
+  const semiMajorAxis = -mu / (2 * energy);
+  const apogeeRadius = semiMajorAxis * (1 + eccentricity);
+
   return {
     id: "lambert-perigee-radius-not-published-SCREENING",
     tier: "D",
@@ -268,7 +381,21 @@ function perigeeReportingCase(extract, source) {
       prograde: source.prograde,
       nRevs: source.nRevs,
     },
-    expect: { perigeeRadius },
+    /**
+     * The COMPANION fields are asserted too, and from the same derivation.
+     * `perigeeRadius` alone would pass against a module that reported the
+     * perigee and got the conic type wrong, and the conic type is exactly what
+     * a consumer reads to tell "this arc has no apoapsis" from "this field was
+     * dropped" (SDK ruling, 2026-08-10: an omitted key is only legible beside
+     * an always-present discriminant).
+     */
+    expect: {
+      perigeeRadius,
+      apogeeRadius,
+      transferEccentricity: eccentricity,
+      transferSemiMajorAxis: semiMajorAxis,
+      transferConic: "elliptic",
+    },
     fieldBands: {
       /**
        * The gate is hapsira's own velocity tolerance carried through: the
@@ -283,18 +410,40 @@ function perigeeReportingCase(extract, source) {
         sourceTolerance: source.tolerances.v1.value,
         sourceToleranceKind: "derived from the published v1 tolerance",
       },
-    },
-    expectedToFail: {
-      defect: TIER_D_DEFECTS.lambertPublishesNoPerigee,
-      classification: {
-        perigeeRadius,
-        earthRadius: 6378137,
-        note:
-          "this published, foreign, entirely correct Lambert solution dives to " +
-          `${Math.round(perigeeRadius)} m from the Earth's CENTRE. The module ` +
-          "returns it as converged and says nothing about that, which is the " +
-          "whole defect.",
+      apogeeRadius: {
+        abs: 1,
+        rel: source.tolerances.v1.value,
+        alarmBudgetFraction: ALARM_BUDGET_FRACTION,
+        sourceTolerance: source.tolerances.v1.value,
+        sourceToleranceKind: "derived from the published v1 tolerance",
       },
+      transferSemiMajorAxis: {
+        abs: 1,
+        rel: source.tolerances.v1.value,
+        alarmBudgetFraction: ALARM_BUDGET_FRACTION,
+        sourceTolerance: source.tolerances.v1.value,
+        sourceToleranceKind: "derived from the published v1 tolerance",
+      },
+      transferEccentricity: {
+        abs: 0,
+        rel: source.tolerances.v1.value,
+        alarmBudgetFraction: ALARM_BUDGET_FRACTION,
+        sourceTolerance: source.tolerances.v1.value,
+        sourceToleranceKind: "derived from the published v1 tolerance",
+      },
+    },
+    repairedBy: TIER_D_REPAIRED["lambert-perigee-radius-not-published-SCREENING"],
+    classification: {
+      perigeeRadius,
+      earthRadius: 6378137,
+      note:
+        "this published, foreign, entirely correct Lambert solution dives to " +
+        `${Math.round(perigeeRadius)} m from the Earth's CENTRE. Against 0.2.0 ` +
+        "the module returned it as converged and said nothing about that, which " +
+        "was the whole defect; 0.3.0 still returns it — it is a correct answer " +
+        "three libraries publish — and now says how low it goes, so the consumer " +
+        "that cares can refuse it and the consumer solving an IOD problem need " +
+        "not.",
     },
     source: {
       ...commonSource(extract, source, "hapsira"),
@@ -515,6 +664,31 @@ export async function buildLibraryCases() {
       cases.push(hapsiraLambertCase(hapsira, entry));
       if (entry.id === "hapsira-der-molniya-0rev") {
         cases.push(perigeeReportingCase(hapsira, entry));
+      }
+      /**
+       * THE DEFAULT AND THE SELECTOR ARE TWO CLAIMS, so the low path is
+       * asserted twice.
+       *
+       * The row above sends no `branch` at all, which pins that 0.3.0's default
+       * still returns the arc 0.2.0 returned — the compatibility half. This one
+       * states `branch: "low"` and pins that the selector, when exercised,
+       * selects the same arc — the correctness half. A suite carrying only the
+       * first would pass against a module whose selector was ignored entirely;
+       * one carrying only the second would pass against a module that had
+       * silently changed its default.
+       */
+      if (entry.id === "hapsira-der-molniya-1rev-lowpath") {
+        cases.push(
+          hapsiraLambertCase(hapsira, entry, {
+            id: "hapsira-der-molniya-1rev-lowpath-selector",
+            stateBranch: true,
+            note:
+              "The same upstream arc as hapsira-der-molniya-1rev-lowpath, asked " +
+              "for by name instead of by default. Both rows must agree, and the " +
+              "pair is what pins the selector without loosening the default " +
+              "(graph: modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two).",
+          }),
+        );
       }
     }
     else if (entry.kind === "refusal") cases.push(hapsiraRefusalCase(hapsira, entry));

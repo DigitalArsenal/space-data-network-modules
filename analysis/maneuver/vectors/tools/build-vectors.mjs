@@ -133,6 +133,33 @@ function tierC() {
         "within 1e-6 of |r2|.",
     },
     {
+      id: "lambert-earth-floor",
+      applies: "solveLambert, solveLambertMinDV",
+      statement:
+        "the transfer conic the module REPORTS (perigeeRadius, apogeeRadius, " +
+        "transferEccentricity, transferConic) reproduces an independent " +
+        "reconstruction from the same returned v1, and the presence of an " +
+        "apoapsis agrees with the conic type the module named. Also classifies " +
+        "each arc above-surface / THROUGH-EARTH: six published conformance " +
+        "geometries pass through the planet and are correct answers, which is " +
+        "why the module REPORTS the perigee instead of refusing them.",
+      changedAt:
+        "0.3.0 — against 0.2.0 this invariant could only classify, because the " +
+        "module published no perigee to check (graph: " +
+        "modules-maneuver-lambert-publishes-no-transfer-perigee).",
+    },
+    {
+      id: "lambert-mindv-ranks-its-own-set",
+      applies: "solveLambertMinDV",
+      statement:
+        "the returned cost is the minimum of the candidate set the response " +
+        "publishes, the returned (revolutions, branch) is a member of that set, " +
+        "and the set is in canonical order (revolutions ascending, low before " +
+        "high). This is what makes 'it ranked over BOTH branches' checkable " +
+        "rather than asserted: 0.2.0 ranked over half its domain and no field " +
+        "of a response distinguished that from a real minimum.",
+    },
+    {
       id: "phasing-earth-floor",
       applies: "phasingManeuver",
       statement:

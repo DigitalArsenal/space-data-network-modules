@@ -179,6 +179,45 @@ HohmannResult computeCombinedManeuver(
 // Lambert Solver (full, not CW approximation)
 // ---------------------------------------------------------------------------
 
+/// WHICH of a multi-revolution problem's TWO arcs to return.
+///
+/// A Lambert problem with `nRevs >= 1` has two solutions per revolution count,
+/// because `F(z)` on `((2*pi*N)^2, (2*pi*(N+1))^2)` dips to a minimum and rises
+/// again — a given time of flight is met twice. 0.2.0 scanned that interval and
+/// stopped at the FIRST sign change, so the second arc was unreachable and the
+/// JSON surface had no way to name it (graph:
+/// modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two). The two arcs
+/// are genuinely different maneuvers: on Der's Molniya case the departure
+/// speeds differ by 1.03 km/s.
+///
+/// LOW is the first crossing (smaller `z`) and is the default, so every 0.2.0
+/// caller gets the identical arc it got before. It corresponds to hapsira's
+/// `lowpath=True`; HIGH is its `lowpath=False`.
+///
+/// At `nRevs == 0` the branch is meaningless — `F` is monotone there and the
+/// root is unique — and the JSON surface reports no branch for such an answer
+/// rather than inventing a distinction the mathematics does not have.
+enum class LambertBranch { LOW, HIGH };
+
+/// The kind of conic the transfer arc turned out to be. Reported ALWAYS, so
+/// that a consumer reading a response with no `apogeeRadius` can tell "this arc
+/// has no apoapsis" from "this field was dropped".
+enum class ConicType { ELLIPTIC, PARABOLIC, HYPERBOLIC };
+
+/// One entry of `solveLambertMinDV`'s candidate set: a (revolution count,
+/// branch) pair that converged, and what it costs.
+///
+/// The set is published so that "the operation ranked over the whole domain"
+/// is CHECKABLE from the response instead of taken on trust. 0.2.0 ranked over
+/// half of it and said nothing about that.
+struct LambertCandidate {
+    int           revolutions = 0;
+    LambertBranch branch      = LambertBranch::LOW;
+    double        dv1         = 0.0;
+    double        dv2         = 0.0;
+    double        totalDeltaV = 0.0;
+};
+
 /// Lambert solution.
 ///
 /// NOTE ON THE RENAMED FIELDS. 0.1.0 called `norm3(v1)` and `norm3(v2)`
@@ -214,32 +253,96 @@ struct LambertResult {
     double  totalDeltaV = 0.0;
     Vector3 dv1_vec = {};
     Vector3 dv2_vec = {};
+
+    /// Which multi-revolution arc this is. Only meaningful when
+    /// `revolutions >= 1`; at zero revolutions the root is unique.
+    LambertBranch branch = LambertBranch::LOW;
+
+    // -----------------------------------------------------------------------
+    // THE TRANSFER ARC'S OWN CONIC — how low, and how high, this arc goes.
+    //
+    // A Lambert solver answers "what velocity flies from r1 to r2 in tof", and
+    // 0.2.0 answered exactly that and nothing else. But an arc that satisfies
+    // the boundary conditions may still pass THROUGH the planet: six of the
+    // published conformance geometries in this repo's own vector set do,
+    // including Vallado example 7-5 (perigee 3,186 km from the centre) and
+    // Der's Molniya case (909 km), and both are correct answers that hapsira
+    // and Orekit assert in their own suites.
+    //
+    // So the module may not REFUSE them — a solver that did would fail its
+    // conformance suite against three libraries at once, and Lambert is also an
+    // orbit-determination tool where an arc between two observations owes
+    // nothing to any floor. The screening decision belongs to the consumer.
+    //
+    // What the module owes the consumer is the EVIDENCE to screen with, and
+    // that evidence was missing: an operator met a through-Earth transfer live
+    // on 2026-08-10, and the only place left to compute a perigee was
+    // JavaScript, which the no-JS-physics law forbids. Every quantity below is
+    // three lines of conic algebra over (r1, v1, mu), all of which this
+    // function already holds (graph:
+    // modules-maneuver-lambert-publishes-no-transfer-perigee).
+    // -----------------------------------------------------------------------
+    /// True once the conic block below has been filled. Set on every converged
+    /// solve; a non-converged result carries no arc to describe.
+    bool      hasTransferConic = false;
+    ConicType transferConicType = ConicType::ELLIPTIC;
+    /// Perigee radius of the transfer arc, from the centre of the body [m].
+    /// Always finite: `p / (1 + e)` is well conditioned for every conic.
+    double    perigeeRadius = 0.0;
+    double    transferEccentricity = 0.0;
+    /// `-mu / (2 * energy)` [m]: positive on an ellipse, NEGATIVE on a
+    /// hyperbola, and unrepresentable on a parabola — hence the flag. A
+    /// non-finite number is not JSON, and emitting one would turn a converged
+    /// solve into an error, which is not an additive change.
+    bool      hasTransferSemiMajorAxis = false;
+    double    transferSemiMajorAxis = 0.0;
+    /// Apoapsis radius [m]. Exists only on a bounded (elliptic) arc; a
+    /// hyperbolic or parabolic transfer has none, and `transferConicType` is
+    /// what tells a consumer which case it is looking at.
+    bool      hasApogeeRadius = false;
+    double    apogeeRadius = 0.0;
+
+    /// `solveLambertMinDV` only: every (revolution count, branch) pair that
+    /// converged, in canonical order — revolutions ascending, LOW before HIGH.
+    /// Canonical rather than ranked, so a diff of two runs is a diff of costs
+    /// and not of an ordering.
+    std::vector<LambertCandidate> ranked;
 };
 
 /// Solve Lambert's problem: find the orbit connecting two position vectors
-/// in a given time of flight.
-/// Uses Izzo's method (fast, robust for multi-revolution).
+/// in a given time of flight, by the Bate-Mueller-White / Curtis universal
+/// variable with a bracketed, safeguarded root find.
 /// @param r1   initial position vector [m] (ECI)
 /// @param r2   final position vector [m] (ECI)
 /// @param tof  time of flight [s]
 /// @param mu   gravitational parameter [m^3/s^2]
 /// @param prograde  true for prograde transfer, false for retrograde
 /// @param nRevs  number of complete revolutions (0 = direct)
+/// @param branch which of the two multi-revolution arcs to return; ignored at
+///               nRevs == 0, where the root is unique. LOW is 0.2.0's
+///               behaviour and stays the default.
 LambertResult solveLambert(
     const Vector3& r1,
     const Vector3& r2,
     double tof,
     double mu = MU_EARTH,
     bool prograde = true,
-    int nRevs = 0);
+    int nRevs = 0,
+    LambertBranch branch = LambertBranch::LOW);
 
 /// Solve Lambert for multiple revolution counts and return the minimum-delta-v
 /// solution, ranked on REAL delta-v against the stated endpoint orbits.
+///
+/// Ranks over BOTH branches of every revolution count from 1 up, which is the
+/// point of the operation: 0.2.0 saw one arc per revolution count and so
+/// minimised over half its own domain while presenting the answer as global.
 /// @param haveEndpoints  false => there is nothing to minimise; the call is
 ///                       refused with status "endpoint-velocities-required"
 ///                       rather than ranking on a meaningless quantity.
 /// @param vDepart  inertial velocity of the departure orbit at r1 [m/s]
 /// @param vArrive  inertial velocity of the arrival orbit at r2 [m/s]
+/// @param restrictBranch  when non-null, rank only that branch — an explicit
+///                        caller choice, not the default.
 LambertResult solveLambertMinDV(
     const Vector3& r1,
     const Vector3& r2,
@@ -249,7 +352,8 @@ LambertResult solveLambertMinDV(
     int maxRevs = 5,
     bool haveEndpoints = false,
     const Vector3& vDepart = {},
-    const Vector3& vArrive = {});
+    const Vector3& vArrive = {},
+    const LambertBranch* restrictBranch = nullptr);
 
 }  // namespace maneuver
 

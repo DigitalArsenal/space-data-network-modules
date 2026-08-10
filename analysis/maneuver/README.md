@@ -167,6 +167,48 @@ Codes: `invalid-parameter`, `malformed-request`, `unknown-operation`,
   `residual`, `residualBudget`, `z` and `iterations` so the claim is auditable.
   A geometry with no arc of the requested revolution count returns
   `no-solution` rather than a velocity that flies nowhere.
+
+  The zero-revolution search marches down from `z = 0` and, since **0.3.0**,
+  respects the branch's own domain boundary: a probe that lands where `y(z) < 0`
+  bisects back toward the boundary instead of doubling further past it. 0.2.0
+  doubled unconditionally and so reported `no-solution` for a whole class of
+  short-transfer-angle hyperbolic arcs — Curtis example 5.3 among them, whose
+  root at `z = -0.173` sits inside a domain that ends at `z = -0.398`.
+
+- **`branch`** (request, optional, **0.3.0**): `"low"` | `"high"`, default
+  `"low"`. A Lambert problem with `nRevs >= 1` has TWO arcs per revolution
+  count, because `F(z)` on `((2πN)², (2π(N+1))²)` dips and rises — a given time
+  of flight is met twice. `"low"` is the first crossing and is what every
+  version through 0.2.0 returned; `"high"` is the second. On Der's Molniya
+  geometry the two one-revolution arcs differ by 1.03 km/s in departure speed.
+  The response carries `branch` whenever `revolutions >= 1`, and carries no such
+  key at zero revolutions, where the root is unique and there is no branch to
+  name.
+
+  On `solveLambertMinDV` the parameter NARROWS the candidate set rather than
+  choosing an arc: the default is to rank over both branches of every revolution
+  count, and the response publishes the whole set it ranked as `branches` —
+  `{revolutions, branch, dv1, dv2, totalDeltaV}` in canonical order (revolutions
+  ascending, low before high). 0.2.0 saw one arc per revolution count and so
+  minimised over half its domain while presenting the winner as global.
+
+- **The transfer arc's own conic** (response, **0.3.0**). A converged Lambert
+  answer now says how low and how high the arc goes, so the CONSUMER can screen:
+  `perigeeRadius` [m from the centre], `transferEccentricity`, and
+  `transferConic` (`"elliptic"` | `"parabolic"` | `"hyperbolic"`) are always
+  present; `apogeeRadius` and `transferSemiMajorAxis` appear only where the
+  quantity exists and is representable — a hyperbolic transfer has no apoapsis,
+  a parabolic one has neither, and `transferConic` is what distinguishes "this
+  arc has no apoapsis" from "this field was dropped".
+
+  This is a REPORT, never a refusal. Six of the published conformance geometries
+  in `vectors/vectors.json` produce transfers that pass through the Earth —
+  Vallado example 7-5 dives to 3,186 km from the centre, Der's Molniya case to
+  909 km — and every one is a correct answer that hapsira, Orekit or Vallado
+  asserts. Lambert is also an orbit-determination tool, and an arc between two
+  observations owes nothing to any floor. A manoeuvre card screens on
+  `perigeeRadius` and refuses; an IOD caller ignores it.
+
 - **`solveLambert` / `solveLambertMinDV` delta-v.** The scalars are named for
   what they are: `v1Magnitude` / `v2Magnitude` are the transfer SPEEDS. Real
   `dv1` / `dv2` / `totalDeltaV` appear only when the caller states the orbits
@@ -232,12 +274,15 @@ npm test                 # sdk_compat + behavior + vectors + error_path
 
 - `tests/sdk_compat.test.mjs` — SDK artifact compliance, the isomorphic surface,
   the browser harness, the WasmEdge server path, the hosted-runtime example.
+- `tests/ratchet.test.mjs` — the vector ratchet: counts and the GREEN count may
+  only grow (`vectors/ratchet.json`), so a row deleted or demoted to
+  expected-to-fail is a test failure rather than a quiet loss.
 - `tests/vectors.test.mjs` — the three-tier parity vectors
   (`vectors/vectors.json`), plus the Lambert LEO sweep: 72 geometries whose
   every claimed solution must actually arrive, adjudicated by the independent
   Kepler propagator in `vectors/index.mjs`.
 - `tests/error_path.test.mjs` — every refusal is structured, the instance
-  survives, and a 664-input fuzz pass proves no input traps the module.
+  survives, and a 698-input fuzz pass proves no input traps the module.
 - `tests/behavior.test.mjs` — the relative-motion operations no command card
   consumes yet.
 

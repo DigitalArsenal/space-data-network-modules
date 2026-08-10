@@ -1,7 +1,7 @@
 {
   "pluginId": "maneuver-planner",
   "name": "Maneuver Planning Plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Classical orbital maneuver and ROE targeting operations exposed through a canonical SDK command bridge.",
   "pluginFamily": "maneuver",
   "capabilities": [],
@@ -17,7 +17,7 @@
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",
-    "detail": "Every operation this module exposes is a closed form or a scalar root-find over a handful of doubles: a Hohmann transfer is four sqrt() calls, and the most expensive path (the universal-variable Lambert solve) converges in single-digit iterations. There is nothing here to shard \u2014 the work per invoke is microseconds, and spawning a thread would cost more than the answer. Parallelism over maneuvers belongs to the CALLER, which plans many independent burns; this module holds no cross-call state (its only static is the per-invoke fault latch, cleared at entry), so any number of instances may be driven concurrently by a host that wants throughput. Both thread models compile through the same clang wasm32-wasip1-threads toolchain; this one links no thread-spawn contract because it genuinely never spawns."
+    "detail": "Every operation this module exposes is a closed form or a scalar root-find over a handful of doubles: a Hohmann transfer is four sqrt() calls, and the most expensive path (the universal-variable Lambert solve) converges in single-digit iterations. There is nothing here to shard — the work per invoke is microseconds, and spawning a thread would cost more than the answer. Parallelism over maneuvers belongs to the CALLER, which plans many independent burns; this module holds no cross-call state (its only static is the per-invoke fault latch, cleared at entry), so any number of instances may be driven concurrently by a host that wants throughput. Both thread models compile through the same clang wasm32-wasip1-threads toolchain; this one links no thread-spawn contract because it genuinely never spawns."
   },
   "methods": [
     {
@@ -38,7 +38,7 @@
               "wildcardJustification": {
                 "kind": "foreign-wire-format",
                 "mediaType": "application/vnd.spacedatanetwork.maneuver-command+json",
-                "detail": "This port does not carry a FlatBuffer and never has. The bridge is JSON-over-bytes: a UTF-8 {\"operation\": string, \"params\": object} envelope whose param set is per-operation and is enumerated in analysis/maneuver/README.md. Declaring a concrete SDS identity here would be a fiction of a different shape from the wildcard \u2014 the storefront would advertise a schema the bytes do not have, and a consumer that trusted it would decode garbage. There is no ratified SDS record for a maneuver COMMAND envelope today; $MVW (maneuver work order) is the identity this port should carry once minted, and it moves in the same rebuild that adopts it.",
+                "detail": "This port does not carry a FlatBuffer and never has. The bridge is JSON-over-bytes: a UTF-8 {\"operation\": string, \"params\": object} envelope whose param set is per-operation and is enumerated in analysis/maneuver/README.md. Declaring a concrete SDS identity here would be a fiction of a different shape from the wildcard — the storefront would advertise a schema the bytes do not have, and a consumer that trusted it would decode garbage. There is no ratified SDS record for a maneuver COMMAND envelope today; $MVW (maneuver work order) is the identity this port should carry once minted, and it moves in the same rebuild that adopts it.",
                 "pendingStandard": "$MVW",
                 "reviewedAt": "2026-08-10",
                 "reviewTask": "modules-maneuver-planner-rebuild-batch"
@@ -65,7 +65,7 @@
               "wildcardJustification": {
                 "kind": "foreign-wire-format",
                 "mediaType": "application/vnd.spacedatanetwork.maneuver-result+json",
-                "detail": "The response is a UTF-8 JSON object whose keys depend on the operation invoked \u2014 delta-v scalars, signed RIC component arrays, transfer geometry, solver convergence evidence, and for a refused request an {error, errorCode} pair. Same reasoning as the request port: the bytes are JSON, so no FlatBuffer identity describes them, and $MVW is the pending standard identity for the answer side as well.",
+                "detail": "The response is a UTF-8 JSON object whose keys depend on the operation invoked — delta-v scalars, signed RIC component arrays, transfer geometry, solver convergence evidence, and for a refused request an {error, errorCode} pair. Same reasoning as the request port: the bytes are JSON, so no FlatBuffer identity describes them, and $MVW is the pending standard identity for the answer side as well.",
                 "pendingStandard": "$MVW",
                 "reviewedAt": "2026-08-10",
                 "reviewTask": "modules-maneuver-planner-rebuild-batch"
