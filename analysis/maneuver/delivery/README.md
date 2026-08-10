@@ -231,26 +231,55 @@ Measured on `4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97`
 
 ## Status
 
-### 0.4.0 — BUILT AND GATED, NOT YET STAGED (2026-08-10)
+### 0.4.0 — STAGED 2026-08-10T20:35Z
 
-The artifact exists, is reproducible, and has passed every lane this repo can
-run on the build box. It has **not** been written to a host, and this section
-says so rather than describing the recipe as if it had been followed — which is
-the exact failure this file corrected below for 0.2.0.
+Applied by `maneuver-phasing-0-4-0` under `/run/sdn-deploy.lock`, taken 20:35:03Z
+and released 20:36:18Z, both ends recorded in `/var/log/sdn-deploy-lock.ledger`.
+Catalog DATA only: no binary roll, no daemon restart, no unit file touched.
 
-What must happen before the row above goes live, in order, is the `## Publishing`
-recipe unchanged. Two things to check against LIVE state first, because both are
-premises rather than facts:
+- artifact `artifacts/65918188…8576e77e.wasm`, 220,775 B, `sdn:sdn` `0644`. The
+  uploaded bytes were re-hashed ON THE HOST before anything read them, and again
+  after `install`, against the digest this repo committed. The content-addressed
+  path did not previously exist, so nothing was overwritten.
+- catalog row REPLACED in place (never appended — two ACTIVE rows for one
+  `MODULE_ID` is a state the catalog defines no ordering over, and the
+  storefront would list the module twice). 68 entries before and after, 68
+  unique `MODULE_ID`s. Backup `modules-catalog.json.bak-20260810T203607Z`.
+  `SUPERSEDES_CONTENT_HASH` was checked against the row being replaced rather
+  than assumed, and the write refuses if the two disagree.
+- validated BEFORE the write, because `pmmPlugin.Start` fails closed and that
+  daemon also terminates TLS on :443. The pre-flight replicates `LoadCatalog` +
+  `Manifest.Validate` + `HashArtifact`, **including stripping the 8-byte `$REC`
+  publication trailer before hashing** — the trap recorded in
+  `deployment/topology.json`: hash the raw bytes instead and every signed
+  artifact reads as a false mismatch. Run THREE times — against the live catalog
+  before touching anything, against the candidate, and against the installed
+  file — and identical each time:
 
-1. **Nothing else is mid-republish of this module.** 0.3.0 was staged at
-   17:52Z on 2026-08-10 and went live on the daemon's own 6-hourly rebuild at
-   18:12:54Z. A second republish inside another lane's staging window is the one
-   thing that makes a module delivery unrollbackable — it is why THIS operation
-   was filed rather than built in the first place (see the task's "Why it was
-   NOT built with the target-pick flow").
-2. **0.3.0's artifact stays on disk** as the rollback. It is content-addressed,
-   so the two never collide, and reverting is restoring one catalog row from
-   the backup.
+      68 entries, 53 served, 53 OK, 7 trailered, 0 bad
+
+  which matches the clean run that topology file records for this host, so a
+  restart would boot.
+- `browse[]` needed no change: its maneuver row carries `module_id`, `family`,
+  `module_path` and visibility flags, and no version.
+- 0.3.0's artifact is left in place as the rollback. It is content-addressed, so
+  the two never collide; reverting is restoring one catalog row from the backup.
+
+**THE TICK MOVED, and it was checked rather than assumed.** The 6-hourly
+`pmmRefreshInterval` runs from the daemon's own start, and this daemon RESTARTED
+at 2026-08-10T19:14:30Z for an unrelated cellular re-mount
+(`hephaestus-cell-remount`, ledgered), re-signing the manifest at 19:16:06Z. So
+the rebuild that picks this row up is ~01:16Z on 2026-08-11 and NOT the ~00:12Z
+the pre-restart schedule implies. Between the staging and that tick the manifest
+legitimately still advertises 0.3.0 and
+`/modules/maneuver-planner/0.4.0/module.wasm` legitimately 404s; that window is
+not a failed deploy, and "fixing" it with a daemon restart nobody needed would
+cost ~100 s of :443 — the app, the update feed and TLS — for convenience.
+
+Both premises were checked against live state before staging rather than
+believed: no other lane was mid-republish of this module (0.3.0's own staging
+window closed at 18:12:54Z), and 0.3.0's artifact is on disk as the rollback.
+
 
 The console side — the `wasmSolver` branch that calls `phasingFromTargetState`
 and then arms CATCH S/C, FALL BEHIND and stage 2 of the composed far
