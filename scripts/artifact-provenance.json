@@ -355,8 +355,8 @@
       "declaration": null
     },
     "analysis/maneuver/dist/isomorphic/module.wasm": {
-      "sha256": "4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97",
-      "bytes": 205798,
+      "sha256": "65918188aaf01223d820a691ac5ae86668da3ac7feaa9812ba59c6938576e77e",
+      "bytes": 220775,
       "module": null,
       "lastCommit": "0c46ec16a513180fe55cafc4770246ed4f9b74bd",
       "lastCommitDate": "2026-08-10T13:42:13-04:00",

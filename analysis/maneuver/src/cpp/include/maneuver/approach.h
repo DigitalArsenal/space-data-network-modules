@@ -148,6 +148,101 @@ PhasingResult computePhasingManeuver(
     double mu = MU_EARTH);
 
 // ---------------------------------------------------------------------------
+// Phasing derived from a TARGET SPACECRAFT rather than from a typed angle
+// ---------------------------------------------------------------------------
+
+/// Which of the two phase solutions drives the returned plan.
+enum class PhasingDirection {
+    SHORT,        ///< the smaller |angle| of the two — the default
+    CATCH_UP,     ///< the chaser GAINS phase: lower, faster orbit
+    FALL_BEHIND   ///< the chaser LOSES phase: higher, slower orbit
+};
+
+/// A compact summary of one of the two directions, so a caller can offer the
+/// operator both without a second invoke.
+struct PhasingBranchSummary {
+    double phaseAngle          = 0.0;   // [rad], signed
+    int    numRevs             = 1;
+    double totalDeltaV         = 0.0;   // [m/s]
+    double totalTime           = 0.0;   // [s]
+    double phasingSMA          = 0.0;   // [m]
+    bool   clampedToEarthFloor = false;
+    bool   metDeltaVBudget     = false;
+};
+
+/// Inputs to the revolution-count recommendation and to the three verdicts
+/// the operation reports rather than leaving to the caller.
+struct PhasingFromStateOptions {
+    PhasingDirection direction = PhasingDirection::SHORT;
+    /// 0 = let the module recommend; >= 1 = the caller's own choice, used
+    /// verbatim and reported as the caller's.
+    int    numRevs = 0;
+    /// Ceiling on the recommendation search. CLAMPED into [1, kMaxPhasingRevs]
+    /// rather than refused: a caller that asks for two billion revolutions has
+    /// made a typo, and a typo must not become a long loop.
+    int    maxRevs = 100;
+    /// Absolute delta-v the recommendation aims under [m/s]. <= 0 means
+    /// "derive it", as `deltaVBudgetFraction` times the chaser's circular
+    /// speed.
+    double deltaVBudget = 0.0;
+    /// One percent of circular speed: ~77 m/s in LEO, ~31 m/s at GEO. That is
+    /// the order of a station-keeping budget rather than a transfer budget,
+    /// which is the level at which a phasing burn stops competing with the
+    /// orbit-raising it usually accompanies.
+    double deltaVBudgetFraction = 0.01;
+    /// Plane-angle threshold for the `coplanar` verdict [rad]. Default 1 deg.
+    double coplanarTolerance = 0.017453292519943295;
+    /// Eccentricity threshold for the `nearCircular` verdict, applied to BOTH
+    /// craft. The phasing model is circular; this is how far from it the pair
+    /// is allowed to sit before the answer is advisory.
+    double eccentricityTolerance = 0.01;
+    /// Semi-major-axis threshold for the `coOrbital` verdict, RELATIVE to the
+    /// chaser's semi-major axis. Phasing only closes a gap between craft on
+    /// the same orbit; two different orbits drift apart again.
+    double coOrbitalTolerance = 1.0e-3;
+    double mu = MU_EARTH;
+};
+
+/// Hard ceiling on any revolution count this module will scan or fly.
+constexpr int kMaxPhasingRevs = 100000;
+
+struct PhasingFromStateResult {
+    PhaseGeometry        geometry{};
+    PhasingResult        plan{};
+    PhasingBranchSummary catchUp{};
+    PhasingBranchSummary fallBehind{};
+    /// The radius the plan is flown at: the CHASER'S SEMI-MAJOR AXIS, not the
+    /// instantaneous |r|. The phasing model's period — the thing the whole
+    /// solution is built on — comes from `a`, so seeding it with a radius that
+    /// disagrees with `a` would produce a plan whose orbit is not the chaser's.
+    double phasingRadius   = 0.0;
+    double phaseAngleFlown = 0.0;   // the angle handed to the plan [rad]
+    int    recommendedRevs = 1;
+    bool   revsFromCaller  = false;
+    bool   metDeltaVBudget = false;
+    double deltaVBudget    = 0.0;   // the budget actually applied [m/s]
+    int    maxRevsApplied  = 1;
+    /// The three verdicts, each with the tolerance that produced it echoed
+    /// back so a caller never has to guess which threshold was in force.
+    bool   coplanar     = false;
+    bool   nearCircular = false;
+    bool   coOrbital    = false;
+    double coplanarTolerance = 0.0;
+    double eccentricityTolerance = 0.0;
+    double coOrbitalToleranceMetres = 0.0;
+};
+
+/// Derive the phase angle between a chaser and a target and return the phasing
+/// plan that closes it.
+///
+/// Both element sets must be at the SAME epoch — nothing here propagates, and
+/// two states an hour apart describe a separation neither craft has.
+PhasingFromStateResult computePhasingFromTargetState(
+    const ClassicalOrbitalElements& chaser,
+    const ClassicalOrbitalElements& target,
+    const PhasingFromStateOptions& options = {});
+
+// ---------------------------------------------------------------------------
 // Plane Change
 // ---------------------------------------------------------------------------
 

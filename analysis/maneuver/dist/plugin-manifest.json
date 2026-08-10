@@ -1,7 +1,7 @@
 {
   "pluginId": "maneuver-planner",
   "name": "Maneuver Planning Plugin",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Classical orbital maneuver and ROE targeting operations exposed through a canonical SDK command bridge.",
   "pluginFamily": "maneuver",
   "capabilities": [],
@@ -17,7 +17,7 @@
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",
-    "detail": "Every operation this module exposes is a closed form or a scalar root-find over a handful of doubles: a Hohmann transfer is four sqrt() calls, and the most expensive path (the universal-variable Lambert solve) converges in single-digit iterations. There is nothing here to shard — the work per invoke is microseconds, and spawning a thread would cost more than the answer. Parallelism over maneuvers belongs to the CALLER, which plans many independent burns; this module holds no cross-call state (its only static is the per-invoke fault latch, cleared at entry), so any number of instances may be driven concurrently by a host that wants throughput. Both thread models compile through the same clang wasm32-wasip1-threads toolchain; this one links no thread-spawn contract because it genuinely never spawns."
+    "detail": "Every operation this module exposes is a closed form, a scalar root-find over a handful of doubles, or a bounded integer scan over one of those: a Hohmann transfer is four sqrt() calls, the most expensive root-find (the universal-variable Lambert solve) converges in single-digit iterations, and the only loop whose trip count a caller influences is phasingFromTargetState's revolution-count recommendation, which evaluates one closed form per revolution and whose ceiling is CLAMPED into [1, 100000] rather than trusted — a hostile maxRevs is a typo, not a workload. There is nothing here to shard — the work per invoke is microseconds, and spawning a thread would cost more than the answer. Parallelism over maneuvers belongs to the CALLER, which plans many independent burns; this module holds no cross-call state (its only static is the per-invoke fault latch, cleared at entry), so any number of instances may be driven concurrently by a host that wants throughput. Both thread models compile through the same clang wasm32-wasip1-threads toolchain; this one links no thread-spawn contract because it genuinely never spawns."
   },
   "methods": [
     {

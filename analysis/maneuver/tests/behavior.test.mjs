@@ -18,6 +18,7 @@
  */
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -212,3 +213,48 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     ));
   });
 }
+
+/**
+ * THE `version` OPERATION MUST NAME THE MODULE THAT ANSWERS IT.
+ *
+ * It returned "1.0.0" from 0.1.0 through 0.3.0 — a version this module has
+ * never carried — because nothing compared it to anything. The one operation
+ * whose entire job is to say which artifact you are talking to was answering a
+ * fiction, and a consumer using it to decide whether the module it fetched has
+ * the operation it needs was reading a constant.
+ *
+ * The manifest is the authority; this asserts the two agree, so the next
+ * release cannot forget one of them.
+ */
+test("the version operation agrees with plugin-manifest.json", async (t) => {
+  const harness = await createStandaloneHarnessOrSkip("browser", WASM_PATH, t);
+  if (!harness) {
+    return;
+  }
+  t.after(async () => {
+    await harness.destroy();
+  });
+
+  const manifest = JSON.parse(
+    await readFile(new URL("../plugin-manifest.json", import.meta.url), "utf8"),
+  );
+  const result = await invokeJsonRequest(harness, { operation: "version", params: {} });
+  assert.equal(result.version, manifest.version);
+});
+
+/**
+ * The delivery row a node admits is DATA, and it declares the version the
+ * artifact claims. A row that names a different version from the manifest
+ * would publish an artifact under a name that does not answer to it.
+ */
+test("the module catalog entry agrees with plugin-manifest.json", async () => {
+  const manifest = JSON.parse(
+    await readFile(new URL("../plugin-manifest.json", import.meta.url), "utf8"),
+  );
+  const entry = JSON.parse(
+    await readFile(new URL("../delivery/modules-catalog.entry.json", import.meta.url), "utf8"),
+  );
+  assert.equal(entry.VERSION, manifest.version);
+  assert.equal(entry.MODULE_ID, manifest.pluginId);
+  assert.equal(entry.ARTIFACT_PATH, `/modules/${manifest.pluginId}/${manifest.version}/module.wasm`);
+});

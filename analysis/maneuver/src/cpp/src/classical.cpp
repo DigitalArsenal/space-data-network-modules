@@ -1,5 +1,6 @@
 #include "maneuver/classical.h"
 #include "maneuver/fault.h"
+#include "maneuver/json_lite.h"
 #include "maneuver/math.h"
 
 #include <cmath>
@@ -218,6 +219,180 @@ DeltaVBudget computeDeltaVBudget(const std::vector<double>& phases) {
     double total = 0.0;
     for (double dv : phases) total += std::abs(dv);
     return {phases, total};
+}
+
+// ===========================================================================
+// Cartesian state -> classical elements, and the phase geometry of a pair
+// ===========================================================================
+
+namespace {
+
+/// The orbit normal implied by an inclination/RAAN pair. Unit length by
+/// construction.
+Vector3 orbitNormal(double inclination, double raan) {
+    const double si = std::sin(inclination);
+    return {si * std::sin(raan), -si * std::cos(raan), std::cos(inclination)};
+}
+
+/// sin(i) below this fraction of unity leaves the node line unresolvable, so
+/// RAAN is fixed at zero and the argument of latitude is measured from +x.
+/// The SUM raan + argumentOfPerigee + meanAnomaly is continuous across the
+/// switch, which is why the geometry below only ever consumes sums.
+constexpr double kNodeFloor = 1.0e-11;
+
+/// Below this eccentricity the eccentricity vector's DIRECTION is noise, so
+/// the perigee is placed at the node and the whole angle is carried by the
+/// mean anomaly. See the header note on why this loses nothing.
+constexpr double kCircularFloor = 1.0e-11;
+
+}  // namespace
+
+ClassicalOrbitalElements stateToClassicalElements(const Vector3& position,
+                                                  const Vector3& velocity,
+                                                  double mu) {
+    if (!(mu > 0.0)) {
+        return fault::fail<ClassicalOrbitalElements>(
+            fault_code::INVALID_PARAMETER,
+            "[state-to-elements]: mu must be positive");
+    }
+    const double r = norm3(position);
+    const double v = norm3(velocity);
+    if (!(r > 0.0)) {
+        return fault::fail<ClassicalOrbitalElements>(
+            fault_code::INVALID_PARAMETER,
+            "[state-to-elements]: position must be a non-zero vector");
+    }
+
+    const Vector3 h = cross3(position, velocity);
+    const double hMag = norm3(h);
+    if (!(hMag > 0.0)) {
+        return fault::fail<ClassicalOrbitalElements>(
+            fault_code::SINGULAR,
+            "[state-to-elements]: the state is rectilinear (r x v = 0). It has "
+            "no orbital plane, so it has no inclination, no node and no "
+            "argument of latitude to phase against.");
+    }
+    const Vector3 hHat = {h[0] / hMag, h[1] / hMag, h[2] / hMag};
+
+    // Inclination from atan2 rather than acos(hz/|h|): near 0 and pi the acos
+    // form loses half its significant digits to the flat cosine.
+    const double inclination = std::atan2(
+        std::sqrt(hHat[0] * hHat[0] + hHat[1] * hHat[1]), hHat[2]);
+
+    // Node line n = zhat x h = (-hy, hx, 0).
+    const double nx = -h[1];
+    const double ny = h[0];
+    const double nMag = std::sqrt(nx * nx + ny * ny);
+    double raan = 0.0;
+    Vector3 nHat = {1.0, 0.0, 0.0};
+    if (nMag > kNodeFloor * hMag) {
+        raan = normalizeAngle(std::atan2(ny, nx));
+        nHat = {nx / nMag, ny / nMag, 0.0};
+    }
+    // In-plane quadrature axis, pointing where the argument of latitude
+    // increases: at the ascending node the motion is along hHat x nHat.
+    const Vector3 mHat = cross3(hHat, nHat);
+
+    // Argument of latitude, straight off the position vector. Exact for any
+    // eccentricity including zero.
+    const double u = std::atan2(dot3(position, mHat), dot3(position, nHat));
+
+    const double energy = 0.5 * v * v - mu / r;
+    if (!(energy < 0.0)) {
+        return fault::fail<ClassicalOrbitalElements>(
+            fault_code::NO_SOLUTION,
+            "[state-to-elements]: specific orbital energy is " +
+                json_lite::numberToString(energy) +
+                " m^2/s^2, which is not negative: the state is on an escape "
+                "trajectory and has no closed orbit, no period and no mean "
+                "anomaly. Phasing is defined only between two closed orbits.");
+    }
+    const double a = -mu / (2.0 * energy);
+
+    // Eccentricity vector, e = ((v^2 - mu/r) r - (r.v) v) / mu.
+    const double rdotv = dot3(position, velocity);
+    const double vv = v * v;
+    Vector3 eVec{};
+    for (int k = 0; k < 3; ++k) {
+        eVec[k] = ((vv - mu / r) * position[k] - rdotv * velocity[k]) / mu;
+    }
+    const double ecc = norm3(eVec);
+    if (ecc >= 1.0) {
+        return fault::fail<ClassicalOrbitalElements>(
+            fault_code::NO_SOLUTION,
+            "[state-to-elements]: eccentricity is " +
+                json_lite::numberToString(ecc) +
+                ", which is not a closed orbit.");
+    }
+
+    double argumentOfPerigee = 0.0;
+    if (ecc > kCircularFloor) {
+        argumentOfPerigee = std::atan2(dot3(eVec, mHat), dot3(eVec, nHat));
+    }
+    // THE cancellation: nu is a DIFFERENCE, so the noise in argumentOfPerigee
+    // leaves argumentOfPerigee + meanAnomaly untouched.
+    const double nu = u - argumentOfPerigee;
+    const double eccentricAnomaly =
+        std::atan2(std::sqrt(1.0 - ecc * ecc) * std::sin(nu), ecc + std::cos(nu));
+    const double meanAnomaly =
+        eccentricAnomaly - ecc * std::sin(eccentricAnomaly);
+
+    ClassicalOrbitalElements oe;
+    oe.semiMajorAxis = a;
+    oe.eccentricity = ecc;
+    oe.inclination = inclination;
+    oe.raan = raan;
+    oe.argumentOfPerigee = normalizeAngle(argumentOfPerigee);
+    oe.meanAnomaly = normalizeAngle(meanAnomaly);
+    oe.gravitationalParameter = mu;
+    oe.angularMomentum = hMag;
+    return oe;
+}
+
+PhaseGeometry computePhaseGeometry(const ClassicalOrbitalElements& chaser,
+                                   const ClassicalOrbitalElements& target) {
+    PhaseGeometry g;
+
+    const double lambdaChaser =
+        normalizeAngle(chaser.argumentOfPerigee + chaser.meanAnomaly);
+    const double lambdaTarget =
+        normalizeAngle(target.argumentOfPerigee + target.meanAnomaly);
+    g.chaserMeanArgumentOfLatitude = lambdaChaser;
+    g.targetMeanArgumentOfLatitude = lambdaTarget;
+    g.chaserMeanAnomaly = normalizeAngle(chaser.meanAnomaly);
+    g.targetMeanAnomaly = normalizeAngle(target.meanAnomaly);
+
+    g.raanDifference = wrapToPi(target.raan - chaser.raan);
+    g.inclinationDifference = target.inclination - chaser.inclination;
+
+    const Vector3 hChaser = orbitNormal(chaser.inclination, chaser.raan);
+    const Vector3 hTarget = orbitNormal(target.inclination, target.raan);
+    double alignment = dot3(hChaser, hTarget);
+    if (alignment > 1.0) alignment = 1.0;
+    if (alignment < -1.0) alignment = -1.0;
+    g.planeAngle = std::acos(alignment);
+
+    // The quasi-nonsingular relative mean longitude, target-leading.
+    g.relativePhaseAngle = wrapToPi(
+        (lambdaTarget - lambdaChaser) +
+        g.raanDifference * std::cos(chaser.inclination));
+
+    // The two ways to fly the same rendezvous. At an exactly-zero separation
+    // the short way is "do nothing" and the two named directions are both a
+    // full lap; that is the truthful answer, not a degenerate one.
+    g.catchUpAngle = g.relativePhaseAngle > 0.0
+                         ? g.relativePhaseAngle
+                         : g.relativePhaseAngle + TWO_PI;
+    g.fallBehindAngle = g.relativePhaseAngle < 0.0
+                            ? g.relativePhaseAngle
+                            : g.relativePhaseAngle - TWO_PI;
+
+    g.chaserSemiMajorAxis = chaser.semiMajorAxis;
+    g.targetSemiMajorAxis = target.semiMajorAxis;
+    g.semiMajorAxisDifference = target.semiMajorAxis - chaser.semiMajorAxis;
+    g.chaserEccentricity = chaser.eccentricity;
+    g.targetEccentricity = target.eccentricity;
+    return g;
 }
 
 }  // namespace maneuver

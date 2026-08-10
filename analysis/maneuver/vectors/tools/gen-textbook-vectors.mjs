@@ -166,6 +166,165 @@ function phasing(radius, phaseAngle, numRevs) {
   };
 }
 
+/**
+ * Phasing WITH the Earth-collision floor the module applies.
+ *
+ * `phasing()` above is the unconstrained closed form, which is all the two
+ * canonical 30-degree rows need. The rows that exercise the revolution-count
+ * RECOMMENDATION need the constraint as well, because the recommendation's
+ * whole job is to climb until the phasing orbit stops trying to fly through
+ * the planet. The floor is `Re + 100 km` on the WGS-84 equatorial radius,
+ * applied to the apse OPPOSITE the burn (`2a - r`), i.e. `a >= (floor + r)/2`.
+ */
+function phasingWithFloor(radius, phaseAngle, numRevs) {
+  const floorRadius = RE_KM + 100; // km, WGS-84 + 100 km
+  const unconstrained = phasing(radius, phaseAngle, numRevs);
+  const aFloor = (floorRadius + radius) / 2;
+  if (unconstrained.phasingSMA >= aFloor) {
+    return { ...unconstrained, clamped: false };
+  }
+  const phasingPeriod = 2 * Math.PI * Math.sqrt(aFloor ** 3 / MU_KM);
+  const dv1 = visViva(radius, aFloor) - vCircular(radius);
+  return {
+    phasingPeriod,
+    phasingSMA: aFloor,
+    dv1,
+    dv2: -dv1,
+    totalDeltaV: 2 * Math.abs(dv1),
+    totalTime: phasingPeriod * numRevs,
+    clamped: true,
+  };
+}
+
+/**
+ * The revolution count the module should recommend: the SMALLEST count that
+ * both clears the floor without clamping and comes in under the delta-v
+ * budget. Both conditions relax monotonically with the count, so the first hit
+ * is the answer. Written here so the vector's expectation is produced by this
+ * file's own scan rather than read back out of the module.
+ */
+function recommendRevs(radius, phaseAngle, budgetKmPerS, maxRevs = 100) {
+  for (let revs = 1; revs <= maxRevs; revs += 1) {
+    const trial = phasingWithFloor(radius, phaseAngle, revs);
+    if (trial.clamped) continue;
+    if (trial.totalDeltaV <= budgetKmPerS) return revs;
+  }
+  return maxRevs;
+}
+
+// ---------------------------------------------------------------------------
+// PHASING FROM TWO SPACECRAFT STATES
+//
+// The two-craft rows are CONSTRUCTED, and the construction is what makes them
+// authoritative. Each craft is specified by classical elements whose mean
+// argument of latitude (`argumentOfPerigee + meanAnomaly`) is chosen by hand;
+// the Cartesian state handed to the module is produced from those elements by
+// the closed form below, which is written here and nowhere else. The
+// separation the module must recover is therefore known ANALYTICALLY, to the
+// last bit, before the module is asked — there is no reference to disagree
+// with and no round trip through the code under test.
+//
+// The rows exist in pairs with the typed-angle rows above: the same radius,
+// the same revolution count, the same 30 degrees, so a from-two-states answer
+// that drifted from the typed answer would show up as two rows disagreeing
+// about one number rather than as nothing at all.
+// ---------------------------------------------------------------------------
+
+const DEG = Math.PI / 180;
+/** The canonical phasing radius, in METRES — these rows are SI throughout. */
+const PHASE_RADIUS_M = 6778.137 * KM;
+
+/** Kepler's equation, Newton. Independent of the module's own solver. */
+function trueAnomalyFromMean(meanAnomaly, eccentricity) {
+  let E = meanAnomaly;
+  for (let iteration = 0; iteration < 200; iteration += 1) {
+    const step =
+      (E - eccentricity * Math.sin(E) - meanAnomaly) /
+      (1 - eccentricity * Math.cos(E));
+    E -= step;
+    if (Math.abs(step) < 1e-16) break;
+  }
+  return Math.atan2(
+    Math.sqrt(1 - eccentricity ** 2) * Math.sin(E),
+    Math.cos(E) - eccentricity,
+  );
+}
+
+/**
+ * Classical elements -> inertial Cartesian state, SI.
+ *
+ * `meanArgumentOfLatitude` is the input rather than the mean anomaly, because
+ * it is the quantity the phase geometry is defined on and the quantity each
+ * row chooses. The mean anomaly falls out as `lambda - argumentOfPerigee`,
+ * which is exactly the relationship the module has to invert.
+ */
+function stateFromElements({
+  semiMajorAxis,
+  eccentricity = 0,
+  inclination = 0,
+  raan = 0,
+  argumentOfPerigee = 0,
+  meanArgumentOfLatitude,
+}) {
+  const meanAnomaly = meanArgumentOfLatitude - argumentOfPerigee;
+  const nu = trueAnomalyFromMean(meanAnomaly, eccentricity);
+  const p = semiMajorAxis * (1 - eccentricity ** 2);
+  const r = p / (1 + eccentricity * Math.cos(nu));
+  const h = Math.sqrt(MU * p);
+
+  const px = r * Math.cos(nu);
+  const py = r * Math.sin(nu);
+  const pvx = -(MU / h) * Math.sin(nu);
+  const pvy = (MU / h) * (eccentricity + Math.cos(nu));
+
+  const cO = Math.cos(raan), sO = Math.sin(raan);
+  const cw = Math.cos(argumentOfPerigee), sw = Math.sin(argumentOfPerigee);
+  const ci = Math.cos(inclination), si = Math.sin(inclination);
+  const m11 = cO * cw - sO * sw * ci, m12 = -cO * sw - sO * cw * ci;
+  const m21 = sO * cw + cO * sw * ci, m22 = -sO * sw + cO * cw * ci;
+  const m31 = sw * si,                m32 = cw * si;
+
+  return {
+    position: [m11 * px + m12 * py, m21 * px + m22 * py, m31 * px + m32 * py],
+    velocity: [m11 * pvx + m12 * pvy, m21 * pvx + m22 * pvy, m31 * pvx + m32 * pvy],
+  };
+}
+
+/** [0, 2pi) — the fold the module applies to every absolute angle. */
+const foldTwoPi = (angle) => {
+  const folded = angle % (2 * Math.PI);
+  const positive = folded < 0 ? folded + 2 * Math.PI : folded;
+  return positive >= 2 * Math.PI ? 0 : positive;
+};
+/** (-pi, pi] — the fold the module applies to every signed angle. */
+const foldPi = (angle) => {
+  const folded = angle % (2 * Math.PI);
+  if (folded <= -Math.PI) return folded + 2 * Math.PI;
+  if (folded > Math.PI) return folded - 2 * Math.PI;
+  return folded;
+};
+
+/**
+ * The plan fields of a from-two-states row, in the SI spelling the module
+ * emits, from the SAME closed form the typed-angle rows use.
+ */
+function planExpectations(phaseAngle, numRevs, { withFloor = false } = {}) {
+  const radiusKm = PHASE_RADIUS_M / KM;
+  const solution = withFloor
+    ? phasingWithFloor(radiusKm, phaseAngle, numRevs)
+    : phasing(radiusKm, phaseAngle, numRevs);
+  return {
+    dv1: Math.abs(solution.dv1) * KM,
+    dv2: Math.abs(solution.dv2) * KM,
+    totalDeltaV: solution.totalDeltaV * KM,
+    phasingPeriod: solution.phasingPeriod,
+    phasingSMA: solution.phasingSMA * KM,
+    totalTime: solution.totalTime,
+    numRevs,
+    phaseAngle,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // FORWARD-CONSTRUCTED LAMBERT ROWS
 //
@@ -646,6 +805,336 @@ const CASES = [
             tolerance: 5e-4,
           },
         ],
+      };
+    },
+  },
+  {
+    id: "phasing-from-state-catch-up-30deg-3revs",
+    operation: "phasingFromTargetState",
+    source: {
+      work: "modules-maneuver-phasing-from-target-state",
+      example:
+        "the TWIN of phasing-catch-up-30deg-3revs: the same rendezvous, with the 30 degrees DERIVED from two Cartesian states instead of typed in",
+      inputs:
+        "two craft on one 6,778.137 km circular orbit at i=51.6deg, raan=40deg; mean arguments of latitude 10deg (chaser) and 40deg (target); 3 revolutions",
+    },
+    build() {
+      const base = {
+        semiMajorAxis: PHASE_RADIUS_M,
+        inclination: 51.6 * DEG,
+        raan: 40 * DEG,
+      };
+      const phaseAngle = 30 * DEG;
+      return {
+        params: {
+          chaserState: stateFromElements({ ...base, meanArgumentOfLatitude: 10 * DEG }),
+          targetState: stateFromElements({ ...base, meanArgumentOfLatitude: 40 * DEG }),
+          numRevs: 3,
+          mu: MU,
+        },
+        expect: {
+          relativePhaseAngle: phaseAngle,
+          catchUpAngle: phaseAngle,
+          fallBehindAngle: phaseAngle - 2 * Math.PI,
+          direction: "short",
+          chaserMeanArgumentOfLatitude: 10 * DEG,
+          targetMeanArgumentOfLatitude: 40 * DEG,
+          coplanar: true,
+          nearCircular: true,
+          coOrbital: true,
+          revsFromCaller: true,
+          phasingRadius: PHASE_RADIUS_M,
+          ...planExpectations(phaseAngle, 3),
+        },
+        anchors: [
+          {
+            what: "|dv1| [m/s]",
+            published: 73.038,
+            computed: planExpectations(phaseAngle, 3).dv1,
+            tolerance: 5e-4,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "phasing-from-state-fall-behind-30deg-3revs",
+    operation: "phasingFromTargetState",
+    source: {
+      work: "modules-maneuver-phasing-from-target-state",
+      example:
+        "the TWIN of phasing-fall-behind-30deg-3revs. Phasing is asymmetric in the sign of the angle, so a from-two-states derivation that got the SIGN backwards would pass the catch-up twin and fail here",
+      inputs:
+        "the same orbit; mean arguments of latitude 10deg (chaser) and 340deg (target), i.e. the target TRAILS by 30 degrees; 3 revolutions",
+    },
+    build() {
+      const base = {
+        semiMajorAxis: PHASE_RADIUS_M,
+        inclination: 51.6 * DEG,
+        raan: 40 * DEG,
+      };
+      const phaseAngle = -30 * DEG;
+      return {
+        params: {
+          chaserState: stateFromElements({ ...base, meanArgumentOfLatitude: 10 * DEG }),
+          targetState: stateFromElements({ ...base, meanArgumentOfLatitude: 340 * DEG }),
+          numRevs: 3,
+          mu: MU,
+        },
+        expect: {
+          relativePhaseAngle: phaseAngle,
+          catchUpAngle: phaseAngle + 2 * Math.PI,
+          fallBehindAngle: phaseAngle,
+          coplanar: true,
+          coOrbital: true,
+          ...planExpectations(phaseAngle, 3),
+        },
+        anchors: [
+          {
+            what: "|dv1| [m/s]",
+            published: 69.0899,
+            computed: planExpectations(phaseAngle, 3).dv1,
+            tolerance: 5e-4,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "phasing-from-state-apsides-opposed",
+    operation: "phasingFromTargetState",
+    source: {
+      work: "modules-maneuver-phasing-from-target-state",
+      example:
+        "THE ADVERSARIAL ROW. Two craft on one orbit whose apsides are 180 degrees apart: their MEAN ANOMALIES differ by 210 degrees while their true along-track separation is 30. The JavaScript derivation this operation replaces (b1360cb armTransfer) differenced mean anomalies, which is right only when both apsides coincide — a condition no real pair satisfies",
+      inputs:
+        "e=0.001 on the 6,778.137 km orbit; chaser argp=70deg M=10deg (lambda=80deg), target argp=250deg M=220deg (lambda=110deg)",
+    },
+    build() {
+      const base = {
+        semiMajorAxis: PHASE_RADIUS_M,
+        eccentricity: 0.001,
+        inclination: 51.6 * DEG,
+        raan: 40 * DEG,
+      };
+      return {
+        params: {
+          chaserState: stateFromElements({
+            ...base, argumentOfPerigee: 70 * DEG, meanArgumentOfLatitude: 80 * DEG,
+          }),
+          targetState: stateFromElements({
+            ...base, argumentOfPerigee: 250 * DEG, meanArgumentOfLatitude: 110 * DEG,
+          }),
+          numRevs: 3,
+          mu: MU,
+        },
+        expect: {
+          relativePhaseAngle: 30 * DEG,
+          chaserMeanArgumentOfLatitude: 80 * DEG,
+          targetMeanArgumentOfLatitude: 110 * DEG,
+          // The two mean anomalies, published so the row SHOWS the trap rather
+          // than merely avoiding it: 220 - 10 = 210 degrees, nothing like 30.
+          chaserMeanAnomaly: 10 * DEG,
+          targetMeanAnomaly: 220 * DEG,
+          coplanar: true,
+          coOrbital: true,
+          ...planExpectations(30 * DEG, 3),
+        },
+        assertions: [
+          {
+            id: "mean-anomaly-difference-is-not-the-answer",
+            holds:
+              Math.abs(foldPi(220 * DEG - 10 * DEG) - 30 * DEG) > 1,
+            detail:
+              "the wrapped mean-anomaly difference must be far from the true " +
+              "separation, or this row is not adversarial",
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "phasing-from-state-raan-offset",
+    operation: "phasingFromTargetState",
+    source: {
+      work: "modules-maneuver-phasing-from-target-state",
+      example:
+        "the RAAN projection. A right-ascension difference is an in-plane rotation only to the extent of cos(i), which is the quasi-nonsingular ROE definition of the relative mean longitude this module already uses for dlambda. A derivation that added the raw RAAN difference, or ignored it, misses by 0.5deg*(1-cos 51.6deg) = 0.19deg here",
+      inputs:
+        "circular 6,778.137 km at i=51.6deg; chaser raan=40deg lambda=10deg, target raan=40.5deg lambda=30deg",
+    },
+    build() {
+      const inclination = 51.6 * DEG;
+      const base = { semiMajorAxis: PHASE_RADIUS_M, inclination };
+      const phaseAngle = 20 * DEG + 0.5 * DEG * Math.cos(inclination);
+      return {
+        params: {
+          chaserState: stateFromElements({
+            ...base, raan: 40 * DEG, meanArgumentOfLatitude: 10 * DEG,
+          }),
+          targetState: stateFromElements({
+            ...base, raan: 40.5 * DEG, meanArgumentOfLatitude: 30 * DEG,
+          }),
+          numRevs: 3,
+          mu: MU,
+        },
+        expect: {
+          relativePhaseAngle: phaseAngle,
+          raanDifference: 0.5 * DEG,
+          inclinationDifference: 0,
+          ...planExpectations(phaseAngle, 3),
+        },
+      };
+    },
+  },
+  {
+    id: "phasing-from-state-fall-behind-the-long-way",
+    operation: "phasingFromTargetState",
+    source: {
+      work: "modules-maneuver-phasing-from-target-state",
+      example:
+        "CATCH S/C and FALL BEHIND are two different cards and must be two different answers. The same pair as the catch-up twin — the target leads by 30 degrees — but the operator pressed FALL BEHIND, so the chaser must LOSE 330 degrees of phase and rise to a higher orbit. Same rendezvous, eight times the delta-v, and the module must not quietly substitute the cheap one",
+      inputs: "the catch-up twin's pair, with direction: \"fallBehind\" and 3 revolutions",
+    },
+    build() {
+      const base = {
+        semiMajorAxis: PHASE_RADIUS_M,
+        inclination: 51.6 * DEG,
+        raan: 40 * DEG,
+      };
+      const longWay = 30 * DEG - 2 * Math.PI;
+      const shortWay = planExpectations(30 * DEG, 3);
+      const long = planExpectations(longWay, 3);
+      return {
+        params: {
+          chaserState: stateFromElements({ ...base, meanArgumentOfLatitude: 10 * DEG }),
+          targetState: stateFromElements({ ...base, meanArgumentOfLatitude: 40 * DEG }),
+          direction: "fallBehind",
+          numRevs: 3,
+          mu: MU,
+        },
+        expect: {
+          direction: "fallBehind",
+          relativePhaseAngle: 30 * DEG,
+          ...long,
+          // BOTH directions are summarised on every response, so the road not
+          // taken is visible to a console that wants to offer the choice.
+          "catchUp.totalDeltaV": shortWay.totalDeltaV,
+          "catchUp.phaseAngle": 30 * DEG,
+          "fallBehind.totalDeltaV": long.totalDeltaV,
+          "fallBehind.phaseAngle": longWay,
+        },
+        assertions: [
+          {
+            id: "the-long-way-is-the-expensive-way",
+            holds: long.totalDeltaV > 5 * shortWay.totalDeltaV,
+            detail:
+              `long way ${long.totalDeltaV} m/s vs short way ${shortWay.totalDeltaV} m/s`,
+          },
+          {
+            id: "the-long-way-raises-the-orbit",
+            holds: long.phasingSMA > PHASE_RADIUS_M && shortWay.phasingSMA < PHASE_RADIUS_M,
+            detail:
+              "falling behind must RAISE the phasing orbit and catching up must lower it",
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "phasing-from-state-recommends-revolutions",
+    operation: "phasingFromTargetState",
+    source: {
+      work: "modules-maneuver-phasing-from-target-state",
+      example:
+        "the revolution count is the knob that trades time for delta-v, and it is the module's to turn. At 170 degrees of separation a one-revolution phasing orbit dives 4,000 km below the surface; the recommendation climbs until the plan neither clamps nor exceeds the budget, and the budget defaults to 1% of the chaser's circular speed",
+      inputs:
+        "circular 6,778.137 km, target leading by 170 degrees, no numRevs and no direction given",
+    },
+    build() {
+      const base = {
+        semiMajorAxis: PHASE_RADIUS_M,
+        inclination: 51.6 * DEG,
+        raan: 40 * DEG,
+      };
+      const radiusKm = PHASE_RADIUS_M / KM;
+      const phaseAngle = 170 * DEG;
+      const budgetKmPerS = 0.01 * vCircular(radiusKm);
+      const revs = recommendRevs(radiusKm, phaseAngle, budgetKmPerS);
+      const oneRev = phasingWithFloor(radiusKm, phaseAngle, 1);
+      return {
+        params: {
+          chaserState: stateFromElements({ ...base, meanArgumentOfLatitude: 0 }),
+          targetState: stateFromElements({ ...base, meanArgumentOfLatitude: 170 * DEG }),
+          mu: MU,
+        },
+        expect: {
+          relativePhaseAngle: phaseAngle,
+          recommendedRevs: revs,
+          revsFromCaller: false,
+          metDeltaVBudget: true,
+          clampedToEarthFloor: false,
+          maxRevs: 100,
+          deltaVBudget: budgetKmPerS * KM,
+          ...planExpectations(phaseAngle, revs, { withFloor: true }),
+        },
+        assertions: [
+          {
+            id: "one-revolution-would-have-flown-through-the-planet",
+            holds: oneRev.clamped,
+            detail:
+              "the premise of the row: at 170 degrees in one revolution the " +
+              "unclamped phasing orbit is below the Earth floor",
+          },
+          {
+            id: "the-recommendation-is-the-smallest-count-that-qualifies",
+            holds: (() => {
+              const justBelow = phasingWithFloor(radiusKm, phaseAngle, revs - 1);
+              return justBelow.clamped || justBelow.totalDeltaV > budgetKmPerS;
+            })(),
+            detail: `one fewer than ${revs} must fail the floor or the budget`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: "phasing-from-state-non-coplanar-polar-droid",
+    operation: "phasingFromTargetState",
+    source: {
+      work: "modules-maneuver-phasing-from-target-state (the owner report that escalated it to P1)",
+      example:
+        "a polar craft aimed at an ISS-inclination target. Phasing to a target in another plane is not a rendezvous, and the operation REPORTS that rather than refusing — the composed far rendezvous plans the plane change first and needs stage 2's numbers afterwards, so a refusal here would break the composition it exists to complete",
+      inputs:
+        "chaser i=97.4deg, target i=51.6deg, same raan and radius; separation 30 degrees",
+    },
+    build() {
+      const base = {
+        semiMajorAxis: PHASE_RADIUS_M,
+        raan: 40 * DEG,
+      };
+      return {
+        params: {
+          chaserState: stateFromElements({
+            ...base, inclination: 97.4 * DEG, meanArgumentOfLatitude: 10 * DEG,
+          }),
+          targetState: stateFromElements({
+            ...base, inclination: 51.6 * DEG, meanArgumentOfLatitude: 40 * DEG,
+          }),
+          numRevs: 3,
+          mu: MU,
+        },
+        expect: {
+          coplanar: false,
+          // Equal RAAN, so the angle between the orbit normals IS the
+          // inclination difference.
+          planeAngle: 45.8 * DEG,
+          inclinationDifference: -45.8 * DEG,
+          coplanarTolerance: 1 * DEG,
+          relativePhaseAngle: 30 * DEG,
+          coOrbital: true,
+          ...planExpectations(30 * DEG, 3),
+        },
       };
     },
   },

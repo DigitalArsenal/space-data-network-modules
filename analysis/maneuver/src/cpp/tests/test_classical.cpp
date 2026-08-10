@@ -1,5 +1,7 @@
 #include "maneuver/classical.h"
 #include "maneuver/constants.h"
+#include "maneuver/fault.h"
+#include "maneuver/math.h"
 
 #include <cassert>
 #include <cmath>
@@ -157,6 +159,147 @@ void testDeltaVBudget() {
     assert(budget.phaseDeltas.size() == 3);
 }
 
+// ===== State -> elements, and the phase geometry of a pair =====
+
+/// Build the inertial state of an element set, independently of the recovery
+/// under test: perifocal position and velocity rotated by (raan, inc, argp).
+/// Written out here rather than reusing the module's own `elementsToState`
+/// so that the round trip below compares two DIFFERENT pieces of code.
+void stateOf(const maneuver::ClassicalOrbitalElements& oe,
+             maneuver::Vector3* position, maneuver::Vector3* velocity) {
+    const double mu = oe.gravitationalParameter;
+    const double a = oe.semiMajorAxis;
+    const double e = oe.eccentricity;
+    const double nu = maneuver::trueAnomalyFromMean(oe.meanAnomaly, e);
+    const double p = a * (1.0 - e * e);
+    const double r = p / (1.0 + e * std::cos(nu));
+    const double h = std::sqrt(mu * p);
+
+    const double px = r * std::cos(nu);
+    const double py = r * std::sin(nu);
+    const double pvx = -(mu / h) * std::sin(nu);
+    const double pvy = (mu / h) * (e + std::cos(nu));
+
+    const double cO = std::cos(oe.raan), sO = std::sin(oe.raan);
+    const double cw = std::cos(oe.argumentOfPerigee);
+    const double sw = std::sin(oe.argumentOfPerigee);
+    const double ci = std::cos(oe.inclination), si = std::sin(oe.inclination);
+
+    const double m11 = cO * cw - sO * sw * ci, m12 = -cO * sw - sO * cw * ci;
+    const double m21 = sO * cw + cO * sw * ci, m22 = -sO * sw + cO * cw * ci;
+    const double m31 = sw * si,                m32 = cw * si;
+
+    *position = {m11 * px + m12 * py, m21 * px + m22 * py, m31 * px + m32 * py};
+    *velocity = {m11 * pvx + m12 * pvy, m21 * pvx + m22 * pvy,
+                 m31 * pvx + m32 * pvy};
+}
+
+maneuver::ClassicalOrbitalElements elementsOf(double a, double e, double inc,
+                                              double raan, double argp,
+                                              double meanAnomaly) {
+    maneuver::ClassicalOrbitalElements oe;
+    oe.semiMajorAxis = a;
+    oe.eccentricity = e;
+    oe.inclination = inc;
+    oe.raan = raan;
+    oe.argumentOfPerigee = argp;
+    oe.meanAnomaly = meanAnomaly;
+    oe.gravitationalParameter = maneuver::MU_EARTH;
+    oe.angularMomentum = std::sqrt(maneuver::MU_EARTH * a * (1.0 - e * e));
+    return oe;
+}
+
+void testStateToElementsRoundTrip() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const auto oe = elementsOf(7000e3, 0.012, 51.6 * d2r, 40.0 * d2r,
+                               70.0 * d2r, 200.0 * d2r);
+    maneuver::Vector3 r{}, v{};
+    stateOf(oe, &r, &v);
+
+    const auto back = maneuver::stateToClassicalElements(r, v, oe.gravitationalParameter);
+    assertNear(back.semiMajorAxis, oe.semiMajorAxis, 1e-6, "rv2coe_sma");
+    assertNear(back.eccentricity, oe.eccentricity, 1e-12, "rv2coe_ecc");
+    assertNear(back.inclination, oe.inclination, 1e-12, "rv2coe_inc");
+    assertNear(back.raan, oe.raan, 1e-12, "rv2coe_raan");
+    assertNear(back.argumentOfPerigee, oe.argumentOfPerigee, 1e-12, "rv2coe_argp");
+    assertNear(back.meanAnomaly, oe.meanAnomaly, 1e-12, "rv2coe_M");
+}
+
+/// THE REASON `nu` IS COMPUTED AS `u - argp`. At e = 1e-9 the eccentricity
+/// vector's direction is noise, so `argumentOfPerigee` and `meanAnomaly` are
+/// each individually meaningless — but their SUM, the mean argument of
+/// latitude, is exact, and it is the only thing a phasing computation reads.
+void testNearCircularMeanArgumentOfLatitudeSurvives() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const double u = 123.456 * d2r;
+    const auto oe = elementsOf(6778137.0, 1e-9, 51.6 * d2r, 40.0 * d2r, 0.0, u);
+    maneuver::Vector3 r{}, v{};
+    stateOf(oe, &r, &v);
+
+    const auto back = maneuver::stateToClassicalElements(r, v, maneuver::MU_EARTH);
+    const double lambda = std::fmod(
+        back.argumentOfPerigee + back.meanAnomaly + 4.0 * M_PI, 2.0 * M_PI);
+    assertNear(lambda, u, 1e-9, "near_circular_mean_arg_latitude");
+}
+
+/// A rectilinear state has no orbital plane. It must REFUSE, not answer.
+void testStateToElementsRefusesRectilinear() {
+    maneuver::fault::reset();
+    const maneuver::Vector3 r{7000e3, 0.0, 0.0};
+    const maneuver::Vector3 v{1000.0, 0.0, 0.0};  // parallel to r
+    maneuver::stateToClassicalElements(r, v, maneuver::MU_EARTH);
+    assert(maneuver::fault::raised());
+    maneuver::fault::reset();
+}
+
+/// An escape trajectory has no mean anomaly. It must REFUSE.
+void testStateToElementsRefusesEscape() {
+    maneuver::fault::reset();
+    const maneuver::Vector3 r{7000e3, 0.0, 0.0};
+    const maneuver::Vector3 v{0.0, 12000.0, 0.0};  // well past escape speed
+    maneuver::stateToClassicalElements(r, v, maneuver::MU_EARTH);
+    assert(maneuver::fault::raised());
+    maneuver::fault::reset();
+}
+
+/// THE ADVERSARIAL CASE for the whole operation: two craft on the SAME
+/// near-circular orbit whose apsides are 180 degrees apart. Their mean
+/// ANOMALIES differ by 180 degrees; their true along-track separation is 30.
+/// A derivation that differences mean anomalies gets this exactly wrong.
+void testPhaseGeometryIsNotAMeanAnomalyDifference() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const auto chaser = elementsOf(6778137.0, 0.001, 51.6 * d2r, 40.0 * d2r,
+                                   70.0 * d2r, 10.0 * d2r);
+    // argp + M = 80 for the chaser; 110 for the target => 30 degrees of lead,
+    // reached with the apsides on opposite sides of the orbit.
+    const auto target = elementsOf(6778137.0, 0.001, 51.6 * d2r, 40.0 * d2r,
+                                   250.0 * d2r, 220.0 * d2r);
+
+    const auto g = maneuver::computePhaseGeometry(chaser, target);
+    assertNear(g.relativePhaseAngle, 30.0 * d2r, 1e-12, "phase_geometry_lead");
+    // The mean-anomaly difference is 210 degrees, i.e. -150 wrapped. Nothing
+    // like the answer.
+    const double meanAnomalyDifference =
+        g.targetMeanAnomaly - g.chaserMeanAnomaly;
+    assert(std::abs(meanAnomalyDifference - 30.0 * d2r) > 1.0);
+    assertNear(g.catchUpAngle, 30.0 * d2r, 1e-12, "phase_geometry_catch_up");
+    assertNear(g.fallBehindAngle, -330.0 * d2r, 1e-12, "phase_geometry_fall_behind");
+    assertNear(g.planeAngle, 0.0, 1e-12, "phase_geometry_coplanar");
+}
+
+/// The RAAN difference enters as an in-plane rotation projected by cos(i) —
+/// the quasi-nonsingular ROE `dlambda` this module already uses elsewhere.
+void testPhaseGeometryProjectsTheRaanDifference() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const double inc = 51.6 * d2r;
+    const auto chaser = elementsOf(6778137.0, 0.0, inc, 40.0 * d2r, 0.0, 10.0 * d2r);
+    const auto target = elementsOf(6778137.0, 0.0, inc, 40.5 * d2r, 0.0, 30.0 * d2r);
+    const auto g = maneuver::computePhaseGeometry(chaser, target);
+    const double expected = 20.0 * d2r + 0.5 * d2r * std::cos(inc);
+    assertNear(g.relativePhaseAngle, expected, 1e-12, "phase_geometry_raan_projection");
+    assertNear(g.raanDifference, 0.5 * d2r, 1e-12, "phase_geometry_raan_difference");
+}
+
 }  // namespace
 
 int main() {
@@ -168,6 +311,12 @@ int main() {
     testBiEllipticWinsForLargeRatio();
     testPatchedConicEarthMars();
     testDeltaVBudget();
+    testStateToElementsRoundTrip();
+    testNearCircularMeanArgumentOfLatitudeSurvives();
+    testStateToElementsRefusesRectilinear();
+    testStateToElementsRefusesEscape();
+    testPhaseGeometryIsNotAMeanAnomalyDifference();
+    testPhaseGeometryProjectsTheRaanDifference();
     std::cout << "All classical maneuver tests passed.\n";
     return 0;
 }

@@ -221,6 +221,18 @@ Vector3 add3(const Vector3& a, const Vector3& b) {
     return {a[0] + b[0], a[1] + b[1], a[2] + b[2]};
 }
 
+double dot3(const Vector3& a, const Vector3& b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+Vector3 cross3(const Vector3& a, const Vector3& b) {
+    return {
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    };
+}
+
 ROEVector matMul6x3_3x1(const ControlMatrix6x3& B, const Vector3& v) {
     ROEVector result;
     for (int i = 0; i < 6; ++i) {
@@ -269,6 +281,17 @@ ROEVector addROE(const ROEVector& a, const ROEVector& b) {
 double normalizeAngle(double angle) {
     double result = std::fmod(angle, TWO_PI);
     if (result < 0.0) result += TWO_PI;
+    // A tiny negative input folds to EXACTLY TWO_PI after the addition
+    // rounds — an out-of-range answer from a range-reducing function, and one
+    // that reads as a whole revolution of separation when it is none.
+    if (result >= TWO_PI) result = 0.0;
+    return result;
+}
+
+double wrapToPi(double angle) {
+    double result = std::fmod(angle, TWO_PI);
+    if (result <= -M_PI) result += TWO_PI;
+    else if (result > M_PI) result -= TWO_PI;
     return result;
 }
 

@@ -1,8 +1,8 @@
 {
   "//": "THE RATCHET. Vector counts may only grow, and the GREEN count may only grow — a row demoted to expected-to-fail fails tests/ratchet.test.mjs even though the total is unchanged. Raise with vectors/tools/update-ratchet.mjs.",
-  "updated": "2026-08-10T17:32:32.384Z",
-  "total": 33,
-  "green": 30,
+  "updated": "2026-08-10T20:05:38.182Z",
+  "total": 43,
+  "green": 40,
   "byOperation": {
     "solveLambert": {
       "total": 19,
@@ -34,6 +34,11 @@
       "green": 2,
       "knownRed": 0
     },
+    "phasingFromTargetState": {
+      "total": 10,
+      "green": 10,
+      "knownRed": 0
+    },
     "solveLambertMinDV": {
       "total": 1,
       "green": 1,
@@ -52,8 +57,8 @@
       "knownRed": 0
     },
     "in-repo": {
-      "total": 12,
-      "green": 11,
+      "total": 19,
+      "green": 18,
       "knownRed": 1
     },
     "hapsira": {
@@ -62,8 +67,8 @@
       "knownRed": 2
     },
     "orekit": {
-      "total": 2,
-      "green": 2,
+      "total": 5,
+      "green": 5,
       "knownRed": 0
     }
   }

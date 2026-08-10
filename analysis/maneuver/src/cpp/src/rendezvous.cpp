@@ -9,17 +9,11 @@ namespace maneuver {
 
 namespace {
 
-double dot3(const Vector3& a, const Vector3& b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-Vector3 cross3(const Vector3& a, const Vector3& b) {
-    return {
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    };
-}
+// `dot3` and `cross3` used to live here as file-local copies of the same four
+// lines that classical.cpp needed too. They are in maneuver/math.h now, beside
+// `norm3`/`add3`/`sub3` where a reader looks for them, and the amalgamated
+// translation unit the shipped artifact is built from carries ONE definition
+// instead of two identical ones in the same anonymous namespace.
 
 Vector3 scale3(const Vector3& v, double s) {
     return {v[0] * s, v[1] * s, v[2] * s};

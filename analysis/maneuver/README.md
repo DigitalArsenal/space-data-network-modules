@@ -31,6 +31,7 @@ The response payload is UTF-8 JSON returned on the `response` port.
 - `solveLambert`
 - `solveLambertMinDV`
 - `phasingManeuver`
+- `phasingFromTargetState`
 - `planeChange`
 - `combinedManeuver`
 - `computeRoeStateTransition`
@@ -161,6 +162,62 @@ Codes: `invalid-parameter`, `malformed-request`, `unknown-operation`,
   and `achievedPhaseAngle` — the phase shift the clamped orbit actually
   delivers, which is the number to show an operator who asked for more than the
   requested revolutions can buy.
+- **`phasingFromTargetState`** (**0.4.0**) is the map from a TARGET SPACECRAFT
+  to the angle `phasingManeuver` consumes, and then to the plan itself. It
+  exists because the angle cannot be derived by the caller: a console holding
+  two spacecraft states had to difference two mean anomalies in JavaScript to
+  get it, which the no-JS-physics law forbids and which is wrong anyway the
+  moment the two orbits' apsides differ.
+
+  Each craft arrives under EXACTLY ONE of two keys — `chaser` / `target` for a
+  classical element set (the same shape `chief` takes elsewhere), or
+  `chaserState` / `targetState` for `{position[3], velocity[3]}` in SI metres
+  and m/s in an inertial frame. Both keys for one craft, or neither, is a
+  refusal that names both spellings; there is no sniffing of one polymorphic
+  key, so a request always says which form it carries.
+
+  **`relativePhaseAngle`** is the answer: signed, wrapped to `(-pi, pi]`,
+  POSITIVE when the TARGET LEADS and the chaser must gain phase. It is the
+  quasi-nonsingular relative mean longitude this module already uses as
+  `dlambda` — `(lambda_target - lambda_chaser) + dRAAN * cos(i_chaser)`, where
+  `lambda` is the mean ARGUMENT OF LATITUDE (`argumentOfPerigee + meanAnomaly`)
+  and not the mean anomaly. Both are published, side by side, because on a pair
+  whose apsides are opposed they differ by 180 degrees and only one of them is
+  the separation.
+
+  **Both directions are always answered.** `catchUpAngle` in `(0, 2pi]` and
+  `fallBehindAngle` in `[-2pi, 0)` are the two ways to fly the same rendezvous,
+  `direction` (`"short"` default, `"catchUp"`, `"fallBehind"`) picks which one
+  drives the plan, and the `catchUp` and `fallBehind` sub-objects summarise
+  BOTH whichever was picked. /beta has a CATCH S/C card and a FALL BEHIND card
+  and each means its direction literally; on a target leading by 30 degrees the
+  long way round costs eight times the short way, and a module that quietly
+  substituted the cheap one would be answering the card that was not pressed.
+
+  **`recommendedRevs`** is the revolution-count trade, made here because this is
+  where the Earth-floor clamp lives: the smallest count in `[1, maxRevs]` whose
+  plan neither clamps nor exceeds `deltaVBudget` (default 1% of the chaser's
+  circular speed — ~77 m/s in LEO, ~31 m/s at GEO). Both conditions relax
+  monotonically with the count, so the first hit is the answer and the scan
+  never ranks. `maxRevs` is CLAMPED into `[1, 100000]` and reported.
+
+  **Three verdicts, each beside the threshold that produced it**: `coplanar`
+  (on `planeAngle`, the angle between the orbit NORMALS — two orbits can share
+  an inclination and be 180 degrees apart in RAAN), `nearCircular` (on both
+  eccentricities) and `coOrbital` (on `semiMajorAxisDifference`). None of them
+  is a refusal. The composed far rendezvous plans the plane change FIRST and
+  needs this stage's numbers afterwards, so refusing a non-coplanar pair would
+  break the composition the operation exists to complete.
+
+  The plan itself is emitted under `phasingManeuver`'s own key names — `dv1`,
+  `dv2`, `totalDeltaV`, `phasingPeriod`, `phasingSMA`, `totalTime`, `numRevs`,
+  `phaseAngle`, `dv1_ric`, `dv2_ric` and the whole Earth-floor group — by the
+  same writer, so the two operations cannot drift into two spellings of one
+  solution. `phasingRadius` says what the plan was flown at: the chaser's
+  SEMI-MAJOR AXIS, because the phasing model's period comes from `a` and
+  seeding it with the instantaneous `|r|` would produce a plan for an orbit the
+  chaser is not on.
+
 - **`solveLambert`** is a bracketed, residual-checked universal-variable solve
   (Bate-Mueller-White / Curtis Algorithm 5.2). `converged` is a MEASUREMENT —
   the residual met its gate — never a literal, and the response carries

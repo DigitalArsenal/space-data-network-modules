@@ -205,6 +205,177 @@ void testPhasingManeuver() {
               << "m/s (less than 1-rev ✓)\n";
 }
 
+// ===== Phasing derived from a target spacecraft =====
+
+maneuver::ClassicalOrbitalElements coOrbital(double meanArgumentOfLatitude,
+                                             double argumentOfPerigee = 0.0,
+                                             double raan = 40.0 *
+                                                           maneuver::DEG_TO_RAD) {
+    maneuver::ClassicalOrbitalElements oe;
+    oe.semiMajorAxis = 6778137.0;
+    oe.eccentricity = 0.0;
+    oe.inclination = 51.6 * maneuver::DEG_TO_RAD;
+    oe.raan = raan;
+    oe.argumentOfPerigee = argumentOfPerigee;
+    oe.meanAnomaly = meanArgumentOfLatitude - argumentOfPerigee;
+    oe.gravitationalParameter = maneuver::MU_EARTH;
+    oe.angularMomentum = std::sqrt(maneuver::MU_EARTH * oe.semiMajorAxis);
+    return oe;
+}
+
+/// The op must reproduce the FROZEN `phasingManeuver` conformance numbers when
+/// it is handed a pair whose separation is the same 30 degrees, with the same
+/// radius and the same revolution count. This is what ties the derived angle
+/// to a solution the vectors already pin.
+void testPhasingFromTargetStateMatchesTheTypedAngle() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const auto chaser = coOrbital(10.0 * d2r);
+    const auto target = coOrbital(40.0 * d2r);
+
+    maneuver::PhasingFromStateOptions options;
+    options.numRevs = 3;
+    const auto derived = maneuver::computePhasingFromTargetState(chaser, target, options);
+    const auto typed = maneuver::computePhasingManeuver(
+        6778137.0, 30.0 * d2r, 3, maneuver::MU_EARTH);
+
+    assertNear(derived.geometry.relativePhaseAngle, 30.0 * d2r, 1e-12,
+               "from_state_angle");
+    assertNear(derived.plan.dv1, typed.dv1, 0.0, "from_state_dv1_exact");
+    assertNear(derived.plan.dv2, typed.dv2, 0.0, "from_state_dv2_exact");
+    assertNear(derived.plan.totalDeltaV, typed.totalDeltaV, 0.0,
+               "from_state_total_exact");
+    assertNear(derived.plan.phasingSMA, typed.phasingSMA, 0.0,
+               "from_state_sma_exact");
+    assert(derived.revsFromCaller);
+    assert(derived.coplanar);
+    assert(derived.nearCircular);
+    assert(derived.coOrbital);
+    assertNear(derived.phasingRadius, 6778137.0, 0.0, "from_state_radius");
+
+    std::cout << "  Phasing from state (+30deg, 3rev): dv="
+              << derived.plan.totalDeltaV << "m/s == typed "
+              << typed.totalDeltaV << "m/s\n";
+}
+
+/// CATCH S/C and FALL BEHIND are different cards and must be different
+/// answers. Forcing the long way round must cost more and must not be
+/// silently replaced by the short one.
+void testPhasingFromTargetStateHonoursBothDirections() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const auto chaser = coOrbital(10.0 * d2r);
+    const auto target = coOrbital(40.0 * d2r);   // target leads by 30 degrees
+
+    maneuver::PhasingFromStateOptions options;
+    options.numRevs = 3;
+
+    options.direction = maneuver::PhasingDirection::CATCH_UP;
+    const auto catchUp = maneuver::computePhasingFromTargetState(chaser, target, options);
+    options.direction = maneuver::PhasingDirection::FALL_BEHIND;
+    const auto fallBehind = maneuver::computePhasingFromTargetState(chaser, target, options);
+
+    assertNear(catchUp.plan.phaseAngle, 30.0 * d2r, 1e-12, "direction_catch_up");
+    assertNear(fallBehind.plan.phaseAngle, -330.0 * d2r, 1e-12,
+               "direction_fall_behind");
+    // Catching up drops to a LOWER orbit; falling behind rises to a higher one.
+    assert(catchUp.plan.phasingSMA < 6778137.0);
+    assert(fallBehind.plan.phasingSMA > 6778137.0);
+    // Going the long way round is the expensive way.
+    assert(fallBehind.plan.totalDeltaV > catchUp.plan.totalDeltaV);
+    // BOTH summaries are present under either direction, and they agree with
+    // the plans the two forced runs produced.
+    assertNear(catchUp.fallBehind.totalDeltaV, fallBehind.plan.totalDeltaV, 0.0,
+               "summary_matches_forced_fall_behind");
+    assertNear(fallBehind.catchUp.totalDeltaV, catchUp.plan.totalDeltaV, 0.0,
+               "summary_matches_forced_catch_up");
+
+    std::cout << "  Directions (3rev): catchUp=" << catchUp.plan.totalDeltaV
+              << "m/s fallBehind=" << fallBehind.plan.totalDeltaV << "m/s\n";
+}
+
+/// The revolution count is the knob that trades time for delta-v. Asked for a
+/// separation that one revolution cannot buy without flying through the Earth,
+/// the recommendation must climb until the plan is both unclamped and inside
+/// the budget.
+void testPhasingFromTargetStateRecommendsRevolutions() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const auto chaser = coOrbital(0.0);
+    const auto target = coOrbital(170.0 * d2r);
+
+    const auto one = maneuver::computePhasingManeuver(6778137.0, 170.0 * d2r, 1,
+                                                      maneuver::MU_EARTH);
+    assert(one.clampedToEarthFloor);  // the premise of the test
+
+    const auto derived = maneuver::computePhasingFromTargetState(chaser, target);
+    assert(!derived.revsFromCaller);
+    assert(derived.recommendedRevs > 1);
+    assert(!derived.plan.clampedToEarthFloor);
+    assert(derived.metDeltaVBudget);
+    assert(derived.plan.totalDeltaV <= derived.deltaVBudget);
+    // The recommendation is the SMALLEST count that qualifies: one fewer must
+    // fail one of the two conditions.
+    const auto justBelow = maneuver::computePhasingManeuver(
+        6778137.0, 170.0 * d2r, derived.recommendedRevs - 1, maneuver::MU_EARTH);
+    assert(justBelow.clampedToEarthFloor ||
+           justBelow.totalDeltaV > derived.deltaVBudget);
+
+    std::cout << "  Recommendation (+170deg): revs=" << derived.recommendedRevs
+              << " dv=" << derived.plan.totalDeltaV << "m/s budget="
+              << derived.deltaVBudget << "m/s\n";
+}
+
+/// A target in another plane is not a phasing problem, and the operation says
+/// so rather than answering as if it were.
+void testPhasingFromTargetStateReportsNonCoplanar() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    auto chaser = coOrbital(10.0 * d2r);
+    chaser.inclination = 97.4 * d2r;   // the polar DROID of the owner report
+    const auto target = coOrbital(40.0 * d2r);  // 51.6 degrees
+
+    const auto derived = maneuver::computePhasingFromTargetState(chaser, target);
+    assert(!derived.coplanar);
+    assertNear(derived.geometry.inclinationDifference, -45.8 * d2r, 1e-12,
+               "non_coplanar_inclination_difference");
+    assert(derived.geometry.planeAngle > 45.0 * d2r);
+    // It still ANSWERS — a refusal here would deny the composed rendezvous its
+    // stage 2 after the plane change has already been planned.
+    assert(derived.plan.totalDeltaV > 0.0);
+
+    std::cout << "  Non-coplanar: planeAngle="
+              << derived.geometry.planeAngle * maneuver::RAD_TO_DEG << "deg\n";
+}
+
+/// maxRevs is CLAMPED, never trapped on, and the clamp is reported.
+void testPhasingFromTargetStateClampsMaxRevs() {
+    const double d2r = maneuver::DEG_TO_RAD;
+    const auto chaser = coOrbital(0.0);
+    const auto target = coOrbital(1.0 * d2r);
+
+    maneuver::PhasingFromStateOptions options;
+    options.maxRevs = 2000000000;
+    const auto derived = maneuver::computePhasingFromTargetState(chaser, target, options);
+    assert(derived.maxRevsApplied == maneuver::kMaxPhasingRevs);
+    assert(derived.recommendedRevs >= 1);
+
+    maneuver::PhasingFromStateOptions floor;
+    floor.maxRevs = -5;
+    const auto low = maneuver::computePhasingFromTargetState(chaser, target, floor);
+    assert(low.maxRevsApplied == 1);
+}
+
+/// Two craft at the same place is a zero-delta-v answer, not a singularity.
+void testPhasingFromTargetStateCoLocated() {
+    const auto chaser = coOrbital(1.0);
+    const auto target = coOrbital(1.0);
+    const auto derived = maneuver::computePhasingFromTargetState(chaser, target);
+    assertNear(derived.geometry.relativePhaseAngle, 0.0, 1e-12, "co_located_angle");
+    assertNear(derived.plan.totalDeltaV, 0.0, 1e-9, "co_located_dv");
+    assert(derived.recommendedRevs == 1);
+    // Both named directions are a full lap, which is the truth.
+    assertNear(derived.geometry.catchUpAngle, 2.0 * M_PI, 1e-12, "co_located_catch_up");
+    assertNear(derived.geometry.fallBehindAngle, -2.0 * M_PI, 1e-12,
+               "co_located_fall_behind");
+}
+
 // ===== Plane Change =====
 
 void testPlaneChange() {
@@ -310,6 +481,12 @@ int main() {
     testCAMAlreadySafe();
     testCAMRequired();
     testPhasingManeuver();
+    testPhasingFromTargetStateMatchesTheTypedAngle();
+    testPhasingFromTargetStateHonoursBothDirections();
+    testPhasingFromTargetStateRecommendsRevolutions();
+    testPhasingFromTargetStateReportsNonCoplanar();
+    testPhasingFromTargetStateClampsMaxRevs();
+    testPhasingFromTargetStateCoLocated();
     testPlaneChange();
     testCombinedManeuver();
     testLambertSimple();

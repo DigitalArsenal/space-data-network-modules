@@ -379,6 +379,170 @@ PhasingResult computePhasingManeuver(
 }
 
 // ===========================================================================
+// Phasing derived from a TARGET SPACECRAFT
+// ===========================================================================
+
+namespace {
+
+/// The phase angle the requested direction actually asks for.
+///
+/// Both directions reach the SAME rendezvous. `catchUp` is the chaser gaining
+/// phase (a positive shift, a lower and faster orbit); `fallBehind` is the
+/// chaser losing it. Which one is cheaper depends entirely on the sign of the
+/// separation, and a module that silently returned only the short one would
+/// hide the card the operator actually pressed — /beta has BOTH a CATCH S/C
+/// card and a FALL BEHIND card, and each means its own direction literally.
+double angleForDirection(const PhaseGeometry& geometry,
+                         PhasingDirection direction) {
+    switch (direction) {
+        case PhasingDirection::CATCH_UP:    return geometry.catchUpAngle;
+        case PhasingDirection::FALL_BEHIND: return geometry.fallBehindAngle;
+        case PhasingDirection::SHORT:       break;
+    }
+    return geometry.relativePhaseAngle;
+}
+
+PhasingBranchSummary summarise(const PhasingResult& plan, double budget) {
+    PhasingBranchSummary summary;
+    summary.phaseAngle = plan.phaseAngle;
+    summary.numRevs = plan.numRevs;
+    summary.totalDeltaV = plan.totalDeltaV;
+    summary.totalTime = plan.totalTime;
+    summary.phasingSMA = plan.phasingSMA;
+    summary.clampedToEarthFloor = plan.clampedToEarthFloor;
+    summary.metDeltaVBudget =
+        !plan.clampedToEarthFloor && plan.totalDeltaV <= budget;
+    return summary;
+}
+
+/// The smallest revolution count in [1, maxRevs] that both clears the Earth
+/// floor without clamping AND comes in under the delta-v budget.
+///
+/// Both conditions are MONOTONE in the revolution count — more revolutions
+/// means a phasing orbit closer to the original, which is both higher (for a
+/// catch-up) and cheaper — so the first hit is the answer and the scan never
+/// has to rank. Ties cannot arise: the scan is ascending and returns on the
+/// first success, so the result depends on the integer order and never on
+/// floating-point comparison order.
+///
+/// When nothing in range qualifies, `maxRevs` is returned: delta-v is
+/// monotonically decreasing, so the ceiling is the best available answer, and
+/// `*metBudget` says plainly that it is not the answer that was asked for.
+int recommendRevs(double radius, double phaseAngle, double mu, int maxRevs,
+                  double budget, bool* metBudget) {
+    *metBudget = false;
+    for (int revs = 1; revs <= maxRevs; ++revs) {
+        const PhasingResult trial =
+            computePhasingManeuver(radius, phaseAngle, revs, mu);
+        if (fault::raised()) return revs;
+        if (trial.clampedToEarthFloor) continue;
+        if (trial.totalDeltaV <= budget) {
+            *metBudget = true;
+            return revs;
+        }
+    }
+    return maxRevs;
+}
+
+}  // namespace
+
+PhasingFromStateResult computePhasingFromTargetState(
+    const ClassicalOrbitalElements& chaser,
+    const ClassicalOrbitalElements& target,
+    const PhasingFromStateOptions& options) {
+    if (!(options.mu > 0.0)) {
+        return fault::fail<PhasingFromStateResult>(
+            fault_code::INVALID_PARAMETER,
+            "[phasing-from-state]: mu must be positive");
+    }
+    if (!(chaser.semiMajorAxis > 0.0) || !(target.semiMajorAxis > 0.0)) {
+        return fault::fail<PhasingFromStateResult>(
+            fault_code::INVALID_PARAMETER,
+            "[phasing-from-state]: both craft need a positive semi-major axis");
+    }
+
+    PhasingFromStateResult result;
+    result.geometry = computePhaseGeometry(chaser, target);
+
+    // The phasing model is circular and its period comes from the semi-major
+    // axis; see the note on `phasingRadius` in the header.
+    const double radius = chaser.semiMajorAxis;
+    result.phasingRadius = radius;
+
+    const double circularSpeed = std::sqrt(options.mu / radius);
+    result.deltaVBudget = options.deltaVBudget > 0.0
+                              ? options.deltaVBudget
+                              : options.deltaVBudgetFraction * circularSpeed;
+
+    // maxRevs is CLAMPED, never refused: a typo must not become a long loop,
+    // and a clamp that is reported is not a lie.
+    int maxRevs = options.maxRevs;
+    if (maxRevs < 1) maxRevs = 1;
+    if (maxRevs > kMaxPhasingRevs) maxRevs = kMaxPhasingRevs;
+    result.maxRevsApplied = maxRevs;
+
+    const double phaseAngle = angleForDirection(result.geometry, options.direction);
+    result.phaseAngleFlown = phaseAngle;
+
+    bool metBudget = false;
+    const int recommended = recommendRevs(radius, phaseAngle, options.mu,
+                                          maxRevs, result.deltaVBudget,
+                                          &metBudget);
+    if (fault::raised()) return {};
+    result.recommendedRevs = recommended;
+    result.metDeltaVBudget = metBudget;
+
+    int revs = recommended;
+    if (options.numRevs >= 1) {
+        revs = options.numRevs > kMaxPhasingRevs ? kMaxPhasingRevs
+                                                 : options.numRevs;
+        result.revsFromCaller = true;
+    } else if (options.numRevs < 0) {
+        return fault::fail<PhasingFromStateResult>(
+            fault_code::INVALID_PARAMETER,
+            "[phasing-from-state]: numRevs must be >= 1 when it is given at "
+            "all; omit it to have the revolution count recommended");
+    }
+
+    result.plan = computePhasingManeuver(radius, phaseAngle, revs, options.mu);
+    if (fault::raised()) return {};
+    result.metDeltaVBudget =
+        !result.plan.clampedToEarthFloor &&
+        result.plan.totalDeltaV <= result.deltaVBudget;
+
+    // BOTH directions, always — even when the caller forced one. The summary
+    // of the road not taken is what lets a console show an operator that
+    // falling behind 330 degrees costs eleven times what catching up 30 does.
+    for (int pass = 0; pass < 2; ++pass) {
+        const double branchAngle = pass == 0 ? result.geometry.catchUpAngle
+                                             : result.geometry.fallBehindAngle;
+        bool branchMet = false;
+        const int branchRevs =
+            options.numRevs >= 1
+                ? revs
+                : recommendRevs(radius, branchAngle, options.mu, maxRevs,
+                                result.deltaVBudget, &branchMet);
+        if (fault::raised()) return {};
+        const PhasingResult branchPlan =
+            computePhasingManeuver(radius, branchAngle, branchRevs, options.mu);
+        if (fault::raised()) return {};
+        (pass == 0 ? result.catchUp : result.fallBehind) =
+            summarise(branchPlan, result.deltaVBudget);
+    }
+
+    result.coplanarTolerance = options.coplanarTolerance;
+    result.eccentricityTolerance = options.eccentricityTolerance;
+    result.coOrbitalToleranceMetres = options.coOrbitalTolerance * radius;
+    result.coplanar = result.geometry.planeAngle <= options.coplanarTolerance;
+    result.nearCircular =
+        result.geometry.chaserEccentricity <= options.eccentricityTolerance &&
+        result.geometry.targetEccentricity <= options.eccentricityTolerance;
+    result.coOrbital = std::abs(result.geometry.semiMajorAxisDifference) <=
+                       result.coOrbitalToleranceMetres;
+    return result;
+}
+
+// ===========================================================================
 // Plane Change
 // ===========================================================================
 

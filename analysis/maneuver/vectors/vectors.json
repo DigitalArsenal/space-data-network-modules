@@ -599,6 +599,436 @@
       ]
     },
     {
+      "id": "phasing-from-state-catch-up-30deg-3revs",
+      "tier": "B",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "work": "modules-maneuver-phasing-from-target-state",
+        "example": "the TWIN of phasing-catch-up-30deg-3revs: the same rendezvous, with the 30 degrees DERIVED from two Cartesian states instead of typed in",
+        "inputs": "two craft on one 6,778.137 km circular orbit at i=51.6deg, raan=40deg; mean arguments of latitude 10deg (chaser) and 40deg (target); 3 revolutions"
+      },
+      "params": {
+        "chaserState": {
+          "position": [
+            4643530.013201233,
+            4850764.791546672,
+            922415.9280712396
+          ],
+          "velocity": [
+            -4035.36838625739,
+            2737.5144592415204,
+            5918.496520421415
+          ]
+        },
+        "targetState": {
+          "position": [
+            2238010.6209013504,
+            5410711.923122557,
+            3414475.9680632018
+          ],
+          "velocity": [
+            -6121.499042116427,
+            -373.23969990278556,
+            4603.773028005019
+          ]
+        },
+        "numRevs": 3,
+        "mu": 398600441800000
+      },
+      "expect": {
+        "relativePhaseAngle": 0.5235987755982988,
+        "catchUpAngle": 0.5235987755982988,
+        "fallBehindAngle": -5.759586531581287,
+        "direction": "short",
+        "chaserMeanArgumentOfLatitude": 0.17453292519943295,
+        "targetMeanArgumentOfLatitude": 0.6981317007977318,
+        "coplanar": true,
+        "nearCircular": true,
+        "coOrbital": true,
+        "revsFromCaller": true,
+        "phasingRadius": 6778137,
+        "dv1": 73.0382731842063,
+        "dv2": 73.0382731842063,
+        "totalDeltaV": 146.0765463684126,
+        "phasingPeriod": 5399.3569303841105,
+        "phasingSMA": 6652027.535728255,
+        "totalTime": 16198.070791152331,
+        "numRevs": 3,
+        "phaseAngle": 0.5235987755982988
+      },
+      "anchors": [
+        {
+          "what": "|dv1| [m/s]",
+          "published": 73.038,
+          "computed": 73.0382731842063,
+          "tolerance": 0.0005,
+          "error": 0.0002731842063070644
+        }
+      ]
+    },
+    {
+      "id": "phasing-from-state-fall-behind-30deg-3revs",
+      "tier": "B",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "work": "modules-maneuver-phasing-from-target-state",
+        "example": "the TWIN of phasing-fall-behind-30deg-3revs. Phasing is asymmetric in the sign of the angle, so a from-two-states derivation that got the SIGN backwards would pass the catch-up twin and fail here",
+        "inputs": "the same orbit; mean arguments of latitude 10deg (chaser) and 340deg (target), i.e. the target TRAILS by 30 degrees; 3 revolutions"
+      },
+      "params": {
+        "chaserState": {
+          "position": [
+            4643530.013201233,
+            4850764.791546672,
+            922415.9280712396
+          ],
+          "velocity": [
+            -4035.36838625739,
+            2737.5144592415204,
+            5918.496520421415
+          ]
+        },
+        "targetState": {
+          "position": [
+            5804819.288434165,
+            2991059.151402532,
+            -1816804.7149330156
+          ],
+          "velocity": [
+            -867.9640301386034,
+            5114.75382976354,
+            5647.363649784484
+          ]
+        },
+        "numRevs": 3,
+        "mu": 398600441800000
+      },
+      "expect": {
+        "relativePhaseAngle": -0.5235987755982988,
+        "catchUpAngle": 5.759586531581287,
+        "fallBehindAngle": -0.5235987755982988,
+        "coplanar": true,
+        "coOrbital": true,
+        "dv1": 69.08987391530897,
+        "dv2": 69.08987391530897,
+        "totalDeltaV": 138.17974783061794,
+        "phasingPeriod": 5707.891612120346,
+        "phasingSMA": 6903083.999689901,
+        "totalTime": 17123.67483636104,
+        "numRevs": 3,
+        "phaseAngle": -0.5235987755982988
+      },
+      "anchors": [
+        {
+          "what": "|dv1| [m/s]",
+          "published": 69.0899,
+          "computed": 69.08987391530897,
+          "tolerance": 0.0005,
+          "error": 0.000026084691029382157
+        }
+      ]
+    },
+    {
+      "id": "phasing-from-state-apsides-opposed",
+      "tier": "B",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "work": "modules-maneuver-phasing-from-target-state",
+        "example": "THE ADVERSARIAL ROW. Two craft on one orbit whose apsides are 180 degrees apart: their MEAN ANOMALIES differ by 210 degrees while their true along-track separation is 30. The JavaScript derivation this operation replaces (b1360cb armTransfer) differenced mean anomalies, which is right only when both apsides coincide — a condition no real pair satisfies",
+        "inputs": "e=0.001 on the 6,778.137 km orbit; chaser argp=70deg M=10deg (lambda=80deg), target argp=250deg M=220deg (lambda=110deg)"
+      },
+      "params": {
+        "chaserState": {
+          "position": [
+            -1763725.7758764252,
+            3927620.0005296376,
+            5226449.149881293
+          ],
+          "velocity": [
+            -6322.761739524246,
+            -4225.674951320003,
+            1043.5885472655393
+          ]
+        },
+        "targetState": {
+          "position": [
+            -4317186.392404768,
+            1548426.0115841748,
+            4997786.871994272
+          ],
+          "velocity": [
+            -4472.694542457721,
+            -5874.35853408193,
+            -2050.2739115117865
+          ]
+        },
+        "numRevs": 3,
+        "mu": 398600441800000
+      },
+      "expect": {
+        "relativePhaseAngle": 0.5235987755982988,
+        "chaserMeanArgumentOfLatitude": 1.3962634015954636,
+        "targetMeanArgumentOfLatitude": 1.9198621771937625,
+        "chaserMeanAnomaly": 0.17453292519943295,
+        "targetMeanAnomaly": 3.839724354387525,
+        "coplanar": true,
+        "coOrbital": true,
+        "dv1": 73.0382731842063,
+        "dv2": 73.0382731842063,
+        "totalDeltaV": 146.0765463684126,
+        "phasingPeriod": 5399.3569303841105,
+        "phasingSMA": 6652027.535728255,
+        "totalTime": 16198.070791152331,
+        "numRevs": 3,
+        "phaseAngle": 0.5235987755982988
+      },
+      "assertions": [
+        {
+          "id": "mean-anomaly-difference-is-not-the-answer",
+          "holds": true,
+          "detail": "the wrapped mean-anomaly difference must be far from the true separation, or this row is not adversarial"
+        }
+      ]
+    },
+    {
+      "id": "phasing-from-state-raan-offset",
+      "tier": "B",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "work": "modules-maneuver-phasing-from-target-state",
+        "example": "the RAAN projection. A right-ascension difference is an in-plane rotation only to the extent of cos(i), which is the quasi-nonsingular ROE definition of the relative mean longitude this module already uses for dlambda. A derivation that added the raw RAAN difference, or ignored it, misses by 0.5deg*(1-cos 51.6deg) = 0.19deg here",
+        "inputs": "circular 6,778.137 km at i=51.6deg; chaser raan=40deg lambda=10deg, target raan=40.5deg lambda=30deg"
+      },
+      "params": {
+        "chaserState": {
+          "position": [
+            4643530.013201233,
+            4850764.791546672,
+            922415.9280712396
+          ],
+          "velocity": [
+            -4035.36838625739,
+            2737.5144592415204,
+            5918.496520421415
+          ]
+        },
+        "targetState": {
+          "position": [
+            3096451.4223086014,
+            5413025.272238234,
+            2655990.809879097
+          ],
+          "velocity": [
+            -5594.676475459597,
+            646.6202815111137,
+            5204.638492352744
+          ]
+        },
+        "numRevs": 3,
+        "mu": 398600441800000
+      },
+      "expect": {
+        "relativePhaseAngle": 0.3544863873525213,
+        "raanDifference": 0.008726646259971648,
+        "inclinationDifference": 0,
+        "dv1": 48.99455508825934,
+        "dv2": 48.99455508825934,
+        "totalDeltaV": 97.98911017651868,
+        "phasingPeriod": 5449.182330400989,
+        "phasingSMA": 6692888.2358285105,
+        "totalTime": 16347.546991202966,
+        "numRevs": 3,
+        "phaseAngle": 0.3544863873525213
+      }
+    },
+    {
+      "id": "phasing-from-state-fall-behind-the-long-way",
+      "tier": "B",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "work": "modules-maneuver-phasing-from-target-state",
+        "example": "CATCH S/C and FALL BEHIND are two different cards and must be two different answers. The same pair as the catch-up twin — the target leads by 30 degrees — but the operator pressed FALL BEHIND, so the chaser must LOSE 330 degrees of phase and rise to a higher orbit. Same rendezvous, eight times the delta-v, and the module must not quietly substitute the cheap one",
+        "inputs": "the catch-up twin's pair, with direction: \"fallBehind\" and 3 revolutions"
+      },
+      "params": {
+        "chaserState": {
+          "position": [
+            4643530.013201233,
+            4850764.791546672,
+            922415.9280712396
+          ],
+          "velocity": [
+            -4035.36838625739,
+            2737.5144592415204,
+            5918.496520421415
+          ]
+        },
+        "targetState": {
+          "position": [
+            2238010.6209013504,
+            5410711.923122557,
+            3414475.9680632018
+          ],
+          "velocity": [
+            -6121.499042116427,
+            -373.23969990278556,
+            4603.773028005019
+          ]
+        },
+        "direction": "fallBehind",
+        "numRevs": 3,
+        "mu": 398600441800000
+      },
+      "expect": {
+        "direction": "fallBehind",
+        "relativePhaseAngle": 0.5235987755982988,
+        "dv1": 600.8729094898353,
+        "dv2": 600.8729094898353,
+        "totalDeltaV": 1201.7458189796705,
+        "phasingPeriod": 7250.5650208015195,
+        "phasingSMA": 8096685.072483417,
+        "totalTime": 21751.695062404557,
+        "numRevs": 3,
+        "phaseAngle": -5.759586531581287,
+        "catchUp.totalDeltaV": 146.0765463684126,
+        "catchUp.phaseAngle": 0.5235987755982988,
+        "fallBehind.totalDeltaV": 1201.7458189796705,
+        "fallBehind.phaseAngle": -5.759586531581287
+      },
+      "assertions": [
+        {
+          "id": "the-long-way-is-the-expensive-way",
+          "holds": true,
+          "detail": "long way 1201.7458189796705 m/s vs short way 146.0765463684126 m/s"
+        },
+        {
+          "id": "the-long-way-raises-the-orbit",
+          "holds": true,
+          "detail": "falling behind must RAISE the phasing orbit and catching up must lower it"
+        }
+      ]
+    },
+    {
+      "id": "phasing-from-state-recommends-revolutions",
+      "tier": "B",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "work": "modules-maneuver-phasing-from-target-state",
+        "example": "the revolution count is the knob that trades time for delta-v, and it is the module's to turn. At 170 degrees of separation a one-revolution phasing orbit dives 4,000 km below the surface; the recommendation climbs until the plan neither clamps nor exceeds the budget, and the budget defaults to 1% of the chaser's circular speed",
+        "inputs": "circular 6,778.137 km, target leading by 170 degrees, no numRevs and no direction given"
+      },
+      "params": {
+        "chaserState": {
+          "position": [
+            5192354.183549141,
+            4356902.48035789,
+            0
+          ],
+          "velocity": [
+            -3061.7952919072764,
+            3648.905538918534,
+            6009.798869189089
+          ]
+        },
+        "targetState": {
+          "position": [
+            -5583411.299487901,
+            -3730657.892002468,
+            922415.9280712393
+          ],
+          "velocity": [
+            1995.1910969557343,
+            -4449.426470230802,
+            -5918.496520421415
+          ]
+        },
+        "mu": 398600441800000
+      },
+      "expect": {
+        "relativePhaseAngle": 2.9670597283903604,
+        "recommendedRevs": 32,
+        "revsFromCaller": false,
+        "metDeltaVBudget": true,
+        "clampedToEarthFloor": false,
+        "maxRevs": 100,
+        "deltaVBudget": 76.68558175407055,
+        "dv1": 38.287121115705425,
+        "dv2": 38.287121115705425,
+        "totalDeltaV": 76.57424223141085,
+        "phasingPeriod": 5471.669746416041,
+        "phasingSMA": 6711288.847854949,
+        "totalTime": 175093.4318853133,
+        "numRevs": 32,
+        "phaseAngle": 2.9670597283903604
+      },
+      "assertions": [
+        {
+          "id": "one-revolution-would-have-flown-through-the-planet",
+          "holds": true,
+          "detail": "the premise of the row: at 170 degrees in one revolution the unclamped phasing orbit is below the Earth floor"
+        },
+        {
+          "id": "the-recommendation-is-the-smallest-count-that-qualifies",
+          "holds": true,
+          "detail": "one fewer than 32 must fail the floor or the budget"
+        }
+      ]
+    },
+    {
+      "id": "phasing-from-state-non-coplanar-polar-droid",
+      "tier": "B",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "work": "modules-maneuver-phasing-from-target-state (the owner report that escalated it to P1)",
+        "example": "a polar craft aimed at an ISS-inclination target. Phasing to a target in another plane is not a rendezvous, and the operation REPORTS that rather than refusing — the composed far rendezvous plans the plane change first and needs stage 2's numbers afterwards, so a refusal here would break the composition it exists to complete",
+        "inputs": "chaser i=97.4deg, target i=51.6deg, same raan and radius; separation 30 degrees"
+      },
+      "params": {
+        "chaserState": {
+          "position": [
+            5210913.30592237,
+            4174583.714068325,
+            1167208.0033848751
+          ],
+          "velocity": [
+            -394.86745655537777,
+            -1601.0656025734143,
+            7489.1557012531175
+          ]
+        },
+        "targetState": {
+          "position": [
+            2238010.6209013504,
+            5410711.923122557,
+            3414475.9680632018
+          ],
+          "velocity": [
+            -6121.499042116427,
+            -373.23969990278556,
+            4603.773028005019
+          ]
+        },
+        "numRevs": 3,
+        "mu": 398600441800000
+      },
+      "expect": {
+        "coplanar": false,
+        "planeAngle": 0.7993607974134029,
+        "inclinationDifference": -0.7993607974134029,
+        "coplanarTolerance": 0.017453292519943295,
+        "relativePhaseAngle": 0.5235987755982988,
+        "coOrbital": true,
+        "dv1": 73.0382731842063,
+        "dv2": 73.0382731842063,
+        "totalDeltaV": 146.0765463684126,
+        "phasingPeriod": 5399.3569303841105,
+        "phasingSMA": 6652027.535728255,
+        "totalTime": 16198.070791152331,
+        "numRevs": 3,
+        "phaseAngle": 0.5235987755982988
+      }
+    },
+    {
       "id": "lambert-march-root-inside-first-step",
       "tier": "B",
       "operation": "solveLambert",
@@ -2092,6 +2522,338 @@
         "abi": "plugin_entity_apply_impulsive_burn (propagator/sgp4), plugin_set_burns (propagator/hpop)",
         "owner": "orbpro-propagators-have-no-native-burn-surface",
         "why": "the burn-application ABI is mid-flight in another lane; adding a second suite against the artifact it is rebuilding would race a republish. The follow-on is filed rather than dropped."
+      }
+    },
+    {
+      "id": "orekit-cartesian-to-keplerian",
+      "tier": "D",
+      "operation": "phasingFromTargetState",
+      "params": {
+        "chaserState": {
+          "position": [
+            -26655470,
+            29881667,
+            -113657
+          ],
+          "velocity": [
+            -1125,
+            -1122,
+            195
+          ]
+        },
+        "targetState": {
+          "position": [
+            -26655470,
+            29881667,
+            -113657
+          ],
+          "velocity": [
+            -1125,
+            -1122,
+            195
+          ]
+        },
+        "mu": 398600470000000
+      },
+      "expect": {
+        "chaserSemiMajorAxis": 22979265.3030773,
+        "relativePhaseAngle": 0,
+        "chaserEccentricity": 0.7435026116647,
+        "chaserMeanAnomaly": 3.22888977629034,
+        "chaserMeanArgumentOfLatitude": 0.0447948792774735
+      },
+      "fieldBands": {
+        "chaserSemiMajorAxis": {
+          "abs": 0.00005,
+          "rel": 1e-12,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 1e-12,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 0.00005
+        },
+        "relativePhaseAngle": {
+          "abs": 1e-12,
+          "rel": 0
+        },
+        "chaserEccentricity": {
+          "abs": 5e-13,
+          "rel": 1e-7,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 1e-7,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 5e-13
+        },
+        "chaserMeanAnomaly": {
+          "abs": 5e-12,
+          "rel": 1e-7,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 1e-7,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 5e-12
+        },
+        "chaserMeanArgumentOfLatitude": {
+          "abs": 6.327980193177041e-7,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 6.327980193177041e-7,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "argumentOfPerigee + meanAnomaly, gated by the SUM of the two gates the source states for them — a gate of 1e-7 relative to the sum would be tighter than either source claim and would fail on digits Orekit never published"
+        }
+      },
+      "source": {
+        "library": "orekit",
+        "head": "81dffba69b3b10b55c515c9197cac7431286ec4f",
+        "version": null,
+        "license": "Apache-2.0",
+        "file": "src/test/java/org/orekit/orbits/CartesianOrbitTest.java",
+        "testCase": "testCartesianToKeplerian",
+        "symbols": {
+          "semiMajorAxis": "p.getA()",
+          "eccentricity": "p.getE()",
+          "inclination": "p.getI()",
+          "argumentOfPerigee": "pa",
+          "raan": "raan",
+          "meanAnomaly": "m"
+        },
+        "upstream": "Orekit CartesianOrbitTest.testCartesianToKeplerian"
+      },
+      "note": "A strongly eccentric Molniya-class state (e = 0.7435). Orekit asserts the semi-major axis, eccentricity, inclination, argument of perigee, RAAN and MEAN ANOMALY separately, each against a hard literal, so this row pins every angle of the recovery independently rather than only their sum.",
+      "derived": {
+        "meanArgumentOfLatitude": "argumentOfPerigee + meanAnomaly, both asserted separately by the source"
+      }
+    },
+    {
+      "id": "orekit-cartesian-to-equinoctial",
+      "tier": "D",
+      "operation": "phasingFromTargetState",
+      "params": {
+        "chaserState": {
+          "position": [
+            -29536113,
+            30329259,
+            -100125
+          ],
+          "velocity": [
+            -2194,
+            -2141,
+            -8
+          ]
+        },
+        "targetState": {
+          "position": [
+            -29536113,
+            30329259,
+            -100125
+          ],
+          "velocity": [
+            -2194,
+            -2141,
+            -8
+          ]
+        },
+        "mu": 398600470000000
+      },
+      "expect": {
+        "chaserSemiMajorAxis": 42255170.0028257,
+        "relativePhaseAngle": 0,
+        "chaserEccentricity": 0.002146216321416872,
+        "chaserMeanArgumentOfLatitude": 3.879437946714889
+      },
+      "fieldBands": {
+        "chaserSemiMajorAxis": {
+          "abs": 0.00005,
+          "rel": 1e-12,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 1e-12,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 0.00005
+        },
+        "relativePhaseAngle": {
+          "abs": 1e-12,
+          "rel": 0
+        },
+        "chaserEccentricity": {
+          "abs": 2.1462163253202493e-10,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 2.1462163253202493e-10,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "sqrt(ex^2 + ey^2) — the source's own eccentricity expression, which it asserts in that form — gated by the ex and ey tolerances"
+        },
+        "chaserMeanArgumentOfLatitude": {
+          "abs": 2.4175969803863495e-7,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 2.4175969803863495e-7,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "meanLongitude - atan2(hy, hx): Orekit pins the mean LONGITUDE (raan + argp + M) and this module reports the mean ARGUMENT OF LATITUDE (argp + M), so the RAAN the equinoctial hx/hy encode is subtracted, and its gate is carried through"
+        }
+      },
+      "source": {
+        "library": "orekit",
+        "head": "81dffba69b3b10b55c515c9197cac7431286ec4f",
+        "version": null,
+        "license": "Apache-2.0",
+        "file": "src/test/java/org/orekit/orbits/CartesianOrbitTest.java",
+        "testCase": "testCartesianToEquinoctial",
+        "symbols": {
+          "semiMajorAxis": "p.getA()",
+          "equinoctialEx": "p.getEquinoctialEx()",
+          "equinoctialEy": "p.getEquinoctialEy()",
+          "meanLongitude": "p.getLM()",
+          "inclinationPair": "p.getI()"
+        },
+        "upstream": "Orekit CartesianOrbitTest.testCartesianToEquinoctial"
+      },
+      "note": "A near-circular, near-equatorial state at GEO radius. Orekit asserts the equinoctial set, and the angle it pins is the MEAN LONGITUDE Lm = raan + argp + M — the sum, not the parts, because at e = 0.002 and i = 0.4 degrees the parts are individually meaningless. That is exactly the regime this module's near-circular cancellation exists for.",
+      "derived": {
+        "eccentricity": {
+          "expression": "sqrt(ex^2 + ey^2)",
+          "value": 0.002146216321416872,
+          "tolerance": 2.1462163253202493e-10
+        },
+        "meanArgumentOfLatitude": {
+          "expression": "LM - atan2(hy, hx)",
+          "value": 3.879437946714889,
+          "tolerance": 2.4175969803863495e-7
+        }
+      }
+    },
+    {
+      "id": "orekit-cartesian-phase-pair",
+      "tier": "D",
+      "operation": "phasingFromTargetState",
+      "params": {
+        "chaserState": {
+          "position": [
+            -26655470,
+            29881667,
+            -113657
+          ],
+          "velocity": [
+            -1125,
+            -1122,
+            195
+          ]
+        },
+        "targetState": {
+          "position": [
+            -29536113,
+            30329259,
+            -100125
+          ],
+          "velocity": [
+            -2194,
+            -2141,
+            -8
+          ]
+        },
+        "mu": 398600470000000
+      },
+      "expect": {
+        "chaserSemiMajorAxis": 22979265.3030773,
+        "targetSemiMajorAxis": 42255170.0028257,
+        "chaserMeanArgumentOfLatitude": 0.0447948792774735,
+        "targetMeanArgumentOfLatitude": 3.879437946714889,
+        "raanDifference": 2.4264186474576173,
+        "inclinationDifference": -0.11865840613010176,
+        "relativePhaseAngle": -0.04021242475617548,
+        "coplanar": false,
+        "coOrbital": false
+      },
+      "fieldBands": {
+        "chaserSemiMajorAxis": {
+          "abs": 0.00005,
+          "rel": 1e-12,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 1e-12,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 0.00005
+        },
+        "targetSemiMajorAxis": {
+          "abs": 0.00005,
+          "rel": 1e-12,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 1e-12,
+          "sourceToleranceKind": "rtol",
+          "publishedHalfUlp": 0.00005
+        },
+        "chaserMeanArgumentOfLatitude": {
+          "abs": 6.32798018645706e-7,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 6.32798018645706e-7,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "argumentOfPerigee gate + meanAnomaly gate, both from the source"
+        },
+        "targetMeanArgumentOfLatitude": {
+          "abs": 2.4175969803863495e-7,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 2.4175969803863495e-7,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "meanLongitude - atan2(hy, hx), gated by the source's own hx, hy and LM tolerances"
+        },
+        "raanDifference": {
+          "abs": 2.394925697757344e-7,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 2.394925697757344e-7,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "atan2(hy, hx) for the equinoctial craft minus the asserted RAAN of the keplerian one"
+        },
+        "inclinationDifference": {
+          "abs": 1.2570578994397508e-8,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 1.2570578994397508e-8,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "2*asin(sqrt((hx^2+hy^2)/4)) — the source's OWN inclination expression — minus the asserted inclination"
+        },
+        "relativePhaseAngle": {
+          "abs": 0.0000011158781463294076,
+          "rel": 0,
+          "alarmBudgetFraction": 0.8,
+          "sourceTolerance": 0.0000011158781463294076,
+          "sourceToleranceKind": "propagated-atol",
+          "provenance": "the quasi-nonsingular relative mean longitude of the two, gated by every Orekit tolerance it consumes"
+        }
+      },
+      "source": {
+        "library": "orekit",
+        "head": "81dffba69b3b10b55c515c9197cac7431286ec4f",
+        "version": null,
+        "license": "Apache-2.0",
+        "file": [
+          "src/test/java/org/orekit/orbits/CartesianOrbitTest.java",
+          "src/test/java/org/orekit/orbits/CartesianOrbitTest.java"
+        ],
+        "testCase": [
+          "testCartesianToKeplerian",
+          "testCartesianToEquinoctial"
+        ],
+        "symbols": {
+          "semiMajorAxis": "p.getA()",
+          "eccentricity": "p.getE()",
+          "inclination": "p.getI()",
+          "argumentOfPerigee": "pa",
+          "raan": "raan",
+          "meanAnomaly": "m"
+        },
+        "upstream": "Orekit CartesianOrbitTest.testCartesianToKeplerian (chaser) + .testCartesianToEquinoctial (target)"
+      },
+      "note": "NEITHER hapsira NOR Orekit implements the operation this row tests. That was checked rather than assumed (see PROVENANCE.md): hapsira has no phasing maneuver and no angular-separation helper at all, and Orekit's closest surface, WalkerConstellation, SYNTHESISES a phased orbit from a T/P/F spec instead of measuring the phase between two given craft. So the foreign claim available is the PRIMITIVE — Cartesian state in, mean anomaly and mean longitude out — and this row buys exactly that, on two states at once, and lets the combination rule be pinned by the analytic tier-B constructions where the truth is exact.",
+      "derived": {
+        "targetRaan": {
+          "expression": "atan2(hy, hx)",
+          "value": -1.5344565499219793,
+          "tolerance": 7.2615584656432475e-9
+        },
+        "targetInclination": {
+          "expression": "2*asin(sqrt((hx^2 + hy^2)/4))",
+          "value": 0.0035236900908042503,
+          "tolerance": 3.52369373696898e-10
+        }
       }
     }
   ]

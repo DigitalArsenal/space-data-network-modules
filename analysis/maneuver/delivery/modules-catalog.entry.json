@@ -2,12 +2,12 @@
   "MODULE_ID": "maneuver-planner",
   "PLUGIN_ID": "maneuver-planner",
   "NAME": "Maneuver Planning Plugin",
-  "DESCRIPTION": "Classical orbital maneuver and ROE targeting operations over a JSON command bridge: Hohmann, bi-elliptic, plane change, combined, phasing, Lambert, CAM, ROE state transition, waypoint missions and closed-loop rendezvous.",
-  "VERSION": "0.3.0",
-  "CONTENT_HASH": "4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97",
-  "ARTIFACT_SIZE_BYTES": 205798,
-  "ARTIFACT_PATH": "/modules/maneuver-planner/0.3.0/module.wasm",
-  "SUPERSEDES_CONTENT_HASH": "0746bb2201281178f984cfd6a16a9dc52dbbb5ed6e09c67171334e01fc2934ae",
+  "DESCRIPTION": "Classical orbital maneuver and ROE targeting operations over a JSON command bridge: Hohmann, bi-elliptic, plane change, combined, phasing (by angle or derived from a target spacecraft's state), Lambert, CAM, ROE state transition, waypoint missions and closed-loop rendezvous.",
+  "VERSION": "0.4.0",
+  "CONTENT_HASH": "65918188aaf01223d820a691ac5ae86668da3ac7feaa9812ba59c6938576e77e",
+  "ARTIFACT_SIZE_BYTES": 220775,
+  "ARTIFACT_PATH": "/modules/maneuver-planner/0.4.0/module.wasm",
+  "SUPERSEDES_CONTENT_HASH": "4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97",
   "TRUST_TIER": "RECOMMENDED",
   "DEFAULT_ENABLED": false,
   "ACCESS_POLICY": "ANONYMOUS",
@@ -19,7 +19,7 @@
     "wasmedge"
   ],
   "LICENSE": "Apache-2.0",
-  "source_artifact": "artifacts/4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97.wasm",
-  "EPOCH": 3,
-  "UPDATED_AT": "2026-08-10T17:38:18.000Z"
+  "source_artifact": "artifacts/65918188aaf01223d820a691ac5ae86668da3ac7feaa9812ba59c6938576e77e.wasm",
+  "EPOCH": 4,
+  "UPDATED_AT": "2026-08-10T20:20:00.000Z"
 }

@@ -70,6 +70,12 @@ Vector3 sub3(const Vector3& a, const Vector3& b);
 /// Element-wise addition of two 3D vectors.
 Vector3 add3(const Vector3& a, const Vector3& b);
 
+/// Dot product of two 3D vectors.
+double dot3(const Vector3& a, const Vector3& b);
+
+/// Cross product of two 3D vectors.
+Vector3 cross3(const Vector3& a, const Vector3& b);
+
 /// Multiply a 6x3 control matrix by a 3D vector.
 ROEVector matMul6x3_3x1(const ControlMatrix6x3& B, const Vector3& v);
 
@@ -88,8 +94,18 @@ extern const Vector3 ZERO_VECTOR3;
 /// Zero-initialized ROE vector constant.
 extern const ROEVector ZERO_ROE;
 
-/// Normalize an angle to the range [-pi, pi).
+/// Normalize an angle to [0, 2pi).
+///
+/// The doc comment here read "[-pi, pi)" from the port onwards and the code
+/// never did that — it has always folded onto [0, 2pi). The comment is
+/// corrected rather than the code: every caller in this module (the ROE and
+/// STM propagators) wants the non-negative fold, and half of them would move
+/// if the implementation were changed to match the sentence.
 double normalizeAngle(double angle);
+
+/// Normalize an angle to (-pi, pi] — the SIGNED fold, in which "exactly
+/// opposite" has one spelling (+pi) rather than two.
+double wrapToPi(double angle);
 
 }  // namespace maneuver
 

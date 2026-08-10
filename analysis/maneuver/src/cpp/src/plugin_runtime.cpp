@@ -48,7 +48,18 @@ using json_lite::Value;
 
 namespace {
 
-std::string version() { return "1.0.0"; }
+/// THE MODULE VERSION, and it must equal `plugin-manifest.json`'s `version`.
+///
+/// It read "1.0.0" from 0.1.0 through 0.3.0 — a number this module has never
+/// had, published by the one operation whose entire job is to say which module
+/// you are talking to. A consumer that asked `version` to decide whether the
+/// artifact it fetched carries the operation it needs was told a fiction, and
+/// three releases went by without it moving because nothing compared it to
+/// anything. `tests/behavior.test.mjs` now asserts this string against the
+/// manifest, so the next release cannot forget it.
+constexpr const char* kModuleVersion = "0.4.0";
+
+std::string version() { return kModuleVersion; }
 
 // ---------------------------------------------------------------------------
 // Small conversions
@@ -87,8 +98,8 @@ bool readChief(const Value& object, const char* key, const char* operation,
     }
     if (elements.eccentricity < 0.0 || elements.eccentricity >= 1.0) {
         fault::raise(fault_code::INVALID_PARAMETER,
-                     std::string("[") + operation +
-                         "]: chief eccentricity must be in [0, 1) (e=" +
+                     std::string("[") + operation + "]: " + key +
+                         " eccentricity must be in [0, 1) (e=" +
                          json_lite::numberToString(elements.eccentricity) + ")");
         return false;
     }
@@ -193,6 +204,80 @@ bool readRelativeState(const Value& object, const char* key,
     out->position = toVector3(position);
     out->velocity = toVector3(velocity);
     return true;
+}
+
+/// Read ONE craft, from EITHER an element set under `elementsKey` OR a
+/// Cartesian state under `stateKey` — exactly one of the two.
+///
+/// Two distinct keys rather than one polymorphic key (SDK ruling, 2026-08-10):
+/// a reader that decides what it was handed by looking for a `position` member
+/// inside it cannot tell a state from a typo, and the caller learns which
+/// branch it took only from the answer's shape. With two keys the request says
+/// which form it is carrying, and a request carrying BOTH or NEITHER is a
+/// refusal with a message that names both spellings.
+bool readCraft(const Value& params, const char* elementsKey,
+               const char* stateKey, const char* operation, double defaultMu,
+               ClassicalOrbitalElements* out) {
+    const Value* elements = params.find(elementsKey);
+    const Value* state = params.find(stateKey);
+    const bool hasElements = elements != nullptr && !elements->isNull();
+    const bool hasState = state != nullptr && !state->isNull();
+
+    if (hasElements == hasState) {
+        fault::raise(
+            fault_code::INVALID_PARAMETER,
+            std::string("[") + operation + "]: give exactly one of \"" +
+                elementsKey + "\" (semiMajorAxis, eccentricity, inclination, " +
+                "raan, argumentOfPerigee, meanAnomaly, mu) or \"" + stateKey +
+                "\" (position[3] and velocity[3], SI metres and m/s in an " +
+                "inertial frame) — " +
+                (hasElements ? "both were given" : "neither was given") + ".");
+        return false;
+    }
+
+    if (hasElements) {
+        if (!readChief(params, elementsKey, operation, out)) return false;
+        return true;
+    }
+
+    double position[3];
+    double velocity[3];
+    if (!json_lite::requireVec3(*state, "position", operation, position) ||
+        !json_lite::requireVec3(*state, "velocity", operation, velocity)) {
+        return false;
+    }
+    double mu = defaultMu;
+    if (!json_lite::optionalPositive(*state, "mu", operation, &mu)) return false;
+    *out = stateToClassicalElements(toVector3(position), toVector3(velocity), mu);
+    return !fault::raised();
+}
+
+/// The wire spelling of a phasing direction. One function so the request
+/// reader and the response writer cannot drift apart.
+const char* directionName(PhasingDirection direction) {
+    switch (direction) {
+        case PhasingDirection::CATCH_UP:    return "catchUp";
+        case PhasingDirection::FALL_BEHIND: return "fallBehind";
+        case PhasingDirection::SHORT:       break;
+    }
+    return "short";
+}
+
+bool readPhasingDirection(const Value& params, const char* op,
+                          PhasingDirection* out) {
+    std::string text = "short";
+    if (!json_lite::optionalString(params, "direction", op, &text)) return false;
+    if (text == "short")      { *out = PhasingDirection::SHORT;       return true; }
+    if (text == "catchUp")    { *out = PhasingDirection::CATCH_UP;    return true; }
+    if (text == "fallBehind") { *out = PhasingDirection::FALL_BEHIND; return true; }
+    fault::raise(fault_code::INVALID_PARAMETER,
+                 std::string("[") + op +
+                     "]: direction must be \"short\", \"catchUp\" or "
+                     "\"fallBehind\" (got \"" + text +
+                     "\"). There are exactly two ways to close an along-track "
+                     "gap — gain phase or lose it — and \"short\" is whichever "
+                     "of them is the smaller angle.");
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -514,20 +599,10 @@ std::string solveLambertMinDVOp(const Value& params) {
     return writeLambert(result, op);
 }
 
-std::string phasingManeuver(const Value& params) {
-    const char* op = "phasingManeuver";
-    double currentRadius = 0.0, phaseAngle = 0.0, mu = MU_EARTH;
-    int numRevs = 1;
-    if (!json_lite::requireNumber(params, "currentRadius", op, &currentRadius) ||
-        !json_lite::requireNumber(params, "phaseAngle", op, &phaseAngle) ||
-        !json_lite::optionalInt(params, "numRevs", op, &numRevs) ||
-        !json_lite::optionalPositive(params, "mu", op, &mu)) {
-        return {};
-    }
-    const auto result = computePhasingManeuver(currentRadius, phaseAngle, numRevs, mu);
-    if (fault::raised()) return {};
-
-    ObjectWriter out;
+/// Serialise a phasing plan. ONE writer, shared by `phasingManeuver` and
+/// `phasingFromTargetState`, so the two operations cannot drift into two
+/// spellings of the same solution.
+void writePhasingPlan(ObjectWriter& out, const PhasingResult& result) {
     out.number("dv1", result.dv1)
         .number("dv2", result.dv2)
         .number("totalDeltaV", result.totalDeltaV)
@@ -548,6 +623,169 @@ std::string phasingManeuver(const Value& params) {
         .number("achievedPhaseAngle", result.achievedPhaseAngle)
         .number("requestedPhasingSMA", result.requestedPhasingSMA)
         .number("requestedPhasingPeriod", result.requestedPhasingPeriod);
+}
+
+std::string phasingManeuver(const Value& params) {
+    const char* op = "phasingManeuver";
+    double currentRadius = 0.0, phaseAngle = 0.0, mu = MU_EARTH;
+    int numRevs = 1;
+    if (!json_lite::requireNumber(params, "currentRadius", op, &currentRadius) ||
+        !json_lite::requireNumber(params, "phaseAngle", op, &phaseAngle) ||
+        !json_lite::optionalInt(params, "numRevs", op, &numRevs) ||
+        !json_lite::optionalPositive(params, "mu", op, &mu)) {
+        return {};
+    }
+    const auto result = computePhasingManeuver(currentRadius, phaseAngle, numRevs, mu);
+    if (fault::raised()) return {};
+
+    ObjectWriter out;
+    writePhasingPlan(out, result);
+    if (!out.ok()) return {};
+    return out.finish();
+}
+
+/// One direction's summary, as a nested object. Built through its OWN writer
+/// so every number passes the same finiteness gate as the outer document, and
+/// its `ok()` is propagated explicitly — `raw` splices bytes and validates
+/// nothing.
+std::string writeBranchSummary(const PhasingBranchSummary& summary, bool* ok) {
+    ObjectWriter entry;
+    entry.number("phaseAngle", summary.phaseAngle)
+        .integer("numRevs", summary.numRevs)
+        .number("totalDeltaV", summary.totalDeltaV)
+        .number("totalTime", summary.totalTime)
+        .number("phasingSMA", summary.phasingSMA)
+        .boolean("clampedToEarthFloor", summary.clampedToEarthFloor)
+        .boolean("metDeltaVBudget", summary.metDeltaVBudget);
+    if (!entry.ok()) {
+        *ok = false;
+        return {};
+    }
+    return entry.finish();
+}
+
+/// PHASING FROM A TARGET SPACECRAFT.
+///
+/// `phasingManeuver` has always taken the phase angle as an INPUT. Nothing
+/// mapped a target craft to that angle, so a console holding two spacecraft
+/// states had to difference two mean anomalies in JavaScript to get it — which
+/// the no-JS-physics law forbids, and which is wrong anyway the moment the two
+/// orbits' apsides differ. This operation is that missing map: two craft in,
+/// the angle and the plan that closes it out.
+std::string phasingFromTargetState(const Value& params) {
+    const char* op = "phasingFromTargetState";
+    double mu = MU_EARTH;
+    if (!json_lite::optionalPositive(params, "mu", op, &mu)) return {};
+
+    ClassicalOrbitalElements chaser{};
+    ClassicalOrbitalElements target{};
+    if (!readCraft(params, "chaser", "chaserState", op, mu, &chaser) ||
+        !readCraft(params, "target", "targetState", op, mu, &target)) {
+        return {};
+    }
+
+    PhasingFromStateOptions options;
+    options.mu = mu;
+    int numRevs = 0;
+    int maxRevs = options.maxRevs;
+    if (!readPhasingDirection(params, op, &options.direction) ||
+        !json_lite::optionalInt(params, "numRevs", op, &numRevs) ||
+        !json_lite::optionalInt(params, "maxRevs", op, &maxRevs) ||
+        !json_lite::optionalNumber(params, "deltaVBudget", op,
+                                   &options.deltaVBudget) ||
+        !json_lite::optionalNumber(params, "deltaVBudgetFraction", op,
+                                   &options.deltaVBudgetFraction) ||
+        !json_lite::optionalNumber(params, "coplanarTolerance", op,
+                                   &options.coplanarTolerance) ||
+        !json_lite::optionalNumber(params, "eccentricityTolerance", op,
+                                   &options.eccentricityTolerance) ||
+        !json_lite::optionalNumber(params, "coOrbitalTolerance", op,
+                                   &options.coOrbitalTolerance)) {
+        return {};
+    }
+    // ABSENT and ZERO are different requests, and `numRevs = 0` as the
+    // "recommend it for me" sentinel would make them the same one. Presence is
+    // read off the request rather than inferred from the value, so a caller
+    // that asks for zero revolutions gets the refusal `phasingManeuver` would
+    // have given it instead of a silently recommended count.
+    const Value* numRevsGiven = params.find("numRevs");
+    if (numRevsGiven != nullptr && !numRevsGiven->isNull() && numRevs < 1) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     std::string("[") + op +
+                         "]: numRevs must be >= 1 when it is given at all; "
+                         "omit it to have the revolution count recommended");
+        return {};
+    }
+    if (!(options.deltaVBudgetFraction > 0.0)) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     std::string("[") + op +
+                         "]: deltaVBudgetFraction must be positive (it is a "
+                         "fraction of the chaser's circular speed)");
+        return {};
+    }
+    if (options.coplanarTolerance < 0.0 || options.eccentricityTolerance < 0.0 ||
+        options.coOrbitalTolerance < 0.0) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     std::string("[") + op +
+                         "]: coplanarTolerance, eccentricityTolerance and "
+                         "coOrbitalTolerance are thresholds and cannot be "
+                         "negative");
+        return {};
+    }
+    options.numRevs = numRevs;
+    options.maxRevs = maxRevs;
+
+    const auto result = computePhasingFromTargetState(chaser, target, options);
+    if (fault::raised()) return {};
+    const PhaseGeometry& geometry = result.geometry;
+
+    ObjectWriter out;
+    // THE ANSWER. Everything after this is the evidence for it.
+    out.number("relativePhaseAngle", geometry.relativePhaseAngle)
+        .number("catchUpAngle", geometry.catchUpAngle)
+        .number("fallBehindAngle", geometry.fallBehindAngle)
+        .string("direction", directionName(options.direction));
+    // The angles the wrap was taken over, published so the derivation is
+    // auditable from the response alone.
+    out.number("chaserMeanArgumentOfLatitude",
+               geometry.chaserMeanArgumentOfLatitude)
+        .number("targetMeanArgumentOfLatitude",
+                geometry.targetMeanArgumentOfLatitude)
+        .number("chaserMeanAnomaly", geometry.chaserMeanAnomaly)
+        .number("targetMeanAnomaly", geometry.targetMeanAnomaly)
+        .number("raanDifference", geometry.raanDifference)
+        .number("inclinationDifference", geometry.inclinationDifference)
+        .number("planeAngle", geometry.planeAngle)
+        .number("chaserSemiMajorAxis", geometry.chaserSemiMajorAxis)
+        .number("targetSemiMajorAxis", geometry.targetSemiMajorAxis)
+        .number("semiMajorAxisDifference", geometry.semiMajorAxisDifference)
+        .number("chaserEccentricity", geometry.chaserEccentricity)
+        .number("targetEccentricity", geometry.targetEccentricity);
+    // The three verdicts, each beside the threshold that produced it.
+    out.boolean("coplanar", result.coplanar)
+        .number("coplanarTolerance", result.coplanarTolerance)
+        .boolean("nearCircular", result.nearCircular)
+        .number("eccentricityTolerance", result.eccentricityTolerance)
+        .boolean("coOrbital", result.coOrbital)
+        .number("coOrbitalTolerance", result.coOrbitalToleranceMetres);
+    // The revolution-count trade.
+    out.integer("recommendedRevs", result.recommendedRevs)
+        .boolean("revsFromCaller", result.revsFromCaller)
+        .boolean("metDeltaVBudget", result.metDeltaVBudget)
+        .number("deltaVBudget", result.deltaVBudget)
+        .integer("maxRevs", result.maxRevsApplied)
+        .number("phasingRadius", result.phasingRadius);
+    // The plan, in `phasingManeuver`'s own spelling.
+    writePhasingPlan(out, result.plan);
+    // And the road not taken, in both directions, always.
+    bool nested = true;
+    const std::string catchUp = writeBranchSummary(result.catchUp, &nested);
+    const std::string fallBehind = writeBranchSummary(result.fallBehind, &nested);
+    if (!nested) {
+        out.invalidate();
+    } else {
+        out.raw("catchUp", catchUp).raw("fallBehind", fallBehind);
+    }
     if (!out.ok()) return {};
     return out.finish();
 }
@@ -1117,6 +1355,7 @@ std::string dispatch(const std::string& operation, const Value& params) {
     if (operation == "solveLambert") return solveLambertOp(params);
     if (operation == "solveLambertMinDV") return solveLambertMinDVOp(params);
     if (operation == "phasingManeuver") return phasingManeuver(params);
+    if (operation == "phasingFromTargetState") return phasingFromTargetState(params);
     if (operation == "planeChange") return planeChange(params);
     if (operation == "combinedManeuver") return combinedManeuver(params);
     if (operation == "computeRoeStateTransition") return computeRoeStateTransition(params);
@@ -1129,9 +1368,10 @@ std::string dispatch(const std::string& operation, const Value& params) {
                  "Unknown maneuver operation: \"" + operation +
                      "\". Supported: version, hohmannTransfer, "
                      "biEllipticTransfer, solveLambert, solveLambertMinDV, "
-                     "phasingManeuver, planeChange, combinedManeuver, "
-                     "computeRoeStateTransition, planRelativeWaypointMission, "
-                     "computeCAM, computeApproach, simulateRendezvous");
+                     "phasingManeuver, phasingFromTargetState, planeChange, "
+                     "combinedManeuver, computeRoeStateTransition, "
+                     "planRelativeWaypointMission, computeCAM, computeApproach, "
+                     "simulateRendezvous");
     return {};
 }
 

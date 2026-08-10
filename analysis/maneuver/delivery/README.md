@@ -1,4 +1,4 @@
-# Delivering maneuver-planner 0.3.0 to an SDN node
+# Delivering maneuver-planner 0.4.0 to an SDN node
 
 `modules-catalog.entry.json` is this module's row for a node's
 `<storage>/modules/modules-catalog.json`. It is committed here because the
@@ -8,7 +8,38 @@ CORE, which is browsable, which is entitled) arrives as data rather than as Go
 code. The module ships the row it wants; the node operator decides whether to
 admit it.
 
-## What changed from the 0.2.0 row
+## What changed from the 0.3.0 row
+
+| Field | 0.3.0 | 0.4.0 | Why |
+|---|---|---|---|
+| `VERSION` | `0.3.0` | `0.4.0` | ONE new operation, `phasingFromTargetState`, and no change to any existing response. |
+| `CONTENT_HASH` | `4e945bbf…19144c97` | `65918188…8576e77e` | The bytes. The node RECOMPUTES this from disk and refuses a declared hash that disagrees. |
+| `ARTIFACT_SIZE_BYTES` | 205,798 | 220,775 | +14,977 bytes: the Cartesian-to-classical element recovery, the phase geometry, the revolution-count scan, the two direction summaries and their messages. |
+| `ARTIFACT_PATH` | `/modules/maneuver-planner/0.3.0/module.wasm` | `/modules/maneuver-planner/0.4.0/module.wasm` | Version-addressed path, per the convention every other row uses. |
+| `SUPERSEDES_CONTENT_HASH` | `0746bb22…c2934ae` | `4e945bbf…19144c97` | Names the artifact this replaces, so a reader of the signed manifest can follow the lineage without a changelog. |
+| `EPOCH` | 3 | 4 | Fourth publication of this module id. |
+| `DESCRIPTION` | "…phasing…" | "…phasing (by angle or derived from a target spacecraft's state)…" | The storefront line names what is new; nothing else in the row moved. |
+
+`abiVersion` stays **1**, the manifest's methods and ports are untouched, and
+`TRUST_TIER` / `DEFAULT_ENABLED` / `ACCESS_POLICY` are unchanged. A new
+`operation` NAME on the existing JSON command envelope is purely additive under
+the SDK contract (ruling, 2026-08-10): every 0.3.0 response keeps its value and
+its meaning, and a consumer written against 0.3.0 reads a 0.4.0 response
+unchanged. Two things did move inside the artifact and both are corrections
+rather than contract changes:
+
+- **`version` now answers `0.4.0`.** It answered `"1.0.0"` from 0.1.0 through
+  0.3.0 — a version this module has never carried — because nothing compared it
+  to anything. The one operation whose job is to say which artifact you are
+  talking to was returning a constant. `tests/behavior.test.mjs` now asserts it
+  against `plugin-manifest.json` AND asserts this catalog row against the same
+  manifest, so the three cannot diverge again.
+- **`sequentialJustification.detail`** gains a clause for the revolution-count
+  scan: it is the module's only loop whose trip count a caller influences, so
+  the manifest says that its ceiling is clamped into `[1, 100000]` rather than
+  trusted. The thread model itself is unchanged.
+
+## What changed from the 0.2.0 row (historical, at 0.3.0)
 
 | Field | 0.2.0 | 0.3.0 | Why |
 |---|---|---|---|
@@ -71,7 +102,7 @@ never touches `modules-catalog.json`, and never creates a
 `/modules/<id>/<version>/module.wasm` path.
 
 ```bash
-SHA=4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97
+SHA=65918188aaf01223d820a691ac5ae86668da3ac7feaa9812ba59c6938576e77e
 ROOT=/opt/data/sdn-module-delivery/modules      # <storage.path>/modules
 
 # 1. the artifact, content-addressed (the convention every other row uses)
@@ -90,8 +121,9 @@ ssh "$HOST" "chown sdn:sdn $ROOT/artifacts/$SHA.wasm && chmod 0644 $ROOT/artifac
 #    and re-hashes every artifact from disk, so a staged row goes live with NO
 #    daemon restart.
 
-# 4. leave 0.2.0's artifact in place until 0.3.0 is verified live. It is
-#    content-addressed, so the two never collide, and it is the rollback.
+# 4. leave the PREVIOUS version's artifact in place until this one is verified
+#    live. It is content-addressed, so the two never collide, and it is the
+#    rollback.
 ```
 
 **Validate before you write.** `pmmPlugin.Start` fails CLOSED: a catalog it
@@ -101,7 +133,59 @@ notices. On host-01 that daemon also terminates TLS on :443. Run the daemon's
 own `LoadCatalog` + `Manifest.Validate()` + `HashArtifact` over the candidate
 file rather than eyeballing it.
 
-## Evidence carried by this artifact
+## Evidence carried by this artifact (0.4.0)
+
+Measured on `65918188aaf01223d820a691ac5ae86668da3ac7feaa9812ba59c6938576e77e`
+(reproducible: two clean `node build.js` runs produced the identical digest).
+
+- **Tri-runtime parity — ALL THREE LANES, for the first time on this module.**
+  `parity PASS fixture=maneuver-command-parity module=65918188aaf01223
+  lanes=[browser(116 runs), wasmedge(116 runs), docker-wasmedge(116 runs)]
+  comparisons=656`, 29 cases byte-identical at 1/2/4/8 threads. The
+  `docker-wasmedge` lane could NOT be exercised at 0.2.0 or 0.3.0 (the Docker
+  daemon did not come up on the build box); it came up for this build and was
+  run, so the third lane is measured rather than reported as unrun. Eight of
+  the 29 cases are NEW and all eight are `phasingFromTargetState`: the
+  canonical catch-up, the forced fall-behind, the revolution-count
+  recommendation, the opposed-apsides geometry, the elements request form, and
+  three refusals (both craft forms at once, an unknown direction, and an escape
+  trajectory). The derived ANGLE is byte-diffed, not merely the plan built from
+  it — it comes out of an `atan2` that a libm difference would move.
+- **Vectors** — 43 rows across four tiers on browser AND WasmEdge (33 at
+  0.3.0), 40 of them green (30 at 0.3.0), 165 tests passing. Ten rows are new:
+  seven analytic tier-B constructions for `phasingFromTargetState` and three
+  tier-D rows lifted from Orekit's `CartesianOrbitTest`. Worst healthy row
+  still uses 59.0% of its budget — the tier-D Lambert watermark, unchanged, so
+  nothing new is near its cliff. The new rows' own worst margin is **0.04%**.
+- **Ratchet** — raised 33 -> 43 vectors, 30 -> 40 green;
+  `phasingFromTargetState` enters at 10 rows with **zero** known-red, and the
+  `orekit` library count goes 2 -> 5. No count fell and no row was demoted.
+- **The derived angle, against analytic truth.** Each tier-B pair is built from
+  elements whose separation is chosen by hand and handed to the module as
+  Cartesian vectors only. Recovered: `+30.000000000 deg` (7.8e-16 rad error),
+  `-30.000000000 deg` (5.6e-16), the opposed-apsides `+30 deg` (4.4e-16), the
+  RAAN-projected `+20.310573890 deg` (1.7e-16), `+170 deg` (exact). Against
+  Orekit's two published states the pair's relative phase agrees to
+  **1.2e-14 rad** on a 1.1e-6 rad budget.
+- **Both directions, honestly.** On a target leading by 30 degrees the module
+  answers catch-up `146.0765 m/s` and fall-behind `1201.7458 m/s` and returns
+  BOTH summaries whichever direction was asked for. The native suite asserts
+  that the forced answers and the summaries are the same numbers.
+- **Fuzz** — 885 hostile inputs (up from 698: every parameter of the new
+  operation is in the mutation set, `maxRevs` included, because the
+  recommendation is the only loop whose trip count a caller controls), zero
+  traps on both runtimes, one instance throughout, still computing the correct
+  Hohmann answer at the end.
+- **Native C++** — 7/7 suites, compiled `-fno-exceptions` to match the shipped
+  dialect. `test_classical` gains the state-to-elements round trip, the
+  near-circular cancellation at e = 1e-9, both degenerate-state refusals and
+  the opposed-apsides geometry; `test_approach` gains six phasing-from-state
+  cases including the maxRevs clamp and the co-located pair.
+- **SDK compliance** — `validatePluginArtifact` ok, imports
+  `[wasi_snapshot_preview1]` only, `threadModel=wasi-sequential` resolved by
+  the compiler and re-checked against the manifest.
+
+## Evidence carried by 0.3.0 (historical)
 
 Measured on `4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97`
 (reproducible: two clean `node build.js` runs produced the identical digest):
@@ -146,6 +230,35 @@ Measured on `4e945bbf81a5a897161107e9d30b66a38535007c025fbde74c3e71cf19144c97`
   the compiler and re-checked against the manifest.
 
 ## Status
+
+### 0.4.0 — BUILT AND GATED, NOT YET STAGED (2026-08-10)
+
+The artifact exists, is reproducible, and has passed every lane this repo can
+run on the build box. It has **not** been written to a host, and this section
+says so rather than describing the recipe as if it had been followed — which is
+the exact failure this file corrected below for 0.2.0.
+
+What must happen before the row above goes live, in order, is the `## Publishing`
+recipe unchanged. Two things to check against LIVE state first, because both are
+premises rather than facts:
+
+1. **Nothing else is mid-republish of this module.** 0.3.0 was staged at
+   17:52Z on 2026-08-10 and went live on the daemon's own 6-hourly rebuild at
+   18:12:54Z. A second republish inside another lane's staging window is the one
+   thing that makes a module delivery unrollbackable — it is why THIS operation
+   was filed rather than built in the first place (see the task's "Why it was
+   NOT built with the target-pick flow").
+2. **0.3.0's artifact stays on disk** as the rollback. It is content-addressed,
+   so the two never collide, and reverting is restoring one catalog row from
+   the backup.
+
+The console side — the `wasmSolver` branch that calls `phasingFromTargetState`
+and then arms CATCH S/C, FALL BEHIND and stage 2 of the composed far
+rendezvous — belongs to the `/beta` lane and is tracked in
+`saw-beta-maneuver-owner-followups`. **The response key it must read is
+`relativePhaseAngle`**, not the `alongTrackAngle` the task filed: "along-track"
+names a RIC distance elsewhere in this stack, and the SDK ruling on 2026-08-10
+renamed it before it shipped rather than after.
 
 ### PREMISE CORRECTION, 2026-08-10 — this file said 0.2.0 was never published
 

@@ -51,7 +51,11 @@ const IOD_LAMBERT = path.join(
 const IMPULSE_MANEUVER = path.join(
   "src", "test", "java", "org", "orekit", "forces", "maneuvers", "ImpulseManeuverTest.java",
 );
+const CARTESIAN_ORBIT = path.join(
+  "src", "test", "java", "org", "orekit", "orbits", "CartesianOrbitTest.java",
+);
 const CONSTANTS = path.join("src", "main", "java", "org", "orekit", "utils", "Constants.java");
+const TEST_UTILS = path.join("src", "test", "java", "org", "orekit", "Utils.java");
 
 // ---------------------------------------------------------------------------
 // A very small Java-expression reader
@@ -124,6 +128,24 @@ function readShiftedBy(block, name) {
   return javaNumber(match[1], `${name}.shiftedBy`);
 }
 
+/**
+ * A fixture FIELD assigned in `setUp`: `mu = 3.9860047e14;`.
+ *
+ * Distinct from `readScalar` on purpose — this is an assignment to a field
+ * declared elsewhere in the class, so the declaration is checked separately
+ * and the value is taken only from the `@BeforeEach` body that every test in
+ * the class runs.
+ */
+function readFixtureAssignment(classSource, setUpBlock, name) {
+  if (!new RegExp(`\\b(?:private|protected|public)?\\s*double\\s+${name}\\s*;`).test(classSource)) {
+    throw new Error(`class declares no double field ${name}`);
+  }
+  const pattern = new RegExp(`(?:^|[;{\\s])${name}\\s*=\\s*([^;]+);`);
+  const match = pattern.exec(setUpBlock);
+  if (!match) throw new Error(`setUp assigns no value to ${name}`);
+  return javaNumber(match[1], `fixture ${name}`);
+}
+
 /** `double name = <literal>;` -> number. */
 function readScalar(block, name) {
   const pattern = new RegExp(`\\b(?:final\\s+)?double\\s+${name}\\s*=\\s*([^;]+);`);
@@ -171,6 +193,83 @@ function splitTopLevel(text) {
   }
   if (buffer.trim() !== "") parts.push(buffer);
   return parts;
+}
+
+/**
+ * The value and the epsilon SYMBOL of an `Assertions.assertEquals` whose
+ * SUBJECT is a named getter or local.
+ *
+ * Orekit writes an element assertion in one of two shapes:
+ *
+ *   Assertions.assertEquals(<literal>, p.getA(), Utils.epsilonTest * p.getA());
+ *   Assertions.assertEquals(MathUtils.normalizeAngle(<literal>, pa), pa,
+ *                           Utils.epsilonAngle * FastMath.abs(pa));
+ *
+ * Both are read here: the expected value is the first literal that appears in
+ * the first argument, and the tolerance is the `Utils.epsilon*` symbol named in
+ * the third. Neither is retyped, and the epsilon's VALUE is resolved out of
+ * Utils.java rather than assumed — Orekit derives three of them from one, so a
+ * change upstream moves every gate at once and must move ours with it.
+ */
+function readElementAssertion(block, subject, what) {
+  for (const statement of block.split(";")) {
+    if (!statement.includes("assertEquals")) continue;
+    const args = /assertEquals\(([\s\S]*)\)\s*$/.exec(statement.trim());
+    if (!args) continue;
+    const parts = splitTopLevel(args[1]);
+    if (parts.length < 3) continue;
+    if (parts[1].trim() !== subject) continue;
+    const literal = /(-?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)/.exec(parts[0]);
+    if (!literal) {
+      throw new Error(`${what}: assertion on ${subject} has no plain literal`);
+    }
+    const epsilon = /Utils\.(epsilon[A-Za-z]+)/.exec(parts[2]);
+    if (!epsilon) {
+      throw new Error(`${what}: assertion on ${subject} names no Utils.epsilon*`);
+    }
+    // THE QUANTITY THE GATE SCALES BY, which is NOT always the one being
+    // asserted: `assertEquals(ex, p.getEquinoctialEx(), epsilonE * abs(p.getE()))`
+    // scales the x-component's gate by the eccentricity MAGNITUDE. Recording
+    // the asserted value's own magnitude instead would silently make our gate
+    // tighter than the one Orekit itself demands, which is how a row starts
+    // failing for a reason the reference never claimed.
+    const scale =
+      /FastMath\.abs\(\s*(?:FastMath\.abs\(\s*)?([A-Za-z_][A-Za-z0-9_.]*(?:\(\))?)/.exec(parts[2]);
+    return {
+      value: Number(literal[1]),
+      epsilonSymbol: epsilon[1],
+      scaleSubject: scale?.[1] ?? parts[1].trim(),
+    };
+  }
+  throw new Error(`${what}: no assertEquals whose subject is ${subject}`);
+}
+
+/**
+ * The two equinoctial inclination literals, read out of the assertion that
+ * reconstructs `i` from them:
+ *
+ *   assertEquals(normalizeAngle(2*asin(sqrt((pow(HX,2)+pow(HY,2))/4.)), p.getI()), ...)
+ *
+ * `hx = tan(i/2) cos(raan)`, `hy = tan(i/2) sin(raan)`, so this pair is where
+ * the equinoctial case's RAAN lives — and RAAN is what separates the mean
+ * longitude Orekit asserts from the mean ARGUMENT OF LATITUDE this module
+ * reports.
+ */
+function readEquinoctialInclinationPair(block, subject, what) {
+  for (const statement of block.split(";")) {
+    if (!statement.includes("assertEquals")) continue;
+    const args = /assertEquals\(([\s\S]*)\)\s*$/.exec(statement.trim());
+    if (!args) continue;
+    const parts = splitTopLevel(args[1]);
+    if (parts.length < 3 || parts[1].trim() !== subject) continue;
+    if (!/asin/.test(parts[0])) continue;
+    const powers = [...parts[0].matchAll(/pow\(\s*(-?[0-9.eE+-]+)\s*,\s*2\s*\)/g)];
+    if (powers.length !== 2) {
+      throw new Error(`${what}: expected two pow(literal, 2) terms, got ${powers.length}`);
+    }
+    return powers.map((match) => javaNumber(match[1], `${what} hx/hy`));
+  }
+  throw new Error(`${what}: no inclination assertion on ${subject}`);
 }
 
 /** `double NAME = <literal>;` out of Constants.java. */
@@ -260,6 +359,72 @@ const IMPULSE_BINDINGS = [
   },
 ];
 
+/**
+ * CARTESIAN STATE -> CLASSICAL ELEMENTS.
+ *
+ * These are the rows that make `phasingFromTargetState` answerable to a
+ * foreign reference at all. NEITHER hapsira NOR Orekit carries an operation
+ * that maps two spacecraft to an along-track phase angle — that negative
+ * finding is recorded in PROVENANCE.md and was checked, not assumed. What
+ * Orekit DOES carry, with hard literals and its own stated tolerances, is the
+ * primitive the whole derivation stands on: a Cartesian position and velocity
+ * in, and a mean anomaly / mean LONGITUDE out.
+ *
+ * So the phase angle's *combination rule* is this repo's (and is pinned by the
+ * tier-B constructions, whose truth is analytic); the *element recovery* under
+ * it is pinned here, by Orekit, on two states — one strongly eccentric
+ * (e = 0.7435, where a true anomaly recovered from the eccentricity vector
+ * rather than from the argument of latitude would still look fine) and one
+ * near-circular and near-equatorial (e = 0.0021, i = 0.4 deg, where the node
+ * and the perigee are both nearly unresolvable and the SUM is all that
+ * survives).
+ */
+const CARTESIAN_ELEMENT_BINDINGS = [
+  {
+    id: "orekit-cartesian-to-keplerian",
+    file: CARTESIAN_ORBIT,
+    test: "testCartesianToKeplerian",
+    muSymbol: "mu",
+    muScope: "method",
+    elements: {
+      semiMajorAxis: "p.getA()",
+      eccentricity: "p.getE()",
+      inclination: "p.getI()",
+      argumentOfPerigee: "pa",
+      raan: "raan",
+      meanAnomaly: "m",
+    },
+    upstream: "Orekit CartesianOrbitTest.testCartesianToKeplerian",
+    note:
+      "A strongly eccentric Molniya-class state (e = 0.7435). Orekit asserts " +
+      "the semi-major axis, eccentricity, inclination, argument of perigee, " +
+      "RAAN and MEAN ANOMALY separately, each against a hard literal, so this " +
+      "row pins every angle of the recovery independently rather than only " +
+      "their sum.",
+  },
+  {
+    id: "orekit-cartesian-to-equinoctial",
+    file: CARTESIAN_ORBIT,
+    test: "testCartesianToEquinoctial",
+    muSymbol: "mu",
+    muScope: "fixture",
+    equinoctial: {
+      semiMajorAxis: "p.getA()",
+      equinoctialEx: "p.getEquinoctialEx()",
+      equinoctialEy: "p.getEquinoctialEy()",
+      meanLongitude: "p.getLM()",
+      inclinationPair: "p.getI()",
+    },
+    upstream: "Orekit CartesianOrbitTest.testCartesianToEquinoctial",
+    note:
+      "A near-circular, near-equatorial state at GEO radius. Orekit asserts " +
+      "the equinoctial set, and the angle it pins is the MEAN LONGITUDE " +
+      "Lm = raan + argp + M — the sum, not the parts, because at e = 0.002 " +
+      "and i = 0.4 degrees the parts are individually meaningless. That is " +
+      "exactly the regime this module's near-circular cancellation exists for.",
+  },
+];
+
 // ---------------------------------------------------------------------------
 
 function resolveCheckout(explicit) {
@@ -298,6 +463,27 @@ async function main() {
   const constants = {
     EGM96_EARTH_MU: readNamedConstant(constantsSource, "EGM96_EARTH_MU"),
     WGS84_EARTH_MU: readNamedConstant(constantsSource, "WGS84_EARTH_MU"),
+  };
+
+  /**
+   * Orekit's test epsilons, read out of its own Utils.java. Three of the four
+   * are DERIVED from `epsilonTest` there, so they are evaluated in that order
+   * rather than retyped — an upstream change to the base epsilon moves every
+   * gate this dumper records, which is the correct behaviour.
+   */
+  const utilsSource = await readFile(path.join(root, TEST_UTILS), "utf8");
+  assertApacheHeader(utilsSource, TEST_UTILS);
+  const epsilonTest = readNamedConstant(utilsSource, "epsilonTest");
+  const epsilonMultiplier = (name) => {
+    const pattern = new RegExp(`\\bdouble\\s+${name}\\s*=\\s*([0-9.eE+-]+)\\s*\\*\\s*epsilonTest\\s*;`);
+    const match = pattern.exec(utilsSource);
+    if (!match) throw new Error(`Utils.java has no ${name} = <n> * epsilonTest`);
+    return javaNumber(match[1], name) * epsilonTest;
+  };
+  const epsilons = {
+    epsilonTest,
+    epsilonE: epsilonMultiplier("epsilonE"),
+    epsilonAngle: epsilonMultiplier("epsilonAngle"),
   };
 
   const sources = new Map();
@@ -398,6 +584,88 @@ async function main() {
     });
   }
 
+  for (const binding of CARTESIAN_ELEMENT_BINDINGS) {
+    const raw = await loadSource(binding.file);
+    const block = stripComments(methodBody(raw, binding.test));
+    const position = readVector3D(block, "position");
+    const velocity = readVector3D(block, "velocity");
+    const mu =
+      binding.muScope === "method"
+        ? readScalar(block, binding.muSymbol)
+        : readFixtureAssignment(
+            stripComments(raw), stripComments(methodBody(raw, "setUp")), binding.muSymbol,
+          );
+
+    const asserted = {};
+    const tolerances = {};
+    const record = (name, subject) => {
+      const hit = readElementAssertion(block, subject, `${binding.test}.${name}`);
+      asserted[name] = hit.value;
+      const epsilon = epsilons[hit.epsilonSymbol];
+      if (epsilon === undefined) {
+        throw new Error(`${binding.test}.${name}: unknown epsilon ${hit.epsilonSymbol}`);
+      }
+      // Orekit's gates are all `epsilon * |asserted|`, i.e. relative. Both the
+      // symbol and the absolute value it works out to are recorded, so a
+      // reader can check the arithmetic without opening Utils.java.
+      tolerances[name] = {
+        kind: "rtol",
+        epsilonSymbol: hit.epsilonSymbol,
+        value: epsilon,
+        scaleSubject: hit.scaleSubject,
+        scaledByAssertedValue: hit.scaleSubject === subject,
+        absolute: epsilon * Math.abs(hit.value),
+      };
+    };
+
+    if (binding.elements) {
+      for (const [name, subject] of Object.entries(binding.elements)) record(name, subject);
+    } else {
+      for (const [name, subject] of Object.entries(binding.equinoctial)) {
+        if (name === "inclinationPair") continue;
+        record(name, subject);
+      }
+      const [hx, hy] = readEquinoctialInclinationPair(
+        block, binding.equinoctial.inclinationPair, binding.test,
+      );
+      asserted.equinoctialHx = hx;
+      asserted.equinoctialHy = hy;
+      tolerances.equinoctialHx = {
+        kind: "rtol",
+        epsilonSymbol: "epsilonAngle",
+        value: epsilons.epsilonAngle,
+        scaleSubject: "hx literal",
+        scaledByAssertedValue: true,
+        absolute: epsilons.epsilonAngle * Math.abs(hx),
+      };
+      tolerances.equinoctialHy = {
+        kind: "rtol",
+        epsilonSymbol: "epsilonAngle",
+        value: epsilons.epsilonAngle,
+        scaleSubject: "hy literal",
+        scaledByAssertedValue: true,
+        absolute: epsilons.epsilonAngle * Math.abs(hy),
+      };
+    }
+
+    cases.push({
+      id: binding.id,
+      kind: "cartesian-elements",
+      operation: "phasingFromTargetState",
+      source: {
+        library: "orekit",
+        file: binding.file,
+        testCase: binding.test,
+        symbols: binding.elements ?? binding.equinoctial,
+        upstream: binding.upstream,
+        license: "Apache-2.0",
+      },
+      values: { position, velocity, mu, ...asserted },
+      tolerances,
+      note: binding.note,
+    });
+  }
+
   const payload = {
     "//":
       "MECHANICALLY EXTRACTED from Orekit test sources by " +
@@ -418,6 +686,7 @@ async function main() {
       copyrightNotice: assertApacheHeader(constantsSource, CONSTANTS),
     },
     constants,
+    epsilons,
     cases,
   };
 

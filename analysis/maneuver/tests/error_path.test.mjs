@@ -113,6 +113,63 @@ const REFUSALS = [
     messageIncludes: "must be positive",
   },
   {
+    // EXACTLY-ONE-OF, both ways round. A reader that sniffed for a `position`
+    // member inside one polymorphic key would have accepted both of these
+    // silently, answering a question the caller never asked (SDK ruling,
+    // 2026-08-10).
+    id: "phasing-from-state-both-craft-forms",
+    body:
+      '{"operation":"phasingFromTargetState","params":{"chaser":{"semiMajorAxis":6778137},' +
+      '"chaserState":{"position":[6778137,0,0],"velocity":[0,7668,0]},' +
+      '"target":{"semiMajorAxis":6778137}}}',
+    errorCode: "invalid-parameter",
+    messageIncludes: "both were given",
+  },
+  {
+    id: "phasing-from-state-neither-craft-form",
+    body: '{"operation":"phasingFromTargetState","params":{"target":{"semiMajorAxis":6778137}}}',
+    errorCode: "invalid-parameter",
+    messageIncludes: "neither was given",
+  },
+  {
+    id: "phasing-from-state-unknown-direction",
+    body:
+      '{"operation":"phasingFromTargetState","params":{"chaser":{"semiMajorAxis":6778137},' +
+      '"target":{"semiMajorAxis":6778137},"direction":"sideways"}}',
+    errorCode: "invalid-parameter",
+    messageIncludes: 'direction must be "short", "catchUp" or "fallBehind"',
+  },
+  {
+    // An escape trajectory has no period and no mean anomaly. Returning a
+    // negative semi-major axis here would flow straight into a phasing period
+    // and out to an operator as a maneuver.
+    id: "phasing-from-state-escape-trajectory",
+    body:
+      '{"operation":"phasingFromTargetState","params":' +
+      '{"chaserState":{"position":[7000000,0,0],"velocity":[0,12000,0]},' +
+      '"targetState":{"position":[7000000,0,0],"velocity":[0,7546,0]}}}',
+    errorCode: "no-solution",
+    messageIncludes: "escape trajectory",
+  },
+  {
+    // r x v = 0. No orbital plane, so no argument of latitude to phase against.
+    id: "phasing-from-state-rectilinear",
+    body:
+      '{"operation":"phasingFromTargetState","params":' +
+      '{"chaserState":{"position":[7000000,0,0],"velocity":[1000,0,0]},' +
+      '"targetState":{"position":[7000000,0,0],"velocity":[0,7546,0]}}}',
+    errorCode: "singular-configuration",
+    messageIncludes: "rectilinear",
+  },
+  {
+    id: "phasing-from-state-zero-revolutions",
+    body:
+      '{"operation":"phasingFromTargetState","params":{"chaser":{"semiMajorAxis":6778137},' +
+      '"target":{"semiMajorAxis":6778137},"numRevs":0}}',
+    errorCode: "invalid-parameter",
+    messageIncludes: "numRevs must be >= 1",
+  },
+  {
     id: "missing-operation-key",
     body: '{"params":{}}',
     errorCode: "malformed-request",
@@ -304,6 +361,27 @@ const OPERATIONS = [
       deltaTime: 1200,
       initialRoe: [1e-5, 2e-5, 1e-6, 2e-6, 3e-6, 4e-6],
       chief: { semiMajorAxis: 6778000, eccentricity: 0.001, inclination: 0.9, mu: MU },
+    },
+  ],
+  [
+    // 0.4.0. Every tolerance, the direction selector and BOTH revolution
+    // knobs are listed so the fuzz mutates each of them: `maxRevs` in
+    // particular, because the recommendation is the module's only loop whose
+    // trip count a caller controls, and a hostile value there is the one input
+    // class that could turn a microsecond call into a hang.
+    "phasingFromTargetState",
+    {
+      chaserState: { position: [6778137, 0, 0], velocity: [0, 4765.6, 6003.9] },
+      targetState: { position: [5871119.9, 3389068.5, 0], velocity: [-2382.8, 4127.2, 6003.9] },
+      mu: MU,
+      numRevs: 3,
+      maxRevs: 100,
+      direction: "short",
+      deltaVBudget: 80,
+      deltaVBudgetFraction: 0.01,
+      coplanarTolerance: 0.0174533,
+      eccentricityTolerance: 0.01,
+      coOrbitalTolerance: 0.001,
     },
   ],
 ];

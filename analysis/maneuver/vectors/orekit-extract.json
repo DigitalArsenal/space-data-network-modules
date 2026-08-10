@@ -12,6 +12,11 @@
     "EGM96_EARTH_MU": 398600441500000,
     "WGS84_EARTH_MU": 398600441800000
   },
+  "epsilons": {
+    "epsilonTest": 1e-12,
+    "epsilonE": 1e-7,
+    "epsilonAngle": 1e-7
+  },
   "cases": [
     {
       "id": "orekit-der-superior-lambert",
@@ -118,6 +123,185 @@
         }
       },
       "note": "THE IMPULSIVE-BURN IDENTITY, in the frame where it has no free parameters: a delta-v applied in an INERTIAL frame adds component by component to the inertial velocity, and Orekit asserts exactly that to 1e-4 m/s after propagating through the burn. Our maneuver module exposes no burn-application op, so this row is carried as the RIC round-trip's inertial anchor: the same three components, expressed in the RIC triad of a stated state and converted back, must reproduce them."
+    },
+    {
+      "id": "orekit-cartesian-to-keplerian",
+      "kind": "cartesian-elements",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "library": "orekit",
+        "file": "src/test/java/org/orekit/orbits/CartesianOrbitTest.java",
+        "testCase": "testCartesianToKeplerian",
+        "symbols": {
+          "semiMajorAxis": "p.getA()",
+          "eccentricity": "p.getE()",
+          "inclination": "p.getI()",
+          "argumentOfPerigee": "pa",
+          "raan": "raan",
+          "meanAnomaly": "m"
+        },
+        "upstream": "Orekit CartesianOrbitTest.testCartesianToKeplerian",
+        "license": "Apache-2.0"
+      },
+      "values": {
+        "position": [
+          -26655470,
+          29881667,
+          -113657
+        ],
+        "velocity": [
+          -1125,
+          -1122,
+          195
+        ],
+        "mu": 398600470000000,
+        "semiMajorAxis": 22979265.3030773,
+        "eccentricity": 0.7435026116647,
+        "inclination": 0.122182096220906,
+        "argumentOfPerigee": 3.09909041016672,
+        "raan": 2.32231010979999,
+        "meanAnomaly": 3.22888977629034
+      },
+      "tolerances": {
+        "semiMajorAxis": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonTest",
+          "value": 1e-12,
+          "scaleSubject": "p.getA()",
+          "scaledByAssertedValue": true,
+          "absolute": 0.0000229792653030773
+        },
+        "eccentricity": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonE",
+          "value": 1e-7,
+          "scaleSubject": "p.getE()",
+          "scaledByAssertedValue": true,
+          "absolute": 7.435026116647e-8
+        },
+        "inclination": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonAngle",
+          "value": 1e-7,
+          "scaleSubject": "p.getI()",
+          "scaledByAssertedValue": true,
+          "absolute": 1.22182096220906e-8
+        },
+        "argumentOfPerigee": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonAngle",
+          "value": 1e-7,
+          "scaleSubject": "pa",
+          "scaledByAssertedValue": true,
+          "absolute": 3.09909041016672e-7
+        },
+        "raan": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonAngle",
+          "value": 1e-7,
+          "scaleSubject": "raan",
+          "scaledByAssertedValue": true,
+          "absolute": 2.3223101097999898e-7
+        },
+        "meanAnomaly": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonAngle",
+          "value": 1e-7,
+          "scaleSubject": "m",
+          "scaledByAssertedValue": true,
+          "absolute": 3.22888977629034e-7
+        }
+      },
+      "note": "A strongly eccentric Molniya-class state (e = 0.7435). Orekit asserts the semi-major axis, eccentricity, inclination, argument of perigee, RAAN and MEAN ANOMALY separately, each against a hard literal, so this row pins every angle of the recovery independently rather than only their sum."
+    },
+    {
+      "id": "orekit-cartesian-to-equinoctial",
+      "kind": "cartesian-elements",
+      "operation": "phasingFromTargetState",
+      "source": {
+        "library": "orekit",
+        "file": "src/test/java/org/orekit/orbits/CartesianOrbitTest.java",
+        "testCase": "testCartesianToEquinoctial",
+        "symbols": {
+          "semiMajorAxis": "p.getA()",
+          "equinoctialEx": "p.getEquinoctialEx()",
+          "equinoctialEy": "p.getEquinoctialEy()",
+          "meanLongitude": "p.getLM()",
+          "inclinationPair": "p.getI()"
+        },
+        "upstream": "Orekit CartesianOrbitTest.testCartesianToEquinoctial",
+        "license": "Apache-2.0"
+      },
+      "values": {
+        "position": [
+          -29536113,
+          30329259,
+          -100125
+        ],
+        "velocity": [
+          -2194,
+          -2141,
+          -8
+        ],
+        "mu": 398600470000000,
+        "semiMajorAxis": 42255170.0028257,
+        "equinoctialEx": 0.000592732497856475,
+        "equinoctialEy": -0.00206274396964359,
+        "meanLongitude": 2.34498139679291,
+        "equinoctialHx": 0.000128021863908325,
+        "equinoctialHy": -0.00352136186881817
+      },
+      "tolerances": {
+        "semiMajorAxis": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonTest",
+          "value": 1e-12,
+          "scaleSubject": "p.getA()",
+          "scaledByAssertedValue": true,
+          "absolute": 0.0000422551700028257
+        },
+        "equinoctialEx": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonE",
+          "value": 1e-7,
+          "scaleSubject": "p.getE()",
+          "scaledByAssertedValue": false,
+          "absolute": 5.92732497856475e-11
+        },
+        "equinoctialEy": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonE",
+          "value": 1e-7,
+          "scaleSubject": "p.getE()",
+          "scaledByAssertedValue": false,
+          "absolute": 2.0627439696435899e-10
+        },
+        "meanLongitude": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonAngle",
+          "value": 1e-7,
+          "scaleSubject": "p.getLM()",
+          "scaledByAssertedValue": true,
+          "absolute": 2.3449813967929098e-7
+        },
+        "equinoctialHx": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonAngle",
+          "value": 1e-7,
+          "scaleSubject": "hx literal",
+          "scaledByAssertedValue": true,
+          "absolute": 1.28021863908325e-11
+        },
+        "equinoctialHy": {
+          "kind": "rtol",
+          "epsilonSymbol": "epsilonAngle",
+          "value": 1e-7,
+          "scaleSubject": "hy literal",
+          "scaledByAssertedValue": true,
+          "absolute": 3.5213618688181697e-10
+        }
+      },
+      "note": "A near-circular, near-equatorial state at GEO radius. Orekit asserts the equinoctial set, and the angle it pins is the MEAN LONGITUDE Lm = raan + argp + M — the sum, not the parts, because at e = 0.002 and i = 0.4 degrees the parts are individually meaningless. That is exactly the regime this module's near-circular cancellation exists for."
     }
   ]
 }

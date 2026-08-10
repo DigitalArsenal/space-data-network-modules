@@ -193,6 +193,37 @@ PHASING(r, dtheta, N):    T  = 2*pi*sqrt(r^3/mu)
 | `combined-optimal-split-KNOWN-GAP` | Program verification spec. Same transfer, optimally split. | `4231.31 m/s` at `2.195 deg` | delta-v exact; angle — see below |
 | `phasing-catch-up-30deg-3revs` | P0 probe + spec section 4.8. r = 6778137 m, `+30 deg`, 3 revs. | `73.038 m/s` | exact |
 | `phasing-fall-behind-30deg-3revs` | P0 probe. Same orbit, `-30 deg`. | `69.0899 m/s` | exact |
+| `phasing-from-state-catch-up-30deg-3revs` | **Twin** of the row above it, with the angle DERIVED from two Cartesian states. | `73.038 m/s` (the same anchor) | exact; angle recovered to `7.8e-16 rad` |
+| `phasing-from-state-fall-behind-30deg-3revs` | Twin of the fall-behind row. | `69.0899 m/s` | exact; angle to `5.6e-16 rad` |
+| `phasing-from-state-apsides-opposed` | **Adversarial.** One orbit, apsides 180 deg apart: mean anomalies differ by 210 deg, true separation is 30. | none — analytic | angle to `4.4e-16 rad` |
+| `phasing-from-state-raan-offset` | The `cos(i)` projection of a 0.5 deg RAAN difference at i = 51.6 deg. | none — analytic | angle to `1.7e-16 rad` |
+| `phasing-from-state-fall-behind-the-long-way` | `direction: "fallBehind"` on a target that LEADS: −330 deg, 1201.75 m/s against the short way's 146.08. | none — analytic | exact |
+| `phasing-from-state-recommends-revolutions` | 170 deg of separation, revolution count unstated: the scan must climb to 32. | none — analytic | exact, integer |
+| `phasing-from-state-non-coplanar-polar-droid` | The owner's polar craft aimed at an ISS-inclination target: 45.8 deg of plane angle, reported not refused. | none — analytic | exact |
+
+#### Why the from-two-states rows are CONSTRUCTED and what that buys
+
+Each craft is specified by classical elements whose mean argument of latitude
+is chosen by hand, and the Cartesian state handed to the module is produced
+from those elements by a closed form written in
+`vectors/tools/gen-textbook-vectors.mjs` and nowhere else. The separation is
+therefore known **analytically, to the last bit**, before the module is asked.
+There is no reference to disagree with and no round trip through the code under
+test — which is the only construction under which a derived angle can be
+checked at all, because (see tier D) no contributing library implements the
+derivation.
+
+Each of the two 30-degree rows is a **twin** of the typed-angle row above it:
+the same radius, the same revolution count, the same angle. A from-two-states
+answer that drifted from the typed answer would show up as two rows disagreeing
+about one number, rather than as nothing at all.
+
+`phasing-from-state-apsides-opposed` is the row that earns its place: the
+JavaScript this operation replaces (`b1360cb`'s `armTransfer`) differenced two
+MEAN ANOMALIES, which is correct only when both apsides coincide — a condition
+no real pair satisfies. On that row the mean-anomaly difference is 210 degrees
+and the answer is 30. It is checked by the generator's own `assertions` block,
+so a construction that stopped being adversarial would stop being emitted.
 
 ### Discrepancies, recorded rather than smoothed
 
@@ -369,6 +400,64 @@ fully green run** — an alarm nobody reads is not an alarm.
 | `hapsira-eccentric-departure-bielliptic` | `biEllipticTransfer` | eccentric departure | hapsira | **KNOWN-RED** |
 | `orekit-der-superior-lambert` | `solveLambert` | Der, at **EGM96's mu** | Orekit | green |
 | `orekit-inertial-impulsive-burn` | `ricFrameAlgebra` | Orekit `ImpulseManeuverTest` | Orekit | green |
+| `orekit-cartesian-to-keplerian` | `phasingFromTargetState` | Orekit `CartesianOrbitTest.testCartesianToKeplerian` | Orekit | green |
+| `orekit-cartesian-to-equinoctial` | `phasingFromTargetState` | Orekit `CartesianOrbitTest.testCartesianToEquinoctial` | Orekit | green |
+| `orekit-cartesian-phase-pair` | `phasingFromTargetState` | both of the above, as chaser and target | Orekit | green |
+
+### NEITHER LIBRARY IMPLEMENTS `phasingFromTargetState`. That was checked.
+
+A negative finding is worth as much as a positive one when it is precise, and
+this one decides what the three rows above can honestly claim. Both checkouts
+were searched before the rows were written:
+
+- **hapsira: nothing.** `src/hapsira/maneuver.py` exposes `impulse`, `hohmann`,
+  `bielliptic`, `lambert` and `correct_pericenter` — there is no `phasing`
+  classmethod. No `phase_angle`, `angular_separation` or `synodic` symbol
+  exists anywhere in `src/` or `tests/`. `Maneuver.lambert` is the only method
+  taking TWO orbits and it touches only their position vectors and the epoch
+  difference — never an anomaly, never a longitude. The single literal
+  occurrence of "phase angle" in the tree is a degenerate-geometry guard inside
+  the Vallado Lambert solver (`core/iod.py`), about the transfer angle between
+  two position vectors, and no test exercises it with numbers.
+- **Orekit: the primitive, not the operation.** It has the whole angle
+  vocabulary (`getLM`, `getLv`, `getAlphaM`, `getMeanAnomaly`) and two
+  hard-literal *Cartesian state in → angle out* unit tests, which is exactly
+  what the rows above lift. Its closest thing to a phasing maneuver,
+  `WalkerConstellation`, **synthesises** a phased orbit from a T/P/F spec and
+  one reference orbit; it does not measure the phase between two given craft
+  and it emits an orbit rather than a delta-v.
+
+So the split is deliberate and is the strongest available: the **combination
+rule** — the quasi-nonsingular relative mean longitude — is this repo's, and it
+is pinned analytically by the tier-B constructions, where the truth is exact by
+design. The **element recovery underneath it** is pinned here, by a foreign
+implementation, on two states chosen for opposite hazards:
+
+- `testCartesianToKeplerian` is strongly eccentric (e = 0.7435, a Molniya-class
+  arc) and Orekit asserts `a`, `e`, `i`, `argp`, `raan` and the **mean anomaly**
+  separately, each against its own literal. Every angle of the recovery is
+  therefore pinned independently, not merely their sum.
+- `testCartesianToEquinoctial` is near-circular AND near-equatorial
+  (e = 0.0021, i = 0.4°) — the regime where the node line and the perigee are
+  both nearly unresolvable and Orekit itself declines to assert the parts,
+  asserting the equinoctial set and the **mean longitude** instead. That is the
+  exact regime `stateToClassicalElements` computes `nu = u - argp` for, so the
+  cancellation it depends on is checked against a foreign answer rather than
+  against its own reasoning.
+
+`orekit-cartesian-phase-pair` then puts the two states in one request. Its
+expectations are derived from Orekit's own literals by Orekit's own definitions
+(`raan = atan2(hy, hx)`, `i = 2 asin(sqrt((hx² + hy²)/4))`, mean argument of
+latitude = `LM − raan`), and every gate is **propagated** from the source's own
+tolerances by perturbing each input by its stated gate and summing the
+absolute changes — a first-order propagation done by measurement, in
+`gen-library-vectors.mjs`, so it cannot drift out of step with the expression
+above it. Asserting anything tighter would be asserting digits Orekit never
+published.
+
+Measured margin on the pair row: the relative phase agrees to `1.2e-14 rad`
+against a `1.1e-6 rad` budget, and the worst element uses **0.04%** of its
+budget (`targetSemiMajorAxis`, `3.7e-8 m` against `9.2e-5 m`).
 
 Two details worth stating because they are easy to get wrong:
 

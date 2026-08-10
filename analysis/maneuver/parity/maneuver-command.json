@@ -91,6 +91,118 @@
       }
     },
     {
+      "id": "phasing-from-state-catch-up",
+      "expect": "ok",
+      "//": "THE NEW OPERATION'S CANONICAL CASE, 0.4.0. Two Cartesian states 30 degrees apart on one circular orbit, three revolutions. The whole response is byte-diffed, which is what pins the DERIVED angle across lanes and not merely the plan built from it: the wrap, the two direction summaries and the three verdicts all have to come out the same bits everywhere, and every one of them is computed from an atan2 that a libm difference would move.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaserState\":{\"position\":[4643530.013201233,4850764.791546672,922415.9280712396],\"velocity\":[-4035.36838625739,2737.5144592415204,5918.496520421415]},\"targetState\":{\"position\":[2238010.6209013504,5410711.923122557,3414475.9680632018],\"velocity\":[-6121.499042116427,-373.23969990278556,4603.773028005019]},\"numRevs\":3,\"mu\":398600441800000}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-from-state-fall-behind-forced",
+      "expect": "ok",
+      "//": "The same pair with FALL BEHIND pressed. CATCH S/C and FALL BEHIND are two console cards and must be two answers: this one flies -330 degrees and raises the orbit. Pinning it beside the case above is what would catch a lane that silently substituted the short way.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaserState\":{\"position\":[4643530.013201233,4850764.791546672,922415.9280712396],\"velocity\":[-4035.36838625739,2737.5144592415204,5918.496520421415]},\"targetState\":{\"position\":[2238010.6209013504,5410711.923122557,3414475.9680632018],\"velocity\":[-6121.499042116427,-373.23969990278556,4603.773028005019]},\"numRevs\":3,\"mu\":398600441800000,\"direction\":\"fallBehind\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-from-state-recommends-revolutions",
+      "expect": "ok",
+      "//": "No numRevs given, so the module scans for the smallest revolution count that neither clamps to the Earth floor nor exceeds the delta-v budget. The scan is a bounded integer loop over a closed form, and the count it lands on is an INTEGER that must be identical on every lane — a floating-point comparison that fell differently under a different libm would move it by a whole revolution.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaserState\":{\"position\":[5192354.183549141,4356902.48035789,0],\"velocity\":[-3061.7952919072764,3648.905538918534,6009.798869189089]},\"targetState\":{\"position\":[-5583411.299487901,-3730657.892002468,922415.9280712393],\"velocity\":[1995.1910969557343,-4449.426470230802,-5918.496520421415]},\"mu\":398600441800000}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-from-state-apsides-opposed",
+      "expect": "ok",
+      "//": "The adversarial geometry: one orbit, apsides 180 degrees apart, mean anomalies 210 degrees apart, true separation 30. This is the case that separates the mean ARGUMENT OF LATITUDE from the mean ANOMALY, and it runs through the eccentric branch of the element recovery on every lane.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaserState\":{\"position\":[-1763725.7758764252,3927620.0005296376,5226449.149881293],\"velocity\":[-6322.761739524246,-4225.674951320003,1043.5885472655393]},\"targetState\":{\"position\":[-4317186.392404768,1548426.0115841748,4997786.871994272],\"velocity\":[-4472.694542457721,-5874.35853408193,-2050.2739115117865]},\"numRevs\":3,\"mu\":398600441800000}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-from-state-elements-form",
+      "expect": "ok",
+      "//": "The SAME rendezvous stated as two element sets instead of two states. The operation takes either form under distinct keys, and the two forms must agree: a caller that already holds elements (the ROE path does) must not get a different answer from one that holds vectors.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaser\":{\"semiMajorAxis\":6778137,\"eccentricity\":0,\"inclination\":0.9006963056237004,\"raan\":0.6981317007977318,\"argumentOfPerigee\":0,\"meanAnomaly\":0.17453292519943295},\"target\":{\"semiMajorAxis\":6778137,\"eccentricity\":0,\"inclination\":0.9006963056237004,\"raan\":0.6981317007977318,\"argumentOfPerigee\":0,\"meanAnomaly\":0.6981317007977318},\"numRevs\":3,\"mu\":398600441800000}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-from-state-both-forms-refused",
+      "expect": "ok",
+      "//": "Elements AND a state for the same craft. Exactly-one-of is a contract, not a preference (SDK ruling 2026-08-10): a reader that picked one and ignored the other would answer a question the caller did not ask. Filed expect:\"ok\" like every other refusal in this fixture — the invoke completes and the structured error frame itself is what gets byte-diffed.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaser\":{\"semiMajorAxis\":6778137},\"chaserState\":{\"position\":[4643530.013201233,4850764.791546672,922415.9280712396],\"velocity\":[-4035.36838625739,2737.5144592415204,5918.496520421415]},\"targetState\":{\"position\":[2238010.6209013504,5410711.923122557,3414475.9680632018],\"velocity\":[-6121.499042116427,-373.23969990278556,4603.773028005019]},\"mu\":398600441800000}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-from-state-bad-direction-refused",
+      "expect": "ok",
+      "//": "There are exactly two ways to close an along-track gap. A third name must be refused with the message that says so, identically on every lane.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaserState\":{\"position\":[4643530.013201233,4850764.791546672,922415.9280712396],\"velocity\":[-4035.36838625739,2737.5144592415204,5918.496520421415]},\"targetState\":{\"position\":[2238010.6209013504,5410711.923122557,3414475.9680632018],\"velocity\":[-6121.499042116427,-373.23969990278556,4603.773028005019]},\"numRevs\":3,\"mu\":398600441800000,\"direction\":\"sideways\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phasing-from-state-escape-refused",
+      "expect": "ok",
+      "//": "A chaser on an escape trajectory. It has no period, no mean anomaly and no phase, and the element recovery refuses rather than returning a negative semi-major axis that would flow into a phasing period. The refusal path through stateToClassicalElements is the one input class that could still trap if the fault latch were bypassed, so it is pinned across lanes and thread counts.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"phasingFromTargetState\",\"params\":{\"chaserState\":{\"position\":[7000000,0,0],\"velocity\":[0,12000,0]},\"targetState\":{\"position\":[2238010.6209013504,5410711.923122557,3414475.9680632018],\"velocity\":[-6121.499042116427,-373.23969990278556,4603.773028005019]},\"mu\":398600441800000}}"
+          }
+        ]
+      }
+    },
+    {
       "id": "lambert-elliptical-tudat",
       "expect": "ok",
       "//": "Tudat's elliptical Lambert case. In 0.1.0 this was the one geometry the solver got right, included so the parity lane would already be watching the operation when the defect was repaired. It is repaired: solveLambert is a bracketed, residual-checked universal-variable solve and all four Tudat rows arrive. This case now also pins `converged` and `residual`, which are measurements rather than the literal `true` 0.1.0 returned on every path.",

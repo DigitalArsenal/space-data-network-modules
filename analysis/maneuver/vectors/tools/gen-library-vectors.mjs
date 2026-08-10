@@ -642,6 +642,328 @@ function orekitImpulsiveBurnCase(extract, entry) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Orekit Cartesian-state -> element rows, for `phasingFromTargetState`
+// ---------------------------------------------------------------------------
+
+const TWO_PI = 2 * Math.PI;
+/** [0, 2pi) — the fold the module applies to every absolute angle it reports. */
+const normalizeAngle = (angle) => {
+  const folded = angle % TWO_PI;
+  const positive = folded < 0 ? folded + TWO_PI : folded;
+  return positive >= TWO_PI ? 0 : positive;
+};
+/** (-pi, pi] — the fold the module applies to every SIGNED angle it reports. */
+const wrapToPi = (angle) => {
+  const folded = angle % TWO_PI;
+  if (folded <= -Math.PI) return folded + TWO_PI;
+  if (folded > Math.PI) return folded - TWO_PI;
+  return folded;
+};
+
+/**
+ * FIRST-ORDER TOLERANCE PROPAGATION, done by measurement rather than by
+ * calculus.
+ *
+ * Orekit states a gate on each quantity it asserts. Three of the quantities
+ * this row needs — the equinoctial case's RAAN, its mean ARGUMENT of latitude,
+ * and the pair's relative phase — are FUNCTIONS of several of those, so their
+ * honest gate is the sum of the source gates weighted by the sensitivities.
+ * Rather than write six partial derivatives out and hope, each input is
+ * perturbed by its own stated tolerance and the absolute changes are summed.
+ * That is the same number the calculus gives to first order, and it cannot
+ * drift out of step with the expression above it.
+ *
+ * Asserting anything tighter would be asserting digits Orekit never published.
+ */
+function propagateTolerance(fn, inputs, tolerances) {
+  const base = fn(inputs);
+  let budget = 0;
+  for (const key of Object.keys(tolerances)) {
+    const nudged = { ...inputs, [key]: inputs[key] + tolerances[key] };
+    budget += Math.abs(fn(nudged) - base);
+  }
+  return { value: base, tolerance: budget };
+}
+
+function propagatedBand(propagated, provenance) {
+  return {
+    abs: propagated.tolerance,
+    rel: 0,
+    alarmBudgetFraction: ALARM_BUDGET_FRACTION,
+    sourceTolerance: propagated.tolerance,
+    sourceToleranceKind: "propagated-atol",
+    provenance,
+  };
+}
+
+/**
+ * ONE Orekit Cartesian state, put in BOTH craft slots.
+ *
+ * The claim is entirely about element recovery: the operation's front door is
+ * `stateToClassicalElements`, and this row drives it with a foreign state and
+ * checks it against the foreign answer, at the foreign tolerance. The strongly
+ * eccentric geometry is the point — e = 0.7435 is where a true anomaly
+ * recovered any other way still looks right, and where the mean anomaly is
+ * most sensitive to getting the eccentric anomaly's quadrant wrong.
+ */
+function orekitCartesianElementsCase(extract, entry) {
+  const v = entry.values;
+  const state = { position: v.position, velocity: v.velocity };
+  const expect = { chaserSemiMajorAxis: v.semiMajorAxis, relativePhaseAngle: 0 };
+  const fieldBands = {
+    chaserSemiMajorAxis: bandFrom(entry.tolerances.semiMajorAxis, v.semiMajorAxis),
+    // The same state in both slots: the separation is identically zero, and
+    // the thing being checked is that the wrap says 0 and not 2*pi.
+    relativePhaseAngle: { abs: 1e-12, rel: 0 },
+  };
+  const derived = {};
+
+  if (entry.tolerances.meanAnomaly) {
+    // KEPLERIAN shape: Orekit asserts every angle separately, so every angle
+    // is pinned separately.
+    const lambda = propagateTolerance(
+      ({ argp, m }) => normalizeAngle(argp + m),
+      { argp: v.argumentOfPerigee, m: v.meanAnomaly },
+      {
+        argp: entry.tolerances.argumentOfPerigee.absolute,
+        m: entry.tolerances.meanAnomaly.absolute,
+      },
+    );
+    expect.chaserEccentricity = v.eccentricity;
+    expect.chaserMeanAnomaly = normalizeAngle(v.meanAnomaly);
+    expect.chaserMeanArgumentOfLatitude = lambda.value;
+    fieldBands.chaserEccentricity = bandFrom(entry.tolerances.eccentricity, v.eccentricity);
+    fieldBands.chaserMeanAnomaly = bandFrom(entry.tolerances.meanAnomaly, v.meanAnomaly);
+    fieldBands.chaserMeanArgumentOfLatitude = propagatedBand(
+      lambda,
+      "argumentOfPerigee + meanAnomaly, gated by the SUM of the two gates the " +
+        "source states for them — a gate of 1e-7 relative to the sum would be " +
+        "tighter than either source claim and would fail on digits Orekit " +
+        "never published",
+    );
+    derived.meanArgumentOfLatitude =
+      "argumentOfPerigee + meanAnomaly, both asserted separately by the source";
+  } else {
+    // EQUINOCTIAL shape: at e = 0.002 and i = 0.4 degrees Orekit does not
+    // assert the parts, because the parts are not resolvable. It asserts the
+    // equinoctial set, so the eccentricity and the mean ARGUMENT of latitude
+    // are reconstructed from it by the source's own definitions.
+    const eccentricity = propagateTolerance(
+      ({ ex, ey }) => Math.hypot(ex, ey),
+      { ex: v.equinoctialEx, ey: v.equinoctialEy },
+      {
+        ex: entry.tolerances.equinoctialEx.absolute,
+        ey: entry.tolerances.equinoctialEy.absolute,
+      },
+    );
+    const lambda = propagateTolerance(
+      ({ hx, hy, lm }) => normalizeAngle(lm - Math.atan2(hy, hx)),
+      { hx: v.equinoctialHx, hy: v.equinoctialHy, lm: v.meanLongitude },
+      {
+        hx: entry.tolerances.equinoctialHx.absolute,
+        hy: entry.tolerances.equinoctialHy.absolute,
+        lm: entry.tolerances.meanLongitude.absolute,
+      },
+    );
+    expect.chaserEccentricity = eccentricity.value;
+    expect.chaserMeanArgumentOfLatitude = lambda.value;
+    fieldBands.chaserEccentricity = propagatedBand(
+      eccentricity,
+      "sqrt(ex^2 + ey^2) — the source's own eccentricity expression, which it " +
+        "asserts in that form — gated by the ex and ey tolerances",
+    );
+    fieldBands.chaserMeanArgumentOfLatitude = propagatedBand(
+      lambda,
+      "meanLongitude - atan2(hy, hx): Orekit pins the mean LONGITUDE " +
+        "(raan + argp + M) and this module reports the mean ARGUMENT OF " +
+        "LATITUDE (argp + M), so the RAAN the equinoctial hx/hy encode is " +
+        "subtracted, and its gate is carried through",
+    );
+    derived.eccentricity = { expression: "sqrt(ex^2 + ey^2)", ...eccentricity };
+    derived.meanArgumentOfLatitude = { expression: "LM - atan2(hy, hx)", ...lambda };
+  }
+
+  return {
+    id: entry.id,
+    tier: "D",
+    operation: "phasingFromTargetState",
+    params: { chaserState: state, targetState: state, mu: v.mu },
+    expect,
+    fieldBands,
+    source: commonSource(extract, entry, "orekit"),
+    note: entry.note,
+    derived,
+  };
+}
+
+/**
+ * The TWO Orekit Cartesian states as a PAIR.
+ *
+ * This is the row that reaches the phase geometry itself. Each craft's mean
+ * argument of latitude is fixed by Orekit — the eccentric one by its separately
+ * asserted argument of perigee and mean anomaly, the near-circular one by the
+ * mean LONGITUDE it asserts minus the RAAN its equinoctial `hx`/`hy` encode.
+ * The combination rule on top (the quasi-nonsingular relative mean longitude)
+ * is this repo's, is stated in classical.h, and is pinned analytically by the
+ * tier-B constructions; what this row adds is that the ELEMENTS it combines are
+ * the elements a foreign implementation recovers from the same bytes.
+ *
+ * The pair is deliberately NOT flyable — different orbits, different planes —
+ * and the row asserts the module says so: `coplanar` and `coOrbital` both
+ * false. An operation that reported a phasing plan for this pair without those
+ * flags would be handing an operator a maneuver that does not rendezvous.
+ */
+function orekitCartesianPairCase(extract, keplerian, equinoctial) {
+  const c = keplerian.values;
+  const t = equinoctial.values;
+
+  const chaserLambda = normalizeAngle(c.argumentOfPerigee + c.meanAnomaly);
+  const chaserLambdaTolerance =
+    keplerian.tolerances.argumentOfPerigee.absolute +
+    keplerian.tolerances.meanAnomaly.absolute;
+
+  // Orekit's own equinoctial definitions: hx = tan(i/2) cos(raan),
+  // hy = tan(i/2) sin(raan); the inclination expression below is the one the
+  // source's own assertion uses, character for character in meaning.
+  const targetRaanOf = ({ hx, hy }) => Math.atan2(hy, hx);
+  const targetInclinationOf = ({ hx, hy }) =>
+    2 * Math.asin(Math.sqrt((hx * hx + hy * hy) / 4));
+  const targetLambdaOf = ({ hx, hy, lm }) => normalizeAngle(lm - Math.atan2(hy, hx));
+
+  const hxTolerance = equinoctial.tolerances.equinoctialHx.absolute;
+  const hyTolerance = equinoctial.tolerances.equinoctialHy.absolute;
+  const lmTolerance = equinoctial.tolerances.meanLongitude.absolute;
+  const equinoctialInputs = { hx: t.equinoctialHx, hy: t.equinoctialHy, lm: t.meanLongitude };
+
+  const targetRaan = propagateTolerance(targetRaanOf, equinoctialInputs, {
+    hx: hxTolerance, hy: hyTolerance,
+  });
+  const targetInclination = propagateTolerance(targetInclinationOf, equinoctialInputs, {
+    hx: hxTolerance, hy: hyTolerance,
+  });
+  const targetLambda = propagateTolerance(targetLambdaOf, equinoctialInputs, {
+    hx: hxTolerance, hy: hyTolerance, lm: lmTolerance,
+  });
+
+  const relativePhaseOf = ({ lambdaT, lambdaC, raanT, raanC, incC }) =>
+    wrapToPi(lambdaT - lambdaC + wrapToPi(raanT - raanC) * Math.cos(incC));
+  const relativePhase = propagateTolerance(
+    relativePhaseOf,
+    {
+      lambdaT: targetLambda.value,
+      lambdaC: chaserLambda,
+      raanT: targetRaan.value,
+      raanC: c.raan,
+      incC: c.inclination,
+    },
+    {
+      lambdaT: targetLambda.tolerance,
+      lambdaC: chaserLambdaTolerance,
+      raanT: targetRaan.tolerance,
+      raanC: keplerian.tolerances.raan.absolute,
+      incC: keplerian.tolerances.inclination.absolute,
+    },
+  );
+
+  const raanDifferenceOf = ({ raanT, raanC }) => wrapToPi(raanT - raanC);
+  const raanDifference = propagateTolerance(
+    raanDifferenceOf,
+    { raanT: targetRaan.value, raanC: c.raan },
+    { raanT: targetRaan.tolerance, raanC: keplerian.tolerances.raan.absolute },
+  );
+
+  const inclinationDifferenceOf = ({ incT, incC }) => incT - incC;
+  const inclinationDifference = propagateTolerance(
+    inclinationDifferenceOf,
+    { incT: targetInclination.value, incC: c.inclination },
+    {
+      incT: targetInclination.tolerance,
+      incC: keplerian.tolerances.inclination.absolute,
+    },
+  );
+
+  return {
+    id: "orekit-cartesian-phase-pair",
+    tier: "D",
+    operation: "phasingFromTargetState",
+    params: {
+      chaserState: { position: c.position, velocity: c.velocity },
+      targetState: { position: t.position, velocity: t.velocity },
+      mu: c.mu,
+    },
+    expect: {
+      chaserSemiMajorAxis: c.semiMajorAxis,
+      targetSemiMajorAxis: t.semiMajorAxis,
+      chaserMeanArgumentOfLatitude: chaserLambda,
+      targetMeanArgumentOfLatitude: targetLambda.value,
+      raanDifference: raanDifference.value,
+      inclinationDifference: inclinationDifference.value,
+      relativePhaseAngle: relativePhase.value,
+      coplanar: false,
+      coOrbital: false,
+    },
+    fieldBands: {
+      chaserSemiMajorAxis: bandFrom(keplerian.tolerances.semiMajorAxis, c.semiMajorAxis),
+      targetSemiMajorAxis: bandFrom(equinoctial.tolerances.semiMajorAxis, t.semiMajorAxis),
+      chaserMeanArgumentOfLatitude: {
+        abs: chaserLambdaTolerance,
+        rel: 0,
+        alarmBudgetFraction: ALARM_BUDGET_FRACTION,
+        sourceTolerance: chaserLambdaTolerance,
+        sourceToleranceKind: "propagated-atol",
+        provenance: "argumentOfPerigee gate + meanAnomaly gate, both from the source",
+      },
+      targetMeanArgumentOfLatitude: propagatedBand(
+        targetLambda,
+        "meanLongitude - atan2(hy, hx), gated by the source's own hx, hy and LM tolerances",
+      ),
+      raanDifference: propagatedBand(
+        raanDifference,
+        "atan2(hy, hx) for the equinoctial craft minus the asserted RAAN of the keplerian one",
+      ),
+      inclinationDifference: propagatedBand(
+        inclinationDifference,
+        "2*asin(sqrt((hx^2+hy^2)/4)) — the source's OWN inclination expression — minus the asserted inclination",
+      ),
+      relativePhaseAngle: propagatedBand(
+        relativePhase,
+        "the quasi-nonsingular relative mean longitude of the two, gated by every Orekit tolerance it consumes",
+      ),
+    },
+    source: {
+      ...commonSource(extract, keplerian, "orekit"),
+      file: [keplerian.source.file, equinoctial.source.file],
+      testCase: [keplerian.source.testCase, equinoctial.source.testCase],
+      upstream:
+        "Orekit CartesianOrbitTest.testCartesianToKeplerian (chaser) + " +
+        ".testCartesianToEquinoctial (target)",
+    },
+    note:
+      "NEITHER hapsira NOR Orekit implements the operation this row tests. That " +
+      "was checked rather than assumed (see PROVENANCE.md): hapsira has no " +
+      "phasing maneuver and no angular-separation helper at all, and Orekit's " +
+      "closest surface, WalkerConstellation, SYNTHESISES a phased orbit from a " +
+      "T/P/F spec instead of measuring the phase between two given craft. So " +
+      "the foreign claim available is the PRIMITIVE — Cartesian state in, mean " +
+      "anomaly and mean longitude out — and this row buys exactly that, on two " +
+      "states at once, and lets the combination rule be pinned by the analytic " +
+      "tier-B constructions where the truth is exact.",
+    derived: {
+      targetRaan: {
+        expression: "atan2(hy, hx)",
+        value: targetRaan.value,
+        tolerance: targetRaan.tolerance,
+      },
+      targetInclination: {
+        expression: "2*asin(sqrt((hx^2 + hy^2)/4))",
+        value: targetInclination.value,
+        tolerance: targetInclination.tolerance,
+      },
+    },
+  };
+}
+
 export async function buildLibraryCases() {
   const cases = [];
   if (!existsSync(HAPSIRA_EXTRACT)) {
@@ -700,7 +1022,25 @@ export async function buildLibraryCases() {
   for (const entry of orekit.cases) {
     if (entry.kind === "lambert-magnitude") cases.push(orekitLambertMagnitudeCase(orekit, entry));
     else if (entry.kind === "impulsive-burn") cases.push(orekitImpulsiveBurnCase(orekit, entry));
+    else if (entry.kind === "cartesian-elements") {
+      cases.push(orekitCartesianElementsCase(orekit, entry));
+    }
     else throw new Error(`unknown orekit extract kind ${entry.kind}`);
+  }
+
+  // The PAIR row needs both Cartesian cases at once, so it is built after the
+  // loop rather than inside it. Both must be present: a pair row assembled
+  // from one extract and a memory of the other is exactly the retyping this
+  // whole dumper exists to prevent.
+  const keplerianState = orekit.cases.find((c) => c.id === "orekit-cartesian-to-keplerian");
+  const equinoctialState = orekit.cases.find((c) => c.id === "orekit-cartesian-to-equinoctial");
+  if (keplerianState && equinoctialState) {
+    cases.push(orekitCartesianPairCase(orekit, keplerianState, equinoctialState));
+  } else if (keplerianState || equinoctialState) {
+    throw new Error(
+      "the orekit extract carries one Cartesian element case but not the other; " +
+        "the phase-pair row needs both states and will not be assembled from one",
+    );
   }
   return cases;
 }
