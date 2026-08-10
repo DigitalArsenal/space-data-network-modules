@@ -1,0 +1,65 @@
+{
+  "pluginId": "com.orbpro.keplerian.reference",
+  "name": "Keplerian Reference Propagator",
+  "version": "1.0.0",
+  "description": "Two-body Keplerian propagator. The reference implementation of the official OrbPro WASM propagator ABI — the minimal complete surface, written to be copied.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Propagation is embarrassingly parallel ACROSS entities and strictly sequential WITHIN one. The propagator ABI (docs/propagator-abi.md §9) puts the sharding on the HOST: the frame-worker pool hands each worker the same output base pointer and a disjoint index range. This module therefore spawns no threads of its own and holds no cross-row state, which is what makes it safe under ANY sharding the host chooses. A module that spawned its own pool here would contend with the pool already scheduling it. Both thread models compile through the same clang wasm32-wasip1-threads toolchain; this one links no thread-spawn contract because it genuinely never spawns."
+  },
+  "methods": [
+    {
+      "methodId": "ingest_omm",
+      "displayName": "Ingest OMM",
+      "description": "Adopts mean elements from SDS $OMM records and replaces the module's element set. Propagation itself is reached through the propagator ABI exports (plugin_propagate / plugin_propagate_batch), not through this invoke surface.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements. The module decodes the FlatBuffer itself. A bare (non-$) four-byte identifier is a vendor invention and is deliberately not accepted here, and there is no acceptsAnyFlatbuffer wildcard: a wildcard port is unconformable."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "OMM mean-element records."
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "keplerian-reference-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

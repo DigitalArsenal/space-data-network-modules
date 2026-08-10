@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-07-30T19:09:20.444Z",
-  "moduleCount": 64,
-  "parityScopeModuleCount": 28,
-  "isomorphicWasmCount": 62,
+  "generatedAt": "2026-08-10T02:41:40.124Z",
+  "moduleCount": 71,
+  "parityScopeModuleCount": 29,
+  "isomorphicWasmCount": 69,
   "missingIsomorphicWasm": [
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 62,
+  "browserWasmEdgeTargetCount": 67,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -38,6 +38,7 @@
     "propagator/cislunar",
     "propagator/hpop",
     "propagator/hypersonics",
+    "propagator/keplerian-reference",
     "propagator/sgp4"
   ],
   "modules": [
@@ -407,7 +408,7 @@
       "modulePath": "analysis/maneuver",
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
-      "pluginFamily": "analysis",
+      "pluginFamily": "maneuver",
       "version": "0.1.0",
       "methodIds": [
         "invoke"
@@ -425,7 +426,7 @@
       ],
       "cxxSourceFileCount": 20,
       "cSourceFileCount": 0,
-      "testFileCount": 12,
+      "testFileCount": 13,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -462,14 +463,15 @@
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
         "tests/fixtures/request.hohmann.json",
         "tests/fixtures/request.rendezvous.json",
-        "tests/sdk_compat.test.mjs"
+        "tests/sdk_compat.test.mjs",
+        "tests/vectors.test.mjs"
       ]
     },
     {
       "modulePath": "analysis/od/fit-pipeline",
       "pluginId": "com.orbpro.od-fit-pipeline",
       "name": "OD Fit Pipeline",
-      "pluginFamily": "analysis",
+      "pluginFamily": "orbit_determination",
       "version": "0.1.0",
       "methodIds": [
         "fit_pipeline"
@@ -500,7 +502,7 @@
       "modulePath": "analysis/od",
       "pluginId": "orbit-determination",
       "name": "Orbit Determination Plugin",
-      "pluginFamily": "analysis",
+      "pluginFamily": "orbit_determination",
       "version": "0.1.0",
       "methodIds": [
         "fit"
@@ -694,6 +696,34 @@
       ]
     },
     {
+      "modulePath": "data-source/bond-attestation-source",
+      "pluginId": "org.spacedatanetwork.bond-attestation",
+      "name": "Security Bond Attestation",
+      "pluginFamily": "data_source",
+      "version": "1.0.0",
+      "methodIds": [
+        "attest"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/bond_attestation.cpp"
+      ],
+      "testFiles": []
+    },
+    {
       "modulePath": "data-source/celestrak-parser",
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
       "name": "CelesTrak Provider Parser Nodes",
@@ -716,13 +746,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/celestrak_parser_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/fixtures/celestrak-gp-omm.csv",
         "tests/fixtures/celestrak-satcat.csv",
         "tests/fixtures/celestrak-satcat.txt",
@@ -754,13 +785,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/celestrak_request_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -802,6 +834,73 @@
         "test/fixtures/SES-E.trimmed.json",
         "test/fixtures/Telesat.trimmed.json",
         "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/cell-tower-credentials",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
+      "name": "Cellular Provider Credential Mediator",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "mediate"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/cell_tower_credentials_module.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/cell-tower-source",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "name": "Cellular Base-Station Aggregation Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "deconflict",
+        "parse",
+        "route"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 7,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/cell_tower_source_module.cpp"
+      ],
+      "testFiles": [
+        "tests/adapters.test.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/fcc-uls-3650-houston.sample.json",
+        "tests/fixtures/opencellid.sample.csv",
+        "tests/fixtures/overpass-berlin.sample.json",
+        "tests/live-probe.mjs",
+        "tests/parity.test.mjs"
       ]
     },
     {
@@ -991,6 +1090,42 @@
       ]
     },
     {
+      "modulePath": "data-source/mlab-starlink-connectivity",
+      "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
+      "name": "M-Lab Starlink Connectivity Source Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse",
+        "request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/mlab_connectivity_module.cpp"
+      ],
+      "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/mlab-asn14593-histogram_daily_stats.sample.json",
+        "tests/live_smoke.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/oem-source-iss",
       "pluginId": "com.digitalarsenal.data-source.oem-source-iss",
       "name": "ISS $OEM Source Node",
@@ -1088,6 +1223,77 @@
       ]
     },
     {
+      "modulePath": "data-source/satnogs-source",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-source",
+      "name": "SatNOGS DB RF Transmitter Source Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse",
+        "request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 4,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/satnogs_source_module.cpp"
+      ],
+      "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/satnogs-transmitters.sample.json",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/sigmf-captures",
+      "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
+      "name": "SigMF Raw-IQ Capture Source Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse",
+        "request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/sigmf_captures_module.cpp"
+      ],
+      "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/iqengine-meta.sample.json",
+        "tests/live_smoke.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/spacex-starlink-source",
       "pluginId": "com.orbpro.spacex-starlink-source",
       "name": "SpaceX Starlink Data Source",
@@ -1130,7 +1336,7 @@
       "modulePath": "flows/supplemental-omm/nodes/flatsql",
       "pluginId": "com.digitalarsenal.flatsql.store",
       "name": "FlatSQL Store",
-      "pluginFamily": "storage",
+      "pluginFamily": "infrastructure",
       "version": "2.0.2",
       "methodIds": [
         "append_records",
@@ -1166,7 +1372,7 @@
       "modulePath": "flows/supplemental-omm/nodes/od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "name": "Supplemental OMM Native Orbit Determination",
-      "pluginFamily": "analysis",
+      "pluginFamily": "orbit_determination",
       "version": "1.0.0",
       "methodIds": [
         "fit"
@@ -1342,7 +1548,7 @@
       "modulePath": "flows/supplemental-omm/nodes/publication",
       "pluginId": "org.sdn.flows.supplemental-omm.publication",
       "name": "Supplemental OMM Publication",
-      "pluginFamily": "publication",
+      "pluginFamily": "publisher",
       "version": "1.0.0",
       "methodIds": [
         "publish_records"
@@ -1371,7 +1577,7 @@
       "modulePath": "flows/supplemental-omm/nodes/status",
       "pluginId": "org.sdn.flows.supplemental-omm.status",
       "name": "Supplemental OMM Status",
-      "pluginFamily": "transform",
+      "pluginFamily": "flow",
       "version": "1.0.0",
       "methodIds": [
         "record_event"
@@ -1479,13 +1685,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/decision_gate_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1513,13 +1720,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/discovery_shape_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1576,13 +1784,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/http_respond_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1609,15 +1818,19 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 1,
+      "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 4,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
-        "src/http_route_module.cpp"
+        "src/http_route_module.cpp",
+        "tests/bulk_route_test.cc"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/bulk_route.test.mjs",
+        "tests/bulk_route_test.cc",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1710,13 +1923,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/omm_json_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1864,13 +2078,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/file_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1896,13 +2111,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/flatsql_query_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1910,7 +2126,7 @@
       "modulePath": "hostcap/flatsql-store",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-store",
       "name": "FlatSQL Store (in-wasm OD-flow write lane)",
-      "pluginFamily": "hostcap",
+      "pluginFamily": "infrastructure",
       "version": "0.1.0",
       "methodIds": [
         "store"
@@ -1956,13 +2172,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/http_request_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1987,13 +2204,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/node_activity_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -2018,13 +2236,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/node_status_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -2052,13 +2271,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/p2p_discovery_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -2114,13 +2334,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/storage_ingest_module.cpp"
       ],
       "testFiles": [
+        "tests/batched_inputs.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -2497,6 +2718,40 @@
         "tests/behavior.test.mjs",
         "tests/chained_reentry.test.mjs",
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "propagator/keplerian-reference",
+      "pluginId": "com.orbpro.keplerian.reference",
+      "name": "Keplerian Reference Propagator",
+      "pluginFamily": "propagator",
+      "version": "1.0.0",
+      "methodIds": [
+        "ingest_omm"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 4,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/keplerian_reference_module.cpp"
+      ],
+      "testFiles": [
+        "tests/conformance.test.mjs",
+        "tests/contract.test.mjs",
+        "tests/harness.mjs",
+        "tests/lifecycle.test.mjs"
       ]
     },
     {
