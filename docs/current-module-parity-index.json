@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T13:37:53.731Z",
+  "generatedAt": "2026-08-10T17:39:47.633Z",
   "moduleCount": 71,
   "parityScopeModuleCount": 29,
   "isomorphicWasmCount": 69,
@@ -409,7 +409,7 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "invoke"
       ],
@@ -426,7 +426,7 @@
       ],
       "cxxSourceFileCount": 20,
       "cSourceFileCount": 0,
-      "testFileCount": 14,
+      "testFileCount": 15,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -464,6 +464,7 @@
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
         "tests/fixtures/request.hohmann.json",
         "tests/fixtures/request.rendezvous.json",
+        "tests/ratchet.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/vectors.test.mjs"
       ]

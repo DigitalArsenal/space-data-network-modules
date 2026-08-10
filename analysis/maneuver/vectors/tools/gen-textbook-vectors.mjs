@@ -31,6 +31,8 @@
  * ONCE, here, at emit time, and the emitted file is SI throughout.
  */
 
+import { propagateKepler } from "../index.mjs";
+
 /** Conformance model, PINNED by the program task (section A.6). */
 export const MU_KM = 398600.4418; //  km^3/s^2
 export const MU = 3.986004418e14; //  m^3/s^2
@@ -161,6 +163,156 @@ function phasing(radius, phaseAngle, numRevs) {
     dv2: -dv1,
     totalDeltaV: 2 * Math.abs(dv1),
     totalTime: phasingPeriod * numRevs,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// FORWARD-CONSTRUCTED LAMBERT ROWS
+//
+// WHY THESE ARE NOT SOLVED, THEY ARE BUILT.
+//
+// A Lambert row needs an expected departure velocity, and there are only three
+// places to get one: a foreign library (tier A and tier D do that), the module
+// itself (a tautology — the reason `hohmannReference()` was deleted), or a
+// construction that never solves Lambert at all. These take the third road:
+// CHOOSE a departure state (r1, v1) with round numbers, propagate it forward by
+// `tof` with the independent universal-variable Kepler propagator in
+// `vectors/index.mjs`, and take where it lands as r2. The Lambert problem
+// (r1, r2, tof) then has that chosen v1 as its solution BY CONSTRUCTION, and
+// the expected number is one this file picked rather than one any solver
+// produced.
+//
+// The propagator is the same instrument the tier-C `lambert-arrival-closure`
+// invariant already trusts to adjudicate every Lambert row in the set, it
+// certifies its own convergence and refuses rather than returning its last
+// iterate, and it shares no line with the module's C++. `buildTextbookCases`
+// refuses to emit if it declines to certify an arc.
+//
+// WHAT THE THREE ROWS PIN, and why one construction is not enough. The
+// zero-revolution search marches DOWN from z = 0 in steps of 1, 2, 4, ... and
+// the branch it is walking runs out at a domain boundary `z_boundary` where
+// y(z) reaches zero. Three distinct things can happen, and 0.2.0 got two of
+// them wrong (graph: modules-maneuver-lambert-refuses-a-solvable-arc):
+//
+//   ROOT INSIDE THE FIRST STEP, boundary also inside it. The first probe at
+//   z = -1 is already past the end of the branch, so 0.2.0 saw a non-finite F,
+//   doubled to -2, -4, ... further into nothing, and reported `no-solution` for
+//   an arc that flies. This is Curtis example 5.3's class.
+//
+//   ROOT JUST OUTSIDE THE FIRST STEP. The probe at z = -1 is inside the domain
+//   and above the root, so 0.2.0 doubled to z = -2 — which for this geometry is
+//   past the boundary at -1.909. Same refusal, one step later, and it shows the
+//   defect is not about the number 1.
+//
+//   ROOT OUTSIDE THE FIRST STEP, boundary further out still. 0.2.0 found this
+//   one by doubling, and 0.3.0 must still find it identically. Without this row
+//   a "fix" that only ever bisected inward would look correct.
+//
+// Of 3,320 forward-constructed hyperbolic arcs sampled while writing this, 1,544
+// were refused by 0.2.0. The class was not exotic.
+// ---------------------------------------------------------------------------
+
+/** The conic of a state, by the same algebra the module publishes. */
+function conicOf(position, velocity, mu = MU) {
+  const r = Math.hypot(...position);
+  const v = Math.hypot(...velocity);
+  const h = Math.hypot(
+    position[1] * velocity[2] - position[2] * velocity[1],
+    position[2] * velocity[0] - position[0] * velocity[2],
+    position[0] * velocity[1] - position[1] * velocity[0],
+  );
+  const energy = (v * v) / 2 - mu / r;
+  const semiLatusRectum = (h * h) / mu;
+  const eccentricity = Math.sqrt(Math.max(0, 1 + (2 * energy * h * h) / (mu * mu)));
+  const semiMajorAxis = -mu / (2 * energy);
+  return {
+    energy,
+    eccentricity,
+    semiMajorAxis,
+    perigeeRadius: semiLatusRectum / (1 + eccentricity),
+    apogeeRadius: energy < 0 ? semiMajorAxis * (1 + eccentricity) : null,
+    conic: energy < 0 ? "elliptic" : energy > 0 ? "hyperbolic" : "parabolic",
+  };
+}
+
+/**
+ * The band for a forward-constructed velocity.
+ *
+ * MEASURED at 0.3.0 across the three march rows: worst component error
+ * 2.21e-11 m/s on a departure velocity of 2,000 m/s, i.e. ~1e-14 relative — the
+ * arithmetic floor for a bracketed root find in doubles. `abs` is 1e-8 m/s (ten
+ * nanometres per second, ~450x the measured worst and far below anything
+ * physical) so that a component which is legitimately ZERO is still checked;
+ * `rel` carries it at scale. The watermark at 1e-11 relative is ~three decades
+ * inside the gate, which is where a solver change that costs an order of
+ * magnitude becomes visible before it becomes a failure.
+ */
+const CONSTRUCTED_VELOCITY_BAND = Object.freeze({
+  abs: 1e-8,
+  rel: 1e-12,
+  alarmRel: 1e-11,
+  rationale:
+    "measured worst component error 2.21e-11 m/s at 0.3.0 over the three march " +
+    "rows; the gate is ~450x that and the watermark ~3 decades inside the gate.",
+});
+
+/**
+ * Build one forward-constructed zero-revolution Lambert row.
+ *
+ * `expect` asserts the whole answer, not just the departure: the velocity this
+ * file chose, the arrival velocity the independent propagator reports, and the
+ * transfer conic the module now publishes — computed here from the SAME chosen
+ * v1 by the textbook relations, so the conic report is pinned on a row whose
+ * departure state is exactly known rather than only on the one tier-D row that
+ * names it.
+ */
+function marchCase({ id, radius, velocity, tof, marchClass, wasRefusedBy020, note }) {
+  const r1 = [radius, 0, 0];
+  const arrival = propagateKepler(r1, velocity, tof, MU);
+  if (!arrival.certified) {
+    throw new Error(
+      `${id}: the independent propagator declined to certify the constructing ` +
+        "arc, so there is no expected value to freeze. Choose a different state.",
+    );
+  }
+  const conic = conicOf(r1, velocity);
+  const expect = {};
+  for (let axis = 0; axis < 3; axis += 1) {
+    expect[`v1.${axis}`] = velocity[axis];
+    expect[`v2.${axis}`] = arrival.velocity[axis];
+  }
+  expect.transferConic = conic.conic;
+  expect.perigeeRadius = conic.perigeeRadius;
+  expect.transferEccentricity = conic.eccentricity;
+  expect.transferSemiMajorAxis = conic.semiMajorAxis;
+  return {
+    params: {
+      r1,
+      r2: arrival.position,
+      tof,
+      mu: MU,
+      prograde: true,
+      nRevs: 0,
+    },
+    expect,
+    fieldBands: {
+      v1: CONSTRUCTED_VELOCITY_BAND,
+      v2: CONSTRUCTED_VELOCITY_BAND,
+    },
+    anchors: [],
+    construction: {
+      method:
+        "forward: (r1, v1) chosen here, r2 = propagateKepler(r1, v1, tof) from " +
+        "vectors/index.mjs. Lambert is never solved to produce this row.",
+      departureVelocity: velocity,
+      adjudicator: arrival.method,
+      certified: arrival.certified,
+      residual: arrival.residual ?? null,
+      marchClass,
+      wasRefusedBy020,
+      transferConic: conic,
+    },
+    note,
   };
 }
 
@@ -494,6 +646,200 @@ const CASES = [
             tolerance: 5e-4,
           },
         ],
+      };
+    },
+  },
+  {
+    id: "lambert-march-root-inside-first-step",
+    operation: "solveLambert",
+    source: {
+      work: "this repo — modules-maneuver-lambert-refuses-a-solvable-arc",
+      example:
+        "forward-constructed hyperbolic fall whose universal-variable root (z = -0.113) AND domain boundary (z = -0.398) both lie inside the first march step",
+      inputs:
+        "r1 = 300,000 km on +x, departure velocity (-2000, 500, 0) m/s, 17 h of flight",
+    },
+    build() {
+      return marchCase({
+        id: "lambert-march-root-inside-first-step",
+        radius: 300e6,
+        velocity: [-2000, 500, 0],
+        tof: 17 * 3600,
+        marchClass:
+          "root INSIDE the first march step, boundary inside it too — the class " +
+          "that made the first probe at z = -1 land in the empty domain",
+        wasRefusedBy020: true,
+        note:
+          "Curtis example 5.3's class, reconstructed independently so the repair " +
+          "is pinned by a row this repo owns rather than only by a foreign one. " +
+          "0.2.0 answers `no-solution` here; the arc is a 17-hour hyperbolic " +
+          "fall from 300,000 km whose perigee clears the Earth by 20,000 km.",
+      });
+    },
+  },
+  {
+    id: "lambert-march-root-just-outside-first-step",
+    operation: "solveLambert",
+    source: {
+      work: "this repo — modules-maneuver-lambert-refuses-a-solvable-arc",
+      example:
+        "forward-constructed hyperbolic fall whose root (z = -1.199) is just BEYOND the first march step, with the domain boundary (z = -1.909) between the root and the second probe",
+      inputs:
+        "r1 = 300,000 km on +x, departure velocity (-3400, 500, 0) m/s, 17 h of flight",
+    },
+    build() {
+      return marchCase({
+        id: "lambert-march-root-just-outside-first-step",
+        radius: 300e6,
+        velocity: [-3400, 500, 0],
+        tof: 17 * 3600,
+        marchClass:
+          "root just OUTSIDE the first march step — the probe at z = -1 is " +
+          "inside the domain and above the root, and doubling to z = -2 " +
+          "overshoots the boundary at z = -1.909",
+        wasRefusedBy020: true,
+        note:
+          "The companion to the row above, and the one that shows the defect was " +
+          "never about the number 1: here the first probe lands correctly and it " +
+          "is the SECOND that falls off the branch. A repair that only widened " +
+          "the initial step would pass the other row and fail this one.",
+      });
+    },
+  },
+  {
+    id: "lambert-march-root-reached-by-doubling",
+    operation: "solveLambert",
+    source: {
+      work: "this repo — modules-maneuver-lambert-refuses-a-solvable-arc (the no-regression half)",
+      example:
+        "forward-constructed hyperbolic fall whose root (z = -1.149) is outside the first march step with the domain boundary far beyond it (z = -3.765)",
+      inputs:
+        "r1 = 300,000 km on +x, departure velocity (-2200, 800, 0) m/s, 28 h of flight",
+    },
+    build() {
+      return marchCase({
+        id: "lambert-march-root-reached-by-doubling",
+        radius: 300e6,
+        velocity: [-2200, 800, 0],
+        tof: 28 * 3600,
+        marchClass:
+          "root outside the first march step, boundary far beyond it — the " +
+          "OUTWARD doubling path, which 0.2.0 already walked correctly",
+        wasRefusedBy020: false,
+        note:
+          "This row was GREEN against 0.2.0 and must stay green. It is here " +
+          "because the other two are: a bracketing change that traded the " +
+          "outward march for the inward one would fix the refusals and break " +
+          "this, and nothing else in the set would notice.",
+      });
+    },
+  },
+  {
+    id: "lambert-mindv-high-branch-wins",
+    operation: "solveLambertMinDV",
+    source: {
+      work: "this repo — modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two",
+      example:
+        "one-revolution transfer between two circular orbits where the HIGH branch is the cheapest arc in the whole domain — the answer 0.2.0 could not reach",
+      inputs:
+        "r1 = 6678.137 km on +x, departure velocity (0, 7800, 0) m/s (a 300 km circular orbit plus 74.24 m/s), 9000 s of flight, endpoints circular and coplanar",
+    },
+    build() {
+      // Forward construction again: the transfer arc is CHOSEN, not solved for.
+      // Departing a 300 km circular orbit 74.24 m/s faster than circular puts
+      // the spacecraft on a slightly eccentric ellipse; 9,000 s later — one full
+      // revolution plus 142 degrees — it is at r2.
+      const r1 = [6678137, 0, 0];
+      const velocity = [0, 7800, 0];
+      const tof = 9000;
+      const arrival = propagateKepler(r1, velocity, tof, MU);
+      if (!arrival.certified) {
+        throw new Error("lambert-mindv-high-branch-wins: the constructing arc did not certify");
+      }
+      const r2 = arrival.position;
+      const norm = (v) => Math.hypot(...v);
+      const cross = (a, b) => [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+      ];
+      const unit = (v) => v.map((component) => component / norm(v));
+      // The endpoint orbits are circular, coplanar with the transfer and
+      // circulating the same way — the standard framing of a Lambert delta-v,
+      // and the one `hohmannTransfer` already assumes. The plane normal comes
+      // from the TRANSFER's own angular momentum rather than from r1 x r2,
+      // which points the other way whenever the transfer angle exceeds pi.
+      const plane = unit(cross(r1, velocity));
+      const departureVelocity = cross(plane, unit(r1)).map(
+        (component) => component * Math.sqrt(MU / norm(r1)),
+      );
+      const arrivalVelocity = cross(plane, unit(r2)).map(
+        (component) => component * Math.sqrt(MU / norm(r2)),
+      );
+      const dv1 = norm(velocity.map((c, i) => c - departureVelocity[i]));
+      const dv2 = norm(arrivalVelocity.map((c, i) => c - arrival.velocity[i]));
+      const conic = conicOf(r1, velocity);
+
+      const expect = {};
+      for (let axis = 0; axis < 3; axis += 1) {
+        expect[`v1.${axis}`] = velocity[axis];
+        expect[`v2.${axis}`] = arrival.velocity[axis];
+      }
+      expect.revolutions = 1;
+      expect.branch = "high";
+      expect.dv1 = dv1;
+      expect.dv2 = dv2;
+      expect.totalDeltaV = dv1 + dv2;
+      expect.transferConic = conic.conic;
+      expect.perigeeRadius = conic.perigeeRadius;
+      expect.apogeeRadius = conic.apogeeRadius;
+
+      return {
+        params: {
+          r1,
+          r2,
+          tof,
+          mu: MU,
+          prograde: true,
+          maxRevs: 3,
+          departureVelocity,
+          arrivalVelocity,
+        },
+        expect,
+        fieldBands: {
+          v1: CONSTRUCTED_VELOCITY_BAND,
+          v2: CONSTRUCTED_VELOCITY_BAND,
+        },
+        anchors: [],
+        construction: {
+          method:
+            "forward: (r1, v1) chosen here, r2 = propagateKepler(r1, v1, tof); " +
+            "endpoint orbits circular in the transfer's own plane. Lambert is " +
+            "never solved to produce this row.",
+          departureVelocity: velocity,
+          adjudicator: arrival.method,
+          certified: arrival.certified,
+        },
+        /**
+         * The point of the row, stated as numbers rather than as prose: 0.2.0
+         * ranked over the first column only, so the arc it would have returned
+         * costs THIRTY-SIX TIMES the one 0.3.0 finds. `branches` in the response
+         * must carry all three, in this order, and the tier-C invariant
+         * `lambert-mindv-ranks-its-own-set` checks that the winner really is the
+         * minimum of the set the module published.
+         */
+        rankingAtLanding: {
+          "rev 0": 6682.707347969772,
+          "rev 1 / low": 9143.961620932241,
+          "rev 1 / high": 182.10978825122217,
+          winner: "rev 1 / high",
+          reachableBy020: ["rev 0", "rev 1 / low"],
+        },
+        note:
+          "A one-revolution Lambert problem has two arcs and 0.2.0 could only " +
+          "see the first, so `solveLambertMinDV` minimised over half its own " +
+          "domain and presented the winner as global. Here the half it could not " +
+          "see is cheaper by a factor of thirty-six.",
       };
     },
   },

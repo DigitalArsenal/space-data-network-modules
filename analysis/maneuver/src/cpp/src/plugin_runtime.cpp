@@ -253,6 +253,73 @@ std::string biEllipticTransfer(const Value& params) {
     return out.finish();
 }
 
+/// The wire spelling of a branch. One function so the request reader and the
+/// response writer cannot drift apart.
+const char* branchName(LambertBranch branch) {
+    return branch == LambertBranch::HIGH ? "high" : "low";
+}
+
+const char* conicName(ConicType type) {
+    switch (type) {
+        case ConicType::HYPERBOLIC: return "hyperbolic";
+        case ConicType::PARABOLIC:  return "parabolic";
+        case ConicType::ELLIPTIC:   break;
+    }
+    return "elliptic";
+}
+
+/// Read the optional `branch` selector. Absent => LOW, which is what 0.2.0
+/// always returned, so an existing caller's answer does not move.
+bool readLambertBranch(const Value& params, const char* op, bool* present,
+                       LambertBranch* out) {
+    *present = params.find("branch") != nullptr &&
+               !params.find("branch")->isNull();
+    std::string text = "low";
+    if (!json_lite::optionalString(params, "branch", op, &text)) return false;
+    if (text == "low") {
+        *out = LambertBranch::LOW;
+        return true;
+    }
+    if (text == "high") {
+        *out = LambertBranch::HIGH;
+        return true;
+    }
+    fault::raise(fault_code::INVALID_PARAMETER,
+                 std::string("[") + op +
+                     "]: branch must be \"low\" or \"high\" (got \"" + text +
+                     "\"). A multi-revolution Lambert problem has exactly two "
+                     "arcs per revolution count; there is no third to name.");
+    return false;
+}
+
+/// The candidate set `solveLambertMinDV` ranked, as a JSON array.
+///
+/// Built through nested writers rather than by string concatenation so that
+/// every number goes through the same finiteness gate as the rest of the
+/// document; `ObjectWriter::raw` splices bytes and validates nothing, so the
+/// nested `ok()` is propagated to the caller explicitly.
+std::string writeRankedCandidates(const std::vector<LambertCandidate>& ranked,
+                                  bool* ok) {
+    std::string out = "[";
+    for (std::size_t i = 0; i < ranked.size(); ++i) {
+        const LambertCandidate& candidate = ranked[i];
+        ObjectWriter entry;
+        entry.integer("revolutions", candidate.revolutions);
+        if (candidate.revolutions >= 1) entry.string("branch", branchName(candidate.branch));
+        entry.number("dv1", candidate.dv1)
+            .number("dv2", candidate.dv2)
+            .number("totalDeltaV", candidate.totalDeltaV);
+        if (!entry.ok()) {
+            *ok = false;
+            return {};
+        }
+        if (i != 0) out.push_back(',');
+        out += entry.finish();
+    }
+    out.push_back(']');
+    return out;
+}
+
 /// Shared serialisation for both Lambert entry points.
 std::string writeLambert(const LambertResult& result, const char* op) {
     if (!result.converged) {
@@ -284,6 +351,46 @@ std::string writeLambert(const LambertResult& result, const char* op) {
             .number("totalDeltaV", result.totalDeltaV);
         writeVec3(out, "dv1_vec", result.dv1_vec);
         writeVec3(out, "dv2_vec", result.dv2_vec);
+    }
+    // -----------------------------------------------------------------------
+    // ADDITIVE, 0.3.0. Every field above keeps its 0.2.0 value and meaning; a
+    // consumer written against 0.2.0 reads this response unchanged.
+    //
+    // Two of these keys are CONDITIONAL, and the condition is part of the
+    // contract rather than an implementation detail (the `hasDeltaV` block
+    // above is the precedent inside this same surface):
+    //
+    //   `branch`   appears only when `revolutions >= 1`. At zero revolutions
+    //              the universal-variable root is unique and there is no
+    //              branch to name; emitting a constant would be inventing a
+    //              distinction the mathematics does not have.
+    //   `apogeeRadius` / `transferSemiMajorAxis`
+    //              appear only when the quantity EXISTS and is representable.
+    //              A hyperbolic transfer has no apoapsis and a parabolic one
+    //              has neither; `transferConic` is always present so that
+    //              "this arc has no apoapsis" is never confused with "this
+    //              field was dropped". Emitting an infinity instead would fail
+    //              the writer's finiteness gate and turn a converged solve into
+    //              an error — which is not an additive change.
+    // -----------------------------------------------------------------------
+    if (result.revolutions >= 1) out.string("branch", branchName(result.branch));
+    if (result.hasTransferConic) {
+        out.string("transferConic", conicName(result.transferConicType))
+            .number("perigeeRadius", result.perigeeRadius)
+            .number("transferEccentricity", result.transferEccentricity);
+        if (result.hasApogeeRadius) out.number("apogeeRadius", result.apogeeRadius);
+        if (result.hasTransferSemiMajorAxis) {
+            out.number("transferSemiMajorAxis", result.transferSemiMajorAxis);
+        }
+    }
+    if (!result.ranked.empty()) {
+        bool rankedOk = true;
+        const std::string candidates = writeRankedCandidates(result.ranked, &rankedOk);
+        if (!rankedOk) {
+            out.invalidate();
+        } else {
+            out.raw("branches", candidates);
+        }
     }
     if (!out.ok()) return {};
     return out.finish();
@@ -339,8 +446,12 @@ std::string solveLambertOp(const Value& params) {
     if (!readLambertEndpoints(params, op, &haveEndpoints, &vDepart, &vArrive)) {
         return {};
     }
+    bool branchGiven = false;
+    LambertBranch branch = LambertBranch::LOW;
+    if (!readLambertBranch(params, op, &branchGiven, &branch)) return {};
 
-    auto result = solveLambert(toVector3(r1), toVector3(r2), tof, mu, prograde, nRevs);
+    auto result =
+        solveLambert(toVector3(r1), toVector3(r2), tof, mu, prograde, nRevs, branch);
     if (fault::raised()) return {};
     if (result.converged && haveEndpoints) {
         const Vector3 dv1 = sub3(result.v1, vDepart);
@@ -389,8 +500,16 @@ std::string solveLambertMinDVOp(const Value& params) {
                      "SPEEDS, which is not the cost of anything.");
         return {};
     }
-    const auto result = solveLambertMinDV(toVector3(r1), toVector3(r2), tof, mu,
-                                          prograde, maxRevs, true, vDepart, vArrive);
+    // On this operation `branch` NARROWS the candidate set rather than choosing
+    // an arc: ranking is the whole point, so the default is to rank over both
+    // branches of every revolution count, and a caller that names one is
+    // deliberately excluding the other.
+    bool branchGiven = false;
+    LambertBranch branch = LambertBranch::LOW;
+    if (!readLambertBranch(params, op, &branchGiven, &branch)) return {};
+    const auto result =
+        solveLambertMinDV(toVector3(r1), toVector3(r2), tof, mu, prograde, maxRevs,
+                          true, vDepart, vArrive, branchGiven ? &branch : nullptr);
     if (fault::raised()) return {};
     return writeLambert(result, op);
 }

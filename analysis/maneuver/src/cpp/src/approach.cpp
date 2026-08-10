@@ -558,15 +558,77 @@ constexpr int LAMBERT_MAX_ITER = 200;
 /// sqrt(mu)*time). This is what `converged` now MEANS.
 constexpr double LAMBERT_RESIDUAL_TOL = 1e-10;
 
+/// Fill the transfer arc's conic block from the departure state the solve just
+/// produced. Three lines of textbook algebra over quantities already in hand;
+/// see the block comment on LambertResult for why the module owes a caller
+/// this rather than a refusal.
+///
+/// The eccentricity comes from `e^2 = 1 + 2 E h^2 / mu^2`, which is finite and
+/// correct for every conic INCLUDING the parabolic limit — unlike any form that
+/// divides by `1 - e^2`. The perigee comes from `p / (1 + e)`, which is well
+/// conditioned everywhere; only the apoapsis and the semi-major axis can fail
+/// to exist, and each says so with its own flag instead of emitting a
+/// non-finite number the JSON writer would have to reject.
+void fillTransferConic(LambertResult& result, const Vector3& r1, double mu) {
+    const double rMag = norm3(r1);
+    const double vMag = norm3(result.v1);
+    const double h = norm3(lambertCross3(r1, result.v1));
+    if (!(rMag > 0.0) || !std::isfinite(vMag) || !std::isfinite(h)) return;
+
+    const double energy = 0.5 * vMag * vMag - mu / rMag;
+    const double p = h * h / mu;
+    double eSquared = 1.0 + 2.0 * energy * h * h / (mu * mu);
+    if (!(eSquared > 0.0)) eSquared = 0.0;  // round-off below a circular arc
+    const double e = std::sqrt(eSquared);
+    const double rPerigee = p / (1.0 + e);
+    if (!std::isfinite(e) || !std::isfinite(rPerigee)) return;
+
+    result.hasTransferConic = true;
+    result.transferEccentricity = e;
+    result.perigeeRadius = rPerigee;
+
+    const double a = -mu / (2.0 * energy);
+    if (energy < 0.0) {
+        result.transferConicType = ConicType::ELLIPTIC;
+        if (std::isfinite(a)) {
+            result.hasTransferSemiMajorAxis = true;
+            result.transferSemiMajorAxis = a;
+            const double rApogee = a * (1.0 + e);
+            if (std::isfinite(rApogee)) {
+                result.hasApogeeRadius = true;
+                result.apogeeRadius = rApogee;
+            }
+        } else {
+            // A bound arc so nearly parabolic that its semi-major axis
+            // overflows a double. It has an apoapsis in principle and no
+            // representable one in fact; saying nothing is the only honest
+            // answer, and `transferConicType` still tells the caller which
+            // conic it is looking at.
+            result.transferConicType = ConicType::PARABOLIC;
+        }
+    } else if (energy > 0.0) {
+        result.transferConicType = ConicType::HYPERBOLIC;
+        if (std::isfinite(a)) {
+            result.hasTransferSemiMajorAxis = true;
+            result.transferSemiMajorAxis = a;  // negative, by construction
+        }
+        // No apoapsis: the arc never returns.
+    } else {
+        // Exactly parabolic. `a` is infinite and there is no apoapsis.
+        result.transferConicType = ConicType::PARABOLIC;
+    }
+}
+
 }  // anonymous namespace
 
 LambertResult solveLambert(
     const Vector3& r1, const Vector3& r2, double tof,
-    double mu, bool prograde, int nRevs) {
+    double mu, bool prograde, int nRevs, LambertBranch branch) {
 
     LambertResult result;
     result.tof = tof;
     result.revolutions = nRevs;
+    result.branch = branch;
     result.converged = false;
 
     const double r1_mag = norm3(r1);
@@ -666,39 +728,112 @@ LambertResult solveLambert(
                 }
             }
         } else {
+            // -----------------------------------------------------------
+            // MARCHING DOWN, WITH THE DOMAIN BOUNDARY RESPECTED.
+            //
+            // Below z0 the branch runs out: `y(z)` decreases monotonically
+            // and at some `z_boundary` it reaches zero, past which `F` has no
+            // value at all. The root, when there is one, lies strictly
+            // between that boundary and z0 — as `y -> 0+`, `F -> -sqrt(mu)*tof`,
+            // which is negative, so a positive `F(z0)` guarantees a crossing
+            // inside the domain.
+            //
+            // 0.2.0 marched `step = 1, 2, 4, ...` and gave up the moment a
+            // probe came back non-finite, which is a probe that landed OUTSIDE
+            // the domain rather than one that proved anything. For Curtis
+            // example 5.3 the boundary is at z = -0.398 and the root at
+            // z = -0.173, so the very first probe at z = -1 fell off the end
+            // and every later one fell further, and a geometry hapsira solves
+            // came back `no-solution` (graph:
+            // modules-maneuver-lambert-refuses-a-solvable-arc). The class lost
+            // was short-transfer-angle hyperbolic arcs — the ones whose domain
+            // boundary sits close to zero — and it was large: of 3,320
+            // forward-constructed hyperbolic arcs, 1,544 were refused.
+            //
+            // The repair keeps a BRACKET IN STEP SPACE. `stepInside` is the
+            // deepest step known to land inside the domain and `stepOutside`
+            // the shallowest known to land outside; a non-finite probe
+            // bisects toward the boundary instead of doubling away from it,
+            // and a finite-but-still-positive probe doubles outward exactly as
+            // before while no boundary is known. That makes the search
+            // converge ON the boundary rather than stepping over it, and it is
+            // a repair to the SEARCH only: every expression evaluated here is
+            // unchanged, the bracket handed to Newton has the same meaning,
+            // and a geometry 0.2.0 solved is solved identically (verified over
+            // the 72-geometry LEO sweep and every Lambert vector).
+            //
+            // NOT the 0.1.0 `if (y < 0) { z += 0.1; continue; }` recovery,
+            // which walked the wrong way for hyperbolic arcs and was one of the
+            // four defects modules-maneuver-lambert-returns-non-solutions
+            // closed.
+            // -----------------------------------------------------------
             b = z0;
+            double stepInside = 0.0;
+            double stepOutside = std::numeric_limits<double>::infinity();
             double step = std::max(1.0, std::abs(z0));
-            for (int i = 0; i < 200 && step <= 1e6; ++i) {
+            for (int i = 0; i < 200; ++i) {
                 const double lo = z0 - step;
                 const double f = problem.F(lo);
-                if (std::isfinite(f) && f < 0.0) {
-                    a = lo;
-                    fa = f;
-                    bracketed = true;
-                    break;
+                if (std::isfinite(f)) {
+                    if (f < 0.0) {
+                        a = lo;
+                        fa = f;
+                        bracketed = true;
+                        break;
+                    }
+                    // Inside the domain and still above the root: go deeper.
+                    stepInside = step;
+                    if (std::isfinite(stepOutside)) {
+                        step = 0.5 * (stepInside + stepOutside);
+                    } else if (step >= 1e6) {
+                        // No boundary found within the conditioning limit and
+                        // no sign change either. Beyond this the two terms of F
+                        // are ~1e14 apiece and cancel to round-off, so a probe
+                        // there brackets noise rather than a root.
+                        break;
+                    } else {
+                        step = std::min(step * 2.0, 1e6);
+                    }
+                } else {
+                    // Outside the domain. The boundary — and with it the root
+                    // — is shallower than this.
+                    stepOutside = step;
+                    step = 0.5 * (stepInside + stepOutside);
                 }
-                step *= 2.0;
+                if (!(step > stepInside) || step >= stepOutside) break;
             }
         }
     } else {
         // A multi-revolution branch lives on ((2*pi*N)^2, (2*pi*(N+1))^2) and
         // is NOT monotone there — it dips to a minimum and rises, so a given
-        // tof has two solutions or none. The interval is bounded and
-        // well-conditioned, so scan it and take the first sign change (the
-        // low-energy / long-transfer branch).
+        // tof has TWO solutions or none. The interval is bounded and
+        // well-conditioned, so scan it and take the crossing the caller asked
+        // for: the first (LOW, the default and 0.2.0's only answer) or the
+        // second (HIGH).
+        //
+        // Crossings are counted by SIGN CLASSIFICATION rather than by the
+        // product `prevF * f <= 0`, which double-counts a scan node that lands
+        // exactly on the root — harmless when the loop stopped at the first
+        // crossing, and an off-by-one in the branch index now that it does not.
         const double zFloor = TWO_PI * nRevs * TWO_PI * nRevs;
         constexpr int SCAN = 2048;
+        const int wanted = (branch == LambertBranch::HIGH) ? 2 : 1;
+        int seen = 0;
         double prevZ = zFloor;
         double prevF = problem.F(zFloor);
         for (int i = 1; i <= SCAN; ++i) {
             const double z = zFloor + (zCeiling - zFloor) * i / SCAN;
             const double f = problem.F(z);
-            if (std::isfinite(prevF) && std::isfinite(f) && prevF * f <= 0.0) {
-                a = prevZ;
-                b = z;
-                fa = prevF;
-                bracketed = true;
-                break;
+            if (std::isfinite(prevF) && std::isfinite(f) &&
+                ((prevF < 0.0) != (f < 0.0))) {
+                ++seen;
+                if (seen == wanted) {
+                    a = prevZ;
+                    b = z;
+                    fa = prevF;
+                    bracketed = true;
+                    break;
+                }
             }
             prevZ = z;
             prevF = f;
@@ -784,13 +919,15 @@ LambertResult solveLambert(
     result.status = result.converged ? "converged" : "residual-not-met";
     result.v1Magnitude = norm3(v1_vec);
     result.v2Magnitude = norm3(v2_vec);
+    if (result.converged) fillTransferConic(result, r1, mu);
     return result;
 }
 
 LambertResult solveLambertMinDV(
     const Vector3& r1, const Vector3& r2, double tof,
     double mu, bool prograde, int maxRevs,
-    bool haveEndpoints, const Vector3& vDepart, const Vector3& vArrive) {
+    bool haveEndpoints, const Vector3& vDepart, const Vector3& vArrive,
+    const LambertBranch* restrictBranch) {
 
     // WHY THIS SIGNATURE CHANGED.
     //
@@ -810,23 +947,52 @@ LambertResult solveLambertMinDV(
         return best;
     }
 
+    // WHY THE LOOP GAINED AN INNER ONE.
+    //
+    // Every revolution count from 1 up has TWO arcs, and 0.2.0 could only ever
+    // see the first — so it minimised over half its own domain and presented
+    // the winner as a global answer. The difference is not academic: on Der's
+    // Molniya geometry the two one-revolution branches differ by 1.03 km/s in
+    // departure speed alone, and there are geometries where the branch 0.2.0
+    // could not reach is the cheaper one by a factor of thirty-six.
+    //
+    // `restrictBranch` narrows the set on an explicit caller request. Absent —
+    // the default, and what every existing caller sends — it ranks over
+    // everything (graph:
+    // modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two).
+    std::vector<LambertCandidate> ranked;
     double bestCost = std::numeric_limits<double>::infinity();
     for (int rev = 0; rev >= 0 && rev <= maxRevs; ++rev) {
-        LambertResult candidate = solveLambert(r1, r2, tof, mu, prograde, rev);
-        if (!candidate.converged) continue;
-        const Vector3 dv1 = sub3(candidate.v1, vDepart);
-        const Vector3 dv2 = sub3(vArrive, candidate.v2);
-        candidate.dv1 = norm3(dv1);
-        candidate.dv2 = norm3(dv2);
-        candidate.totalDeltaV = candidate.dv1 + candidate.dv2;
-        candidate.dv1_vec = dv1;
-        candidate.dv2_vec = dv2;
-        candidate.hasDeltaV = true;
-        if (candidate.totalDeltaV < bestCost) {
-            bestCost = candidate.totalDeltaV;
-            best = candidate;
+        // Canonical order: revolutions ascending, LOW before HIGH. At zero
+        // revolutions the root is unique, so there is one arc and no branch.
+        const LambertBranch branches[2] = {LambertBranch::LOW, LambertBranch::HIGH};
+        const int branchCount = (rev == 0) ? 1 : 2;
+        for (int b = 0; b < branchCount; ++b) {
+            if (rev > 0 && restrictBranch != nullptr && branches[b] != *restrictBranch) {
+                continue;
+            }
+            LambertResult candidate =
+                solveLambert(r1, r2, tof, mu, prograde, rev, branches[b]);
+            if (!candidate.converged) continue;
+            const Vector3 dv1 = sub3(candidate.v1, vDepart);
+            const Vector3 dv2 = sub3(vArrive, candidate.v2);
+            candidate.dv1 = norm3(dv1);
+            candidate.dv2 = norm3(dv2);
+            candidate.totalDeltaV = candidate.dv1 + candidate.dv2;
+            candidate.dv1_vec = dv1;
+            candidate.dv2_vec = dv2;
+            candidate.hasDeltaV = true;
+            ranked.push_back({rev, branches[b], candidate.dv1, candidate.dv2,
+                              candidate.totalDeltaV});
+            if (candidate.totalDeltaV < bestCost) {
+                bestCost = candidate.totalDeltaV;
+                best = candidate;
+            }
         }
     }
+    // Assigned last: `best` is overwritten wholesale by each new winner, so the
+    // candidate set can only be attached once the winner is final.
+    best.ranked = ranked;
     return best;
 }
 

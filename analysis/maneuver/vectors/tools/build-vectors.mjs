@@ -31,6 +31,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildTextbookCases } from "./gen-textbook-vectors.mjs";
+import { buildLibraryCases, libraryProvenance } from "./gen-library-vectors.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTRACT = path.resolve(HERE, "..", "tudat-extract.json");
@@ -132,6 +133,33 @@ function tierC() {
         "within 1e-6 of |r2|.",
     },
     {
+      id: "lambert-earth-floor",
+      applies: "solveLambert, solveLambertMinDV",
+      statement:
+        "the transfer conic the module REPORTS (perigeeRadius, apogeeRadius, " +
+        "transferEccentricity, transferConic) reproduces an independent " +
+        "reconstruction from the same returned v1, and the presence of an " +
+        "apoapsis agrees with the conic type the module named. Also classifies " +
+        "each arc above-surface / THROUGH-EARTH: six published conformance " +
+        "geometries pass through the planet and are correct answers, which is " +
+        "why the module REPORTS the perigee instead of refusing them.",
+      changedAt:
+        "0.3.0 — against 0.2.0 this invariant could only classify, because the " +
+        "module published no perigee to check (graph: " +
+        "modules-maneuver-lambert-publishes-no-transfer-perigee).",
+    },
+    {
+      id: "lambert-mindv-ranks-its-own-set",
+      applies: "solveLambertMinDV",
+      statement:
+        "the returned cost is the minimum of the candidate set the response " +
+        "publishes, the returned (revolutions, branch) is a member of that set, " +
+        "and the set is in canonical order (revolutions ascending, low before " +
+        "high). This is what makes 'it ranked over BOTH branches' checkable " +
+        "rather than asserted: 0.2.0 ranked over half its domain and no field " +
+        "of a response distinguished that from a real minimum.",
+    },
+    {
       id: "phasing-earth-floor",
       applies: "phasingManeuver",
       statement:
@@ -144,26 +172,83 @@ function tierC() {
 }
 
 /**
- * Known-defect marks applied to tier A rows.
+ * TIER A: REPAIRED, not marked.
  *
- * The three Lambert geometries below were adjudicated by propagation, not
- * assumed: each module answer was propagated forward and missed its target by
- * more than a quarter of the target radius while the reference's answer
- * arrived. The elliptical row is NOT marked — the module solves that one to
- * 5.8e-11 of |r2|, which is what makes the other three unambiguous rather than
- * a suspicion about the harness.
+ * These three Lambert geometries were held open as expected FAILURES from the
+ * harness's first run until maneuver-planner 0.2.0. They are green now. The
+ * markers came off in the same commit as the fix, exactly as the task demanded
+ * — but they came off `vectors.json` BY HAND while this generator went on
+ * applying them, so `build-vectors.mjs --check` had been failing on `main`
+ * since that landing and nothing was running it. The repair record and the
+ * recalibrated watermarks below are the hand edits, moved into the generator
+ * where they belong: the file is reproducible again, and `--check` is now part
+ * of `npm test` so it cannot rot silently a second time.
  */
-const TIER_A_KNOWN_DEFECT = new Set([
-  "tudat-izzo-hyperbolic",
-  "tudat-izzo-retrograde",
-  "tudat-izzo-near-pi",
-]);
+const TIER_A_REPAIRED_NOTE =
+  "Held open as an expected FAILURE from the harness's first run until 0.2.0. " +
+  "The row is unchanged — same Tudat source, same tolerance, same adjudicating " +
+  "invariant. What changed is the solver: the small-|z| derivative was y^3.5 " +
+  "where BMW/Curtis give y^1.5, the non-zero branch was not the Curtis " +
+  "expression either, `converged` was the literal true, and the residual was " +
+  "never re-evaluated. The marker is removed in the SAME commit as the fix, " +
+  "deliberately, so that neither the green run nor the red one is silent.";
+
+const TIER_A_REPAIRED = {
+  "tudat-izzo-hyperbolic": {
+    /**
+     * The watermarks below were RECALIBRATED when the rows flipped green. They
+     * had been set while the rows were expected to FAIL, so none of them had
+     * ever been measured against a working solver and every one fired on the
+     * first green run. Each is now ~3-4x the measured agreement, with the
+     * measurement written down beside it.
+     */
+    alarmRel: 1e-5,
+    alarmRelRationale:
+      "Measured 2.4e-6 relative at 0.2.0. Tudat prints this row to SIX " +
+      "significant figures (-745.457, 156.743, 104.495, -693.209), so ~1e-6 is " +
+      "the floor the PRINTED reference can support; nothing tighter is " +
+      "assertable without asserting digits that were never published. Watermark " +
+      "set just above it.",
+  },
+  "tudat-izzo-retrograde": {
+    alarmRel: 3e-11,
+    alarmRelRationale:
+      "Measured 7.3e-12 relative at 0.2.0, against a reference Tudat quotes to " +
+      "15 significant figures and gates itself at 1e-9. This is the " +
+      "highest-authority row in the tier and the watermark is the tightest: at " +
+      "3e-11 it is ~4x the observed agreement, so a solver change that costs an " +
+      "order of magnitude shows up here first.",
+  },
+  "tudat-izzo-near-pi": {
+    alarmRel: 3e-9,
+    alarmRelRationale:
+      "Measured 5.5e-10 relative at 0.2.0. The near-pi geometry is the one that " +
+      "depends on the conditioning choices in the solver (|sin| from the cross " +
+      "product, 1-cos from a unit-vector chord); reverting either takes this row " +
+      "to ~3e-7, which is inside the 1e-6 gate and would otherwise pass " +
+      "silently. This watermark is what makes that revert visible.",
+  },
+};
+
+/** The elliptical row was never marked and needs no repair record. */
+const TIER_A_UNMARKED_WATERMARK = { "tudat-izzo-elliptical": { alarmRel: 1e-5 } };
 
 async function build() {
   const a = await tierA();
   for (const entry of a) {
-    if (TIER_A_KNOWN_DEFECT.has(entry.id)) {
-      entry.expectedToFail = { defect: DEFECTS.lambert };
+    const override = TIER_A_REPAIRED[entry.id] ?? TIER_A_UNMARKED_WATERMARK[entry.id];
+    if (override) {
+      entry.band.alarmRel = override.alarmRel;
+      if (override.alarmRelRationale) {
+        entry.band.alarmRelRationale = override.alarmRelRationale;
+      }
+    }
+    if (TIER_A_REPAIRED[entry.id]) {
+      entry.repairedBy = {
+        task: "modules-maneuver-lambert-returns-non-solutions",
+        landedWith: "modules-maneuver-planner-rebuild-batch (maneuver-planner 0.2.0)",
+        note: TIER_A_REPAIRED_NOTE,
+      };
     }
   }
   const b = buildTextbookCases().map((entry) => {
@@ -173,22 +258,34 @@ async function build() {
     return entry;
   });
 
+  const d = await buildLibraryCases();
+
   return {
     "//":
       "GENERATED by vectors/tools/build-vectors.mjs from tudat-extract.json " +
-      "(tier A) and gen-textbook-vectors.mjs (tier B). DO NOT HAND-EDIT — " +
-      "`node vectors/tools/build-vectors.mjs --check` fails on drift. " +
-      "Provenance for every row is in vectors/PROVENANCE.md.",
-    schemaVersion: 1,
+      "(tier A), gen-textbook-vectors.mjs (tier B) and hapsira-extract.json + " +
+      "orekit-extract.json via gen-library-vectors.mjs (tier D). DO NOT " +
+      "HAND-EDIT — `node vectors/tools/build-vectors.mjs --check` fails on " +
+      "drift. Provenance for every row is in vectors/PROVENANCE.md.",
+    schemaVersion: 2,
     conformance: {
       model: "two-body point-mass, impulsive burns",
       mu: 3.986004418e14,
       re: 6378137,
       units: "SI throughout: metres, m/s, seconds, radians",
+      /**
+       * Tier D rows carry their SOURCE's gravitational parameter in `params.mu`
+       * rather than the pinned one. Orekit's Der case runs at EGM96's
+       * 3.986004415e14 and hapsira's at the IAU 3.986004418e14 — the same
+       * upstream geometry at two constants. Forcing both onto our pin would
+       * turn a conformance check into a comparison of constants.
+       */
+      tierDUsesSourceMu: true,
     },
     tolerancePolicy: "fail <=> |observed - expected| > abs + rel * |expected|",
+    libraries: await libraryProvenance(),
     invariants: tierC(),
-    cases: [...a, ...b],
+    cases: [...a, ...b, ...d],
   };
 }
 

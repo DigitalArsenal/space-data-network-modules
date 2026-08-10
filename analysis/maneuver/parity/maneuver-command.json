@@ -1,5 +1,5 @@
 {
-  "//": "TRI-RUNTIME BEHAVIOURAL FIXTURE for the maneuver-planner command surface. Every case here is byte-diffed across the browser harness, native WasmEdge and the pinned Docker WasmEdge, at 1/2/4/8 threads. Success paths AND failure paths: a deterministic error is parity evidence exactly like a deterministic answer. Until 0.2.0 this module's failure path was a TRAP (its exceptions were compiled out) and the cases below expected the trap CLASS to match across lanes. 0.2.0 gave the module a real error path, so those same cases now expect \"guest-error\" \u2014 the SAME inputs, judged by the same instrument, with the expectation flipped in the commit that flipped the behaviour. Run: space-data-module parity --wasm dist/isomorphic/module.wasm --fixture parity/maneuver-command.json --lanes browser,wasmedge,docker-wasmedge",
+  "//": "TRI-RUNTIME BEHAVIOURAL FIXTURE for the maneuver-planner command surface. Every case here is byte-diffed across the browser harness, native WasmEdge and the pinned Docker WasmEdge, at 1/2/4/8 threads. Success paths AND failure paths: a deterministic error is parity evidence exactly like a deterministic answer. Until 0.2.0 this module's failure path was a TRAP (its exceptions were compiled out) and the cases below expected the trap CLASS to match across lanes. 0.2.0 gave the module a real error path, so those same cases now expect \"guest-error\" — the SAME inputs, judged by the same instrument, with the expectation flipped in the commit that flipped the behaviour. Run: space-data-module parity --wasm dist/isomorphic/module.wasm --fixture parity/maneuver-command.json --lanes browser,wasmedge,docker-wasmedge",
   "name": "maneuver-command-parity",
   "threadEnvVar": "SDM_PARITY_THREADS",
   "threadCounts": [
@@ -65,7 +65,7 @@
     {
       "id": "phasing-catch-up",
       "expect": "ok",
-      "//": "Positive phase angle: the phasing orbit is SMALLER and the first burn is retrograde. The response carries only the magnitude, so what this case pins across lanes is that phasingSMA \u2014 the quantity the console wrapper recovers the sign from \u2014 is byte-identical everywhere.",
+      "//": "Positive phase angle: the phasing orbit is SMALLER and the first burn is retrograde. The response carries only the magnitude, so what this case pins across lanes is that phasingSMA — the quantity the console wrapper recovers the sign from — is byte-identical everywhere.",
       "request": {
         "methodId": "invoke",
         "inputs": [
@@ -105,6 +105,90 @@
       }
     },
     {
+      "id": "lambert-curtis-5-3-domain-boundary",
+      "expect": "ok",
+      "//": "THE 0.3.0 BRACKETING REPAIR, as a parity case. Curtis example 5.3: the zero-revolution root sits at z = -0.173 inside a domain that ends at z = -0.398, so 0.2.0 stepped over it and answered no-solution on every lane. It is here because the repair is a SEARCH change — the one class of change whose answer can legitimately differ between two libm implementations if a probe lands on the boundary differently — and a search that brackets identically on three runtimes is the evidence that it does not.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"solveLambert\",\"params\":{\"r1\":[273378000,0,0],\"r2\":[145820000,12758000,0],\"tof\":48600,\"mu\":398600441800000,\"prograde\":true,\"nRevs\":0}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lambert-multi-rev-high-branch",
+      "expect": "ok",
+      "//": "The multi-revolution HIGH branch (0.3.0). Der Molniya, one revolution, second sign change — an arc no version through 0.2.0 could return. The scan that finds it walks 2048 nodes and counts sign changes, so a single node classified differently on one lane would return the OTHER arc, and that difference is 1.03 km/s of departure speed rather than a last-digit wobble.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"solveLambert\",\"params\":{\"r1\":[22592145.603,-1599915.239,-19783950.506],\"r2\":[1922067.697,4054157.051,-8925727.465],\"tof\":36000,\"mu\":398600441800000,\"prograde\":true,\"nRevs\":1,\"branch\":\"high\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lambert-multi-rev-low-branch-default",
+      "expect": "ok",
+      "//": "The same geometry with NO branch stated: the default must still be the low arc, byte for byte, on every lane. Paired with the case above, this is what pins the selector without loosening the default.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"solveLambert\",\"params\":{\"r1\":[22592145.603,-1599915.239,-19783950.506],\"r2\":[1922067.697,4054157.051,-8925727.465],\"tof\":36000,\"mu\":398600441800000,\"prograde\":true,\"nRevs\":1}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lambert-hyperbolic-conic-report",
+      "expect": "ok",
+      "//": "The transfer-conic report on a HYPERBOLIC arc (0.3.0): perigeeRadius, transferEccentricity and transferConic present, apogeeRadius ABSENT because the arc never returns. The conditional key is the part worth diffing across lanes — a lane that emitted it, or omitted transferSemiMajorAxis, would be serving a different contract from the same bytes.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"solveLambert\",\"params\":{\"r1\":[300000000,0,0],\"r2\":[165850840.0444268,29968662.9674529,0],\"tof\":61200,\"mu\":398600441800000,\"prograde\":true,\"nRevs\":0}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lambert-mindv-ranks-both-branches",
+      "expect": "ok",
+      "//": "solveLambertMinDV over both branches (0.3.0), on a geometry where the high branch wins by a factor of thirty-six. The response carries the whole candidate set it ranked, so this case diffs an ORDERED COMPOSITE across lanes rather than a scalar: same members, same order, same costs.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"solveLambertMinDV\",\"params\":{\"r1\":[6678137,0,0],\"r2\":[-5448333.689812294,-4253906.917107157,0],\"tof\":9000,\"mu\":398600441800000,\"prograde\":true,\"maxRevs\":3,\"departureVelocity\":[0,7725.760232077137,0],\"arrivalVelocity\":[4673.280237681472,-5985.460109270802,0]}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lambert-branch-must-name-one-of-the-two-arcs",
+      "expect": "ok",
+      "//": "A refusal is parity evidence exactly like an answer, and it is filed as expect:\"ok\" for the same reason every other refusal case in this fixture is — the class describes whether the INVOKE completed, and a structured error did complete; what is byte-diffed is the error frame itself. The branch selector admits two names and no third; a lane that fell back to the default instead of refusing would hand a caller a different arc than the one it asked for, silently.",
+      "request": {
+        "methodId": "invoke",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadUtf8": "{\"operation\":\"solveLambert\",\"params\":{\"r1\":[22592145.603,-1599915.239,-19783950.506],\"r2\":[1922067.697,4054157.051,-8925727.465],\"tof\":36000,\"mu\":398600441800000,\"nRevs\":1,\"branch\":\"middle\"}}"
+          }
+        ]
+      }
+    },
+    {
       "id": "version",
       "expect": "ok",
       "request": {
@@ -120,7 +204,7 @@
     {
       "id": "unknown-operation-errors",
       "expect": "ok",
-      "//": "An unknown operation returns errorCode \"unknown-operation\" and a JSON {error, errorCode} body, identically on every lane. Under 0.1.0 this aborted the guest and poisoned the instance. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count \u2014 so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\".",
+      "//": "An unknown operation returns errorCode \"unknown-operation\" and a JSON {error, errorCode} body, identically on every lane. Under 0.1.0 this aborted the guest and poisoned the instance. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count — so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\".",
       "request": {
         "methodId": "invoke",
         "inputs": [
@@ -143,12 +227,12 @@
           }
         ]
       },
-      "//": "A missing required parameter names the parameter it wants. Same message text on every lane \u2014 the message is built from the operation and key names, so a lane-specific difference here would mean the string formatting itself diverged. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count \u2014 so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\"."
+      "//": "A missing required parameter names the parameter it wants. Same message text on every lane — the message is built from the operation and key names, so a lane-specific difference here would mean the string formatting itself diverged. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count — so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\"."
     },
     {
       "id": "validator-range-errors",
       "expect": "ok",
-      "//": "numRevs = 0 hits the module's OWN validator. Its carefully worded message was unreachable for the whole life of 0.1.0; this case pins that it is now observable, and identical, on all three runtimes. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count \u2014 so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\".",
+      "//": "numRevs = 0 hits the module's OWN validator. Its carefully worded message was unreachable for the whole life of 0.1.0; this case pins that it is now observable, and identical, on all three runtimes. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count — so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\".",
       "request": {
         "methodId": "invoke",
         "inputs": [
@@ -171,7 +255,7 @@
           }
         ]
       },
-      "//": "A truncated request body. The parser reports the byte offset it failed at, which makes this the tightest parity probe in the failure set: a lane whose parser walked the input differently would report a different offset. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count \u2014 so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\"."
+      "//": "A truncated request body. The parser reports the byte offset it failed at, which makes this the tightest parity probe in the failure set: a lane whose parser walked the input differently would report a different offset. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count — so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\"."
     },
     {
       "id": "malformed-stdin",
@@ -181,7 +265,7 @@
     {
       "id": "lambert-no-solution-errors",
       "expect": "ok",
-      "//": "An antipodal geometry: r1 and r2 exactly opposed, so every plane through the line is a valid transfer plane and no unique solution exists. The universal-variable formulation says so algebraically (A = 0). 0.1.0 answered converged:true here. The REFUSAL must be identical across lanes \u2014 a solver that refuses in one runtime and answers in another is the worst possible isomorphism failure, because the answer is the wrong one. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count \u2014 so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\".",
+      "//": "An antipodal geometry: r1 and r2 exactly opposed, so every plane through the line is a valid transfer plane and no unique solution exists. The universal-variable formulation says so algebraically (A = 0). 0.1.0 answered converged:true here. The REFUSAL must be identical across lanes — a solver that refuses in one runtime and answers in another is the worst possible isomorphism failure, because the answer is the wrong one. EXIT CLASS IS \"ok\", NOT \"guest-error\": the command surface always exits 0 and encodes the refusal INTO the PIV response envelope ({error, errorCode} plus the module's message). That makes \"ok\" the stronger expectation here, because an \"ok\" case is additionally BYTE-DIFFED across every lane and thread count — so the whole error payload, message text included, is pinned rather than just the class. What changed at 0.2.0 is that this input used to produce class \"trap\".",
       "request": {
         "methodId": "invoke",
         "inputs": [

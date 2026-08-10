@@ -1,0 +1,764 @@
+{
+  "//": "MECHANICALLY EXTRACTED from hapsira test sources by vectors/tools/dump-hapsira-vectors.mjs. Do not hand-edit: regenerate. hapsira is consulted as an ORACLE — it is never imported, executed, or depended on by any build in this repo.",
+  "generator": "vectors/tools/dump-hapsira-vectors.mjs",
+  "hapsira": {
+    "root": "/Users/tj/software/upstream/hapsira",
+    "head": "5d25e627fdbb3192b912c2ed7fa5e647b07088ba",
+    "version": "0.19.dev0",
+    "license": "MIT",
+    "licenseFirstLine": "The MIT License (MIT)",
+    "licenseNote": "MIT permits reuse of the values with attribution and does not reach our artifact. No hapsira CODE is copied into this repo: the dumper reads the test sources as text and re-expresses the inputs and expected numbers in our own JSON. (The GPL firewall Perses applies to SSBM does not bind here — it would if the source were GPL, which is why the licence is read out of the checkout and asserted above rather than assumed.)"
+  },
+  "constants": {
+    "GM_earth": {
+      "value": 398600441800000,
+      "unit": "m3 / (s2)",
+      "source": "src/hapsira/constants/general.py"
+    },
+    "R_earth": {
+      "value": 6378136.6,
+      "unit": "m",
+      "source": "src/hapsira/constants/general.py"
+    }
+  },
+  "cases": [
+    {
+      "id": "hapsira-vallado-7-5",
+      "kind": "lambert",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_vallado75",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof",
+          "v1": "expected_va",
+          "v2": "expected_vb"
+        },
+        "upstream": "Vallado, Fundamentals of Astrodynamics and Applications, example 7-5",
+        "license": "MIT"
+      },
+      "nRevs": 0,
+      "branch": null,
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 46495909845.04,
+        "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+      },
+      "values": {
+        "r1": [
+          15945340,
+          0,
+          0
+        ],
+        "r2": [
+          12214833.989999998,
+          10249467.31,
+          0
+        ],
+        "tof": 4560,
+        "mu": 398600441800000,
+        "v1": [
+          2058.9249999999997,
+          2915.956,
+          0
+        ],
+        "v2": [
+          -3451.569,
+          910.301,
+          0
+        ]
+      },
+      "tolerances": {
+        "v1": {
+          "kind": "rtol",
+          "value": 0.00001
+        },
+        "v2": {
+          "kind": "rtol",
+          "value": 0.0001
+        }
+      },
+      "note": "Coplanar equatorial Lambert transfer over 76 minutes. hapsira runs it through BOTH of its solvers (its Vallado universal-variable and its Izzo implementation) against the same expected pair."
+    },
+    {
+      "id": "hapsira-curtis-5-2",
+      "kind": "lambert",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_curtis52",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof",
+          "v1": "expected_va",
+          "v2": "expected_vb"
+        },
+        "upstream": "Curtis, Orbital Mechanics for Engineering Students, example 5.2",
+        "license": "MIT"
+      },
+      "nRevs": 0,
+      "branch": null,
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 69552000000,
+        "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+      },
+      "values": {
+        "r1": [
+          5000000,
+          10000000,
+          2100000
+        ],
+        "r2": [
+          -14600000,
+          2500000,
+          7000000
+        ],
+        "tof": 3600,
+        "mu": 398600441800000,
+        "v1": [
+          -5992.5,
+          1925.4,
+          3245.6
+        ],
+        "v2": [
+          -3312.5,
+          -4196.6,
+          -385.29
+        ]
+      },
+      "tolerances": {
+        "v1": {
+          "kind": "rtol",
+          "value": 0.0001
+        },
+        "v2": {
+          "kind": "rtol",
+          "value": 0.0001
+        }
+      },
+      "note": "A fully three-dimensional geometry — the only tier-D Lambert row whose positions are not coplanar with an axis — so it is the row that catches a solver whose plane handling is right only in the equatorial special case."
+    },
+    {
+      "id": "hapsira-curtis-5-3",
+      "kind": "lambert",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_curtis53",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof",
+          "v1": "expected_va"
+        },
+        "upstream": "Curtis, example 5.3 (hapsira records an ERRATUM: the j component is positive)",
+        "license": "MIT"
+      },
+      "nRevs": 0,
+      "branch": null,
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 73104010979.99998,
+        "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+      },
+      "values": {
+        "r1": [
+          273378000,
+          0,
+          0
+        ],
+        "r2": [
+          145820000,
+          12758000,
+          0
+        ],
+        "tof": 48600,
+        "mu": 398600441800000,
+        "v1": [
+          -2435.6,
+          267.40999999999997,
+          0
+        ]
+      },
+      "tolerances": {
+        "v1": {
+          "kind": "rtol",
+          "value": 0.0001
+        }
+      },
+      "note": "A 13.5-hour high-apogee arc. hapsira asserts the departure velocity only, so this row does too — asserting an arrival velocity the source does not state would be inventing a reference."
+    },
+    {
+      "id": "hapsira-der-molniya-0rev",
+      "kind": "lambert",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_molniya_der_zero_full_revolution",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof",
+          "v1": "expected_va",
+          "v2": "expected_vb"
+        },
+        "upstream": "Der, \"Superior Lambert Algorithm\" — Molniya geometry, zero full revolutions",
+        "license": "MIT"
+      },
+      "nRevs": 0,
+      "branch": null,
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 11959592376.582159,
+        "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+      },
+      "values": {
+        "r1": [
+          22592145.603,
+          -1599915.2389999998,
+          -19783950.506
+        ],
+        "r2": [
+          1922067.697,
+          4054157.051,
+          -8925727.465
+        ],
+        "tof": 36000,
+        "mu": 398600441800000,
+        "v1": [
+          2000.652697,
+          387.688615,
+          -2666.9477599999996
+        ],
+        "v2": [
+          -3792.4661899999996,
+          -1777.0764100000001,
+          6856.814394999999
+        ]
+      },
+      "tolerances": {
+        "v1": {
+          "kind": "rtol",
+          "value": 0.000001
+        },
+        "v2": {
+          "kind": "rtol",
+          "value": 0.000001
+        }
+      },
+      "note": "The SAME case Orekit carries in IodLambertTest.testIssue752, at a different gravitational parameter (hapsira: GM_earth; Orekit: EGM96). Two independent libraries, one upstream paper, two mu values — a row that agrees with both is agreeing with the physics, not with a constant."
+    },
+    {
+      "id": "hapsira-der-molniya-1rev-highpath",
+      "kind": "lambert",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_molniya_der_one_full_revolution",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof",
+          "v1": "expected_va_l",
+          "v2": "expected_vb_l"
+        },
+        "upstream": "Der, \"Superior Lambert Algorithm\" — Molniya geometry, ONE full revolution",
+        "license": "MIT"
+      },
+      "nRevs": 1,
+      "branch": "high-path (hapsira lowpath=False)",
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 14782956393.972118,
+        "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+      },
+      "values": {
+        "r1": [
+          22592145.603,
+          -1599915.2389999998,
+          -19783950.506
+        ],
+        "r2": [
+          1922067.697,
+          4054157.051,
+          -8925727.465
+        ],
+        "tof": 36000,
+        "mu": 398600441800000,
+        "v1": [
+          503.3577,
+          618.69408,
+          -1571.76904
+        ],
+        "v2": [
+          -4183.34626,
+          -1132.62727,
+          6133.0709099999995
+        ]
+      },
+      "tolerances": {
+        "v1": {
+          "kind": "rtol",
+          "value": 0.00001
+        },
+        "v2": {
+          "kind": "rtol",
+          "value": 0.00001
+        }
+      },
+      "note": "MULTI-REVOLUTION. A one-revolution Lambert problem has TWO solutions, and hapsira exposes the choice as `lowpath`. This row is the high-path branch."
+    },
+    {
+      "id": "hapsira-der-molniya-1rev-lowpath",
+      "kind": "lambert",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_molniya_der_one_full_revolution",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof",
+          "v1": "expected_va_r",
+          "v2": "expected_vb_r"
+        },
+        "upstream": "Der, \"Superior Lambert Algorithm\" — Molniya geometry, ONE full revolution",
+        "license": "MIT"
+      },
+      "nRevs": 1,
+      "branch": "low-path (hapsira lowpath=True)",
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 22488621098.769352,
+        "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+      },
+      "values": {
+        "r1": [
+          22592145.603,
+          -1599915.2389999998,
+          -19783950.506
+        ],
+        "r2": [
+          1922067.697,
+          4054157.051,
+          -8925727.465
+        ],
+        "tof": 36000,
+        "mu": 398600441800000,
+        "v1": [
+          -2457.59553,
+          1169.45801,
+          431.61258000000004
+        ],
+        "v2": [
+          -5538.4137,
+          18.2222,
+          5496.41054
+        ]
+      },
+      "tolerances": {
+        "v1": {
+          "kind": "rtol",
+          "value": 0.00001
+        },
+        "v2": {
+          "kind": "rtol",
+          "value": 0.0001
+        }
+      },
+      "note": "The OTHER one-revolution branch of the identical geometry. Our module's multi-revolution path scans the bounded interval and takes the FIRST sign change, so it can return only one of these two arcs and the JSON surface carries no way to ask for the other."
+    },
+    {
+      "id": "hapsira-issue840-retrograde",
+      "kind": "lambert",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_issue840",
+        "symbols": {
+          "r1": "r0",
+          "r2": "rf",
+          "tof": "tof",
+          "v1": "expected_va",
+          "v2": "expected_vb"
+        },
+        "upstream": "hapsira issue #840 — a geometry whose short way is RETROGRADE",
+        "license": "MIT"
+      },
+      "nRevs": 0,
+      "branch": null,
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 58228806000.00001,
+        "rule": "sign of (r1 x v1)_z on the PUBLISHED departure velocity — the sense the source's own answer circulates in. hapsira's Izzo solver takes no prograde flag."
+      },
+      "values": {
+        "r1": [
+          10000000,
+          0,
+          0
+        ],
+        "r2": [
+          8000000,
+          -5000000,
+          0
+        ],
+        "tof": 7200,
+        "mu": 398600441800000,
+        "v1": [
+          365.91277,
+          5822.8806,
+          0
+        ],
+        "v2": [
+          3993.97599,
+          4782.365760000001,
+          0
+        ]
+      },
+      "tolerances": {
+        "v1": {
+          "kind": "rtol",
+          "value": 0.000001
+        },
+        "v2": {
+          "kind": "rtol",
+          "value": 0.000001
+        }
+      },
+      "note": "hapsira's own regression for a transfer whose angular momentum points along -z: its Vallado solver has to be told `prograde=False` and its Izzo solver infers it. The row exists because a solver that hardwires prograde answers this one confidently and wrongly."
+    },
+    {
+      "id": "hapsira-der-molniya-1rev-infeasible",
+      "kind": "refusal",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_raises_exception_for_non_feasible_solution",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof"
+        },
+        "license": "MIT"
+      },
+      "nRevs": 1,
+      "prograde": true,
+      "progradeDerivation": {
+        "prograde": true,
+        "momentumZ": 94667251792441.03,
+        "rule": "sign of (r1 x r2)_z — the short way. Used only where the source publishes no velocity to read the sense from, i.e. the rows where it REFUSES."
+      },
+      "values": {
+        "r1": [
+          22592145.603,
+          -1599915.2389999998,
+          -19783950.506
+        ],
+        "r2": [
+          1922067.697,
+          4054157.051,
+          -8925727.465
+        ],
+        "tof": 18000,
+        "mu": 398600441800000
+      },
+      "upstreamMessage": "No feasible solution, try lower M",
+      "note": "NON-SOLUTION SCREENING. The Molniya geometry again, with the time of flight cut to five hours: there is no ONE-revolution arc that flies it. hapsira raises. The only wrong answer here is a velocity pair with converged:true — which is precisely what 0.1.0 returned for 50 of 52 routine LEO geometries (modules-maneuver-lambert-returns-non-solutions)."
+    },
+    {
+      "id": "hapsira-collinear-refusal",
+      "kind": "refusal",
+      "operation": "solveLambert",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_iod.py",
+        "testCase": "test_collinear_vectors_input",
+        "symbols": {
+          "r1": "r0",
+          "r2": "r",
+          "tof": "tof"
+        },
+        "license": "MIT"
+      },
+      "nRevs": 0,
+      "prograde": false,
+      "progradeDerivation": {
+        "prograde": false,
+        "momentumZ": 0,
+        "rule": "sign of (r1 x r2)_z — the short way. Used only where the source publishes no velocity to read the sense from, i.e. the rows where it REFUSES."
+      },
+      "values": {
+        "r1": [
+          22592145.603,
+          -1599915.2389999998,
+          -19783950.506
+        ],
+        "r2": [
+          22592145.603,
+          -1599915.2389999998,
+          -19783950.506
+        ],
+        "tof": 18000,
+        "mu": 398600441800000
+      },
+      "upstreamMessage": "Lambert solution cannot be computed for collinear vectors",
+      "note": "DEGENERATE GEOMETRY. r1 and r2 are the same vector, so the transfer plane is undefined. hapsira raises rather than picking a plane."
+    },
+    {
+      "id": "hapsira-vallado-6-1-hohmann",
+      "kind": "transfer",
+      "operation": "hohmannTransfer",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_maneuver.py",
+        "testCase": "test_hohmann_maneuver",
+        "symbols": {
+          "r1": "alt_i",
+          "r2": "alt_f",
+          "totalDeltaV": "expected_dv",
+          "tof": "expected_t_trans"
+        },
+        "upstream": "Vallado, example 6-1 — circular LEO to circular GEO",
+        "license": "MIT"
+      },
+      "values": {
+        "mu": 398600441800000,
+        "r1": 6569480.71,
+        "r2": 42159485.17
+      },
+      "radiiFrom": {
+        "r1": {
+          "altitudeSymbol": "alt_i",
+          "altitude": 191344.11,
+          "earthRadius": 6378136.6
+        },
+        "r2": {
+          "altitudeSymbol": "alt_f",
+          "altitude": 35781348.57,
+          "earthRadius": 6378136.6
+        }
+      },
+      "expect": {
+        "totalDeltaV": 3935.2239999999997,
+        "tof": 18924.166800000003
+      },
+      "tolerances": {
+        "totalDeltaV": {
+          "kind": "rtol",
+          "value": 0.00001
+        },
+        "tof": {
+          "kind": "rtol",
+          "value": 0.00001,
+          "statedVia": "expected_total_time"
+        }
+      },
+      "note": "The canonical Hohmann. Our tier B already reproduces Vallado's own printed dv_a/dv_b/tau; this row is the same transfer as a THIRD party states it, over hapsira's Earth radius rather than ours, which is what makes it an independent check rather than a restatement."
+    },
+    {
+      "id": "hapsira-vallado-6-2-bielliptic",
+      "kind": "transfer",
+      "operation": "biEllipticTransfer",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_maneuver.py",
+        "testCase": "test_bielliptic_maneuver",
+        "symbols": {
+          "r1": "alt_i",
+          "rIntermediate": "alt_b",
+          "r2": "alt_f",
+          "totalDeltaV": "expected_dv",
+          "tof": "expected_t_trans"
+        },
+        "upstream": "Vallado, example 6-2 — bi-elliptic transfer via a 503873 km apoapsis",
+        "license": "MIT"
+      },
+      "values": {
+        "mu": 398600441800000,
+        "r1": 6569480.71,
+        "rIntermediate": 510251136.6,
+        "r2": 382688136.6
+      },
+      "radiiFrom": {
+        "r1": {
+          "altitudeSymbol": "alt_i",
+          "altitude": 191344.11,
+          "earthRadius": 6378136.6
+        },
+        "rIntermediate": {
+          "altitudeSymbol": "alt_b",
+          "altitude": 503873000,
+          "earthRadius": 6378136.6
+        },
+        "r2": {
+          "altitudeSymbol": "alt_f",
+          "altitude": 376310000,
+          "earthRadius": 6378136.6
+        }
+      },
+      "expect": {
+        "totalDeltaV": 3904.057,
+        "tof": 2138111.2908
+      },
+      "tolerances": {
+        "totalDeltaV": {
+          "kind": "rtol",
+          "value": 0.00001
+        },
+        "tof": {
+          "kind": "rtol",
+          "value": 0.000001,
+          "statedVia": "expected_total_time"
+        }
+      },
+      "note": "THIS ROW SETTLES A DISCREPANCY THIS REPO RECORDED AND COULD NOT CLOSE. vectors/PROVENANCE.md withdrew the published bi-elliptic anchor because 3.904057 km/s did not reproduce. It reproduces exactly here: the three radii are ALTITUDES above hapsira's R_earth, and the total is the sum of the burn MAGNITUDES — the third burn is a deceleration and enters the total with its sign flipped."
+    },
+    {
+      "id": "hapsira-eccentric-departure-hohmann",
+      "kind": "eccentric-departure",
+      "operation": "hohmannTransfer",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_maneuver.py",
+        "testCase": "test_repr_maneuver",
+        "symbols": {
+          "position": "r",
+          "velocity": "v",
+          "r2": "alt_f",
+          "cost": "expected_hohmann_maneuver"
+        },
+        "upstream": "hapsira Maneuver.hohmann applied to an ECCENTRIC departure orbit",
+        "license": "MIT"
+      },
+      "values": {
+        "mu": 398600441800000,
+        "r1": 7283463.90079383,
+        "r2": 42159485.17
+      },
+      "radiiFrom": {
+        "r2": {
+          "altitudeSymbol": "alt_f",
+          "altitude": 35781348.57,
+          "earthRadius": 6378136.6
+        }
+      },
+      "derivedDepartureState": {
+        "rule": "periapsis radius and periapsis SPEED of the state hapsira's test builds. hapsira's Maneuver.hohmann propagates to periapsis and departs from the state it finds there; our JSON surface takes a scalar radius. This is an INPUT conversion — the expected number below is hapsira's, untouched.",
+        "position": [
+          -6045000,
+          -3490000,
+          2500000
+        ],
+        "velocity": [
+          -3457,
+          6618,
+          2533
+        ],
+        "semiMajorAxis": 8788081.767279672,
+        "eccentricity": 0.17121118195416976,
+        "periapsisRadius": 7283463.90079383,
+        "periapsisSpeed": 8006.035414756516
+      },
+      "expect": {
+        "totalDeltaV": 3060.548
+      },
+      "reprLiteral": "expected_hohmann_maneuver = \"Number of impulses: 2, Total cost: 3.060548 km / s\"",
+      "impulses": 2,
+      "tolerances": {
+        "totalDeltaV": {
+          "kind": "atol",
+          "value": 0.0005,
+          "rationale": "half a unit in the last decimal place hapsira's repr() prints: six decimals of km/s resolve 1e-6 km/s = 1 mm/s, so the honest gate is +/- 0.5 mm/s = 5e-4 m/s. Nothing tighter is assertable about a number that reached us through a formatted string."
+        }
+      },
+      "note": "hapsira departs from the orbit's actual periapsis STATE: dv_a = sqrt(2k/r_i - k/a_trans) - v_i, with v_i the true periapsis speed. Our computeHohmannTransfer assumes a CIRCULAR departure and the JSON surface gives the caller no way to say otherwise — which is exactly graph task modules-maneuver-hohmann-departure-speed."
+    },
+    {
+      "id": "hapsira-eccentric-departure-bielliptic",
+      "kind": "eccentric-departure",
+      "operation": "biEllipticTransfer",
+      "source": {
+        "library": "hapsira",
+        "file": "tests/test_maneuver.py",
+        "testCase": "test_repr_maneuver",
+        "symbols": {
+          "position": "r",
+          "velocity": "v",
+          "rIntermediate": "alt_b",
+          "r2": "alt_fi",
+          "cost": "expected_bielliptic_maneuver"
+        },
+        "upstream": "hapsira Maneuver.bielliptic applied to an ECCENTRIC departure orbit",
+        "license": "MIT"
+      },
+      "values": {
+        "mu": 398600441800000,
+        "r1": 7283463.90079383,
+        "rIntermediate": 510251136.6,
+        "r2": 382688136.6
+      },
+      "radiiFrom": {
+        "rIntermediate": {
+          "altitudeSymbol": "alt_b",
+          "altitude": 503873000,
+          "earthRadius": 6378136.6
+        },
+        "r2": {
+          "altitudeSymbol": "alt_fi",
+          "altitude": 376310000,
+          "earthRadius": 6378136.6
+        }
+      },
+      "derivedDepartureState": {
+        "rule": "periapsis radius and periapsis SPEED of the state hapsira's test builds. hapsira's Maneuver.hohmann propagates to periapsis and departs from the state it finds there; our JSON surface takes a scalar radius. This is an INPUT conversion — the expected number below is hapsira's, untouched.",
+        "position": [
+          -6045000,
+          -3490000,
+          2500000
+        ],
+        "velocity": [
+          -3457,
+          6618,
+          2533
+        ],
+        "semiMajorAxis": 8788081.767279672,
+        "eccentricity": 0.17121118195416976,
+        "periapsisRadius": 7283463.90079383,
+        "periapsisSpeed": 8006.035414756516
+      },
+      "expect": {
+        "totalDeltaV": 3122.556
+      },
+      "reprLiteral": "expected_bielliptic_maneuver = \"Number of impulses: 3, Total cost: 3.122556 km / s\"",
+      "impulses": 3,
+      "tolerances": {
+        "totalDeltaV": {
+          "kind": "atol",
+          "value": 0.0005,
+          "rationale": "half a unit in the last decimal place hapsira's repr() prints: six decimals of km/s resolve 1e-6 km/s = 1 mm/s, so the honest gate is +/- 0.5 mm/s = 5e-4 m/s. Nothing tighter is assertable about a number that reached us through a formatted string."
+        }
+      },
+      "note": "The same defect seen through the three-burn transfer: computeBiEllipticTransfer shares the circular-departure assumption with computeHohmannTransfer, so the departure-speed parameter has to reach both."
+    }
+  ]
+}

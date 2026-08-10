@@ -1,0 +1,123 @@
+{
+  "//": "MECHANICALLY EXTRACTED from Orekit test sources by vectors/tools/dump-orekit-vectors.mjs. Do not hand-edit: regenerate. Orekit is consulted as an ORACLE — it is never compiled, linked, or depended on by any build in this repo.",
+  "generator": "vectors/tools/dump-orekit-vectors.mjs",
+  "orekit": {
+    "root": "/Users/tj/software/upstream/orekit",
+    "head": "81dffba69b3b10b55c515c9197cac7431286ec4f",
+    "license": "Apache-2.0",
+    "licenseNote": "Apache-2.0 permits reuse of the values with attribution and does not reach our artifact. No Orekit CODE is copied: the dumper reads the test sources as text and re-expresses inputs and expected numbers in our own JSON. Every file it reads is checked for the Apache header before a single number is taken from it.",
+    "copyrightNotice": "Copyright 2002-2026 CS GROUP"
+  },
+  "constants": {
+    "EGM96_EARTH_MU": 398600441500000,
+    "WGS84_EARTH_MU": 398600441800000
+  },
+  "cases": [
+    {
+      "id": "orekit-der-superior-lambert",
+      "kind": "lambert-magnitude",
+      "operation": "solveLambert",
+      "source": {
+        "library": "orekit",
+        "file": "src/test/java/org/orekit/estimation/iod/IodLambertTest.java",
+        "testCase": "testIssue752",
+        "symbols": {
+          "r1": "posR1",
+          "r2": "posR2",
+          "tof": "date2",
+          "v1": "velR1",
+          "v2": "velR2",
+          "mu": "EGM96_EARTH_MU"
+        },
+        "upstream": "Der, \"Superior Lambert Algorithm\"",
+        "license": "Apache-2.0"
+      },
+      "nRevs": 0,
+      "prograde": true,
+      "progradeCheck": {
+        "rule": "the source passes posigrade=true; the geometry agrees (sign of (r1 x r2)_z)",
+        "momentumZ": 94667251792441.03
+      },
+      "values": {
+        "r1": [
+          22592145.603,
+          -1599915.239,
+          -19783950.506
+        ],
+        "r2": [
+          1922067.697,
+          4054157.051,
+          -8925727.465
+        ],
+        "tof": 36000,
+        "mu": 398600441500000,
+        "v1Magnitude": 3356.415354330124,
+        "v2Magnitude": 8034.719138079134,
+        "v1Components": [
+          2000.652697,
+          387.688615,
+          -2666.94776
+        ],
+        "v2Components": [
+          -3792.46619,
+          -1777.07641,
+          6856.81495
+        ]
+      },
+      "tolerances": {
+        "v1Magnitude": {
+          "kind": "atol",
+          "value": 0.001
+        },
+        "v2Magnitude": {
+          "kind": "atol",
+          "value": 0.001
+        }
+      },
+      "note": "Orekit's own regression for the Der Molniya case, at EGM96's mu rather than the IAU value hapsira uses. Orekit asserts only the NORMS of the two velocities, to 1e-3 m/s, so this row asserts exactly those — v1Magnitude and v2Magnitude, which the module publishes. Asserting the components would be asserting something Orekit does not."
+    },
+    {
+      "id": "orekit-inertial-impulsive-burn",
+      "kind": "impulsive-burn",
+      "operation": "ricRoundTrip",
+      "source": {
+        "library": "orekit",
+        "file": "src/test/java/org/orekit/forces/maneuvers/ImpulseManeuverTest.java",
+        "testCase": "testInertialManeuver",
+        "symbols": {
+          "vx": "initialVx",
+          "vy": "initialVy",
+          "vz": "initialVz",
+          "dv": "deltaV",
+          "tolerance": "maneuverTolerance"
+        },
+        "upstream": "Orekit ImpulseManeuverTest.testInertialManeuver",
+        "license": "Apache-2.0"
+      },
+      "values": {
+        "initialVelocity": [
+          0,
+          8000,
+          1000
+        ],
+        "deltaV": [
+          0.01,
+          0.02,
+          0.03
+        ],
+        "expectedFinalVelocity": [
+          0.01,
+          8000.02,
+          1000.03
+        ]
+      },
+      "tolerances": {
+        "finalVelocity": {
+          "kind": "atol",
+          "value": 0.0001
+        }
+      },
+      "note": "THE IMPULSIVE-BURN IDENTITY, in the frame where it has no free parameters: a delta-v applied in an INERTIAL frame adds component by component to the inertial velocity, and Orekit asserts exactly that to 1e-4 m/s after propagating through the burn. Our maneuver module exposes no burn-application op, so this row is carried as the RIC round-trip's inertial anchor: the same three components, expressed in the RIC triad of a stated state and converted back, must reproduce them."
+    }
+  ]
+}
