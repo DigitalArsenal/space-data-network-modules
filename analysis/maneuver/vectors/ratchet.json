@@ -1,0 +1,65 @@
+{
+  "//": "THE RATCHET. Vector counts may only grow, and the GREEN count may only grow — a row demoted to expected-to-fail fails tests/ratchet.test.mjs even though the total is unchanged. Raise with vectors/tools/update-ratchet.mjs.",
+  "updated": "2026-08-10T16:54:36.374Z",
+  "total": 28,
+  "green": 22,
+  "byOperation": {
+    "solveLambert": {
+      "total": 15,
+      "green": 12,
+      "knownRed": 3
+    },
+    "hohmannTransfer": {
+      "total": 4,
+      "green": 3,
+      "knownRed": 1
+    },
+    "biEllipticTransfer": {
+      "total": 3,
+      "green": 2,
+      "knownRed": 1
+    },
+    "planeChange": {
+      "total": 1,
+      "green": 1,
+      "knownRed": 0
+    },
+    "combinedManeuver": {
+      "total": 2,
+      "green": 1,
+      "knownRed": 1
+    },
+    "phasingManeuver": {
+      "total": 2,
+      "green": 2,
+      "knownRed": 0
+    },
+    "ricFrameAlgebra": {
+      "total": 1,
+      "green": 1,
+      "knownRed": 0
+    }
+  },
+  "byLibrary": {
+    "tudat": {
+      "total": 4,
+      "green": 4,
+      "knownRed": 0
+    },
+    "in-repo": {
+      "total": 8,
+      "green": 7,
+      "knownRed": 1
+    },
+    "hapsira": {
+      "total": 14,
+      "green": 9,
+      "knownRed": 5
+    },
+    "orekit": {
+      "total": 2,
+      "green": 2,
+      "knownRed": 0
+    }
+  }
+}

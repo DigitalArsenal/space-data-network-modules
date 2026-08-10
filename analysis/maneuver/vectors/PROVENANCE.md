@@ -92,12 +92,28 @@ element set, and it **asserts** the element set rather than assuming it.
   permanently on the elliptical case, whose references are printed to six
   figures, and an alarm that is always on is an alarm nobody reads.
 
-### KNOWN DEFECT — three of these four rows fail
+### KNOWN DEFECT — three of these four rows failed, and were repaired in 0.2.0
 
-`tudat-izzo-hyperbolic`, `tudat-izzo-retrograde` and `tudat-izzo-near-pi` are
-marked `expectedToFail`. The runner **asserts that they fail**; an unexpected
-pass is itself a test failure, which forces a deliberate re-baseline instead of
-letting the ledger quietly go stale.
+`tudat-izzo-hyperbolic`, `tudat-izzo-retrograde` and `tudat-izzo-near-pi` were
+marked `expectedToFail`. The runner **asserts that a marked row fails**; an
+unexpected pass is itself a test failure, which forces a deliberate re-baseline
+instead of letting the ledger quietly go stale.
+
+> **All three are green as of maneuver-planner 0.2.0** and carry a `repairedBy`
+> block naming the task, the release, and what changed. Their watermarks were
+> recalibrated against the measured agreement at the same time — they had been
+> set while the rows were expected to FAIL, so none of them had ever been
+> calibrated against a working solver.
+>
+> **A second thing was wrong and is fixed here (2026-08-10).** The markers came
+> off `vectors.json` **by hand** while `build-vectors.mjs` went on applying
+> them, and so did the recalibrated watermarks and the `repairedBy` blocks. That
+> made the committed file unreproducible: `node vectors/tools/build-vectors.mjs
+> --check` — the command whose entire job is to fail when the file drifts from
+> its generator — had been failing on `main` ever since, and nothing was running
+> it. Every one of those edits now lives in the generator, all twelve
+> pre-existing rows regenerate **byte-identically**, and `--check` is the first
+> thing `npm test` runs so it cannot rot silently a second time.
 
 The verdict was **adjudicated, not inferred from disagreement**. Each candidate
 departure velocity — Tudat's and the module's — was propagated forward by the
@@ -199,6 +215,17 @@ the generator asserts it: at this radius ratio the bi-elliptic total
 Anyone with the book should either supply the correct published figure or
 correct the stated inputs.
 
+> **SETTLED, 2026-08-10, by tier D.** The withdrawn anchor was right and the
+> inputs were the problem. hapsira's `test_bielliptic_maneuver` carries the same
+> Vallado example and asserts `3.904057 km/s`, and it reproduces to **6.3e-8
+> relative** once the three radii are read as ALTITUDES above hapsira's
+> `R_earth` and the total is the sum of the burn MAGNITUDES — the third burn is
+> a deceleration, `-70.466 m/s`, and enters the total with its sign flipped.
+> The tier-D row `hapsira-vallado-6-2-bielliptic` asserts it and is green. This
+> tier-B row is left exactly as it stands: it is a different claim about a
+> different input set, and rewriting it to match would erase the record of how
+> the disagreement was actually resolved.
+
 **`combined-optimal-split-KNOWN-GAP` — the optimal angle.** The spec quotes
 `2.195 deg`; a ternary search on the exact objective gives `2.2002 deg`. The
 delta-v anchor `4231.31 m/s` reproduces *exactly*, because the objective is
@@ -232,6 +259,204 @@ where somebody remembered to list it is not an invariant.
 | `rtn-eci-round-trip-per-component` | A RIC delta-v converted to inertial through `ricBasis` and back reproduces **component by component**. Magnitude-only passes under *any* rotation, including the identity map that engine defect D1 applies — component-wise is the only form of this check that can see the bug it exists to see. The probe state is deliberately non-axis-aligned and non-equatorial, because an aligned state makes the RIC basis a permutation of the inertial axes and hides D1 completely. |
 | `lambert-arrival-closure` | Propagating `(r1, v1)` forward by `tof` with an independent Kepler propagator arrives at `r2`, per component, within 1e-6 of `|r2|`. This is the adjudicator that settled the tier-A verdict. |
 | `phasing-earth-floor` | Classifies whether the phasing orbit's far apse clears `Re + 100 km`. The module does not clamp it, so this invariant **records rather than fails** — and the console wrapper's guard is tested against exactly the cases it classifies `BELOW-FLOOR`. |
+| `lambert-earth-floor` | Classifies whether the transfer arc's **perigee** clears the Earth's surface. Records rather than fails, and the count is printed on every run. It is the check that made the through-Earth defect tractable: six of the Lambert rows classify `THROUGH-EARTH`, so the fix cannot be a refusal — see tier D. |
+
+### The adjudicator was hardened on 2026-08-10
+
+`propagateKepler` — the independent propagator that settles every arrival claim
+— gained three things, and **none of them repairs a wrong answer**. Every vector
+it had ever adjudicated, it adjudicated correctly. What it could not do was
+*tell us when it could not answer*:
+
+1. **An initial guess per orbit type.** `sqrt(mu) * |alpha| * dt` is the
+   *elliptic* guess. Tier D walked it onto a near-radial hyperbolic arc where
+   that guess puts `z` near `-3300` and `cosh(sqrt(-z))` is `1e24`.
+2. **Newton safeguarded by bisection.** `F(x)` is monotone increasing (`dF/dx`
+   is the radius), so a bracket always exists. The old loop had no bracket and
+   no bail-out: a diverged step simply left `x` where it landed.
+3. **Certify or refuse.** The time residual is re-checked, and angular momentum
+   and energy must be conserved. If they are not, the arc is re-propagated by
+   direct numerical integration; if *that* cannot converge either, the result
+   comes back `certified: false` and `lambert-arrival-closure` **fails the row**
+   rather than passing it.
+
+The case that forced all three is Curtis example 5.3 solved the retrograde way
+round: a mathematically valid Kepler arc whose perigee is **5.9 km from the
+Earth's centre**, passed at **369 km/s**. Fixed-step RK4 cannot resolve that
+perigee at all and blows up by eleven orders of magnitude, which is exactly why
+the integrator measures its own convergence instead of returning its last
+iterate.
+
+---
+
+## Tier D — the contributing libraries' own test suites (owner directive 2026-08-10)
+
+> *"We should have tests for all this maneuver functionality that are taken from
+> the tests from the contributing libraries."*
+
+**Dumpers:** `vectors/tools/dump-hapsira-vectors.mjs`,
+`vectors/tools/dump-orekit-vectors.mjs`
+**Composer:** `vectors/tools/gen-library-vectors.mjs`
+**Raw extractions (audit trail, committed):** `vectors/hapsira-extract.json`,
+`vectors/orekit-extract.json`
+
+Same construction as tier A, twice over: the dumpers read upstream test source
+as **text**, parse every literal, and emit an extract; the composer maps the
+extract onto the module's JSON surface and derives the bands. Neither library is
+imported, executed, compiled, or linked, and neither is a dependency of any
+build in this repo. Regenerating needs a checkout; consuming does not.
+
+### Licences — checked in code, not remembered
+
+| Library | Licence | How it is verified |
+| --- | --- | --- |
+| hapsira 0.19.dev0 (`5d25e627`) — the maintained poliastro fork | **MIT** | The dumper reads `LICENSE` and **refuses to emit** if the first line does not read as MIT. |
+| Orekit `81dffba6` (14.0-SNAPSHOT, `develop`) | **Apache-2.0** | The dumper checks the Apache header of **every file it reads** before taking a single number from it, and records the copyright notice. |
+| Tudat `028b3087` (tier A) | BSD-style | Unchanged from tier A. |
+
+`tests/vectors.test.mjs` then re-asserts it at RUN time: every tier-D row must
+name its library, commit, upstream file, upstream test and licence, and the
+licence must be on the permissive list (`MIT`, `Apache-2.0`, `BSD-3-Clause`,
+`ISC`). A future dumper pointed at a copyleft source fails there, loudly, rather
+than quietly shipping copyleft values inside our test data.
+
+**No upstream CODE is copied.** What crosses the boundary is inputs, expected
+numbers, and stated tolerances, re-expressed in our own JSON with citation —
+which is the form the GPL firewall requires *even where the licence would not*.
+(Perses' SSBM precedent is why the licence is read out of the checkout and
+asserted rather than assumed: the rule has to hold when the answer is *no*.)
+
+### Band policy — tighter provenance than tier A, and no invented floor
+
+Tier A floors the relative gate at `1e-6` because Tudat prints some references
+to six significant figures and a case-wide floor was all that was available.
+Tier D needs no floor:
+
+```
+rel = the tolerance the upstream test states for THAT symbol
+abs = half a unit in the last decimal place actually published
+```
+
+Both come from the source. hapsira asserts `expected_va` at `rtol=1e-5` and
+`expected_vb` at `rtol=1e-4` *inside one test*, so bands are **per field**
+(`fieldBands`), not per case; a single case-wide band would over-assert one and
+under-assert the other.
+
+**The regression watermark is a fraction of the row's own budget (80 %), not a
+multiple of the source tolerance.** Tier A can afford `tolerance * 1e-3` because
+Tudat quotes its best rows to fifteen figures. Tier D's references are printed
+to five to seven, and hapsira gates at `1e-5` *because its own two solvers only
+agree to that*. Applying tier A's construction here lit **twenty-two alarms on a
+fully green run** — an alarm nobody reads is not an alarm.
+
+### Rows
+
+| id | Op | Upstream authority | Library | Verdict |
+| --- | --- | --- | --- | --- |
+| `hapsira-vallado-7-5` | `solveLambert` | Vallado example 7-5 | hapsira | green |
+| `hapsira-curtis-5-2` | `solveLambert` | Curtis example 5.2 (fully 3-D) | hapsira | green |
+| `hapsira-curtis-5-3` | `solveLambert` | Curtis example 5.3 | hapsira | **KNOWN-RED** |
+| `hapsira-der-molniya-0rev` | `solveLambert` | Der, *Superior Lambert Algorithm* | hapsira | green |
+| `hapsira-der-molniya-1rev-highpath` | `solveLambert` | Der — **multi-rev**, high path | hapsira | **KNOWN-RED** |
+| `hapsira-der-molniya-1rev-lowpath` | `solveLambert` | Der — **multi-rev**, low path | hapsira | green |
+| `hapsira-issue840-retrograde` | `solveLambert` | hapsira issue #840 | hapsira | green |
+| `hapsira-der-molniya-1rev-infeasible` | `solveLambert` | Der geometry, ToF cut to 5 h — **must refuse** | hapsira | green |
+| `hapsira-collinear-refusal` | `solveLambert` | collinear positions — **must refuse** | hapsira | green |
+| `lambert-perigee-radius-not-published-SCREENING` | `solveLambert` | Der geometry + a requirement of ours | hapsira | **KNOWN-RED** |
+| `hapsira-vallado-6-1-hohmann` | `hohmannTransfer` | Vallado example 6-1 | hapsira | green |
+| `hapsira-eccentric-departure-hohmann` | `hohmannTransfer` | eccentric departure | hapsira | **KNOWN-RED** |
+| `hapsira-vallado-6-2-bielliptic` | `biEllipticTransfer` | Vallado example 6-2 | hapsira | green |
+| `hapsira-eccentric-departure-bielliptic` | `biEllipticTransfer` | eccentric departure | hapsira | **KNOWN-RED** |
+| `orekit-der-superior-lambert` | `solveLambert` | Der, at **EGM96's mu** | Orekit | green |
+| `orekit-inertial-impulsive-burn` | `ricFrameAlgebra` | Orekit `ImpulseManeuverTest` | Orekit | green |
+
+Two details worth stating because they are easy to get wrong:
+
+- **The `prograde` flag is derived from the PUBLISHED ARC, not the geometry.**
+  hapsira's Izzo solver takes no such flag. The first version of the dumper
+  derived it from the sign of `(r1 × r2)_z` — "the short way" — which is right
+  for six of the seven rows and **wrong for hapsira's own issue-840 regression**,
+  where the published departure velocity is a *prograde* arc sweeping 328°
+  while the short way is retrograde. It is now `sign((r1 × v1)_z)` on the
+  published velocity: the only question our flag actually answers.
+- **Tier D rows carry the SOURCE's gravitational parameter.** Orekit's Der case
+  runs at EGM96's `3.986004415e14` and hapsira's at the IAU `3.986004418e14` —
+  the same upstream paper at two constants. Forcing both onto our pin would turn
+  a conformance check into a comparison of constants.
+
+### The four known-red rows, and what each one owns
+
+**`hapsira-curtis-5-3` — `solveLambert` refuses an arc that flies.**
+`modules-maneuver-lambert-refuses-a-solvable-arc`. The module answers
+`no-solution`; hapsira solves it and this repo's own independent propagator
+confirms the answer arrives to `2.3e-5` of `|r2|` (which is all hapsira's
+five-figure printing supports). Root cause is line-level: the zero-revolution
+downward march starts at `|step| = max(1, |z0|)` and only **doubles**. This root
+is at `z = -0.173`; the first probe lands at `z = -1`, where `y < 0` and `F` is
+not finite, and every probe after it is deeper into the empty domain. A whole
+class of short-transfer-angle hyperbolic arcs is unreachable and is reported as
+though no arc existed.
+
+**`hapsira-der-molniya-1rev-highpath` — only one of two multi-rev branches.**
+`modules-maneuver-lambert-multi-rev-exposes-one-branch-of-two`. A
+one-revolution Lambert problem has **two** arcs; hapsira exposes the choice as
+`lowpath`. Our solver scans the bounded interval and takes the **first** sign
+change, so it returns the low path — which is why the `lowpath` row is green and
+this one is red — and the JSON surface carries no way to ask for the other.
+
+**`hapsira-eccentric-departure-{hohmann,bielliptic}` — the departure-speed gap.**
+`modules-maneuver-hohmann-departure-speed`, and this is the foreign evidence
+that task was missing. hapsira's `Maneuver.hohmann` propagates to periapsis and
+departs from the state it finds there
+(`dv_a = sqrt(2k/r_i − k/a_trans) − v_i`); ours assumes `v_i = sqrt(mu/r1)` and
+the JSON surface gives the caller no way to say otherwise. Each row records both
+speeds and the eccentricity, so the marker states the SIZE of the gap and not
+merely its existence.
+
+**`lambert-perigee-radius-not-published-SCREENING` — the owner's live hit.**
+`modules-maneuver-lambert-publishes-no-transfer-perigee`. An operator met a
+through-Earth transfer on 2026-08-10. The obvious fix — refuse arcs whose
+perigee is inside the planet — **is wrong, and this tier proves it**: the
+`lambert-earth-floor` invariant classifies every Lambert row, and six of them,
+including Vallado 7-5 (3,186 km from the centre) and the Der Molniya case that
+hapsira *and* Orekit both carry (909 km), are `THROUGH-EARTH`. Those are correct
+answers to the Lambert problem, and a solver that refused them would fail its
+conformance suite against three libraries. The requirement is therefore a
+**report**, not a refusal: publish `perigeeRadius` and let the consumer screen.
+Today it publishes neither that nor a flag, so the only place to screen is the
+console, in JavaScript, which the no-JS-physics law forbids.
+
+### What tier D does NOT cover, said plainly
+
+`plugin_entity_apply_impulsive_burn` (`propagator/sgp4`) and `plugin_set_burns`
+(`propagator/hpop`) are the surfaces that APPLY a burn and recover elements.
+Orekit's `ImpulseManeuverTest` is the natural conformance source for them, and
+they are not tested here: that ABI is **mid-flight in another lane**
+(`orbpro-propagators-have-no-native-burn-surface`), and a second suite against
+an artifact somebody is rebuilding races a republish. What the row
+`orekit-inertial-impulsive-burn` does assert is the part the maneuver module
+owns — the RIC ↔ inertial algebra every `*_ric` field depends on — against
+Orekit's triple and Orekit's own `1e-4 m/s` tolerance. The rest is filed, not
+dropped.
+
+---
+
+## The ratchet
+
+`vectors/ratchet.json` + `tests/ratchet.test.mjs`. Vector counts may only grow,
+**and so may the GREEN count** — the second rule is the one that matters, because
+the cheapest way to make a red suite green is to mark a row `expectedToFail`,
+and that leaves every total unchanged. Three rules:
+
+1. total per operation may not fall (catches a deleted row);
+2. **green** per operation may not fall (catches a row demoted to known-red);
+3. every known-red row must name a defect, or it is a disabled test with extra
+   steps.
+
+Raising it is deliberate and prints the delta:
+`node vectors/tools/update-ratchet.mjs`. It **refuses** to lower any number
+without `--allow-lower "<reason>"`, which is recorded in the file.
+
 
 ---
 
@@ -256,8 +481,37 @@ Recorded against `modules-maneuver-planner-rebuild-batch`.
 ## Regenerating
 
 ```sh
-node vectors/tools/dump-tudat-vectors.mjs   # tier A; needs a tudat checkout to READ
-node vectors/tools/build-vectors.mjs        # compose tiers A + B + C
-node vectors/tools/build-vectors.mjs --check   # CI: fail on drift
-npm test                                    # run every vector on every runtime
+# Tier A + D dumpers. Each READS an upstream checkout; none compiles, imports or
+# links one. The emitted *-extract.json files are committed, so only somebody
+# CHANGING a vector needs the checkouts.
+node vectors/tools/dump-tudat-vectors.mjs      # tier A  -> tudat-extract.json
+node vectors/tools/dump-hapsira-vectors.mjs    # tier D  -> hapsira-extract.json
+node vectors/tools/dump-orekit-vectors.mjs     # tier D  -> orekit-extract.json
+
+node vectors/tools/build-vectors.mjs           # compose tiers A + B + C + D
+node vectors/tools/build-vectors.mjs --check   # fail on drift; FIRST thing npm test runs
+node vectors/tools/update-ratchet.mjs          # raise the floor, deliberately
+npm test                                       # every vector, every runtime
 ```
+
+Where the upstream checkouts are expected, and how to make them:
+
+```sh
+git clone --filter=blob:none --depth 1 \
+  https://github.com/pleiszenburg/hapsira.git ~/software/upstream/hapsira
+
+git clone --filter=blob:none --no-checkout --depth 1 --branch develop \
+  https://gitlab.orekit.org/orekit/orekit.git ~/software/upstream/orekit
+git -C ~/software/upstream/orekit sparse-checkout set \
+  src/test/java/org/orekit src/main/java/org/orekit/utils
+git -C ~/software/upstream/orekit checkout
+```
+
+Override with `--hapsira <dir>` / `--orekit <dir>`, or `HAPSIRA_ROOT` /
+`OREKIT_ROOT`. Both dumpers fail loudly with these instructions when no checkout
+is found; neither ever silently emits a partial file.
+
+`~/software/upstream/` is deliberately NOT `repos/` (owner law 2026-08-02: the
+`repos/*-packages/` directories carry gitlinked submodules and nothing else) and
+NOT `~/software/worktrees/` (which is for agent worktrees). These are read-only
+oracles, not part of this stack.
