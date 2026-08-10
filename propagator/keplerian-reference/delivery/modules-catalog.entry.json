@@ -1,0 +1,21 @@
+{
+  "MODULE_ID": "com.orbpro.keplerian.reference",
+  "PLUGIN_ID": "com.orbpro.keplerian.reference",
+  "NAME": "Keplerian Reference Propagator",
+  "DESCRIPTION": "Reference implementation of the official OrbPro WASM propagator ABI. Two-body Keplerian motion; the module a third party copies.",
+  "VERSION": "1.0.0",
+  "CONTENT_HASH": "d6b7044766ad268aad407180abcc8ab5c47901e9ce177d2e20200e1d76c49645",
+  "ARTIFACT_SIZE_BYTES": 82923,
+  "ARTIFACT_PATH": "/modules/com.orbpro.keplerian.reference/1.0.0/module.wasm",
+  "TRUST_TIER": "OPTIONAL",
+  "DEFAULT_ENABLED": false,
+  "ACCESS_POLICY": "ANONYMOUS",
+  "ENTRY_STATE": "ACTIVE",
+  "PLUGIN_TYPE": "Propagator",
+  "RUNTIME_TARGETS": [
+    "browser",
+    "wasmedge"
+  ],
+  "LICENSE": "MIT",
+  "source_artifact": "artifacts/keplerian-reference/module.wasm"
+}
