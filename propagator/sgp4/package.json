@@ -6,6 +6,7 @@
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "bash build.sh",
+    "test:parity": "space-data-module parity --wasm dist/isomorphic/module.wasm --fixture tests/fixtures/parity/sgp4-command.json --lanes browser,wasmedge,docker-wasmedge",
     "test": "node --test tests/*.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:contract": "node --test tests/pivInvokeContract.test.mjs tests/catFlatBufferContract.test.mjs tests/manifestContract.test.mjs",
@@ -15,7 +16,7 @@
     "esbuild": "^0.20.2",
     "flatbuffers": "^25.2.10",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "file:../../../space-data-module-sdk",
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk",
     "spacedatastandards.org": "^1.173.0"
   }
 }

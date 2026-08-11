@@ -67,8 +67,12 @@ typedef struct {
 #define orbpro_malloc malloc
 #define orbpro_free free
 #else
-extern void* orbpro_malloc(size_t size);
-extern void orbpro_free(void* ptr);
+// The standalone WASI guest owns its allocator. It must not import a host
+// allocator: that would add a non-WASI import and make the one artifact fail
+// under either the browser shim or WasmEdge.
+#include <stdlib.h>
+#define orbpro_malloc malloc
+#define orbpro_free free
 #endif
 
 /**

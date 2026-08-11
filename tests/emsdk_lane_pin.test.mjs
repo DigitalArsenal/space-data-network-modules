@@ -34,9 +34,27 @@ import {
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PIN = loadEmsdkPin();
 
-function buildScript(moduleDir) {
-  return fs.readFileSync(path.join(REPO_ROOT, moduleDir, "build.mjs"), "utf8");
+function buildScriptPath(moduleDir, names = ["build.mjs", "build.sh"]) {
+  for (const name of names) {
+    const candidate = path.join(REPO_ROOT, moduleDir, name);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error(`${moduleDir} has no readable build.mjs or build.sh`);
 }
+
+function buildScript(moduleDir) {
+  return fs.readFileSync(buildScriptPath(moduleDir), "utf8");
+}
+
+test("the raw-em++ lane reader covers shell entry points", () => {
+  // SGP4 is deliberately OUTSIDE the Emscripten lane, but it is the regression
+  // fixture for the old blind spot: a shell build used to be invisible because
+  // this test hard-coded build.mjs. If a future raw lane module uses build.sh,
+  // it now receives the same fetch/resolver/record checks.
+  const shellEntry = buildScriptPath("propagator/sgp4", ["build.sh"]);
+  assert.equal(path.basename(shellEntry), "build.sh");
+  assert.match(buildScript("propagator/sgp4"), /wasi-sequential/);
+});
 
 test("no module in the raw em++ lane fetches its own toolchain or sources", () => {
   const offenders = [];

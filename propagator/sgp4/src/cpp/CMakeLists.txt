@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(sgp4_propagator_plugin LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 17)
@@ -6,64 +6,41 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(NOT EMSCRIPTEN)
-    message(FATAL_ERROR "propagator.sgp4 is expected to be built through Emscripten.")
+if(NOT SGP4_WASI_SEQUENTIAL)
+    message(FATAL_ERROR "SGP4 must build with -DSGP4_WASI_SEQUENTIAL=ON. Emscripten is not a supported lane.")
 endif()
 
-# -------- Common flags --------------------------------------------------------
-# -msimd128 enables WebAssembly SIMD.
-# Standard Wasm exceptions keep the artifact portable across browser + WasmEdge.
-set(CMAKE_CXX_FLAGS
-    "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG -msimd128 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -Wno-dangling-else -Wno-format"
-)
-set(CMAKE_C_FLAGS
-    "${CMAKE_C_FLAGS} -O3 -flto -DNDEBUG -msimd128"
-)
-set(CMAKE_EXE_LINKER_FLAGS
-    "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0"
-)
-
-# -------- FlatBuffers include -------------------------------------------------
-find_path(
-    FLATBUFFERS_INCLUDE_DIR
-    NAMES flatbuffers/flatbuffers.h
-    HINTS
-        # An explicit checkout wins over whatever the host package manager has,
-        # which is what makes this build reproducible on a box where
-        # `brew install flatbuffers` was never run or has since been removed.
-        # (Measured 2026-08-10: `brew --prefix flatbuffers` answered with a
-        # path that does not exist, and the build died at configure time with
-        # "install flatbuffers and retry" — advice that names no version.)
-        $ENV{FLATBUFFERS_INCLUDE_DIR}
-        $ENV{FLATBUFFERS_ROOT}/include
-    PATHS
-        /opt/homebrew/include
-        /opt/homebrew/opt/flatbuffers/include
-        /usr/local/include
-        /usr/local/opt/flatbuffers/include
-    NO_CMAKE_FIND_ROOT_PATH
-)
-if(NOT FLATBUFFERS_INCLUDE_DIR)
-    message(FATAL_ERROR
-        "flatbuffers headers not found. Point FLATBUFFERS_ROOT at a flatbuffers "
-        "checkout (FLATBUFFERS_ROOT=<repo> so that <repo>/include/flatbuffers/"
-        "flatbuffers.h resolves), or set FLATBUFFERS_INCLUDE_DIR directly.")
+if(NOT CMAKE_CXX_COMPILER MATCHES "wasm32-wasi-clang\\+\\+")
+    message(FATAL_ERROR "SGP4 requires the SDK WASI clang driver, not Emscripten or a host compiler.")
 endif()
 
-# -------- SQLite3 amalgamation ------------------------------------------------
-# Staged by build.sh into deps/sqlite3/ so the build is self-contained and
-# works across host machines that may not share the same emsdk cache layout.
-set(SQLITE_AMALGAMATION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/sqlite3")
-if(NOT EXISTS "${SQLITE_AMALGAMATION_DIR}/sqlite3.c" OR NOT EXISTS "${SQLITE_AMALGAMATION_DIR}/sqlite3.h")
-    message(FATAL_ERROR
-        "SQLite amalgamation not found at ${SQLITE_AMALGAMATION_DIR}. "
-        "build.sh should stage sqlite3.c/sqlite3.h before invoking cmake.")
+if(NOT FLATBUFFERS_INCLUDE_DIR OR NOT EXISTS "${FLATBUFFERS_INCLUDE_DIR}/flatbuffers/flatbuffers.h")
+    message(FATAL_ERROR "Set FLATBUFFERS_INCLUDE_DIR to the pinned stack FlatBuffers include directory.")
 endif()
 
-add_library(sgp4_sqlite3 STATIC "${SQLITE_AMALGAMATION_DIR}/sqlite3.c")
-target_include_directories(sgp4_sqlite3 PUBLIC "${SQLITE_AMALGAMATION_DIR}")
-target_compile_definitions(
-    sgp4_sqlite3 PUBLIC
+if(NOT SGP4_SQLITE_AMALGAMATION_DIR)
+    set(SGP4_SQLITE_AMALGAMATION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/sqlite3")
+endif()
+if(NOT EXISTS "${SGP4_SQLITE_AMALGAMATION_DIR}/sqlite3.c" OR NOT EXISTS "${SGP4_SQLITE_AMALGAMATION_DIR}/sqlite3.h")
+    message(FATAL_ERROR "Pinned SQLite amalgamation is missing. The build does not download SQLite.")
+endif()
+
+set(SGP4_COMMON_FLAGS -O3 -flto -ffast-math -DNDEBUG -mbulk-memory -fno-exceptions)
+set(SGP4_WASI_LINK_FLAGS
+    -Wl,--initial-memory=16777216
+    -Wl,--max-memory=2147483648
+    -Wl,-z,stack-size=2097152
+    # wasi-libc provides filesystem wrappers even though the SGP4 SQLite VFS is
+    # in-memory only. standalone_stubs.c supplies the fail-closed variants;
+    # retain that object before wasi-libc instead of importing unsupported
+    # filesystem calls into the browser/WasmEdge artifact.
+    -Wl,--allow-multiple-definition
+)
+
+add_library(sgp4_sqlite3 STATIC "${SGP4_SQLITE_AMALGAMATION_DIR}/sqlite3.c")
+target_include_directories(sgp4_sqlite3 PUBLIC "${SGP4_SQLITE_AMALGAMATION_DIR}")
+target_compile_options(sgp4_sqlite3 PRIVATE ${SGP4_COMMON_FLAGS} -Wno-everything)
+target_compile_definitions(sgp4_sqlite3 PUBLIC
     SQLITE_OMIT_LOAD_EXTENSION=1
     SQLITE_THREADSAFE=0
     SQLITE_DEFAULT_MEMSTATUS=0
@@ -72,21 +49,14 @@ target_compile_definitions(
     SQLITE_OMIT_SHARED_CACHE=1
     SQLITE_OMIT_DEPRECATED=1
 )
-# SQLite's amalgamation triggers a sea of shadow / unused warnings on -O3 +
-# -Werror configurations. Keep the build quiet without disabling genuine
-# diagnostics for our own code.
-target_compile_options(sgp4_sqlite3 PRIVATE -Wno-everything)
 
-# -------- Core propagator library --------------------------------------------
-# SGP4 (Vallado) + OrbPro's SDS PIV wasm surface.
-add_library(
-    sgp4_core STATIC
+add_library(sgp4_core STATIC
     src/SGP4.cpp
     src/sgp4_plugin.cpp
     src/standalone_stubs.c
 )
-target_include_directories(
-    sgp4_core PUBLIC
+target_compile_options(sgp4_core PRIVATE ${SGP4_COMMON_FLAGS})
+target_include_directories(sgp4_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -96,15 +66,9 @@ target_include_directories(
 )
 target_link_libraries(sgp4_core PUBLIC sgp4_sqlite3)
 
-# -------- Wasm adapter executable --------------------------------------------
-# The bridge implements the SDS PIV invoke surface and dispatches into
-# SGP4 native method handlers without a second invoke FlatBuffer dialect.
-add_executable(
-    sgp4_wasm
-    src/plugin_invoke_bridge.cpp
-)
-target_include_directories(
-    sgp4_wasm PRIVATE
+add_executable(sgp4_wasi src/plugin_invoke_bridge.cpp)
+target_compile_options(sgp4_wasi PRIVATE ${SGP4_COMMON_FLAGS})
+target_include_directories(sgp4_wasi PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -112,107 +76,57 @@ target_include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/generated/sds"
     "${FLATBUFFERS_INCLUDE_DIR}"
 )
-target_link_libraries(sgp4_wasm PRIVATE sgp4_core)
-
-add_executable(
-    sgp4_wasm_browser_shared
-    src/plugin_invoke_bridge.cpp
+target_link_libraries(sgp4_wasi PRIVATE sgp4_core)
+set_target_properties(sgp4_wasi PROPERTIES SUFFIX ".wasm")
+target_link_options(sgp4_wasi PRIVATE ${SGP4_WASI_LINK_FLAGS}
+    -Wl,--export=plugin_alloc
+    -Wl,--export=plugin_free
+    -Wl,--export=plugin_invoke_stream
+    -Wl,--export=plugin_get_input_count
+    -Wl,--export=plugin_get_input_frame
+    -Wl,--export=plugin_find_input_index
+    -Wl,--export=plugin_reset_output_state
+    -Wl,--export=plugin_push_output_typed
+    -Wl,--export=plugin_push_output
+    -Wl,--export=plugin_set_error
+    -Wl,--export=plugin_get_manifest_flatbuffer
+    -Wl,--export=plugin_get_manifest_flatbuffer_size
+    -Wl,--export=plugin_init
+    -Wl,--export=plugin_init_omm
+    -Wl,--export=plugin_init_omm_flatbuffer_stream
+    -Wl,--export=plugin_propagate
+    -Wl,--export=plugin_propagate_batch
+    -Wl,--export=plugin_propagate_all_positions
+    -Wl,--export=plugin_propagate_to_registry
+    -Wl,--export=plugin_propagate_path
+    -Wl,--export=plugin_propagate_path_sv
+    -Wl,--export=plugin_propagate_path_adaptive
+    -Wl,--export=plugin_destroy
+    -Wl,--export=get_entity_info
+    -Wl,--export=get_satellite_count
+    -Wl,--export=get_orbital_period
+    -Wl,--export=get_tle_epoch
+    -Wl,--export=get_eccentricity
+    -Wl,--export=plugin_get_cat_record_json_size
+    -Wl,--export=plugin_get_cat_record_json
+    -Wl,--export=plugin_catalog_begin_transaction
+    -Wl,--export=plugin_catalog_commit_transaction
+    -Wl,--export=plugin_catalog_rollback_transaction
+    -Wl,--export=plugin_catalog_upsert_cat_record
+    -Wl,--export=plugin_catalog_upsert_cat_flatbuffer_stream
+    -Wl,--export=plugin_catalog_upsert_cat_records_packed
+    -Wl,--export=plugin_entity_add_omm
+    -Wl,--export=plugin_entity_add_omm_flatbuffer
+    -Wl,--export=plugin_entity_omm_count
+    -Wl,--export=plugin_entity_list_omm
+    -Wl,--export=plugin_entity_remove_omm
+    -Wl,--export=plugin_entity_remove_all_omm_except
+    -Wl,--export=plugin_entity_clear_omm
+    -Wl,--export=plugin_entity_set_mode
+    -Wl,--export=plugin_entity_get_mode
+    -Wl,--export=plugin_entity_get_omm_pointer
+    -Wl,--export=plugin_entity_apply_impulsive_burn
+    -Wl,--export=plugin_get_omm_record_by_pointer
+    -Wl,--export=malloc
+    -Wl,--export=free
 )
-target_include_directories(
-    sgp4_wasm_browser_shared PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/generated"
-    "${CMAKE_CURRENT_SOURCE_DIR}/generated/sds"
-    "${FLATBUFFERS_INCLUDE_DIR}"
-)
-target_link_libraries(sgp4_wasm_browser_shared PRIVATE sgp4_core)
-
-# Keep the full OrbPro native surface exported alongside the SDS PIV
-# invoke/manifest exports so the artifact can be consumed by browser and WASI
-# runtimes.
-set(SGP4_EXPORTED_FUNCTIONS "\
-\"__initialize\",\
-\"_plugin_alloc\",\
-\"_plugin_free\",\
-\"_plugin_invoke_stream\",\
-\"_plugin_get_manifest_flatbuffer\",\
-\"_plugin_get_manifest_flatbuffer_size\",\
-\"_plugin_init\",\
-\"_plugin_init_omm\",\
-\"_plugin_init_omm_flatbuffer_stream\",\
-\"_plugin_propagate\",\
-\"_plugin_propagate_batch\",\
-\"_plugin_propagate_all_positions\",\
-\"_plugin_propagate_to_registry\",\
-\"_plugin_propagate_path\",\
-\"_plugin_propagate_path_sv\",\
-\"_plugin_propagate_path_adaptive\",\
-\"_plugin_destroy\",\
-\"_get_entity_info\",\
-\"_plugin_query_entity_indices_by_name\",\
-\"_plugin_query_entity_rows_by_name\",\
-\"_plugin_query_visibility_mask_by_name\",\
-\"_plugin_get_entity_catalog_row\",\
-\"_plugin_catalog_begin_transaction\",\
-\"_plugin_catalog_commit_transaction\",\
-\"_plugin_catalog_rollback_transaction\",\
-\"_plugin_catalog_upsert_cat_record\",\
-\"_plugin_catalog_upsert_cat_flatbuffer_stream\",\
-\"_plugin_catalog_upsert_cat_records_packed\",\
-\"_plugin_get_cat_record_json_size\",\
-\"_plugin_get_cat_record_json\",\
-\"_get_satellite_count\",\
-\"_get_orbital_period\",\
-\"_get_tle_epoch\",\
-\"_get_eccentricity\",\
-\"_plugin_entity_add_omm\",\
-\"_plugin_entity_add_omm_flatbuffer\",\
-\"_plugin_entity_omm_count\",\
-\"_plugin_entity_list_omm\",\
-\"_plugin_entity_remove_omm\",\
-\"_plugin_entity_remove_all_omm_except\",\
-\"_plugin_entity_clear_omm\",\
-\"_plugin_entity_set_mode\",\
-\"_plugin_entity_get_mode\",\
-\"_plugin_entity_get_omm_pointer\",\
-\"_plugin_entity_apply_impulsive_burn\",\
-\"_plugin_get_omm_record_by_pointer\",\
-\"_malloc\",\
-\"_free\"\
-")
-
-function(configure_sgp4_emscripten_target target_name export_name)
-    set(imported_memory_link_flags "")
-    if(ARGC GREATER 2 AND ARGV2)
-        target_compile_options(${target_name} PRIVATE -matomics -mbulk-memory)
-        set(imported_memory_link_flags "-s IMPORTED_MEMORY=1 -s SHARED_MEMORY=1 -matomics -mbulk-memory")
-    endif()
-
-    set_target_properties(
-        ${target_name} PROPERTIES
-        SUFFIX ".js"
-        LINK_FLAGS "\
-        -s EXPORTED_FUNCTIONS=[${SGP4_EXPORTED_FUNCTIONS}] \
-        -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAPU32','HEAP8','HEAP32','HEAPF64'] \
-        -s MODULARIZE=1 \
-        -s EXPORT_NAME='${export_name}' \
-        -s EXPORT_ES6=1 \
-        -s STANDALONE_WASM=1 \
-        ${imported_memory_link_flags} \
-        -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
-        -Wl,--allow-undefined \
-        -Wl,--export=__wasm_call_ctors \
-        -s ALLOW_MEMORY_GROWTH=1 \
-        -s INITIAL_MEMORY=67108864 \
-        -s MAXIMUM_MEMORY=2147483648 \
-        -s STACK_SIZE=2097152 \
-        -s MALLOC='emmalloc' \
-        -s FILESYSTEM=0 \
-    "
-    )
-endfunction()
-
-configure_sgp4_emscripten_target(sgp4_wasm Sgp4Module OFF)
-configure_sgp4_emscripten_target(sgp4_wasm_browser_shared Sgp4SharedModule ON)

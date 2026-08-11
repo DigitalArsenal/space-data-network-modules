@@ -1,34 +1,18 @@
 /*
  * Standalone-WASM stubs.
  *
- * Emscripten's sqlite amalgamation references a handful of filesystem
- * syscalls that the linker would otherwise pull from the "env" import
- * module. Because the SGP4 plugin only ever opens an in-memory database
- * (`:memory:`), these code paths are never exercised at runtime — but the
- * references must still resolve or the artifact fails the SDK 0.8.0
- * compliance check that requires `wasi_snapshot_preview1` as the sole
- * import module.
- *
- * We also stub `emscripten_notify_memory_growth` so memory growth no
- * longer escapes into "env".
+ * SQLite only opens an in-memory database in this module. The unused POSIX
+ * paths would otherwise pull a large WASI filesystem import set into the one
+ * browser/WasmEdge artifact. The browser WASI shim deliberately has no
+ * preopened filesystem, so these fail-closed stubs keep the import contract to
+ * stdin/stdout while returning NOTCAPABLE if an unreachable file path is used.
  */
 
 #include <errno.h>
 #include <stdint.h>
 
 /* ------------------------------------------------------------------------- */
-/* Emscripten memory growth notifications -- no-op for standalone modules.   */
-/* ------------------------------------------------------------------------- */
-
-void emscripten_notify_memory_growth(int memory_index) {
-    (void)memory_index;
-}
-
-/* ------------------------------------------------------------------------- */
-/* Unused filesystem syscalls referenced by the sqlite amalgamation.         */
-/* Every entry returns -EPERM (matching sqlite's expectations) so that, in   */
-/* the rare case the runtime did reach one of these paths, it fails cleanly  */
-/* instead of trapping.                                                      */
+/* Legacy syscall names can still be referenced by SQLite platform code. */
 /* ------------------------------------------------------------------------- */
 
 long __syscall_fchown32(long fd, long owner, long group) {
@@ -96,4 +80,86 @@ int fsync(int fd) {
 int fdatasync(int fd) {
     (void)fd;
     return 0;
+}
+
+/*
+ * wasi-libc imports these through __wasi_* when its filesystem helpers are
+ * linked. The command bridge needs fd_read/fd_write, but SGP4 never needs the
+ * rest. Keep these definitions in the guest so the browser harness does not
+ * have to pretend that it owns a filesystem.
+ */
+typedef unsigned short wasi_errno_t;
+typedef unsigned int wasi_fd_t;
+typedef unsigned long long wasi_filesize_t;
+typedef long long wasi_filesize_signed_t;
+typedef unsigned long long wasi_timestamp_t;
+
+#define WASI_ERRNO_NOTCAPABLE 76u
+
+wasi_errno_t __wasi_fd_close(wasi_fd_t fd) {
+    (void)fd;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_fd_fdstat_get(wasi_fd_t fd, void* stat) {
+    (void)fd; (void)stat;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_fd_fdstat_set_flags(wasi_fd_t fd, unsigned short flags) {
+    (void)fd; (void)flags;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_fd_filestat_get(wasi_fd_t fd, void* stat) {
+    (void)fd; (void)stat;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_fd_filestat_set_size(wasi_fd_t fd, wasi_filesize_t size) {
+    (void)fd; (void)size;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_fd_prestat_get(wasi_fd_t fd, void* prestat) {
+    (void)fd; (void)prestat;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_fd_prestat_dir_name(wasi_fd_t fd, char* path, unsigned int path_len) {
+    (void)fd; (void)path; (void)path_len;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_fd_seek(wasi_fd_t fd, wasi_filesize_signed_t offset, unsigned char whence, wasi_filesize_t* new_offset) {
+    (void)fd; (void)offset; (void)whence; (void)new_offset;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_path_create_directory(wasi_fd_t fd, const char* path, unsigned int path_len) {
+    (void)fd; (void)path; (void)path_len;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_path_filestat_get(wasi_fd_t fd, unsigned int flags, const char* path, unsigned int path_len, void* stat) {
+    (void)fd; (void)flags; (void)path; (void)path_len; (void)stat;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_path_filestat_set_times(wasi_fd_t fd, unsigned int flags, const char* path, unsigned int path_len, wasi_timestamp_t atim, wasi_timestamp_t mtim, unsigned short fst_flags) {
+    (void)fd; (void)flags; (void)path; (void)path_len; (void)atim; (void)mtim; (void)fst_flags;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_path_open(wasi_fd_t fd, unsigned int dirflags, const char* path, unsigned int path_len, unsigned int oflags, unsigned long long rights_base, unsigned long long rights_inheriting, unsigned short fdflags, wasi_fd_t* opened_fd) {
+    (void)fd; (void)dirflags; (void)path; (void)path_len; (void)oflags; (void)rights_base; (void)rights_inheriting; (void)fdflags; (void)opened_fd;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_path_readlink(wasi_fd_t fd, const char* path, unsigned int path_len, char* buffer, unsigned int buffer_len, unsigned int* used) {
+    (void)fd; (void)path; (void)path_len; (void)buffer; (void)buffer_len; (void)used;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_path_remove_directory(wasi_fd_t fd, const char* path, unsigned int path_len) {
+    (void)fd; (void)path; (void)path_len;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_path_unlink_file(wasi_fd_t fd, const char* path, unsigned int path_len) {
+    (void)fd; (void)path; (void)path_len;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_poll_oneoff(const void* subscriptions, void* events, unsigned int count, unsigned int* out_count) {
+    (void)subscriptions; (void)events; (void)count; (void)out_count;
+    return WASI_ERRNO_NOTCAPABLE;
+}
+wasi_errno_t __wasi_sched_yield(void) {
+    return WASI_ERRNO_NOTCAPABLE;
 }

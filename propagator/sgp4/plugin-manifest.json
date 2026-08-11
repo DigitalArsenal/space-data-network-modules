@@ -8,6 +8,11 @@
   "externalInterfaces": [],
   "invokeSurfaces": ["command"],
   "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "SGP4 propagation is sequential within one entity state. Hosts shard independent entities and invocations, so a guest thread pool would duplicate host scheduling and add a browser-only or incomplete WASI thread contract."
+  },
   "methods": [
     {
       "methodId": "ingest_omm",

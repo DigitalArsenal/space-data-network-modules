@@ -1,7 +1,7 @@
 // Shared harness for driving the SGP4 module's canonical SDS PIV invoke ABI.
 
 import * as flatbuffers from "flatbuffers";
-import { readFile } from "node:fs/promises";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -15,33 +15,65 @@ import {
   PIVT,
   TABT,
 } from "spacedatastandards.org/lib/js/PIV/main.js";
-import { stripPublicationRecordCollection } from "space-data-module-sdk/transport";
+import { createBrowserModuleHarness } from "space-data-module-sdk/testing/browser";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const browserDistDir = path.resolve(__dirname, "..", "..", "dist", "browser");
-
-let cachedFactory = null;
-
-async function loadFactory() {
-  if (!cachedFactory) {
-    const moduleUrl = new URL(
-      "file://" + path.join(browserDistDir, "module.js"),
-    );
-    const imported = await import(moduleUrl.href);
-    cachedFactory = imported.default;
-  }
-  return cachedFactory;
-}
+const isomorphicArtifact = path.resolve(
+  __dirname,
+  "..",
+  "..",
+  "dist",
+  "isomorphic",
+  "module.wasm",
+);
 
 export async function loadRawSgp4Module() {
-  const factory = await loadFactory();
-  // dist artifacts ship signed (appended publication record collection);
-  // strip it the way runtime consumers (OrbPro resolveProtectedWasmBytes,
-  // SDK loaders) do before handing bytes to the Emscripten factory.
-  const wasmBinary = stripPublicationRecordCollection(
-    await readFile(path.join(browserDistDir, "module.wasm")),
-  );
-  return factory({ wasmBinary });
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(isomorphicArtifact),
+    surface: "direct",
+  });
+  const exports = harness.instance.exports;
+  const memory = harness.memory ?? exports.memory;
+  if (!memory) throw new Error("SGP4 direct harness did not expose linear memory.");
+
+  // Preserve the small Emscripten-shaped adapter used by the focused PIV
+  // contract tests while they now execute the canonical WASI artifact. The
+  // aliases are test-only; no production loader depends on Emscripten glue.
+  const module = {
+    destroy() {
+      harness.destroy();
+    },
+  };
+  for (const name of [
+    "plugin_alloc",
+    "plugin_free",
+    "plugin_invoke_stream",
+    "plugin_get_manifest_flatbuffer",
+    "plugin_get_manifest_flatbuffer_size",
+    "plugin_destroy",
+    "get_satellite_count",
+    "plugin_get_cat_record_json_size",
+    "plugin_get_cat_record_json",
+    "malloc",
+    "free",
+  ]) {
+    if (typeof exports[name] === "function") module[`_${name}`] = exports[name];
+  }
+  if (typeof exports.plugin_destroy === "function") {
+    module._plugin_destroy = (...args) => {
+      try {
+        return exports.plugin_destroy(...args);
+      } finally {
+        harness.destroy();
+      }
+    };
+  }
+  Object.defineProperty(module, "HEAPU8", {
+    get() {
+      return new Uint8Array(memory.buffer);
+    },
+  });
+  return module;
 }
 
 function alignOffset(offset, alignment) {

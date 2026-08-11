@@ -1,0 +1,62 @@
+{
+  "compiler": "wasm32-wasi-clang++",
+  "compilerVersion": "clang version 22.0.0git",
+  "target": "wasm32-wasip1-threads",
+  "toolchainArgs": [
+    "--target=wasm32-wasip1-threads",
+    "--sysroot=/opt/homebrew/share/wasi-sysroot",
+    "-resource-dir=/opt/homebrew/share/wasi-runtimes"
+  ],
+  "threadModel": "wasi-sequential",
+  "sqlite": {
+    "version": "3.45.2",
+    "files": {
+      "sqlite3.c": "6eef1d024738af82aced260657a030e43bd38777fddf9cb70e59cf5444f80bef",
+      "sqlite3.h": "7dc8a389408a2385ec239270cfd77a23cf67e206b5a13c8de59923ac3ccfa2da",
+      "sqlite3ext.h": "b184dd1586d935133d37ad76fa353faf0a1021ff2fdedeedcc3498fff74bbb94"
+    }
+  },
+  "artifact": "dist/isomorphic/module.wasm",
+  "imports": [
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "args_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "args_sizes_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "environ_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "environ_sizes_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "clock_time_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_read",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_write",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "proc_exit",
+      "kind": "function"
+    }
+  ]
+}
