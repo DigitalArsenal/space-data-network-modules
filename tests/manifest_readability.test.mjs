@@ -20,6 +20,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -37,7 +38,7 @@ test("a repaired artifact declares runtime targets the current SDK can read", ()
 });
 
 test("a SIGNED artifact is read through its detached publication trailer, not refused by it", () => {
-  const rel = "propagator/sgp4/dist/isomorphic/module.wasm";
+  const rel = "analysis/covariance/dist/isomorphic/module.wasm";
   const bytes = read(rel);
   const end = moduleProperEnd(bytes);
   // signModuleArtifact appends an SDS `$REC` publication record past the end of
@@ -50,12 +51,12 @@ test("a SIGNED artifact is read through its detached publication trailer, not re
 });
 
 test("the section walker crosses the exception-handling tag section", () => {
-  // Section id 13 is the tag section. Stopping at 12 truncated propagator/sgp4 at
-  // offset 2,192 — 1.17 MB short — and produced "function count is 1260, but code
-  // section…", which reads like a corrupt artifact and is not one.
+  // Section id 13 is the tag section. Stopping at 12 truncates this SGP4
+  // control before its code section, which reports a corrupt artifact instead.
+  // Its byte offset is toolchain output.
   const bytes = read("propagator/sgp4/dist/isomorphic/module.wasm");
-  assert.equal(bytes[2192], 13, "sgp4's tag section begins at 2192");
-  assert.ok(moduleProperEnd(bytes) > 1_000_000, "the walk must reach the end of the module");
+  assert.ok(wasmSectionIds(bytes).includes(13), "the control must carry a tag section");
+  assert.equal(moduleProperEnd(bytes), bytes.length, "the walk must reach the end of the module");
 });
 
 test("DETECTION: the two artifacts still carrying the old $PLG encoding are REFUSED", () => {
@@ -116,13 +117,17 @@ test("the loadability census is a ratchet with every survivor named", () => {
 
 test("NEGATIVE CONTROL: the checker's loadability lane fails when the census grows", () => {
   const ledger = JSON.parse(fs.readFileSync(LEDGER, "utf8"));
-  const original = fs.readFileSync(LEDGER);
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "modules-manifest-ledger-"));
+  const isolatedLedger = path.join(scratch, "artifact-provenance.json");
   try {
-    fs.writeFileSync(LEDGER, `${JSON.stringify({ ...ledger, manifestUnreadableBaseline: -1 }, null, 2)}\n`);
+    fs.writeFileSync(isolatedLedger, `${JSON.stringify({ ...ledger, manifestUnreadableBaseline: -1 }, null, 2)}\n`);
     let output = "";
     try {
       execFileSync(process.execPath, [path.join(REPO_ROOT, "scripts", "check-artifact-reproducibility.mjs")], {
-        cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, SDN_ARTIFACT_PROVENANCE_LEDGER: isolatedLedger },
       });
       assert.fail("the checker must refuse a loadability census above its baseline");
     } catch (error) {
@@ -130,6 +135,25 @@ test("NEGATIVE CONTROL: the checker's loadability lane fails when the census gro
     }
     assert.match(output, /EMBEDDED MANIFEST UNREADABLE AT THE CURRENT SDK/);
   } finally {
-    fs.writeFileSync(LEDGER, original);
+    fs.rmSync(scratch, { recursive: true, force: true });
   }
 });
+
+function wasmSectionIds(bytes) {
+  const ids = [];
+  let offset = 8;
+  while (offset < bytes.length) {
+    const id = bytes[offset++];
+    let size = 0;
+    let shift = 0;
+    let byte;
+    do {
+      byte = bytes[offset++];
+      size += (byte & 0x7f) * 2 ** shift;
+      shift += 7;
+    } while (byte & 0x80);
+    ids.push(id);
+    offset += size;
+  }
+  return ids;
+}

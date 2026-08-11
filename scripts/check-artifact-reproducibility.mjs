@@ -75,7 +75,11 @@ import { THREAD_MODELS, assertArtifactThreadModel } from "./lib/thread-model.mjs
 import { loadEmsdkPin } from "./lib/emsdk-toolchain.mjs";
 import { inspectEmbeddedManifest } from "./lib/manifest-readability.mjs";
 
-const LEDGER_PATH = path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
+// Tests may point the checker at a copied ledger while keeping the committed
+// artifacts read-only. Normal verification always uses the committed ledger.
+const LEDGER_PATH = process.env.SDN_ARTIFACT_PROVENANCE_LEDGER
+  ? path.resolve(process.env.SDN_ARTIFACT_PROVENANCE_LEDGER)
+  : path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
 
 // The representative set the REBUILD lane draws from when asked for N modules.
 // Chosen to cover the distinct compile paths rather than to be a big number:
