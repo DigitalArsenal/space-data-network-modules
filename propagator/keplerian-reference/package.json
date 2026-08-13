@@ -11,6 +11,8 @@
   "scripts": {
     "build": "node build.js",
     "test": "node --test tests/*.test.mjs",
+    "conformance": "space-data-module conformance propagator --artifact ./dist/isomorphic/module.wasm --vectors ./vectors/vectors.json",
+    "conformance:self-test": "space-data-module conformance propagator --self-test",
     "vectors:check": "node vectors/tools/build-vectors.mjs --check",
     "vectors:build": "node vectors/tools/build-vectors.mjs"
   },
