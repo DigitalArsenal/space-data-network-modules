@@ -20,11 +20,28 @@
  * `errors[]` — the module never invents a balance. `attested` is true only
  * when at least one balance AND the price feed answered.
  *
- * Request payload (JSON): {"btc":"bc1...","eth":"0x...","sol":"..."}
+ * PER-KEY ATTESTATION (owner ruling 2026-08-07, graph task
+ * sdn-managed-key-registry-api): the server manages several keys (purpose
+ * children of the node root, plus operator-configured external keys), and the
+ * rollup must cover "all value across all keys that are being managed by a
+ * server". The request therefore optionally carries `keys` — one address
+ * triple per managed key, keyed by purpose label — and the response answers
+ * per key AND in total. The legacy flat fields remain the ROOT's addresses so
+ * an old host and an old module keep interoperating in both directions.
+ *
+ * Request payload (JSON):
+ *   {"btc":"bc1...","eth":"0x...","sol":"...",              // the ROOT's
+ *    "keys":{"identity-signing":{"btc":"...","eth":"..."},  // per managed key
+ *            "licensing-grant":{"eth":"..."}}}              // (optional)
  * Response (JSON): {
  *   "attested": bool,
- *   "bond_usd": number, "bond_native": "0.1234 BTC", "total_usd": number,
+ *   "bond_usd": number,        // the ROOT key's bond (what backs the node id)
+ *   "bond_native": "0.1234 BTC",
+ *   "total_usd": number,       // the ROLLUP: every managed key, each funded
+ *                              // (chain,address) counted exactly once
  *   "holdings": [{"symbol":"BTC","name":"Bitcoin","amount":n,"usd":n}, ...],
+ *   "keys": [{"purpose":"identity-signing","attested":bool,"bond_usd":n,
+ *             "holdings":[...]}, ...],
  *   "errors": ["..."]
  * }
  *
@@ -192,15 +209,121 @@ bool usd_prices(double* btc, double* eth, double* sol, std::string* err) {
     return true;
 }
 
+// ── request parsing (per-key address sets) ──────────────────────────────────
+
+// One managed key's address triple, as requested by the host.
+struct KeyAddresses {
+    std::string purpose;
+    std::string btc, eth, sol;
+    bool empty() const { return btc.empty() && eth.empty() && sol.empty(); }
+};
+
+// object_span finds the '}' matching the '{' at `open`, skipping over quoted
+// strings (an address or label must never unbalance the scan). Returns false
+// on malformed input.
+bool object_span(const std::string& j, size_t open, size_t* close) {
+    if (open >= j.size() || j[open] != '{') return false;
+    int depth = 0;
+    bool inString = false;
+    for (size_t i = open; i < j.size(); ++i) {
+        char c = j[i];
+        if (inString) {
+            if (c == '\\') { ++i; continue; }
+            if (c == '"') inString = false;
+            continue;
+        }
+        if (c == '"') { inString = true; continue; }
+        if (c == '{') ++depth;
+        else if (c == '}') {
+            if (--depth == 0) { *close = i; return true; }
+        }
+    }
+    return false;
+}
+
+// parse_keys extracts the `keys` object: {"<purpose>":{"btc":...},...}. On
+// success *keysStart/*keysEnd bound the object (inclusive) so the caller can
+// keep flat-field parsing OUTSIDE it. Tolerant: a malformed keys object yields
+// no entries rather than a crash — the host is trusted but versions skew.
+void parse_keys(const std::string& j, std::vector<KeyAddresses>* out, size_t* keysStart, size_t* keysEnd) {
+    *keysStart = std::string::npos;
+    *keysEnd = std::string::npos;
+    size_t k = j.find("\"keys\"");
+    if (k == std::string::npos) return;
+    size_t colon = j.find(':', k + 6);
+    if (colon == std::string::npos) return;
+    size_t open = j.find_first_not_of(" \t\r\n", colon + 1);
+    if (open == std::string::npos || j[open] != '{') return;
+    size_t close = 0;
+    if (!object_span(j, open, &close)) return;
+    *keysStart = k;
+    *keysEnd = close;
+
+    size_t i = open + 1;
+    while (i < close) {
+        size_t q1 = j.find('"', i);
+        if (q1 == std::string::npos || q1 >= close) break;
+        size_t q2 = j.find('"', q1 + 1);
+        if (q2 == std::string::npos || q2 >= close) break;
+        std::string purpose = j.substr(q1 + 1, q2 - q1 - 1);
+        size_t pcolon = j.find(':', q2 + 1);
+        if (pcolon == std::string::npos || pcolon >= close) break;
+        size_t popen = j.find_first_not_of(" \t\r\n", pcolon + 1);
+        if (popen == std::string::npos || popen >= close || j[popen] != '{') break;
+        size_t pclose = 0;
+        if (!object_span(j, popen, &pclose) || pclose > close) break;
+
+        std::string sub = j.substr(popen, pclose - popen + 1);
+        KeyAddresses entry;
+        entry.purpose = purpose;
+        ps::json_string_field(sub, "btc", &entry.btc);
+        ps::json_string_field(sub, "eth", &entry.eth);
+        ps::json_string_field(sub, "sol", &entry.sol);
+        if (!entry.purpose.empty() && !entry.empty()) out->push_back(entry);
+        i = pclose + 1;
+    }
+}
+
 // ── the attest method ────────────────────────────────────────────────────────
 
+// kRootPurpose is the purpose label of the node identity — the key whose bond
+// the legacy top-level fields describe.
+static const char* kRootPurpose = "identity-signing";
+
 std::string run_attest(const uint8_t* req, uint32_t len) {
+    std::vector<KeyAddresses> keys;
     std::string btcAddr, ethAddr, solAddr;
     if (req != nullptr && len > 0) {
         std::string json(reinterpret_cast<const char*>(req), len);
-        ps::json_string_field(json, "btc", &btcAddr);
-        ps::json_string_field(json, "eth", &ethAddr);
-        ps::json_string_field(json, "sol", &solAddr);
+        size_t keysStart = std::string::npos, keysEnd = std::string::npos;
+        parse_keys(json, &keys, &keysStart, &keysEnd);
+        // Flat fields are parsed OUTSIDE the keys object, so a request whose
+        // only "btc" lives inside some key's triple never mislabels it as the
+        // root's.
+        std::string flat = json;
+        if (keysStart != std::string::npos && keysEnd != std::string::npos && keysEnd >= keysStart) {
+            flat = json.substr(0, keysStart) + json.substr(keysEnd + 1);
+        }
+        ps::json_string_field(flat, "btc", &btcAddr);
+        ps::json_string_field(flat, "eth", &ethAddr);
+        ps::json_string_field(flat, "sol", &solAddr);
+    }
+
+    // The legacy flat triple IS the root's addresses. If the host did not send
+    // an explicit identity-signing entry (an old host, or a legacy identity
+    // that publishes EPM addresses without an HD inventory), synthesize one so
+    // per-key and legacy answers stay one arithmetic.
+    bool haveRootEntry = false;
+    for (const KeyAddresses& k : keys) {
+        if (k.purpose == kRootPurpose) { haveRootEntry = true; break; }
+    }
+    if (!haveRootEntry && !(btcAddr.empty() && ethAddr.empty() && solAddr.empty())) {
+        KeyAddresses root;
+        root.purpose = kRootPurpose;
+        root.btc = btcAddr;
+        root.eth = ethAddr;
+        root.sol = solAddr;
+        keys.insert(keys.begin(), root);
     }
 
     std::vector<std::string> errors;
@@ -210,51 +333,99 @@ std::string run_attest(const uint8_t* req, uint32_t len) {
     bool havePrices = usd_prices(&pBtc, &pEth, &pSol, &err);
     if (!havePrices) errors.push_back(err);
 
-    struct Row {
+    // Balance cache: each unique (chain, address) is queried EXACTLY once, so
+    // two keys sharing an address can never double-count it in the rollup and
+    // the free APIs see the minimum number of requests.
+    struct Balance {
+        std::string chain, addr;
+        bool ok = false;
+        double amount = 0;
+    };
+    std::vector<Balance> cache;
+    auto lookup = [&](const std::string& chain, const std::string& addr) -> Balance* {
+        if (addr.empty()) return nullptr;
+        for (Balance& b : cache) {
+            if (b.chain == chain && b.addr == addr) return &b;
+        }
+        Balance b;
+        b.chain = chain;
+        b.addr = addr;
+        std::string berr;
+        if (chain == "btc") b.ok = btc_balance(addr, &b.amount, &berr);
+        else if (chain == "eth") b.ok = eth_balance(addr, &b.amount, &berr);
+        else b.ok = sol_balance(addr, &b.amount, &berr);
+        if (!b.ok) errors.push_back(berr);
+        cache.push_back(b);
+        return &cache.back();
+    };
+
+    struct ChainSpec {
+        const char* chain;
         const char* symbol;
         const char* name;
-        bool have = false;
-        double amount = 0;
-        double price = 0;
+        double price;
     };
-    Row rows[3] = {{"BTC", "Bitcoin"}, {"ETH", "Ethereum"}, {"SOL", "Solana"}};
-    rows[0].price = pBtc;
-    rows[1].price = pEth;
-    rows[2].price = pSol;
+    ChainSpec chains[3] = {
+        {"btc", "BTC", "Bitcoin", pBtc},
+        {"eth", "ETH", "Ethereum", pEth},
+        {"sol", "SOL", "Solana", pSol},
+    };
 
-    if (!btcAddr.empty()) {
-        if (btc_balance(btcAddr, &rows[0].amount, &err)) rows[0].have = true;
-        else errors.push_back(err);
+    // Per-key answers.
+    double rootUsd = 0;
+    bool rootAttested = false;
+    std::string rootHoldings = "[]";
+    std::string keysJson = "[";
+    bool firstKey = true;
+    for (const KeyAddresses& key : keys) {
+        const std::string addrs[3] = {key.btc, key.eth, key.sol};
+        double keyUsd = 0;
+        bool anyBalance = false;
+        std::string holdings = "[";
+        bool firstRow = true;
+        for (int c = 0; c < 3; ++c) {
+            Balance* b = lookup(chains[c].chain, addrs[c]);
+            if (b == nullptr || !b->ok) continue;
+            anyBalance = true;
+            double usd = havePrices ? b->amount * chains[c].price : 0;
+            keyUsd += usd;
+            if (!firstRow) holdings += ",";
+            firstRow = false;
+            holdings += "{\"symbol\":\"" + std::string(chains[c].symbol) + "\",\"name\":\"" +
+                        std::string(chains[c].name) + "\",\"amount\":" + ps::double_to_json(b->amount) +
+                        ",\"usd\":" + ps::double_to_json(usd) + "}";
+        }
+        holdings += "]";
+        bool keyAttested = anyBalance && havePrices;
+        if (key.purpose == kRootPurpose) {
+            rootUsd = keyAttested ? keyUsd : 0;
+            rootAttested = keyAttested;
+            rootHoldings = holdings;
+        }
+        if (!firstKey) keysJson += ",";
+        firstKey = false;
+        keysJson += "{\"purpose\":\"" + ps::json_escape(key.purpose) +
+                    "\",\"attested\":" + (keyAttested ? "true" : "false") +
+                    ",\"bond_usd\":" + ps::double_to_json(keyAttested ? keyUsd : 0) +
+                    ",\"holdings\":" + holdings + "}";
     }
-    if (!ethAddr.empty()) {
-        if (eth_balance(ethAddr, &rows[1].amount, &err)) rows[1].have = true;
-        else errors.push_back(err);
-    }
-    if (!solAddr.empty()) {
-        if (sol_balance(solAddr, &rows[2].amount, &err)) rows[2].have = true;
-        else errors.push_back(err);
-    }
+    keysJson += "]";
 
-    bool anyBalance = rows[0].have || rows[1].have || rows[2].have;
+    // THE ROLLUP: every unique funded (chain, address) exactly once — "the
+    // rollup of all value across all keys that are being managed by a server".
+    bool anyBalance = false;
+    double total = 0;
+    for (const Balance& b : cache) {
+        if (!b.ok) continue;
+        anyBalance = true;
+        for (int c = 0; c < 3; ++c) {
+            if (b.chain == chains[c].chain) total += havePrices ? b.amount * chains[c].price : 0;
+        }
+    }
     bool attested = anyBalance && havePrices;
 
-    double total = 0;
-    std::string holdings = "[";
-    bool first = true;
-    for (const Row& row : rows) {
-        if (!row.have) continue;
-        double usd = havePrices ? row.amount * row.price : 0;
-        total += usd;
-        if (!first) holdings += ",";
-        first = false;
-        holdings += "{\"symbol\":\"" + std::string(row.symbol) + "\",\"name\":\"" +
-                    std::string(row.name) + "\",\"amount\":" + ps::double_to_json(row.amount) +
-                    ",\"usd\":" + ps::double_to_json(usd) + "}";
-    }
-    holdings += "]";
-
-    // The bond in native terms: the BTC equivalent of the USD total (the
-    // template's own presentation), only stated when prices are real.
+    // The bond in native terms: the BTC equivalent of the USD rollup, only
+    // stated when prices are real.
     std::string native;
     if (attested && pBtc > 0) {
         char buf[64];
@@ -269,11 +440,17 @@ std::string run_attest(const uint8_t* req, uint32_t len) {
     }
     errJson += "]";
 
+    // Legacy fields keep their meaning for a single-key node (root bond ==
+    // rollup); with N keys, `bond_usd`/`holdings` stay the ROOT's — the number
+    // that prices trust in the node identity — and `total_usd` is the rollup.
+    (void)rootAttested;
     return "{\"attested\":" + std::string(attested ? "true" : "false") +
-           ",\"bond_usd\":" + ps::double_to_json(attested ? total : 0) +
+           ",\"bond_usd\":" + ps::double_to_json(rootUsd) +
            ",\"bond_native\":\"" + ps::json_escape(native) + "\"" +
            ",\"total_usd\":" + ps::double_to_json(attested ? total : 0) +
-           ",\"holdings\":" + holdings + ",\"errors\":" + errJson + "}";
+           ",\"holdings\":" + rootHoldings +
+           ",\"keys\":" + keysJson +
+           ",\"errors\":" + errJson + "}";
 }
 
 }  // namespace
