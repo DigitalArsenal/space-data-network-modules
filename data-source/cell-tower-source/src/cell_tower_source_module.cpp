@@ -555,9 +555,11 @@ std::string iso_now() {
     return std::string(buf);
 }
 
-// The hostcap/http-request response frame carries the body BASE64-ENCODED
-// (`bodyB64`), because a raw body is not JSON-safe. Reading `body` instead
-// would silently see nothing on every real response.
+// The connector's default response frame carries the body BASE64-ENCODED
+// (`bodyB64`), because a raw body is not JSON-safe. This flow opts into the
+// connector's raw-body-v1 lane for large provider documents; the base64 codec
+// stays here for backward compatibility with already-published JSON frames and
+// direct module tests.
 int b64_value(char c) {
     if (c >= 'A' && c <= 'Z') return c - 'A';
     if (c >= 'a' && c <= 'z') return c - 'a' + 26;
@@ -849,8 +851,10 @@ const char* detect_body_format(const std::string& body) {
     // carrying `features` is a GeoJSON FeatureCollection. The two keys are
     // disjoint, so this stays a corroboration rather than a guess.
     if (body[i] == '{') {
-        if (!json_string(body, "elements", "").empty()) return "osm-json";
-        if (!json_string(body, "features", "").empty()) return "swiss-geojson";
+        // Do not extract the arrays merely to prove their keys exist. On the
+        // BAKOM national document that copied 27 MiB twice before parsing.
+        if (body.find("\"elements\"") != std::string::npos) return "osm-json";
+        if (body.find("\"features\"") != std::string::npos) return "swiss-geojson";
         return nullptr;
     }
     // A CSV answer is not JSON and is deliberately NOT identified here. An
@@ -859,15 +863,26 @@ const char* detect_body_format(const std::string& body) {
     return nullptr;
 }
 
-// Format of the body carried by a hostcap response frame, or nullptr when the
-// frame carries no usable body. Decodes base64 once for the sniff; parse
-// decodes again for the real work, which is cheap next to the fetch.
-const char* detect_body_format_of_frame(const std::string& frame) {
-    const std::string body_b64 = json_string(frame, "bodyB64", "");
-    if (body_b64.empty()) return nullptr;
-    std::string payload;
-    if (!base64_decode(body_b64, &payload) || payload.empty()) return nullptr;
-    return detect_body_format(payload);
+// Decode hostcap/http-request's opt-in raw response lane. Keeping the status in
+// an eight-byte prefix and the body verbatim avoids inflating a 27 MB national
+// GeoJSON document to 36 MB of base64 plus several same-sized JSON/string
+// copies inside the flow's 128 MB linear-memory ceiling.
+//
+//   0..3  "$HRB"
+//   4..7  signed HTTP status, little endian
+//   8..N  response body
+bool decode_raw_http_response(const plugin_input_frame_t* frame, int* status,
+                              std::string* body) {
+    if (!frame || !frame->payload || frame->payload_length < 8) return false;
+    const uint8_t* p = frame->payload;
+    if (p[0] != '$' || p[1] != 'H' || p[2] != 'R' || p[3] != 'B') return false;
+    const uint32_t raw_status = static_cast<uint32_t>(p[4]) |
+                                (static_cast<uint32_t>(p[5]) << 8) |
+                                (static_cast<uint32_t>(p[6]) << 16) |
+                                (static_cast<uint32_t>(p[7]) << 24);
+    *status = static_cast<int32_t>(raw_status);
+    body->assign(reinterpret_cast<const char*>(p + 8), frame->payload_length - 8);
+    return true;
 }
 
 // Decode an Overpass `elements` array into reports.
@@ -975,14 +990,43 @@ int8_t swiss_radio_from_techno(const std::string& techno) {
 }
 
 void decode_swiss_geojson(const ProviderSpec& spec, const std::string& body,
-                          std::vector<Report>* out) {
+                          size_t report_limit, std::vector<Report>* out) {
     // Split the FEATURES ARRAY, not the document — same lesson the Overpass
     // decoder records: a GeoJSON FeatureCollection is one top-level object, so
     // splitting the body yields one "feature" (the whole file) and every field
     // read returns the first match anywhere in 27 MB.
-    const std::string features = json_string(body, "features", "");
-    if (features.empty()) return;
-    for (const std::string& feature : split_json_objects(features)) {
+    const std::string needle = "\"features\"";
+    size_t at = body.find(needle);
+    if (at == std::string::npos) return;
+    at = body.find(':', at + needle.size());
+    if (at == std::string::npos) return;
+    at = body.find('[', at + 1);
+    if (at == std::string::npos) return;
+
+    // Stream object slices out of the array and stop at the request's bounded
+    // per-provider row cap. The old json_string + split_json_objects path first
+    // copied the entire 27 MiB array and then allocated every feature object,
+    // even though route had already capped useful rows at 1,000.
+    size_t emitted = 0;
+    size_t object_start = 0;
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    for (++at; at < body.size() && emitted < report_limit; ++at) {
+        const char c = body[at];
+        if (in_string) {
+            if (escaped) escaped = false;
+            else if (c == '\\') escaped = true;
+            else if (c == '"') in_string = false;
+            continue;
+        }
+        if (c == '"') { in_string = true; continue; }
+        if (c == '{') {
+            if (depth++ == 0) object_start = at;
+            continue;
+        }
+        if (c != '}' || depth <= 0 || --depth != 0) continue;
+        const std::string feature = body.substr(object_start, at - object_start + 1);
         // `coordinates` is a two-number ARRAY, so it is read positionally
         // rather than by key. Order is [easting, northing].
         const size_t at = feature.find("\"coordinates\"");
@@ -1022,6 +1066,7 @@ void decode_swiss_geojson(const ProviderSpec& spec, const std::string& body,
         }
         r.radio = swiss_radio_from_techno(json_string(feature, "techno_en", ""));
         out->push_back(r);
+        ++emitted;
     }
 }
 
@@ -1678,7 +1723,7 @@ int route(void) {
                                   "\",\"method\":\"GET\",\"url\":\"" + json_escape(url) +
                                   "\",\"headers\":{\"accept\":\"application/json\"" +
                                   ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
-                                  ",\"timeoutMs\":40000}");
+                                  ",\"timeoutMs\":40000,\"responseWire\":\"raw-body-v1\"}");
             descriptor_providers.push_back(spec->id);
         }
     }
@@ -1815,13 +1860,25 @@ int parse(void) {
     // restarted at 0 every time and mapped later batches onto provider 0.
     const std::vector<std::string>& request_providers = g_request_providers;
     std::vector<Report>& reports = g_reports;
+    long provider_row_cap = static_cast<long>(json_number(g_job, "limit", 2000));
+    if (provider_row_cap < 1) provider_row_cap = 1;
+    if (provider_row_cap > 1000) provider_row_cap = 1000;
 
     const uint32_t count = plugin_get_input_count();
     size_t new_responses = 0;
     for (uint32_t i = 0; i < count; ++i) {
         const plugin_input_frame_t* f = plugin_get_input_frame(i);
         if (!f || !f->port_id || std::strcmp(f->port_id, "responses") != 0) continue;
-        const std::string frame(reinterpret_cast<const char*>(f->payload), f->payload_length);
+        std::string frame;
+        std::string payload;
+        int status = 0;
+        const bool raw_response = decode_raw_http_response(f, &status, &payload);
+        if (!raw_response) {
+            frame.assign(reinterpret_cast<const char*>(f->payload), f->payload_length);
+            status = static_cast<int>(json_number(frame, "status", 0));
+            const std::string body_b64 = json_string(frame, "bodyB64", "");
+            if (!body_b64.empty() && !base64_decode(body_b64, &payload)) payload.clear();
+        }
         const size_t k = g_response_cursor++;
         ++new_responses;
 
@@ -1829,7 +1886,7 @@ int parse(void) {
         // today, so this is forward compatibility, not the live path: if the
         // hostcap ever grows a correlation echo, attribution stops depending on
         // frame order the moment it does, with no change here.
-        std::string provider_id = json_string(frame, "provider_id", "");
+        std::string provider_id = raw_response ? std::string() : json_string(frame, "provider_id", "");
 
         // POSITION IS THE FALLBACK, NOT THE PRIMARY. It cannot be the primary:
         // `hostcap/http-request` pushes NO frame for a failed fetch, so one
@@ -1845,7 +1902,7 @@ int parse(void) {
         // matter which slot it arrived in or how many siblings went missing.
         // Ambiguity (two consulted providers sharing a format) falls back to
         // position, still corroborated below.
-        const char* observed_format = detect_body_format_of_frame(frame);
+        const char* observed_format = payload.empty() ? nullptr : detect_body_format(payload);
         if (provider_id.empty() && observed_format) {
             const ProviderSpec* only = nullptr;
             bool ambiguous = false;
@@ -1863,15 +1920,11 @@ int parse(void) {
         }
         const ProviderSpec* spec = find_provider(provider_id);
         if (!spec) continue;
-        const double status = json_number(frame, "status", 0);
         // A provider that failed is simply absent from the answer. It stays in
         // providers_consulted, so "asked and got nothing" remains visible and
         // never reads as "agreed".
         if (status < 200 || status >= 300) continue;
-        const std::string body_b64 = json_string(frame, "bodyB64", "");
-        if (body_b64.empty()) continue;
-        std::string payload;
-        if (!base64_decode(body_b64, &payload) || payload.empty()) continue;
+        if (payload.empty()) continue;
 
         // FAIL CLOSED ON A CONTRADICTED ATTRIBUTION.
         //
@@ -1896,7 +1949,10 @@ int parse(void) {
         if (std::strcmp(spec->format, "csv") == 0) decode_csv(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "osm-json") == 0) decode_osm_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "soql-json") == 0) decode_soql_json(*spec, payload, &reports);
-        else if (std::strcmp(spec->format, "swiss-geojson") == 0) decode_swiss_geojson(*spec, payload, &reports);
+        else if (std::strcmp(spec->format, "swiss-geojson") == 0) {
+            decode_swiss_geojson(*spec, payload,
+                                 static_cast<size_t>(provider_row_cap), &reports);
+        }
         // JSON adapters land with the per-provider decoders; until each is
         // written and fixtured, an unsupported format contributes nothing
         // rather than a guess.

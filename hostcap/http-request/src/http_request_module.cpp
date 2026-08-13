@@ -3,9 +3,11 @@
  *
  * Capability node for the host http.request hostcall. One method:
  *
- *   request — "request" JSON {"method","url","headers","bodyB64","timeoutMs"}
- *             -> http.request -> "response" JSON
- *             {"status":N,"headers":{...},"bodyB64":"..."}.
+ *   request — "request" JSON {"method","url","headers","bodyB64","timeoutMs",
+ *                              "responseWire":"raw-body-v1"}
+ *             -> http.request -> one "response" frame. The default is JSON
+ *             {"status":N,"headers":{...},"bodyB64":"..."}; raw-body-v1 is
+ *             $HRB + status + the body bytes, with no base64 expansion.
  *
  * Host dialects (verified against SDK nodeHost.js/browserHost.js and
  * sdn-server internal/modulert/caps/http.go):
@@ -14,11 +16,11 @@
  *     bytes (binary envelope segment) when responseType=binary.
  *   - The Go host takes {method,url,headers,body,body_encoding,timeout_ms}
  *     and returns {status,headers,body,body_encoding} with body as a JSON
- *     string (utf8 or base64), capped at 4 MiB.
+ *     string (utf8 or base64), bounded by host policy.
  * The request meta therefore carries BOTH dialects (timeout_ms + timeoutMs,
  * body as binary segment which the Go bridge attaches as a base64 string
  * matched by body_encoding=base64), and the response path normalizes either
- * shape to bodyB64.
+ * shape to bodyB64, or decodes it directly into the raw frame when opted in.
  */
 
 #include <cstdint>
@@ -59,6 +61,8 @@ uint32_t read_u32le(const uint8_t* src) {
     return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8) |
            (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
 }
+
+bool is_json_ws(char c);
 
 std::vector<uint8_t> hostcall(const char* op, const std::string& payload_json,
                               const uint8_t* seg = nullptr, uint32_t seg_len = 0) {
@@ -111,6 +115,101 @@ bool envelope_first_segment(const std::vector<uint8_t>& env,
     *seg_out = env.data() + off;
     *seg_len_out = seg_len;
     return true;
+}
+
+bool envelope_meta_view(const std::vector<uint8_t>& env,
+                        const uint8_t** meta_out, size_t* meta_len_out) {
+    *meta_out = nullptr;
+    *meta_len_out = 0;
+    if (env.size() < 4) return false;
+    const uint32_t meta_len = read_u32le(env.data());
+    if (env.size() < 4u + meta_len) return false;
+    *meta_out = env.data() + 4;
+    *meta_len_out = meta_len;
+    return true;
+}
+
+// Locate a structural JSON string field without materialising the host's whole
+// response envelope as std::string copies. Provider bodies are themselves JSON
+// strings in the Go host dialect, so copying meta -> result -> body used three
+// additional body-sized allocations before decoding even began.
+bool json_string_field_view(const uint8_t* json, size_t json_len, const char* key,
+                            const uint8_t** value_out, size_t* value_len_out) {
+    *value_out = nullptr;
+    *value_len_out = 0;
+    const size_t key_len = std::strlen(key);
+    for (size_t i = 0; i + key_len + 2 <= json_len; ++i) {
+        if (json[i] != '"' || std::memcmp(json + i + 1, key, key_len) != 0 ||
+            json[i + key_len + 1] != '"') {
+            continue;
+        }
+        size_t at = i + key_len + 2;
+        while (at < json_len && is_json_ws(static_cast<char>(json[at]))) ++at;
+        if (at >= json_len || json[at++] != ':') continue;
+        while (at < json_len && is_json_ws(static_cast<char>(json[at]))) ++at;
+        if (at >= json_len || json[at++] != '"') return false;
+        const size_t start = at;
+        bool escaped = false;
+        for (; at < json_len; ++at) {
+            const uint8_t c = json[at];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '"') {
+                *value_out = json + start;
+                *value_len_out = at - start;
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+bool json_integer_field_view(const uint8_t* json, size_t json_len, const char* key,
+                             int* value_out) {
+    const size_t key_len = std::strlen(key);
+    for (size_t i = 0; i + key_len + 2 <= json_len; ++i) {
+        if (json[i] != '"' || std::memcmp(json + i + 1, key, key_len) != 0 ||
+            json[i + key_len + 1] != '"') {
+            continue;
+        }
+        size_t at = i + key_len + 2;
+        while (at < json_len && is_json_ws(static_cast<char>(json[at]))) ++at;
+        if (at >= json_len || json[at++] != ':') continue;
+        while (at < json_len && is_json_ws(static_cast<char>(json[at]))) ++at;
+        bool negative = false;
+        if (at < json_len && json[at] == '-') { negative = true; ++at; }
+        if (at >= json_len || json[at] < '0' || json[at] > '9') return false;
+        int value = 0;
+        while (at < json_len && json[at] >= '0' && json[at] <= '9') {
+            value = value * 10 + static_cast<int>(json[at++] - '0');
+        }
+        *value_out = negative ? -value : value;
+        return true;
+    }
+    return false;
+}
+
+bool json_true_field_view(const uint8_t* json, size_t json_len, const char* key) {
+    const size_t key_len = std::strlen(key);
+    for (size_t i = 0; i + key_len + 2 <= json_len; ++i) {
+        if (json[i] != '"' || std::memcmp(json + i + 1, key, key_len) != 0 ||
+            json[i + key_len + 1] != '"') {
+            continue;
+        }
+        size_t at = i + key_len + 2;
+        while (at < json_len && is_json_ws(static_cast<char>(json[at]))) ++at;
+        if (at >= json_len || json[at++] != ':') continue;
+        while (at < json_len && is_json_ws(static_cast<char>(json[at]))) ++at;
+        return at + 4 <= json_len && std::memcmp(json + at, "true", 4) == 0;
+    }
+    return false;
 }
 
 bool meta_ok(const std::string& meta) {
@@ -265,15 +364,93 @@ int b64_value(char c) {
     return -1;
 }
 
-bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
+int hex_value(uint8_t c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+void append_utf8(uint32_t codepoint, std::vector<uint8_t>* out) {
+    if (codepoint <= 0x7f) {
+        out->push_back(static_cast<uint8_t>(codepoint));
+    } else if (codepoint <= 0x7ff) {
+        out->push_back(static_cast<uint8_t>(0xc0 | (codepoint >> 6)));
+        out->push_back(static_cast<uint8_t>(0x80 | (codepoint & 0x3f)));
+    } else if (codepoint <= 0xffff) {
+        out->push_back(static_cast<uint8_t>(0xe0 | (codepoint >> 12)));
+        out->push_back(static_cast<uint8_t>(0x80 | ((codepoint >> 6) & 0x3f)));
+        out->push_back(static_cast<uint8_t>(0x80 | (codepoint & 0x3f)));
+    } else {
+        out->push_back(static_cast<uint8_t>(0xf0 | (codepoint >> 18)));
+        out->push_back(static_cast<uint8_t>(0x80 | ((codepoint >> 12) & 0x3f)));
+        out->push_back(static_cast<uint8_t>(0x80 | ((codepoint >> 6) & 0x3f)));
+        out->push_back(static_cast<uint8_t>(0x80 | (codepoint & 0x3f)));
+    }
+}
+
+bool decode_json_string_into(const uint8_t* text, size_t text_len,
+                             std::vector<uint8_t>* out, size_t prefix) {
     out->clear();
+    out->reserve(prefix + text_len);
+    out->resize(prefix, 0);
+    for (size_t i = 0; i < text_len; ++i) {
+        const uint8_t c = text[i];
+        if (c != '\\') {
+            out->push_back(c);
+            continue;
+        }
+        if (++i >= text_len) return false;
+        const uint8_t escaped = text[i];
+        if (escaped == '"' || escaped == '\\' || escaped == '/') out->push_back(escaped);
+        else if (escaped == 'b') out->push_back('\b');
+        else if (escaped == 'f') out->push_back('\f');
+        else if (escaped == 'n') out->push_back('\n');
+        else if (escaped == 'r') out->push_back('\r');
+        else if (escaped == 't') out->push_back('\t');
+        else if (escaped == 'u') {
+            if (i + 4 >= text_len) return false;
+            uint32_t codepoint = 0;
+            for (size_t digit = 0; digit < 4; ++digit) {
+                const int value = hex_value(text[++i]);
+                if (value < 0) return false;
+                codepoint = (codepoint << 4) | static_cast<uint32_t>(value);
+            }
+            if (codepoint >= 0xd800 && codepoint <= 0xdbff && i + 6 < text_len &&
+                text[i + 1] == '\\' && text[i + 2] == 'u') {
+                uint32_t low = 0;
+                bool valid_low = true;
+                for (size_t digit = 0; digit < 4; ++digit) {
+                    const int value = hex_value(text[i + 3 + digit]);
+                    if (value < 0) { valid_low = false; break; }
+                    low = (low << 4) | static_cast<uint32_t>(value);
+                }
+                if (valid_low && low >= 0xdc00 && low <= 0xdfff) {
+                    codepoint = 0x10000 + ((codepoint - 0xd800) << 10) + (low - 0xdc00);
+                    i += 6;
+                }
+            }
+            append_utf8(codepoint, out);
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool base64_decode_into(const uint8_t* text, size_t text_len,
+                        std::vector<uint8_t>* out, size_t prefix) {
+    out->clear();
+    out->reserve(prefix + ((text_len + 3) / 4) * 3);
+    out->resize(prefix, 0);
     uint32_t acc = 0;
     int bits = 0;
-    for (const char c : text) {
+    for (size_t i = 0; i < text_len; ++i) {
+        const char c = static_cast<char>(text[i]);
         if (c == '=' || c == '\n' || c == '\r') continue;
-        const int v = b64_value(c);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<uint32_t>(v);
+        const int value = b64_value(c);
+        if (value < 0) return false;
+        acc = (acc << 6) | static_cast<uint32_t>(value);
         bits += 6;
         if (bits >= 8) {
             bits -= 8;
@@ -281,6 +458,11 @@ bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
         }
     }
     return true;
+}
+
+bool base64_decode(const std::string& text, std::vector<uint8_t>* out) {
+    return base64_decode_into(reinterpret_cast<const uint8_t*>(text.data()),
+                              text.size(), out, 0);
 }
 
 // Push one "response" frame. Every exit path of perform_one_request goes
@@ -306,6 +488,107 @@ int push_response(int status, const std::string& headers_json, const std::string
     return pushed < 0 ? 500 : 0;
 }
 
+// Raw response-body lane for flows that consume large provider documents.
+//
+// The default JSON response above remains the public connector contract. It is
+// convenient for small responses, but a 27 MB GeoJSON body becomes a 36 MB
+// base64 string and is copied through several JSON/string buffers before the
+// downstream parser sees it. The cellular aggregate's 128 MB flow instance
+// exhausted its memory in that conversion and trapped before the HTTP node
+// completed, permanently leaving one pooled instance unable to run real work.
+//
+// A descriptor may therefore request `responseWire:"raw-body-v1"`. The output
+// is an aligned-binary frame:
+//
+//   0..3  "$HRB" (host response body)
+//   4..7  signed HTTP status, little endian (0 means connector failure)
+//   8..N  response body bytes verbatim
+//
+// This is still a generic connector surface: no provider or application
+// semantics enter this node. The consumer opts in and owns the body format.
+int push_raw_response(int status, const uint8_t* body, size_t body_len) {
+    std::vector<uint8_t> response(8 + body_len);
+    response[0] = '$';
+    response[1] = 'H';
+    response[2] = 'R';
+    response[3] = 'B';
+    write_u32le(response.data() + 4, static_cast<uint32_t>(status));
+    if (body_len > 0 && body) {
+        std::memcpy(response.data() + 8, body, body_len);
+    }
+    const int32_t pushed = plugin_push_output_ex(
+        "response", nullptr, nullptr,
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
+        0, 1, response.data(), static_cast<uint32_t>(response.size()));
+    return pushed < 0 ? 500 : 0;
+}
+
+int fail_slot(int return_status, const char* code, const std::string& message,
+              bool raw_response);
+
+int push_raw_response_buffer(int status, std::vector<uint8_t>* response) {
+    if (!response || response->size() < 8) return 500;
+    (*response)[0] = '$';
+    (*response)[1] = 'H';
+    (*response)[2] = 'R';
+    (*response)[3] = 'B';
+    write_u32le(response->data() + 4, static_cast<uint32_t>(status));
+    const int32_t pushed = plugin_push_output_ex(
+        "response", nullptr, nullptr,
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
+        0, 1, response->data(), static_cast<uint32_t>(response->size()));
+    return pushed < 0 ? 500 : 0;
+}
+
+// Go returns text/json bodies inside the hostcall envelope's JSON metadata.
+// Decode that JSON string DIRECTLY from the envelope into the output frame.
+// The former meta/result/body std::string chain held three extra 27 MB copies
+// for BAKOM before push_output made a fourth, exhausting the 128 MiB guest.
+int push_raw_host_response(const std::vector<uint8_t>& env) {
+    const uint8_t* meta = nullptr;
+    size_t meta_len = 0;
+    if (!envelope_meta_view(env, &meta, &meta_len) ||
+        !json_true_field_view(meta, meta_len, "ok")) {
+        return fail_slot(502, "http-request-failed",
+                         "http.request hostcall failed.", true);
+    }
+
+    int status = 0;
+    if (!json_integer_field_view(meta, meta_len, "status", &status)) {
+        return fail_slot(502, "http-request-failed",
+                         "http.request response carried no status field.", true);
+    }
+
+    const uint8_t* seg = nullptr;
+    uint32_t seg_len = 0;
+    if (envelope_first_segment(env, &seg, &seg_len)) {
+        return push_raw_response(status, seg, seg_len);
+    }
+
+    const uint8_t* body = nullptr;
+    size_t body_len = 0;
+    if (!json_string_field_view(meta, meta_len, "body", &body, &body_len)) {
+        return push_raw_response(status, nullptr, 0);
+    }
+    const uint8_t* encoding = nullptr;
+    size_t encoding_len = 0;
+    const bool base64 = json_string_field_view(meta, meta_len, "body_encoding",
+                                                &encoding, &encoding_len) &&
+                        encoding_len == 6 && std::memcmp(encoding, "base64", 6) == 0;
+
+    std::vector<uint8_t> response;
+    const bool decoded = base64
+        ? base64_decode_into(body, body_len, &response, 8)
+        : decode_json_string_into(body, body_len, &response, 8);
+    if (!decoded) {
+        return fail_slot(502, "http-request-failed",
+                         base64 ? "http.request response body is not valid base64."
+                                : "http.request response body is not valid JSON text.",
+                         true);
+    }
+    return push_raw_response_buffer(status, &response);
+}
+
 // A request that could not be performed still occupies its slot. Status 0 is
 // outside 2xx, so a consumer that filters on status drops it exactly as it
 // would drop a 500 — but the FRAME EXISTS, which is what keeps request k and
@@ -319,9 +602,11 @@ int push_response(int status, const std::string& headers_json, const std::string
 // record type cannot tolerate — a mast published under a regulator's name that
 // never asserted it — so parse had to add format corroboration to fail closed
 // against a hole this node was digging.
-int fail_slot(int return_status, const char* code, const std::string& message) {
+int fail_slot(int return_status, const char* code, const std::string& message,
+              bool raw_response) {
     plugin_set_error(code, message.c_str());
-    push_response(0, "{}", "", code, message);
+    if (raw_response) push_raw_response(0, nullptr, 0);
+    else push_response(0, "{}", "", code, message);
     return return_status;
 }
 
@@ -336,9 +621,14 @@ int fail_slot(int return_status, const char* code, const std::string& message) {
 // exactly one response frame.
 // ---------------------------------------------------------------------------
 int perform_one_request(const std::string& request_json) {
+    std::string response_wire;
+    json_string_field(request_json, "responseWire", &response_wire);
+    const bool raw_response = response_wire == "raw-body-v1";
+
     std::string url;
     if (!json_string_field(request_json, "url", &url) || url.empty()) {
-        return fail_slot(400, "missing-url", "request requires {\"url\":\"...\"}.");
+        return fail_slot(400, "missing-url", "request requires {\"url\":\"...\"}.",
+                         raw_response);
     }
     std::string method = "GET";
     {
@@ -356,7 +646,8 @@ int perform_one_request(const std::string& request_json) {
         std::string body_b64;
         if (json_string_field(request_json, "bodyB64", &body_b64) && !body_b64.empty()) {
             if (!base64_decode(body_b64, &body)) {
-                return fail_slot(400, "invalid-body", "bodyB64 is not valid base64.");
+                return fail_slot(400, "invalid-body", "bodyB64 is not valid base64.",
+                                 raw_response);
             }
             has_body = true;
         }
@@ -386,19 +677,22 @@ int perform_one_request(const std::string& request_json) {
         has_body ? hostcall("http.request", payload, body.data(),
                             static_cast<uint32_t>(body.size()))
                  : hostcall("http.request", payload);
+    if (raw_response) return push_raw_host_response(env);
+
     const std::string meta = envelope_meta_json(env);
     if (!meta_ok(meta)) {
         std::string message;
         json_string_field(meta, "message", &message);
         return fail_slot(502, "http-request-failed",
-                         message.empty() ? "http.request hostcall failed." : message);
+                         message.empty() ? "http.request hostcall failed." : message,
+                         raw_response);
     }
 
     const std::string result = json_object_slice(meta, "result");
     double status = 0.0;
     if (result.empty() || !json_number_field(result, "status", &status)) {
         return fail_slot(502, "http-request-failed",
-                         "http.request response carried no status field.");
+                         "http.request response carried no status field.", raw_response);
     }
 
     std::string response_headers = json_object_slice(result, "headers");
@@ -407,12 +701,12 @@ int perform_one_request(const std::string& request_json) {
     // Body: JS hosts detach the binary body into envelope segment 0; the Go
     // host inlines a string body with body_encoding utf8|base64.
     std::string body_b64;
+    std::string body_text;
     const uint8_t* seg = nullptr;
     uint32_t seg_len = 0;
     if (envelope_first_segment(env, &seg, &seg_len)) {
-        body_b64 = base64_encode(seg, seg_len);
+        if (!raw_response) body_b64 = base64_encode(seg, seg_len);
     } else {
-        std::string body_text;
         if (json_string_field(result, "body", &body_text) && !body_text.empty()) {
             std::string encoding;
             json_string_field(result, "body_encoding", &encoding);

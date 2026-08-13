@@ -10,7 +10,8 @@ import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT
+  ?? fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -112,6 +113,15 @@ function decodeResponse(response) {
   return JSON.parse(decoder.decode(frame.payload));
 }
 
+function decodeRawResponse(response) {
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1);
+  const payload = new Uint8Array(response.outputs[0].payload);
+  assert.equal(decoder.decode(payload.subarray(0, 4)), "$HRB");
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  return { status: view.getInt32(4, true), body: payload.subarray(8) };
+}
+
 test("hostcap/http-request artifact passes SDK compliance", async () => {
   const report = await validateArtifactWithStandards({
     manifest: readManifest(),
@@ -207,6 +217,65 @@ test("request normalizes the Go-host utf8 string body dialect to bodyB64", async
   assert.equal(out.status, 404);
   assert.equal(out.headers["Content-Type"], "text/plain");
   assert.equal(Buffer.from(out.bodyB64, "base64").toString("utf8"), "not found");
+});
+
+test("raw-body-v1 carries a large-consumer response without base64 expansion", async (t) => {
+  const geojson = "{\"label\":\"Zürich & Bern\\n\\\"mast\\\"\",\"features\":[]}";
+  const stub = createGoHostStub({
+    status: 200,
+    headers: { "Content-Type": "application/geo+json" },
+    body: geojson,
+    body_encoding: "utf8",
+  });
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "request",
+    inputs: [
+      jsonInput("request", {
+        url: "https://example.test/national.geojson",
+        responseWire: "raw-body-v1",
+      }),
+    ],
+  });
+
+  const out = decodeRawResponse(response);
+  assert.equal(out.status, 200);
+  assert.equal(decoder.decode(out.body), geojson);
+  assert.equal(
+    out.body.byteLength,
+    Buffer.byteLength(geojson),
+    "raw lane must not grow the body by base64's 4/3 expansion",
+  );
+});
+
+test("raw-body-v1 decodes the Go-host base64 dialect directly into the frame", async (t) => {
+  const bodyB64 = Buffer.from(RESPONSE_BODY).toString("base64");
+  const stub = createGoHostStub({ status: 200, headers: {}, body: bodyB64, body_encoding: "base64" });
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "request",
+    inputs: [jsonInput("request", { url: "https://example.test/blob", responseWire: "raw-body-v1" })],
+  });
+  const out = decodeRawResponse(response);
+  assert.equal(out.status, 200);
+  assert.deepEqual(out.body, RESPONSE_BODY);
+});
+
+test("raw-body-v1 failures keep their positional slot", async (t) => {
+  const stub = createJsHostStub({ failOps: { "http.request": "origin down" } });
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "request",
+    inputs: [jsonInput("request", { url: "https://example.test/", responseWire: "raw-body-v1" })],
+  });
+
+  assert.notEqual(response.statusCode, 0);
+  assert.equal(response.outputs.length, 1);
+  const payload = new Uint8Array(response.outputs[0].payload);
+  assert.equal(decoder.decode(payload.subarray(0, 4)), "$HRB");
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  assert.equal(view.getInt32(4, true), 0);
+  assert.equal(payload.byteLength, 8);
 });
 
 test("request passes the Go-host base64 body dialect through verbatim", async (t) => {

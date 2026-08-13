@@ -59,7 +59,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON array of http request descriptors, one per selected provider.",
+              "description": "UTF-8 JSON array of http request descriptors, one per selected provider. Each descriptor opts into hostcap/http-request responseWire=raw-body-v1 so large provider bodies remain binary rather than expanding through base64 inside the flow guest.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -206,18 +206,18 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON from hostcap/http-request, one frame per provider.",
+              "description": "hostcap/http-request response, one frame per provider: normally an aligned binary $HRB raw-body-v1 frame (status plus verbatim body), with legacy JSON/bodyB64 accepted for compatibility.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "hostcap/http-request response frame ({provider_id,status,headers,body}) consumed inside this flow; the shape is defined by the host http.request op, not by SDS."
+                "detail": "hostcap/http-request response frame ($HRB raw-body-v1, or legacy {status,headers,bodyB64}) consumed inside this flow; the shape is defined by that generic connector, not by SDS."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 100000,
           "required": true,
-          "description": "HTTP responses, one per request descriptor route emitted. NOT capped at 1: the fan-out is one descriptor per provider URL including mirrors, and a cap of 1 delivered only the first, which is why a two-provider request returned exactly the first-named provider's answer."
+          "description": "HTTP responses, one per request descriptor route emitted. NOT capped at 1: the fan-out is one descriptor per provider URL including mirrors, and a cap of 1 delivered only the first, which is why a two-provider request returned exactly the first-named provider's answer. raw-body-v1 is used to avoid the 4/3 base64 expansion and duplicate JSON/string buffers that previously exhausted a 128 MiB WasmEdge instance on the 27 MiB BAKOM document."
         }
       ],
       "outputPorts": [

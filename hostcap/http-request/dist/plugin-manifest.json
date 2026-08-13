@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.hostcap.http-request",
   "name": "SDN Host HTTP Request Node",
   "version": "0.1.0",
-  "description": "Capability node wrapping the host http.request hostcall. Method \"request\": input \"request\" JSON {\"method\":\"GET|POST|...\",\"url\":\"https://...\",\"headers\":{...},\"bodyB64\":\"<base64 request body>\",\"timeoutMs\":N} -> one \"response\" frame of UTF-8 JSON bytes {\"status\":N,\"headers\":{...},\"bodyB64\":\"<base64 response body>\"}. The node decodes bodyB64 and forwards the raw bytes as the hostcall binary segment; the request meta carries both host dialects (timeout_ms/timeoutMs, body_encoding=base64, responseType=binary) so one payload serves every host. Response handling is host-agnostic: the SDK NodeHost/BrowserHost return the body as raw bytes (binary segment; response limited only by host policy), while the Go server host (sdn-server modulert/caps/http.go) returns body as a JSON string with body_encoding utf8|base64 and caps the response body at 4 MiB — the node normalizes both to bodyB64. Capability \"http\" is required on all hosts.",
+  "description": "Capability node wrapping the host http.request hostcall. Method \"request\": input \"request\" JSON {\"method\":\"GET|POST|...\",\"url\":\"https://...\",\"headers\":{...},\"bodyB64\":\"<base64 request body>\",\"timeoutMs\":N,\"responseWire\":\"raw-body-v1\"} -> one \"response\" frame per request. The default response is UTF-8 JSON {\"status\":N,\"headers\":{...},\"bodyB64\":\"<base64 response body>\"}; responseWire=raw-body-v1 instead emits an aligned binary $HRB frame containing status plus the response body verbatim, avoiding base64 expansion for large intra-flow documents. The node decodes request bodyB64 and forwards the raw bytes as the hostcall binary segment; the request meta carries both host dialects (timeout_ms/timeoutMs, body_encoding=base64, responseType=binary) so one payload serves every host. Response handling is host-agnostic: the SDK NodeHost/BrowserHost return the body as raw bytes (binary segment; response limited only by host policy), while the Go server host returns body as a JSON string with body_encoding utf8|base64. Capability \"http\" is required on all hosts.",
   "pluginFamily": "infrastructure",
   "capabilities": ["http"],
   "externalInterfaces": [
@@ -35,7 +35,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"method\":\"GET\",\"url\":\"https://...\" (required),\"headers\":{\"Name\":\"Value\"},\"bodyB64\":\"<base64>\",\"timeoutMs\":30000}. Only url is required; method defaults to GET."
+              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"method\":\"GET\",\"url\":\"https://...\" (required),\"headers\":{\"Name\":\"Value\"},\"bodyB64\":\"<base64>\",\"timeoutMs\":30000,\"responseWire\":\"raw-body-v1\"}. Only url is required; method defaults to GET. responseWire is optional and defaults to the JSON/bodyB64 response."
             }
           ],
           "minStreams": 1,
@@ -55,13 +55,13 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON bytes (aligned-binary wire format): {\"status\":<HTTP status>,\"headers\":{...verbatim from the host...},\"bodyB64\":\"<base64 response body>\"}. bodyB64 is always base64 regardless of which host dialect returned the body."
+              "description": "Default lane: UTF-8 JSON bytes (aligned-binary wire format) {\"status\":<HTTP status>,\"headers\":{...verbatim from the host...},\"bodyB64\":\"<base64 response body>\"}. raw-body-v1 lane: aligned binary bytes '$HRB' + signed little-endian int32 status + the response body verbatim."
             }
           ],
           "minStreams": 1,
           "maxStreams": 100000,
           "required": true,
-          "description": "The HTTP responses: EXACTLY ONE frame per request frame consumed, pushed in input order, so response k answers request k. A request that could not be performed still emits its frame, carrying status 0 plus \"error\"/\"errorMessage\" and an empty bodyB64 — status 0 is outside 2xx so a consumer that filters on status drops it exactly as it would drop a 500, while the slot stays aligned. Emitting nothing for a failure is what previously shifted every later body one slot left and let a consumer attribute a payload to a provider that never served it."
+          "description": "The HTTP responses: EXACTLY ONE frame per request frame consumed, pushed in input order, so response k answers request k. A request that could not be performed still emits its frame: the default JSON lane carries status 0 plus error/errorMessage and empty bodyB64, while raw-body-v1 carries status 0 and an empty body. Status 0 is outside 2xx, so a consumer drops it exactly as it would drop a 500 while the positional slot stays aligned."
         }
       ],
       "maxBatch": 1,

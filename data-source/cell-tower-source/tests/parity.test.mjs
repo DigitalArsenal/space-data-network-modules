@@ -604,6 +604,11 @@ test("route skips credentialed providers loudly and never fetches them", async (
   for (const descriptor of requests) {
     assert.equal(typeof descriptor.url, "string");
     assert.equal(descriptor.method, "GET");
+    assert.equal(
+      descriptor.responseWire,
+      "raw-body-v1",
+      "large provider bodies must not be expanded through base64 inside the flow",
+    );
     assert.equal(Array.isArray(descriptor), false);
   }
   assert.deepEqual(job.providers_consulted, ["fcc-uls-3650"]);

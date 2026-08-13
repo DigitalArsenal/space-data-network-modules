@@ -97,6 +97,30 @@ const httpResponse = (providerId, body) => ({
   bodyB64: Buffer.from(body).toString("base64"),
 });
 
+const rawHttpResponse = (status, body = new Uint8Array()) => {
+  const bytes = Buffer.from(body);
+  const frame = Buffer.alloc(8 + bytes.byteLength);
+  frame.write("$HRB", 0, "ascii");
+  frame.writeInt32LE(status, 4);
+  bytes.copy(frame, 8);
+  return new Uint8Array(frame);
+};
+
+const responseInput = (response) => {
+  if (response instanceof Uint8Array) {
+    return {
+      portId: "responses",
+      typeRef: {
+        wireFormat: "aligned-binary",
+        requiredAlignment: 1,
+        byteLength: response.byteLength,
+      },
+      payload: response,
+    };
+  }
+  return jsonInput("responses", response);
+};
+
 async function routeFor(t, body) {
   const harness = await harnessFor(t);
   const response = await harness.invoke({ methodId: "route", inputs: [htqRequest(JSON.stringify(body))] });
@@ -151,7 +175,7 @@ async function parseWith(t, providers, responses, body = {}) {
   while (padded.length < descriptors.length) padded.push(FAILED_FETCH);
   const parsed = await drainParse(harness, [
     jsonInput("job", job),
-    ...padded.map((r) => jsonInput("responses", r)),
+    ...padded.map(responseInput),
   ]);
   return jsonFrame(parsed, "reports");
 }
@@ -314,6 +338,37 @@ test("attribution survives the host's real response shape (no provider_id)", asy
 
   assert.equal(byProvider["fcc-uls-3650"], fcc.length);
   assert.equal(byProvider["openstreetmap-overpass"], overpass.elements.length);
+});
+
+test("raw-body-v1 parses the provider body without a base64 copy", async (t) => {
+  const captured = JSON.parse(BAKOM.toString("utf8"));
+  const reports = await parseWith(
+    t,
+    ["bakom-mobile-sites"],
+    [rawHttpResponse(200, BAKOM)],
+    { BBOX: undefined },
+  );
+  assert.equal(reports.length, captured.features.length);
+  assert.ok(reports.every((r) => r.provider_id === "bakom-mobile-sites"));
+});
+
+test("the national GeoJSON decoder stops at the declared per-provider row cap", async (t) => {
+  const document = JSON.stringify({
+    type: "FeatureCollection",
+    features: Array.from({ length: 8 }, (_, index) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [2600000 + index, 1200000 + index] },
+      properties: { station: `bounded-${index}`, techno_en: "Technology 4G" },
+    })),
+  });
+  const reports = await parseWith(
+    t,
+    ["bakom-mobile-sites"],
+    [rawHttpResponse(200, encoder.encode(document))],
+    { BBOX: undefined, LIMIT: 3 },
+  );
+  assert.equal(reports.length, 3, "the decoder scanned past the caller's bounded work cap");
+  assert.deepEqual(reports.map((report) => report.site_name), ["bounded-0", "bounded-1", "bounded-2"]);
 });
 
 test("attribution follows the BODY, not the slot it arrived in", async (t) => {
