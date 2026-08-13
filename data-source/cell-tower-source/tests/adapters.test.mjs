@@ -508,6 +508,17 @@ test("a WORLDWIDE request skips bounded providers instead of substituting a regi
   assert.match(fcc.url, /-90\.000000%20and%2090\.000000/u);
 });
 
+test("the bounded BAKOM row contract fetches only the sufficient GeoJSON prefix", async (t) => {
+  const { descriptors } = await routeFor(t, {
+    PROVIDERS: ["bakom-mobile-sites"],
+    METHOD: "HIGHEST_SAMPLE_COUNT",
+    LIMIT: 2000,
+  });
+  assert.equal(descriptors.length, 1);
+  assert.equal(descriptors[0].headers.range, "bytes=0-2097151");
+  assert.equal(descriptors[0].responseWire, "raw-body-v1");
+});
+
 test("a bulk-ingest-only provider names the missing capability and is never fetched", async (t) => {
   const { descriptors, outcome } = await routeFor(t, {
     PROVIDERS: ["anfr-cartoradio", "acma-rrl", "ised-sms-tafl", "comreg-siteviewer"],

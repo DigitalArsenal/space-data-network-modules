@@ -405,6 +405,15 @@ constexpr ProviderSpec kProviders[] = {
   // 27,261,289 bytes, last-modified the previous day. A whole country in one
   // file, so it answers a worldwide request in full.
   //
+  // The file is ordered as an ordinary FeatureCollection, and this module's
+  // anonymous per-provider contract accepts at most 1,000 rows. A 2 MiB prefix
+  // contains about 1,700 complete features (measured 2026-08-13), so fetching
+  // the remaining 25 MiB cannot change the answer. Route therefore asks for
+  // that prefix with Range and the streaming decoder below deliberately accepts
+  // the incomplete JSON tail after it has emitted the bounded row set. Besides
+  // wasting bandwidth, the full document occasionally pushed the buffered HTTP
+  // flow beyond Cloudflare's response deadline (live 524 at 124 s).
+  //
   // TRAP: coordinates are EPSG:2056 (Swiss LV95) EASTING/NORTHING in metres,
   // not degrees. Read as lat/lon they are silently out of range and every row
   // is dropped by the range guard — a provider that fetches perfectly and
@@ -1719,9 +1728,14 @@ int route(void) {
                     url += "?$where=" + url_encode(q) + "&$limit=" + rows_buf;
                 }
             }
+            const std::string bounded_headers =
+                std::strcmp(spec->format, "swiss-geojson") == 0
+                    ? ",\"range\":\"bytes=0-2097151\""
+                    : "";
             descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
                                   "\",\"method\":\"GET\",\"url\":\"" + json_escape(url) +
                                   "\",\"headers\":{\"accept\":\"application/json\"" +
+                                  bounded_headers +
                                   ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
                                   ",\"timeoutMs\":40000,\"responseWire\":\"raw-body-v1\"}");
             descriptor_providers.push_back(spec->id);
