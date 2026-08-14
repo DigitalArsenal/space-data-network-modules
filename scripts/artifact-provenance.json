@@ -752,14 +752,17 @@
       }
     },
     "data-source/cell-tower-source/dist/isomorphic/module.wasm": {
-      "sha256": "ef4dd4d64ac51758ddcfb2d94fcd17104902a8bc5dc1cec81028d32b342a1c6b",
-      "bytes": 233401,
+      "sha256": "321366ebc59b6aed4621c5a9494754906d29e4da673f835ef175af3cd0ba7f39",
+      "bytes": 257344,
       "module": "data-source/cell-tower-source",
-      "lastCommit": "2000b17fadacc8dcd8aaa1f030dd4fd77ff026d2",
-      "lastCommitDate": "2026-08-14T07:30:51-04:00",
+      "lastCommit": "bdcf9d5b7c5b12a9732a51f5ac747e9ed6311b7c",
+      "lastCommitDate": "2026-08-14T08:01:38-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "fe293486e8ff226aa8767f25047d2892c1bd7866",
+        "sdkCommit": "915141d7aedda354e3a8d9a95aaa45f58b15dacd"
+      },
       "declaration": {
         "declares": true,
         "threadModels": [
