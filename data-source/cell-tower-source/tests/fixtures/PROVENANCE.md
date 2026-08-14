@@ -176,3 +176,43 @@ CC BY 4.0, and the registry string says so. ISED is the Open Government Licence
 – Canada; ANFR is Licence Ouverte 2.0; ComReg SiteViewer is CC BY 4.0. The
 fixtures are small extracts kept for regression testing; the full bodies are
 fetched at runtime and carry their attribution through `$TBS.SOURCES`.
+
+## `opencellid-bulk.slice.csv` / `.csv.gz`
+
+HAND-WRITTEN, like `opencellid.sample.csv` and for the same reason: no cut of
+the real bulk export could be committed here. The live file is a gzip of roughly
+40 million cells behind a paid account, and a slice of it large enough to
+exercise the collapse would still carry OpenCelliD's CC BY-SA obligations into
+this repo for no test benefit. A synthetic file engages no provider's terms.
+
+Both forms are kept. The `.csv.gz` is what the test feeds the decoder; the
+plain `.csv` is the same bytes before compression, so the fixture can be audited
+without a gunzip step and the expected site count can be checked by reading it.
+
+It is written in the BULK export's column contract —
+`radio,mcc,net,area,cell,unit,lon,lat,range,samples,changeable,created,updated,averageSignal`
+— which is NOT the `getInArea` API's contract; the two disagree on five of nine
+identity columns (see `column_of_either` in the module).
+
+**16 data rows, 15 in range, SIX sites.** Every row exists to make one specific
+collapse decision fail loudly if it is wrong:
+
+| site | position | radio | mcc/net | cells | what it proves |
+|---|---|---|---|---|---|
+| A | 52.5200, 13.4050 | LTE | 262/1 | 4 | three sectors collapse to one site; a fourth cell at 52.52004 proves the 1e-3 grid rounds together rather than compares equal |
+| B | 52.5200, 13.4050 | LTE | 262/2 | 2 | a SECOND OPERATOR on the same mast stays a second site — never one averaged tower |
+| C | 52.5200, 13.4050 | UMTS | 262/1 | 2 | a SECOND RADIO on the same mast stays a second site, because the record carries a radio and a merged one would have to invent which |
+| D | 52.5210, 13.4050 | LTE | 262/1 | 1 | 111 m away is a different grid cell, so the collapse does not eat adjacent masts |
+| E | 48.8566, 2.3522 | LTE | 208/1 | 4 | sample SUMMING across a site (60+70+65+90) |
+| F | 40.7128, -74.0060 | NR | 310/260 | 2 | widest-range selection, and a negative longitude |
+
+The 16th row is at latitude 91.0 and must be DROPPED, not clamped: a clamped
+tower is a tower in the wrong place, silently.
+
+The counts are chosen so that a decoder which does not collapse answers 15, and
+one which collapses on POSITION ALONE answers 4 — both plausible numbers, which
+is why the test asserts the exact 6 rather than "fewer than 15".
+
+Regenerate with the script recorded in the task
+`graph/tasks/mod-cell-tower-opencellid-bulk.md`; the gzip is written at level 9
+with `mtime=0` so the bytes are reproducible.

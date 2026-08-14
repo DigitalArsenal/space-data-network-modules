@@ -367,6 +367,40 @@ constexpr ProviderSpec kProviders[] = {
    "CC BY-SA 4.0","https://wiki.opencellid.org/wiki/Menu_map_view","OpenCelliD Project",true,false,
    "query",nullptr},
 
+  // ── OpenCelliD BULK export ────────────────────────────────────────────────
+  // The whole register in one gzip: ~40 million CELLS, which this module
+  // collapses to SITES as it decodes (decode_opencellid_bulk_gz). Storing the
+  // cells is refused — at ~1.43 KB/site the per-cell form is ~57 GB.
+  //
+  // ROUTE VERIFIED LIVE, UNAUTHENTICATED, 2026-08-14 (the same proof technique
+  // the row endpoint above carries, and the only one available without
+  // spending the owner's daily quota):
+  //   GET https://opencellid.org/ocid/downloads?token=INVALID&type=full
+  //       &file=cell_towers.csv.gz
+  //   -> 200, application/json, 44 bytes, {"status":"error","message":"INVALID_TOKEN"}
+  // That proves the path, the parameter names and the token check are real.
+  // The compiled-in `downloads.php` this task was filed against is, still, a
+  // human HTML page (200, text/html, 14,729 bytes on the same date).
+  //
+  // ⚠ THE TRAP THIS PROBE EXPOSES: a bad token answers **200 with JSON**, not
+  // 4xx. Handed to a gzip decoder that returns 200 and zero rows, an expired
+  // token would read exactly like "the register is empty" — the failure this
+  // registry exists to prevent. `detect_body_format` therefore refuses to let
+  // a JSON body reach this provider's decoder, and the gzip magic check in
+  // `gzip_header_length` is the second gate.
+  //
+  // STILL UNVERIFIED, and it needs the owner's token: the response SIZE, the
+  // `accept-ranges` header, and whether the export is one gzip member or
+  // several. The chunked lane below assumes single-member (see BulkResume) —
+  // which is the SAFE assumption, because a multi-member file decodes correctly
+  // under a single-member reader while the reverse silently truncates.
+  {"opencellid-bulk","OpenCelliD contributors","https://opencellid.org/ocid/downloads",
+   {nullptr,nullptr,nullptr},
+   "opencellid-bulk",
+   "token={{credential}}&type=full&file=cell_towers.csv.gz","csv-gz",
+   "CC BY-SA 4.0","https://wiki.opencellid.org/wiki/Menu_map_view","OpenCelliD Project",true,false,
+   "bulk",nullptr},
+
   // ── OpenStreetMap via Overpass ────────────────────────────────────────────
   // Bounded-region only: an unbounded Overpass program against a public
   // interpreter times out and is an abuse of a donated service. Three mirrors
@@ -798,7 +832,9 @@ ZipEntry zip_find_member(const std::string& body, const char* want) {
     return e;
 }
 
-// Inflate a member and hand the caller ONE LINE AT A TIME.
+// ── Streaming deflate -> lines, RESUMABLE ──────────────────────────────────
+//
+// Inflate a raw deflate stream and hand the caller ONE LINE AT A TIME.
 //
 // `on_line(line)` returns false to stop early, which is what makes a capped
 // request cheap: the anonymous lane's 1,000-row bound stops after a few hundred
@@ -808,6 +844,97 @@ ZipEntry zip_find_member(const std::string& body, const char* want) {
 // contract for tinfl's non-TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF mode, and
 // it is the entire reason a 428 MB member costs 32 KiB of memory here. The only
 // unbounded accumulation is `pending`, one line.
+//
+// WHY THIS IS A STRUCT AND NOT A FUNCTION (mod-cell-tower-opencellid-bulk).
+// The four ZIP members arrive whole, so a single call sufficed. The OpenCelliD
+// bulk gzip does NOT: it is fetched as a sequence of byte ranges across
+// SEPARATE flow invocations, and a flow node keeps nothing between them. A raw
+// deflate stream cannot be restarted at an arbitrary offset — there is no
+// sync point and the back-references reach up to 32 KiB behind — so resuming
+// means carrying the decoder's state forward explicitly. Everything needed for
+// that is here and is POD or a byte buffer: `tinfl_decompressor` contains no
+// pointers (miniz.h:1037-1043, counters + tables + `m_raw_header`/`m_len_codes`
+// arrays), the 32 KiB window IS the dictionary, and `pending` is the partial
+// line straddling the chunk boundary. See `BulkResume`.
+struct DeflateLineStream {
+    tinfl_decompressor* inflator = nullptr;
+    std::vector<uint8_t> window;
+    size_t out_pos = 0;   // write cursor inside the wrapping window
+    std::string pending;  // bytes of the line currently being assembled
+    bool ok = true;
+    bool done = false;     // the stream reached its natural end
+    bool stopped = false;  // on_line asked to stop
+
+    DeflateLineStream() : window(TINFL_LZ_DICT_SIZE, 0) {
+        // tinfl_decompressor is ~11 KiB; it is heap-allocated rather than placed
+        // on the guest stack, which is small in this thread model.
+        inflator = tinfl_decompressor_alloc();
+        if (inflator) tinfl_init(inflator);
+        else ok = false;
+    }
+    ~DeflateLineStream() { if (inflator) tinfl_decompressor_free(inflator); }
+    DeflateLineStream(const DeflateLineStream&) = delete;
+    DeflateLineStream& operator=(const DeflateLineStream&) = delete;
+
+    // Feed one compressed span. `more_after` says whether further bytes of this
+    // SAME deflate stream will arrive in a later call — it is the difference
+    // between "input exhausted for now" and "input exhausted for good", and
+    // getting it wrong makes tinfl declare a truncated stream corrupt.
+    // Returns the number of input bytes consumed.
+    template <typename OnLine>
+    size_t feed(const uint8_t* data, size_t size, bool more_after, OnLine on_line) {
+        if (!ok || done || stopped || !inflator) return 0;
+        size_t in_pos = 0;
+        for (;;) {
+            size_t in_avail = size - in_pos;
+            size_t out_avail = TINFL_LZ_DICT_SIZE - out_pos;
+            mz_uint32 flags = 0;
+            if (in_avail || more_after) flags |= TINFL_FLAG_HAS_MORE_INPUT;
+            const tinfl_status status =
+                tinfl_decompress(inflator, reinterpret_cast<const mz_uint8*>(data + in_pos),
+                                 &in_avail, window.data(), window.data() + out_pos, &out_avail,
+                                 flags);
+            in_pos += in_avail;
+
+            // Split whatever this pass produced into lines.
+            for (size_t i = 0; i < out_avail && !stopped; ++i) {
+                const char c = static_cast<char>(window[out_pos + i]);
+                if (c == '\n') {
+                    if (!pending.empty() && pending[pending.size() - 1] == '\r') {
+                        pending.resize(pending.size() - 1);
+                    }
+                    if (!pending.empty() && !on_line(pending)) stopped = true;
+                    pending.clear();
+                } else {
+                    pending += c;
+                }
+            }
+            out_pos = (out_pos + out_avail) & (TINFL_LZ_DICT_SIZE - 1);
+
+            if (stopped) break;
+            if (status == TINFL_STATUS_DONE) {
+                // The last line of a file with no trailing newline.
+                if (!pending.empty()) {
+                    if (pending[pending.size() - 1] == '\r') pending.resize(pending.size() - 1);
+                    if (!pending.empty()) on_line(pending);
+                    pending.clear();
+                }
+                done = true;
+                break;
+            }
+            if (status < TINFL_STATUS_DONE) { ok = false; break; }  // corrupt input
+            // NEEDS_MORE_INPUT with nothing left to give: this span is spent and
+            // the caller will bring the next one.
+            if (status == TINFL_STATUS_NEEDS_MORE_INPUT && in_pos >= size) break;
+            if (in_pos >= size && out_avail == 0 && status == TINFL_STATUS_HAS_MORE_OUTPUT) continue;
+            if (in_pos >= size && status != TINFL_STATUS_HAS_MORE_OUTPUT) break;
+        }
+        return in_pos;
+    }
+};
+
+// Inflate a ZIP member and hand the caller ONE LINE AT A TIME. The member is
+// resident whole, so this is one `feed` with `more_after = false`.
 template <typename OnLine>
 bool zip_stream_lines(const std::string& body, const ZipEntry& entry, OnLine on_line) {
     if (!entry.found) return false;
@@ -828,61 +955,144 @@ bool zip_stream_lines(const std::string& body, const ZipEntry& entry, OnLine on_
         return true;
     }
 
-    // Deflate. tinfl_decompressor is ~11 KiB; it is heap-allocated rather than
-    // placed on the guest stack, which is small in this thread model.
-    tinfl_decompressor* inflator = tinfl_decompressor_alloc();
-    if (!inflator) return false;
-    tinfl_init(inflator);
+    DeflateLineStream stream;
+    stream.feed(reinterpret_cast<const uint8_t*>(body.data() + entry.data_offset),
+                entry.compressed_size, false, on_line);
+    return stream.ok;
+}
 
-    std::vector<uint8_t> window(TINFL_LZ_DICT_SIZE);
-    size_t in_pos = 0;
-    size_t out_pos = 0;   // write cursor inside the wrapping window
-    std::string pending;  // bytes of the line currently being assembled
-    bool stopped = false;
-    bool ok = true;
-
-    for (;;) {
-        size_t in_avail = entry.compressed_size - in_pos;
-        size_t out_avail = TINFL_LZ_DICT_SIZE - out_pos;
-        const mz_uint32 flags = in_avail ? TINFL_FLAG_HAS_MORE_INPUT : 0;
-        const tinfl_status status = tinfl_decompress(
-            inflator,
-            reinterpret_cast<const mz_uint8*>(body.data() + entry.data_offset + in_pos),
-            &in_avail,
-            window.data(),
-            window.data() + out_pos,
-            &out_avail,
-            flags);
-        in_pos += in_avail;
-
-        // Split whatever this pass produced into lines.
-        for (size_t i = 0; i < out_avail && !stopped; ++i) {
-            const char c = static_cast<char>(window[out_pos + i]);
-            if (c == '\n') {
-                if (!pending.empty() && pending[pending.size() - 1] == '\r') {
-                    pending.resize(pending.size() - 1);
-                }
-                if (!pending.empty() && !on_line(pending)) stopped = true;
-                pending.clear();
-            } else {
-                pending += c;
-            }
-        }
-        out_pos = (out_pos + out_avail) & (TINFL_LZ_DICT_SIZE - 1);
-
-        if (stopped) break;
-        if (status == TINFL_STATUS_DONE) {
-            if (!pending.empty()) {
-                if (pending[pending.size() - 1] == '\r') pending.resize(pending.size() - 1);
-                if (!pending.empty()) on_line(pending);
-            }
-            break;
-        }
-        if (status < TINFL_STATUS_DONE) { ok = false; break; }  // corrupt input
+// ── gzip ───────────────────────────────────────────────────────────────────
+//
+// A gzip member is a 10-byte fixed header, optional variable fields, then RAW
+// DEFLATE — which is why the tinfl streamer above is reused verbatim rather
+// than a second inflate implementation being vendored. miniz's `tinfl_*`
+// speaks raw deflate (and zlib, with a flag); it does NOT skip a gzip header,
+// so that is done here. Feeding a gzip stream straight to tinfl produces
+// TINFL_STATUS_FAILED on the first call — a whole register decoding to zero
+// rows, which is the failure this module's registry exists to prevent.
+//
+// Returns the header length, or 0 if this is not a gzip member this module
+// will decode. Never guesses: an unknown compression method is refused rather
+// than fed to the deflate decoder.
+size_t gzip_header_length(const uint8_t* data, size_t size) {
+    if (size < 10) return 0;
+    if (data[0] != 0x1F || data[1] != 0x8B) return 0;
+    if (data[2] != 8) return 0;  // CM: only deflate is defined
+    const uint8_t flg = data[3];
+    if (flg & 0xE0) return 0;    // reserved bits set: not a gzip we understand
+    size_t at = 10;
+    if (flg & 0x04) {            // FEXTRA
+        if (at + 2 > size) return 0;
+        const size_t xlen = static_cast<size_t>(data[at]) | (static_cast<size_t>(data[at + 1]) << 8);
+        at += 2 + xlen;
     }
+    if (flg & 0x08) {            // FNAME, NUL-terminated
+        while (at < size && data[at] != 0) ++at;
+        if (at >= size) return 0;
+        ++at;
+    }
+    if (flg & 0x10) {            // FCOMMENT, NUL-terminated
+        while (at < size && data[at] != 0) ++at;
+        if (at >= size) return 0;
+        ++at;
+    }
+    if (flg & 0x02) at += 2;     // FHCRC
+    return at <= size ? at : 0;
+}
 
-    tinfl_decompressor_free(inflator);
-    return ok;
+// ── THE BULK RESUME MARK ───────────────────────────────────────────────────
+//
+// The OpenCelliD bulk export is ONE gzip member of roughly 40 million cells.
+// It cannot be fetched in one response — the flow's linear memory ceiling is
+// 128 MB (see decode_raw_http_response) — so it is fetched as a sequence of
+// byte RANGES across separate invocations, and this is the state that travels
+// between them, in the JOB, exactly like `request_providers` does.
+//
+// WHY THE STATE IS THE WHOLE DECODER AND NOT JUST AN OFFSET. A raw deflate
+// stream has no restart point. Huffman codes are bit-packed across byte
+// boundaries, and a back-reference may reach 32 KiB behind the cursor, so byte
+// N of the compressed stream is meaningless without everything that preceded
+// it. Two alternatives were considered and rejected:
+//
+//   - Re-fetch `bytes=0-N` each time and skip the lines already emitted. This
+//     is correct but quadratic: a 32-chunk file inflates its own prefix 32
+//     times and re-downloads it too. On a ~2 GB export that is not a cost, it
+//     is a refusal to finish.
+//   - Assume the export is a MULTI-MEMBER gzip whose members can be decoded
+//     independently. Nothing published says it is, and being wrong produces
+//     zero rows silently. This module does not guess about a wire format.
+//
+// So the decoder state is carried. It is safe to memcpy because
+// `tinfl_decompressor` holds no pointers (miniz.h:1037-1043), and the 32 KiB
+// window IS the LZ dictionary the back-references need. `pending` is the CSV
+// line straddling the chunk boundary, which is the other thing a naive
+// byte-range split silently corrupts: half a row at each seam, parsed as a row.
+//
+// The mark is version-and-size stamped and a mismatch RESTARTS the download
+// rather than resuming into a differently-shaped struct. A rebuilt module is
+// exactly when that would otherwise go wrong.
+constexpr uint32_t kBulkResumeVersion = 1;
+
+struct BulkResume {
+    bool valid = false;
+    bool header_done = false;   // the gzip header has been consumed
+    uint64_t next_byte = 0;     // next COMPRESSED byte to request (absolute)
+    uint64_t total_bytes = 0;   // content length, 0 = not yet known
+    uint64_t rows_seen = 0;     // CSV data rows decoded so far, all chunks
+    uint64_t sites_emitted = 0; // sites emitted so far, all chunks
+    bool complete = false;      // the deflate stream reached its end
+    std::string decoder;        // opaque: tinfl state + window + out_pos + pending
+};
+
+// Serialize the decoder half of the mark. Layout is
+// [version:4][sizeof(tinfl_decompressor):4][out_pos:4][pending_len:4][tinfl][window][pending]
+std::string bulk_state_encode(const DeflateLineStream& s) {
+    const uint32_t tinfl_size = static_cast<uint32_t>(sizeof(tinfl_decompressor));
+    const uint32_t out_pos = static_cast<uint32_t>(s.out_pos);
+    const uint32_t pending_len = static_cast<uint32_t>(s.pending.size());
+    std::string raw;
+    raw.reserve(16 + tinfl_size + TINFL_LZ_DICT_SIZE + pending_len);
+    auto put32 = [&raw](uint32_t v) {
+        raw += static_cast<char>(v & 0xFF);
+        raw += static_cast<char>((v >> 8) & 0xFF);
+        raw += static_cast<char>((v >> 16) & 0xFF);
+        raw += static_cast<char>((v >> 24) & 0xFF);
+    };
+    put32(kBulkResumeVersion);
+    put32(tinfl_size);
+    put32(out_pos);
+    put32(pending_len);
+    raw.append(reinterpret_cast<const char*>(s.inflator), tinfl_size);
+    raw.append(reinterpret_cast<const char*>(s.window.data()), TINFL_LZ_DICT_SIZE);
+    raw.append(s.pending);
+    return base64_encode(raw);
+}
+
+// Restore a decoder from a mark. Returns false — meaning RESTART, never
+// "resume anyway" — on any version, size or length disagreement.
+bool bulk_state_decode(const std::string& encoded, DeflateLineStream* s) {
+    if (encoded.empty() || !s || !s->inflator) return false;
+    std::string raw;
+    if (!base64_decode(encoded, &raw)) return false;
+    if (raw.size() < 16) return false;
+    auto get32 = [&raw](size_t at) -> uint32_t {
+        return static_cast<uint32_t>(static_cast<uint8_t>(raw[at])) |
+               (static_cast<uint32_t>(static_cast<uint8_t>(raw[at + 1])) << 8) |
+               (static_cast<uint32_t>(static_cast<uint8_t>(raw[at + 2])) << 16) |
+               (static_cast<uint32_t>(static_cast<uint8_t>(raw[at + 3])) << 24);
+    };
+    if (get32(0) != kBulkResumeVersion) return false;
+    const uint32_t tinfl_size = get32(4);
+    if (tinfl_size != static_cast<uint32_t>(sizeof(tinfl_decompressor))) return false;
+    const uint32_t out_pos = get32(8);
+    const uint32_t pending_len = get32(12);
+    if (out_pos >= TINFL_LZ_DICT_SIZE) return false;
+    if (raw.size() != 16u + tinfl_size + TINFL_LZ_DICT_SIZE + pending_len) return false;
+    std::memcpy(s->inflator, raw.data() + 16, tinfl_size);
+    std::memcpy(s->window.data(), raw.data() + 16 + tinfl_size, TINFL_LZ_DICT_SIZE);
+    s->out_pos = out_pos;
+    s->pending.assign(raw, 16u + tinfl_size + TINFL_LZ_DICT_SIZE, pending_len);
+    return true;
 }
 
 // Split a ';'-delimited line (ANFR). Kept separate from split_csv_line rather
@@ -1003,6 +1213,228 @@ void decode_csv(const ProviderSpec& spec, const std::string& body, std::vector<R
         r.native_id = r.cell_id;
         out->push_back(r);
     }
+}
+
+// ── The OpenCelliD BULK export: CELLS IN, SITES OUT ────────────────────────
+//
+// The bulk export is roughly 40 million CELLS. This module does not store them
+// and must not: at ~1.43 KB per stored site the per-cell form is ~57 GB, which
+// the owning task refuses outright. A cell is not a thing in the world anyway —
+// a mast carrying three sectors on two radios publishes six cells at one
+// place, and six towers at one place is worse than one tower, because it looks
+// like data.
+//
+// So the decode collapses to SITES as it streams, and the collapse happens
+// HERE rather than downstream for a memory reason: emitting 40 M Reports to let
+// deconflict merge them would need the 57 GB this exists to avoid.
+//
+// THE KEY is rounded position plus the identity that distinguishes co-located
+// operators:
+//
+//   round(lat, 3), round(lon, 3)   ~111 m — one mast, not one sector. Sector
+//                                  centroids in this dataset are trilaterated
+//                                  per cell and scatter by tens of metres
+//                                  around the structure, so a tighter round
+//                                  (1e-4, ~11 m) leaves the same mast as three
+//                                  sites and a looser one (1e-2, ~1.1 km) eats
+//                                  genuinely distinct urban masts.
+//   radio                          GSM/UMTS/LTE/NR at one mast are one site,
+//                                  but they are kept apart in the key because
+//                                  the record carries a radio and a merged one
+//                                  would have to invent which.
+//   mcc, net                       two operators sharing a tower are two sites
+//                                  with two operators, never one averaged one.
+//
+// WITHIN a key the winner is the highest `samples` — the same rule the
+// HIGHEST_SAMPLE_COUNT deconfliction method uses, so the site this emits is the
+// one that method would have chosen anyway. `samples` is SUMMED across the
+// collapsed cells, because the mast really was observed that many times, and
+// `range_m` takes the widest cell: a site's footprint is the union of its
+// sectors', never the narrowest.
+//
+// PER-CHUNK, DELIBERATELY. The collapse map lives for one chunk and is not
+// carried in the resume mark: carrying it would mean holding a key per site for
+// the whole 40 M-cell stream, which is the unbounded state this design exists
+// to avoid. Sites that straddle a chunk seam therefore arrive as two Reports
+// with the same identity — which is exactly what `deconflict` already merges
+// across providers. The bounded thing is done here; the global thing is done
+// where a global pass already happens.
+constexpr double kSiteGridDegrees = 1000.0;  // 3 decimal places
+
+struct SiteAccumulator {
+    Report report;
+    long samples_total = 0;
+    long best_samples = -1;
+};
+
+std::string site_key(const Report& r) {
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "%lld:%lld:%d:%ld:%ld",
+                  static_cast<long long>(std::llround(r.latitude * kSiteGridDegrees)),
+                  static_cast<long long>(std::llround(r.longitude * kSiteGridDegrees)),
+                  static_cast<int>(r.radio), r.mcc, r.mnc);
+    return buf;
+}
+
+// Decode ONE CHUNK of the bulk gzip. `resume` is read for the decoder state and
+// written with the state the NEXT chunk needs. Returns false only on a stream
+// this module cannot decode — never on "the chunk ended", which is the normal
+// case and is what `resume->complete == false` means.
+bool decode_opencellid_bulk_gz(const ProviderSpec& spec, const std::string& body, size_t row_cap,
+                               BulkResume* resume, std::vector<Report>* out, bool* hit_cap) {
+    if (!resume) return false;
+
+    DeflateLineStream stream;
+    if (!stream.ok) return false;
+
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(body.data());
+    size_t size = body.size();
+
+    if (resume->header_done) {
+        // Mid-stream. A mark this build cannot read means RESTART, announced by
+        // leaving next_byte at 0, never a resume into a foreign struct.
+        if (!bulk_state_decode(resume->decoder, &stream)) {
+            resume->valid = false;
+            resume->next_byte = 0;
+            resume->header_done = false;
+            resume->decoder.clear();
+            return false;
+        }
+    } else {
+        const size_t header = gzip_header_length(data, size);
+        if (header == 0) return false;  // not a gzip this module decodes
+        data += header;
+        size -= header;
+        resume->header_done = true;
+    }
+
+    // The collapse map for THIS chunk only. See the note above.
+    std::map<std::string, SiteAccumulator> sites;
+    std::vector<std::string> order;  // emission order = first sighting, stable
+    std::vector<std::string> header_cells;
+    bool header_seen = resume->rows_seen > 0;  // a later chunk has no header row
+    bool capped = false;
+
+    const size_t header_bytes = body.size() - size;  // 0 on a resumed chunk
+    const size_t consumed = stream.feed(data, size, true, [&](const std::string& line) -> bool {
+        if (line.empty()) return true;
+        const std::vector<std::string> cells = split_csv_line(line);
+        if (!header_seen) {
+            header_cells = cells;
+            header_seen = true;
+            return true;
+        }
+        // A resumed chunk never saw the header row, so the column contract is
+        // the bulk export's, which is fixed and documented. It is asserted
+        // rather than assumed on the FIRST chunk (where the header IS present)
+        // and reconstructed on later ones.
+        if (header_cells.empty()) {
+            header_cells = {"radio", "mcc",     "net",     "area",    "cell", "unit",         "lon",
+                            "lat",   "range",   "samples", "changeable", "created", "updated",
+                            "averageSignal"};
+        }
+        const int c_lat = column_of(header_cells, "lat");
+        const int c_lon = column_of(header_cells, "lon");
+        if (c_lat < 0 || c_lon < 0) return false;  // not the expected contract
+        if (c_lat >= static_cast<int>(cells.size()) || c_lon >= static_cast<int>(cells.size())) {
+            return true;
+        }
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = std::atof(cells[c_lat].c_str());
+        r.longitude = std::atof(cells[c_lon].c_str());
+        // Out of range is DROPPED, not clamped: a clamped tower is a tower in
+        // the wrong place, silently.
+        if (r.latitude < -90 || r.latitude > 90 || r.longitude < -180 || r.longitude > 180) {
+            return true;
+        }
+        auto cell_at = [&](int idx) -> std::string {
+            return (idx >= 0 && idx < static_cast<int>(cells.size())) ? cells[idx] : std::string();
+        };
+        // Both OpenCelliD contracts, exactly as decode_csv accepts them.
+        r.radio = radio_from_text(cell_at(column_of(header_cells, "radio")));
+        const std::string mcc = cell_at(column_of(header_cells, "mcc"));
+        const std::string net = cell_at(column_of_either(header_cells, "net", "mnc"));
+        const std::string area = cell_at(column_of_either(header_cells, "area", "lac"));
+        const std::string cell = cell_at(column_of_either(header_cells, "cell", "cellid"));
+        const std::string range = cell_at(column_of(header_cells, "range"));
+        const std::string samples = cell_at(column_of(header_cells, "samples"));
+        const std::string updated = cell_at(column_of(header_cells, "updated"));
+        const std::string signal =
+            cell_at(column_of_either(header_cells, "averageSignal", "averageSignalStrength"));
+        if (!mcc.empty()) r.mcc = std::atol(mcc.c_str());
+        if (!net.empty()) r.mnc = std::atol(net.c_str());
+        if (!area.empty()) r.lac = std::atol(area.c_str());
+        r.cell_id = cell;
+        if (!range.empty()) r.range_m = std::atof(range.c_str());
+        if (!samples.empty()) r.samples = std::atol(samples.c_str());
+        if (!updated.empty()) r.observed_at = std::atoll(updated.c_str());
+        if (!signal.empty()) {
+            r.average_signal_dbm = std::atof(signal.c_str());
+            r.has_signal = true;
+        }
+        r.native_id = r.cell_id;
+        ++resume->rows_seen;
+
+        const std::string key = site_key(r);
+        auto it = sites.find(key);
+        if (it == sites.end()) {
+            // A NEW site is what the row cap bounds — the cap counts sites, the
+            // unit this lane emits, not cells, the unit it consumes. Capping on
+            // cells would make the answer depend on how many sectors happened
+            // to sit on the masts read first.
+            if (sites.size() >= row_cap) {
+                capped = true;
+                return false;
+            }
+            SiteAccumulator acc;
+            acc.report = r;
+            acc.samples_total = r.samples > 0 ? r.samples : 0;
+            acc.best_samples = r.samples;
+            sites.emplace(key, acc);
+            order.push_back(key);
+            return true;
+        }
+        SiteAccumulator& acc = it->second;
+        if (r.samples > 0) acc.samples_total += r.samples;
+        if (r.samples > acc.best_samples) {
+            const long total = acc.samples_total;
+            const double widest = acc.report.range_m > r.range_m ? acc.report.range_m : r.range_m;
+            acc.report = r;
+            acc.samples_total = total;
+            acc.best_samples = r.samples;
+            acc.report.range_m = widest;
+        } else if (r.range_m > acc.report.range_m) {
+            acc.report.range_m = r.range_m;
+        }
+        // The newest observation wins the timestamp: a site is current if ANY
+        // of its cells is.
+        if (r.observed_at > acc.report.observed_at) acc.report.observed_at = r.observed_at;
+        return true;
+    });
+
+    for (const std::string& key : order) {
+        SiteAccumulator& acc = sites[key];
+        acc.report.samples = acc.samples_total > 0 ? acc.samples_total : acc.report.samples;
+        out->push_back(acc.report);
+        ++resume->sites_emitted;
+    }
+
+    if (hit_cap && capped) *hit_cap = true;
+    resume->complete = stream.done;
+    resume->valid = true;
+    if (!stream.done && stream.ok && !capped) {
+        resume->decoder = bulk_state_encode(stream);
+        // Advance by what was actually CONSUMED, not by the chunk length. The
+        // two differ whenever tinfl stops holding a partial symbol, and paying
+        // that difference forward would drop those bytes — a silent corruption
+        // at every seam rather than a visible failure.
+        resume->next_byte += header_bytes + consumed;
+    } else {
+        resume->decoder.clear();
+    }
+    return stream.ok;
 }
 
 // Replace every occurrence of `token` in place. Written as a loop that advances
@@ -1157,6 +1589,19 @@ const char* detect_body_format(const std::string& body) {
         // BAKOM national document that copied 27 MiB twice before parsing.
         if (body.find("\"elements\"") != std::string::npos) return "osm-json";
         if (body.find("\"features\"") != std::string::npos) return "swiss-geojson";
+        // A PROVIDER ERROR ENVELOPE SERVED AS 200.
+        //
+        // OpenCelliD answers a bad, expired or quota-exhausted token with
+        // status 200 and `{"status":"error","message":"INVALID_TOKEN"}`
+        // (verified live 2026-08-14). The HTTP status carries no signal at all,
+        // so the only place this can be caught is the body. Naming it a format
+        // no provider declares makes the corroboration check below VETO the
+        // frame, which is what keeps a dead credential from reading as a
+        // register with nothing in it.
+        if (body.find("\"status\":\"error\"") != std::string::npos ||
+            body.find("\"error\"") != std::string::npos) {
+            return "provider-error";
+        }
         return nullptr;
     }
     // A ZIP is identified DOWN TO THE PROVIDER, not merely as "a zip".
@@ -1168,6 +1613,21 @@ const char* detect_body_format(const std::string& body) {
     // ships `TAFL_LTAF.csv`, only ANFR ships `SUP_SUPPORT.txt`. Reading the
     // central directory to check is cheap (a backward scan over the last 64 KiB
     // plus one walk of the entry table) and inflates nothing.
+    // gzip. Unlike the ZIPs there is only ONE gzip provider, so the magic
+    // number is unambiguous on its own and no member table needs walking.
+    //
+    // This check earns its keep on the FAILURE path, not the success one.
+    // OpenCelliD answers a bad or expired token with **200 and a JSON body**
+    // (`{"status":"error","message":"INVALID_TOKEN"}`, verified live
+    // 2026-08-14), so without a format veto an expired credential would decode
+    // to zero sites and be reported as a register that had nothing to say. The
+    // JSON branch above already claims a `{` body, so such a response can never
+    // reach the gzip decoder: it is attributed to no format and dropped, and
+    // the run reports the provider as consulted-and-silent rather than empty.
+    if (body.size() > 2 && static_cast<uint8_t>(body[0]) == 0x1F &&
+        static_cast<uint8_t>(body[1]) == 0x8B) {
+        return "csv-gz";
+    }
     if (body.size() > 4 && body[0] == 'P' && body[1] == 'K' &&
         static_cast<uint8_t>(body[2]) == 0x03 && static_cast<uint8_t>(body[3]) == 0x04) {
         if (zip_find_member(body, "site.csv").found) return "zip-acma";
@@ -2272,6 +2732,21 @@ int route(void) {
     // complete answer.
     const bool full_population = json_bool(body, "FULL_POPULATION", false);
 
+    // THE CREDENTIAL MEDIATOR IS WIRED. Opt-in, never a default — see the
+    // login_required skip below for why this is a property of the FLOW and not
+    // of the credential. A caller that sets this is asserting that a
+    // `cell-tower-credentials` node sits between this one and the http node and
+    // will substitute `{{credential}}` before anything is fetched.
+    const bool credential_mediator = json_bool(body, "CREDENTIAL_MEDIATOR", false);
+
+    // THE BULK RESUME MARK, arriving from the previous invocation. The bulk
+    // gzip lanes are fetched as a sequence of byte ranges and this is where the
+    // next range starts; absent, the download starts at zero. `parse` writes
+    // the next one (see forwarded_job).
+    const std::string bulk_resume_in = json_string(body, "BULK_RESUME", "");
+    const double bulk_next_byte = json_number(bulk_resume_in, "next_byte", 0);
+    const bool bulk_complete = json_bool(bulk_resume_in, "complete", false);
+
     // BBOX in Overpass order (south,west,north,east).
     //
     // THE DEFAULT IS THE WHOLE PLANET (owner 2026-08-10: "should not be
@@ -2386,19 +2861,55 @@ int route(void) {
                        "and is an abuse of a donated service. Name a BBOX to include it.\"}";
             continue;
         }
-        if (spec->login_required) {
-            // Skip loudly, never fetch unauthenticated and pretend the answer is
-            // complete — but say WHICH of the two situations this is. The two
-            // reasons are the observable difference a stored credential makes,
-            // and the only end-to-end proof of the store round trip that does
-            // not require an account with the provider. See the CREDENTIALS
-            // note at the top for why the query template is not compiled in.
+        // A bulk download the resume mark says is FINISHED is not re-fetched.
+        // The mark is per-run state, so this is what stops the chunk sequence
+        // rather than an unbounded loop asking for ranges past the end of the
+        // file — which a CDN answers with 416 and no body, i.e. a provider that
+        // fetches forever and contributes nothing.
+        if (std::strcmp(spec->format, "csv-gz") == 0 && bulk_complete) {
+            if (skipped_count++) skipped += ",";
+            skipped += std::string("{\"provider_id\":\"") + spec->id +
+                       "\",\"bulkComplete\":true,\"reason\":\"the bulk export has been read to "
+                       "its end in this run; the resume mark says there is nothing left to "
+                       "fetch\"}";
+            continue;
+        }
+        if (spec->login_required && !credential_mediator) {
+            // THE SKIP THAT LIFTS, AND WHAT LIFTS IT (mod-cell-tower-opencellid-bulk).
+            //
+            // This used to say the endpoint "is not verified against a live
+            // account yet". That is no longer true and the reason was stale:
+            // the row endpoint was verified live against the owner's account on
+            // 2026-08-09, the bulk route on 2026-08-14, and the token has been
+            // in the node credential store on lane `cell_opencellid` since
+            // 2026-08-09.
+            //
+            // What actually blocks the fetch is narrower and structural: THIS
+            // module cannot build the URL. The token lives behind
+            // `secrets:cell_opencellid`, which only `cell-tower-credentials`
+            // holds — this plugin is `capabilities: []` by design so that it can
+            // stay browser-instantiable for its own tests. So the descriptor
+            // leaves here with `{{credential}}` UNSUBSTITUTED and the mediator
+            // completes it.
+            //
+            // FAIL CLOSED ON THE WIRING, not on the credential. If the flow has
+            // no mediator node, a descriptor carrying the literal `{{credential}}`
+            // would be fetched verbatim and OpenCelliD would answer 200 with
+            // `{"status":"error","message":"INVALID_TOKEN"}` — a request that
+            // spends quota to produce zero rows. So the credentialed lane is
+            // emitted ONLY when the caller declares the mediator is wired, and
+            // `CREDENTIAL_MEDIATOR` defaults to false. Whether a credential is
+            // actually HELD is the mediator's question, not this node's: it
+            // reads `secrets.status`/`secrets.get`, and drops the descriptor
+            // (and its correlation entry) when the lane is empty.
             if (skipped_count++) skipped += ",";
             skipped += std::string("{\"provider_id\":\"") + spec->id +
                        "\",\"credentialLane\":\"" + json_escape(credential_lane(spec->id)) +
-                       "\",\"reason\":\"this provider needs a login; its authenticated row-query "
-                       "endpoint is not verified against a live account yet, so it is not "
-                       "fetched even when a credential is stored\"}";
+                       "\",\"needsMediator\":true,\"reason\":\"this provider needs a login. Its "
+                       "endpoint is verified and a credential lane exists, but this module holds "
+                       "no secrets capability and cannot build the authenticated URL. Route the "
+                       "request through the cell-tower-credentials mediator and set "
+                       "CREDENTIAL_MEDIATOR to include it.\"}";
             continue;
         }
         if (emitted++) { consulted += ","; }
@@ -2436,6 +2947,32 @@ int route(void) {
                 substitute_all(&q, "{{limit}}", rows_buf);
                 if (std::strcmp(spec->query_kind, "overpass") == 0) {
                     url += "?data=" + url_encode(q);
+                } else if (std::strcmp(spec->query_kind, "opencellid") == 0 ||
+                           std::strcmp(spec->query_kind, "opencellid-bulk") == 0) {
+                    // The template is ALREADY in `name=value&name=value` form,
+                    // so it is appended whole rather than encoded as one blob:
+                    // encoding it would turn its own `&` and `=` into data and
+                    // send a single parameter with a very long name.
+                    //
+                    // Neither template was ever assembled before this task,
+                    // because both providers were skipped at route time — so
+                    // the row lane's URL had been a bare
+                    // `https://opencellid.org/cell/getInArea` with no key and
+                    // no BBOX since the day it was compiled in. That is the
+                    // kind of defect a skip hides: the code path that builds
+                    // the request had never once run.
+                    //
+                    // BBOX ORDER: OpenCelliD takes lat,lon,lat,lon where every
+                    // other provider here takes south,west,north,east. Those
+                    // are the same four numbers in the same order — latmin,
+                    // lonmin, latmax, lonmax — which is why the template names
+                    // {{south}},{{west}},{{north}},{{east}} and needs no
+                    // swap. Written out because "they happen to coincide" is
+                    // the sort of thing that gets 'fixed' into a bug.
+                    //
+                    // `{{credential}}` is deliberately left UNSUBSTITUTED: this
+                    // module holds no secrets capability. The mediator fills it.
+                    url += "?" + q;
                 } else if (std::strcmp(spec->query_kind, "soql") == 0) {
                     // `$where`/`$limit` are the API's own parameter NAMES and
                     // stay literal; only the filter value is encoded.
@@ -2453,10 +2990,34 @@ int route(void) {
             // and it would parse to zero rows: the failure this registry
             // exists to prevent. The bulk archives are fetched whole or not
             // at all, which is what their `bulk` lane already asserts.
-            const std::string bounded_headers =
+            std::string bounded_headers =
                 (std::strcmp(spec->format, "swiss-geojson") == 0 && !full_population)
                     ? ",\"range\":\"bytes=0-2097151\""
                     : "";
+
+            // THE BULK gzip CHUNK WINDOW.
+            //
+            // A ZIP gets no Range at any lane because its central directory is
+            // at the END. A gzip is the opposite case: it is a forward stream
+            // with no index, so a PREFIX is always decodable and a sequence of
+            // adjacent windows reconstructs the whole thing exactly — provided
+            // the decoder state crosses the seam, which is what BulkResume
+            // carries. So this lane is chunked, and MUST be: the export is
+            // roughly 40 million cells and the flow's linear memory ceiling is
+            // 128 MB.
+            //
+            // The window is 32 MiB. That is a memory bound, not a source
+            // property: the compressed chunk, the inflate window and the
+            // decoded Reports all have to fit at once, alongside whatever the
+            // other providers in the same run are holding.
+            if (std::strcmp(spec->format, "csv-gz") == 0) {
+                constexpr long long kBulkChunkBytes = 32ll * 1024 * 1024;
+                const long long from = static_cast<long long>(bulk_next_byte);
+                char window[96];
+                std::snprintf(window, sizeof(window), ",\"range\":\"bytes=%lld-%lld\"", from,
+                              from + kBulkChunkBytes - 1);
+                bounded_headers += window;
+            }
             // Request SHAPE, declared per provider rather than assumed. Every
             // other provider answers a bare GET; ComReg's SiteViewer backend
             // is a POST-only RPC that returns the national mast list for an
@@ -2473,9 +3034,21 @@ int route(void) {
                     : "application/json";
             std::string extra = bounded_headers;
             if (post_json) extra += ",\"content-type\":\"application/json\"";
+            // THE MEDIATOR'S MARK. A descriptor whose URL still carries
+            // `{{credential}}` names the lane that fills it, so the mediator
+            // needs no registry of its own — the same reason the catalog op
+            // reads its lanes out of the catalog rather than compiling in a
+            // second copy of this table. A descriptor without this field is
+            // fetched exactly as it stands.
+            const std::string credential_mark =
+                spec->login_required
+                    ? std::string(",\"credentialLane\":\"") +
+                          json_escape(credential_lane(spec->id)) + "\""
+                    : std::string();
             descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
                                   "\",\"method\":\"" + verb + "\",\"url\":\"" + json_escape(url) +
-                                  "\",\"headers\":{\"accept\":\"" + accept + "\"" +
+                                  "\"" + credential_mark +
+                                  ",\"headers\":{\"accept\":\"" + accept + "\"" +
                                   extra +
                                   ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
                                   (post_json
@@ -2524,6 +3097,9 @@ int route(void) {
                             ",\"method_name\":\"" + json_escape(method_name) + "\"" +
                             ",\"limit\":" + std::to_string(static_cast<long>(limit)) +
                             ",\"full_population\":" + (full_population ? "true" : "false") +
+                            ",\"credential_mediator\":" + (credential_mediator ? "true" : "false") +
+                            ",\"bulk_resume\":" +
+                            (bulk_resume_in.empty() ? std::string("{}") : bulk_resume_in) +
                             ",\"providers_consulted\":" + consulted +
                             ",\"request_providers\":" + request_providers +
                             ",\"skipped\":" + skipped + "}";
@@ -2598,10 +3174,15 @@ static bool g_emitted = false;
 // Did any provider's decoder stop at the per-provider row cap this run? Run-
 // scoped like the rest of the accumulator, because parse spans invocations.
 static bool g_row_capped = false;
+// The bulk gzip decoder's state across CHUNKS of one download. Run-scoped like
+// the rest, and reset with them: a resume mark from a previous run names byte
+// offsets in a file that has since been republished.
+static BulkResume g_bulk_resume;
 // Bounds the yield loop so a lost frame can never hang the request forever.
 static uint32_t g_idle_ticks = 0;
 
 void reset_run_state(void) {
+    g_bulk_resume = BulkResume();
     g_job.clear();
     g_request_providers.clear();
     g_providers_consulted.clear();
@@ -2621,6 +3202,20 @@ int parse(void) {
         g_job = job;
         g_request_providers = json_string_array(job, "request_providers");
         g_providers_consulted = json_string_array(job, "providers_consulted");
+        // Adopt the resume mark route carried through. The DECODER half is what
+        // makes this a resume rather than a restart; without it the next chunk
+        // would inflate from a byte that is not a symbol boundary and fail.
+        const std::string mark = json_string(job, "bulk_resume", "");
+        if (!mark.empty() && mark != "{}") {
+            g_bulk_resume.next_byte =
+                static_cast<uint64_t>(json_number(mark, "next_byte", 0));
+            g_bulk_resume.rows_seen = static_cast<uint64_t>(json_number(mark, "rows_seen", 0));
+            g_bulk_resume.sites_emitted =
+                static_cast<uint64_t>(json_number(mark, "sites_emitted", 0));
+            g_bulk_resume.header_done = json_bool(mark, "header_done", false);
+            g_bulk_resume.complete = json_bool(mark, "complete", false);
+            g_bulk_resume.decoder = json_string(mark, "decoder", "");
+        }
         g_have_job = true;
     }
 
@@ -2746,6 +3341,13 @@ int parse(void) {
         else if (std::strcmp(spec->format, "comreg-protobuf") == 0) {
             decode_comreg_protobuf(*spec, payload, provider_row_cap, &reports, &g_row_capped);
         }
+        // The OpenCelliD bulk gzip. Unlike every other decoder this one is
+        // STATEFUL across invocations: it reads the resume mark the previous
+        // chunk left in the job and writes the one the next chunk needs.
+        else if (std::strcmp(spec->format, "csv-gz") == 0) {
+            decode_opencellid_bulk_gz(*spec, payload, provider_row_cap, &g_bulk_resume, &reports,
+                                      &g_row_capped);
+        }
         // JSON adapters land with the per-provider decoders; until each is
         // written and fixtured, an unsupported format contributes nothing
         // rather than a guess.
@@ -2858,7 +3460,35 @@ int parse(void) {
     std::string forwarded_job = g_job;
     if (!forwarded_job.empty() && forwarded_job[forwarded_job.size() - 1] == '}') {
         forwarded_job.erase(forwarded_job.size() - 1);
-        forwarded_job += ",\"row_capped\":" + std::string(g_row_capped ? "true" : "false") + "}";
+        forwarded_job += ",\"row_capped\":" + std::string(g_row_capped ? "true" : "false");
+        // THE NEXT CHUNK'S RESUME MARK travels the same way, and only when a
+        // bulk lane actually ran. `decoder` is the serialized inflate state;
+        // it is opaque, it is never a credential, and it is the reason the next
+        // range can start mid-symbol instead of re-reading the whole prefix.
+        //
+        // The key is `bulk_resume_NEXT`, not `bulk_resume`. The job already
+        // carries the INBOUND mark under the latter, and these frames are read
+        // with a first-match scan (`json_raw_field`), so appending a second
+        // `bulk_resume` would leave every reader seeing the stale one — a
+        // download that restarts from the same offset forever, reporting
+        // progress each time.
+        if (g_bulk_resume.valid) {
+            char counters[192];
+            std::snprintf(counters, sizeof(counters),
+                          ",\"bulk_resume_next\":{\"next_byte\":%llu,\"rows_seen\":%llu"
+                          ",\"sites_emitted\":%llu,\"header_done\":%s,\"complete\":%s",
+                          static_cast<unsigned long long>(g_bulk_resume.next_byte),
+                          static_cast<unsigned long long>(g_bulk_resume.rows_seen),
+                          static_cast<unsigned long long>(g_bulk_resume.sites_emitted),
+                          g_bulk_resume.header_done ? "true" : "false",
+                          g_bulk_resume.complete ? "true" : "false");
+            forwarded_job += counters;
+            if (!g_bulk_resume.decoder.empty()) {
+                forwarded_job += ",\"decoder\":\"" + g_bulk_resume.decoder + "\"";
+            }
+            forwarded_job += "}";
+        }
+        forwarded_job += "}";
     }
     if (push_json("job", forwarded_job) < 0) return 500;
     if (push_json("reports", out) < 0) return 500;
@@ -2948,6 +3578,17 @@ int deconflict(void) {
         // long as it did.
         ",\"fullPopulation\":" + (full_population ? "true" : "false") +
         ",\"truncated\":" + (truncated ? "true" : "false") +
+        // THE RESUME MARK IS PART OF THE ANSWER, not internal bookkeeping.
+        //
+        // A bulk run that read 32 MiB of a multi-gigabyte export has given a
+        // TRUE but PARTIAL answer, and this file's standing rule is that a
+        // partial answer must never be indistinguishable from a complete one.
+        // Handing the mark back is also the only way the caller can ask for the
+        // next chunk: this node keeps nothing between invocations, so the
+        // continuation lives with whoever is driving the ingest.
+        (json_string(job, "bulk_resume_next", "").empty()
+             ? std::string()
+             : ",\"bulkResume\":" + json_string(job, "bulk_resume_next", "{}")) +
         ",\"skipped\":" + json_string(job, "skipped", "[]") + "}";
 
     if (push_tbs_stream("records", stream) < 0) return 500;

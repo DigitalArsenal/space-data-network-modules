@@ -28,7 +28,7 @@
       "displayName": "Mediate a cellular provider credential",
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Three operations, dispatched on the task frame the router emits. `catalog` finishes the provider catalog: it appends keySlot {slotId, publicKey, algorithm} from the ungated node.publicKey bridge operation (hex on the wire, published as base64 because that is what the browser's WebCrypto import takes) and flips credentialConfigured/defaultSelected for each lane secrets.status reports as held. `put` opens the browser's keyslot envelope with keyslot.unwrap and hands the result straight to secrets.put; the plaintext is never pushed to an output port, never logged and never returned, and there is no code path that accepts an unsealed credential. `clear` is secrets.clear, and answers identically whether or not a credential was there so a write grant does not become a presence oracle. Every lane is checked for the cell_ prefix before any host call, so a malformed frame cannot reach an operator lane belonging to some other subsystem.",
+      "description": "Four operations, dispatched on the task frame the router emits. `catalog` finishes the provider catalog: it appends keySlot {slotId, publicKey, algorithm} from the ungated node.publicKey bridge operation (hex on the wire, published as base64 because that is what the browser's WebCrypto import takes) and flips credentialConfigured/defaultSelected for each lane secrets.status reports as held. `descriptors` is the credentialed FETCH: cell-tower-source holds no secrets capability, so a credentialed provider's request descriptor leaves the router with a literal {{credential}} placeholder and a credentialLane naming the lane that fills it; this op reads that lane with secrets.get, percent-encodes the value into the URL, drops the credentialLane marker, and returns the descriptor list together with its request_providers correlation list — rewritten in ONE pass so that dropping a descriptor whose lane is empty also drops its correlation entry, because parse attributes response frames to providers BY POSITION and a filtered descriptor list alone would misattribute every provider after the gap. `put` opens the browser's keyslot envelope with keyslot.unwrap and hands the result straight to secrets.put; the plaintext is never pushed to an output port, never logged and never returned, and there is no code path that accepts an unsealed credential. `clear` is secrets.clear, and answers identically whether or not a credential was there so a write grant does not become a presence oracle. Every lane is checked for the cell_ prefix before any host call, so a malformed frame cannot reach an operator lane belonging to some other subsystem.",
       "inputPorts": [
         {
           "portId": "task",
@@ -44,7 +44,7 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "One of {op:catalog, catalog:<the catalog the router built>}, {op:put, providerId, lane, envelope} or {op:clear, providerId, lane}. Request-scoped routing between two nodes of one flow, not observation data; no SDS record describes an instruction and inventing one would be worse than naming it what it is."
+                "detail": "One of {op:catalog, catalog:<the catalog the router built>}, {op:descriptors, descriptors:[...], request_providers:[...]}, {op:put, providerId, lane, envelope} or {op:clear, providerId, lane}. Request-scoped routing between two nodes of one flow, not observation data; no SDS record describes an instruction and inventing one would be worse than naming it what it is."
               }
             }
           ],
@@ -88,11 +88,11 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON answer: the finished provider catalog, or the credential lane's new state.",
+              "description": "UTF-8 JSON answer: the finished provider catalog, the completed request-descriptor list with its correlation list, or the credential lane's new state.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Source metadata and lane state (which provider, which lane, stored or cleared) handed to the flow's http-respond node. Never a credential value, and no SDS record type describes node-local configuration state."
+                "detail": "Source metadata, request descriptors and lane state (which provider, which lane, stored or cleared) handed to the flow's next node. Never a credential value: the `descriptors` op emits URLs that CONTAIN a substituted token, which travel only to the http node and are never logged, and no reply ever echoes a stored secret. No SDS record type describes node-local configuration state or an HTTP request descriptor."
               }
             }
           ],

@@ -44,6 +44,12 @@
  *       memory for the few instructions between the two and is never pushed to
  *       an output port, never logged, never returned.
  *
+ *   {"op":"descriptors","descriptors":[...],"request_providers":[...]}
+ *       secrets.get -> substitute `{{credential}}` into the request descriptors
+ *       the router could not finish, and hand both lists back with their
+ *       POSITIONAL correlation intact. This is the op that makes a stored
+ *       credential do something; see handle_descriptors.
+ *
  *   {"op":"clear","providerId":"...","lane":"cell_..."}
  *       secrets.clear.
  *
@@ -237,6 +243,114 @@ std::string json_string(const std::string& src, const std::string& key,
     std::string raw;
     if (!json_raw_field(src, key, &raw)) return fallback;
     return raw;
+}
+
+// Split a JSON array of OBJECTS into its top-level elements, brace-counted so a
+// nested object (every descriptor carries a `headers` object) does not end the
+// element early. Strings are tracked because a URL may legitimately contain a
+// brace.
+std::vector<std::string> json_object_array(const std::string& array) {
+    std::vector<std::string> out;
+    int depth = 0;
+    size_t start = 0;
+    bool in_string = false;
+    for (size_t i = 0; i < array.size(); ++i) {
+        const char c = array[i];
+        if (in_string) {
+            if (c == '\\') ++i;
+            else if (c == '"') in_string = false;
+            continue;
+        }
+        if (c == '"') { in_string = true; continue; }
+        if (c == '{') { if (depth++ == 0) start = i; continue; }
+        if (c == '}') {
+            if (--depth == 0) out.push_back(array.substr(start, i - start + 1));
+        }
+    }
+    return out;
+}
+
+std::vector<std::string> json_string_array(const std::string& array) {
+    std::vector<std::string> out;
+    for (size_t i = 0; i < array.size(); ++i) {
+        if (array[i] != '"') continue;
+        size_t end = i + 1;
+        while (end < array.size() && !(array[end] == '"' && array[end - 1] != '\\')) ++end;
+        if (end >= array.size()) break;
+        out.push_back(json_unescape(array.substr(i + 1, end - i - 1)));
+        i = end;
+    }
+    return out;
+}
+
+// Replace every occurrence of `token`, advancing PAST the substitution rather
+// than re-searching from the start, so a value containing the token cannot loop
+// forever. (A credential containing "{{credential}}" is absurd but it is also
+// entirely under an attacker's control if a lane is ever populated remotely.)
+void substitute_all(std::string* text, const std::string& token, const std::string& value) {
+    if (!text || token.empty()) return;
+    size_t at = 0;
+    while ((at = text->find(token, at)) != std::string::npos) {
+        text->replace(at, token.size(), value);
+        at += value.size();
+    }
+}
+
+// Percent-encode for a query-parameter VALUE. A credential is arbitrary bytes;
+// an unencoded one carrying '&' or '#' would silently truncate the query and
+// send a request that means something other than what was built.
+std::string url_encode(const std::string& in) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(in.size() * 3);
+    for (const unsigned char c : in) {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+            c == '-' || c == '_' || c == '.' || c == '~') {
+            out += static_cast<char>(c);
+        } else {
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 0x0F];
+        }
+    }
+    return out;
+}
+
+// Rewrite one top-level string field's VALUE in place. Used to swap the
+// completed URL back into the descriptor the router built, rather than
+// re-serializing the descriptor here: the descriptor's shape (headers, body,
+// timeout, wire format) belongs to the router, and a second copy of it in this
+// file would drift from the first.
+bool replace_json_string_field(std::string* object, const std::string& key,
+                               const std::string& value) {
+    if (!object) return false;
+    const std::string needle = "\"" + key + "\":\"";
+    const size_t at = object->find(needle);
+    if (at == std::string::npos) return false;
+    const size_t start = at + needle.size();
+    size_t end = start;
+    while (end < object->size() && !((*object)[end] == '"' && (*object)[end - 1] != '\\')) ++end;
+    if (end >= object->size()) return false;
+    object->replace(start, end - start, json_escape(value));
+    return true;
+}
+
+// Remove one top-level string field, with the comma that joins it to its
+// neighbour. Absent is success: the marker this erases is optional by design.
+bool erase_json_string_field(std::string* object, const std::string& key) {
+    if (!object) return false;
+    const std::string needle = "\"" + key + "\":\"";
+    const size_t at = object->find(needle);
+    if (at == std::string::npos) return true;
+    const size_t start = at + needle.size();
+    size_t end = start;
+    while (end < object->size() && !((*object)[end] == '"' && (*object)[end - 1] != '\\')) ++end;
+    if (end >= object->size()) return false;
+    size_t from = at, to = end + 1;
+    if (from > 0 && (*object)[from - 1] == ',') --from;          // ,"k":"v"
+    else if (to < object->size() && (*object)[to] == ',') ++to;  // "k":"v",
+    object->erase(from, to - from);
+    return true;
 }
 
 // ── base64 ─────────────────────────────────────────────────────────────────
@@ -529,6 +643,155 @@ int handle_put(const std::string& task) {
                          "\",\"credentialConfigured\":true,\"stored\":true}");
 }
 
+// ---------------------------------------------------------------------------
+// op = descriptors — THE CREDENTIALED FETCH.
+//
+// This is the operation that makes a stored credential do something. `route` in
+// cell-tower-source builds every request descriptor, but it holds NO secrets
+// capability (it is `capabilities: []` so it stays browser-instantiable for its
+// own tests), so a credentialed provider's URL leaves it with the literal
+// `{{credential}}` still in it and a `credentialLane` naming the lane that
+// fills it. This node has the grant; it substitutes, and hands the finished
+// list on to the http node.
+//
+// THE INVARIANT THIS MUST NOT BREAK. `parse` correlates a response frame to a
+// provider BY POSITION in `request_providers`, because `hostcap/http-request`
+// echoes nothing from the request it was handed. So descriptors[i] must keep
+// naming request_providers[i] after this node has run. That is why both lists
+// are rewritten HERE, together, in one pass: when a lane turns out to be empty
+// the descriptor is dropped AND its correlation entry is dropped with it. A
+// node that filtered only the descriptors would shift every provider after the
+// gap by one and attribute real towers to the wrong operator — the failure mode
+// this flow has already been bitten by once.
+//
+// WHY A DROP AND NOT A REFUSAL. An empty lane is an ordinary operator state,
+// not an error: the other providers in the same run have real answers and the
+// request should still get them. The dropped provider is named in
+// `credentialSkipped` so the run can say it asked and could not, which is the
+// same contract `route`'s own skip list carries.
+//
+// NO ECHO, still. The substituted URL goes to the http node and nowhere else.
+// It is never logged (`hostcap/http-request`'s host capability writes no URL to
+// the journal), never returned in the reply, and the token is never named in
+// `credentialSkipped` — which reports lanes, not values.
+int handle_descriptors(const std::string& task) {
+    std::string descriptors_raw;
+    if (!json_raw_field(task, "descriptors", &descriptors_raw) || descriptors_raw.empty() ||
+        descriptors_raw[0] != '[') {
+        return emit_error(500, "no-descriptors", "the router emitted no descriptor list");
+    }
+    std::string providers_raw;
+    if (!json_raw_field(task, "request_providers", &providers_raw) || providers_raw.empty() ||
+        providers_raw[0] != '[') {
+        return emit_error(500, "no-correlation",
+                          "the router emitted descriptors with no correlation list");
+    }
+
+    const std::vector<std::string> descriptors = json_object_array(descriptors_raw);
+    const std::vector<std::string> providers = json_string_array(providers_raw);
+    if (descriptors.size() != providers.size()) {
+        // Refuse rather than guess an alignment. A mismatched pair is the one
+        // condition under which every attribution downstream is unsound.
+        return emit_error(500, "correlation-mismatch",
+                          "descriptor and correlation lists differ in length");
+    }
+
+    std::string out_descriptors = "[";
+    std::string out_providers = "[";
+    std::string skipped = "[";
+    size_t kept = 0, skipped_count = 0;
+
+    for (size_t i = 0; i < descriptors.size(); ++i) {
+        const std::string& descriptor = descriptors[i];
+        const std::string lane = json_string(descriptor, "credentialLane", "");
+        if (lane.empty()) {
+            // Not a credentialed descriptor. Passes through byte-for-byte.
+            if (kept++) { out_descriptors += ","; out_providers += ","; }
+            out_descriptors += descriptor;
+            out_providers += "\"" + json_escape(providers[i]) + "\"";
+            continue;
+        }
+        const std::string provider_id = json_string(descriptor, "provider_id", "");
+        if (!lane_is_ours(lane)) {
+            if (skipped_count++) skipped += ",";
+            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
+                       "\",\"reason\":\"not a cellular credential lane\"}";
+            continue;
+        }
+
+        // `secrets.get` is gated by the READ grant (`secrets:<lane>`), which is
+        // separate from the `:write` grant `put`/`clear` use — an operator can
+        // approve storing a credential without approving its use, and this is
+        // the call that needs the other half.
+        const std::string get_meta =
+            host_meta("secrets.get", "{\"id\":\"" + json_escape(lane) + "\"}");
+        std::string secret, username;
+        if (host_meta_ok(get_meta)) {
+            secret = json_string(get_meta, "secret", "");
+            username = json_string(get_meta, "username", "");
+        }
+        if (secret.empty()) {
+            // Either the operator has not entered this credential or this
+            // module is not approved for the lane. The two are deliberately NOT
+            // distinguished in the reply: telling a caller which one it is
+            // makes an unapproved lane's existence observable.
+            if (skipped_count++) skipped += ",";
+            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
+                       "\",\"credentialLane\":\"" + json_escape(lane) +
+                       "\",\"credentialConfigured\":false"
+                       ",\"reason\":\"no credential is stored for this lane on this node\"}";
+            continue;
+        }
+
+        const std::string url = json_string(descriptor, "url", "");
+        std::string filled = url;
+        substitute_all(&filled, "{{credential}}", url_encode(secret));
+        // Some providers key on a username too; substitute it when the
+        // descriptor asks for one, so a two-field credential needs no second op.
+        substitute_all(&filled, "{{credential_user}}", url_encode(username));
+        // The plaintext's lifetime ends here. It exists for the few
+        // instructions between the hostcall and the substitution, exactly as it
+        // does in `put` between unwrap and store.
+        secret.assign(secret.size(), '\0');
+        secret.clear();
+        username.clear();
+
+        if (filled.find("{{credential") != std::string::npos) {
+            // A placeholder this node does not know how to fill would be
+            // fetched verbatim. Drop it rather than spend the provider's quota
+            // on a request that cannot succeed.
+            if (skipped_count++) skipped += ",";
+            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
+                       "\",\"reason\":\"the descriptor carries a credential placeholder this "
+                       "node does not fill\"}";
+            continue;
+        }
+
+        // Rebuild the descriptor with the finished URL, and DROP the
+        // `credentialLane` marker: it has done its job, and a lane name is
+        // operator configuration that has no business travelling further than
+        // the node that acts on it.
+        std::string rebuilt = descriptor;
+        if (!replace_json_string_field(&rebuilt, "url", filled) ||
+            !erase_json_string_field(&rebuilt, "credentialLane")) {
+            if (skipped_count++) skipped += ",";
+            skipped += "{\"provider_id\":\"" + json_escape(provider_id) +
+                       "\",\"reason\":\"the descriptor could not be rewritten\"}";
+            continue;
+        }
+        if (kept++) { out_descriptors += ","; out_providers += ","; }
+        out_descriptors += rebuilt;
+        out_providers += "\"" + json_escape(providers[i]) + "\"";
+    }
+    out_descriptors += "]";
+    out_providers += "]";
+    skipped += "]";
+
+    return emit(200, std::string("{\"descriptors\":") + out_descriptors +
+                         ",\"request_providers\":" + out_providers +
+                         ",\"credentialSkipped\":" + skipped + "}");
+}
+
 int handle_clear(const std::string& task) {
     const std::string provider_id = json_string(task, "providerId", "");
     const std::string lane = json_string(task, "lane", "");
@@ -563,6 +826,7 @@ int mediate(void) {
 
     const std::string op = json_string(task, "op", "");
     if (op == "catalog") return handle_catalog(task);
+    if (op == "descriptors") return handle_descriptors(task);
     if (op == "put") return handle_put(task);
     if (op == "clear") return handle_clear(task);
     return emit_error(500, "unknown-op", "the router emitted an operation this node does not know");
