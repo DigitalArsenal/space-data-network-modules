@@ -124,6 +124,7 @@
 #include <cmath>
 #include <map>
 #include <set>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -264,6 +265,16 @@ double json_number(const std::string& src, const std::string& key, double fallba
     if (!json_raw_field(src, key, &raw)) return fallback;
     if (raw.empty() || raw == "null") return fallback;
     return std::atof(raw.c_str());
+}
+
+// A JSON boolean. Anything that is not literally `true` is false, including a
+// missing key — the FULL_POPULATION lane must be opted INTO explicitly, never
+// inferred, because it lifts the caps that bound what an anonymous caller can
+// make this node fetch and merge.
+bool json_bool(const std::string& src, const std::string& key, bool fallback) {
+    std::string raw;
+    if (!json_raw_field(src, key, &raw)) return fallback;
+    return raw == "true";
 }
 
 // Splits a JSON array of strings. Used for the PROVIDERS list.
@@ -408,11 +419,20 @@ constexpr ProviderSpec kProviders[] = {
   // The file is ordered as an ordinary FeatureCollection, and this module's
   // anonymous per-provider contract accepts at most 1,000 rows. A 2 MiB prefix
   // contains about 1,700 complete features (measured 2026-08-13), so fetching
-  // the remaining 25 MiB cannot change the answer. Route therefore asks for
-  // that prefix with Range and the streaming decoder below deliberately accepts
-  // the incomplete JSON tail after it has emitted the bounded row set. Besides
-  // wasting bandwidth, the full document occasionally pushed the buffered HTTP
-  // flow beyond Cloudflare's response deadline (live 524 at 124 s).
+  // the remaining 25 MiB cannot change THAT capped answer. Route therefore asks
+  // for the prefix with Range on the anonymous lane, and the streaming decoder
+  // below deliberately accepts the incomplete JSON tail after it has emitted the
+  // bounded row set. Besides wasting bandwidth, the full document occasionally
+  // pushed the buffered HTTP flow beyond Cloudflare's response deadline (live
+  // 524 at 124 s), so the ingest lane also asks for a longer timeout.
+  //
+  // "Cannot change the answer" was true of the CAPPED answer and false of the
+  // register: the prefix is a crop by DOCUMENT ORDER, which for a national
+  // FeatureCollection is a geographic crop. Measured 2026-08-14 against the live
+  // asset — 27,273,745 bytes, EXACTLY 22,347 features — the anonymous lane's
+  // three caps (2 MiB Range, 1,000-row decode cap, LIMIT on emit) compounded to
+  // ~364 sites at the live-probe's LIMIT=400. FULL_POPULATION lifts all three;
+  // see the ingest-lane note in `route`.
   //
   // TRAP: coordinates are EPSG:2056 (Swiss LV95) EASTING/NORTHING in metres,
   // not degrees. Read as lat/lon they are silently out of range and every row
@@ -998,8 +1018,14 @@ int8_t swiss_radio_from_techno(const std::string& techno) {
     return RC_UNKNOWN;
 }
 
+// `hit_cap` reports whether the decoder STOPPED at report_limit with body
+// left over, as opposed to running out of features. That distinction is the
+// difference between "Switzerland has this many masts" and "you asked for this
+// many" — the ambiguity this whole task exists to remove — so it is an output,
+// not an inference the caller makes from a count.
 void decode_swiss_geojson(const ProviderSpec& spec, const std::string& body,
-                          size_t report_limit, std::vector<Report>* out) {
+                          size_t report_limit, std::vector<Report>* out,
+                          bool* hit_cap) {
     // Split the FEATURES ARRAY, not the document — same lesson the Overpass
     // decoder records: a GeoJSON FeatureCollection is one top-level object, so
     // splitting the body yields one "feature" (the whole file) and every field
@@ -1021,7 +1047,7 @@ void decode_swiss_geojson(const ProviderSpec& spec, const std::string& body,
     int depth = 0;
     bool in_string = false;
     bool escaped = false;
-    for (++at; at < body.size() && emitted < report_limit; ++at) {
+    for (++at; at < body.size(); ++at) {
         const char c = body[at];
         if (in_string) {
             if (escaped) escaped = false;
@@ -1031,6 +1057,13 @@ void decode_swiss_geojson(const ProviderSpec& spec, const std::string& body,
         }
         if (c == '"') { in_string = true; continue; }
         if (c == '{') {
+            // The cap is enforced at the START of the NEXT feature, never on
+            // the trailing bytes of the array: stopping here means a feature
+            // really was left undecoded, which is what `hit_cap` promises.
+            if (depth == 0 && emitted >= report_limit) {
+                if (hit_cap) *hit_cap = true;
+                break;
+            }
             if (depth++ == 0) object_start = at;
             continue;
         }
@@ -1112,7 +1145,9 @@ std::string network_identity(const Report& r) {
 std::vector<std::vector<size_t>> group_reports(const std::vector<Report>& reports) {
     std::vector<std::vector<size_t>> groups;
     std::map<std::string, size_t> by_identity;
-    std::vector<size_t> geometric;  // indices INTO groups
+    // Geometric group HEADS bucketed by (lat cell, lon cell) — values are
+    // indices INTO groups, exactly as the old flat `geometric` list held.
+    std::map<std::pair<long, long>, std::vector<size_t>> head_grid;
     for (size_t i = 0; i < reports.size(); ++i) {
         const std::string identity = network_identity(reports[i]);
         if (!identity.empty()) {
@@ -1125,16 +1160,46 @@ std::vector<std::vector<size_t>> group_reports(const std::vector<Report>& report
             }
             continue;
         }
+        // SPATIAL BUCKETS, NOT A LINEAR SCAN.
+        //
+        // This used to compare every identity-less report against every
+        // geometric group HEAD, which is O(n^2): the national BAKOM register
+        // publishes no MCC/MNC/cell id, so all 22,347 Swiss masts take this
+        // path and the scan is ~2.5e8 haversine calls inside ONE wasm
+        // invocation. That cost is precisely why the lane was capped at 1,000
+        // rows, so bounding it is a PRECONDITION of emitting the full
+        // population — not an optimisation.
+        //
+        // Heads are indexed on a lat/lon grid whose cell is the match
+        // tolerance, so a candidate can only lie in the 3x3 neighbourhood of
+        // its own cell. The winner is still the NEAREST head within tolerance,
+        // scanning that neighbourhood in ascending cell order, so the grouping
+        // is identical to the linear scan's — the grid changes which heads are
+        // CONSIDERED, never which one wins. (Longitude cells widen by
+        // 1/cos(lat) so a cell stays at least the tolerance wide in metres;
+        // near the poles cos(lat) is floored to keep the divisor finite.)
+        const double lat_cell = kPositionToleranceM / 111320.0;
+        const double coslat = std::fabs(std::cos(reports[i].latitude * (3.14159265358979323846 / 180.0)));
+        const double lon_cell = lat_cell / (coslat < 1e-6 ? 1e-6 : coslat);
+        const long gy = static_cast<long>(std::floor(reports[i].latitude / lat_cell));
+        const long gx = static_cast<long>(std::floor(reports[i].longitude / lon_cell));
+
         size_t matched = SIZE_MAX;
         double best = 1e18;
-        for (size_t g : geometric) {
-            const Report& head = reports[groups[g][0]];
-            const double d = haversine_m(head.latitude, head.longitude,
-                                         reports[i].latitude, reports[i].longitude);
-            if (d <= kPositionToleranceM && d < best) { best = d; matched = g; }
+        for (long dy = -1; dy <= 1; ++dy) {
+            for (long dx = -1; dx <= 1; ++dx) {
+                auto bucket = head_grid.find(std::make_pair(gy + dy, gx + dx));
+                if (bucket == head_grid.end()) continue;
+                for (size_t g : bucket->second) {
+                    const Report& head = reports[groups[g][0]];
+                    const double d = haversine_m(head.latitude, head.longitude,
+                                                 reports[i].latitude, reports[i].longitude);
+                    if (d <= kPositionToleranceM && d < best) { best = d; matched = g; }
+                }
+            }
         }
         if (matched != SIZE_MAX) { groups[matched].push_back(i); continue; }
-        geometric.push_back(groups.size());
+        head_grid[std::make_pair(gy, gx)].push_back(groups.size());
         groups.push_back({i});
     }
     return groups;
@@ -1557,6 +1622,22 @@ int route(void) {
     std::vector<std::string> wanted = json_string_array(body, "PROVIDERS");
     const std::string method_name = json_string(body, "METHOD", "HIGHEST_SAMPLE_COUNT");
     const double limit = json_number(body, "LIMIT", 2000);
+    // THE INGEST LANE. Opt-in, never a default.
+    //
+    // Every cap below this line exists to bound what an ANONYMOUS caller can
+    // make this node fetch and merge, and together they are why the BAKOM lane
+    // answered a worldwide request with ~364 of 22,347 Swiss sites: route asked
+    // for a 2 MiB Range, parse stopped decoding at the per-provider row cap, and
+    // deconflict stopped writing at LIMIT. None of the three is a decode bug and
+    // none of them was visible in the answer.
+    //
+    // FULL_POPULATION is the ingest path saying "I am not a page; give me the
+    // whole register." It lifts all three caps. The ANONYMOUS defaults are
+    // unchanged — and, more importantly, a capped run now SAYS it was capped
+    // (see `truncated` in the deconflict summary), because this file's own rule
+    // is that a default which crops must never be indistinguishable from a
+    // complete answer.
+    const bool full_population = json_bool(body, "FULL_POPULATION", false);
 
     // BBOX in Overpass order (south,west,north,east).
     //
@@ -1706,7 +1787,7 @@ int route(void) {
         // job's LIMIT only caps records emitted at the cheap end.
         double rows = limit;
         if (rows < 1) rows = 1;
-        if (rows > 1000) rows = 1000;
+        if (rows > 1000 && !full_population) rows = 1000;
         char rows_buf[16];
         std::snprintf(rows_buf, sizeof(rows_buf), "%.0f", rows);
 
@@ -1728,8 +1809,12 @@ int route(void) {
                     url += "?$where=" + url_encode(q) + "&$limit=" + rows_buf;
                 }
             }
+            // The 2 MiB Range prefix is the anonymous lane's bandwidth bound,
+            // NOT a property of the source: the file is one ordered national
+            // FeatureCollection, so a prefix is a geographic crop by document
+            // order. The ingest lane fetches the whole 27 MB asset.
             const std::string bounded_headers =
-                std::strcmp(spec->format, "swiss-geojson") == 0
+                (std::strcmp(spec->format, "swiss-geojson") == 0 && !full_population)
                     ? ",\"range\":\"bytes=0-2097151\""
                     : "";
             descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
@@ -1737,7 +1822,9 @@ int route(void) {
                                   "\",\"headers\":{\"accept\":\"application/json\"" +
                                   bounded_headers +
                                   ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
-                                  ",\"timeoutMs\":40000,\"responseWire\":\"raw-body-v1\"}");
+                                  ",\"timeoutMs\":" +
+                                  (full_population ? "300000" : "40000") +
+                                  ",\"responseWire\":\"raw-body-v1\"}");
             descriptor_providers.push_back(spec->id);
         }
     }
@@ -1772,6 +1859,7 @@ int route(void) {
     const std::string job = std::string("{\"method\":") + std::to_string(static_cast<int>(method)) +
                             ",\"method_name\":\"" + json_escape(method_name) + "\"" +
                             ",\"limit\":" + std::to_string(static_cast<long>(limit)) +
+                            ",\"full_population\":" + (full_population ? "true" : "false") +
                             ",\"providers_consulted\":" + consulted +
                             ",\"request_providers\":" + request_providers +
                             ",\"skipped\":" + skipped + "}";
@@ -1843,6 +1931,9 @@ static size_t g_response_cursor = 0;
 static bool g_have_job = false;
 // Emit exactly once per run: respond/egress carry ONE HTTP body.
 static bool g_emitted = false;
+// Did any provider's decoder stop at the per-provider row cap this run? Run-
+// scoped like the rest of the accumulator, because parse spans invocations.
+static bool g_row_capped = false;
 // Bounds the yield loop so a lost frame can never hang the request forever.
 static uint32_t g_idle_ticks = 0;
 
@@ -1854,6 +1945,7 @@ void reset_run_state(void) {
     g_response_cursor = 0;
     g_have_job = false;
     g_emitted = false;
+    g_row_capped = false;
     g_idle_ticks = 0;
 }
 
@@ -1874,9 +1966,16 @@ int parse(void) {
     // restarted at 0 every time and mapped later batches onto provider 0.
     const std::vector<std::string>& request_providers = g_request_providers;
     std::vector<Report>& reports = g_reports;
-    long provider_row_cap = static_cast<long>(json_number(g_job, "limit", 2000));
-    if (provider_row_cap < 1) provider_row_cap = 1;
-    if (provider_row_cap > 1000) provider_row_cap = 1000;
+    // Per-provider decode cap. The ingest lane decodes every row the body
+    // carries; the anonymous lane keeps its 1,000-row bound.
+    const bool full_population = json_bool(g_job, "full_population", false);
+    size_t provider_row_cap = SIZE_MAX;
+    if (!full_population) {
+        long capped = static_cast<long>(json_number(g_job, "limit", 2000));
+        if (capped < 1) capped = 1;
+        if (capped > 1000) capped = 1000;
+        provider_row_cap = static_cast<size_t>(capped);
+    }
 
     const uint32_t count = plugin_get_input_count();
     size_t new_responses = 0;
@@ -1964,8 +2063,8 @@ int parse(void) {
         else if (std::strcmp(spec->format, "osm-json") == 0) decode_osm_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "soql-json") == 0) decode_soql_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "swiss-geojson") == 0) {
-            decode_swiss_geojson(*spec, payload,
-                                 static_cast<size_t>(provider_row_cap), &reports);
+            decode_swiss_geojson(*spec, payload, provider_row_cap, &reports,
+                                 &g_row_capped);
         }
         // JSON adapters land with the per-provider decoders; until each is
         // written and fixtured, an unsupported format contributes nothing
@@ -2073,7 +2172,15 @@ int parse(void) {
     // frame; what must not happen is a SECOND emission inside this run.
     g_emitted = true;
 
-    if (push_json("job", g_job) < 0) return 500;
+    // Hand the row-cap verdict to deconflict on the job it forwards. The job
+    // is JSON built by route, so appending before the closing brace is the
+    // whole edit — and deconflict reads it with the same json_bool as the rest.
+    std::string forwarded_job = g_job;
+    if (!forwarded_job.empty() && forwarded_job[forwarded_job.size() - 1] == '}') {
+        forwarded_job.erase(forwarded_job.size() - 1);
+        forwarded_job += ",\"row_capped\":" + std::string(g_row_capped ? "true" : "false") + "}";
+    }
+    if (push_json("job", forwarded_job) < 0) return 500;
     if (push_json("reports", out) < 0) return 500;
     return 0;
 }
@@ -2086,7 +2193,13 @@ int deconflict(void) {
     const std::string reports_json = input_text("reports", 0);
 
     const int8_t method = static_cast<int8_t>(json_number(job, "method", MM_HIGHEST_SAMPLE_COUNT));
-    const long limit = static_cast<long>(json_number(job, "limit", 2000));
+    // The ingest lane writes every deconflicted site; the anonymous lane stops
+    // at LIMIT. Either way the summary reports whether it stopped early, so a
+    // cropped answer is never indistinguishable from a complete one.
+    const bool full_population = json_bool(job, "full_population", false);
+    const long limit = full_population
+                           ? 0  // 0 == unbounded, the existing `limit > 0` sense
+                           : static_cast<long>(json_number(job, "limit", 2000));
     const std::vector<std::string> consulted_ids = json_string_array(job, "providers_consulted");
     const size_t consulted = consulted_ids.size();
 
@@ -2106,8 +2219,14 @@ int deconflict(void) {
     std::vector<uint8_t> stream;
     size_t multi = 0;
     size_t written = 0;
+    // TRUNCATED means "this answer is not the whole population", whichever cap
+    // did it: the decoder stopping at the per-provider row cap (reported by
+    // parse on the job) or the writer stopping at LIMIT below. Reporting only
+    // the second would still let a row-capped run read as complete, which is
+    // the exact ambiguity behind "~364 Swiss sites".
+    bool truncated = json_bool(job, "row_capped", false);
     for (const std::vector<size_t>& group : groups) {
-        if (limit > 0 && static_cast<long>(written) >= limit) break;
+        if (limit > 0 && static_cast<long>(written) >= limit) { truncated = true; break; }
         const size_t win = select_winner(reports, group, method);
         const double spread = position_spread(reports, group);
         std::set<std::string> agreeing;
@@ -2143,6 +2262,12 @@ int deconflict(void) {
         ",\"multiProviderSites\":" + std::to_string(multi) +
         ",\"providersConsulted\":" + std::to_string(consulted) +
         ",\"method\":\"" + json_escape(json_string(job, "method_name", "")) + "\"" +
+        // A CROPPED ANSWER MUST SAY SO. `truncated` is true exactly when a cap
+        // stopped this run short of the population it decoded — the thing that
+        // made "~364 Swiss sites" read as a complete worldwide answer for as
+        // long as it did.
+        ",\"fullPopulation\":" + (full_population ? "true" : "false") +
+        ",\"truncated\":" + (truncated ? "true" : "false") +
         ",\"skipped\":" + json_string(job, "skipped", "[]") + "}";
 
     if (push_tbs_stream("records", stream) < 0) return 500;

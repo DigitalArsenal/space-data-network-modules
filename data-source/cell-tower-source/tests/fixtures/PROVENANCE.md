@@ -87,3 +87,34 @@ put a point inside Switzerland but not inside the right canton.
 
 Licence: opendata.swiss terms. The obligation rides into republication through
 `$TBS.SOURCES`, like every other provider's.
+
+## 2026-08-14 — `bakom-mobile-sites.slice-1200.json.gz`
+
+Captured by full GET of the same live national asset, for
+`graph/tasks/mod-cell-tower-bakom-decode-loss.md`:
+
+```
+GET https://data.geo.admin.ch/ch.bakom.standorte-mobilfunkanlagen/
+      standorte-mobilfunkanlagen/standorte-mobilfunkanlagen_2056.json
+-> 200  27,273,745 bytes
+   sha256 852b82d7a1e484ee269e99a0c878e5949f0bb7a049a7432b8f2058c23e1736a3
+   features: 22,347 (exact)
+```
+
+The fixture is the first **1,200 complete features** of that body, **verbatim** —
+the leading bytes are the file's own, byte for byte, and only the array
+terminator `\n]}\n` is appended to close the envelope. Nothing was edited,
+reformatted or re-serialized. It is gzipped (63 KB vs 1.48 MB) purely to keep
+that much upstream JSON out of the tree; `zlib.gunzipSync` returns the captured
+bytes exactly.
+
+**Chosen for its ability to FAIL.** 1,200 is deliberately *above* the
+1,000-row anonymous per-provider cap. A slice that fit under the cap could not
+distinguish a lifted cap from an unlifted one, which is the entire question
+`tests/bakom-full-population.test.mjs` exists to answer — the lane reported ~364
+of 22,347 Swiss sites and the cause was three silent caps, not a decode fault.
+
+Why the sibling 14-feature `bakom-mobile-sites.sample.json` stays: it is the
+adapter's semantic fixture (four `techno_en` generations, the GE canton check on
+the LV95 transform). This one is the *population* fixture. They fail for
+different reasons and neither replaces the other.
