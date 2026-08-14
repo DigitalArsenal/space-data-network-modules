@@ -40,7 +40,10 @@ test("OpenCelliD CSV normalizes identity, coordinates, cell metadata, and proven
     provenance: {
       providerId: "opencellid",
       authority: "Unwired Labs / OpenCelliD contributors",
-      sourceUrl: "https://opencellid.org/downloads.php",
+      // CORRECTED 2026-08-14: the provenance URL follows the registry, and the
+      // registry's bulk endpoint is no longer the human download page.
+      sourceUrl:
+        "https://opencellid.org/ocid/downloads?token=<token>&type=full&file=cell_towers.csv.gz",
       retrievedAt: "2026-08-05T12:00:00.000Z",
       license: "CC BY-SA 4.0",
       licenseUrl: "https://wiki.opencellid.org/wiki/Menu_map_view",
@@ -84,17 +87,35 @@ test("CSV parser supports quoted delimiters, escaped quotes, CRLF, and final lin
 });
 
 test("provider endpoint seam exposes auth metadata without handling secrets", () => {
-  assert.deepEqual(resolveProviderEndpoint("opencellid"), {
-    kind: "bulk",
-    url: "https://opencellid.org/downloads.php",
-    format: "csv-zip",
-    refresh: "daily",
-    providerId: "opencellid",
-    loginRequired: true,
-    credentialEnv: "OPENCELLID_TOKEN",
-    registrationUrl: "https://opencellid.org/",
-    termsUrl: "https://wiki.opencellid.org/wiki/Server_usage_policy",
-  });
+  const endpoint = resolveProviderEndpoint("opencellid");
+
+  // The load-bearing fields, asserted individually rather than by deep-equal on
+  // the whole object. A deep-equal here also pinned the endpoint's PROSE, which
+  // meant the registry could not record why a URL had been corrected without
+  // failing a test about authentication metadata — and that is how the wrong
+  // URL survived: the assertion made documenting the correction expensive.
+  assert.equal(endpoint.kind, "bulk");
+  assert.equal(endpoint.providerId, "opencellid");
+  assert.equal(endpoint.refresh, "daily");
+
+  // CORRECTED 2026-08-14 (graph: mod-cell-tower-opencellid-bulk). This asserted
+  // `https://opencellid.org/downloads.php` + `csv-zip`. Both were wrong: that
+  // URL is the human download PAGE (verified live: 200, text/html, 14,729 B)
+  // and the real export is GZIP, not ZIP.
+  assert.equal(
+    endpoint.url,
+    "https://opencellid.org/ocid/downloads?token=<token>&type=full&file=cell_towers.csv.gz",
+  );
+  assert.equal(endpoint.format, "csv-gz");
+
+  // The seam publishes WHERE the credential comes from and never the credential.
+  assert.equal(endpoint.loginRequired, true);
+  assert.equal(endpoint.credentialEnv, "OPENCELLID_TOKEN");
+  assert.equal(endpoint.registrationUrl, "https://opencellid.org/");
+  assert.equal(endpoint.termsUrl, "https://wiki.opencellid.org/wiki/Server_usage_policy");
+  for (const key of ["token", "secret", "credential", "key", "apiKey", "password"]) {
+    assert.equal(key in endpoint, false, `the endpoint seam exposes a ${key} field`);
+  }
 });
 
 test("payload seam handles Overpass JSON and rejects discovery-only catalogs", () => {

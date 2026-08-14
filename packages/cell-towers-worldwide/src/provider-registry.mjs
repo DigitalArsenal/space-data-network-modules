@@ -9,7 +9,12 @@ const ACCESS_MODES = new Set([
   "account-api",
   "interactive-public",
 ]);
-const FORMATS = new Set(["csv", "csv-zip", "json", "geojson", "osm-json", "api-json", "html"]);
+// `csv-gz` was added 2026-08-14 (graph: mod-cell-tower-opencellid-bulk). The
+// registry could not describe a GZIP bulk export at all, so OpenCelliD's real
+// download — which is gzip, not zip — had been recorded as `csv-zip` against a
+// URL that was in fact the human download page. An enum that cannot name what a
+// provider actually serves does not prevent a wrong entry; it forces one.
+const FORMATS = new Set(["csv", "csv-zip", "csv-gz", "json", "geojson", "osm-json", "api-json", "html"]);
 
 function nonEmpty(value) {
   return typeof value === "string" && value.trim().length > 0;
