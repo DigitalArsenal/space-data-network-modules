@@ -1,0 +1,310 @@
+{
+  "programId": "com.digitalarsenal.flows.cellular-network-ingest",
+  "name": "Cellular Network Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "The INGEST counterpart to cellular-network-aggregate, which is a per-request HTTP aggregate: route -> http -> parse -> merge -> respond, no storage node, no publication node, nothing persisted. That is the correct shape for the browser demo and the wrong shape for ingest, and the two cannot be the same flow - the aggregate is capabilities [] on route BY DESIGN so it stays browser-shaped. Here a cron TIMER tick enters at cell-tower-ingest:mark_query, which builds the flatsql-query that reads this provider's durable resume mark; hostcap/flatsql-query returns it to cell-tower-ingest:ingest_plan, which emits ONE hostcap/http-request descriptor carrying a Range header for the next chunk plus the cell-tower-source run contract. The chunk is bounded by the Go server host's 4 MiB response-body cap (hostcap/http-request manifest), so a 40M-row bulk export is fetched as a sequence of ranged chunks instead of one truncated GET; cellular-worldwide-ingest-exceeds-host01 measured a 4.75 MB CSV already forcing 8192 linear-memory pages. cell-tower-source's parse and deconflict are REUSED UNCHANGED - decoding a provider body and merging sites are the same operations whether the answer is served or stored - and cell-tower-ingest:ingest_meta authors the storage attribution ($TBS + $TBS.SOURCES provenance, reconcile=append because each batch is one CHUNK of the provider's set, not the set) before hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. cell-tower-ingest:publish_request then advances the resume mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one chunk instead of skipping rows invisibly - and emits the dataset-publication POST only when a publish URL is configured. The host owns no schedule, no provider list, no chunking policy and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL row that holds the mark. No new host connector is required.",
+  "nodes": [
+    {
+      "nodeId": "mark_read_q",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "mark_query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "mark_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "ingest_plan",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "parse",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "merge",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
+      "methodId": "deconflict",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "meta",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "ingest_meta",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "markq-fq",
+      "fromNodeId": "mark_read_q",
+      "fromPortId": "query",
+      "toNodeId": "mark_read",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "fq-plan",
+      "fromNodeId": "mark_read",
+      "fromPortId": "stream",
+      "toNodeId": "plan",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-http",
+      "fromNodeId": "plan",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-parse-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "responses",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-job-merge",
+      "fromNodeId": "parse",
+      "fromPortId": "job",
+      "toNodeId": "merge",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-reports",
+      "fromNodeId": "parse",
+      "fromPortId": "reports",
+      "toNodeId": "merge",
+      "toPortId": "reports",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "merge-records-meta",
+      "fromNodeId": "merge",
+      "fromPortId": "records",
+      "toNodeId": "meta",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false
+    },
+    {
+      "edgeId": "merge-decision-meta",
+      "fromNodeId": "merge",
+      "fromPortId": "decision",
+      "toNodeId": "meta",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-meta-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "meta",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-meta-response",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "meta",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "meta-ingest-meta",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "meta-ingest-records",
+      "fromNodeId": "meta",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false
+    },
+    {
+      "edgeId": "ingest-publish-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "publish",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "meta-publish-meta",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "publish",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-http",
+      "fromNodeId": "publish",
+      "fromPortId": "request",
+      "toNodeId": "publish_http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-egress",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-http-egress",
+      "fromNodeId": "publish_http",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-mark-egress",
+      "fromNodeId": "publish",
+      "fromPortId": "mark",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-cell-ingest",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 300000,
+      "description": "Chunk tick. One tick fetches and stores ONE ranged chunk and advances the mark, so the interval sets ingest pace and a restart resumes from the mark, not from zero."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-cell-ingest",
+      "targetNodeId": "mark_read_q",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "triggerId": "timer-cell-ingest",
+      "targetNodeId": "plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.cell-tower-ingest",
+    "com.digitalarsenal.data-source.cell-tower-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest",
+    "com.digitalarsenal.hostcap.flatsql-query"
+  ]
+}
