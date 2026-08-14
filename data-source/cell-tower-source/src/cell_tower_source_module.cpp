@@ -445,60 +445,68 @@ constexpr ProviderSpec kProviders[] = {
    "opendata.swiss terms","https://opendata.swiss/en/terms-of-use","BAKOM mobile transmitter sites",false,true,
    "bulk",nullptr},
 
-  // ── Verified live, real, and NOT CONSUMABLE BY THIS MODULE YET ────────────
-  // Each of the four below was reached with a successful fetch on 2026-08-10.
-  // None is compiled in as a fetchable URL, because this module decodes only
-  // CSV, Overpass JSON, SoQL JSON and the Swiss GeoJSON above — it has no ZIP
-  // inflate and no protobuf decoder. Fetching them would return 200 and parse
-  // to zero rows, which is precisely the failure mode this task was filed
-  // about. They are carried as `unavailable` so the discovery is not lost and
-  // the catalog can state the reason, and they are never fetched.
-  // Follow-up: `cell-tower-bulk-archive-adapters`.
+  // ── National bulk archives, UNLOCKED 2026-08-14 ───────────────────────────
+  // These four were carried as `unavailable` because the module decoded only
+  // CSV, Overpass JSON, SoQL JSON and the Swiss GeoJSON — no ZIP inflate and no
+  // protobuf. `cell-tower-bulk-archive-adapters` added both: miniz 3.1.2 is
+  // vendored (sha-pinned, MINIZ_NO_ARCHIVE_APIS, hand-walked central directory,
+  // 32 KiB streaming window — see zip_find_member/zip_stream_lines) and the
+  // ComReg wire shape was recovered from a live unauthenticated response.
+  // Each was re-verified against the LIVE archive on 2026-08-14 and each has an
+  // exact-count decode test over a captured slice.
   {"anfr-cartoradio","Agence nationale des frequences",
    "https://static.data.gouv.fr/resources/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1/20260702-135014/20260630-export-etalab-data.zip",
    {nullptr,nullptr,nullptr},
-   "","","csv",
+   "","","zip-anfr",
    "Licence Ouverte 2.0","https://www.etalab.gouv.fr/licence-ouverte-open-licence","ANFR Cartoradio",false,true,
-   "unavailable",
-   "verified live (206, application/zip, 65,696,863 B): a ZIP of five ';'-delimited "
-   "tables. Needs ZIP inflate, a STA_NM_ANFR join across SUP_STATION/SUP_SUPPORT, a "
-   "further ADM_ID join for the operator name, and DMS-to-decimal conversion "
-   "(coordinates are split across four degree/minute/second/hemisphere columns)"},
+   // Verified live 2026-08-14: 200, application/zip, 65,696,863 B, five
+   // ';'-delimited tables. Positions come from SUP_SUPPORT.txt (198,524
+   // supports, 18.6 MB inflated) through the four-column DMS conversion; the
+   // 203 MB SUP_BANDE and 117 MB SUP_EMETTEUR members are never touched. No
+   // operator name: the ADM_ID affectataire code has no name table in-archive.
+   "bulk",nullptr},
 
   {"acma-rrl","Australian Communications and Media Authority","https://cdn.acma.gov.au/rrl/spectra_rrl.zip",
    {nullptr,nullptr,nullptr},
-   "","","csv",
-   // CORRECTED 2026-08-10. This registry declared CC BY 4.0; the LICENCE.TXT
-   // inside the live archive is ACMA's own non-transferable licence-to-use with
-   // IP retained. An attribution string that overstates the grant is a licence
-   // defect, not a cosmetic one — $TBS.SOURCES carries it into republication.
+   "","","zip-acma",
+   // CORRECTED 2026-08-10, RE-CONFIRMED FROM THE ARCHIVE 2026-08-14. This
+   // registry declared CC BY 4.0; the LICENCE.TXT inside the live archive is
+   // ACMA's own non-transferable licence-to-use with IP retained ("Intellectual
+   // Property in the Register is retained by the ACMA"). An attribution string
+   // that overstates the grant is a licence defect, not a cosmetic one —
+   // $TBS.SOURCES carries it into republication.
    "ACMA Licence to Use the Register of Radiocommunications Licences",
    "https://www.acma.gov.au/","ACMA Register of Radiocommunications Licences",false,true,
-   "unavailable",
-   "verified live (206, application/zip, 69,981,982 B, refreshed daily): 28 tables; "
-   "site.csv carries clean decimal LATITUDE/LONGITUDE. Needs ZIP inflate plus a "
-   "site-licence-client join for the operator name"},
+   // Verified live 2026-08-14: 200, application/zip, 69,940,117 B, refreshed
+   // daily, 31 members. site.csv (13.5 MB inflated) carries clean decimal
+   // LATITUDE/LONGITUDE; the 383 MB device_details and 175 MB
+   // applic_text_block members are never touched, which is also why no
+   // licensee name is emitted (that join runs through device_details).
+   "bulk",nullptr},
 
   {"ised-sms-tafl","Innovation, Science and Economic Development Canada",
    "https://www.ic.gc.ca/engineering/SMS_TAFL_Files/TAFL_LTAF.zip",
    {nullptr,nullptr,nullptr},
-   "","","csv",
+   "","","zip-ised",
    "Open Government Licence - Canada","https://open.canada.ca/en/open-government-licence-canada","ISED Spectrum Management System",false,true,
-   "unavailable",
-   "verified live (206, application/zip, 64,197,105 B): one HEADERLESS positional "
-   "CSV. Needs ZIP inflate plus a column map taken from the companion field "
-   "description document — there are no column names to look up"},
+   // Verified live 2026-08-14: 200, application/zip, 64,197,105 B, ONE member
+   // (TAFL_LTAF.csv) that inflates to 428,229,263 B — more than three times the
+   // whole memory ceiling, so it is only ever streamed. Headerless/positional;
+   // the ordinal map and the 99.5% province/coordinate corroboration that
+   // establishes it are recorded at decode_ised_zip.
+   "bulk",nullptr},
 
   {"comreg-siteviewer","Commission for Communications Regulation",
    "https://api-siteviewer.comreg.ie/mobile-masts/point",
    {nullptr,nullptr,nullptr},
-   "","","json",
+   "post-json","{}","comreg-protobuf",
    "CC BY 4.0","https://creativecommons.org/licenses/by/4.0/","ComReg SiteViewer",false,true,
-   "unavailable",
-   "verified live and UNAUTHENTICATED (POST {} -> 200 with real national mast ids "
-   "in the body): a bespoke backend that answers application/x-protobuf and ignores "
-   "Accept: application/json. Needs a protobuf decoder and the schema; the best "
-   "candidate to unblock first"},
+   // Verified live and UNAUTHENTICATED 2026-08-14: POST {} -> 200,
+   // application/x-protobuf, 401,836 B carrying 9,646 masts (8,107
+   // operator-named, 1,539 licence-referenced). No .proto is published; the
+   // recovered wire shape and the negative-longitude trap are at
+   // decode_comreg_protobuf.
+   "bulk",nullptr},
 
   // ── WiGLE ─────────────────────────────────────────────────────────────────
   // Endpoint real (401 "Not Authorized (WiGLE.net)" proves the route). Kept as
@@ -598,6 +606,44 @@ int b64_value(char c) {
     return -1;
 }
 
+// Encode a REQUEST body. `hostcap/http-request` reads the outgoing body from
+// `bodyB64` and ignores a plain `body` key (http_request_module.cpp:645-652), so
+// a descriptor that spells it `body` sends a bodiless request — which for
+// ComReg's POST-only RPC is a 200 with an empty mast list, i.e. the
+// parses-to-zero-rows failure again, arriving through the request side instead
+// of the decode side.
+std::string base64_encode(const std::string& in) {
+    static const char* kAlphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((in.size() + 2) / 3) * 4);
+    size_t i = 0;
+    while (i + 2 < in.size()) {
+        const uint32_t v = (static_cast<uint8_t>(in[i]) << 16) |
+                           (static_cast<uint8_t>(in[i + 1]) << 8) |
+                           static_cast<uint8_t>(in[i + 2]);
+        out += kAlphabet[(v >> 18) & 63];
+        out += kAlphabet[(v >> 12) & 63];
+        out += kAlphabet[(v >> 6) & 63];
+        out += kAlphabet[v & 63];
+        i += 3;
+    }
+    if (i + 1 == in.size()) {
+        const uint32_t v = static_cast<uint8_t>(in[i]) << 16;
+        out += kAlphabet[(v >> 18) & 63];
+        out += kAlphabet[(v >> 12) & 63];
+        out += "==";
+    } else if (i + 2 == in.size()) {
+        const uint32_t v = (static_cast<uint8_t>(in[i]) << 16) |
+                           (static_cast<uint8_t>(in[i + 1]) << 8);
+        out += kAlphabet[(v >> 18) & 63];
+        out += kAlphabet[(v >> 12) & 63];
+        out += kAlphabet[(v >> 6) & 63];
+        out += '=';
+    }
+    return out;
+}
+
 bool base64_decode(const std::string& text, std::string* out) {
     out->clear();
     out->reserve((text.size() / 4) * 3);
@@ -625,6 +671,233 @@ double haversine_m(double lat1, double lon1, double lat2, double lon2) {
                      std::cos(lat1 * to_rad) * std::cos(lat2 * to_rad) *
                          std::sin(dlon / 2) * std::sin(dlon / 2);
     return 2 * kEarthRadiusM * std::asin(std::min(1.0, std::sqrt(a)));
+}
+
+// ── ZIP member access (stored + deflate), STREAMING ────────────────────────
+//
+// Four national registers publish as one ZIP each. They are NOT small, and the
+// numbers are why every byte below is streamed rather than extracted:
+//
+//   archive          compressed   the member we want   the members we must NOT touch
+//   acma-rrl          69,940,117   site.csv  13.5 MB   device_details.csv 383 MB,
+//                                                      applic_text_block.csv 175 MB
+//   ised-sms-tafl     64,197,105   TAFL_LTAF.csv 428 MB (the only member)
+//   anfr-cartoradio   65,696,863   SUP_SUPPORT.txt 18.6 MB  SUP_BANDE.txt 203 MB,
+//                                                      SUP_EMETTEUR.txt 117 MB
+//
+// The compressed body is ALREADY resident as `payload` when these run, inside
+// the flow's 128 MB linear-memory ceiling (see decode_raw_http_response). So
+// `mz_zip_reader_extract_*` is not merely wasteful here, it is impossible:
+// extracting ISED's single member alone asks for 428 MB. Every decoder below
+// therefore inflates through a fixed 32 KiB window and is handed ONE LINE AT A
+// TIME, and selects its member by name so the giant siblings are never touched.
+//
+// miniz is vendored at vendor/miniz-3.1.2 and compiled with
+// MINIZ_NO_ARCHIVE_APIS (see miniz-source.mjs), which removes mz_zip_* — the
+// central directory is therefore walked by hand below. tinfl_* survives that
+// define (it is gated by MINIZ_NO_INFLATE_APIS, which is NOT set).
+
+struct ZipEntry {
+    size_t data_offset = 0;      // offset of the member's compressed bytes
+    uint32_t compressed_size = 0;
+    uint32_t uncompressed_size = 0;
+    uint16_t method = 0;         // 0 = stored, 8 = deflate
+    bool found = false;
+};
+
+uint16_t le16(const std::string& b, size_t at) {
+    return static_cast<uint16_t>(static_cast<uint8_t>(b[at])) |
+           (static_cast<uint16_t>(static_cast<uint8_t>(b[at + 1])) << 8);
+}
+
+uint32_t le32(const std::string& b, size_t at) {
+    return static_cast<uint32_t>(static_cast<uint8_t>(b[at])) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(b[at + 1])) << 8) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(b[at + 2])) << 16) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(b[at + 3])) << 24);
+}
+
+// Locate one member by exact name through the CENTRAL DIRECTORY.
+//
+// The central directory is the authority for the sizes, never the local header:
+// a ZIP written with a data descriptor (general-purpose flag bit 3) carries
+// zeroes for both sizes in the local header, and reading those would inflate
+// zero bytes and report an empty register — the parse-to-nothing failure this
+// module's whole provider registry exists to prevent. The three live archives
+// were checked on 2026-08-14 and use flags=0/method=8 throughout, but the code
+// does not depend on that holding.
+ZipEntry zip_find_member(const std::string& body, const char* want) {
+    ZipEntry e;
+    if (body.size() < 22) return e;
+    // End of central directory: scan backwards over the permitted 64 KiB
+    // comment. Searching FORWARD for the signature is wrong — the bytes
+    // "PK\x05\x06" can occur inside compressed data.
+    const size_t floor_at = body.size() > 66000 ? body.size() - 66000 : 0;
+    size_t eocd = std::string::npos;
+    for (size_t i = body.size() - 22 + 1; i-- > floor_at;) {
+        if (body[i] == 'P' && body[i + 1] == 'K' &&
+            static_cast<uint8_t>(body[i + 2]) == 0x05 &&
+            static_cast<uint8_t>(body[i + 3]) == 0x06) {
+            eocd = i;
+            break;
+        }
+    }
+    if (eocd == std::string::npos || eocd + 22 > body.size()) return e;
+
+    const uint16_t entries = le16(body, eocd + 10);
+    const uint32_t cd_offset = le32(body, eocd + 16);
+    if (cd_offset == 0xFFFFFFFFu) return e;  // ZIP64: refused, never guessed
+    size_t p = cd_offset;
+
+    for (uint16_t n = 0; n < entries; ++n) {
+        if (p + 46 > body.size()) return e;
+        if (!(body[p] == 'P' && body[p + 1] == 'K' &&
+              static_cast<uint8_t>(body[p + 2]) == 0x01 &&
+              static_cast<uint8_t>(body[p + 3]) == 0x02)) {
+            return e;
+        }
+        const uint16_t flags = le16(body, p + 8);
+        const uint16_t method = le16(body, p + 10);
+        const uint32_t csize = le32(body, p + 20);
+        const uint32_t usize = le32(body, p + 24);
+        const uint16_t name_len = le16(body, p + 28);
+        const uint16_t extra_len = le16(body, p + 30);
+        const uint16_t comment_len = le16(body, p + 32);
+        const uint32_t local_at = le32(body, p + 42);
+        if (p + 46 + name_len > body.size()) return e;
+        const std::string name = body.substr(p + 46, name_len);
+        p += 46u + name_len + extra_len + comment_len;
+
+        if (name != want) continue;
+        // Encrypted (bit 0) is refused rather than decoded into noise.
+        if (flags & 0x0001) return e;
+        if (csize == 0xFFFFFFFFu || usize == 0xFFFFFFFFu ||
+            local_at == 0xFFFFFFFFu) {
+            return e;  // ZIP64 member
+        }
+        if (method != 0 && method != 8) return e;
+        // The LOCAL header is read only for its own name/extra lengths, which
+        // are permitted to differ from the central directory's.
+        if (local_at + 30 > body.size()) return e;
+        if (!(body[local_at] == 'P' && body[local_at + 1] == 'K' &&
+              static_cast<uint8_t>(body[local_at + 2]) == 0x03 &&
+              static_cast<uint8_t>(body[local_at + 3]) == 0x04)) {
+            return e;
+        }
+        const uint16_t l_name = le16(body, local_at + 26);
+        const uint16_t l_extra = le16(body, local_at + 28);
+        const size_t data_at = local_at + 30u + l_name + l_extra;
+        if (data_at + csize > body.size()) return e;
+        e.data_offset = data_at;
+        e.compressed_size = csize;
+        e.uncompressed_size = usize;
+        e.method = method;
+        e.found = true;
+        return e;
+    }
+    return e;
+}
+
+// Inflate a member and hand the caller ONE LINE AT A TIME.
+//
+// `on_line(line)` returns false to stop early, which is what makes a capped
+// request cheap: the anonymous lane's 1,000-row bound stops after a few hundred
+// KiB of a 428 MB member instead of inflating all of it.
+//
+// The output window is exactly TINFL_LZ_DICT_SIZE and WRAPS — that is the
+// contract for tinfl's non-TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF mode, and
+// it is the entire reason a 428 MB member costs 32 KiB of memory here. The only
+// unbounded accumulation is `pending`, one line.
+template <typename OnLine>
+bool zip_stream_lines(const std::string& body, const ZipEntry& entry, OnLine on_line) {
+    if (!entry.found) return false;
+
+    if (entry.method == 0) {  // stored
+        const char* base = body.data() + entry.data_offset;
+        size_t start = 0;
+        for (size_t i = 0; i <= entry.compressed_size; ++i) {
+            if (i == entry.compressed_size || base[i] == '\n') {
+                if (i > start || i != entry.compressed_size) {
+                    std::string line(base + start, i - start);
+                    if (!line.empty() && line[line.size() - 1] == '\r') line.resize(line.size() - 1);
+                    if (!line.empty() && !on_line(line)) return true;
+                }
+                start = i + 1;
+            }
+        }
+        return true;
+    }
+
+    // Deflate. tinfl_decompressor is ~11 KiB; it is heap-allocated rather than
+    // placed on the guest stack, which is small in this thread model.
+    tinfl_decompressor* inflator = tinfl_decompressor_alloc();
+    if (!inflator) return false;
+    tinfl_init(inflator);
+
+    std::vector<uint8_t> window(TINFL_LZ_DICT_SIZE);
+    size_t in_pos = 0;
+    size_t out_pos = 0;   // write cursor inside the wrapping window
+    std::string pending;  // bytes of the line currently being assembled
+    bool stopped = false;
+    bool ok = true;
+
+    for (;;) {
+        size_t in_avail = entry.compressed_size - in_pos;
+        size_t out_avail = TINFL_LZ_DICT_SIZE - out_pos;
+        const mz_uint32 flags = in_avail ? TINFL_FLAG_HAS_MORE_INPUT : 0;
+        const tinfl_status status = tinfl_decompress(
+            inflator,
+            reinterpret_cast<const mz_uint8*>(body.data() + entry.data_offset + in_pos),
+            &in_avail,
+            window.data(),
+            window.data() + out_pos,
+            &out_avail,
+            flags);
+        in_pos += in_avail;
+
+        // Split whatever this pass produced into lines.
+        for (size_t i = 0; i < out_avail && !stopped; ++i) {
+            const char c = static_cast<char>(window[out_pos + i]);
+            if (c == '\n') {
+                if (!pending.empty() && pending[pending.size() - 1] == '\r') {
+                    pending.resize(pending.size() - 1);
+                }
+                if (!pending.empty() && !on_line(pending)) stopped = true;
+                pending.clear();
+            } else {
+                pending += c;
+            }
+        }
+        out_pos = (out_pos + out_avail) & (TINFL_LZ_DICT_SIZE - 1);
+
+        if (stopped) break;
+        if (status == TINFL_STATUS_DONE) {
+            if (!pending.empty()) {
+                if (pending[pending.size() - 1] == '\r') pending.resize(pending.size() - 1);
+                if (!pending.empty()) on_line(pending);
+            }
+            break;
+        }
+        if (status < TINFL_STATUS_DONE) { ok = false; break; }  // corrupt input
+    }
+
+    tinfl_decompressor_free(inflator);
+    return ok;
+}
+
+// Split a ';'-delimited line (ANFR). Kept separate from split_csv_line rather
+// than parameterised: the ANFR exports are not RFC4180 and do not quote, so
+// treating '"' as a quote character there would swallow real content.
+std::vector<std::string> split_semicolon_line(const std::string& line) {
+    std::vector<std::string> cells;
+    std::string cur;
+    for (size_t i = 0; i < line.size(); ++i) {
+        const char c = line[i];
+        if (c == ';') { cells.push_back(cur); cur.clear(); }
+        else if (c != '\r') cur += c;
+    }
+    cells.push_back(cur);
+    return cells;
 }
 
 // ── CSV decoding (the OpenCelliD/MLS column contract) ──────────────────────
@@ -886,9 +1159,27 @@ const char* detect_body_format(const std::string& body) {
         if (body.find("\"features\"") != std::string::npos) return "swiss-geojson";
         return nullptr;
     }
-    // A CSV answer is not JSON and is deliberately NOT identified here. An
-    // unrecognised body must fall through to positional attribution, which is
-    // still corroborated downstream — never be vetoed by an unknown shape.
+    // A ZIP is identified DOWN TO THE PROVIDER, not merely as "a zip".
+    //
+    // The three bulk archives share one magic number, so magic alone would make
+    // them mutually ambiguous and push all three back onto positional
+    // attribution — the exact fragility the format check exists to remove. A
+    // member NAME is unambiguous instead: only ACMA ships `site.csv`, only ISED
+    // ships `TAFL_LTAF.csv`, only ANFR ships `SUP_SUPPORT.txt`. Reading the
+    // central directory to check is cheap (a backward scan over the last 64 KiB
+    // plus one walk of the entry table) and inflates nothing.
+    if (body.size() > 4 && body[0] == 'P' && body[1] == 'K' &&
+        static_cast<uint8_t>(body[2]) == 0x03 && static_cast<uint8_t>(body[3]) == 0x04) {
+        if (zip_find_member(body, "site.csv").found) return "zip-acma";
+        if (zip_find_member(body, "TAFL_LTAF.csv").found) return "zip-ised";
+        if (zip_find_member(body, "SUP_SUPPORT.txt").found) return "zip-anfr";
+        return nullptr;  // a ZIP this module does not know: never guessed at
+    }
+    // A CSV answer is not JSON and is deliberately NOT identified here, and
+    // neither is ComReg's protobuf: a protobuf stream has no magic number, and
+    // any byte pattern claimed for one would also match some CSV. Both fall
+    // through to positional attribution, which is still corroborated
+    // downstream — never be vetoed by an unknown shape.
     return nullptr;
 }
 
@@ -1131,6 +1422,348 @@ void decode_soql_json(const ProviderSpec& spec, const std::string& body, std::ve
         const std::string name = json_string(row, "u_location_name", "");
         if (!name.empty()) r.site_name = name;
         out->push_back(r);
+    }
+}
+
+// ── ACMA Register of Radiocommunications Licences (Australia) ──────────────
+//
+// `site.csv` is the whole adapter: SITE_ID,LATITUDE,LONGITUDE,NAME,STATE,... in
+// clean decimal degrees, verified against the live archive 2026-08-14.
+//
+// NO OPERATOR NAME IS EMITTED, and that is a measurement rather than an
+// omission. The site->licence->client join that would name the licensee runs
+// through `device_details.csv`, which is the member carrying both SITE_ID and
+// LICENCE_NO — and it inflates to 383,353,349 bytes. Streaming it is possible;
+// holding the resulting SITE_ID->CLIENT_NO map for millions of device rows,
+// plus client.csv, is not, inside a 128 MB ceiling that already contains a
+// 70 MB compressed body. So this decoder emits what the register states about
+// the SITE and invents no licensee, exactly as the BAKOM lane emits masts with
+// no cell identity rather than fabricating one.
+//
+// LICENCE, re-read from LICENCE.TXT INSIDE the live archive on 2026-08-14 as
+// the task required: "Intellectual Property in the Register is retained by the
+// ACMA", granting a "non-transferable, non-exclusive Licence to use, reproduce
+// and adapt". It is NOT CC BY 4.0. The registry string was already corrected to
+// match; this run confirms the correction against the bytes.
+void decode_acma_zip(const ProviderSpec& spec, const std::string& body,
+                     size_t report_limit, std::vector<Report>* out, bool* hit_cap) {
+    const ZipEntry entry = zip_find_member(body, "site.csv");
+    if (!entry.found) return;
+
+    int c_id = -1, c_lat = -1, c_lon = -1, c_name = -1, c_state = -1;
+    bool have_header = false;
+    size_t emitted = 0;
+    zip_stream_lines(body, entry, [&](const std::string& line) -> bool {
+        const std::vector<std::string> cells = split_csv_line(line);
+        if (!have_header) {
+            have_header = true;
+            c_id = column_of(cells, "SITE_ID");
+            c_lat = column_of(cells, "LATITUDE");
+            c_lon = column_of(cells, "LONGITUDE");
+            c_name = column_of(cells, "NAME");
+            c_state = column_of(cells, "STATE");
+            // A header that is not the expected contract emits NOTHING rather
+            // than decoding positionally against a guess.
+            return c_lat >= 0 && c_lon >= 0;
+        }
+        if (emitted >= report_limit) { if (hit_cap) *hit_cap = true; return false; }
+        const int need = std::max(c_lat, c_lon);
+        if (need >= static_cast<int>(cells.size())) return true;
+        const std::string& lat_s = cells[c_lat];
+        const std::string& lon_s = cells[c_lon];
+        if (lat_s.empty() || lon_s.empty()) return true;
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = std::atof(lat_s.c_str());
+        r.longitude = std::atof(lon_s.c_str());
+        if (r.latitude < -90 || r.latitude > 90 || r.longitude < -180 || r.longitude > 180) return true;
+        if (r.latitude == 0.0 && r.longitude == 0.0) return true;
+        r.country_code = "AU";
+        r.radio = RC_UNKNOWN;
+        if (c_id >= 0 && c_id < static_cast<int>(cells.size())) r.native_id = cells[c_id];
+        if (c_name >= 0 && c_name < static_cast<int>(cells.size())) r.site_name = cells[c_name];
+        (void)c_state;
+        out->push_back(r);
+        ++emitted;
+        return true;
+    });
+}
+
+// ── ISED Technical and Administrative Frequency List (Canada) ──────────────
+//
+// TAFL_LTAF.csv is the archive's ONLY member and inflates to 428,229,263 bytes,
+// so it is the strongest case for the streaming window: fully extracting it is
+// more than three times the entire memory ceiling.
+//
+// It is HEADERLESS AND POSITIONAL — there are no names to look up, so the
+// ordinals below are the contract. They were established on 2026-08-14 against
+// the live file and are recorded with their evidence, because a positional map
+// that is off by one decodes silently into confident nonsense:
+//
+//   2   frequency record identifier   "0001403864"
+//   14  frequency (MHz)               "23.35156"
+//   31  station location name         "CASTLEGAR BC (ILS LOCALIZER)"
+//   39  province code                 "BC"
+//   40  latitude (decimal degrees)    "49.2525"
+//   41  longitude (decimal degrees)   "-117.6625"
+//   54  licensee                      "NAV CANADA - BRITISH COLUMBIA"
+//
+// CORROBORATION, not assertion: over the first 200,000 rows, 166,139 of the
+// 166,948 rows carrying both a province code and a coordinate pair fall inside
+// that province's bounding box (99.5%); the residue sits on inter-provincial
+// borders. A column map shifted by one puts essentially none of them in the
+// right province, so this test distinguishes the right map from a plausible
+// wrong one — which reading three rows by eye cannot.
+//
+// The file has a UTF-8 BOM, which would otherwise ride into the first field.
+void decode_ised_zip(const ProviderSpec& spec, const std::string& body,
+                     size_t report_limit, std::vector<Report>* out, bool* hit_cap) {
+    const ZipEntry entry = zip_find_member(body, "TAFL_LTAF.csv");
+    if (!entry.found) return;
+
+    const size_t kColId = 2, kColFreq = 14, kColName = 31, kColProv = 39;
+    const size_t kColLat = 40, kColLon = 41, kColLicensee = 54, kMinCols = 55;
+    size_t emitted = 0;
+    bool first = true;
+    zip_stream_lines(body, entry, [&](const std::string& raw) -> bool {
+        if (emitted >= report_limit) { if (hit_cap) *hit_cap = true; return false; }
+        const char* start = raw.c_str();
+        size_t skip = 0;
+        if (first) {
+            first = false;
+            if (raw.size() >= 3 && static_cast<uint8_t>(raw[0]) == 0xEF &&
+                static_cast<uint8_t>(raw[1]) == 0xBB && static_cast<uint8_t>(raw[2]) == 0xBF) {
+                skip = 3;
+            }
+        }
+        (void)start;
+        const std::vector<std::string> cells =
+            split_csv_line(skip ? raw.substr(skip) : raw);
+        if (cells.size() < kMinCols) return true;
+        const std::string& lat_s = cells[kColLat];
+        const std::string& lon_s = cells[kColLon];
+        if (lat_s.empty() || lon_s.empty()) return true;
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = std::atof(lat_s.c_str());
+        r.longitude = std::atof(lon_s.c_str());
+        if (r.latitude < -90 || r.latitude > 90 || r.longitude < -180 || r.longitude > 180) return true;
+        if (r.latitude == 0.0 && r.longitude == 0.0) return true;
+        r.country_code = "CA";
+        r.radio = RC_UNKNOWN;
+        r.native_id = cells[kColId];
+        if (!cells[kColName].empty()) r.site_name = cells[kColName];
+        if (!cells[kColLicensee].empty()) r.operator_name = cells[kColLicensee];
+        (void)kColFreq;
+        (void)kColProv;
+        out->push_back(r);
+        ++emitted;
+        return true;
+    });
+}
+
+// ── ANFR Cartoradio (France) ───────────────────────────────────────────────
+//
+// Positions live in SUP_SUPPORT.txt (18.6 MB inflated, 198,524 supports),
+// ';'-delimited and unquoted. SUP_BANDE.txt (203 MB) and SUP_EMETTEUR.txt
+// (117 MB) are siblings in the same archive and are never touched.
+//
+// THE DMS TRAP, which is the reason this provider needs a decoder of its own:
+// each coordinate is FOUR columns — degrees, minutes, seconds, hemisphere:
+//   COR_NB_DG_LAT COR_NB_MN_LAT COR_NB_SC_LAT COR_CD_NS_LAT
+//   COR_NB_DG_LON COR_NB_MN_LON COR_NB_SC_LON COR_CD_EW_LON
+// Reading the degree column alone yields a coordinate that is IN RANGE and
+// plausible and wrong by up to a degree — a site placed in the wrong commune
+// rather than a row that gets dropped. That failure is invisible to a
+// row-count test, so it is covered by an exact-value fixture assertion.
+//
+// NO OPERATOR NAME IS EMITTED. The ADM_ID that SUP_STATION.txt joins on is a
+// numeric affectataire code (6, 23, 240, 137, 39, 2, ...) and the archive ships
+// NO table mapping those codes to names. Emitting "ADM_ID 6" as an operator
+// would be a fabricated attribution riding into $TBS.SOURCES, so the join is
+// deliberately not performed for naming and the station id is carried instead.
+double dms_to_decimal(const std::string& d, const std::string& m, const std::string& s,
+                      const std::string& hemi) {
+    const double deg = std::atof(d.c_str());
+    const double min = std::atof(m.c_str());
+    const double sec = std::atof(s.c_str());
+    double v = deg + (min / 60.0) + (sec / 3600.0);
+    if (!hemi.empty() && (hemi[0] == 'S' || hemi[0] == 'W' || hemi[0] == 'O')) v = -v;
+    return v;
+}
+
+void decode_anfr_zip(const ProviderSpec& spec, const std::string& body,
+                     size_t report_limit, std::vector<Report>* out, bool* hit_cap) {
+    const ZipEntry entry = zip_find_member(body, "SUP_SUPPORT.txt");
+    if (!entry.found) return;
+
+    int c_sta = -1, c_dlat = -1, c_mlat = -1, c_slat = -1, c_hlat = -1;
+    int c_dlon = -1, c_mlon = -1, c_slon = -1, c_hlon = -1, c_lieu = -1;
+    bool have_header = false;
+    size_t emitted = 0;
+    zip_stream_lines(body, entry, [&](const std::string& line) -> bool {
+        const std::vector<std::string> cells = split_semicolon_line(line);
+        if (!have_header) {
+            have_header = true;
+            c_sta = column_of(cells, "STA_NM_ANFR");
+            c_dlat = column_of(cells, "COR_NB_DG_LAT");
+            c_mlat = column_of(cells, "COR_NB_MN_LAT");
+            c_slat = column_of(cells, "COR_NB_SC_LAT");
+            c_hlat = column_of(cells, "COR_CD_NS_LAT");
+            c_dlon = column_of(cells, "COR_NB_DG_LON");
+            c_mlon = column_of(cells, "COR_NB_MN_LON");
+            c_slon = column_of(cells, "COR_NB_SC_LON");
+            c_hlon = column_of(cells, "COR_CD_EW_LON");
+            c_lieu = column_of(cells, "ADR_LB_LIEU");
+            return c_dlat >= 0 && c_dlon >= 0 && c_hlat >= 0 && c_hlon >= 0;
+        }
+        if (emitted >= report_limit) { if (hit_cap) *hit_cap = true; return false; }
+        int need = c_hlon;
+        if (c_slon > need) need = c_slon;
+        if (need >= static_cast<int>(cells.size())) return true;
+        auto at = [&](int i) -> std::string {
+            return (i >= 0 && i < static_cast<int>(cells.size())) ? cells[i] : std::string();
+        };
+        if (at(c_dlat).empty() || at(c_dlon).empty()) return true;
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = dms_to_decimal(at(c_dlat), at(c_mlat), at(c_slat), at(c_hlat));
+        r.longitude = dms_to_decimal(at(c_dlon), at(c_mlon), at(c_slon), at(c_hlon));
+        if (r.latitude < -90 || r.latitude > 90 || r.longitude < -180 || r.longitude > 180) return true;
+        if (r.latitude == 0.0 && r.longitude == 0.0) return true;
+        r.country_code = "FR";
+        r.radio = RC_UNKNOWN;
+        r.native_id = at(c_sta);
+        const std::string lieu = at(c_lieu);
+        if (!lieu.empty()) r.site_name = lieu;
+        out->push_back(r);
+        ++emitted;
+        return true;
+    });
+}
+
+// ── ComReg SiteViewer (Ireland), application/x-protobuf ────────────────────
+//
+// The backend ignores `Accept: application/json` and always answers protobuf,
+// so this is a decoder rather than a header negotiation. No .proto is
+// published; the wire shape below was recovered from the live response on
+// 2026-08-14 (`POST {}` -> 200, 401,836 bytes, unauthenticated) and is narrow
+// enough to read directly:
+//
+//   response { repeated Mast masts = 1; }
+//   Mast { string id = 1; uint32 class = 2; sint-as-int64 lat_e6 = 3; lon_e6 = 4; }
+//
+// Field 3/4 are degrees scaled by 1e6, encoded as plain varints in two's
+// complement — NOT zigzag — so a negative longitude arrives as a ten-byte
+// varint that must be reinterpreted as int64. Ireland's longitudes are all
+// negative, so reading them as unsigned would place every Irish mast near
+// +18,446,744,073,709 degrees and drop the entire national register through the
+// range guard: a provider that fetches perfectly and contributes nothing.
+//
+// The id, e.g. "1-EIR_CE_1135-3GQQVUXZ", carries the operator token before the
+// first '_'. That token (EIR / THR / VOD / IMA) is emitted VERBATIM and is not
+// expanded into a company name — "THR" is evidently Three and "VOD" evidently
+// Vodafone, but evidently is not stated, and this module does not fabricate
+// attribution. Class 2 records (1,539 of 9,646) are licence-referenced sites
+// whose id is a licence number rather than an operator token; they yield no
+// operator, which is why the token is taken only when it is alphabetic.
+bool pb_varint(const std::string& b, size_t* at, uint64_t* out) {
+    uint64_t result = 0;
+    int shift = 0;
+    while (*at < b.size() && shift <= 63) {
+        const uint8_t byte = static_cast<uint8_t>(b[*at]);
+        ++(*at);
+        result |= static_cast<uint64_t>(byte & 0x7F) << shift;
+        if (!(byte & 0x80)) { *out = result; return true; }
+        shift += 7;
+    }
+    return false;
+}
+
+void decode_comreg_protobuf(const ProviderSpec& spec, const std::string& body,
+                            size_t report_limit, std::vector<Report>* out, bool* hit_cap) {
+    size_t at = 0;
+    size_t emitted = 0;
+    while (at < body.size()) {
+        uint64_t key = 0;
+        if (!pb_varint(body, &at, &key)) return;
+        const uint64_t field = key >> 3;
+        const uint64_t wire = key & 0x7;
+        if (wire != 2) {  // skip anything that is not a length-delimited mast
+            uint64_t skip = 0;
+            if (wire == 0) { if (!pb_varint(body, &at, &skip)) return; continue; }
+            if (wire == 5) { at += 4; continue; }
+            if (wire == 1) { at += 8; continue; }
+            return;
+        }
+        uint64_t len = 0;
+        if (!pb_varint(body, &at, &len)) return;
+        if (at + len > body.size()) return;
+        const size_t rec_start = at;
+        const size_t rec_end = at + static_cast<size_t>(len);
+        at = rec_end;
+        if (field != 1) continue;
+
+        if (emitted >= report_limit) { if (hit_cap) *hit_cap = true; return; }
+
+        std::string id;
+        bool have_lat = false, have_lon = false;
+        double lat = 0, lon = 0;
+        size_t p = rec_start;
+        while (p < rec_end) {
+            uint64_t k = 0;
+            if (!pb_varint(body, &p, &k)) break;
+            const uint64_t f = k >> 3;
+            const uint64_t w = k & 0x7;
+            if (w == 2) {
+                uint64_t n = 0;
+                if (!pb_varint(body, &p, &n)) break;
+                if (p + n > rec_end) break;
+                if (f == 1) id.assign(body, p, static_cast<size_t>(n));
+                p += static_cast<size_t>(n);
+                continue;
+            }
+            if (w != 0) break;
+            uint64_t v = 0;
+            if (!pb_varint(body, &p, &v)) break;
+            if (f == 3) { lat = static_cast<double>(static_cast<int64_t>(v)) / 1e6; have_lat = true; }
+            else if (f == 4) { lon = static_cast<double>(static_cast<int64_t>(v)) / 1e6; have_lon = true; }
+        }
+        if (!have_lat || !have_lon) continue;
+        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+        if (lat == 0.0 && lon == 0.0) continue;
+
+        Report r;
+        r.provider_id = spec.id;
+        r.latitude = lat;
+        r.longitude = lon;
+        r.country_code = "IE";
+        r.radio = RC_UNKNOWN;
+        r.native_id = id;
+        // Operator token: the run of letters after the leading "<n>-" and
+        // before the first '_'. Taken only when it is wholly alphabetic, so a
+        // licence-numbered id ("1-07/81_...") yields no operator rather than a
+        // fragment of a licence number presented as a carrier.
+        const size_t dash = id.find('-');
+        const size_t underscore = id.find('_');
+        if (dash != std::string::npos && underscore != std::string::npos && underscore > dash + 1) {
+            const std::string token = id.substr(dash + 1, underscore - dash - 1);
+            bool alpha = !token.empty();
+            for (size_t i = 0; i < token.size(); ++i) {
+                if (token[i] < 'A' || token[i] > 'Z') { alpha = false; break; }
+            }
+            if (alpha) r.operator_name = token;
+        }
+        // "-3G" / "-4G" / "-5G" appears in the id for the operator-named class.
+        if (id.find("-5G") != std::string::npos) r.radio = RC_NR;
+        else if (id.find("-4G") != std::string::npos) r.radio = RC_LTE;
+        else if (id.find("-3G") != std::string::npos) r.radio = RC_UMTS;
+        else if (id.find("-2G") != std::string::npos) r.radio = RC_GSM;
+        out->push_back(r);
+        ++emitted;
     }
 }
 
@@ -1813,15 +2446,46 @@ int route(void) {
             // NOT a property of the source: the file is one ordered national
             // FeatureCollection, so a prefix is a geographic crop by document
             // order. The ingest lane fetches the whole 27 MB asset.
+            //
+            // A ZIP gets NO such prefix, at any lane. The central directory
+            // that names the members lives at the END of the archive, so a
+            // truncated ZIP is not a smaller ZIP — it is an undecodable one,
+            // and it would parse to zero rows: the failure this registry
+            // exists to prevent. The bulk archives are fetched whole or not
+            // at all, which is what their `bulk` lane already asserts.
             const std::string bounded_headers =
                 (std::strcmp(spec->format, "swiss-geojson") == 0 && !full_population)
                     ? ",\"range\":\"bytes=0-2097151\""
                     : "";
+            // Request SHAPE, declared per provider rather than assumed. Every
+            // other provider answers a bare GET; ComReg's SiteViewer backend
+            // is a POST-only RPC that returns the national mast list for an
+            // empty JSON body, so the verb and the body are part of its
+            // contract exactly as the query template is part of Overpass's.
+            const bool post_json = std::strcmp(spec->query_kind, "post-json") == 0;
+            const std::string verb = post_json ? "POST" : "GET";
+            // ComReg ignores `Accept: application/json` and always answers
+            // application/x-protobuf, so the honest header says what the
+            // module will actually decode.
+            const std::string accept =
+                (std::strcmp(spec->format, "comreg-protobuf") == 0)
+                    ? "application/x-protobuf"
+                    : "application/json";
+            std::string extra = bounded_headers;
+            if (post_json) extra += ",\"content-type\":\"application/json\"";
             descriptors.push_back(std::string("{\"provider_id\":\"") + spec->id +
-                                  "\",\"method\":\"GET\",\"url\":\"" + json_escape(url) +
-                                  "\",\"headers\":{\"accept\":\"application/json\"" +
-                                  bounded_headers +
+                                  "\",\"method\":\"" + verb + "\",\"url\":\"" + json_escape(url) +
+                                  "\",\"headers\":{\"accept\":\"" + accept + "\"" +
+                                  extra +
                                   ",\"user-agent\":\"spacedatanetwork-cell-tower-source/0.1\"}" +
+                                  (post_json
+                                       ? std::string(",\"bodyB64\":\"") +
+                                             base64_encode(spec->query_template &&
+                                                                   spec->query_template[0]
+                                                               ? spec->query_template
+                                                               : "{}") +
+                                             "\""
+                                       : std::string()) +
                                   ",\"timeoutMs\":" +
                                   (full_population ? "300000" : "40000") +
                                   ",\"responseWire\":\"raw-body-v1\"}");
@@ -2065,6 +2729,22 @@ int parse(void) {
         else if (std::strcmp(spec->format, "swiss-geojson") == 0) {
             decode_swiss_geojson(*spec, payload, provider_row_cap, &reports,
                                  &g_row_capped);
+        }
+        // The four national bulk archives. Each takes the per-provider row cap
+        // and reports `hit_cap` for the same reason the BAKOM lane does: with
+        // members of 428 MB and 198,524 supports, "you asked for this many" and
+        // "the register has this many" must never be confused.
+        else if (std::strcmp(spec->format, "zip-acma") == 0) {
+            decode_acma_zip(*spec, payload, provider_row_cap, &reports, &g_row_capped);
+        }
+        else if (std::strcmp(spec->format, "zip-ised") == 0) {
+            decode_ised_zip(*spec, payload, provider_row_cap, &reports, &g_row_capped);
+        }
+        else if (std::strcmp(spec->format, "zip-anfr") == 0) {
+            decode_anfr_zip(*spec, payload, provider_row_cap, &reports, &g_row_capped);
+        }
+        else if (std::strcmp(spec->format, "comreg-protobuf") == 0) {
+            decode_comreg_protobuf(*spec, payload, provider_row_cap, &reports, &g_row_capped);
         }
         // JSON adapters land with the per-provider decoders; until each is
         // written and fixtured, an unsupported format contributes nothing

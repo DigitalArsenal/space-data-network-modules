@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
+import { minizSourceFragments } from "./miniz-source.mjs";
+
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "cell_tower_source_module.cpp");
@@ -50,8 +52,29 @@ const headers = await Promise.all(
   ),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
+
+// ZIP INFLATE for the national bulk archives (ACMA/ISED/ANFR ship one ZIP
+// each). Vendored miniz 3.1.2, SHA-256 pinned per file and re-verified on every
+// build by miniz-source.mjs — the same sanctioned pattern
+// flows/supplemental-omm/nodes/providers/starlink uses, deliberately reused
+// rather than hand-rolling a second inflate in this repo.
+//
+// The fragments are PREPENDED to the translation unit (miniz.h then miniz.c),
+// exactly as build-provider.mjs orders them, because the module's decoders call
+// tinfl_* at namespace scope below.
+//
+// They define MINIZ_NO_ARCHIVE_APIS, so mz_zip_* does NOT exist here and the
+// module walks the central directory itself (zip_find_member). That is not a
+// workaround: mz_zip_reader_extract_to_heap materialises a whole member, and
+// ISED's single member inflates to 428 MB against a 128 MB ceiling that already
+// holds a 64 MB compressed body. tinfl_* survives the define (it is gated by
+// MINIZ_NO_INFLATE_APIS, which is not set) and is what the 32 KiB streaming
+// window uses.
+const minizFragments = await minizSourceFragments();
+
 const sourceCode = [
   ...headers.map(inlineGeneratedHeader),
+  ...minizFragments,
   implementationSource,
 ].join("\n\n");
 

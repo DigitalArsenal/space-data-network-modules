@@ -118,3 +118,61 @@ Why the sibling 14-feature `bakom-mobile-sites.sample.json` stays: it is the
 adapter's semantic fixture (four `techno_en` generations, the GE canton check on
 the LV95 transform). This one is the *population* fixture. They fail for
 different reasons and neither replaces the other.
+
+## The four national bulk archives (2026-08-14)
+
+`cell-tower-bulk-archive-adapters`. Four registers were verified live and then
+carried as `lane: "unavailable"` because the module decoded no ZIP and no
+protobuf. These fixtures are what unblocked them, and each is cut from a body
+fetched on 2026-08-14.
+
+| fixture | upstream | live body | contains | rows |
+|---|---|---|---|---|
+| `acma-rrl.slice.zip` | `cdn.acma.gov.au/rrl/spectra_rrl.zip` | 69,940,117 B, 31 members | `site.csv` header + first 200 data rows, verbatim | 200 |
+| `ised-sms-tafl.slice.zip` | `ic.gc.ca/engineering/SMS_TAFL_Files/TAFL_LTAF.zip` | 64,197,105 B, 1 member | `TAFL_LTAF.csv` first 200 rows incl. the UTF-8 BOM, verbatim | 200 |
+| `anfr-cartoradio.slice.zip` | `static.data.gouv.fr/.../20260630-export-etalab-data.zip` | 65,696,863 B, 5 members | `SUP_SUPPORT.txt` header + first 200 rows, verbatim | 200 |
+| `comreg-siteviewer.sample.pb` | `POST api-siteviewer.comreg.ie/mobile-masts/point` `{}` | 401,836 B, unauthenticated | first 250 complete protobuf records, byte-exact prefix | 250 |
+
+**Repacked containers, verbatim contents.** The three ZIPs are *re-packed* (the
+upstream archives are 64–70 MB and cannot live in the tree), but every CSV byte
+inside them is the upstream file's own — headers, quoting, delimiters, BOM and
+all. The ComReg fixture is not repacked at all: it is a byte-exact prefix of the
+live response, cut at a record boundary.
+
+**The two decoy members are deliberate.** `acma-rrl.slice.zip` carries a
+`device_details.csv` and `anfr-cartoradio.slice.zip` a `SUP_BANDE.txt`, both
+filled with junk rows. They stand in for the real siblings the decoders must
+never touch — 383,353,349 B and 203,638,089 B respectively — so that a decoder
+which starts extracting members it does not need fails a test instead of
+quietly exceeding the memory ceiling in production.
+
+**Why 200 rows and not more.** These fixtures exist to pin the COLUMN CONTRACTS,
+which is a per-row property; the population question is answered against the
+live archives instead (below). 200 is under the 1,000-row anonymous cap on
+purpose, so the cap tests can set a small `LIMIT` and observe it without the
+fixture's own size confounding the result.
+
+**Verified at real scale, 2026-08-14.** The fixtures pin the contracts; the full
+archives prove the streaming design holds. Each complete body was decoded
+through the compiled `dist/isomorphic/module.wasm`:
+
+| provider | compressed in | decoded out | wall |
+|---|---|---|---|
+| `acma-rrl` | 69,940,117 B | 129,334 sites | 5.4 s |
+| `ised-sms-tafl` | 64,197,105 B | 795,495 records | 25.4 s |
+| `anfr-cartoradio` | 65,696,863 B | 198,524 supports | 4.6 s |
+| `comreg-siteviewer` | 401,836 B | 9,646 masts | 0.1 s |
+
+The ANFR number is the corroboration worth keeping: `SUP_SUPPORT.txt` has
+198,525 lines including its header, so 198,524 is every support in the file and
+none invented. The ISED run is the one that justifies the whole streaming
+design — its single member inflates to 428,229,263 B, more than three times the
+flow's 128 MB linear-memory ceiling, and it is never materialised.
+
+**Licences.** ACMA's `LICENCE.TXT` was re-read from inside the live archive:
+Intellectual Property in the Register is retained by the ACMA, granting a
+non-transferable, non-exclusive licence to use, reproduce and adapt. It is NOT
+CC BY 4.0, and the registry string says so. ISED is the Open Government Licence
+– Canada; ANFR is Licence Ouverte 2.0; ComReg SiteViewer is CC BY 4.0. The
+fixtures are small extracts kept for regression testing; the full bodies are
+fetched at runtime and carry their attribution through `$TBS.SOURCES`.

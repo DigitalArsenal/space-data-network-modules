@@ -519,22 +519,43 @@ test("the bounded BAKOM row contract fetches only the sufficient GeoJSON prefix"
   assert.equal(descriptors[0].responseWire, "raw-body-v1");
 });
 
-test("a bulk-ingest-only provider names the missing capability and is never fetched", async (t) => {
+test("the four national bulk archives are fetched, not skipped", async (t) => {
+  // SUPERSEDES "a bulk-ingest-only provider names the missing capability and is
+  // never fetched" (graph: cell-tower-bulk-archive-adapters).
+  //
+  // That test pinned a REAL constraint honestly: each of these four was
+  // verified live and none was fetchable, because this module decoded no ZIP
+  // and no protobuf, and handing a ZIP to the CSV decoder returns 200 and
+  // parses to zero rows. Refusing to fetch them was the correct behaviour for
+  // as long as that was true.
+  //
+  // It is no longer true. miniz 3.1.2 is vendored and the module streams ZIP
+  // members through a 32 KiB window, and the ComReg wire shape was recovered
+  // from a live unauthenticated response. The decode side is covered by exact
+  // counts in tests/bulk-archives.test.mjs; what this asserts is the ROUTE
+  // side — the skip is gone and a descriptor is really emitted for each.
   const { descriptors, outcome } = await routeFor(t, {
     PROVIDERS: ["anfr-cartoradio", "acma-rrl", "ised-sms-tafl", "comreg-siteviewer"],
     METHOD: "CENTROID",
     LIMIT: 400,
   });
-  // Each of these was verified LIVE and is real. None is fetchable by this
-  // module, because it decodes no ZIP and no protobuf — and handing a ZIP to a
-  // CSV decoder returns 200 and parses to zero rows, which is precisely the
-  // failure this task exists to prevent, reproduced one layer along.
-  assert.equal(descriptors.length, 0, "a provider this module cannot decode was fetched");
+  assert.equal(descriptors.length, 4, "a national bulk archive was not fetched");
   for (const id of ["anfr-cartoradio", "acma-rrl", "ised-sms-tafl", "comreg-siteviewer"]) {
-    const skip = outcome.skipped.find((s) => s.provider_id === id);
-    assert.ok(skip, `${id} vanished instead of being reported`);
-    assert.equal(skip.bulkIngestOnly, true);
-    assert.match(skip.reason, /verified live/u, `${id} does not say what was measured`);
+    assert.ok(
+      descriptors.some((d) => d.provider_id === id),
+      `${id} produced no request descriptor`,
+    );
+    assert.equal(
+      outcome.skipped.find((s) => s.provider_id === id),
+      undefined,
+      `${id} is still skipped`,
+    );
+  }
+  // A ZIP is fetched WHOLE at every lane: its central directory is at the end
+  // of the file, so a Range prefix is undecodable rather than merely smaller.
+  for (const id of ["anfr-cartoradio", "acma-rrl", "ised-sms-tafl"]) {
+    const d = descriptors.find((x) => x.provider_id === id);
+    assert.equal(d.headers.range, undefined, `${id} asked for a byte range`);
   }
 });
 
