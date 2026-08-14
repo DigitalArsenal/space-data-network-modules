@@ -1,11 +1,11 @@
 {
   "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 7,
-  "edges": 13,
+  "nodes": 11,
+  "edges": 20,
   "triggers": 1,
   "capabilities": [
     "http",
@@ -13,10 +13,39 @@
     "secrets:cell_opencellid:write",
     "secrets:cell_wigle",
     "secrets:cell_wigle:write",
+    "storage_query",
     "wallet_sign"
   ],
   "engineLinkage": "bridge",
   "dispatch": [
+    {
+      "nodeId": "cache_plan",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "cache_plan",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "cache_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "mark_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "cache_freshness",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "cache_freshness",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
     {
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
@@ -70,10 +99,44 @@
   "dependencies": [
     {
       "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "version": "0.1.0",
+      "sha256": "c554334998f5f61de2ce12463b5f15412c45988c4619059d5133728bb13557b4",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_",
+      "methodSymbols": {
+        "cache_plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_cache_plan",
+        "cache_freshness": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_cache_freshness",
+        "mark_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_mark_query",
+        "ingest_plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_ingest_plan",
+        "ingest_meta": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_ingest_meta",
+        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c6c2d746f7765722d696e67657374_publish_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "version": "0.2.0",
+      "sha256": "b8ebf6b73d3166e373ce26bf6e59e3a4f0b474b732ffcf38697d4dff4b1cbad7",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_",
+      "methodSymbols": {
+        "query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_query",
+        "sandbox_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_sandbox_query"
+      }
+    },
+    {
+      "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.cell-tower-source",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "version": "0.1.0",
-      "sha256": "50e8f04f8abdf72636c59150f3def0e50b68183ed565828b4eee8ad6d6bbc6cc",
+      "sha256": "95b40baf3a716a365e37357107d38340ef1f0a7e4320d79c971fa88c7bc7d682",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -103,7 +166,7 @@
       "dependencyId": "com.digitalarsenal.data-source.cell-tower-credentials",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-credentials",
       "version": "0.1.0",
-      "sha256": "ee64e6b50094c34709b0983d266d00defb51749b0c22766f2a4323db32ecb0c6",
+      "sha256": "5703532559fa8a11b0cd50ee018b9d17629b55b9058768551bdc8fa669eb1b31",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -117,7 +180,7 @@
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.2.1",
-      "sha256": "4e02f83058f9b468f54d94a2baaf9d08f370cd3d64f0316fbf92f16a15ab9764",
+      "sha256": "ef8205cbcdeb4bb4cc29bd1a802d56d46cddba0137e737d6e651fd217ead195d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

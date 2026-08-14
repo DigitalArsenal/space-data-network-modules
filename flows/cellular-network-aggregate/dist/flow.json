@@ -1,9 +1,45 @@
 {
   "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
-  "version": "0.1.0",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
+  "version": "0.2.0",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. CACHE-FIRST since 2026-08-14 (graph task mod-cellular-aggregate-cache, owner: 'the cell towers should load almost instantaneously'). The ONE $HTQ request now enters at cell-tower-ingest:cache_plan, not at route. cache_plan reads the envelope and picks ONE lane. THE CACHE LANE (the default for an /aggregate read): it emits this dataset's DEFAULT FlatSQL query, hostcap/flatsql-query streams the stored rows back verbatim into foundation/http-respond's body, and a second query over the ingest resume marks feeds cache_freshness, which authors the decision envelope carrying cacheState/freshness/stale/per-provider progress so the UI shows staleness honestly rather than presenting a cached answer as a current one. That path is one SELECT and a byte forward - no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ is forwarded byte-for-byte to route, which behaves exactly as before - it reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; parse normalizes each provider's native payload into reports; deconflict merges them and emits a size-prefixed $TBS record stream. Before the gate existed that fan-out ran on EVERY request and cost ~9s on the live page; it is now the explicit-refresh path, while routine refresh belongs to the cellular-network-ingest timer flow. Exactly one lane emits per request, so two bodies can never race into respond. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes.",
   "nodes": [
+    {
+      "nodeId": "cache_plan",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "cache_plan",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "cache_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "capabilities": [
+        "storage_query"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "mark_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "capabilities": [
+        "storage_query"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "cache_freshness",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "cache_freshness",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
     {
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
@@ -100,6 +136,75 @@
     }
   ],
   "edges": [
+    {
+      "edgeId": "cacheplan-route",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "passthrough",
+      "toNodeId": "route",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16,
+      "opaque": true
+    },
+    {
+      "edgeId": "cacheplan-cacheread",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "query",
+      "toNodeId": "cache_read",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "cacheplan-markread",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "mark_query",
+      "toNodeId": "mark_read",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "cacheplan-freshness-job",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "job",
+      "toNodeId": "cache_freshness",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "markread-freshness",
+      "fromNodeId": "mark_read",
+      "fromPortId": "stream",
+      "toNodeId": "cache_freshness",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "cacheread-respond",
+      "fromNodeId": "cache_read",
+      "fromPortId": "stream",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "freshness-respond",
+      "fromNodeId": "cache_freshness",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
     {
       "edgeId": "route-http",
       "fromNodeId": "route",
@@ -241,7 +346,7 @@
   "triggerBindings": [
     {
       "triggerId": "http-request",
-      "targetNodeId": "route",
+      "targetNodeId": "cache_plan",
       "targetPortId": "request",
       "backpressurePolicy": "queue",
       "queueDepth": 16
@@ -251,7 +356,9 @@
     "com.digitalarsenal.data-source.cell-tower-source",
     "com.digitalarsenal.hostcap.http-request",
     "com.digitalarsenal.foundation.http-respond",
-    "com.digitalarsenal.data-source.cell-tower-credentials"
+    "com.digitalarsenal.data-source.cell-tower-credentials",
+    "com.digitalarsenal.data-source.cell-tower-ingest",
+    "com.digitalarsenal.hostcap.flatsql-query"
   ],
   "api": {
     "tag": "cellular",
@@ -278,14 +385,14 @@
         "method": "PUT",
         "operationId": "storeCellularProviderCredential",
         "summary": "Store a browser-sealed provider credential in the node's credential store",
-        "description": "Takes the node's own keyslot envelope ({slotId, ephemeralPublicKey, nonce, ciphertext}), asks the host to open it, and writes the result to the machine-bound credential store under the lane cell_<providerId>. The value is never echoed, logged or readable back through any route. NOT ANONYMOUS, and deliberately so: an anonymous visitor overwriting this node's provider credentials would change what every other viewer's run does. There is no plaintext branch — a caller who cannot seal cannot store.",
+        "description": "Takes the node's own keyslot envelope ({slotId, ephemeralPublicKey, nonce, ciphertext}), asks the host to open it, and writes the result to the machine-bound credential store under the lane cell_<providerId>. The value is never echoed, logged or readable back through any route. NOT ANONYMOUS, and deliberately so: an anonymous visitor overwriting this node's provider credentials would change what every other viewer's run does. There is no plaintext branch \u2014 a caller who cannot seal cannot store.",
         "anonymous": false,
         "params": [
           {
             "name": "providerId",
             "in": "path",
             "required": true,
-            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry — never a lane name the caller supplies.",
+            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry \u2014 never a lane name the caller supplies.",
             "schema": {
               "type": "string"
             }
@@ -304,7 +411,7 @@
             "name": "providerId",
             "in": "path",
             "required": true,
-            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry — never a lane name the caller supplies.",
+            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry \u2014 never a lane name the caller supplies.",
             "schema": {
               "type": "string"
             }

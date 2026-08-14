@@ -365,21 +365,319 @@ std::string mark_json(const std::string& provider_id, const std::string& source_
            ",\"batch_id\":\"" + json_escape(batch_id) + "\"}";
 }
 
+// ── $HTQ request envelope (read-only) ──────────────────────────────────────
+//
+// The cache lane sits in FRONT of cell-tower-source's `route`, so it has to read
+// the same envelope `route` reads in order to decide whether a request can be
+// answered from the store. Hand-decoded exactly as cell-tower-source does it
+// (cell_tower_source_module.cpp:2374) — one table, six fields, slots
+// METHOD=0, PATH=1, QUERY=2, HEADERS=3, BODY=4, REMOTE=5. Deliberately a COPY
+// rather than a shared header: this reader is READ-ONLY and never constructs an
+// envelope, and linking the two plugins' sources together would drag
+// cell-tower-source's whole provider registry into a plugin whose entire point
+// is that it holds none.
+struct HtqPeek {
+    const uint8_t* buf = nullptr;
+    uint32_t len = 0;
+    uint32_t root = 0;
+    uint32_t vtable = 0;
+    uint16_t vtable_len = 0;
+
+    bool init(const uint8_t* data, uint32_t size) {
+        if (!data || size < 8) return false;
+        buf = data;
+        len = size;
+        root = rd32(0);
+        if (root + 4 > len) return false;
+        const int32_t soffset = static_cast<int32_t>(rd32(root));
+        const int64_t vt = static_cast<int64_t>(root) - soffset;
+        if (vt < 0 || vt + 4 > len) return false;
+        vtable = static_cast<uint32_t>(vt);
+        vtable_len = rd16(vtable);
+        return true;
+    }
+    uint32_t rd32(uint32_t at) const {
+        return static_cast<uint32_t>(buf[at]) | (static_cast<uint32_t>(buf[at + 1]) << 8) |
+               (static_cast<uint32_t>(buf[at + 2]) << 16) |
+               (static_cast<uint32_t>(buf[at + 3]) << 24);
+    }
+    uint16_t rd16(uint32_t at) const {
+        return static_cast<uint16_t>(buf[at]) | (static_cast<uint16_t>(buf[at + 1]) << 8);
+    }
+    uint16_t slot(int index) const {
+        const uint32_t at = vtable + 4 + static_cast<uint32_t>(index) * 2;
+        if (at + 2 > vtable + vtable_len || at + 2 > len) return 0;
+        return rd16(at);
+    }
+    std::string str(int index) const {
+        const uint16_t rel = slot(index);
+        if (!rel) return std::string();
+        const uint32_t at = root + rel;
+        if (at + 4 > len) return std::string();
+        const uint32_t off = at + rd32(at);
+        if (off + 4 > len) return std::string();
+        const uint32_t n = rd32(off);
+        if (off + 4 + n > len) return std::string();
+        return std::string(reinterpret_cast<const char*>(buf + off + 4), n);
+    }
+};
+
+std::string upper_ascii(const std::string& s) {
+    std::string out = s;
+    for (char& c : out) {
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    }
+    return out;
+}
+
+bool json_bool_or(const std::string& json, const char* key, bool fallback) {
+    const std::string needle = std::string("\"") + key + "\"";
+    const size_t k = json.find(needle);
+    if (k == std::string::npos) return fallback;
+    const size_t colon = json.find(':', k + needle.size());
+    if (colon == std::string::npos) return fallback;
+    size_t i = colon + 1;
+    while (i < json.size() && is_ws(json[i])) i++;
+    if (json.compare(i, 4, "true") == 0) return true;
+    if (json.compare(i, 5, "false") == 0) return false;
+    return fallback;
+}
+
+bool path_has_segment(const std::string& path, const char* segment) {
+    return path.find(segment) != std::string::npos;
+}
+
+// THE DEFAULT QUERY. This is the per-dataset default FlatSQL query of
+// `sdn-dataset-default-query-materialized-cache`, in its first concrete
+// instance: the SQL is node CONFIG (`cell_cache_sql`), not a compiled-in
+// constant, so an operator retargets the cache without a rebuild. The default
+// names the table the cellular ingest lane's storage writes land in
+// (`sds_<lowercased SDS type>`, the convention hostcap/flatsql-store encodes at
+// flatsql_store_module.cpp:137) and takes the row cap as a bound parameter, so
+// the caller's LIMIT still bounds the answer.
+constexpr const char* kDefaultCacheSql = "SELECT data FROM sds_tbs ORDER BY rowid DESC LIMIT ?";
+constexpr long kDefaultCacheMaxRows = 5000;
+
 }  // namespace
 
 extern "C" {
+
+// ---------------------------------------------------------------------------
+// cache_plan — THE CACHE GATE. Owner 2026-08-14: "the cell towers should load
+// almost instantaneously."
+//
+// This node sits between the flow's ONE http trigger and cell-tower-source's
+// `route`, and it is the whole reason the request path stops costing ~9s. Before
+// this existed, every /aggregate request fanned out a live GET per provider and
+// merged the bodies while the caller waited. Now:
+//
+//   * an /aggregate read is answered FROM THE STORE — one FlatSQL SELECT over
+//     rows the cellular-network-ingest timer already persisted, streamed back
+//     verbatim by hostcap/flatsql-query;
+//   * every other route (/providers, /credentials/*) and any request that asks
+//     for `REFRESH: true` is PASSED THROUGH to `route` unchanged, so the live
+//     provider lane is intact and reachable, just no longer the default;
+//   * provider refresh is the timer flow's job (flows/cellular-network-ingest),
+//     never the request path's.
+//
+// It emits NOTHING on the cache ports when it passes through, and nothing on
+// `passthrough` when it serves from cache, so exactly one lane answers and the
+// two bodies can never race into `respond`.
+//
+// NO NEW HOST SURFACE. This is `plugin.getConfig` plus two flatsql-query frames
+// over the existing generic hooks; the plugin stays `capabilities: []`.
+// ---------------------------------------------------------------------------
+int cache_plan(void) {
+    if (refuse_batched()) return 500;
+
+    const plugin_input_frame_t* frame = frame_for("request");
+    if (!frame || !frame->payload || frame->payload_length == 0) {
+        plugin_set_error("missing-request-frame",
+                         "cache_plan requires the $HTQ request frame on port \"request\".");
+        return 400;
+    }
+
+    // A FORWARD ON EVERY UNCERTAINTY. If the envelope cannot be read, this node
+    // does not get to decide anything — it hands the frame to `route`, which
+    // owns the error vocabulary for a malformed request. Answering an
+    // unreadable request out of the cache would serve the last good answer to a
+    // request nobody could parse.
+    HtqPeek htq;
+    const bool readable = htq.init(frame->payload, frame->payload_length);
+    const std::string path = readable ? htq.str(1) : std::string();
+    const std::string verb = readable ? upper_ascii(htq.str(0)) : std::string();
+    const std::string body = readable ? htq.str(4) : std::string();
+
+    const bool is_aggregate = readable && !path_has_segment(path, "/providers") &&
+                              !path_has_segment(path, "/credentials/") &&
+                              (verb == "POST" || verb == "GET");
+    // REFRESH is the caller's explicit "go to the providers now". It is opt-IN:
+    // a default that refreshed would put the 9 s back for everyone.
+    const bool refresh = json_bool_or(body, "REFRESH", false);
+
+    if (!is_aggregate || refresh) {
+        // Verbatim forward. The payload is re-pushed byte-for-byte as aligned
+        // binary — `route` re-decodes the same $HTQ this node just read, and no
+        // field is re-serialised in between where it could drift.
+        const int32_t pushed = plugin_push_output_ex(
+            "passthrough", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0,
+            8, frame->payload, frame->payload_length);
+        return pushed < 0 ? 500 : 0;
+    }
+
+    const std::string config = load_config();
+    const std::string sql = config_string(config, "cell_cache_sql", kDefaultCacheSql);
+    long max_rows = static_cast<long>(json_number_or(config, "cell_cache_max_rows",
+                                                     static_cast<double>(kDefaultCacheMaxRows)));
+    if (max_rows <= 0) max_rows = kDefaultCacheMaxRows;
+    long limit = static_cast<long>(json_number_or(body, "LIMIT", 2000));
+    if (limit <= 0) limit = 2000;
+    if (limit > max_rows) limit = max_rows;
+
+    char limit_buf[32];
+    std::snprintf(limit_buf, sizeof(limit_buf), "%ld", limit);
+
+    const std::string query = std::string("{\"sql\":\"") + json_escape(sql) +
+                              "\",\"params\":[{\"t\":\"i64\",\"v\":" + limit_buf + "}]}";
+    if (push_json("query", query) < 0) return 500;
+
+    // The freshness read is a SECOND query, not a join onto the first: the
+    // records answer must stream back verbatim to the caller, and mixing
+    // bookkeeping columns into it would corrupt the record stream.
+    const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
+    const std::string mark_sql = std::string("{\"sql\":\"SELECT * FROM ") + kMarkTable +
+                                 "\",\"params\":[]}";
+    if (push_json("mark_query", mark_sql) < 0) return 500;
+
+    const std::string job = std::string("{\"route\":\"cellular-aggregate-cache\"") +
+                            ",\"limit\":" + limit_buf + ",\"maxRows\":" +
+                            std::to_string(max_rows) + ",\"provider_id\":\"" +
+                            json_escape(provider) + "\"" + ",\"sql\":\"" + json_escape(sql) + "\"}";
+    return push_json("job", job) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// cache_freshness — the honest half of the cache.
+//
+// A cache that answers instantly and says nothing about its age is worse than
+// the 9 s fetch it replaced, because a stale answer becomes indistinguishable
+// from a current one. This node authors the decision envelope that rides beside
+// the cached record stream, and it exists so that the UI can say WHEN the towers
+// it is drawing were last ingested.
+//
+// It reports what it can actually establish and refuses to invent the rest:
+//
+//   * `cacheState: "empty"` when the ingest lane has left no mark at all. That
+//     is the "no fake instant-but-empty answers" case from the task — the
+//     answer is instant AND empty, and the envelope says so, names the reason,
+//     and tells the caller that REFRESH:true reaches the providers directly.
+//   * `cacheState: "warm"` when a mark exists, with the provider and byte
+//     progress the mark carries.
+//   * `freshness: "unavailable"` when the mark frame is present but not
+//     readable as the JSON `ingest_plan` already expects on this port
+//     (cell_tower_ingest_module.cpp `ingest_plan`, port "mark"). The read side
+//     of the mark lane is not yet closed end-to-end (see the file header), and
+//     a timestamp guessed at here would be a lie with a number on it.
+// ---------------------------------------------------------------------------
+int cache_freshness(void) {
+    if (refuse_batched()) return 500;
+
+    const std::string job = input_text("job");
+    if (job.empty()) {
+        plugin_set_error("missing-job-frame",
+                         "cache_freshness requires the cache job frame from cache_plan.");
+        return 400;
+    }
+    const long limit = static_cast<long>(json_number_or(job, "limit", 0));
+    std::string provider;
+    json_string_field(job, "provider_id", &provider);
+
+    const std::string mark = input_text("mark");
+
+    std::string state = "empty";
+    std::string freshness = "unknown";
+    std::string detail;
+    bool stale = true;
+
+    if (!mark.empty()) {
+        std::string mark_provider;
+        if (json_string_field(mark, "provider_id", &mark_provider)) {
+            const long next_offset = static_cast<long>(json_number_or(mark, "next_offset", 0));
+            const long total_bytes = static_cast<long>(json_number_or(mark, "total_bytes", 0));
+            const long chunk_index = static_cast<long>(json_number_or(mark, "chunk_index", 0));
+            state = "warm";
+            freshness = (total_bytes > 0 && next_offset >= total_bytes) ? "complete" : "ingesting";
+            stale = freshness != "complete";
+            char buf[224];
+            std::snprintf(buf, sizeof(buf),
+                          ",\"providers\":[{\"providerId\":\"%s\",\"nextOffset\":%ld"
+                          ",\"totalBytes\":%ld,\"chunkIndex\":%ld,\"state\":\"%s\"}]",
+                          json_escape(mark_provider).c_str(), next_offset, total_bytes, chunk_index,
+                          freshness.c_str());
+            detail = buf;
+        } else {
+            state = "warm";
+            freshness = "unavailable";
+            detail =
+                ",\"providers\":[],\"freshnessReason\":\"the resume-mark row is not readable as "
+                "JSON on this port; the mark read lane is not closed end-to-end yet\"";
+        }
+    } else {
+        detail = std::string(
+                     ",\"providers\":[],\"freshnessReason\":\"no ingest mark for provider \\\"") +
+                 json_escape(provider) +
+                 "\\\" — the cellular-network-ingest timer has not stored anything yet; POST "
+                 "{\\\"REFRESH\\\":true} to reach the providers directly\"";
+    }
+
+    // THE FRESHNESS MUST REACH THE CALLER, and the body is a verbatim FlatBuffer
+    // stream that cannot carry it. So it rides as response HEADERS, through
+    // foundation/http-respond's `decision.headers` passthrough — string values
+    // only, which is why `providers` is serialised into one compact string
+    // rather than nested. The same fields stay on the decision object itself so
+    // an in-flow consumer reads them structurally.
+    std::string providers_header = detail;
+    const size_t marker = providers_header.find("\"providers\":");
+    providers_header = marker == std::string::npos
+                           ? std::string("[]")
+                           : providers_header.substr(marker + 12);
+    const size_t close = providers_header.find(']');
+    providers_header =
+        close == std::string::npos ? std::string("[]") : providers_header.substr(0, close + 1);
+
+    const std::string headers = std::string(",\"headers\":{\"x-sdn-cache\":\"") + state + "\"" +
+                                ",\"x-sdn-cache-freshness\":\"" + freshness + "\"" +
+                                ",\"x-sdn-cache-stale\":\"" + (stale ? "true" : "false") + "\"" +
+                                ",\"x-sdn-cache-providers\":\"" + json_escape(providers_header) +
+                                "\"}";
+
+    const std::string decision =
+        std::string("{\"route\":\"cellular-aggregate-cache\",\"format\":\"record-stream\"") +
+        ",\"status\":200,\"served\":\"cache\"" + ",\"cacheState\":\"" + state + "\"" +
+        ",\"freshness\":\"" + freshness + "\"" + ",\"stale\":" + (stale ? "true" : "false") +
+        ",\"limit\":" + std::to_string(limit) + detail + headers + "}";
+    return push_json("decision", decision) < 0 ? 500 : 0;
+}
 
 // mark_query: timer tick -> the flatsql-query JSON that reads this provider's
 // resume mark back. It is a SEPARATE node from ingest_plan on purpose: the plan
 // needs the mark as an input, and a node that emitted its own input would be a
 // cycle in the flow graph.
+//
+// EMITS {"sql","params"}, NOT {"table","where","limit"}. The original shape was
+// refused by the node that consumes it: hostcap/flatsql-query's `query` reads
+// `sql` and returns 400 `missing-sql` for anything else
+// (hostcap/flatsql-query/src/flatsql_query_module.cpp:465-469), so the mark read
+// could never have executed. It is fixed on discovery rather than filed, per the
+// standing rule on broken basics.
 int mark_query(void) {
     if (refuse_batched()) return 500;
     const std::string config = load_config();
     const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
-    const std::string query = std::string("{\"table\":\"") + kMarkTable + "\"" +
-                              ",\"where\":{\"provider_id\":\"" + json_escape(provider) + "\"}" +
-                              ",\"limit\":1}";
+    const std::string query = std::string("{\"sql\":\"SELECT * FROM ") + kMarkTable +
+                              " WHERE provider_id = ? LIMIT 1\"" +
+                              ",\"params\":[{\"t\":\"str\",\"v\":\"" + json_escape(provider) +
+                              "\"}]}";
     return push_json("query", query) < 0 ? 500 : 0;
 }
 

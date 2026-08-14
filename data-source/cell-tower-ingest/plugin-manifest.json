@@ -20,6 +20,212 @@
   "externalInterfaces": [],
   "methods": [
     {
+      "methodId": "cache_plan",
+      "displayName": "Answer from the store, or pass the request through",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-htq-request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ request envelope from the flow's ONE http trigger.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $HTQ request envelope from the flow's ONE http trigger."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "passthrough",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-htq-request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ forwarded byte-for-byte to cell-tower-source's route. Emitted ONLY for non-aggregate routes (/providers, /credentials/*) and for an explicit REFRESH request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The $HTQ forwarded byte-for-byte to cell-tower-source's route. Emitted ONLY for non-aggregate routes (/providers, /credentials/*) and for an explicit REFRESH request."
+        },
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The DEFAULT FlatSQL query for this dataset ({sql,params}) reading the cached aggregate out of the store. Emitted only on the cache-served lane.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The DEFAULT FlatSQL query for this dataset ({sql,params}) reading the cached aggregate out of the store. Emitted only on the cache-served lane."
+        },
+        {
+          "portId": "mark_query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-mark-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "A second {sql,params} frame reading the ingest resume marks, so the answer can report its own age.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A second {sql,params} frame reading the ingest resume marks, so the answer can report its own age."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The cache run contract for cache_freshness (limit, provider, effective sql).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The cache run contract for cache_freshness (limit, provider, effective sql)."
+        }
+      ],
+      "description": "THE CACHE GATE (owner 2026-08-14: 'the cell towers should load almost instantaneously'). Sits between the flow's one http trigger and cell-tower-source's route. An /aggregate read is answered FROM THE STORE - one FlatSQL SELECT over rows the cellular-network-ingest timer already persisted, streamed back verbatim by hostcap/flatsql-query - instead of fanning out a live GET per provider and merging the bodies while the caller waits (~9s on the live page). Every other route, and any request carrying REFRESH:true, is passed through to route UNCHANGED, so the live provider lane stays intact and reachable; it is simply no longer the default. Provider refresh belongs to the timer flow, never the request path. Emits on exactly ONE lane per request, so two bodies can never race into respond. The SQL is node CONFIG (cell_cache_sql), not a compiled-in constant - this is the first concrete instance of the per-dataset DEFAULT QUERY contract (graph task sdn-dataset-default-query-materialized-cache). A request whose envelope cannot be read is FORWARDED, never answered from cache: serving the last good answer to a request nobody could parse is the one failure this gate must not introduce. NO NEW HOST SURFACE - plugin.getConfig plus flatsql-query frames over existing generic hooks; the plugin stays capabilities []. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "cache_freshness",
+      "displayName": "Author the cache freshness envelope",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The cache run contract from cache_plan.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The cache run contract from cache_plan."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The ingest resume-mark rows read back by hostcap/flatsql-query. Absent before the ingest lane has stored anything.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The ingest resume-mark rows read back by hostcap/flatsql-query. Absent before the ingest lane has stored anything."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The http-respond decision envelope carrying cacheState, freshness, stale and per-provider ingest progress.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The http-respond decision envelope carrying cacheState, freshness, stale and per-provider ingest progress."
+        }
+      ],
+      "description": "THE HONEST HALF OF THE CACHE. A cache that answers instantly and says nothing about its age is worse than the fetch it replaced, because a stale answer becomes indistinguishable from a current one. This node authors the decision envelope that rides beside the cached record stream so the UI can say WHEN the towers it is drawing were ingested. It reports only what it can establish: cacheState 'empty' when the ingest lane has left no mark (instant AND empty, with the reason named and REFRESH:true offered as the direct route to the providers - the task's 'no fake instant-but-empty answers'); cacheState 'warm' with the provider and byte progress the mark carries; and freshness 'unavailable' when a mark frame is present but not readable as the JSON ingest_plan already expects on this port, because the mark read lane is not yet closed end-to-end and a timestamp guessed at here would be a lie with a number on it. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
       "methodId": "mark_query",
       "displayName": "Read the resume mark",
       "inputPorts": [

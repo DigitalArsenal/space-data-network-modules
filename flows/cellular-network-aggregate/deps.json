@@ -1,0 +1,8 @@
+{
+  "com.digitalarsenal.data-source.cell-tower-source": "../../data-source/cell-tower-source",
+  "com.digitalarsenal.data-source.cell-tower-credentials": "../../data-source/cell-tower-credentials",
+  "com.digitalarsenal.data-source.cell-tower-ingest": "../../data-source/cell-tower-ingest",
+  "com.digitalarsenal.hostcap.http-request": "../../hostcap/http-request",
+  "com.digitalarsenal.hostcap.flatsql-query": "../../hostcap/flatsql-query",
+  "com.digitalarsenal.foundation.http-respond": "../../foundation/http-respond"
+}

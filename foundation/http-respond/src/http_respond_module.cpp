@@ -275,6 +275,125 @@ struct HeaderEntry {
     std::string value;
 };
 
+// ---------------------------------------------------------------------------
+// decision.headers — the producer's own response headers.
+//
+// This node's header set was previously CLOSED: content-type, x-sdn-record-count
+// and etag, and nothing a producing node could add. That is the right default
+// for a body, and the wrong one for metadata ABOUT the body — a producer with
+// something the caller must know cannot say it without corrupting the record
+// stream it is streaming back.
+//
+// The case that forced it (graph task mod-cellular-aggregate-cache) is cache
+// freshness: the cellular aggregate now answers from the node's store in
+// milliseconds instead of fetching every provider on the request path, and an
+// instant answer that cannot say HOW OLD it is turns a stale result into
+// something indistinguishable from a current one. The freshness has to ride
+// beside a verbatim FlatBuffer stream, so it has to be a header.
+//
+// Deliberately narrow, because this is a shared foundation node:
+//   * STRING VALUES ONLY, one flat object — no nesting, no arrays, no numbers.
+//     A producer serialises its own structure into a string if it needs one.
+//   * Names are LOWER-CASED here, matching the rest of this node's contract.
+//   * CR/LF are STRIPPED from both name and value. A header value is the one
+//     place a guest could otherwise inject a second header, or a body, into a
+//     response it does not own.
+//   * The RESERVED names this node computes itself (content-type,
+//     x-sdn-record-count, etag) are REFUSED rather than overridden: a producer
+//     that could rewrite content-type could make a FlatBuffer stream claim to
+//     be json and be believed.
+//   * Capped at 16 entries and 1 KiB per value.
+// Absent or malformed `headers` is a NO-OP, never an error: every flow that
+// does not use this is unaffected.
+// ---------------------------------------------------------------------------
+std::string json_object_slice(const std::string& json, const std::string& key);
+
+bool is_reserved_header(const std::string& name) {
+    return name == "content-type" || name == "x-sdn-record-count" || name == "etag";
+}
+
+void append_decision_headers(const std::string& decision, std::vector<HeaderEntry>* out) {
+    const std::string object = json_object_slice(decision, "headers");
+    if (object.size() < 2) return;
+
+    constexpr size_t kMaxHeaders = 16;
+    constexpr size_t kMaxValueLength = 1024;
+
+    // Walk the flat object: "name" : "value" pairs, skipping any value that is
+    // not a string (an object/array/number is a producer error, not a header).
+    size_t i = 1;  // past '{'
+    while (i < object.size() && out->size() < kMaxHeaders) {
+        while (i < object.size() && (is_json_ws(object[i]) || object[i] == ',')) i++;
+        if (i >= object.size() || object[i] != '"') break;
+
+        std::string name;
+        i++;
+        while (i < object.size() && object[i] != '"') {
+            if (object[i] == '\\' && i + 1 < object.size()) {
+                name.push_back(object[i + 1]);
+                i += 2;
+            } else {
+                name.push_back(object[i]);
+                i++;
+            }
+        }
+        i++;  // past closing quote
+        while (i < object.size() && is_json_ws(object[i])) i++;
+        if (i >= object.size() || object[i] != ':') break;
+        i++;
+        while (i < object.size() && is_json_ws(object[i])) i++;
+        if (i >= object.size()) break;
+        if (object[i] != '"') {
+            // Skip a non-string value without trying to interpret it.
+            int depth = 0;
+            bool in_string = false;
+            for (; i < object.size(); i++) {
+                const char c = object[i];
+                if (in_string) {
+                    if (c == '\\') i++;
+                    else if (c == '"') in_string = false;
+                    continue;
+                }
+                if (c == '"') in_string = true;
+                else if (c == '{' || c == '[') depth++;
+                else if (c == '}' || c == ']') {
+                    if (depth == 0) break;
+                    depth--;
+                } else if (c == ',' && depth == 0) break;
+            }
+            continue;
+        }
+
+        std::string value;
+        i++;
+        while (i < object.size() && object[i] != '"') {
+            if (object[i] == '\\' && i + 1 < object.size()) {
+                const char esc = object[i + 1];
+                value.push_back(esc == 'n' ? '\n' : (esc == 't' ? '\t' : esc));
+                i += 2;
+            } else {
+                value.push_back(object[i]);
+                i++;
+            }
+        }
+        i++;
+
+        std::string clean_name;
+        for (const char c : name) {
+            if (c == '\r' || c == '\n' || c == ':') continue;
+            clean_name.push_back(c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c);
+        }
+        std::string clean_value;
+        for (const char c : value) {
+            if (c == '\r' || c == '\n') continue;
+            clean_value.push_back(c);
+            if (clean_value.size() >= kMaxValueLength) break;
+        }
+        if (clean_name.empty() || is_reserved_header(clean_name)) continue;
+        out->push_back({clean_name, clean_value});
+    }
+}
+
 int push_response_with_ref(uint16_t status, const std::vector<HeaderEntry>& headers,
                            const uint8_t* body, size_t body_length,
                            uint64_t body_ref_token, uint64_t body_ref_size) {
@@ -526,6 +645,7 @@ int respond(void) {
 
     std::vector<HeaderEntry> headers;
     headers.push_back({"content-type", format == "json" ? kContentTypeJson : kContentTypeStream});
+    append_decision_headers(decision, &headers);
     if (format == "json") {
         // Bare top-level array body: the count header carries the record
         // count the {"records":…,"count":N} envelope used to (json body

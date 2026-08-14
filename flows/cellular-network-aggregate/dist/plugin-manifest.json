@@ -1,18 +1,29 @@
 {
   "pluginId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. One $HTQ request enters on the http-request trigger; cell-tower-source `route` reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; `parse` normalizes each provider's native payload into reports; `deconflict` merges them across providers and emits a size-prefixed $TBS record stream, which foundation/http-respond writes back to the caller. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy and no record semantics — it mounts a route and moves bytes. Configuration is request-scoped, so two callers may ask for different provider sets concurrently without either changing node state.",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. CACHE-FIRST since 2026-08-14 (graph task mod-cellular-aggregate-cache, owner: 'the cell towers should load almost instantaneously'). The ONE $HTQ request now enters at cell-tower-ingest:cache_plan, not at route. cache_plan reads the envelope and picks ONE lane. THE CACHE LANE (the default for an /aggregate read): it emits this dataset's DEFAULT FlatSQL query, hostcap/flatsql-query streams the stored rows back verbatim into foundation/http-respond's body, and a second query over the ingest resume marks feeds cache_freshness, which authors the decision envelope carrying cacheState/freshness/stale/per-provider progress so the UI shows staleness honestly rather than presenting a cached answer as a current one. That path is one SELECT and a byte forward - no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ is forwarded byte-for-byte to route, which behaves exactly as before - it reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; parse normalizes each provider's native payload into reports; deconflict merges them and emits a size-prefixed $TBS record stream. Before the gate existed that fan-out ran on EVERY request and cost ~9s on the live page; it is now the explicit-refresh path, while routine refresh belongs to the cellular-network-ingest timer flow. Exactly one lane emits per request, so two bodies can never race into respond. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes.",
   "capabilities": [
     "http",
     "secrets:cell_opencellid",
     "secrets:cell_opencellid:write",
     "secrets:cell_wigle",
     "secrets:cell_wigle:write",
+    "storage_query",
     "wallet_sign"
   ],
   "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
     {
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "minVersion": "0.1.0",
@@ -35,6 +46,21 @@
     }
   ],
   "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-query-stream",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
+      "properties": {
+        "hostOps": [
+          "storage.flatsql_query_stream",
+          "storage.query_sandboxed",
+          "storage.query_surface"
+        ]
+      }
+    },
     {
       "interfaceId": "host-http",
       "kind": "host-service",
@@ -59,24 +85,24 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-http-request-envelope",
+              "setId": "sdn-htq-request",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The $HTQ HttpRequest envelope the host pumps at the flow ingress.",
+              "description": "The $HTQ request envelope from the flow's ONE http trigger.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Host-http trigger envelope produced by the flow runtime; its shape is defined by the host's http mount, not by SDS."
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The HTTP request envelope."
+          "description": "The $HTQ request envelope from the flow's ONE http trigger."
         }
       ],
       "outputPorts": [
@@ -129,6 +155,42 @@
     }
   ],
   "flowNodes": [
+    {
+      "nodeId": "cache_plan",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "cache_plan",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "cache_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "mark_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "cache_freshness",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "cache_freshness",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
     {
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
@@ -194,6 +256,111 @@
     }
   ],
   "flowEdges": [
+    {
+      "edgeId": "cacheplan-route",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "passthrough",
+      "toNodeId": "route",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "cacheplan-cacheread",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "query",
+      "toNodeId": "cache_read",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "cacheplan-markread",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "mark_query",
+      "toNodeId": "mark_read",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "cacheplan-freshness-job",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "job",
+      "toNodeId": "cache_freshness",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "markread-freshness",
+      "fromNodeId": "mark_read",
+      "fromPortId": "stream",
+      "toNodeId": "cache_freshness",
+      "toPortId": "mark",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "cacheread-respond",
+      "fromNodeId": "cache_read",
+      "fromPortId": "stream",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "freshness-respond",
+      "fromNodeId": "cache_freshness",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
     {
       "edgeId": "route-http",
       "fromNodeId": "route",
@@ -424,7 +591,7 @@
   "flowTriggerBindings": [
     {
       "triggerId": "http-request",
-      "targetNodeId": "route",
+      "targetNodeId": "cache_plan",
       "targetPortId": "request"
     }
   ],
