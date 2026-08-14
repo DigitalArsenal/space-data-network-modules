@@ -1290,6 +1290,14 @@ bool decode_opencellid_bulk_gz(const ProviderSpec& spec, const std::string& body
     const uint8_t* data = reinterpret_cast<const uint8_t*>(body.data());
     size_t size = body.size();
 
+    // Is this a CONTINUATION? Read before `header_done` is set below, because
+    // it is also the answer to "has the CSV header row already gone past?".
+    // Deriving that from `rows_seen > 0` instead would be wrong for a first
+    // chunk that ended after the header and before any data row: the next
+    // chunk would then eat a real row as a header. A 32 MiB window makes that
+    // impossible in practice, which is exactly why it would never be found.
+    const bool resuming = resume->header_done;
+
     if (resume->header_done) {
         // Mid-stream. A mark this build cannot read means RESTART, announced by
         // leaving next_byte at 0, never a resume into a foreign struct.
@@ -1312,7 +1320,7 @@ bool decode_opencellid_bulk_gz(const ProviderSpec& spec, const std::string& body
     std::map<std::string, SiteAccumulator> sites;
     std::vector<std::string> order;  // emission order = first sighting, stable
     std::vector<std::string> header_cells;
-    bool header_seen = resume->rows_seen > 0;  // a later chunk has no header row
+    bool header_seen = resuming;  // a later chunk has no header row
     bool capped = false;
 
     const size_t header_bytes = body.size() - size;  // 0 on a resumed chunk
