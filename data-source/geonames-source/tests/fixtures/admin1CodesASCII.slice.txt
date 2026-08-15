@@ -1,0 +1,6 @@
+AD.06	Sant Julià de Loria	Sant Julia de Loria	3039162
+AD.05	Ordino	Ordino	3039676
+AD.04	La Massana	La Massana	3040131
+AD.03	Encamp	Encamp	3040684
+AD.02	Canillo	Canillo	3041203
+AD.07	Andorra la Vella	Andorra la Vella	3041566

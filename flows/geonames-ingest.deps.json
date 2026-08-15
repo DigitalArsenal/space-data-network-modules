@@ -1,0 +1,7 @@
+{
+  "com.digitalarsenal.data-source.geonames-ingest": "../data-source/geonames-ingest",
+  "com.digitalarsenal.data-source.geonames-source": "../data-source/geonames-source",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest",
+  "com.digitalarsenal.hostcap.flatsql-query": "../hostcap/flatsql-query"
+}

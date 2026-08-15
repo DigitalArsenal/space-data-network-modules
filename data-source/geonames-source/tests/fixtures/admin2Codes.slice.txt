@@ -1,0 +1,6 @@
+AE.01.101	Abu Dhabi Municipality	Abu Dhabi Municipality	12047239
+AE.01.102	Al Ain Municipality	Al Ain Municipality	12047240
+AE.01.103	Al Dhafra	Al Dhafra	12047241
+AE.04.701	Al Fujairah Municipality	Al Fujairah Municipality	12047242
+AE.04.702	Dibba Al Fujairah Municipality	Dibba Al Fujairah Municipality	12047243
+AE.06.302	Dhaid	Dhaid	12060391

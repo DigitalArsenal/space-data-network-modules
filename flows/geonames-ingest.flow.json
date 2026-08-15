@@ -1,0 +1,509 @@
+{
+  "programId": "com.digitalarsenal.flows.geonames-ingest",
+  "name": "GeoNames Gazetteer Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Scheduled ingest of a gazetteer into $GNP. A 24 h host-cron TICK enters at geonames-ingest:mark_query, which builds the flatsql-query that reads this dataset's durable resume mark; hostcap/flatsql-query returns it to geonames-ingest:ingest_plan, which decides between three outcomes and only three. FIRST TICK (no mark) = the SEED: one ranged hostcap/http-request for cities15000.zip plus three more for the division and country files, because $GNP carries a RESOLVED admin and country NAME beside every code and those names live in separate files. EVERY LATER TICK = the DELTA for that tick's own UTC day: modifications-YYYY-MM-DD.txt and deletes-YYYY-MM-DD.txt, verified live 2026-08-15 to be full 19-column geoname rows and three-column tombstone rows respectively - so the delta upserts through the SAME decoder as the seed and there is no second record shape to keep in step. A TICK FOR A DAY ALREADY ON THE MARK emits nothing at all: the mark IS the same-data ledger, carrying the upstream ETag that also rides out as If-None-Match, so an unchanged file costs one conditional request and comes back 304, which geonames-source:inflate ends the run on without an error. The seed archive is inflated IN-GUEST (vendored miniz; there is no host unzip capability and none may be added) and the chunk is bounded by the Go server host's 4 MiB response-body cap, which ingest_meta re-checks against Content-Range's denominator rather than trusting. geonames-ingest:ingest_meta authors the storage attribution before hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op, with reconcile=append because a daily modifications file is an upsert of a few thousand rows and not the gazetteer's set. geonames-ingest:publish_request then advances the mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one day instead of skipping it invisibly - and emits the epoch announcement only when a publish URL is configured; DATASET_EPOCH and DATASET_CID already ride in $GNP.SOURCE, so no new record type is minted. The tombstone list leaves the flow on egress: no host capability removes a stored row, and inventing one would be a new host capability this lane may not add. The host owns no schedule, no dataset list, no licence and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL row that holds the mark. No new host connector is required.",
+  "nodes": [
+    {
+      "nodeId": "mark_read_q",
+      "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
+      "methodId": "mark_query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "mark_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
+      "methodId": "ingest_plan",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_deletes",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_admin1",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_admin2",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_country",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "unzip",
+      "pluginId": "com.digitalarsenal.data-source.geonames-source",
+      "methodId": "inflate",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "unzip_deletes",
+      "pluginId": "com.digitalarsenal.data-source.geonames-source",
+      "methodId": "inflate",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "lookups",
+      "pluginId": "com.digitalarsenal.data-source.geonames-source",
+      "methodId": "parse_lookups",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "places",
+      "pluginId": "com.digitalarsenal.data-source.geonames-source",
+      "methodId": "parse_places",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tombstones",
+      "pluginId": "com.digitalarsenal.data-source.geonames-source",
+      "methodId": "parse_deletes",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "meta",
+      "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
+      "methodId": "ingest_meta",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish",
+      "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "markq-fq",
+      "fromNodeId": "mark_read_q",
+      "fromPortId": "query",
+      "toNodeId": "mark_read",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "fq-plan",
+      "fromNodeId": "mark_read",
+      "fromPortId": "stream",
+      "toNodeId": "plan",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-unzip-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "unzip",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-lookups-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "lookups",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-places-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "places",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-tombstones-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "tombstones",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-unzip-del-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "unzip_deletes",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-meta-job",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "meta",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-http",
+      "fromNodeId": "plan",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-http-deletes",
+      "fromNodeId": "plan",
+      "fromPortId": "request_deletes",
+      "toNodeId": "http_deletes",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-http-admin1",
+      "fromNodeId": "plan",
+      "fromPortId": "request_admin1",
+      "toNodeId": "http_admin1",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-http-admin2",
+      "fromNodeId": "plan",
+      "fromPortId": "request_admin2",
+      "toNodeId": "http_admin2",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-http-country",
+      "fromNodeId": "plan",
+      "fromPortId": "request_country",
+      "toNodeId": "http_country",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-unzip",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "unzip",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "unzip-places-text",
+      "fromNodeId": "unzip",
+      "fromPortId": "text",
+      "toNodeId": "places",
+      "toPortId": "text",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-admin1-lookups",
+      "fromNodeId": "http_admin1",
+      "fromPortId": "response",
+      "toNodeId": "lookups",
+      "toPortId": "admin1",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-admin2-lookups",
+      "fromNodeId": "http_admin2",
+      "fromPortId": "response",
+      "toNodeId": "lookups",
+      "toPortId": "admin2",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-country-lookups",
+      "fromNodeId": "http_country",
+      "fromPortId": "response",
+      "toNodeId": "lookups",
+      "toPortId": "country",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "lookups-places",
+      "fromNodeId": "lookups",
+      "fromPortId": "tables",
+      "toNodeId": "places",
+      "toPortId": "tables",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-deletes-unzip",
+      "fromNodeId": "http_deletes",
+      "fromPortId": "response",
+      "toNodeId": "unzip_deletes",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "unzip-deletes-tombstones",
+      "fromNodeId": "unzip_deletes",
+      "fromPortId": "text",
+      "toNodeId": "tombstones",
+      "toPortId": "text",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "places-records-meta",
+      "fromNodeId": "places",
+      "fromPortId": "records",
+      "toNodeId": "meta",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false
+    },
+    {
+      "edgeId": "places-decision-meta",
+      "fromNodeId": "places",
+      "fromPortId": "decision",
+      "toNodeId": "meta",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-meta-response",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "meta",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "meta-ingest-meta",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "meta-ingest-records",
+      "fromNodeId": "meta",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false
+    },
+    {
+      "edgeId": "ingest-publish-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "publish",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "meta-publish-meta",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "publish",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-http",
+      "fromNodeId": "publish",
+      "fromPortId": "request",
+      "toNodeId": "publish_http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-egress",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-http-egress",
+      "fromNodeId": "publish_http",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-mark-egress",
+      "fromNodeId": "publish",
+      "fromPortId": "mark",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tombstones-egress",
+      "fromNodeId": "tombstones",
+      "fromPortId": "tombstones",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "unzip-report-egress",
+      "fromNodeId": "unzip",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-geonames-ingest",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "description": "Epoch tick, at the gazetteer's own publication cadence. One tick is one bounded unit of work - the seed on the first, one day's modifications and deletes on every later one - and the durable resume mark advances only from a verified store, so a restart resumes at the day it left off and an overrun tick is naturally skipped because the next one re-derives the same date and finds it already marked."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-geonames-ingest",
+      "targetNodeId": "mark_read_q",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "triggerId": "timer-geonames-ingest",
+      "targetNodeId": "plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.geonames-ingest",
+    "com.digitalarsenal.data-source.geonames-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest",
+    "com.digitalarsenal.hostcap.flatsql-query"
+  ]
+}

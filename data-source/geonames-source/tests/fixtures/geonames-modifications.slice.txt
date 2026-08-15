@@ -1,0 +1,12 @@
+3432555	Laferrere	Laferrere	Gregorio de Laferrere	-34.75049	-58.58464	P	PPL	AR		01	06427			248362		13	America/Argentina/Buenos_Aires	2026-08-15
+3832661	Villa Nueva	Villa Nueva	Guaymallen,Guaymallén,Villa Nueva,Villa Nueva de Guaymallen,Villa Nueva de Guaymallén	-32.89737	-68.7871	P	PPLX	AR		13	50028			11104		807	America/Argentina/Mendoza	2026-08-14
+3864299	Bermejo	Bermejo	Bermejo,El Bermejo	-32.86731	-68.77954	P	PPLX	AR		13	50028			13428		788	America/Argentina/Mendoza	2026-08-15
+6942538	Costa del Este	Costa del Este		-36.61122	-56.69327	P	PPL	AR		01	06420			6916		11	America/Argentina/Buenos_Aires	2026-08-15
+12594578	Ciudad de Las Heras	Ciudad de Las Heras	Ciudad de Las Heras	-32.85094	-68.83602	P	PPLX	AR		13				189067		822	America/Argentina/Mendoza	2026-08-14
+13696884	Thomizil Eichberg (Thombauer)	Thomizil Eichberg (Thombauer)		46.71319	15.41743	S	HTL	AT		06	610	61032		0		538	Europe/Vienna	2026-08-14
+13696885	Hube Greith	Hube Greith		46.70909	15.37291	S	HTL	AT		06	610	61032		0		343	Europe/Vienna	2026-08-14
+13696886	Landvilla Sinelia	Landvilla Sinelia		46.81499	15.80557	S	HTL	AT		06	623	62388		0		289	Europe/Vienna	2026-08-14
+13696893	Nikolaier Weinblick Sauvignon Blanc	Nikolaier Weinblick Sauvignon Blanc		46.81718	15.68082	S	HTL	AT		06	610	61056		0		368	Europe/Vienna	2026-08-14
+13696888	Moose Hotel & Suites	Moose Hotel & Suites		51.18069	-115.56939	S	HTL	CA		01	4815035			0		1437	America/Vancouver	2026-08-14
+20010	Vounon tou Armeni	Vounon tou Armeni	Chalevga,Halevga,Halewka,Vounon tou Armeni,Հալեւկա	35.28527	33.52207	L	LCTY	CY		02	2202			0		635	Asia/Famagusta	2026-08-14
+146590	Chalévga	Chalevga	Alevkaya,Chalevga,Chalévga,Halevga,Halewka,Χαλεύγα,Հալեւկա	35.28538	33.53363	P	PPL	CY		02	2202			0		618	Asia/Famagusta	2026-08-14

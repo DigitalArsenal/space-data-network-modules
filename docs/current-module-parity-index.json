@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-08-10T17:39:47.633Z",
-  "moduleCount": 71,
+  "generatedAt": "2026-08-15T21:03:48.284Z",
+  "moduleCount": 74,
   "parityScopeModuleCount": 29,
-  "isomorphicWasmCount": 69,
+  "isomorphicWasmCount": 72,
   "missingIsomorphicWasm": [
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 67,
+  "browserWasmEdgeTargetCount": 70,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -409,7 +409,7 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "invoke"
       ],
@@ -867,6 +867,40 @@
       "testFiles": []
     },
     {
+      "modulePath": "data-source/cell-tower-ingest",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "name": "Cellular Base-Station Ingest Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "cache_freshness",
+        "cache_plan",
+        "ingest_meta",
+        "ingest_plan",
+        "mark_query",
+        "publish_request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/cell_tower_ingest_module.cpp"
+      ],
+      "testFiles": []
+    },
+    {
       "modulePath": "data-source/cell-tower-source",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
       "name": "Cellular Base-Station Aggregation Nodes",
@@ -885,23 +919,36 @@
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
       "sourceLanguages": [
+        "c",
         "c++"
       ],
       "cxxSourceFileCount": 1,
-      "cSourceFileCount": 0,
-      "testFileCount": 7,
+      "cSourceFileCount": 1,
+      "testFileCount": 18,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "src/cell_tower_source_module.cpp"
+        "src/cell_tower_source_module.cpp",
+        "vendor/miniz-3.1.2/miniz.c"
       ],
       "testFiles": [
         "tests/adapters.test.mjs",
+        "tests/bakom-full-population.test.mjs",
+        "tests/bulk-archives.test.mjs",
         "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/acma-rrl.slice.zip",
+        "tests/fixtures/anfr-cartoradio.slice.zip",
+        "tests/fixtures/bakom-mobile-sites.sample.json",
+        "tests/fixtures/bakom-mobile-sites.slice-1200.json.gz",
+        "tests/fixtures/comreg-siteviewer.sample.pb",
         "tests/fixtures/fcc-uls-3650-houston.sample.json",
+        "tests/fixtures/ised-sms-tafl.slice.zip",
+        "tests/fixtures/opencellid-bulk.slice.csv",
+        "tests/fixtures/opencellid-bulk.slice.csv.gz",
         "tests/fixtures/opencellid.sample.csv",
         "tests/fixtures/overpass-berlin.sample.json",
         "tests/live-probe.mjs",
+        "tests/opencellid-bulk.test.mjs",
         "tests/parity.test.mjs"
       ]
     },
@@ -941,6 +988,85 @@
         "test/fixtures/supgp-reference-draft/README.md",
         "test/fixtures/supgp-reference-draft/provider.json",
         "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/geonames-ingest",
+      "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
+      "name": "Gazetteer Named Place Ingest Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "ingest_meta",
+        "ingest_plan",
+        "mark_query",
+        "publish_request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/geonames_ingest_module.cpp"
+      ],
+      "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/geonames-source",
+      "pluginId": "com.digitalarsenal.data-source.geonames-source",
+      "name": "Gazetteer Named Place Source Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "inflate",
+        "parse_deletes",
+        "parse_lookups",
+        "parse_places"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c",
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 1,
+      "testFileCount": 9,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/geonames_source_module.cpp",
+        "vendor/miniz-3.1.2/miniz.c"
+      ],
+      "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/admin1CodesASCII.slice.txt",
+        "tests/fixtures/admin2Codes.slice.txt",
+        "tests/fixtures/countryInfo.slice.txt",
+        "tests/fixtures/geonames-deletes.slice.txt",
+        "tests/fixtures/geonames-modifications.slice.txt",
+        "tests/parse.test.mjs",
+        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -2743,7 +2869,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 5,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -2753,7 +2879,8 @@
         "tests/conformance.test.mjs",
         "tests/contract.test.mjs",
         "tests/harness.mjs",
-        "tests/lifecycle.test.mjs"
+        "tests/lifecycle.test.mjs",
+        "tests/sdk-conformance-runner.test.mjs"
       ]
     },
     {
