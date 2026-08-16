@@ -1,0 +1,22 @@
+{
+  "name": "@spacedatanetwork/terrain-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Terrain ingest scheduler module: regional-priority DEM fetch planning (populated land first), resume marks, chunked ranged fetches, epoch announcement. Owns scheduling/chunking/resume; decode/tiling lives in the sibling terrain-source module.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "plugin-manifest.json"
+  ],
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}
