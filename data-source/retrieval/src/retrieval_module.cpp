@@ -376,6 +376,43 @@ std::string body_ref_descriptor(const std::string& meta) {
     return "{\"$sdnbodyref\":1," + ref.substr(1);
 }
 
+// Push ONE body-reference descriptor frame on `port`.
+//
+// THE DESCRIPTOR TRAVELS THE SAME TYPED EDGE AS THE BYTES IT STANDS FOR, so it
+// must wear the SAME type claim and the SAME alignment claim. This is the P1
+// `modules-data-retrieval-flatbuffer-branch-emits-nothing`: the descriptor used
+// to be pushed with NO type claim and required_alignment=1 while the
+// omm.stream/query.rows edges declare $OMM/OMM.fbs at alignment 8. The compiled
+// flow runtime's route_output then rejects the frame
+// (flow_runtime.cpp: `out.required_alignment != edge.aligned_required_alignment`
+// -> -26) and DROPS it. Nothing downstream runs, nothing errors: `branch` is
+// never invoked, no $HTR is ever emitted, and the Go host answers 502 "flow
+// produced no HTTP response" with no detail at all. Because only the
+// flatbuffer branch elects ref delivery, that silently killed EVERY default
+// request on /omm/bulk and /cat/bulk while format=json kept working.
+//
+// A reference to an $OMM stream is still an $OMM stream — it is the same bytes
+// delivered out of band — so claiming the edge's identity is honest, and
+// downstream (decision-gate `branch`, foundation/http-respond) discriminates on
+// the `{"$sdnbodyref"` prefix, never on the type claim.
+//
+// The payload must also SIT on the declared alignment (route_output checks
+// `payload % edge.aligned_required_alignment`), which a std::string's heap
+// buffer does not guarantee — hence the alignas(8) staging buffer.
+int push_body_ref_descriptor(const char* port, const char* schema, const char* file_id,
+                             const char* root_type, const char* descriptor, size_t length) {
+    alignas(8) char staged[256];
+    if (length == 0 || length >= sizeof(staged)) {
+        plugin_set_error("invalid-body-ref",
+                         "body-reference descriptor does not fit the aligned staging buffer.");
+        return -1;
+    }
+    std::memcpy(staged, descriptor, length);
+    return plugin_push_output_ex(
+        port, schema, file_id, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, root_type,
+        0, 8, reinterpret_cast<const uint8_t*>(staged), static_cast<uint32_t>(length));
+}
+
 // Push either the body-reference descriptor (ref delivery) or binary segment
 // 0 verbatim (byte delivery) on the given port. Returns the invoke status.
 int push_stream_or_ref(const char* port, const char* schema, const char* file_id,
@@ -384,12 +421,8 @@ int push_stream_or_ref(const char* port, const char* schema, const char* file_id
     if (deliver_ref) {
         const std::string descriptor = body_ref_descriptor(meta);
         if (!descriptor.empty()) {
-            const int32_t pushed = plugin_push_output_ex(
-                port, nullptr, nullptr,
-                PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr,
-                0, 1,
-                reinterpret_cast<const uint8_t*>(descriptor.data()),
-                static_cast<uint32_t>(descriptor.size()));
+            const int32_t pushed = push_body_ref_descriptor(port, schema, file_id, root_type,
+                                                            descriptor.data(), descriptor.size());
             return pushed < 0 ? 500 : 0;
         }
         // Host ignored "deliver":"ref" — fall through to segment bytes.
@@ -574,10 +607,11 @@ int linked_query_and_push(const char* port, const char* schema, const char* file
                       "\"fnv1a64\":\"%016llx\"}",
                       static_cast<unsigned long long>(result.token), result.size, result.frames,
                       static_cast<unsigned long long>(result.fnv1a64));
-        const int32_t pushed = plugin_push_output_ex(
-            port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-            reinterpret_cast<const uint8_t*>(descriptor),
-            static_cast<uint32_t>(std::strlen(descriptor)));
+        // Same typed-edge alignment contract as push_body_ref_descriptor's
+        // comment states — a no-claim/alignment-1 frame is dropped by
+        // route_output and the flow emits nothing.
+        const int32_t pushed = push_body_ref_descriptor(port, schema, file_id, root_type,
+                                                        descriptor, std::strlen(descriptor));
         return pushed < 0 ? 500 : 0;
     }
 

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "pluginFamily": "flow",
   "description": "HTTP data-retrieval flow (loop C.3c): a $HTQ HttpRequest enters on the http-request trigger, foundation/http-route emits the routing-decision JSON, foundation/decision-gate dispatches it to data-source/retrieval omm_bulk or data_query as an SDS $CAQ request (or straight to http-respond for 404s), the retrieval stream joins the decision in the gate's format branch (flatbuffer: verbatim to the response body; json: through foundation/omm-json encode) together with a deterministic FNV-1a etag, and foundation/http-respond assembles the final $HTR envelope (200/304/404) delivered to the host-model egress sink. All inter-node frames stay inside the linked-direct artifact's linear memory; engineLinkage: bridge — the retrieval node reaches the store over the storage.flatsql_* hostcall bridge (capability storage_query). The former \"flatsql\" linkage, which linked the live store engine into this artifact's own linear memory, is RETIRED: FlatSQL is an independently signed and instantiated isomorphic WASM node, never a library baked into every flow that reads. Flatbuffer-branch bodies cross the bridge as SDNE body-ref tokens when the host honours \"deliver\":\"ref\" and as segment bytes otherwise; the json branch copies bytes engine->flow in-wasm.",
   "capabilities": [

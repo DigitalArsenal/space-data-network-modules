@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.data-retrieval",
   "name": "SDN Data Retrieval Flow",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 8,
@@ -16,49 +16,57 @@
       "nodeId": "route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "methodId": "route",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "gate",
       "pluginId": "com.digitalarsenal.foundation.decision-gate",
       "methodId": "dispatch",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "omm",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "methodId": "omm_bulk",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "query",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "methodId": "data_query",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "branch",
       "pluginId": "com.digitalarsenal.foundation.decision-gate",
       "methodId": "branch",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "tojson",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
       "methodId": "encode",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "methodId": "respond",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
-      "dispatchModel": "host"
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -67,7 +75,7 @@
       "dependencyId": "com.digitalarsenal.foundation.http-route",
       "pluginId": "com.digitalarsenal.foundation.http-route",
       "version": "0.7.0",
-      "sha256": "bae707c220d812218b9c0c19112628390f9e7b7a667e3b834142bfc0eae54a56",
+      "sha256": "3569f1231e09237ab3545e01ed96ea8a974e1be9e0432b64fd30c58009c96fcd",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -85,7 +93,7 @@
       "dependencyId": "com.digitalarsenal.foundation.decision-gate",
       "pluginId": "com.digitalarsenal.foundation.decision-gate",
       "version": "0.1.0",
-      "sha256": "d69d88445a6596577550c6a3edf9d13fb42dd40fd14851d6e22f9c76c95ef279",
+      "sha256": "3e9d3a91190498c038fd812efdf5bc24561222c11d1d0bdb5a5a778b959fe027",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -100,14 +108,14 @@
       "dependencyId": "com.digitalarsenal.data-source.retrieval",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "version": "0.1.0",
-      "sha256": "56395f977af82f3ab78597dfeda96ec44a7b98bdcc5b59d8a0ca875a58fdbab8",
+      "sha256": "97e5fdae1dc1cd02f1cebc0d47e25db84a042dc7d30db2f988f57df424602057",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e72657472696576616c_",
       "methodSymbols": {
-        "omm_bulk": "sdm_guest_636f6d2e6469676974616c61_omm_bulk",
-        "data_query": "sdm_guest_636f6d2e6469676974616c61_data_query"
+        "omm_bulk": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e72657472696576616c_omm_bulk",
+        "data_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e72657472696576616c_data_query"
       }
     },
     {
@@ -115,13 +123,13 @@
       "dependencyId": "com.digitalarsenal.foundation.omm-json",
       "pluginId": "com.digitalarsenal.foundation.omm-json",
       "version": "0.1.1",
-      "sha256": "4a34dcff2384464324b6f041551c8138804e15e300b0d44caab0628e05de7e56",
+      "sha256": "c8334c1cb3e42926de29d62da0a2e0520ac3be4fc8ffb57ef938829e85e5ea37",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e6f6d6d2d6a736f6e_",
       "methodSymbols": {
-        "encode": "sdm_guest_636f6d2e6469676974616c61_encode"
+        "encode": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666f756e646174696f6e2e6f6d6d2d6a736f6e_encode"
       }
     },
     {
@@ -129,7 +137,7 @@
       "dependencyId": "com.digitalarsenal.foundation.http-respond",
       "pluginId": "com.digitalarsenal.foundation.http-respond",
       "version": "0.2.1",
-      "sha256": "ba0eeac0a64ad318d5e3c720d61c1ef83e248232f8e3003b65a542d30d318ade",
+      "sha256": "ef8205cbcdeb4bb4cc29bd1a802d56d46cddba0137e737d6e651fd217ead195d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
