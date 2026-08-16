@@ -1,0 +1,444 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+  "name": "Terrain Tile Ingest Scheduler Nodes",
+  "version": "0.1.0",
+  "description": "The ORCHESTRATION half of the terrain lane. terrain-source is the request-scoped decoder - DEM/WBM bytes in, terrain tiles out, nothing persisted - and this module is the scheduler: four pure nodes read a durable resume mark, walk the TMS GEOGRAPHIC_WGS84 tile pyramid REGION-PRIORITY ordered (higher priority first, shallow levels before deep), emit bounded batches of plan frames naming the Copernicus GLO-30 DEM and water-mask granule URLs each tile needs, author the storage attribution, and advance the mark only from a verified store. OCEAN CELLS: Copernicus publishes no granule over open ocean and the guest cannot cheaply know land from ocean, so every intersecting granule is planned with allow_404 true and the fetcher treats 404 as no-data, never an error. The mark doubles as the same-data ledger: the upstream ETag rides on it and back out on every plan entry as if_none_match. NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes, so this plugin performs no I/O and needs no new host connector.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "All four methods are single-pass transforms over the frames the flow hands them: they format a query, a bounded batch of plan frames, an attribution frame or a mark. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "mark_query",
+      "displayName": "Read the terrain resume mark",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Cron timer tick (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick (content ignored)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-mark-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/flatsql-query reading this dataset's resume mark row.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "UTF-8 JSON for hostcap/flatsql-query reading this dataset's resume mark row."
+        }
+      ],
+      "description": "Turns the timer tick into the flatsql-query that reads this dataset's resume mark back. It is a SEPARATE node from ingest_plan on purpose: the plan takes the mark as an INPUT, and a node that emitted its own input would be a cycle in the flow graph. It emits {\"sql\",\"params\"} and not {\"table\",\"where\"}, because hostcap/flatsql-query's query reads sql and returns 400 missing-sql for anything else. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_plan",
+      "displayName": "Plan a bounded batch of terrain tiles",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Cron timer tick; its firedAt dates the edition when config carries no dataset_epoch.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick; its firedAt dates the edition when config carries no dataset_epoch."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The resume mark row read back by flatsql-query, carrying the next tile index and the upstream ETag. Absent on the first run.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The resume mark row read back by flatsql-query, carrying the next tile index and the upstream ETag. Absent on the first run."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-plan-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One work unit per frame: the tile address and extent, the Copernicus GLO-30 DEM + water-mask granule URLs intersecting it (allow_404 true - ocean cells simply do not exist upstream), the mark's ETag as if_none_match, and the verbatim licence/attribution provenance.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 256,
+          "required": false,
+          "description": "One work unit per frame: the tile address and extent, the granule URLs it needs, and the provenance block. At most batch_tiles (default 64, clamped to 256) frames per invocation; the remainder is reported as backlog."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The run contract for this batch: dataset and tileset identity, epoch, first tile index, tiles planned, total tiles.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The run contract for this batch: dataset and tileset identity, epoch, first tile index, tiles planned, total tiles."
+        }
+      ],
+      "description": "ONE INVOCATION IS ONE BOUNDED BATCH. The plan walks the TMS GEOGRAPHIC_WGS84 pyramid (2x1 level-0 roots, row origin SOUTH) REGION-PRIORITY ordered: regions by priority descending (config order breaks ties), shallow levels before deep within a region, tiles row-major within a level. That order is a pure function of the config, so a tile's global index is stable and the durable mark is a single integer - the next tile to plan. At most batch_tiles (default 64) plan frames are emitted per invocation and the remainder is reported through the backlog counter, so the runtime re-invokes until the pyramid drains. Granule lists are the tile extent CLIPPED to the region bbox, expanded to whole-degree cells: a level-0 tile intersects tens of thousands of 1-degree granules, and the ones outside the region render from the ellipsoid either way. Every granule is planned with allow_404 true because Copernicus publishes NO object for open-ocean cells and the guest cannot cheaply know land from ocean; the fetcher treats 404 as no-data, never an error. Fails closed with no tileset_id or an empty regions list rather than inventing a whole-earth plan. A mark for a different dataset, tileset or epoch is ignored; a drained enumeration is a clean no-op. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_meta",
+      "displayName": "Author the storage attribution",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The run contract from ingest_plan.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The run contract from ingest_plan."
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-tile-records",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The built terrain tile record stream from terrain-source, opaque to this scheduler and forwarded byte-for-byte.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.terrain-tile-stream",
+                "detail": "The tile record stream's wire type is owned by the sibling terrain-source module; this scheduler never parses it, it only forwards the bytes alongside the attribution it authors."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The built terrain tile record stream from terrain-source, opaque to this scheduler and forwarded byte-for-byte."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The tile builder's run summary; supplies this batch's record count.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The tile builder's run summary; supplies this batch's record count."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "A raw http response from the granule fetch lane, read for the ETag/Last-Modified the ledger turns on.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A raw http response from the granule fetch lane, read for the ETag/Last-Modified the ledger turns on."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/storage-ingest meta: schema, attribution, batch identity {batch_id, reconcile append, dataset_id, dataset_epoch, lane terrain} and the batch window.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/storage-ingest meta: schema, attribution, batch identity and the batch window."
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-tile-records",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The record stream, forwarded untouched.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.terrain-tile-stream",
+                "detail": "The tile record stream's wire type is owned by the sibling terrain-source module; this scheduler never parses it, it only forwards the bytes alongside the attribution it authors."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The record stream, forwarded untouched."
+        }
+      ],
+      "description": "Authors the attribution the storage lane cannot invent - dataset, tileset, batch and epoch - and forwards the tile records untouched. The batch id is tileset_id@dataset_epoch#first_tile_index, so re-running a batch is idempotent at the storage lane and two batches never collide. reconcile is append because a batch is a WINDOW of the pyramid, never the tileset's complete set - a source-batch reconcile on it would delete every tile outside the window. REFUSES a job missing dataset_id, tileset_id or dataset_epoch (\"incomplete-job-attribution\"): the epoch is the edition boundary and storage cannot invent the edition a tile belongs to. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Advance the mark, announce the batch",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-ingest-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/storage-ingest result summary.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/storage-ingest result summary."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The meta that produced that result.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The meta that produced that result."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The advanced resume mark: next_tile_index = first_tile_index + tiles_planned, plus the upstream ETag that rides out on the next batch's plan entries.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The advanced resume mark."
+        },
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Dataset-publication POST announcing this batch; emitted ONLY when a publish URL is configured.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Dataset-publication POST announcing this batch; emitted ONLY when a publish URL is configured."
+        }
+      ],
+      "description": "Advances the resume mark from the STORAGE RESULT, never at dispatch: a mark advanced at plan time turns a crash between fetch and store into a permanently skipped batch of tiles, and the hole is invisible - the next tick walks on past it. It catches the silent nop that survives hostcap/storage-ingest's own ok:false check - ok:true with inserted=0 for a batch that carried tiles - and refuses to advance the mark over tiles that were never stored. The publication POST ({schema DTT, providerId, sourceName, batchId}) is fail-closed: emitted ONLY when publish_url is configured, and the mark is NOT gated on it, because a node that stores without publishing must still make progress. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "terrain-ingest-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
