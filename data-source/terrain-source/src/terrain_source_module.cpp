@@ -797,6 +797,122 @@ flatbuffers::Offset<DTTProvenance> build_provenance(flatbuffers::FlatBufferBuild
     return pb.Finish();
 }
 
+// ── serving lane helpers (route / respond) ─────────────────────────────────
+
+// The sync hostcall bridge, used for exactly ONE operation: plugin.getConfig.
+// Same import surface the tests already admit (space_data_module_host) and the
+// same precedent geonames-ingest set: reading the flow's host-provided config
+// is not a capability, it is the module asking who it was deployed as.
+extern "C" {
+__attribute__((import_module("space_data_module_host"), import_name("call")))
+int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
+                      const uint8_t* payload_ptr, int32_t payload_len);
+__attribute__((import_module("space_data_module_host"), import_name("response_len")))
+int32_t sdm_host_response_len(void);
+__attribute__((import_module("space_data_module_host"), import_name("read_response")))
+int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
+}
+
+std::string load_config() {
+    static const char* op = "plugin.getConfig";
+    const std::string payload_json = "{}";
+    std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
+    const uint32_t meta_len = static_cast<uint32_t>(payload_json.size());
+    req[0] = static_cast<uint8_t>(meta_len & 0xff);
+    req[1] = static_cast<uint8_t>((meta_len >> 8) & 0xff);
+    req[2] = static_cast<uint8_t>((meta_len >> 16) & 0xff);
+    req[3] = static_cast<uint8_t>((meta_len >> 24) & 0xff);
+    std::memcpy(req.data() + 4, payload_json.data(), payload_json.size());
+    sdm_host_call(reinterpret_cast<const uint8_t*>(op), static_cast<int32_t>(std::strlen(op)),
+                  req.data(), static_cast<int32_t>(req.size()));
+    const int32_t len = sdm_host_response_len();
+    if (len <= 4) return "{}";
+    std::vector<uint8_t> buf(static_cast<size_t>(len));
+    sdm_host_read_response(buf.data(), len);
+    const uint32_t rlen = static_cast<uint32_t>(buf[0]) | (static_cast<uint32_t>(buf[1]) << 8) |
+                          (static_cast<uint32_t>(buf[2]) << 16) |
+                          (static_cast<uint32_t>(buf[3]) << 24);
+    if (buf.size() < 4u + rlen) return "{}";
+    return std::string(reinterpret_cast<const char*>(buf.data() + 4), rlen);
+}
+
+struct HeaderEntry {
+    std::string name;
+    std::string value;
+};
+
+int push_htr(uint16_t status, const std::vector<HeaderEntry>& headers, const uint8_t* body,
+             size_t body_length) {
+    flatbuffers::FlatBufferBuilder builder(body_length + 512);
+    std::vector<::flatbuffers::Offset<sdn::http::HttpHeader>> header_offsets;
+    header_offsets.reserve(headers.size());
+    for (const auto& h : headers) {
+        header_offsets.push_back(sdn::http::CreateHttpHeader(
+            builder, builder.CreateString(h.name), builder.CreateString(h.value)));
+    }
+    const auto headers_vector =
+        header_offsets.empty()
+            ? ::flatbuffers::Offset<
+                  ::flatbuffers::Vector<::flatbuffers::Offset<sdn::http::HttpHeader>>>(0)
+            : builder.CreateVectorOfSortedTables<sdn::http::HttpHeader>(&header_offsets);
+    const auto body_vector =
+        body && body_length > 0
+            ? builder.CreateVector<uint8_t>(body, body_length)
+            : ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>>(0);
+    const auto response =
+        sdn::http::CreateHttpResponse(builder, status, headers_vector, body_vector, 0, 0);
+    sdn::http::FinishHttpResponseBuffer(builder, response);
+    const int32_t pushed = plugin_push_output_ex(
+        "response", "HttpResponseAbi.fbs", "$HTR", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+        "HttpResponse", 0, 0, builder.GetBufferPointer(), builder.GetSize());
+    return pushed < 0 ? 500 : 0;
+}
+
+int push_htr_json(uint16_t status, const std::string& body, const char* cache_control) {
+    std::vector<HeaderEntry> headers = {{"content-type", "application/json"}};
+    if (cache_control) headers.push_back({"cache-control", cache_control});
+    return push_htr(status, headers,
+                    reinterpret_cast<const uint8_t*>(body.data()), body.size());
+}
+
+// A cheap, honest, CACHEABLE 404: the client's own upsampling relies on
+// layer.json availability, so a miss below the published pyramid is normal
+// traffic and must never surface as an error or a cache-buster.
+int push_htr_not_found(const std::string& detail) {
+    return push_htr_json(404,
+                         std::string("{\"error\":\"not found\",\"detail\":\"") +
+                             json_escape(detail) + "\"}",
+                         "public, max-age=300");
+}
+
+// Parse "<z>/<x>/<y>.terrain" (all decimal, nothing else) after the mount.
+bool parse_tile_path(const std::string& rest, uint32_t* z, uint32_t* x, uint32_t* y) {
+    const size_t suffix = rest.rfind(".terrain");
+    if (suffix == std::string::npos || suffix + 8 != rest.size()) return false;
+    const std::string zxy = rest.substr(0, suffix);
+    const size_t s1 = zxy.find('/');
+    if (s1 == std::string::npos) return false;
+    const size_t s2 = zxy.find('/', s1 + 1);
+    if (s2 == std::string::npos || zxy.find('/', s2 + 1) != std::string::npos) return false;
+    const std::string parts[3] = {zxy.substr(0, s1), zxy.substr(s1 + 1, s2 - s1 - 1),
+                                  zxy.substr(s2 + 1)};
+    uint32_t vals[3];
+    for (int i = 0; i < 3; i++) {
+        if (parts[i].empty() || parts[i].size() > 9) return false;
+        uint64_t v = 0;
+        for (const char c : parts[i]) {
+            if (c < '0' || c > '9') return false;
+            v = v * 10 + static_cast<uint64_t>(c - '0');
+        }
+        if (v > 0xffffffffull) return false;
+        vals[i] = static_cast<uint32_t>(v);
+    }
+    *z = vals[0];
+    *x = vals[1];
+    *y = vals[2];
+    return true;
+}
+
 constexpr const char* kGeoidRemark =
     "Heights are geoid-referenced as the source dataset publishes them (VERTICAL_DATUM "
     "GEOID); no geoid-to-ellipsoid conversion is applied at this parity floor. A consumer "
@@ -1274,6 +1390,244 @@ int layer_json(void) {
         "response", "HttpResponseAbi.fbs", "$HTR", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
         "HttpResponse", 0, 0, builder.GetBufferPointer(), builder.GetSize());
     return pushed < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// route — one $HTQ HttpRequest -> exactly one of:
+//   layer_plan  (path ".../terrain/layer.json")  -> the layer_json node
+//   query+context (path ".../terrain/{z}/{x}/{y}.terrain") -> flatsql-query
+//   response    (anything else) -> a direct, cacheable $HTR 404
+//
+// The mount prefix is config-owned (the node mounts this flow at
+// /api/v1/terrain/, sdn-server lane), so the router strips up to and
+// including the LAST "/terrain/" segment rather than pinning the prefix.
+//
+// SERVING CONFIG (plugin.getConfig, all optional):
+//   terrain_tileset_id   the pyramid served (default "spaceaware-terrain")
+//   terrain_maxzoom      layer.json maxzoom (default 0)
+//   terrain_available    layer.json availability array VERBATIM (default the
+//                        two level-0 roots — honest exactly when maxzoom is 0)
+//   terrain_attribution / terrain_description / terrain_version
+// The availability index is the ORCHESTRATOR'S knowledge; first light takes
+// it from config rather than aggregating SQL per request, because layer.json
+// is fetched once per client session and the config is updated by the same
+// lane that ingests tiles. The SQL-aggregate upgrade is recorded in the
+// manifest description, not silently skipped.
+// ---------------------------------------------------------------------------
+int route(void) {
+    if (refuse_batched()) return 500;
+
+    const int32_t request_index = plugin_find_input_index("request", 0);
+    const plugin_input_frame_t* frame =
+        request_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(request_index))
+                           : nullptr;
+    if (!frame || !frame->payload || frame->payload_length == 0) {
+        plugin_set_error("missing-request-frame",
+                         "route requires a $HTQ HttpRequest frame on port \"request\".");
+        return 400;
+    }
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!sdn::http::VerifyHttpRequestBuffer(verifier)) {
+        plugin_set_error("invalid-request-frame",
+                         "the request frame is not a valid $HTQ HttpRequest envelope.");
+        return 400;
+    }
+    const sdn::http::HttpRequest* request = sdn::http::GetHttpRequest(frame->payload);
+    const std::string method = request->METHOD() ? request->METHOD()->str() : "GET";
+    if (method != "GET" && method != "HEAD") {
+        std::vector<HeaderEntry> headers = {{"allow", "GET, HEAD"},
+                                            {"content-type", "application/json"}};
+        const std::string body = "{\"error\":\"method not allowed\"}";
+        return push_htr(405, headers, reinterpret_cast<const uint8_t*>(body.data()),
+                        body.size());
+    }
+    const std::string path = request->PATH() ? request->PATH()->str() : "";
+
+    // Strip up to and including the LAST "/terrain/". A path without the
+    // segment is not this flow's to answer creatively.
+    const size_t mount = path.rfind("/terrain/");
+    if (mount == std::string::npos) return push_htr_not_found(path);
+    const std::string rest = path.substr(mount + 9);
+
+    const std::string config = load_config();
+    const std::string tileset_id =
+        json_string(config, "terrain_tileset_id", "spaceaware-terrain");
+
+    if (rest == "layer.json") {
+        const long maxzoom = static_cast<long>(json_number(config, "terrain_maxzoom", 0));
+        std::string available;
+        if (!json_raw_value(config, "terrain_available", &available) || available.empty() ||
+            available[0] != '[') {
+            // Default: the two level-0 roots of the two-root geographic
+            // scheme. Honest exactly when maxzoom is 0; a deeper pyramid MUST
+            // configure terrain_available.
+            available = "[[{\"startX\":0,\"startY\":0,\"endX\":1,\"endY\":0}]]";
+        }
+        const std::string plan =
+            std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
+            ",\"maxzoom\":" + std::to_string(maxzoom) + ",\"attribution\":\"" +
+            json_escape(json_string(config, "terrain_attribution", "")) + "\"" +
+            ",\"description\":\"" +
+            json_escape(json_string(config, "terrain_description", "")) + "\"" +
+            ",\"version\":\"" + json_escape(json_string(config, "terrain_version", "1.0.0")) +
+            "\"" + ",\"available\":" + available + "}";
+        return push_json("layer_plan", plan) < 0 ? 500 : 0;
+    }
+
+    uint32_t z = 0, x = 0, y = 0;
+    if (!parse_tile_path(rest, &z, &x, &y)) return push_htr_not_found(path);
+
+    // The newest stored record for this address wins; the record BLOB is the
+    // whole answer ($DTT carries its own payload, encoding and etag).
+    const std::string sql =
+        "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? "
+        "ORDER BY rowid DESC LIMIT 1";
+    const std::string query =
+        std::string("{\"sql\":\"") + sql + "\",\"params\":[{\"t\":\"str\",\"v\":\"" +
+        json_escape(tileset_id) + "\"},{\"t\":\"i64\",\"v\":" + std::to_string(z) +
+        "},{\"t\":\"i64\",\"v\":" + std::to_string(x) + "},{\"t\":\"i64\",\"v\":" +
+        std::to_string(y) + "}]}";
+    if (push_json("query", query) < 0) return 500;
+
+    // Conditional-request state for respond: the client's If-None-Match.
+    std::string if_none_match;
+    if (request->HEADERS()) {
+        for (const auto* h : *request->HEADERS()) {
+            if (h->NAME() && h->NAME()->str() == "if-none-match" && h->VALUE()) {
+                if_none_match = h->VALUE()->str();
+            }
+        }
+    }
+    const std::string context =
+        std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
+        ",\"level\":" + std::to_string(z) + ",\"x\":" + std::to_string(x) +
+        ",\"y\":" + std::to_string(y) + ",\"ifNoneMatch\":\"" + json_escape(if_none_match) +
+        "\"}";
+    return push_json("context", context) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// respond — the flatsql-query stream (aligned size-prefixed $DTT frames) +
+// route's context -> one $HTR envelope.
+//
+//   record found  -> 200, payload BYTES verbatim (already gzipped at encode
+//                    time), content-type/content-encoding FROM THE RECORD,
+//                    cache-control public max-age=86400, strong ETag
+//   etag match    -> 304 (empty body)
+//   empty stream  -> a cacheable 404 (an unpublished tile is NORMAL: client
+//                    upsampling relies on layer.json availability)
+// ---------------------------------------------------------------------------
+int respond(void) {
+    if (refuse_batched()) return 500;
+
+    const int32_t stream_index = plugin_find_input_index("stream", 0);
+    const plugin_input_frame_t* frame =
+        stream_index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(stream_index))
+                          : nullptr;
+    if (!frame) {
+        plugin_set_error("missing-stream-frame",
+                         "respond requires the flatsql-query stream frame on port \"stream\".");
+        return 400;
+    }
+    const std::string context = input_text("context");
+
+    // Walk the aligned size-prefixed stream, exactly as foundation/omm-json
+    // does: zero-length prefixes are alignment padding; frames verify with
+    // the size-prefixed accessors first (the store's wire contract counts the
+    // 4-byte prefix in internal alignment), plain-anchored as the fallback.
+    const uint8_t* data = frame->payload;
+    const size_t length = data ? static_cast<size_t>(frame->payload_length) : 0u;
+    std::vector<uint8_t> scratch;
+    const DTT* record = nullptr;
+    size_t offset = 0;
+    while (offset < length && !record) {
+        if (length - offset < 4) {
+            plugin_set_error("malformed-stream",
+                             "trailing bytes after the last size-prefixed $DTT frame.");
+            return 400;
+        }
+        const uint32_t frame_size = static_cast<uint32_t>(data[offset]) |
+                                    (static_cast<uint32_t>(data[offset + 1]) << 8) |
+                                    (static_cast<uint32_t>(data[offset + 2]) << 16) |
+                                    (static_cast<uint32_t>(data[offset + 3]) << 24);
+        offset += 4;
+        if (frame_size == 0) continue;
+        if (frame_size > length - offset) {
+            plugin_set_error("malformed-stream",
+                             "size-prefixed $DTT frame overruns the stream payload.");
+            return 400;
+        }
+        scratch.assign(data + offset - 4, data + offset + frame_size);
+        offset += frame_size;
+        if (frame_size >= 8) {
+            ::flatbuffers::Verifier prefixed(scratch.data(), scratch.size());
+            if (VerifySizePrefixedDTTBuffer(prefixed)) {
+                record = GetSizePrefixedDTT(scratch.data());
+            } else {
+                scratch.erase(scratch.begin(), scratch.begin() + 4);
+                ::flatbuffers::Verifier plain(scratch.data(), scratch.size());
+                if (DTTBufferHasIdentifier(scratch.data()) && VerifyDTTBuffer(plain)) {
+                    record = GetDTT(scratch.data());
+                }
+            }
+        }
+        if (!record) {
+            plugin_set_error("invalid-dtt-frame",
+                             "stream frame is not a valid $DTT FlatBuffer.");
+            return 400;
+        }
+    }
+
+    if (!record) {
+        std::string detail = "no stored tile at this address";
+        if (!context.empty()) {
+            detail += " (" + json_string(context, "tilesetId", "?") + " " +
+                      fmt_double(json_number(context, "level", -1)) + "/" +
+                      fmt_double(json_number(context, "x", -1)) + "/" +
+                      fmt_double(json_number(context, "y", -1)) + ")";
+        }
+        return push_htr_not_found(detail);
+    }
+
+    const DTTPayloadRef* payload = record->PAYLOAD();
+    if (!payload || !payload->BYTES() || payload->BYTES()->size() == 0) {
+        // A CID-only record cannot be served inline yet: the dataset-lane
+        // fetch is the growth path. Refusing loudly beats serving an empty
+        // tile that renders as a hole at sea level.
+        plugin_set_error("payload-not-inline",
+                         "the stored $DTT record carries no inline BYTES (CID-only); the "
+                         "CID resolution lane is not built and a 200 with an empty body "
+                         "would render as fabricated terrain.");
+        return 500;
+    }
+
+    // ETag precedence: the record's own ETAG verbatim; else the payload
+    // DIGEST quoted strong; else a weak address+size tag (changes whenever
+    // the stored bytes change size — honest, if coarse).
+    std::string etag = record->ETAG() ? record->ETAG()->str() : "";
+    if (etag.empty() && payload->DIGEST() && payload->DIGEST()->size() > 0) {
+        etag = "\"" + payload->DIGEST()->str() + "\"";
+    }
+    if (etag.empty()) {
+        etag = "W/\"dtt-" + std::to_string(record->LEVEL()) + "-" +
+               std::to_string(record->X()) + "-" + std::to_string(record->Y()) + "-" +
+               std::to_string(payload->BYTES()->size()) + "\"";
+    }
+
+    const std::string if_none_match = json_string(context, "ifNoneMatch", "");
+    std::vector<HeaderEntry> headers;
+    headers.push_back({"cache-control", "public, max-age=86400"});
+    headers.push_back({"etag", etag});
+    if (!if_none_match.empty() && if_none_match == etag) {
+        return push_htr(304, headers, nullptr, 0);
+    }
+    headers.push_back({"content-type", payload->MEDIA_TYPE() && payload->MEDIA_TYPE()->size()
+                                           ? payload->MEDIA_TYPE()->str()
+                                           : "application/vnd.quantized-mesh"});
+    if (payload->CONTENT_ENCODING() && payload->CONTENT_ENCODING()->size() > 0) {
+        headers.push_back({"content-encoding", payload->CONTENT_ENCODING()->str()});
+    }
+    return push_htr(200, headers, payload->BYTES()->data(), payload->BYTES()->size());
 }
 
 }  // extern "C"

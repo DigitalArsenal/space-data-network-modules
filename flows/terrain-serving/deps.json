@@ -1,0 +1,4 @@
+{
+  "com.digitalarsenal.data-source.terrain-source": "../../data-source/terrain-source",
+  "com.digitalarsenal.hostcap.flatsql-query": "../../hostcap/flatsql-query"
+}

@@ -171,7 +171,206 @@
           "description": "Exactly one HTTP response envelope carrying the complete layer.json body."
         }
       ],
-      "description": "Renders the complete layer.json body for a quantized-mesh-1.0 tileset - tilejson 2.1.0, format quantized-mesh-1.0, scheme tms, projection EPSG:4326, bounds [-180,-90,180,90], minzoom 0, the plan's maxzoom, extensions [\"watermask\"] (octvertexnormals is omitted until normals ship), and the plan's available ranges passed through VERBATIM - and emits it as the SDK's canonical $HTR HttpResponse envelope with the body inline, never as a JSON control frame. The availability index is the orchestrator's knowledge, not this encoder's, so it is never synthesized here. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
+      "description": "SERVING LANE (flows/terrain-serving.flow.json, mount /api/v1/terrain/): renders the complete layer.json body for a quantized-mesh-1.0 tileset - tilejson 2.1.0, format quantized-mesh-1.0, scheme tms, projection EPSG:4326, bounds [-180,-90,180,90], minzoom 0, the plan's maxzoom, extensions [\"watermask\"] (octvertexnormals is omitted until normals ship), and the plan's available ranges passed through VERBATIM - and emits it as the SDK's canonical $HTR HttpResponse envelope with the body inline, never as a JSON control frame. The availability index is the orchestrator's knowledge, not this encoder's, so it is never synthesized here. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "route",
+      "displayName": "Route one terrain HTTP request",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "One $HTQ HttpRequest envelope (module-sdk schemas/HttpRequestAbi.fbs)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request to route."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-tile-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "{sql, params} for hostcap/flatsql-query:query - SELECT _data FROM DTT for (TILESET_ID, LEVEL, X, Y), newest row wins.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record-store query for a {z}/{x}/{y}.terrain request."
+        },
+        {
+          "portId": "context",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-serve-context-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Address + conditional-request state (ifNoneMatch) for respond.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Serve context forwarded to respond."
+        },
+        {
+          "portId": "layer_plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-plan-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The layer_json plan composed from the serving config: tilesetId, maxzoom, availability verbatim, attribution.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The plan frame for the layer_json node on a layer.json request."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR). The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Direct $HTR for requests no other node should see: cacheable 404 for unknown paths, 405 for non-GET/HEAD."
+        }
+      ],
+      "description": "One $HTQ in, exactly ONE downstream path out. The mount prefix is config-owned (the node mounts this flow at /api/v1/terrain/, sdn-server lane), so the router strips up to and including the LAST \"/terrain/\" segment. \"layer.json\" => a layer_plan frame for the sibling layer_json node, composed from plugin.getConfig keys terrain_tileset_id / terrain_maxzoom / terrain_available (VERBATIM availability array; defaults to the two level-0 roots, honest exactly when maxzoom is 0 - a deeper pyramid MUST configure terrain_available; the per-request SQL-aggregate availability upgrade is recorded here, not silently skipped) / terrain_attribution / terrain_description / terrain_version. \"{z}/{x}/{y}.terrain\" => a {sql,params} frame for hostcap/flatsql-query:query (SELECT _data FROM DTT WHERE TILESET_ID/LEVEL/X/Y, ORDER BY rowid DESC LIMIT 1) plus a context frame carrying the address and the client's If-None-Match. Anything else => a direct, CACHEABLE $HTR 404 (public, max-age=300) because a miss is normal traffic, and 405 for non-GET/HEAD. plugin.getConfig is the module's only hostcall - reading who it was deployed as, the geonames-ingest precedent, not a capability. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "respond",
+      "displayName": "Assemble the terrain tile HTTP response",
+      "inputPorts": [
+        {
+          "portId": "stream",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dtt-stream",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The flatsql-query stream output: aligned size-prefixed $DTT FlatBuffer frames, verbatim engine bytes (zero rows = empty frame).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The queried $DTT record stream."
+        },
+        {
+          "portId": "context",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-serve-context-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "route's serve context: address + ifNoneMatch.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Serve context from route."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR). The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "description": "Walks the aligned size-prefixed $DTT stream (zero-length prefixes are alignment padding; size-prefixed verify first, plain-anchored fallback - the foundation/omm-json framing contract) and serves the FIRST record: 200 with the payload BYTES VERBATIM (they are already gzip-compressed at encode time), content-type and content-encoding FROM THE RECORD (never re-negotiated), cache-control public max-age=86400, and a strong ETag (record ETAG verbatim, else the payload DIGEST quoted, else a weak address+size tag). An If-None-Match match answers 304 with no body. An EMPTY stream answers a cheap CACHEABLE 404 (public, max-age=300) - an unpublished tile is normal traffic, the client's upsampling relies on layer.json availability, and a 404 must never be an error. A record whose payload is CID-only (no inline BYTES) is REFUSED loudly rather than served as an empty body that would render as fabricated sea-level terrain - the CID resolution lane is the recorded growth path. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
