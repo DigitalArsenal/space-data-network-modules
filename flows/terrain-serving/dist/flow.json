@@ -1,0 +1,214 @@
+{
+  "programId": "com.digitalarsenal.flows.terrain-serving",
+  "name": "Terrain Tile Serving Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "WASM-served quantized-mesh terrain (mount /api/v1/terrain/, config-mounted on the sdn-server lane). A $HTQ HttpRequest enters on the http-request trigger; terrain-source:route strips the mount up to and including the last \"/terrain/\" segment and takes exactly one of three paths. \"layer.json\" => a layer_plan frame for terrain-source:layer_json, which renders the complete tilejson-2.1.0 body (format quantized-mesh-1.0, scheme tms, EPSG:4326, extensions [watermask], availability VERBATIM from the flow config key terrain_available - the availability index is the ingest orchestrator's knowledge and is configured, not aggregated per request at first light) inside the canonical $HTR envelope. \"{z}/{x}/{y}.terrain\" => a {sql,params} frame for hostcap/flatsql-query:query (SELECT _data FROM DTT WHERE TILESET_ID/LEVEL/X/Y ORDER BY rowid DESC LIMIT 1 - the newest stored record for the address wins) plus a context frame carrying the address and the client's If-None-Match; terrain-source:respond walks the returned aligned size-prefixed $DTT stream and serves the record's payload BYTES VERBATIM (they are gzip-compressed at encode time) with content-type and content-encoding FROM THE RECORD, cache-control public max-age=86400 and a strong ETag (record ETAG, else payload DIGEST, else a weak address+size tag); an If-None-Match match answers 304 and an EMPTY stream answers a cheap CACHEABLE 404 (public, max-age=300) because a miss below the published pyramid is normal traffic - the client's own upsampling relies on layer.json availability. Any other path is a direct cacheable 404 from route; non-GET/HEAD answers 405. Bridge linkage: the only host crossings are the declared storage.flatsql_query_stream hostcall and plugin.getConfig.",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "route",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "q",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "layer",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "layer_json",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "respond",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-query",
+      "fromNodeId": "route",
+      "fromPortId": "query",
+      "toNodeId": "q",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "route-context",
+      "fromNodeId": "route",
+      "fromPortId": "context",
+      "toNodeId": "respond",
+      "toPortId": "context",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "route-layer-plan",
+      "fromNodeId": "route",
+      "fromPortId": "layer_plan",
+      "toNodeId": "layer",
+      "toPortId": "plan",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "q-stream",
+      "fromNodeId": "q",
+      "fromPortId": "stream",
+      "toNodeId": "respond",
+      "toPortId": "stream",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "route-response",
+      "fromNodeId": "route",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "layer-response",
+      "fromNodeId": "layer",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "respond-response",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "api": {
+    "basePath": "/api/v1/terrain",
+    "tag": "terrain",
+    "tagDescription": "Quantized-mesh terrain tiles served from this node's $DTT record store (wasm; all routing, conditional-request and response shaping run inside the module). Anonymous by design: every response is cacheable and the record store is read-only from this flow.",
+    "routes": [
+      {
+        "path": "/layer.json",
+        "method": "GET",
+        "operationId": "getTerrainLayerJson",
+        "summary": "Tileset layer.json",
+        "description": "The complete tilejson-2.1.0 descriptor for the served quantized-mesh-1.0 tileset: scheme tms, projection EPSG:4326, bounds [-180,-90,180,90], minzoom 0, configured maxzoom, extensions [\"watermask\"], and the configured availability index verbatim (octvertexnormals is omitted until normals ship).",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "layer.json body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "tilejson 2.1.0 quantized-mesh layer descriptor."
+              }
+            }
+          }
+        }
+      },
+      {
+        "path": "/{z}/{x}/{tile}",
+        "method": "GET",
+        "operationId": "getTerrainTile",
+        "summary": "One quantized-mesh terrain tile",
+        "description": "The stored quantized-mesh-1.0 tile at TMS address z/x/y (the path's third segment is \"<y>.terrain\") of the two-root GEOGRAPHIC_WGS84 pyramid (newest stored $DTT record for the address). The body is served VERBATIM from the record's payload: gzip content-encoding as stored, strong ETag, cache-control public max-age=86400. If-None-Match answers 304. An unpublished address answers a CACHEABLE 404 (public, max-age=300) - normal traffic, the client upsamples per layer.json availability.",
+        "anonymous": true,
+        "params": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Zoom level, 0 at the pyramid root."
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Column, eastward from -180."
+          },
+          {
+            "name": "tile",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+\\.terrain$"
+            },
+            "description": "Row + extension: \"<y>.terrain\", TMS row (0 at the south edge)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tile bytes, gzip content-encoding, strong ETag.",
+            "content": {
+              "application/vnd.quantized-mesh": {
+                "description": "quantized-mesh-1.0 tile (watermask extension included)."
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the tile ETag)."
+          },
+          "404": {
+            "description": "No tile stored at this address (cacheable; clients upsample per layer.json availability)."
+          }
+        }
+      }
+    ]
+  },
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.terrain-source",
+    "com.digitalarsenal.hostcap.flatsql-query"
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ]
+}
