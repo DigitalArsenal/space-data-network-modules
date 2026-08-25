@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.cellular-network-ingest",
   "name": "Cellular Network Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "The INGEST counterpart to cellular-network-aggregate, which is a per-request HTTP aggregate: route -> http -> parse -> merge -> respond, no storage node, no publication node, nothing persisted. That is the correct shape for the browser demo and the wrong shape for ingest, and the two cannot be the same flow - the aggregate is capabilities [] on route BY DESIGN so it stays browser-shaped. Here a cron TIMER tick enters at cell-tower-ingest:mark_query, which builds the flatsql-query that reads this provider's durable resume mark; hostcap/flatsql-query returns it to cell-tower-ingest:ingest_plan, which emits ONE hostcap/http-request descriptor carrying a Range header for the next chunk plus the cell-tower-source run contract. The chunk is bounded by the Go server host's 4 MiB response-body cap (hostcap/http-request manifest), so a 40M-row bulk export is fetched as a sequence of ranged chunks instead of one truncated GET; cellular-worldwide-ingest-exceeds-host01 measured a 4.75 MB CSV already forcing 8192 linear-memory pages. cell-tower-source's parse and deconflict are REUSED UNCHANGED - decoding a provider body and merging sites are the same operations whether the answer is served or stored - and cell-tower-ingest:ingest_meta authors the storage attribution ($TBS + $TBS.SOURCES provenance, reconcile=append because each batch is one CHUNK of the provider's set, not the set) before hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. cell-tower-ingest:publish_request then advances the resume mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one chunk instead of skipping rows invisibly - and emits the dataset-publication POST only when a publish URL is configured. The host owns no schedule, no provider list, no chunking policy and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL row that holds the mark. No new host connector is required.",
+  "description": "The INGEST counterpart to cellular-network-aggregate, which is a per-request HTTP aggregate: route -> http -> parse -> merge -> respond, no storage node, no publication node, nothing persisted. That is the correct shape for the browser demo and the wrong shape for ingest, and the two cannot be the same flow - the aggregate is capabilities [] on route BY DESIGN so it stays browser-shaped. Here a cron TIMER tick enters at cell-tower-ingest:mark_query, which builds the flatsql-query that reads this provider's durable resume mark; hostcap/flatsql-query returns it to cell-tower-ingest:ingest_plan, which emits ONE hostcap/http-request descriptor carrying a Range header for the next chunk plus the cell-tower-source run contract. The chunk is bounded by the Go server host's 4 MiB response-body cap (hostcap/http-request manifest), so a 40M-row bulk export is fetched as a sequence of ranged chunks instead of one truncated GET; cellular-worldwide-ingest-exceeds-host01 measured a 4.75 MB CSV already forcing 8192 linear-memory pages. cell-tower-source's parse and deconflict are REUSED UNCHANGED - decoding a provider body and merging sites are the same operations whether the answer is served or stored - and cell-tower-ingest:ingest_meta authors the storage attribution ($TBS + $TBS.SOURCES provenance, reconcile=append because each batch is one CHUNK of the provider's set, not the set) before hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. cell-tower-ingest:publish_request then advances the resume mark FROM THE STORAGE RESULT - never at dispatch, so a crash between fetch and store re-fetches one chunk instead of skipping rows invisibly - and emits the dataset-publication POST only when a publish URL is configured. The host owns no schedule, no provider list, no chunking policy and no record semantics: it contributes timers, HTTP egress, guarded persistence and the FlatSQL row that holds the mark. No new host connector is required. DURABLE RESUME MARK (2026-08-24, upstream-modules-2): the mark no longer stops at egress. publish_request authors it as an $IRM (Ingest Resume Mark) record - Themis minted and ratified the standard in spacedatastandards.org 1.196.0, which was the single thing blocking this lane - and hostcap/storage-write persists it through the schema-typed storage.write hostcall under the storage_write grant. mark_read_q now reads $IRM records back out of the store instead of a bespoke bookkeeping table, so the loop is closed with ZERO Go host changes. The mark carries the version-stamped opaque decode context (cell-tower-source's own bulk_resume_next frame, verbatim, restarted rather than resumed if its stamp is unrecognised) and the CSV header row from chunk 0, which is what makes a chunk N>0 decode to rows at all instead of eating its own first data row as a column contract and reporting a clean empty tail. The flow's runtimeTargets narrow to [wasmedge] and that is the truthful declaration, not a convenience: storage_write is browser-incompatible because a browser has no node store, and this is a timer-driven server ingest lane by construction.",
   "nodes": [
     {
       "nodeId": "mark_read_q",
@@ -80,6 +80,16 @@
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
       "kind": "sink",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "mark_write",
+      "pluginId": "com.digitalarsenal.hostcap.storage-write",
+      "methodId": "write_record",
+      "kind": "transform",
+      "capabilities": [
+        "storage_write"
+      ],
       "drainPolicy": "single-shot"
     }
   ],
@@ -273,6 +283,35 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "publish-markrecord-write",
+      "fromNodeId": "publish",
+      "fromPortId": "mark_record",
+      "toNodeId": "mark_write",
+      "toPortId": "record",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "publish-markmeta-write",
+      "fromNodeId": "publish",
+      "fromPortId": "mark_meta",
+      "toNodeId": "mark_write",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "markwrite-egress",
+      "fromNodeId": "mark_write",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
     }
   ],
   "triggers": [
@@ -305,6 +344,7 @@
     "com.digitalarsenal.data-source.cell-tower-source",
     "com.digitalarsenal.hostcap.http-request",
     "com.digitalarsenal.hostcap.storage-ingest",
-    "com.digitalarsenal.hostcap.flatsql-query"
+    "com.digitalarsenal.hostcap.flatsql-query",
+    "com.digitalarsenal.hostcap.storage-write"
   ]
 }

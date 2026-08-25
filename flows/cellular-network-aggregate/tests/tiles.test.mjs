@@ -37,6 +37,8 @@ import { fileURLToPath } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
 
+import { irmRecord, irmStream, isMarkQuery } from "./irm-fixture.mjs";
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -333,9 +335,11 @@ function createHostStub({ config = {}, rows = new Uint8Array(0), mark = null } =
           return 0;
         }
         if (operation === "storage.flatsql_query_stream") {
-          const isMark = String(meta.sql ?? "").includes("cell_tower_ingest_mark");
+          // The DURABLE mark read: $IRM records out of the store's per-type
+          // table, not a bespoke bookkeeping table.
+          const isMark = isMarkQuery(meta.sql);
           if (isMark) {
-            const segment = mark ? encoder.encode(JSON.stringify(mark)) : new Uint8Array(0);
+            const segment = mark ? irmStream([mark]) : new Uint8Array(0);
             response = encodeHostcallEnvelope({ ok: true, result: {} }, [segment]);
             return 0;
           }
@@ -443,14 +447,18 @@ function storeOf(points, extra = []) {
   ]);
 }
 
-const WARM_MARK = {
-  provider_id: "opencellid",
-  next_offset: 3145728,
-  total_bytes: 3145728,
-  chunk_index: 1,
-  stored_rows: 41234,
-  stored_at: "2026-08-24T12:00:00Z",
-};
+// THE DURABLE MARK, as a real $IRM record built by the published JS binding.
+// The guest reads it back through flatc's C++ output, so this is a genuine
+// cross-implementation round trip rather than two copies of one mistake.
+const WARM_MARK = irmRecord({
+  providerId: "opencellid",
+  sourceUrl: "https://example.invalid/opencellid-bulk.csv",
+  nextOffset: 3145728,
+  totalBytes: 3145728,
+  nextChunkIndex: 1,
+  recordsCommitted: 41234,
+  updatedAt: "2026-08-24T12:00:00Z",
+});
 
 const tilePath = (z, x, y) => `/api/v1/cellular/tiles/${z}/${x}/${y}`;
 
@@ -481,7 +489,7 @@ test("the meta envelope satisfies the client's meta grammar and reports the stor
   // NO ROW SCAN for meta: exactly one store read, and it is the mark read.
   const queries = stub.calls.filter((c) => c.operation === "storage.flatsql_query_stream");
   assert.equal(queries.length, 1, "meta must not scan the record store");
-  assert.match(String(queries[0].meta.sql), /cell_tower_ingest_mark/);
+  assert.ok(isMarkQuery(queries[0].meta.sql), "meta's one read is the durable $IRM mark read");
   assert.equal(stub.calls.filter((c) => c.operation === "http.request").length, 0);
 });
 

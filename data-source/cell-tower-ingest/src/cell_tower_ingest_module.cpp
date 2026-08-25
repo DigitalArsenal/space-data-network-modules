@@ -100,7 +100,6 @@ namespace {
 constexpr long kDefaultChunkBytes = 3L * 1024L * 1024L;
 constexpr long kMaxChunkBytes = 4L * 1024L * 1024L;
 constexpr long kDefaultTimeoutMs = 90000;
-constexpr const char* kMarkTable = "cell_tower_ingest_mark";
 constexpr const char* kSchema = "TBS";
 
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -127,6 +126,38 @@ bool json_string_field(const std::string& json, const std::string& key, std::str
     }
     *out = value;
     return true;
+}
+
+// Slice a nested JSON object out verbatim, brace-matched and string-aware, so
+// a value containing braces (a URL template, an escaped quote) cannot end the
+// slice early. Used to forward a producer's own frame without re-serialising it.
+std::string json_object_slice_local(const std::string& json, const std::string& key) {
+    const std::string needle = "\"" + key + "\"";
+    const size_t k = json.find(needle);
+    if (k == std::string::npos) return std::string();
+    const size_t colon = json.find(':', k + needle.size());
+    if (colon == std::string::npos) return std::string();
+    size_t i = colon + 1;
+    while (i < json.size() && is_ws(json[i])) i++;
+    if (i >= json.size() || json[i] != '{') return std::string();
+    const size_t start = i;
+    int depth = 0;
+    bool in_string = false;
+    for (; i < json.size(); i++) {
+        const char c = json[i];
+        if (in_string) {
+            if (c == '\\') i++;
+            else if (c == '"') in_string = false;
+            continue;
+        }
+        if (c == '"') in_string = true;
+        else if (c == '{') depth++;
+        else if (c == '}') {
+            depth--;
+            if (depth == 0) return json.substr(start, i - start + 1);
+        }
+    }
+    return std::string();
 }
 
 bool json_number_field(const std::string& json, const std::string& key, double* out) {
@@ -378,6 +409,282 @@ std::string mark_json(const std::string& provider_id, const std::string& source_
            ",\"source_url\":\"" + json_escape(source_url) + "\"" + ",\"next_offset\":" + buf +
            ",\"stored_rows\":" + std::to_string(stored_rows) + ",\"stored_at\":\"" +
            json_escape(stored_at) + "\"" + ",\"batch_id\":\"" + json_escape(batch_id) + "\"}";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE DURABLE RESUME MARK — $IRM (graph tasks mod-cell-tower-ingest-flow /
+// sds-ingest-resume-mark-record / upstream-modules-2).
+//
+// `mod-cell-tower-ingest-flow` shipped with ONE REAL GAP, recorded rather than
+// worked around: the mark had nowhere durable to go. `hostcap/flatsql-store` is
+// wasi-threads (the flow compiler refuses to link it into a single-thread flow)
+// and admits only $OMM/$OCM/$OBD; `hostcap/file` fits but the Go host has no
+// filesystem capability handler; `storage.write` was exactly right but
+// SCHEMA-TYPED, and inventing an SDS record for a bookkeeping row is Themis's
+// call, not a flow's.
+//
+// Themis ruled. $IRM (Ingest Resume Mark) was minted and ratified in
+// spacedatastandards.org 1.196.0, so the loop closes here: publish_request
+// authors an $IRM record, hostcap/storage-write persists it under the
+// storage_write grant, and mark_query/ingest_plan read it back. ZERO Go host
+// changes; the whole lane is still the generic hooks.
+//
+// THE DECODE CONTEXT IS OPAQUE AND VERSION-STAMPED, AND THAT IS DELIBERATE.
+//
+// A ranged bulk fetch cuts a deflate stream at an arbitrary byte. There is no
+// sync point and back-references reach 32 KiB behind, so chunk N>0 cannot be
+// decoded at all without the decoder's state — and cell-tower-source's `parse`
+// ALREADY serializes exactly that (tinfl state + the 32 KiB dictionary window +
+// the partial line straddling the seam) into its `bulk_resume_next` job field.
+// So the mark carries that producer's own frame VERBATIM in
+// IRMDecodeContext.DECODER_STATE rather than re-deriving it: a re-derivation is
+// a second implementation of a format whose whole purpose is to be restored
+// bit-exactly, and the failure mode of getting it wrong is a resume into
+// nonsense that stores cleanly.
+//
+// What makes verbatim safe is the VERSION STAMP. DECODER_STATE_FORMAT names the
+// producer and its layout; a mark whose stamp this build does not recognise is
+// IGNORED and the run RESTARTS, never resumed. That is the same posture
+// cell-tower-source's own `bulk_state_decode` takes on a version, size or
+// length disagreement, and for the same reason.
+// ═══════════════════════════════════════════════════════════════════════════
+
+constexpr const char* kIrmType = "IRM";
+constexpr const char* kIrmDecoderStateFormat = "cell-tower-source/bulk-resume-v1";
+constexpr const char* kIrmDecoderStateVersion = "1";
+constexpr const char* kIrmDecoderStateMediaType = "application/json";
+constexpr const char* kDefaultMarkSql = "SELECT data FROM sds_irm ORDER BY rowid DESC LIMIT ?";
+constexpr long kDefaultMarkScanRows = 32;
+
+// Everything the read side needs, from EITHER a durable $IRM record or the
+// legacy JSON frame the flow still lands on egress for observability. The two
+// are told apart by the FlatBuffer file identifier versus a leading '{' — an
+// unambiguous discrimination, not a heuristic.
+struct MarkView {
+    bool present = false;
+    bool durable = false;  // came from an $IRM record rather than the JSON frame
+    std::string provider_id;
+    std::string source_url;
+    std::string batch_id;
+    std::string updated_at;
+    long next_offset = 0;
+    long total_bytes = 0;
+    long chunk_index = 0;
+    long stored_rows = 0;
+    std::string header_line;
+    std::string decoder_state;         // the producer's own frame, verbatim
+    std::string decoder_state_format;  // its version stamp
+};
+
+// Locate an $IRM root buffer inside a frame that may be the bare buffer or one
+// element of a size-prefixed stream. Returns nullptr when the bytes are not an
+// $IRM buffer at all — absent, never assumed.
+const uint8_t* find_irm_root(const uint8_t* data, size_t length, size_t* out_length) {
+    if (!data) return nullptr;
+    if (length >= 8 && std::memcmp(data + 4, "$IRM", 4) == 0) {
+        *out_length = length;
+        return data;
+    }
+    if (length >= 12 && std::memcmp(data + 8, "$IRM", 4) == 0) {
+        const uint32_t size = static_cast<uint32_t>(data[0]) |
+                              (static_cast<uint32_t>(data[1]) << 8) |
+                              (static_cast<uint32_t>(data[2]) << 16) |
+                              (static_cast<uint32_t>(data[3]) << 24);
+        if (size > 0 && 4u + size <= length) {
+            *out_length = size;
+            return data + 4;
+        }
+    }
+    return nullptr;
+}
+
+// Read the mark frame. `want_provider` is the provider this run is ingesting; a
+// mark belonging to a DIFFERENT provider is skipped rather than trusted, because
+// resuming provider A at provider B's offset skips the head of B's file and
+// never reports it. The query returns the newest few rows so a shared $IRM table
+// can hold several ingest lanes at once.
+MarkView read_mark(const std::string& frame, const std::string& want_provider) {
+    MarkView view;
+    if (frame.empty()) return view;
+
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(frame.data());
+    size_t remaining = frame.size();
+    size_t at = 0;
+
+    // Walk every element of the stream, keeping the first mark for this
+    // provider (the query orders newest first).
+    while (at < remaining) {
+        size_t buffer_length = 0;
+        const uint8_t* root = find_irm_root(bytes + at, remaining - at, &buffer_length);
+        if (!root) break;
+
+        const IRM* irm = GetIRM(root);
+        if (irm) {
+            const char* provider = irm->PROVIDER_ID() ? irm->PROVIDER_ID()->c_str() : "";
+            if (want_provider.empty() || want_provider == provider) {
+                view.present = true;
+                view.durable = true;
+                view.provider_id = provider;
+                view.next_offset = static_cast<long>(irm->NEXT_OFFSET());
+                view.chunk_index = static_cast<long>(irm->NEXT_CHUNK_INDEX());
+                view.stored_rows = static_cast<long>(irm->RECORDS_COMMITTED());
+                if (irm->UPDATED_AT()) view.updated_at = irm->UPDATED_AT()->str();
+                if (const IRMSource* source = irm->SOURCE()) {
+                    if (source->SOURCE_URL()) view.source_url = source->SOURCE_URL()->str();
+                    view.total_bytes = static_cast<long>(source->TOTAL_BYTES());
+                }
+                if (const IRMChunk* chunk = irm->LAST_CHUNK()) {
+                    if (chunk->BATCH_ID()) view.batch_id = chunk->BATCH_ID()->str();
+                }
+                if (const IRMDecodeContext* decode = irm->DECODE_CONTEXT()) {
+                    if (decode->HEADER_LINE()) view.header_line = decode->HEADER_LINE()->str();
+                    if (decode->DECODER_STATE_FORMAT()) {
+                        view.decoder_state_format = decode->DECODER_STATE_FORMAT()->str();
+                    }
+                    if (decode->DECODER_STATE()) {
+                        view.decoder_state.assign(
+                            reinterpret_cast<const char*>(decode->DECODER_STATE()->Data()),
+                            decode->DECODER_STATE()->size());
+                    }
+                }
+                return view;
+            }
+        }
+        // The whole element, including its size prefix when it had one.
+        at += (root == bytes + at) ? buffer_length : buffer_length + 4;
+        if (buffer_length == 0) break;
+    }
+
+    // LEGACY JSON. The flow still emits the mark as JSON on egress so an
+    // operator can read it, and the pre-$IRM tests exercise that shape. It is
+    // accepted here, and it is NEVER confused with a record: a FlatBuffer does
+    // not begin with '{'.
+    size_t first = 0;
+    while (first < frame.size() && is_ws(frame[first])) first++;
+    if (first < frame.size() && frame[first] == '{') {
+        std::string provider;
+        if (json_string_field(frame, "provider_id", &provider)) {
+            if (!want_provider.empty() && want_provider != provider) return view;
+            view.present = true;
+            view.durable = false;
+            view.provider_id = provider;
+            json_string_field(frame, "source_url", &view.source_url);
+            json_string_field(frame, "batch_id", &view.batch_id);
+            json_string_field(frame, "stored_at", &view.updated_at);
+            view.next_offset = static_cast<long>(json_number_or(frame, "next_offset", 0));
+            view.total_bytes = static_cast<long>(json_number_or(frame, "total_bytes", 0));
+            view.chunk_index = static_cast<long>(json_number_or(frame, "chunk_index", 0));
+            view.stored_rows = static_cast<long>(json_number_or(frame, "stored_rows", 0));
+        }
+    }
+    return view;
+}
+
+// Author the durable $IRM record.
+//
+// Every field here is something the run ESTABLISHED. Nothing is invented to
+// fill a slot: an unknown total is 0 (which the read side reads as "length still
+// unknown" and never as "finished"), an absent decode context is an absent
+// table, and STATE is COMPLETE only when the fetch has demonstrably reached the
+// end of a source whose length is known.
+std::vector<uint8_t> build_irm(const std::string& provider, const std::string& source_url,
+                               const std::string& batch_id, long next_offset, long total_bytes,
+                               long chunk_index, long stored_rows, long chunk_offset,
+                               long records_in, const std::string& header_line,
+                               const std::string& decoder_state, const std::string& format,
+                               const std::string& merge_policy, const std::string& updated_at) {
+    ::flatbuffers::FlatBufferBuilder b(2048 + decoder_state.size() + header_line.size());
+
+    // JOB_ID is required and must be STABLE for one (provider, source) lane, so
+    // a later chunk updates the same job rather than opening a new one.
+    const std::string job_id = provider + "@" + source_url;
+    const auto job_id_off = b.CreateString(job_id);
+    const auto provider_off = b.CreateString(provider);
+    const auto ingestor_off = b.CreateString("cell-tower-ingest-wasm/v1");
+    const auto updated_off = b.CreateString(updated_at);
+    const auto target_off = b.CreateString(kSchema);
+    const auto reconcile_off = b.CreateString("append");
+    const auto merge_off = merge_policy.empty() ? 0 : b.CreateString(merge_policy);
+
+    const auto source_url_off = b.CreateString(source_url);
+    IRMSourceBuilder sb(b);
+    sb.add_SOURCE_URL(source_url_off);
+    if (total_bytes > 0) sb.add_TOTAL_BYTES(static_cast<uint64_t>(total_bytes));
+    const auto source_off = sb.Finish();
+
+    // The decode context exists ONLY when there is something to carry. An empty
+    // table would read as "resume context available" and hand the decoder
+    // nothing.
+    ::flatbuffers::Offset<IRMDecodeContext> decode_off = 0;
+    if (!header_line.empty() || !decoder_state.empty()) {
+        const auto format_off = b.CreateString(format.empty() ? "csv" : format);
+        const auto header_off = header_line.empty() ? 0 : b.CreateString(header_line);
+        const auto state_off =
+            decoder_state.empty()
+                ? 0
+                : b.CreateVector(reinterpret_cast<const uint8_t*>(decoder_state.data()),
+                                 decoder_state.size());
+        const auto state_format_off =
+            decoder_state.empty() ? 0 : b.CreateString(kIrmDecoderStateFormat);
+        const auto state_version_off =
+            decoder_state.empty() ? 0 : b.CreateString(kIrmDecoderStateVersion);
+        const auto state_media_off =
+            decoder_state.empty() ? 0 : b.CreateString(kIrmDecoderStateMediaType);
+        IRMDecodeContextBuilder db(b);
+        db.add_FORMAT(format_off);
+        if (header_off.o) {
+            db.add_HEADER_LINE(header_off);
+            db.add_HEADER_BYTE_LENGTH(static_cast<uint64_t>(header_line.size()));
+        }
+        if (state_off.o) {
+            db.add_DECODER_STATE(state_off);
+            db.add_DECODER_STATE_FORMAT(state_format_off);
+            db.add_DECODER_STATE_VERSION(state_version_off);
+            db.add_DECODER_STATE_MEDIA_TYPE(state_media_off);
+            db.add_DECODER_STATE_BYTE_LENGTH(static_cast<uint64_t>(decoder_state.size()));
+        }
+        decode_off = db.Finish();
+    }
+
+    const auto batch_off = b.CreateString(batch_id);
+    const auto committed_off = b.CreateString(updated_at);
+    IRMChunkBuilder cb(b);
+    cb.add_CHUNK_INDEX(static_cast<uint32_t>(chunk_index));
+    cb.add_BATCH_ID(batch_off);
+    cb.add_RANGE_FIRST_BYTE(static_cast<uint64_t>(chunk_offset));
+    if (next_offset > chunk_offset) {
+        cb.add_RANGE_LAST_BYTE(static_cast<uint64_t>(next_offset - 1));
+        cb.add_BYTE_LENGTH(static_cast<uint64_t>(next_offset - chunk_offset));
+    }
+    if (records_in >= 0) cb.add_RECORDS_DECODED(static_cast<uint32_t>(records_in));
+    cb.add_COMMITTED_AT(committed_off);
+    const auto chunk_off = cb.Finish();
+
+    const bool complete = total_bytes > 0 && next_offset >= total_bytes;
+
+    IRMBuilder ib(b);
+    ib.add_JOB_ID(job_id_off);
+    ib.add_SEQUENCE(static_cast<uint64_t>(chunk_index + 1));
+    ib.add_PROVIDER_ID(provider_off);
+    ib.add_INGESTOR_ID(ingestor_off);
+    ib.add_SOURCE(source_off);
+    ib.add_STATE(complete ? irmJobState_COMPLETE : irmJobState_IN_PROGRESS);
+    ib.add_RANGE_MODE(irmRangeMode_INCLUSIVE_BYTE_RANGE);
+    ib.add_NEXT_OFFSET(static_cast<uint64_t>(next_offset));
+    ib.add_NEXT_CHUNK_INDEX(static_cast<uint32_t>(chunk_index + 1));
+    if (decode_off.o) ib.add_DECODE_CONTEXT(decode_off);
+    ib.add_LAST_CHUNK(chunk_off);
+    ib.add_CHUNKS_COMMITTED(static_cast<uint32_t>(chunk_index + 1));
+    ib.add_BYTES_COMMITTED(static_cast<uint64_t>(next_offset));
+    ib.add_RECORDS_COMMITTED(static_cast<uint64_t>(stored_rows));
+    ib.add_TARGET_STANDARD(target_off);
+    ib.add_RECONCILE_MODE(reconcile_off);
+    if (merge_off.o) ib.add_MERGE_POLICY(merge_off);
+    ib.add_UPDATED_AT(updated_off);
+    if (complete) ib.add_COMPLETED_AT(updated_off);
+    FinishIRMBuffer(b, ib.Finish());
+
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 // ── $HTQ request envelope (read-only) ──────────────────────────────────────
@@ -752,25 +1059,39 @@ std::string tile_dataset_json(const std::string& mark, std::string* state_out) {
     long records = 0;
     bool stale = true;
 
-    std::string mark_provider;
-    if (!mark.empty() && json_string_field(mark, "provider_id", &mark_provider)) {
-        const long next_offset = static_cast<long>(json_number_or(mark, "next_offset", 0));
-        const long total_bytes = static_cast<long>(json_number_or(mark, "total_bytes", 0));
-        records = static_cast<long>(json_number_or(mark, "stored_rows", 0));
-        if (records < 0) records = 0;
-        const bool complete = total_bytes > 0 && next_offset >= total_bytes;
+    const MarkView view = read_mark(mark, std::string());
+    if (view.present) {
+        records = view.stored_rows < 0 ? 0 : view.stored_rows;
+        const bool complete = view.total_bytes > 0 && view.next_offset >= view.total_bytes;
         state = complete ? "warm" : "ingesting";
         stale = !complete;
-        std::string stored_at;
-        if (json_string_field(mark, "stored_at", &stored_at) && !stored_at.empty()) {
-            epoch = stored_at;
-        }
+        if (!view.updated_at.empty()) epoch = view.updated_at;
     }
 
     if (state_out) *state_out = state;
     return std::string("{\"dataset\":\"") + kTileDataset + "\",\"epoch\":\"" + json_escape(epoch) +
            "\",\"records\":" + std::to_string(records) + ",\"stale\":" + (stale ? "true" : "false") +
            ",\"cacheState\":\"" + state + "\"}";
+}
+
+// THE ONE DURABLE MARK READ, shared by every planner.
+//
+// $IRM records land in the store's per-type table (sds_<lowercased type>, the
+// convention hostcap/flatsql-store encodes), so the mark is read back as
+// RECORDS rather than out of a bespoke bookkeeping table. The provider is NOT
+// pushed into the SQL: PROVIDER_ID lives inside the FlatBuffer, not in a
+// column, and inventing a column the store does not have returns an error on
+// some backends and an EMPTY SET on others — the second being
+// indistinguishable from "never ingested". The newest few rows are read and
+// `read_mark` picks the right provider's, which also lets one $IRM table serve
+// several ingest lanes at once.
+std::string durable_mark_query(const std::string& config) {
+    const std::string sql = config_string(config, "cell_ingest_mark_sql", kDefaultMarkSql);
+    long scan = static_cast<long>(json_number_or(config, "cell_ingest_mark_scan_rows",
+                                                 static_cast<double>(kDefaultMarkScanRows)));
+    if (scan <= 0) scan = kDefaultMarkScanRows;
+    return std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":[{\"t\":\"i64\",\"v\":" +
+           std::to_string(scan) + "}]}";
 }
 
 // The tile path grammar: ".../tiles/meta" or ".../tiles/{z}/{x}/{y}".
@@ -908,9 +1229,7 @@ int cache_plan(void) {
     // records answer must stream back verbatim to the caller, and mixing
     // bookkeeping columns into it would corrupt the record stream.
     const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
-    const std::string mark_sql = std::string("{\"sql\":\"SELECT * FROM ") + kMarkTable +
-                                 "\",\"params\":[]}";
-    if (push_json("mark_query", mark_sql) < 0) return 500;
+    if (push_json("mark_query", durable_mark_query(config)) < 0) return 500;
 
     const std::string job = std::string("{\"route\":\"cellular-aggregate-cache\"") +
                             ",\"limit\":" + limit_buf + ",\"maxRows\":" +
@@ -955,6 +1274,7 @@ int cache_freshness(void) {
     std::string provider;
     json_string_field(job, "provider_id", &provider);
 
+    const MarkView mark_view = read_mark(input_text("mark"), std::string());
     const std::string mark = input_text("mark");
 
     std::string state = "empty";
@@ -963,11 +1283,11 @@ int cache_freshness(void) {
     bool stale = true;
 
     if (!mark.empty()) {
-        std::string mark_provider;
-        if (json_string_field(mark, "provider_id", &mark_provider)) {
-            const long next_offset = static_cast<long>(json_number_or(mark, "next_offset", 0));
-            const long total_bytes = static_cast<long>(json_number_or(mark, "total_bytes", 0));
-            const long chunk_index = static_cast<long>(json_number_or(mark, "chunk_index", 0));
+        if (mark_view.present) {
+            const std::string mark_provider = mark_view.provider_id;
+            const long next_offset = mark_view.next_offset;
+            const long total_bytes = mark_view.total_bytes;
+            const long chunk_index = mark_view.chunk_index;
             state = "warm";
             freshness = (total_bytes > 0 && next_offset >= total_bytes) ? "complete" : "ingesting";
             stale = freshness != "complete";
@@ -1065,8 +1385,7 @@ int tile_plan(void) {
 
     const std::string config = load_config();
     const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
-    const std::string mark_sql = std::string("{\"sql\":\"SELECT * FROM ") + kMarkTable +
-                                 "\",\"params\":[]}";
+    const std::string mark_sql = durable_mark_query(config);
 
     // ── the meta lane: capability envelope + store honesty, and NO row scan.
     //
@@ -1331,12 +1650,19 @@ int tile(void) {
 int mark_query(void) {
     if (refuse_batched()) return 500;
     const std::string config = load_config();
-    const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
-    const std::string query = std::string("{\"sql\":\"SELECT * FROM ") + kMarkTable +
-                              " WHERE provider_id = ? LIMIT 1\"" +
-                              ",\"params\":[{\"t\":\"str\",\"v\":\"" + json_escape(provider) +
-                              "\"}]}";
-    return push_json("query", query) < 0 ? 500 : 0;
+
+    // THE DURABLE READ SIDE, now that the write side exists. $IRM records land
+    // in the store's per-type table (sds_<lowercased type>, the convention
+    // hostcap/flatsql-store encodes), so the mark is read back as RECORDS, not
+    // as a bespoke bookkeeping table.
+    //
+    // The provider is NOT pushed into the SQL as a WHERE clause: PROVIDER_ID
+    // lives inside the FlatBuffer, not in a column, and inventing a column that
+    // the store does not have returns an error on some backends and an empty
+    // set on others — the second being indistinguishable from "never ingested".
+    // So the newest few rows are read and `read_mark` picks this provider's,
+    // which also lets one $IRM table serve several ingest lanes at once.
+    return push_json("query", durable_mark_query(config)) < 0 ? 500 : 0;
 }
 
 // ingest_plan: tick (+ the resume mark, when one exists) -> ONE ranged fetch
@@ -1359,25 +1685,32 @@ int ingest_plan(void) {
         return 400;
     }
 
-    const std::string mark = input_text("mark");
-    long offset = 0;
-    long total = 0;
-    long chunk_index = 0;
-    long prior_stored_rows = 0;
-    if (!mark.empty()) {
-        std::string mark_provider;
-        // A mark belonging to a DIFFERENT provider is ignored rather than
-        // trusted: resuming provider A at provider B's offset would skip the
-        // head of B's file and never report it.
-        if (json_string_field(mark, "provider_id", &mark_provider) && mark_provider == provider) {
-            offset = static_cast<long>(json_number_or(mark, "next_offset", 0));
-            total = static_cast<long>(json_number_or(mark, "total_bytes", 0));
-            chunk_index = static_cast<long>(json_number_or(mark, "chunk_index", 0));
-            prior_stored_rows = static_cast<long>(json_number_or(mark, "stored_rows", 0));
-            if (offset < 0) offset = 0;
-            if (prior_stored_rows < 0) prior_stored_rows = 0;
-        }
+    // The durable $IRM record (or the legacy JSON frame). `read_mark` refuses a
+    // mark belonging to a different provider outright: resuming provider A at
+    // provider B's offset skips the head of B's file and never reports it.
+    const MarkView mark = read_mark(input_text("mark"), provider);
+    long offset = mark.next_offset;
+    long total = mark.total_bytes;
+    long chunk_index = mark.chunk_index;
+    long prior_stored_rows = mark.stored_rows;
+    if (offset < 0) offset = 0;
+    if (prior_stored_rows < 0) prior_stored_rows = 0;
+
+    // THE DECODE CONTEXT, GATED ON ITS VERSION STAMP.
+    //
+    // A mark whose decoder-state format this build does not recognise is
+    // DISCARDED and the run restarts from the top, exactly as
+    // cell-tower-source's own bulk_state_decode restarts on a version, size or
+    // length disagreement. Handing a foreign blob to the decoder does not fail
+    // loudly — it resumes into nonsense that stores cleanly.
+    std::string bulk_resume;
+    if (!mark.decoder_state.empty() && mark.decoder_state_format == kIrmDecoderStateFormat) {
+        bulk_resume = mark.decoder_state;
     }
+    // The CSV header row lives only in chunk 0. Carried forward here, it is what
+    // makes a chunk N>0 decode to rows at all instead of eating its own first
+    // data row as a column contract and reporting a clean empty tail.
+    const std::string csv_header = mark.header_line;
 
     // Already complete: emit NOTHING. The downstream http node never becomes
     // ready and the run ends without a fetch. A finished file is not an error.
@@ -1419,6 +1752,9 @@ int ingest_plan(void) {
         ",\"request_providers\":[\"" + json_escape(provider) + "\"]" + ",\"skipped\":[]" +
         ",\"provider_id\":\"" + json_escape(provider) + "\"" + ",\"source_url\":\"" +
         json_escape(url) + "\"" + ",\"prior_stored_rows\":" + std::to_string(prior_stored_rows) +
+        (csv_header.empty() ? std::string()
+                            : ",\"csv_header\":\"" + json_escape(csv_header) + "\"") +
+        (bulk_resume.empty() ? std::string() : ",\"bulk_resume\":" + bulk_resume) +
         ",\"chunk_bytes\":" + std::to_string(chunk) + "}";
 
     // Job first: parse and deconflict both need the run contract, and a response
@@ -1477,6 +1813,10 @@ int ingest_meta(void) {
     // Total object size from Content-Range's denominator (see the note above).
     // Absent or "*" leaves total 0, which the mark reads as "length still
     // unknown" and keeps ranging — it never reads as "finished".
+    // Read before the body block: the deconflict decision carries the decoder's
+    // own resume point, which overrides the byte estimate computed there.
+    const std::string decision_raw = input_text("decision");
+
     long total_bytes = 0;
     const std::string response = input_text("response");
     if (!response.empty()) {
@@ -1512,6 +1852,7 @@ int ingest_meta(void) {
     // Falls back to the nominal chunk end only when the body is unavailable —
     // never silently, since that is the case a test must be able to see.
     long next_offset = chunk_offset + chunk_bytes;
+    std::string header_line;
     std::string body_b64;
     if (json_string_field(response, "bodyB64", &body_b64) && !body_b64.empty()) {
         const std::string body = base64_decode(body_b64);
@@ -1520,14 +1861,48 @@ int ingest_meta(void) {
         // the chunk size would skip it; the run must widen the chunk instead, so
         // the offset does not move and the condition is reported.
         if (nl != std::string::npos) next_offset = chunk_offset + static_cast<long>(nl) + 1;
+
+        // THE HEADER ROW EXISTS IN CHUNK 0 AND NOWHERE ELSE, so chunk 0 is the
+        // only place it can ever be captured. Taken from a chunk that already
+        // carried a header (chunk_offset > 0 means a header was carried IN)
+        // would capture a data row and poison every later chunk's column
+        // contract, so it is read only at offset 0.
+        if (chunk_offset == 0) {
+            const size_t first = body.find('\n');
+            if (first != std::string::npos) {
+                header_line = body.substr(0, first);
+                if (!header_line.empty() && header_line.back() == '\r') header_line.pop_back();
+            }
+        }
+    }
+    // A header carried IN on the job is carried straight back out: the mark must
+    // keep naming it for every later chunk, not only for the one after chunk 0.
+    if (header_line.empty()) json_string_field(job, "csv_header", &header_line);
+
+    // THE DECODER'S OWN NEXT BYTE WINS OVER THE NEWLINE CORRECTION.
+    //
+    // Row-boundary correction is right for a plain CSV chunk and WRONG for a
+    // compressed one: a deflate stream has no row boundaries in its compressed
+    // bytes, and the last newline in the DECOMPRESSED body says nothing about
+    // where to resume the fetch. When the decoder published its own resume point
+    // (cell-tower-source's `bulk_resume_next.next_byte`, advanced by what tinfl
+    // actually CONSUMED rather than by the chunk length), that is the only
+    // authority. The two are never averaged or cross-checked; the decoder's
+    // answer replaces the estimate.
+    std::string bulk_resume_next;
+    if (!decision_raw.empty()) {
+        bulk_resume_next = json_object_slice_local(decision_raw, "bulkResume");
+        if (!bulk_resume_next.empty()) {
+            const double decoder_next = json_number_or(bulk_resume_next, "next_byte", -1);
+            if (decoder_next >= 0) next_offset = static_cast<long>(decoder_next);
+        }
     }
 
     // The record count this chunk actually produced, from deconflict's decision.
     // publish_request needs it to tell a real empty tail from a stored-nothing
     // refusal; -1 (absent) disables that check rather than faking a count.
-    const std::string decision = input_text("decision");
     const long records_in =
-        decision.empty() ? -1 : static_cast<long>(json_number_or(decision, "sitesOut", -1));
+        decision_raw.empty() ? -1 : static_cast<long>(json_number_or(decision_raw, "sitesOut", -1));
 
     // ONE BATCH PER CHUNK. A single batch id spanning every chunk would make the
     // storage lane's source-batch reconcile treat each chunk as the provider's
@@ -1564,6 +1939,14 @@ int ingest_meta(void) {
         ",\"records_in\":" + std::to_string(records_in) +
         ",\"prior_stored_rows\":" +
         std::to_string(static_cast<long>(json_number_or(job, "prior_stored_rows", 0))) +
+        // The decode context rides to publish_request, which is the only node
+        // that reaches the durable mark. Verbatim: it is the producer's own
+        // frame and re-serialising it here would be a second implementation of
+        // a format whose entire purpose is bit-exact restoration.
+        (header_line.empty() ? std::string()
+                             : ",\"csv_header\":\"" + json_escape(header_line) + "\"") +
+        (bulk_resume_next.empty() ? std::string()
+                                  : ",\"bulk_resume_next\":" + bulk_resume_next) +
         ",\"provenance\":{\"source\":\"cell-tower-ingest-wasm/v1\"" + ",\"json\":\"" +
         base64_encode(reinterpret_cast<const uint8_t*>(provenance.data()), provenance.size()) +
         "\"}}";
@@ -1638,9 +2021,44 @@ int publish_request(void) {
     if (prior_stored < 0) prior_stored = 0;
     const long stored_rows = prior_stored + (inserted > 0 ? inserted : 0);
 
+    const std::string stamped_at = iso_now();
+
+    // The JSON mark stays: it is what an operator reads off egress, and it is
+    // the frame the pre-$IRM tests exercise. It is NOT the durable one.
     const std::string next_mark = mark_json(provider, source_url, next_offset, total,
-                                            chunk_index + 1, batch_id, stored_rows, iso_now());
+                                            chunk_index + 1, batch_id, stored_rows, stamped_at);
     if (push_json("mark", next_mark) < 0) return 500;
+
+    // THE DURABLE MARK. This is the gap `mod-cell-tower-ingest-flow` recorded
+    // and could not close: `storage.write` is schema-typed, and the record it
+    // needed did not exist. Themis minted and ratified $IRM in
+    // spacedatastandards.org 1.196.0, so the record is authored here and
+    // hostcap/storage-write persists it under the storage_write grant.
+    //
+    // It is emitted on the SAME condition as the JSON mark — after a VERIFIED
+    // store, never at dispatch. A mark advanced when a chunk is requested turns
+    // a crash between fetch and store into permanently skipped rows, and the
+    // gap is invisible: the next run resumes past data that was never
+    // persisted.
+    std::string header_line;
+    json_string_field(meta, "csv_header", &header_line);
+    const std::string decoder_state = json_object_slice_local(meta, "bulk_resume_next");
+    std::string merge_policy;
+    json_string_field(meta, "method_name", &merge_policy);
+
+    const std::vector<uint8_t> record = build_irm(
+        provider, source_url, batch_id, next_offset, total, chunk_index, stored_rows, chunk_offset,
+        records_in, header_line, decoder_state,
+        config_string(load_config(), "cell_ingest_format", "csv"), merge_policy, stamped_at);
+    if (push_bytes("mark_record", record.data(), static_cast<uint32_t>(record.size())) < 0) {
+        return 500;
+    }
+    // `source` is the record's attribution string; `type` is asserted here AND
+    // re-derived by storage-write from the buffer's own file identifier, which
+    // refuses the pair if they ever disagree.
+    const std::string mark_meta = std::string("{\"source\":\"") + json_escape(provider) +
+                                  "\",\"type\":\"" + kIrmType + "\"}";
+    if (push_json("mark_meta", mark_meta) < 0) return 500;
 
     const std::string config = load_config();
     std::string publish_url;

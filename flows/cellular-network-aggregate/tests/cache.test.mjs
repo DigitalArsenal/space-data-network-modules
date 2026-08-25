@@ -38,6 +38,8 @@ import { fileURLToPath } from "node:url";
 
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
 
+import { irmRecord, irmStream, isMarkQuery } from "./irm-fixture.mjs";
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -166,9 +168,11 @@ function createHostStub({ config = {}, rows = CACHED_ROWS, mark = null } = {}) {
         if (operation === "storage.flatsql_query_stream") {
           // The mark query and the records query are told apart by the SQL,
           // exactly as the engine would.
-          const isMark = String(meta.sql ?? "").includes("cell_tower_ingest_mark");
+          // The DURABLE mark read: $IRM records out of the store's per-type
+          // table, not a bespoke bookkeeping table.
+          const isMark = isMarkQuery(meta.sql);
           if (isMark) {
-            const segment = mark ? encoder.encode(JSON.stringify(mark)) : new Uint8Array(0);
+            const segment = mark ? irmStream([mark]) : new Uint8Array(0);
             response = encodeHostcallEnvelope({ ok: true, result: {} }, [segment]);
             return 0;
           }
@@ -247,12 +251,18 @@ function responseText(emitted) {
   return emitted.map((bytes) => decoder.decode(bytes)).join("\n");
 }
 
-const WARM_MARK = {
-  provider_id: "opencellid",
-  next_offset: 3145728,
-  total_bytes: 3145728,
-  chunk_index: 1,
-};
+// THE DURABLE MARK, as a real $IRM record (Themis minted the standard in
+// spacedatastandards.org 1.196.0). Built with the published JS binding and read
+// by the guest through flatc's C++ output.
+const WARM_MARK = irmRecord({
+  providerId: "opencellid",
+  sourceUrl: "https://example.invalid/opencellid-bulk.csv",
+  nextOffset: 3145728,
+  totalBytes: 3145728,
+  nextChunkIndex: 1,
+  recordsCommitted: 41234,
+  updatedAt: "2026-08-24T12:00:00Z",
+});
 
 test("cache hit serves exactly the default query's bytes, and contacts no provider", async () => {
   const stub = createHostStub({ mark: WARM_MARK });
@@ -368,7 +378,15 @@ test("invalidation: new ingest state changes what the next request is served and
 
   // The ingest lane runs: rows land, the mark advances. Same request again.
   const second = createHostStub({
-    mark: { provider_id: "opencellid", next_offset: 1048576, total_bytes: 3145728, chunk_index: 0 },
+    mark: irmRecord({
+      providerId: "opencellid",
+      sourceUrl: "https://example.invalid/opencellid-bulk.csv",
+      nextOffset: 1048576,
+      totalBytes: 3145728,
+      nextChunkIndex: 1,
+      recordsCommitted: 900,
+      updatedAt: "2026-08-24T11:00:00Z",
+    }),
     rows: CACHED_ROWS,
   });
   const b = await runFlowOnce(

@@ -205,7 +205,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The ingest resume-mark rows read back by hostcap/flatsql-query. Absent before the ingest lane has stored anything.",
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -216,7 +216,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "The ingest resume-mark rows read back by hostcap/flatsql-query. Absent before the ingest lane has stored anything."
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
         }
       ],
       "outputPorts": [
@@ -342,7 +342,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The resume mark row read back by flatsql-query. Absent on the first run.",
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -353,7 +353,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "The resume mark row read back by flatsql-query. Absent on the first run."
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
         }
       ],
       "outputPorts": [
@@ -404,7 +404,7 @@
           "description": "cell-tower-source run contract for parse/deconflict, plus this chunk's offset/index."
         }
       ],
-      "description": "Emits ONE ranged fetch descriptor plus the cell-tower-source run contract for that chunk. The chunk size is clamped to 4 MiB because the Go server host caps an http response body there (hostcap/http-request manifest): a larger ask is TRUNCATED by the host and parses to a plausible short row set with no error anywhere. One chunk per tick rather than an in-guest loop, so the loop's state lives in the durable mark instead of in a guest instance a restart erases. Emits nothing once the mark shows the object complete, and fails closed when no cell_ingest_url is configured. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Emits ONE ranged fetch descriptor plus the cell-tower-source run contract for that chunk. The chunk size is clamped to 4 MiB because the Go server host caps an http response body there (hostcap/http-request manifest): a larger ask is TRUNCATED by the host and parses to a plausible short row set with no error anywhere. One chunk per tick rather than an in-guest loop, so the loop's state lives in the durable mark instead of in a guest instance a restart erases. Emits nothing once the mark shows the object complete, and fails closed when no cell_ingest_url is configured. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count. RESUME IS NOW DURABLE AND CARRIES THE DECODE CONTEXT: the mark is an $IRM record, and its IRMDecodeContext.DECODER_STATE is handed to cell-tower-source's parse as `bulk_resume` VERBATIM - GATED ON ITS VERSION STAMP. A mark whose DECODER_STATE_FORMAT this build does not recognise is DISCARDED and the run restarts from the top; handing a foreign blob to the decoder does not fail loudly, it resumes into nonsense that stores cleanly. The CSV header row from chunk 0 rides as `csv_header`, without which a chunk N>0 eats its own first data row as a column contract and reports a clean empty tail.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -549,7 +549,7 @@
           "description": "The record stream, forwarded untouched."
         }
       ],
-      "description": "Authors the attribution the storage lane cannot invent (provider, source, batch, $TBS.SOURCES provenance) and forwards the records untouched. Takes the http response because the object's TOTAL SIZE is only knowable from Content-Range's denominator - Content-Length on a 206 describes the chunk, and reading it as the total would end the run after one chunk with every later byte silently unfetched. Uses reconcile=append, NOT the source-batch reconcile the celestrak lane uses: this batch is one CHUNK of the provider's set, not the set, and reconciling would delete every earlier chunk as the next arrived. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Authors the attribution the storage lane cannot invent (provider, source, batch, $TBS.SOURCES provenance) and forwards the records untouched. Takes the http response because the object's TOTAL SIZE is only knowable from Content-Range's denominator - Content-Length on a 206 describes the chunk, and reading it as the total would end the run after one chunk with every later byte silently unfetched. Uses reconcile=append, NOT the source-batch reconcile the celestrak lane uses: this batch is one CHUNK of the provider's set, not the set, and reconciling would delete every earlier chunk as the next arrived. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count. THE DECODER'S OWN NEXT BYTE WINS OVER THE NEWLINE CORRECTION. Row-boundary correction is right for a plain CSV chunk and WRONG for a compressed one: a deflate stream has no row boundaries in its compressed bytes. When the decoder published its own resume point (bulk_resume_next.next_byte, advanced by what tinfl actually CONSUMED rather than by the chunk length), that is the only authority and it REPLACES the estimate. This node also captures the CSV header row, and only at chunk_offset 0 - taken from a chunk that already carried a header in, it would capture a data row and poison every later chunk.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -650,9 +650,59 @@
           "maxStreams": 1,
           "required": false,
           "description": "Dataset-publication POST; emitted ONLY when a publish URL is configured."
+        },
+        {
+          "portId": "mark_record",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-irm-record",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM"
+                },
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "THE DURABLE RESUME MARK as an $IRM (Ingest Resume Mark) record, for hostcap/storage-write. Emitted on the same condition as the JSON mark - after a VERIFIED store, never at dispatch - because a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "THE DURABLE RESUME MARK as an $IRM (Ingest Resume Mark) record, for hostcap/storage-write. Emitted on the same condition as the JSON mark - after a VERIFIED store, never at dispatch - because a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows."
+        },
+        {
+          "portId": "mark_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-write-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The storage-write meta for the $IRM record: {\"source\":\"<providerId>\",\"type\":\"IRM\"}. The type is asserted here AND re-derived by storage-write from the buffer's own file identifier, which refuses the pair if they disagree.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The storage-write meta for the $IRM record: {\"source\":\"<providerId>\",\"type\":\"IRM\"}. The type is asserted here AND re-derived by storage-write from the buffer's own file identifier, which refuses the pair if they disagree."
         }
       ],
-      "description": "Advances the resume mark from the STORAGE RESULT, never at dispatch: a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows, invisibly. Catches the silent nop that survives hostcap/storage-ingest's own ok:false check - ok:true with inserted=0 for a chunk that carried records, which is byte-identical to a healthy empty tail - and refuses to advance the mark over rows that were never stored. The mark is NOT gated on the publish URL (a node that stores without publishing must still make progress); publication itself is fail-closed, emitting nothing when unconfigured. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "Advances the resume mark from the STORAGE RESULT, never at dispatch: a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows, invisibly. Catches the silent nop that survives hostcap/storage-ingest's own ok:false check - ok:true with inserted=0 for a chunk that carried records, which is byte-identical to a healthy empty tail - and refuses to advance the mark over rows that were never stored. The mark is NOT gated on the publish URL (a node that stores without publishing must still make progress); publication itself is fail-closed, emitting nothing when unconfigured. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count. DURABLE SINCE 2026-08-24: the mark is now also authored as an $IRM record (Themis minted and ratified it in spacedatastandards.org 1.196.0) and persisted through hostcap/storage-write's storage_write grant - the ONE REAL GAP mod-cell-tower-ingest-flow recorded rather than worked around. It carries the version-stamped opaque decode context (cell-tower-source's own bulk_resume_next frame, verbatim) and the CSV header row from chunk 0, which is what makes a chunk N>0 decode to rows at all. The JSON mark stays on egress for operator readability; it is not the durable one.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -842,7 +892,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The ingest resume-mark rows read back by hostcap/flatsql-query. Absent before the ingest lane has stored anything.",
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -853,7 +903,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "The ingest resume-mark rows read back by hostcap/flatsql-query. Absent before the ingest lane has stored anything."
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
         }
       ],
       "outputPorts": [
@@ -972,7 +1022,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The ingest resume-mark rows, for the dataset block.",
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -983,7 +1033,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "The ingest resume-mark rows, for the dataset block."
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
         }
       ],
       "outputPorts": [

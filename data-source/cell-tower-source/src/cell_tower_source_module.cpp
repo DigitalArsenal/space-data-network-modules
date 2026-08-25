@@ -1158,9 +1158,28 @@ int column_of_either(const std::vector<std::string>& header, const char* a, cons
     return at >= 0 ? at : column_of(header, b);
 }
 
-void decode_csv(const ProviderSpec& spec, const std::string& body, std::vector<Report>* out) {
+// THE HEADER OF A CHUNK THAT HAS NO HEADER.
+//
+// A ranged bulk fetch puts the CSV header row in chunk 0 and NOWHERE ELSE. Read
+// without one, this decoder consumes the first DATA row of chunk N>0 as the
+// column contract and then measures every later row against it: `lat`/`lon`
+// miss, the function returns having emitted nothing, and a headerless chunk is
+// byte-for-byte indistinguishable from a clean tail. That is the "second gap"
+// of `mod-cell-tower-ingest-flow`, and it is why a multi-chunk row ingest could
+// not be attempted before the durable mark existed to carry the header forward.
+//
+// `injected_header` is that carried header. When it is present EVERY line of
+// the body is a data row — including the first, which would otherwise be eaten.
+// When it is empty the behaviour is exactly what it always was, so chunk 0 and
+// every single-shot request path are untouched.
+void decode_csv(const ProviderSpec& spec, const std::string& body, std::vector<Report>* out,
+                const std::string& injected_header = std::string()) {
     size_t pos = 0, line_no = 0;
     std::vector<std::string> header;
+    if (!injected_header.empty()) {
+        header = split_csv_line(injected_header);
+        line_no = 1;  // the header slot is already filled; no line is consumed for it
+    }
     while (pos < body.size()) {
         size_t nl = body.find('\n', pos);
         if (nl == std::string::npos) nl = body.size();
@@ -3326,7 +3345,12 @@ int parse(void) {
         const char* observed = detect_body_format(payload);
         if (observed && std::strcmp(observed, spec->format) != 0) continue;
 
-        if (std::strcmp(spec->format, "csv") == 0) decode_csv(*spec, payload, &reports);
+        // `csv_header` is the header row a PREVIOUS chunk saw, carried forward
+        // on the run contract by the ingest lane's durable resume mark. Empty
+        // on chunk 0 and on every request-scoped path, where the body carries
+        // its own header.
+        if (std::strcmp(spec->format, "csv") == 0)
+            decode_csv(*spec, payload, &reports, json_string(job, "csv_header", ""));
         else if (std::strcmp(spec->format, "osm-json") == 0) decode_osm_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "soql-json") == 0) decode_soql_json(*spec, payload, &reports);
         else if (std::strcmp(spec->format, "swiss-geojson") == 0) {
