@@ -621,8 +621,8 @@ test("a mark belonging to a DIFFERENT provider is ignored, not resumed into", as
 // signal it does not have — a file whose LAST row legitimately has no trailing
 // newline would otherwise lose that row, and the offset correction would then
 // stall the run instead of finishing it. Designing that signal is a separate
-// change from closing the durable mark. This test PINS the current behaviour so
-// it cannot drift silently while that work is scheduled.
+// change from closing the durable mark. This test locks the current behaviour
+// down so it cannot drift silently while that work is scheduled.
 test("PINNED DEFECT: a chunk cut mid-row also stores its partial tail row", async () => {
   const store = createStore();
   const stub = createHostStub({
