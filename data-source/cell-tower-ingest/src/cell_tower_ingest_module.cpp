@@ -68,11 +68,14 @@
  * the run instead of advancing the mark over data that was never stored.
  */
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <string>
+#include <sys/time.h>
 #include <vector>
 
 #include "space_data_module_invoke.h"
@@ -354,15 +357,27 @@ bool total_from_content_range(const std::string& headers_json, long* total) {
     return true;
 }
 
+// The mark also carries WHAT THE STORE HOLDS, not only where the fetch is.
+//
+// `stored_rows` and `stored_at` exist because the tile lane must answer
+// "how many records, ingested when" WITHOUT scanning the store: a COUNT over
+// millions of rows to fill one field of a capability envelope the client
+// fetches at startup is not a tile lane, it is a table scan with a URL. The
+// ingest lane is the only place those two numbers are ever established, so it
+// records them where the read side can find them. `stored_rows` is CUMULATIVE
+// across chunks — a per-chunk count would report the size of the last chunk as
+// the size of the dataset.
 std::string mark_json(const std::string& provider_id, const std::string& source_url,
                       long next_offset, long total_bytes, long chunk_index,
-                      const std::string& batch_id) {
+                      const std::string& batch_id, long stored_rows,
+                      const std::string& stored_at) {
     char buf[160];
     std::snprintf(buf, sizeof(buf), "%ld,\"total_bytes\":%ld,\"chunk_index\":%ld", next_offset,
                   total_bytes, chunk_index);
     return std::string("{\"provider_id\":\"") + json_escape(provider_id) + "\"" +
            ",\"source_url\":\"" + json_escape(source_url) + "\"" + ",\"next_offset\":" + buf +
-           ",\"batch_id\":\"" + json_escape(batch_id) + "\"}";
+           ",\"stored_rows\":" + std::to_string(stored_rows) + ",\"stored_at\":\"" +
+           json_escape(stored_at) + "\"" + ",\"batch_id\":\"" + json_escape(batch_id) + "\"}";
 }
 
 // ── $HTQ request envelope (read-only) ──────────────────────────────────────
@@ -458,6 +473,341 @@ bool path_has_segment(const std::string& path, const char* segment) {
 constexpr const char* kDefaultCacheSql = "SELECT data FROM sds_tbs ORDER BY rowid DESC LIMIT ?";
 constexpr long kDefaultCacheMaxRows = 5000;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// THE DENSITY-TILE SERVING LANE (graph tasks sdn-cellular-density-tiles /
+// upstream-modules-2; owner 2026-08-24: "all worldwide cell towers must reach
+// the cellular sandcastle").
+//
+// A worldwide site set is millions of rows. Handing them to a browser as one
+// answer is not slow, it is impossible — so the node serves BOUNDED tiles and
+// the client streams the ones its camera can see. THE TILING CONTRACT LIVES
+// SERVER-SIDE: the client re-derives nothing, and every mode decision below is
+// this node's, never the renderer's.
+//
+// The grammar is not negotiable and is not documented-only: the landed OrbPro
+// client (packages/sandcastle/gallery/_shared/cellularTileStream.js, f9e39b5437)
+// FAILS HARD on an off-contract envelope — points mode above budget, density
+// mode at or below budget, a density tile with an empty cells array, a missing
+// threshold, a non-ISO epoch. Its parser is the normative consumer, so these
+// constants and this envelope are written against it rather than against prose.
+//
+// ZERO GO HOST CHANGES. The lane is the existing generic hooks: plugin.getConfig
+// plus hostcap/flatsql-query frames. The plugin stays `capabilities: []`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+constexpr const char* kTileScheme = "xyz";
+constexpr long kTileMinZoom = 0;
+constexpr long kTileMaxZoom = 18;
+
+// The mode boundaries. `threshold` is where raw points stop being sent whole;
+// `budget` is the client's per-tile point envelope (proven 250k points at
+// 360 fps across ~60 visible tiles). count <= threshold -> every point;
+// threshold < count <= budget -> a deterministic sample; count > budget ->
+// a density grid. The client refuses any tile that disagrees with this.
+constexpr long kTileThreshold = 2048;
+constexpr long kTileBudget = 4096;
+constexpr long kTileDensityN = 16;
+
+// Web Mercator's latitude limit. y = 0 and y = 2^z - 1 close exactly here.
+constexpr double kTileLatClamp = 85.05112878;
+
+// ONE SHARED EPSILON WITH THE CLIENT. A point produced by the round trip
+// lon/lat -> tileBounds -> lon/lat must never land on the wrong side of a seam
+// by one ulp, and server and client must agree on which tile owns a seam.
+// This is the client's TILE_INDEX_EPSILON verbatim (cellularTileStream.js).
+constexpr double kTileIndexEpsilon = 1e-9;
+
+// The tile lane's own default query. Same posture as `cell_cache_sql`: node
+// CONFIG, not a compiled-in constant, so an operator with a spatial index can
+// push the bbox into SQL without a rebuild. The default reads the rows the
+// cellular ingest lane's storage writes land in and bounds the scan.
+constexpr const char* kDefaultTileSql = "SELECT data FROM sds_tbs ORDER BY rowid DESC LIMIT ?";
+constexpr long kDefaultTileMaxRows = 100000;
+
+// The dataset identity the envelope names. The client only requires a non-empty
+// string; naming the dataset rather than the table keeps the store's physical
+// layout out of a public contract.
+constexpr const char* kTileDataset = "cellular-base-stations";
+
+// The honest "no epoch yet" answer. dataset.epoch MUST parse as a timestamp
+// (the client refuses anything Date.parse cannot read), so an empty store
+// cannot answer with "" or null — and it must not answer with NOW, which would
+// stamp an empty store as freshly current. The Unix epoch reads as what it is,
+// beside cacheState "empty" and records 0.
+constexpr const char* kTileNoEpoch = "1970-01-01T00:00:00Z";
+
+std::string iso_now(void) {
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    const time_t seconds = static_cast<time_t>(tv.tv_sec);
+    struct tm g;
+    gmtime_r(&seconds, &g);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &g);
+    return std::string(buf);
+}
+
+// ── the XYZ scheme, byte-for-byte the client's math ────────────────────────
+//
+// These four functions are the SAME formulas as lonToTileX / latToTileY /
+// tileBounds in the landed client. They are duplicated rather than shared
+// because one of them is C++ in a wasm guest and the other is JS in a browser;
+// what makes the duplication safe is that the tests below assert the SERVER's
+// assignment against tiles the CLIENT's bounds produced.
+
+double tile_lat_clamp(double lat) {
+    if (lat > kTileLatClamp) return kTileLatClamp;
+    if (lat < -kTileLatClamp) return -kTileLatClamp;
+    return lat;
+}
+
+long tile_n(long z) { return 1L << z; }
+
+long lon_to_tile_x(double lon, long z) {
+    const double n = static_cast<double>(tile_n(z));
+    const double raw = ((lon + 180.0) / 360.0) * n + kTileIndexEpsilon;
+    long x = static_cast<long>(std::floor(raw));
+    if (x < 0) x = 0;
+    if (x > tile_n(z) - 1) x = tile_n(z) - 1;
+    return x;
+}
+
+long lat_to_tile_y(double lat, long z) {
+    const double n = static_cast<double>(tile_n(z));
+    const double phi = (tile_lat_clamp(lat) * M_PI) / 180.0;
+    const double raw = ((1.0 - std::asinh(std::tan(phi)) / M_PI) / 2.0) * n + kTileIndexEpsilon;
+    long y = static_cast<long>(std::floor(raw));
+    if (y < 0) y = 0;
+    if (y > tile_n(z) - 1) y = tile_n(z) - 1;
+    return y;
+}
+
+struct TileBounds {
+    double west = 0, south = 0, north = 0, east = 0;
+};
+
+TileBounds tile_bounds(long z, long x, long y) {
+    const double n = static_cast<double>(tile_n(z));
+    TileBounds b;
+    b.west = (static_cast<double>(x) / n) * 360.0 - 180.0;
+    b.east = (static_cast<double>(x + 1) / n) * 360.0 - 180.0;
+    b.north = std::atan(std::sinh(M_PI * (1.0 - (2.0 * static_cast<double>(y)) / n))) * 180.0 / M_PI;
+    b.south =
+        std::atan(std::sinh(M_PI * (1.0 - (2.0 * static_cast<double>(y + 1)) / n))) * 180.0 / M_PI;
+    return b;
+}
+
+// ── $TBS read-only peek ────────────────────────────────────────────────────
+//
+// The tile lane needs exactly two fields out of a stored $TBS record: LATITUDE
+// and LONGITUDE. Linking the generated TBS header in would drag the whole
+// schema (and cell-tower-source's registry, via its inlining build) into a
+// plugin whose entire point is that it holds neither — so the two doubles are
+// hand-decoded, exactly as HtqPeek above hand-decodes the $HTQ it only reads.
+//
+// SLOT INDICES ARE THE IDL'S DECLARATION ORDER, verified against
+// spacedatastandards.org schema/TBS: ID=0, NATIVE_ID=1, RADIO=2, MCC=3, MNC=4,
+// LAC=5, TAC=6, CELL_ID=7, LATITUDE=8, LONGITUDE=9. A field the writer omitted
+// has vtable slot 0 and is ABSENT, not zero — a record with no position must be
+// skipped, never plotted at null island.
+constexpr int kTbsSlotLatitude = 8;
+constexpr int kTbsSlotLongitude = 9;
+
+struct TbsPeek {
+    const uint8_t* buf = nullptr;
+    uint32_t len = 0;
+    uint32_t root = 0;
+    uint32_t vtable = 0;
+    uint16_t vtable_len = 0;
+
+    uint32_t rd32(uint32_t at) const {
+        return static_cast<uint32_t>(buf[at]) | (static_cast<uint32_t>(buf[at + 1]) << 8) |
+               (static_cast<uint32_t>(buf[at + 2]) << 16) |
+               (static_cast<uint32_t>(buf[at + 3]) << 24);
+    }
+    uint16_t rd16(uint32_t at) const {
+        return static_cast<uint16_t>(buf[at]) | (static_cast<uint16_t>(buf[at + 1]) << 8);
+    }
+
+    bool init(const uint8_t* data, uint32_t size) {
+        if (!data || size < 8) return false;
+        buf = data;
+        len = size;
+        root = rd32(0);
+        if (root + 4 > len) return false;
+        const int32_t soffset = static_cast<int32_t>(rd32(root));
+        const int64_t vt = static_cast<int64_t>(root) - soffset;
+        if (vt < 0 || vt + 4 > static_cast<int64_t>(len)) return false;
+        vtable = static_cast<uint32_t>(vt);
+        vtable_len = rd16(vtable);
+        return vtable_len >= 4;
+    }
+
+    uint16_t slot(int index) const {
+        const uint32_t at = vtable + 4 + static_cast<uint32_t>(index) * 2;
+        if (at + 2 > vtable + vtable_len || at + 2 > len) return 0;
+        return rd16(at);
+    }
+
+    bool f64(int index, double* out) const {
+        const uint16_t rel = slot(index);
+        if (!rel) return false;  // ABSENT, not zero.
+        const uint32_t at = root + rel;
+        if (at + 8 > len) return false;
+        uint64_t bits = 0;
+        for (int i = 7; i >= 0; i--) bits = (bits << 8) | static_cast<uint64_t>(buf[at + i]);
+        double value;
+        std::memcpy(&value, &bits, sizeof(value));
+        *out = value;
+        return true;
+    }
+};
+
+struct TilePoint {
+    double lat = 0, lon = 0;
+};
+
+// Walk a size-prefixed record stream, keep the points that fall in ONE tile.
+//
+// Membership is decided by re-deriving the point's own (x, y) with the same
+// formulas and the same epsilon the client uses, NOT by a west<=lon<east
+// rectangle test: a rectangle test disagrees with the client's tile assignment
+// on the seams, and a site that both sides claim (or neither) is a duplicate or
+// a hole in the worldwide picture.
+//
+// `scanned` counts every well-formed positioned record the query returned, so
+// the envelope can say how much of the store this answer actually saw.
+void collect_tile_points(const uint8_t* stream, uint32_t stream_len, long z, long x, long y,
+                         std::vector<TilePoint>* out, long* scanned, long* malformed) {
+    uint32_t at = 0;
+    while (at + 4 <= stream_len) {
+        const uint32_t size = static_cast<uint32_t>(stream[at]) |
+                              (static_cast<uint32_t>(stream[at + 1]) << 8) |
+                              (static_cast<uint32_t>(stream[at + 2]) << 16) |
+                              (static_cast<uint32_t>(stream[at + 3]) << 24);
+        at += 4;
+        if (size == 0 || at + size > stream_len) break;
+        const uint8_t* record = stream + at;
+        at += size;
+
+        TbsPeek peek;
+        double lat = 0, lon = 0;
+        if (!peek.init(record, size) || !peek.f64(kTbsSlotLatitude, &lat) ||
+            !peek.f64(kTbsSlotLongitude, &lon)) {
+            (*malformed)++;
+            continue;
+        }
+        if (!(lat >= -90.0 && lat <= 90.0) || !(lon >= -180.0 && lon <= 180.0)) {
+            (*malformed)++;
+            continue;
+        }
+        (*scanned)++;
+        if (lon_to_tile_x(lon, z) != x || lat_to_tile_y(lat, z) != y) continue;
+        TilePoint p;
+        p.lat = lat;
+        p.lon = lon;
+        out->push_back(p);
+    }
+}
+
+// Point coordinates: 1e-7 degrees is ~1 cm, far finer than any renderer needs,
+// and a tile ships up to 2048 of them — precision beyond this is payload, not
+// information.
+std::string fixed7(double v) {
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "%.7f", v);
+    return std::string(buf);
+}
+
+// DENSITY CELL CORNERS ARE FULL-PRECISION, and that is not fussiness.
+//
+// The client rebuilds a cell's rectangle from its south-west corner plus the
+// tile's own span (densityCellRectangle: east = cell.lon + (bounds.east -
+// bounds.west) / n). If the corner it is handed has been rounded, the
+// reconstructed east edge of the last column OVERSHOOTS the tile's east edge —
+// measured at 2e-8 degrees with %.7f corners, i.e. the cells no longer tile
+// their parent and adjacent tiles overlap by a sliver at every seam. A grid
+// whose cells do not partition the tile is a density product that double-counts
+// at its own boundaries. Round-trip precision (17 significant digits) hands the
+// client the EXACT double the server computed, so its arithmetic reproduces the
+// server's bit for bit. There are at most 256 cells, so the extra bytes are
+// nothing.
+std::string exact_double(double v) {
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "%.17g", v);
+    return std::string(buf);
+}
+
+// ── the dataset block ──────────────────────────────────────────────────────
+//
+// Every tile and the meta carry the SAME dataset block, sourced from the ingest
+// lane's resume mark and from nothing else. An empty store answers honestly:
+// cacheState "empty", records 0, the sentinel epoch, stale true. Nothing here
+// invents a count, a time, or a state it cannot establish — a tile layer that
+// draws zero towers over a store that was never ingested must say which of the
+// two it is.
+std::string tile_dataset_json(const std::string& mark, std::string* state_out) {
+    std::string state = "empty";
+    std::string epoch = kTileNoEpoch;
+    long records = 0;
+    bool stale = true;
+
+    std::string mark_provider;
+    if (!mark.empty() && json_string_field(mark, "provider_id", &mark_provider)) {
+        const long next_offset = static_cast<long>(json_number_or(mark, "next_offset", 0));
+        const long total_bytes = static_cast<long>(json_number_or(mark, "total_bytes", 0));
+        records = static_cast<long>(json_number_or(mark, "stored_rows", 0));
+        if (records < 0) records = 0;
+        const bool complete = total_bytes > 0 && next_offset >= total_bytes;
+        state = complete ? "warm" : "ingesting";
+        stale = !complete;
+        std::string stored_at;
+        if (json_string_field(mark, "stored_at", &stored_at) && !stored_at.empty()) {
+            epoch = stored_at;
+        }
+    }
+
+    if (state_out) *state_out = state;
+    return std::string("{\"dataset\":\"") + kTileDataset + "\",\"epoch\":\"" + json_escape(epoch) +
+           "\",\"records\":" + std::to_string(records) + ",\"stale\":" + (stale ? "true" : "false") +
+           ",\"cacheState\":\"" + state + "\"}";
+}
+
+// The tile path grammar: ".../tiles/meta" or ".../tiles/{z}/{x}/{y}".
+// Returns false when the path is not a tile path at all.
+bool split_tile_path(const std::string& path, std::vector<std::string>* segments) {
+    const size_t at = path.find("/tiles");
+    if (at == std::string::npos) return false;
+    size_t i = at + 6;
+    if (i < path.size() && path[i] != '/') return false;  // "/tilesfoo" is not ours
+    std::string current;
+    for (; i <= path.size(); i++) {
+        const char c = i < path.size() ? path[i] : '/';
+        if (c == '/' || c == '?') {
+            if (!current.empty()) segments->push_back(current);
+            current.clear();
+            if (c == '?') break;
+        } else {
+            current.push_back(c);
+        }
+    }
+    return true;
+}
+
+// Strict non-negative integer parse. "3.5", "+3", "0x3", "", " 3" and "3abc"
+// are all REFUSED: a tile index that silently truncates serves a neighbour's
+// tile under the requested key, which is a wrong answer with a 200 on it.
+bool parse_index(const std::string& text, long* out) {
+    if (text.empty() || text.size() > 10) return false;
+    long value = 0;
+    for (const char c : text) {
+        if (c < '0' || c > '9') return false;
+        value = value * 10 + (c - '0');
+    }
+    *out = value;
+    return true;
+}
+
 }  // namespace
 
 extern "C" {
@@ -507,6 +857,19 @@ int cache_plan(void) {
     const std::string path = readable ? htq.str(1) : std::string();
     const std::string verb = readable ? upper_ascii(htq.str(0)) : std::string();
     const std::string body = readable ? htq.str(4) : std::string();
+
+    // THE TILE LANE gets the request BEFORE anything else looks at it. Without
+    // this branch `/tiles/...` is a GET that names neither /providers nor
+    // /credentials/, so the aggregate test below would claim it and answer a
+    // tile request with the whole cached record stream — a 200 carrying
+    // megabytes of the wrong shape. The $HTQ is forwarded byte-for-byte; this
+    // node re-serialises nothing.
+    if (readable && path_has_segment(path, "/tiles")) {
+        const int32_t pushed = plugin_push_output_ex(
+            "tile", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 8,
+            frame->payload, frame->payload_length);
+        return pushed < 0 ? 500 : 0;
+    }
 
     const bool is_aggregate = readable && !path_has_segment(path, "/providers") &&
                               !path_has_segment(path, "/credentials/") &&
@@ -659,6 +1022,301 @@ int cache_freshness(void) {
     return push_json("decision", decision) < 0 ? 500 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// tile_plan — THE TILE ROUTER. One $HTQ in, ONE lane out.
+//
+// `/tiles/meta` and `/tiles/{z}/{x}/{y}` are the only two shapes; everything
+// else under `/tiles` is refused with the reason named. The refusal travels on
+// the SAME `tile_job` port the tile lane uses, so exactly one node ever answers
+// a tile request and two bodies can never race into `respond` — the discipline
+// the cache gate established and the one property that makes this flow's
+// single-responder invariant checkable.
+//
+// BOUNDS ARE REFUSED, NEVER CLAMPED. A z of 19 clamped to 18, or an x of 2^z
+// clamped to 2^z - 1, answers 200 with a DIFFERENT tile's contents under the
+// requested key — a wrong answer that no client can detect. z outside [0, 18],
+// x or y outside [0, 2^z), and any non-canonical integer literal are 400s.
+// ---------------------------------------------------------------------------
+int tile_plan(void) {
+    if (refuse_batched()) return 500;
+
+    const plugin_input_frame_t* frame = frame_for("request");
+    if (!frame || !frame->payload || frame->payload_length == 0) {
+        plugin_set_error("missing-request-frame",
+                         "tile_plan requires the $HTQ request frame on port \"request\".");
+        return 400;
+    }
+
+    HtqPeek htq;
+    const bool readable = htq.init(frame->payload, frame->payload_length);
+    const std::string path = readable ? htq.str(1) : std::string();
+
+    auto refuse = [&](const char* code, const std::string& why) -> int {
+        const std::string job = std::string("{\"route\":\"cellular-tile\",\"code\":\"") + code +
+                                "\",\"refuse\":\"" + json_escape(why) + "\"}";
+        return push_json("tile_job", job) < 0 ? 500 : 0;
+    };
+
+    std::vector<std::string> segments;
+    if (!readable || !split_tile_path(path, &segments)) {
+        return refuse("tile-path",
+                      "the tile lane serves /tiles/meta and /tiles/{z}/{x}/{y} only");
+    }
+
+    const std::string config = load_config();
+    const std::string provider = config_string(config, "cell_ingest_provider_id", "opencellid");
+    const std::string mark_sql = std::string("{\"sql\":\"SELECT * FROM ") + kMarkTable +
+                                 "\",\"params\":[]}";
+
+    // ── the meta lane: capability envelope + store honesty, and NO row scan.
+    //
+    // `dataset.records` comes from the resume mark, not from a COUNT over the
+    // store. Counting would mean reading the whole record stream back through
+    // the guest to answer a question the client asks ONCE at startup — tens of
+    // MB to produce one integer. The mark is the number the ingest lane
+    // actually established, and it is the honest one.
+    if (segments.size() == 1 && segments[0] == "meta") {
+        if (push_json("meta_mark_query", mark_sql) < 0) return 500;
+        const std::string job = std::string("{\"route\":\"cellular-tile-meta\",\"provider_id\":\"") +
+                                json_escape(provider) + "\"}";
+        return push_json("meta_job", job) < 0 ? 500 : 0;
+    }
+
+    if (segments.size() != 3) {
+        return refuse("tile-path",
+                      "a tile request is /tiles/{z}/{x}/{y}; got " +
+                          std::to_string(segments.size()) + " path segment(s) after /tiles");
+    }
+
+    long z = 0, x = 0, y = 0;
+    if (!parse_index(segments[0], &z) || !parse_index(segments[1], &x) ||
+        !parse_index(segments[2], &y)) {
+        return refuse("tile-bounds",
+                      "z, x and y must be canonical non-negative integers");
+    }
+    if (z < kTileMinZoom || z > kTileMaxZoom) {
+        return refuse("tile-bounds", "zoom " + std::to_string(z) + " is outside [" +
+                                         std::to_string(kTileMinZoom) + ", " +
+                                         std::to_string(kTileMaxZoom) + "]");
+    }
+    const long n = tile_n(z);
+    if (x >= n || y >= n) {
+        return refuse("tile-bounds", "tile " + std::to_string(z) + "/" + std::to_string(x) + "/" +
+                                         std::to_string(y) + " is outside [0, " +
+                                         std::to_string(n) + ") at this zoom");
+    }
+
+    const std::string sql = config_string(config, "cell_tile_sql", kDefaultTileSql);
+    long max_rows = static_cast<long>(
+        json_number_or(config, "cell_tile_max_rows", static_cast<double>(kDefaultTileMaxRows)));
+    if (max_rows <= 0) max_rows = kDefaultTileMaxRows;
+
+    const std::string rows_query = std::string("{\"sql\":\"") + json_escape(sql) +
+                                   "\",\"params\":[{\"t\":\"i64\",\"v\":" +
+                                   std::to_string(max_rows) + "}]}";
+    if (push_json("rows_query", rows_query) < 0) return 500;
+    if (push_json("tile_mark_query", mark_sql) < 0) return 500;
+
+    const std::string job = std::string("{\"route\":\"cellular-tile\",\"z\":") + std::to_string(z) +
+                            ",\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
+                            ",\"maxRows\":" + std::to_string(max_rows) + ",\"provider_id\":\"" +
+                            json_escape(provider) + "\"}";
+    return push_json("tile_job", job) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// tile_meta — the tile layer's capability envelope.
+//
+// The client fetches this ONCE and fails hard if it drifts: scheme must be
+// "xyz", and minZoom/maxZoom/threshold/budget/densityN must all be integers.
+// It is the server's declaration of the contract it will then honour on every
+// tile, which is why the same constants author both.
+// ---------------------------------------------------------------------------
+int tile_meta(void) {
+    if (refuse_batched()) return 500;
+
+    const std::string job = input_text("job");
+    if (job.empty()) {
+        plugin_set_error("missing-job-frame", "tile_meta requires the meta job from tile_plan.");
+        return 400;
+    }
+
+    std::string state;
+    const std::string dataset = tile_dataset_json(input_text("mark"), &state);
+
+    const std::string envelope =
+        std::string("{\"scheme\":\"") + kTileScheme + "\"" +
+        ",\"minZoom\":" + std::to_string(kTileMinZoom) +
+        ",\"maxZoom\":" + std::to_string(kTileMaxZoom) +
+        ",\"threshold\":" + std::to_string(kTileThreshold) +
+        ",\"budget\":" + std::to_string(kTileBudget) +
+        ",\"densityN\":" + std::to_string(kTileDensityN) +
+        ",\"latClamp\":" + exact_double(kTileLatClamp) +
+        ",\"tileUrlTemplate\":\"/api/v1/cellular/tiles/{z}/{x}/{y}\"" +
+        ",\"deconfliction\":{\"statement\":\"Tiles are pre-deconflicted on the node: sites are "
+        "merged across provider registries before storage, so a tile never carries the same "
+        "site twice.\"}" +
+        ",\"dataset\":" + dataset + "}";
+
+    const std::string decision =
+        std::string("{\"route\":\"cellular-tile-meta\",\"format\":\"json\",\"status\":200") +
+        ",\"headers\":{\"x-sdn-cache\":\"" + state + "\"}}";
+
+    if (push_bytes("body", reinterpret_cast<const uint8_t*>(envelope.data()),
+                   static_cast<uint32_t>(envelope.size())) < 0) {
+        return 500;
+    }
+    return push_json("decision", decision) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// tile — ONE bounded tile, and the mode is the SERVER's.
+//
+//   count <= 2048  -> every point, sampled false
+//   count <= 4096  -> a DETERMINISTIC stride sample, sampled true
+//   count >  4096  -> a 16x16 density grid, points null
+//
+// The client refuses any tile that disagrees with those boundaries, so `count`
+// is always the tile's TRUE population — never the number of points shipped.
+// Reporting the shipped count instead would make a sampled tile look complete
+// and a density tile look like a points tile that lost its rows.
+//
+// DETERMINISM IS THE POINT OF THE SAMPLE. The stride is derived from the count
+// alone, over the rows in the order the query returned them, so the same store
+// and the same tile produce byte-identical output on every runtime and every
+// request — no RNG, no time, no thread count. A "representative" sample that
+// varied per request would make the same tile flicker as the camera returned
+// to it.
+//
+// AN EMPTY STORE ANSWERS EMPTY, NEVER FABRICATED: count 0, points [], and the
+// dataset block saying cacheState "empty" so the client can say WHY there is
+// nothing to draw instead of drawing zero towers over a populated planet.
+// ---------------------------------------------------------------------------
+int tile(void) {
+    if (refuse_batched()) return 500;
+
+    const std::string job = input_text("job");
+    if (job.empty()) {
+        plugin_set_error("missing-job-frame", "tile requires the tile job from tile_plan.");
+        return 400;
+    }
+
+    // A refusal authored by tile_plan. It travels this far so that exactly one
+    // node in the flow speaks to `respond`.
+    std::string why;
+    if (json_string_field(job, "refuse", &why) && !why.empty()) {
+        std::string code = "tile-bounds";
+        json_string_field(job, "code", &code);
+        const std::string decision =
+            std::string("{\"route\":\"error\",\"status\":400,\"code\":\"") + json_escape(code) +
+            "\",\"error\":\"" + json_escape(why) + "\"}";
+        return push_json("decision", decision) < 0 ? 500 : 0;
+    }
+
+    const long z = static_cast<long>(json_number_or(job, "z", -1));
+    const long x = static_cast<long>(json_number_or(job, "x", -1));
+    const long y = static_cast<long>(json_number_or(job, "y", -1));
+    if (z < kTileMinZoom || z > kTileMaxZoom || x < 0 || y < 0) {
+        plugin_set_error("invalid-tile-job", "the tile job does not carry a valid z/x/y.");
+        return 500;
+    }
+
+    std::string state;
+    const std::string dataset = tile_dataset_json(input_text("mark"), &state);
+
+    std::vector<TilePoint> points;
+    long scanned = 0;
+    long malformed = 0;
+    const plugin_input_frame_t* rows = frame_for("rows");
+    if (rows && rows->payload && rows->payload_length > 0) {
+        collect_tile_points(rows->payload, rows->payload_length, z, x, y, &points, &scanned,
+                            &malformed);
+    }
+
+    const long count = static_cast<long>(points.size());
+    std::string body;
+    body.reserve(count > 0 ? static_cast<size_t>(count) * 48 + 512 : 512);
+    body += std::string("{\"scheme\":\"") + kTileScheme + "\",\"z\":" + std::to_string(z) +
+            ",\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
+            ",\"count\":" + std::to_string(count) +
+            ",\"threshold\":" + std::to_string(kTileThreshold) +
+            ",\"budget\":" + std::to_string(kTileBudget) + ",\"deconflicted\":true" +
+            ",\"scanned\":" + std::to_string(scanned) +
+            ",\"malformed\":" + std::to_string(malformed) + ",\"dataset\":" + dataset;
+
+    if (count > kTileBudget) {
+        // DENSITY. The grid is linear in degrees inside the tile's own bounds,
+        // because that is exactly how the client rebuilds a cell rectangle from
+        // its south-west corner (densityCellRectangle: spanLon = (east - west)
+        // / n). A Mercator-linear grid here would draw cells that do not tile
+        // the parent, with visible gaps at the top of every tile.
+        const TileBounds b = tile_bounds(z, x, y);
+        const double span_lon = (b.east - b.west) / static_cast<double>(kTileDensityN);
+        const double span_lat = (b.north - b.south) / static_cast<double>(kTileDensityN);
+        std::vector<long> cells(static_cast<size_t>(kTileDensityN * kTileDensityN), 0);
+        for (const TilePoint& p : points) {
+            long col = span_lon > 0 ? static_cast<long>(std::floor((p.lon - b.west) / span_lon)) : 0;
+            long row = span_lat > 0 ? static_cast<long>(std::floor((p.lat - b.south) / span_lat)) : 0;
+            if (col < 0) col = 0;
+            if (col > kTileDensityN - 1) col = kTileDensityN - 1;
+            if (row < 0) row = 0;
+            if (row > kTileDensityN - 1) row = kTileDensityN - 1;
+            cells[static_cast<size_t>(row * kTileDensityN + col)]++;
+        }
+        // EMPTY CELLS ARE OMITTED, and the client REFUSES an empty cells array
+        // outright. count > budget guarantees at least one cell is populated,
+        // so the two rules cannot collide.
+        body += ",\"mode\":\"density\",\"sampled\":false,\"points\":null";
+        body += ",\"density\":{\"n\":" + std::to_string(kTileDensityN) + ",\"cells\":[";
+        bool first = true;
+        for (long row = 0; row < kTileDensityN; row++) {
+            for (long col = 0; col < kTileDensityN; col++) {
+                const long c = cells[static_cast<size_t>(row * kTileDensityN + col)];
+                if (c == 0) continue;
+                if (!first) body += ",";
+                first = false;
+                body += "{\"lon\":" + exact_double(b.west + static_cast<double>(col) * span_lon) +
+                        ",\"lat\":" + exact_double(b.south + static_cast<double>(row) * span_lat) +
+                        ",\"count\":" + std::to_string(c) + "}";
+            }
+        }
+        body += "]}";
+    } else {
+        // POINTS, whole or deterministically sampled. The stride is
+        // ceil(count / threshold), so a tile at the threshold ships every point
+        // and one above it ships every other one — a monotone, reproducible
+        // step, not a heuristic.
+        long stride = 1;
+        bool sampled = false;
+        if (count > kTileThreshold) {
+            stride = (count + kTileThreshold - 1) / kTileThreshold;
+            sampled = true;
+        }
+        body += std::string(",\"mode\":\"points\",\"sampled\":") + (sampled ? "true" : "false") +
+                ",\"density\":null,\"points\":[";
+        bool first = true;
+        for (long i = 0; i < count; i += stride) {
+            if (!first) body += ",";
+            first = false;
+            body += "{\"LATITUDE\":" + fixed7(points[static_cast<size_t>(i)].lat) +
+                    ",\"LONGITUDE\":" + fixed7(points[static_cast<size_t>(i)].lon) + "}";
+        }
+        body += "]";
+    }
+    body += "}";
+
+    const std::string decision =
+        std::string("{\"route\":\"cellular-tile\",\"format\":\"json\",\"status\":200") +
+        ",\"headers\":{\"x-sdn-cache\":\"" + state + "\",\"x-sdn-tile\":\"" + std::to_string(z) +
+        "/" + std::to_string(x) + "/" + std::to_string(y) + "\"}}";
+
+    if (push_bytes("body", reinterpret_cast<const uint8_t*>(body.data()),
+                   static_cast<uint32_t>(body.size())) < 0) {
+        return 500;
+    }
+    return push_json("decision", decision) < 0 ? 500 : 0;
+}
+
 // mark_query: timer tick -> the flatsql-query JSON that reads this provider's
 // resume mark back. It is a SEPARATE node from ingest_plan on purpose: the plan
 // needs the mark as an input, and a node that emitted its own input would be a
@@ -705,6 +1363,7 @@ int ingest_plan(void) {
     long offset = 0;
     long total = 0;
     long chunk_index = 0;
+    long prior_stored_rows = 0;
     if (!mark.empty()) {
         std::string mark_provider;
         // A mark belonging to a DIFFERENT provider is ignored rather than
@@ -714,7 +1373,9 @@ int ingest_plan(void) {
             offset = static_cast<long>(json_number_or(mark, "next_offset", 0));
             total = static_cast<long>(json_number_or(mark, "total_bytes", 0));
             chunk_index = static_cast<long>(json_number_or(mark, "chunk_index", 0));
+            prior_stored_rows = static_cast<long>(json_number_or(mark, "stored_rows", 0));
             if (offset < 0) offset = 0;
+            if (prior_stored_rows < 0) prior_stored_rows = 0;
         }
     }
 
@@ -757,7 +1418,8 @@ int ingest_plan(void) {
         "\"" + ",\"providers_consulted\":[\"" + json_escape(provider) + "\"]" +
         ",\"request_providers\":[\"" + json_escape(provider) + "\"]" + ",\"skipped\":[]" +
         ",\"provider_id\":\"" + json_escape(provider) + "\"" + ",\"source_url\":\"" +
-        json_escape(url) + "\"" + ",\"chunk_bytes\":" + std::to_string(chunk) + "}";
+        json_escape(url) + "\"" + ",\"prior_stored_rows\":" + std::to_string(prior_stored_rows) +
+        ",\"chunk_bytes\":" + std::to_string(chunk) + "}";
 
     // Job first: parse and deconflict both need the run contract, and a response
     // arriving before it would have nothing to be interpreted against.
@@ -900,6 +1562,8 @@ int ingest_meta(void) {
         ",\"total_bytes\":" + std::to_string(total_bytes) +
         ",\"next_offset\":" + std::to_string(next_offset) +
         ",\"records_in\":" + std::to_string(records_in) +
+        ",\"prior_stored_rows\":" +
+        std::to_string(static_cast<long>(json_number_or(job, "prior_stored_rows", 0))) +
         ",\"provenance\":{\"source\":\"cell-tower-ingest-wasm/v1\"" + ",\"json\":\"" +
         base64_encode(reinterpret_cast<const uint8_t*>(provenance.data()), provenance.size()) +
         "\"}}";
@@ -966,8 +1630,16 @@ int publish_request(void) {
     const long next_offset =
         static_cast<long>(json_number_or(meta, "next_offset", static_cast<double>(chunk_offset)));
 
-    const std::string next_mark =
-        mark_json(provider, source_url, next_offset, total, chunk_index + 1, batch_id);
+    // CUMULATIVE, and only what STORAGE confirmed. `inserted` is the storage
+    // lane's own count; a negative (absent) value adds nothing rather than
+    // guessing from records_in, because the read side reports this number to
+    // users as "records in the store".
+    long prior_stored = static_cast<long>(json_number_or(meta, "prior_stored_rows", 0));
+    if (prior_stored < 0) prior_stored = 0;
+    const long stored_rows = prior_stored + (inserted > 0 ? inserted : 0);
+
+    const std::string next_mark = mark_json(provider, source_url, next_offset, total,
+                                            chunk_index + 1, batch_id, stored_rows, iso_now());
     if (push_json("mark", next_mark) < 0) return 500;
 
     const std::string config = load_config();

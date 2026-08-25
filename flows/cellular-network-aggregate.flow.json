@@ -1,8 +1,8 @@
 {
   "programId": "com.digitalarsenal.flows.cellular-network-aggregate",
   "name": "Cellular Network Aggregation",
-  "version": "0.2.0",
-  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. CACHE-FIRST since 2026-08-14 (graph task mod-cellular-aggregate-cache, owner: 'the cell towers should load almost instantaneously'). The ONE $HTQ request now enters at cell-tower-ingest:cache_plan, not at route. cache_plan reads the envelope and picks ONE lane. THE CACHE LANE (the default for an /aggregate read): it emits this dataset's DEFAULT FlatSQL query, hostcap/flatsql-query streams the stored rows back verbatim into foundation/http-respond's body, and a second query over the ingest resume marks feeds cache_freshness, which authors the decision envelope carrying cacheState/freshness/stale/per-provider progress so the UI shows staleness honestly rather than presenting a cached answer as a current one. That path is one SELECT and a byte forward - no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ is forwarded byte-for-byte to route, which behaves exactly as before - it reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; parse normalizes each provider's native payload into reports; deconflict merges them and emits a size-prefixed $TBS record stream. Before the gate existed that fan-out ran on EVERY request and cost ~9s on the live page; it is now the explicit-refresh path, while routine refresh belongs to the cellular-network-ingest timer flow. Exactly one lane emits per request, so two bodies can never race into respond. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes.",
+  "version": "0.3.0",
+  "description": "Signed isomorphic graph, mounted at /api/v1/cellular. CACHE-FIRST since 2026-08-14 (graph task mod-cellular-aggregate-cache, owner: 'the cell towers should load almost instantaneously'). The ONE $HTQ request now enters at cell-tower-ingest:cache_plan, not at route. cache_plan reads the envelope and picks ONE lane. THE CACHE LANE (the default for an /aggregate read): it emits this dataset's DEFAULT FlatSQL query, hostcap/flatsql-query streams the stored rows back verbatim into foundation/http-respond's body, and a second query over the ingest resume marks feeds cache_freshness, which authors the decision envelope carrying cacheState/freshness/stale/per-provider progress so the UI shows staleness honestly rather than presenting a cached answer as a current one. That path is one SELECT and a byte forward - no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ is forwarded byte-for-byte to route, which behaves exactly as before - it reads the caller's PROVIDERS list and tbsMergeMethod and fans out one hostcap/http-request GET per selected provider; parse normalizes each provider's native payload into reports; deconflict merges them and emits a size-prefixed $TBS record stream. Before the gate existed that fan-out ran on EVERY request and cost ~9s on the live page; it is now the explicit-refresh path, while routine refresh belongs to the cellular-network-ingest timer flow. Exactly one lane emits per request, so two bodies can never race into respond. The catalog and credential routes are finished by cell-tower-credentials, the ONE node holding a credential capability: it appends the node key slot, reports which lanes are configured, and opens/stores a browser-sealed credential. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes. THE TILE LANE (2026-08-24, graph tasks sdn-cellular-density-tiles / upstream-modules-2; owner: all worldwide cell towers must reach the cellular sandcastle): a worldwide site set is millions of rows and cannot be one answer, so cache_plan now forwards any /tiles path verbatim to tile_plan BEFORE the aggregate test can claim it, and the node serves bounded Web Mercator XYZ tiles - GET /api/v1/cellular/tiles/meta and /api/v1/cellular/tiles/{z}/{x}/{y} - out of the SAME FlatSQL read lane the cache gate uses. tile_plan routes and refuses (z outside [0,18] or x/y outside [0,2^z) is a 400, never a clamp, because a clamped index answers 200 with a different tile's contents under the requested key); tile_meta declares the layer's capability envelope from the resume mark alone, with no COUNT over the store; tile scans the bounded row stream, decides the mode by the tile's TRUE population (<=2048 raw points, <=4096 a deterministic stride sample, above that a 16x16 density grid) and answers an empty store as empty rather than fabricating anything. Exactly one of the cache, live, credential and tile lanes emits per request, so two bodies can never race into respond. ZERO Go host changes and zero new capabilities: the tile lane is plugin.getConfig plus flatsql-query frames over the existing generic hooks.",
   "nodes": [
     {
       "nodeId": "cache_plan",
@@ -36,6 +36,60 @@
       "nodeId": "cache_freshness",
       "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
       "methodId": "cache_freshness",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tile_plan",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "tile_plan",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tile_meta_mark",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "capabilities": [
+        "storage_query"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tile_meta",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "tile_meta",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tile_rows",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "capabilities": [
+        "storage_query"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tile_mark",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "capabilities": [
+        "storage_query"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tile",
+      "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+      "methodId": "tile",
       "kind": "transform",
       "capabilities": [],
       "drainPolicy": "single-shot"
@@ -332,6 +386,133 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "cacheplan-tile",
+      "fromNodeId": "cache_plan",
+      "fromPortId": "tile",
+      "toNodeId": "tile_plan",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16,
+      "opaque": true
+    },
+    {
+      "edgeId": "tileplan-metamark",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "meta_mark_query",
+      "toNodeId": "tile_meta_mark",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "metamark-tilemeta",
+      "fromNodeId": "tile_meta_mark",
+      "fromPortId": "stream",
+      "toNodeId": "tile_meta",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tileplan-metajob",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "meta_job",
+      "toNodeId": "tile_meta",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tilemeta-body-respond",
+      "fromNodeId": "tile_meta",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tilemeta-decision-respond",
+      "fromNodeId": "tile_meta",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tileplan-rowsquery",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "rows_query",
+      "toNodeId": "tile_rows",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tilerows-tile",
+      "fromNodeId": "tile_rows",
+      "fromPortId": "stream",
+      "toNodeId": "tile",
+      "toPortId": "rows",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tileplan-tilemark",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "tile_mark_query",
+      "toNodeId": "tile_mark",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tilemark-tile",
+      "fromNodeId": "tile_mark",
+      "fromPortId": "stream",
+      "toNodeId": "tile",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tileplan-tilejob",
+      "fromNodeId": "tile_plan",
+      "fromPortId": "tile_job",
+      "toNodeId": "tile",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "tile-body-respond",
+      "fromNodeId": "tile",
+      "fromPortId": "body",
+      "toNodeId": "respond",
+      "toPortId": "body",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "tile-decision-respond",
+      "fromNodeId": "tile",
+      "fromPortId": "decision",
+      "toNodeId": "respond",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
     }
   ],
   "triggers": [
@@ -414,6 +595,51 @@
             "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry \u2014 never a lane name the caller supplies.",
             "schema": {
               "type": "string"
+            }
+          }
+        ]
+      },
+      {
+        "path": "tiles/meta",
+        "method": "GET",
+        "operationId": "getCellularTileMeta",
+        "summary": "The density-tile layer's capability envelope",
+        "description": "Scheme (xyz), zoom range, the points/sample/density thresholds, the density grid size and the store's own honesty block (cacheState, records, epoch, stale). The client fetches this once and fails hard if it drifts, so it is the server's binding declaration of the contract every tile then honours. Anonymous for the same reason as /aggregate: a public read of open-data metadata that changes no node state.",
+        "anonymous": true
+      },
+      {
+        "path": "tiles/{z}/{x}/{y}",
+        "method": "GET",
+        "operationId": "getCellularDensityTile",
+        "summary": "One bounded, pre-deconflicted Web Mercator XYZ tile",
+        "description": "Answers from the node store only. The MODE IS THE SERVER'S: a tile holding at most 2048 sites ships every site, at most 4096 ships a deterministic stride sample, and above that ships a 16x16 density grid; `count` is always the tile's true population, never the number of points shipped. z outside [0,18] or x/y outside [0,2^z) is refused 400 rather than clamped. An empty store answers an empty tile and says so in the dataset block; it never fabricates sites. Anonymous, same reasoning as /aggregate.",
+        "anonymous": true,
+        "params": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "description": "Zoom level, 0-18 inclusive. Refused, never clamped.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "description": "Tile column, 0 <= x < 2^z. Refused, never clamped.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "description": "Tile row, 0 <= y < 2^z, north to south with the Web Mercator latitude clamp at +-85.05112878 degrees. Refused, never clamped.",
+            "schema": {
+              "type": "integer"
             }
           }
         ]
