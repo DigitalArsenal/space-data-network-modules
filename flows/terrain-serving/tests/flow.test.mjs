@@ -259,7 +259,23 @@ test("GET layer.json serves the config-derived descriptor through the compiled f
   assert.equal(body.scheme, "tms");
   assert.equal(body.maxzoom, 8);
   assert.deepEqual(body.available, CONFIG.terrain_available);
+  // ATLAS, both halves of the same rule:
+  //  * `available` MUST exist and MUST cover level 0. A native
+  //    CesiumTerrainProvider with no availability rejects its tile promise
+  //    with a TypeError and the globe stays an ellipsoid forever.
+  //  * extensions is EXACTLY ["watermask"]. Declaring octvertexnormals while
+  //    serving no normals makes the client request an extension the tiles do
+  //    not carry, and the spelling "vertexnormals" is never valid at all.
+  assert.ok(Array.isArray(body.available) && body.available.length >= 1);
+  assert.ok(body.available[0].length >= 1, "level 0 is covered");
+  assert.deepEqual(body.available[0], [{ startX: 0, startY: 0, endX: 1, endY: 0 }],
+    "both roots of the two-root geographic scheme");
   assert.deepEqual(body.extensions, ["watermask"]);
+  assert.equal(body.projection, "EPSG:4326");
+  assert.deepEqual(body.bounds, [-180, -90, 180, 90]);
+  assert.equal(body.minzoom, 0);
+  assert.equal(body.attribution, CONFIG.terrain_attribution);
+  assert.ok(!JSON.stringify(body).includes("vertexnormals"), "never that spelling, in any form");
   assert.deepEqual(
     stub.calls.map((c) => c.operation),
     ["plugin.getConfig"],
@@ -278,8 +294,12 @@ test("GET {z}/{x}/{y}.terrain serves the stored record bytes verbatim", async ()
   assert.equal(header(http, "content-type"), "application/vnd.quantized-mesh");
   assert.equal(header(http, "content-encoding"), "gzip");
   assert.equal(header(http, "cache-control"), "public, max-age=86400");
+  // The record states its own strong ETag: the sha2-256 multihash of the
+  // GZIPPED payload bytes, so a cache revalidates against the exact bytes it
+  // holds rather than against an address-and-size guess.
   const etag = header(http, "etag");
-  assert.ok(etag && etag.startsWith('W/"dtt-8-271-192-'));
+  assert.ok(etag?.startsWith('"1220'), `strong sha2-256 multihash ETag, got ${etag}`);
+  assert.ok(!etag.startsWith("W/"), "strong, never weak, when the record states a digest");
   // The served body gunzips to a quantized-mesh whose vertex count matches
   // the encode plan (33x33 grid).
   const mesh = zlib.gunzipSync(Buffer.from(http.body));
@@ -322,4 +342,37 @@ test("a tile miss and an unknown path both answer cheap cacheable 404s", async (
   });
   assert.equal(unknown.status, 404);
   assert.equal(header(unknown, "cache-control"), "public, max-age=300");
+});
+
+test("a miss inside availability is synthesized by the COMPILED flow, never a 404", async () => {
+  // Level 0 is inside the configured availability, and the stub store holds
+  // nothing. Through the whole compiled graph — trigger, route, flatsql-query,
+  // respond, egress — the client must still get terrain.
+  const stub = createStub({ stream: new Uint8Array(4) });
+  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/0/0/0.terrain" });
+  assert.equal(http.status, 200, "the tileset promised level 0; the endpoint answers it");
+  assert.equal(header(http, "content-type"), "application/vnd.quantized-mesh");
+  assert.equal(header(http, "content-encoding"), "gzip");
+  assert.equal(header(http, "cache-control"), "public, max-age=86400");
+  assert.equal(header(http, "x-terrain-synthesized"), "uniform-water");
+  assert.ok(header(http, "etag")?.startsWith('"1220'), "strong digest ETag");
+
+  const mesh = zlib.gunzipSync(Buffer.from(http.body));
+  assert.equal(mesh.readFloatLE(24), 0, "minHeight exactly zero");
+  assert.equal(mesh.readFloatLE(28), 0, "maxHeight exactly zero");
+  assert.equal(mesh.readUInt32LE(88), 65 * 65, "vertexCount after the 88-byte header");
+
+  // It still went through the store first: synthesis is the ANSWER TO A MISS,
+  // not a shortcut that stops the endpoint from serving real tiles.
+  assert.ok(
+    stub.calls.some((c) => c.operation === "storage.flatsql_query_stream"),
+    "the store was asked before anything was synthesized",
+  );
+});
+
+test("a miss OUTSIDE availability is still a cheap cacheable 404 through the flow", async () => {
+  const stub = createStub({ stream: new Uint8Array(4) });
+  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/8/271/192.terrain" });
+  assert.equal(http.status, 404, "nothing promised this address");
+  assert.equal(header(http, "cache-control"), "public, max-age=300");
 });
