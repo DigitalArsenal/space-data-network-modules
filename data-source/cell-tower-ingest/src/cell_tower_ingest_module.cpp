@@ -169,11 +169,34 @@ bool json_number_field(const std::string& json, const std::string& key, double* 
     size_t i = colon + 1;
     while (i < json.size() && is_ws(json[i])) i++;
     if (i >= json.size()) return false;
-    const char c = json[i];
+    // A QUOTED NUMBER IS STILL A NUMBER.
+    //
+    // Node CONFIG arrives as JSON built from the operator's YAML, and an
+    // operator writing `cell_ingest_http_timeout_ms: "1800000"` — which is
+    // ordinary YAML practice and exactly what host-02 had — produced a JSON
+    // STRING. This function required a digit or a minus sign, returned false,
+    // and every caller quietly fell back to its compiled-in default: the
+    // 30-minute timeout was really 90 seconds and a configured chunk size was
+    // not the chunk size used. Nothing said so (graph:
+    // sdn-cellular-ingest-lands-no-batch). Refusing the quoted form would be
+    // the other defensible answer, but it is not the one that can be taken
+    // safely against configs that are already deployed and already quoted.
+    size_t j = i;
+    bool quoted = false;
+    if (json[j] == '"') { quoted = true; j++; }
+    if (j >= json.size()) return false;
+    const char c = json[j];
     if (c != '-' && (c < '0' || c > '9')) return false;
     char* end = nullptr;
-    const double value = strtod(json.c_str() + i, &end);
-    if (end == json.c_str() + i) return false;
+    const double value = strtod(json.c_str() + j, &end);
+    if (end == json.c_str() + j) return false;
+    // A quoted value must be ENTIRELY numeric: "1800000" is a number written as
+    // a string, "1800000ms" is a unit the caller did not ask for and must not
+    // silently become 1800000.
+    if (quoted) {
+        const size_t consumed = static_cast<size_t>(end - json.c_str());
+        if (consumed >= json.size() || json[consumed] != '"') return false;
+    }
     *out = value;
     return true;
 }
