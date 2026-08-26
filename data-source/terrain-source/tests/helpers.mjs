@@ -190,6 +190,81 @@ export function buildGeoTiff({
   return file;
 }
 
+// A granule whose IFD declares a geometry far larger than anything that could
+// be decoded, with a strip table nothing ever reads. It exists to prove the
+// decode budget refuses on the DECLARED geometry, BEFORE any allocation — the
+// only place a refusal is worth anything, since an allocation that traps takes
+// the pooled flow instance with it. Header-only: building 20000x20000 float32
+// pixels to test a refusal would itself need 1.6 GB.
+export function buildOversizedTiffHeader({
+  width = 20000,
+  height = 20000,
+  originLon,
+  originLat,
+  scaleLon,
+  scaleLat,
+}) {
+  const SHORT = 3;
+  const LONG = 4;
+  const DOUBLE = 12;
+  const tags = [
+    { id: 256, type: LONG, values: [width] },
+    { id: 257, type: LONG, values: [height] },
+    { id: 258, type: SHORT, values: [32] },
+    { id: 259, type: SHORT, values: [8] },
+    { id: 273, type: LONG, values: [0] }, // strip offset, patched below
+    { id: 277, type: SHORT, values: [1] },
+    { id: 278, type: LONG, values: [height] },
+    { id: 279, type: LONG, values: [8] },
+    { id: 317, type: SHORT, values: [1] },
+    { id: 339, type: SHORT, values: [3] },
+    { id: 33550, type: DOUBLE, values: [scaleLon, scaleLat, 0] },
+    { id: 33922, type: DOUBLE, values: [0, 0, 0, originLon, originLat, 0] },
+  ];
+  tags.sort((a, b) => a.id - b.id);
+  const typeSize = { [SHORT]: 2, [LONG]: 4, [DOUBLE]: 8 };
+  let cursor = 8 + 2 + tags.length * 12 + 4;
+  for (const t of tags) {
+    const bytes = typeSize[t.type] * t.values.length;
+    if (bytes > 4) {
+      t.offset = cursor;
+      cursor += bytes;
+    }
+  }
+  const stripAt = cursor;
+  tags.find((t) => t.id === 273).values = [stripAt];
+  const file = Buffer.alloc(stripAt + 8);
+  file.write("II", 0, "latin1");
+  file.writeUInt16LE(42, 2);
+  file.writeUInt32LE(8, 4);
+  file.writeUInt16LE(tags.length, 8);
+  tags.forEach((t, n) => {
+    const at = 10 + n * 12;
+    file.writeUInt16LE(t.id, at);
+    file.writeUInt16LE(t.type, at + 2);
+    file.writeUInt32LE(t.values.length, at + 4);
+    const bytes = typeSize[t.type] * t.values.length;
+    const target = bytes > 4 ? t.offset : at + 8;
+    if (bytes > 4) file.writeUInt32LE(t.offset, at + 8);
+    t.values.forEach((v, i) => {
+      if (t.type === SHORT) file.writeUInt16LE(v, target + i * 2);
+      else if (t.type === LONG) file.writeUInt32LE(v, target + i * 4);
+      else file.writeDoubleLE(v, target + i * 8);
+    });
+  });
+  return file;
+}
+
+// hostcap/http-request responseWire "raw-body-v1": "$HRB", little-endian
+// status, body verbatim.
+export function rawBodyFrameBytes(body, status = 200) {
+  const out = Buffer.alloc(8 + body.length);
+  out.write("$HRB", 0, "latin1");
+  out.writeUInt32LE(status >>> 0, 4);
+  Buffer.from(body).copy(out, 8);
+  return out;
+}
+
 // The water-body granule the mask lane classifies: single-band uint8, source
 // convention 0 = no water and any non-zero class a water body.
 export function buildWaterTiff(options) {

@@ -1,0 +1,151 @@
+{
+  "name": "terrain-source-parity",
+  "threadEnvVar": "SDM_PARITY_THREADS",
+  "threadCounts": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "cases": [
+    {
+      "id": "tile-single",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-single.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 372
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/dem-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 153642
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tile-block-amortized",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-block.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 444
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/dem-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 153642
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tile-water-raster",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-water.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 372
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/dem-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 153642
+            }
+          },
+          {
+            "portId": "water",
+            "payloadFile": "parity/water-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 4575
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer-json",
+      "expect": "ok",
+      "request": {
+        "methodId": "layer_json",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-layer.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 185
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tile-over-decode-budget",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-oversized.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 370
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/oversized-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 246
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "malformed-stdin",
+      "stdinUtf8": "this is not a PIV invoke frame — the trap/error class must match across every lane"
+    }
+  ]
+}

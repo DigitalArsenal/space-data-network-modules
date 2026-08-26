@@ -436,7 +436,7 @@ struct DecodeBudget {
     }
 };
 
-void set_decode_budget_error(size_t requested, size_t used) {
+void set_decode_budget_error(uint64_t requested, size_t used) {
     char message[384];
     std::snprintf(message, sizeof(message),
                   "this granule window needs %llu bytes on top of the %llu already resident, "
@@ -723,13 +723,18 @@ DemGrid decode_geotiff_window(const std::string& body, double west, double east,
     const uint32_t ww = static_cast<uint32_t>(wx1 - wx0 + 1);
     const uint32_t wh = static_cast<uint32_t>(wy1 - wy0 + 1);
     const size_t sample_bytes = expect_mask ? 1u : 4u;
-    const size_t need = static_cast<size_t>(ww) * wh * sample_bytes;
+    // Computed in 64 bits DELIBERATELY: size_t is 32-bit in this target, and a
+    // declared geometry large enough to wrap it would wrap into a small,
+    // admissible number. The budget must refuse the real figure.
+    const uint64_t need64 =
+        static_cast<uint64_t>(ww) * static_cast<uint64_t>(wh) * sample_bytes;
     // THE CEILING, checked BEFORE the assign and against the RUNNING total.
-    if (!budget->admit(need)) {
-        set_decode_budget_error(need, budget->used);
+    if (need64 > kDecodeByteBudget || !budget->admit(static_cast<size_t>(need64))) {
+        set_decode_budget_error(need64, budget->used);
         g.budget_refused = true;
         return g;
     }
+    const size_t need = static_cast<size_t>(need64);
 
     g.width = ww;
     g.height = wh;
@@ -1071,6 +1076,24 @@ flatbuffers::Offset<DTTProvenance> build_provenance(flatbuffers::FlatBufferBuild
 // Same import surface the tests already admit (space_data_module_host) and the
 // same precedent geonames-ingest set: reading the flow's host-provided config
 // is not a capability, it is the module asking who it was deployed as.
+//
+// TERRAIN_SOURCE_NO_HOST_BRIDGE compiles the three imports OUT. It exists for
+// ONE reason: the SDK's tri-runtime parity lane cannot execute a module that
+// imports space_data_module_host at all — the wasmedge lanes run
+// `wasmedge module.wasm` with no host module to link against, and the browser
+// lane's own host construction reaches a dynamic import that its served bundle
+// externalizes away. Both are lane-provisioning limits, not properties of this
+// code, and they apply to every production module using the sanctioned
+// plugin.getConfig bridge. The SHIPPED artifact always keeps the imports; the
+// parity artifact (npm run build:parity) drops them so the ENCODER's byte
+// identity across the three runtimes can still be measured. See the task md.
+#ifdef TERRAIN_SOURCE_NO_HOST_BRIDGE
+namespace {
+int32_t sdm_host_call(const uint8_t*, int32_t, const uint8_t*, int32_t) { return 0; }
+int32_t sdm_host_response_len(void) { return 0; }
+int32_t sdm_host_read_response(uint8_t*, int32_t) { return 0; }
+}  // namespace
+#else
 extern "C" {
 __attribute__((import_module("space_data_module_host"), import_name("call")))
 int32_t sdm_host_call(const uint8_t* op_ptr, int32_t op_len,
@@ -1080,6 +1103,7 @@ int32_t sdm_host_response_len(void);
 __attribute__((import_module("space_data_module_host"), import_name("read_response")))
 int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
 }
+#endif
 
 std::string load_config() {
     static const char* op = "plugin.getConfig";
