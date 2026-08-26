@@ -4,6 +4,7 @@
 // the bytes the ingest path stores.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import test from "node:test";
@@ -13,7 +14,7 @@ import zlib from "node:zlib";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { decodeHttpResponse, encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
 
-import { buildGeoTiff, decodeQuantizedMesh, splitStream } from "./helpers.mjs";
+import { buildGeoTiff, decodeDtt, decodeQuantizedMesh, splitStream } from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -213,8 +214,19 @@ test("respond serves the stored record verbatim with record-stated headers", asy
   assert.equal(headerOf("content-type"), "application/vnd.quantized-mesh");
   assert.equal(headerOf("content-encoding"), "gzip", "the stored bytes are already gzipped");
   assert.equal(headerOf("cache-control"), "public, max-age=86400");
+  // The record states its own strong ETag now: the sha2-256 multihash of the
+  // GZIPPED payload bytes (Themis). A cache therefore revalidates against the
+  // exact bytes it holds, not against an address-and-size guess.
   const etag = headerOf("etag");
-  assert.ok(etag && etag.startsWith('W/"dtt-8-271-192-'), "weak address+size tag when the record states none");
+  const record = decodeDtt(splitStream(stream)[0]);
+  assert.ok(record.payload.digest?.startsWith("1220"), "sha2-256 multihash, lowercase hex");
+  assert.equal(etag, `"${record.payload.digest}"`, "strong ETag is the payload digest");
+  assert.ok(!etag.startsWith("W/"), "strong, never weak, when the record states a digest");
+  assert.equal(
+    record.payload.digest,
+    `1220${createHash("sha256").update(Buffer.from(record.payload.bytes)).digest("hex")}`,
+    "the digest is over the bytes the client actually receives",
+  );
 
   // The served body IS the record's payload: it gunzips to a valid
   // quantized-mesh whose vertex count matches the encode plan.

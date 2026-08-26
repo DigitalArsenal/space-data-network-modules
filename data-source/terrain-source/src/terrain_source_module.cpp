@@ -38,6 +38,7 @@
  * bytes, which is worse than no tile at all.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -258,11 +259,12 @@ int push_dtt_stream(const char* port, const std::vector<uint8_t>& bytes) {
 // PORT-BLIND up to a budget of 64; maxStreams/maxBatch/drainPolicy are purely
 // declarative there. A guest that reads ordinal 0 and returns therefore
 // destroys every other frame it was handed (the live P1 that produced
-// `modules-guest-nodes-drop-batched-frames`). The "dem" port legitimately
-// carries up to FOUR frames — the corner granules of a granule-spanning tile —
-// so its budget is 4; every other port is single-stream by contract.
+// `modules-guest-nodes-drop-batched-frames`). The "dem" and "water" ports
+// legitimately carry up to FOUR frames each — the corner granules of an extent
+// that straddles a 2x2 granule neighbourhood — so their budget is 4; every
+// other port is single-stream by contract.
 uint32_t port_stream_budget(const char* port_id) {
-    return std::strcmp(port_id, "dem") == 0 ? 4u : 1u;
+    return (std::strcmp(port_id, "dem") == 0 || std::strcmp(port_id, "water") == 0) ? 4u : 1u;
 }
 
 bool find_batched_input_port(char* message, size_t message_len) {
@@ -298,6 +300,154 @@ std::string fmt_double(double v) {
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%.9g", v);
     return std::string(buf);
+}
+
+// ── SHA-256 (record DIGEST and ETag) ───────────────────────────────────────
+//
+// Themis: DIGEST and SIZE_BYTES are stated over the GZIPPED bytes — the bytes
+// a cache actually stores and a client actually receives — and DIGEST is a
+// lowercase-hex MULTIHASH, so the sha2-256 prefix 0x12 0x20 is part of the
+// string. There is no host hashing capability and none may be added, so the
+// digest is computed here.
+
+struct Sha256 {
+    uint32_t h[8] = {0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au,
+                     0x510e527fu, 0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u};
+    uint8_t block[64] = {0};
+    size_t block_len = 0;
+    uint64_t total_bits = 0;
+
+    static uint32_t rotr(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
+
+    void compress(const uint8_t* p) {
+        static const uint32_t k[64] = {
+            0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,
+            0x923f82a4u,0xab1c5ed5u,0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,
+            0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,0xe49b69c1u,0xefbe4786u,
+            0x0fc19dc6u,0x240ca1ccu,0x2de92c6fu,0x4a7484aau,0x5cb0a9dcu,0x76f988dau,
+            0x983e5152u,0xa831c66du,0xb00327c8u,0xbf597fc7u,0xc6e00bf3u,0xd5a79147u,
+            0x06ca6351u,0x14292967u,0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,
+            0x650a7354u,0x766a0abbu,0x81c2c92eu,0x92722c85u,0xa2bfe8a1u,0xa81a664bu,
+            0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
+            0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,
+            0x5b9cca4fu,0x682e6ff3u,0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,
+            0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u};
+        uint32_t w[64];
+        for (int i = 0; i < 16; i++) {
+            w[i] = (static_cast<uint32_t>(p[i * 4]) << 24) |
+                   (static_cast<uint32_t>(p[i * 4 + 1]) << 16) |
+                   (static_cast<uint32_t>(p[i * 4 + 2]) << 8) |
+                   static_cast<uint32_t>(p[i * 4 + 3]);
+        }
+        for (int i = 16; i < 64; i++) {
+            const uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
+            const uint32_t s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+        }
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3];
+        uint32_t e = h[4], f = h[5], g = h[6], hh = h[7];
+        for (int i = 0; i < 64; i++) {
+            const uint32_t S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+            const uint32_t ch = (e & f) ^ (~e & g);
+            const uint32_t t1 = hh + S1 + ch + k[i] + w[i];
+            const uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+            const uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+            const uint32_t t2 = S0 + maj;
+            hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d;
+        h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    }
+
+    void update(const uint8_t* data, size_t len) {
+        total_bits += static_cast<uint64_t>(len) * 8u;
+        while (len > 0) {
+            const size_t take = std::min(len, static_cast<size_t>(64) - block_len);
+            std::memcpy(block + block_len, data, take);
+            block_len += take;
+            data += take;
+            len -= take;
+            if (block_len == 64) { compress(block); block_len = 0; }
+        }
+    }
+
+    // Lowercase-hex sha2-256 MULTIHASH: 0x12 (sha2-256), 0x20 (32 bytes), digest.
+    std::string multihash_hex() {
+        const uint64_t bits = total_bits;
+        uint8_t pad = 0x80;
+        update(&pad, 1);
+        total_bits = bits;  // the padding is not message length
+        pad = 0x00;
+        while (block_len != 56) { update(&pad, 1); total_bits = bits; }
+        uint8_t tail[8];
+        for (int i = 0; i < 8; i++) tail[i] = static_cast<uint8_t>((bits >> (56 - 8 * i)) & 0xff);
+        std::memcpy(block + block_len, tail, 8);
+        compress(block);
+        block_len = 0;
+        static const char* hex = "0123456789abcdef";
+        std::string out = "1220";
+        for (int i = 0; i < 8; i++) {
+            for (int b = 3; b >= 0; b--) {
+                const uint8_t byte = static_cast<uint8_t>((h[i] >> (8 * b)) & 0xff);
+                out.push_back(hex[byte >> 4]);
+                out.push_back(hex[byte & 0x0f]);
+            }
+        }
+        return out;
+    }
+};
+
+std::string sha256_multihash(const std::vector<uint8_t>& bytes) {
+    Sha256 sha;
+    if (!bytes.empty()) sha.update(bytes.data(), bytes.size());
+    return sha.multihash_hex();
+}
+
+// ── decode byte budget ─────────────────────────────────────────────────────
+//
+// A source granule at the dataset's native post spacing is 3600x3600 float32 =
+// 51.8 MB, and a tile whose corner spans four granules holds 207 MB of raster
+// if each is decoded WHOLE. That is exactly what the first cut of this module
+// did, and it sat flat at 235 MiB of guest memory on every invoke.
+//
+// Two DIFFERENT mechanisms answer that, and conflating them is how the first
+// cut went wrong:
+//
+//   * WINDOWING (decode_geotiff_window, below) inflates only the internal
+//     chunks that intersect the requested extent, so the resident raster is
+//     proportional to the OUTPUT rather than to the granule. It is what keeps
+//     the ordinary case small — it is not a safety property, because a large
+//     enough extent still asks for a large window.
+//   * kDecodeByteBudget IS the safety property: a named in-guest ceiling,
+//     checked before ANY raster allocation and again before each subsequent
+//     granule against the RUNNING total. A plan whose union extent would cross
+//     it is REFUSED by name. A guest that instead traps on allocation takes
+//     its pooled flow instance down with it and that instance never runs work
+//     again — the live failure this ceiling exists to prevent.
+constexpr size_t kDecodeByteBudget = 256u * 1024u * 1024u;  // 256 MiB
+
+struct DecodeBudget {
+    size_t used = 0;
+    // Overflow-safe by construction: `used + bytes` is never formed.
+    bool admit(size_t bytes) {
+        if (bytes > kDecodeByteBudget || used > kDecodeByteBudget - bytes) return false;
+        used += bytes;
+        return true;
+    }
+};
+
+void set_decode_budget_error(size_t requested, size_t used) {
+    char message[384];
+    std::snprintf(message, sizeof(message),
+                  "this granule window needs %llu bytes on top of the %llu already resident, "
+                  "past the %llu-byte in-guest decode budget. The plan is REFUSED rather than "
+                  "decoded: a guest that traps on allocation takes its pooled flow instance "
+                  "with it and that instance never runs work again. Split the plan into "
+                  "smaller tile blocks.",
+                  static_cast<unsigned long long>(requested),
+                  static_cast<unsigned long long>(used),
+                  static_cast<unsigned long long>(kDecodeByteBudget));
+    plugin_set_error("decode-budget-exceeded", message);
 }
 
 // ── minimal little-endian TIFF / BigTIFF reader ────────────────────────────
@@ -346,16 +496,22 @@ size_t tiff_type_size(uint16_t type) {
 }
 
 struct DemGrid {
+    // The decoded WINDOW, not the granule: width/height are the sub-raster's.
     uint32_t width = 0;
     uint32_t height = 0;
-    std::vector<float> samples;  // row-major from the top-left pixel
-    // Georeference: geographic coordinate of pixel (0,0), degree per pixel.
+    std::vector<float> samples;    // float32 elevation posts, row-major
+    std::vector<uint8_t> classes;  // uint8 categorical samples (water-body mask)
+    bool is_mask = false;
+    // Georeference of the SUB-RASTER: model coordinate of ITS pixel (0,0).
     double origin_lon = 0.0;
     double origin_lat = 0.0;
     double scale_lon = 0.0;  // positive eastward
     double scale_lat = 0.0;  // positive (subtracted going south)
+    bool covers = false;     // the requested extent intersected this granule
+    bool budget_refused = false;  // the error is already set; do not overwrite it
     bool ok = false;
     std::string error;
+    size_t resident_bytes() const { return samples.size() * 4u + classes.size(); }
 };
 
 // Undo the TIFF floating-point predictor (3) for one decoded chunk of
@@ -382,8 +538,32 @@ bool undo_predictor3(std::vector<uint8_t>* data, uint32_t width, uint32_t rows) 
     return true;
 }
 
-DemGrid decode_geotiff(const std::string& body) {
+// Undo the TIFF horizontal predictor (2) for one chunk of 8-bit samples.
+bool undo_predictor2_u8(std::vector<uint8_t>* data, uint32_t width, uint32_t rows) {
+    if (data->size() < static_cast<size_t>(width) * rows) return false;
+    for (uint32_t r = 0; r < rows; r++) {
+        uint8_t* p = data->data() + static_cast<size_t>(r) * width;
+        for (uint32_t i = 1; i < width; i++) p[i] = static_cast<uint8_t>(p[i] + p[i - 1]);
+    }
+    return true;
+}
+
+// ── WINDOWED GeoTIFF decode ────────────────────────────────────────────────
+//
+// Decodes ONLY the internal chunks (tiles or strips) that intersect
+// [west,east] x [south,north], into a sub-raster of exactly that extent plus a
+// one-pixel margin so every bilinear corner is resident. Peak memory is the
+// window plus ONE chunk of scratch, which is what makes a four-granule tile
+// cost megabytes instead of the 207 MB a whole-granule decode holds.
+//
+// `expect_mask` selects the categorical 8-bit lane (the water-body granule);
+// otherwise the single-band Float32 elevation lane. An unmodelled layout is
+// REFUSED, never guessed at: decoding it to plausible values would be
+// fabricated terrain.
+DemGrid decode_geotiff_window(const std::string& body, double west, double east, double south,
+                              double north, bool expect_mask, DecodeBudget* budget) {
     DemGrid g;
+    g.is_mask = expect_mask;
     if (body.size() < 16) { g.error = "body too short to be a TIFF"; return g; }
     if (!(body[0] == 'I' && body[1] == 'I')) {
         g.error = "not a little-endian TIFF (big-endian granules are refused, not byte-guessed)";
@@ -434,16 +614,13 @@ DemGrid decode_geotiff(const std::string& body) {
         for (const TiffTag& t : tags) if (t.id == id) return &t;
         return nullptr;
     };
-    auto value_base = [&](const TiffTag& t) -> size_t {
-        return t.value_inline ? static_cast<size_t>(t.value_or_offset)
-                              : static_cast<size_t>(t.value_or_offset);
-    };
     auto read_uint = [&](const TiffTag& t, uint64_t index, uint64_t* out) -> bool {
         const size_t esz = tiff_type_size(t.type);
         if (esz == 0 || index >= t.count) return false;
-        const size_t at = value_base(t) + index * esz;
+        const size_t at = static_cast<size_t>(t.value_or_offset) + index * esz;
         if (at + esz > body.size()) return false;
-        if (t.type == 3) *out = rd16(body, at);
+        if (t.type == 1) *out = static_cast<uint8_t>(body[at]);
+        else if (t.type == 3) *out = rd16(body, at);
         else if (t.type == 4) *out = rd32(body, at);
         else if (t.type == 16) *out = rd64(body, at);
         else return false;
@@ -451,7 +628,7 @@ DemGrid decode_geotiff(const std::string& body) {
     };
     auto read_double = [&](const TiffTag& t, uint64_t index, double* out) -> bool {
         if (t.type != 12 || index >= t.count) return false;
-        const size_t at = value_base(t) + index * 8;
+        const size_t at = static_cast<size_t>(t.value_or_offset) + index * 8;
         if (at + 8 > body.size()) return false;
         uint64_t bits = rd64(body, at);
         double v;
@@ -468,27 +645,39 @@ DemGrid decode_geotiff(const std::string& body) {
 
     const uint64_t width = uint_of(256, 0);
     const uint64_t height = uint_of(257, 0);
-    const uint64_t bits = uint_of(258, 1);
+    const uint64_t bits = uint_of(258, expect_mask ? 8 : 1);
     const uint64_t compression = uint_of(259, 1);
     const uint64_t samples_per_pixel = uint_of(277, 1);
     const uint64_t predictor = uint_of(317, 1);
     const uint64_t sample_format = uint_of(339, 1);
 
-    if (width == 0 || height == 0 || width > 20000 || height > 20000) {
+    if (width == 0 || height == 0 || width > 200000 || height > 200000) {
         g.error = "missing or implausible ImageWidth/ImageLength";
         return g;
     }
-    if (bits != 32 || sample_format != 3 || samples_per_pixel != 1) {
-        g.error = "granule is not single-band Float32 (BitsPerSample 32, SampleFormat 3); "
-                  "an unmodelled sample layout is refused, never reinterpreted";
-        return g;
+    if (expect_mask) {
+        if (bits != 8 || samples_per_pixel != 1) {
+            g.error = "water-body granule is not single-band 8-bit; an unmodelled sample "
+                      "layout is refused, never reinterpreted as coastline";
+            return g;
+        }
+        if (predictor != 1 && predictor != 2) {
+            g.error = "water-body granule predictor is neither none (1) nor horizontal (2)";
+            return g;
+        }
+    } else {
+        if (bits != 32 || sample_format != 3 || samples_per_pixel != 1) {
+            g.error = "granule is not single-band Float32 (BitsPerSample 32, SampleFormat 3); "
+                      "an unmodelled sample layout is refused, never reinterpreted";
+            return g;
+        }
+        if (predictor != 1 && predictor != 3) {
+            g.error = "granule predictor is neither none (1) nor floating-point (3)";
+            return g;
+        }
     }
     if (compression != 1 && compression != 8) {
         g.error = "granule compression is neither none (1) nor DEFLATE (8)";
-        return g;
-    }
-    if (predictor != 1 && predictor != 3) {
-        g.error = "granule predictor is neither none (1) nor floating-point (3)";
         return g;
     }
 
@@ -507,15 +696,49 @@ DemGrid decode_geotiff(const std::string& body) {
         g.error = "malformed georeference tags";
         return g;
     }
-    g.origin_lon = tp_x - tp_i * sx;
-    g.origin_lat = tp_y + tp_j * sy;
+    const double full_origin_lon = tp_x - tp_i * sx;
+    const double full_origin_lat = tp_y + tp_j * sy;
+
+    // ── the WINDOW: pixel rectangle covering the extent, one-pixel margin ────
+    const double fx0 = (west - full_origin_lon) / sx;
+    const double fx1 = (east - full_origin_lon) / sx;
+    const double fy0 = (full_origin_lat - north) / sy;
+    const double fy1 = (full_origin_lat - south) / sy;
+    long wx0 = static_cast<long>(std::floor(fx0)) - 1;
+    long wx1 = static_cast<long>(std::ceil(fx1)) + 1;
+    long wy0 = static_cast<long>(std::floor(fy0)) - 1;
+    long wy1 = static_cast<long>(std::ceil(fy1)) + 1;
+    if (wx0 < 0) wx0 = 0;
+    if (wy0 < 0) wy0 = 0;
+    if (wx1 > static_cast<long>(width) - 1) wx1 = static_cast<long>(width) - 1;
+    if (wy1 > static_cast<long>(height) - 1) wy1 = static_cast<long>(height) - 1;
+    if (wx1 < wx0 || wy1 < wy0) {
+        // The granule does not intersect the requested extent at all. That is
+        // not an error and costs nothing: NOTHING is inflated.
+        g.ok = true;
+        g.covers = false;
+        return g;
+    }
+
+    const uint32_t ww = static_cast<uint32_t>(wx1 - wx0 + 1);
+    const uint32_t wh = static_cast<uint32_t>(wy1 - wy0 + 1);
+    const size_t sample_bytes = expect_mask ? 1u : 4u;
+    const size_t need = static_cast<size_t>(ww) * wh * sample_bytes;
+    // THE CEILING, checked BEFORE the assign and against the RUNNING total.
+    if (!budget->admit(need)) {
+        set_decode_budget_error(need, budget->used);
+        g.budget_refused = true;
+        return g;
+    }
+
+    g.width = ww;
+    g.height = wh;
+    if (expect_mask) g.classes.assign(need, 0);
+    else g.samples.assign(static_cast<size_t>(ww) * wh, 0.0f);
+    g.origin_lon = full_origin_lon + wx0 * sx;
+    g.origin_lat = full_origin_lat - wy0 * sy;
     g.scale_lon = sx;
     g.scale_lat = sy;
-
-    // ── decode chunks (tiles or strips) into the full raster ────────────────
-    g.width = static_cast<uint32_t>(width);
-    g.height = static_cast<uint32_t>(height);
-    g.samples.assign(static_cast<size_t>(width) * height, 0.0f);
 
     const TiffTag* tile_offsets = find_tag(324);
     const TiffTag* tile_counts = find_tag(325);
@@ -525,7 +748,7 @@ DemGrid decode_geotiff(const std::string& body) {
     auto decode_chunk = [&](size_t at, size_t len, uint32_t chunk_w, uint32_t chunk_rows,
                             std::vector<uint8_t>* out) -> bool {
         if (at + len > body.size()) return false;
-        const size_t expect = static_cast<size_t>(chunk_w) * chunk_rows * 4;
+        const size_t expect = static_cast<size_t>(chunk_w) * chunk_rows * sample_bytes;
         if (compression == 1) {
             if (len < expect) return false;
             out->assign(body.begin() + at, body.begin() + at + expect);
@@ -538,8 +761,30 @@ DemGrid decode_geotiff(const std::string& body) {
             mz_free(raw);
             if (out->size() < expect) return false;
         }
-        if (predictor == 3 && !undo_predictor3(out, chunk_w, chunk_rows)) return false;
+        if (!expect_mask && predictor == 3 && !undo_predictor3(out, chunk_w, chunk_rows)) return false;
+        if (expect_mask && predictor == 2 && !undo_predictor2_u8(out, chunk_w, chunk_rows)) return false;
         return true;
+    };
+
+    // Copy one decoded chunk's overlap with the window into the sub-raster.
+    auto blit = [&](const std::vector<uint8_t>& chunk, uint32_t chunk_w, long x_start,
+                    long y_start, long y_last) {
+        const long oy0 = std::max(y_start, wy0);
+        const long oy1 = std::min(y_last, wy1);
+        const long ox0 = std::max(x_start, wx0);
+        const long ox1 = std::min(x_start + static_cast<long>(chunk_w) - 1, wx1);
+        if (oy1 < oy0 || ox1 < ox0) return;
+        const size_t run = static_cast<size_t>(ox1 - ox0 + 1);
+        for (long r = oy0; r <= oy1; r++) {
+            const size_t src =
+                (static_cast<size_t>(r - y_start) * chunk_w + static_cast<size_t>(ox0 - x_start)) *
+                sample_bytes;
+            const size_t dst =
+                static_cast<size_t>(r - wy0) * ww + static_cast<size_t>(ox0 - wx0);
+            if (src + run * sample_bytes > chunk.size()) continue;
+            if (expect_mask) std::memcpy(&g.classes[dst], chunk.data() + src, run);
+            else std::memcpy(&g.samples[dst], chunk.data() + src, run * 4);
+        }
     };
 
     std::vector<uint8_t> chunk;
@@ -550,7 +795,12 @@ DemGrid decode_geotiff(const std::string& body) {
         const uint64_t across = (width + tw - 1) / tw;
         const uint64_t down = (height + th - 1) / th;
         for (uint64_t ty = 0; ty < down; ty++) {
+            const long y_start = static_cast<long>(ty * th);
+            const long y_last = y_start + static_cast<long>(th) - 1;
+            if (y_last < wy0 || y_start > wy1) continue;  // WINDOW: never inflated
             for (uint64_t tx = 0; tx < across; tx++) {
+                const long x_start = static_cast<long>(tx * tw);
+                if (x_start + static_cast<long>(tw) - 1 < wx0 || x_start > wx1) continue;
                 const uint64_t n = ty * across + tx;
                 uint64_t at = 0, len = 0;
                 if (!read_uint(*tile_offsets, n, &at) || !read_uint(*tile_counts, n, &len)) {
@@ -562,32 +812,30 @@ DemGrid decode_geotiff(const std::string& body) {
                     g.error = "a tile failed to inflate; a partial raster is refused";
                     return g;
                 }
-                const uint64_t copy_w = std::min<uint64_t>(tw, width - tx * tw);
-                const uint64_t copy_h = std::min<uint64_t>(th, height - ty * th);
-                for (uint64_t r = 0; r < copy_h; r++) {
-                    std::memcpy(&g.samples[(ty * th + r) * width + tx * tw],
-                                &chunk[static_cast<size_t>(r) * tw * 4],
-                                static_cast<size_t>(copy_w) * 4);
-                }
+                blit(chunk, static_cast<uint32_t>(tw), x_start, y_start, y_last);
             }
         }
     } else if (strip_offsets && strip_counts) {
         const uint64_t rows_per_strip = uint_of(278, height);
+        if (rows_per_strip == 0) { g.error = "strip layout with RowsPerStrip 0"; return g; }
         const uint64_t strips = (height + rows_per_strip - 1) / rows_per_strip;
         for (uint64_t s = 0; s < strips; s++) {
+            const long y_start = static_cast<long>(s * rows_per_strip);
+            const uint64_t rows =
+                std::min<uint64_t>(rows_per_strip, height - s * rows_per_strip);
+            const long y_last = y_start + static_cast<long>(rows) - 1;
+            if (y_last < wy0 || y_start > wy1) continue;  // WINDOW: never inflated
             uint64_t at = 0, len = 0;
             if (!read_uint(*strip_offsets, s, &at) || !read_uint(*strip_counts, s, &len)) {
                 g.error = "strip offset/count tables shorter than the strip count";
                 return g;
             }
-            const uint64_t rows = std::min<uint64_t>(rows_per_strip, height - s * rows_per_strip);
             if (!decode_chunk(static_cast<size_t>(at), static_cast<size_t>(len),
                               static_cast<uint32_t>(width), static_cast<uint32_t>(rows), &chunk)) {
                 g.error = "a strip failed to inflate; a partial raster is refused";
                 return g;
             }
-            std::memcpy(&g.samples[s * rows_per_strip * width], chunk.data(),
-                        static_cast<size_t>(rows) * width * 4);
+            blit(chunk, static_cast<uint32_t>(width), 0, y_start, y_last);
         }
     } else {
         g.error = "granule has neither tile nor strip layout tables";
@@ -595,6 +843,7 @@ DemGrid decode_geotiff(const std::string& body) {
     }
 
     g.ok = true;
+    g.covers = true;
     return g;
 }
 
@@ -602,9 +851,10 @@ DemGrid decode_geotiff(const std::string& body) {
 
 constexpr float kNoData = -32767.0f;
 
-// Bilinear sample of one granule at a geographic position; false when the
-// position lies outside the granule. NO_DATA corners poison the sample.
+// Bilinear sample of one granule window at a geographic position; false when
+// the position lies outside the window. NO_DATA corners poison the sample.
 bool sample_granule(const DemGrid& g, double lon, double lat, double* out, bool* nodata) {
+    if (!g.covers || g.samples.empty()) return false;
     const double px = (lon - g.origin_lon) / g.scale_lon;
     const double py = (g.origin_lat - lat) / g.scale_lat;
     if (px < -0.5 || py < -0.5 || px > g.width - 0.5 || py > g.height - 0.5) return false;
@@ -627,6 +877,24 @@ bool sample_granule(const DemGrid& g, double lon, double lat, double* out, bool*
     }
     *nodata = false;
     *out = (1 - fy) * ((1 - fx) * s00 + fx * s10) + fy * ((1 - fx) * s01 + fx * s11);
+    return true;
+}
+
+// NEAREST-NEIGHBOUR sample of a categorical water-body granule. A land/water
+// class is never interpolated: averaging category ordinals invents a class the
+// source never stated.
+bool sample_water_class(const DemGrid& g, double lon, double lat, uint8_t* out) {
+    if (!g.covers || g.classes.empty()) return false;
+    const double px = (lon - g.origin_lon) / g.scale_lon;
+    const double py = (g.origin_lat - lat) / g.scale_lat;
+    if (px < -0.5 || py < -0.5 || px > g.width - 0.5 || py > g.height - 0.5) return false;
+    long x = std::lround(px);
+    long y = std::lround(py);
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > static_cast<long>(g.width) - 1) x = static_cast<long>(g.width) - 1;
+    if (y > static_cast<long>(g.height) - 1) y = static_cast<long>(g.height) - 1;
+    *out = g.classes[static_cast<size_t>(y) * g.width + static_cast<size_t>(x)];
     return true;
 }
 
@@ -913,6 +1181,173 @@ bool parse_tile_path(const std::string& rest, uint32_t* z, uint32_t* x, uint32_t
     return true;
 }
 
+// ── amortization + serving constants ───────────────────────────────────────
+//
+// PER-TILE GZIPPED CEILING, enforced at ENCODE time. The serving lane's own
+// bound (Hermes): a tile past it is refused where it is produced, not
+// discovered later by a client that already paid for the transfer.
+constexpr size_t kTileGzipCeilingBytes = 32u * 1024u;  // 32 KiB
+
+// The water-mask raster geometry this encoder cuts. N stays 256 at EVERY
+// level (Atlas): a mask whose resolution changed with depth would make the
+// shared-edge identity below untestable.
+constexpr uint32_t kMaskSize = 256;
+
+// Split a JSON array of objects into its depth-0 members.
+std::vector<std::string> split_json_objects(const std::string& array_json) {
+    std::vector<std::string> out;
+    int depth = 0;
+    bool in_string = false;
+    size_t start = 0;
+    for (size_t i = 0; i < array_json.size(); i++) {
+        const char c = array_json[i];
+        if (in_string) {
+            if (c == '\\') i++;
+            else if (c == '"') in_string = false;
+            continue;
+        }
+        if (c == '"') in_string = true;
+        else if (c == '{') { if (depth++ == 0) start = i; }
+        else if (c == '}') { if (--depth == 0) out.push_back(array_json.substr(start, i - start + 1)); }
+    }
+    return out;
+}
+
+// ── the http response lane ─────────────────────────────────────────────────
+//
+// Janus (e): com.digitalarsenal.hostcap.http-request is the ONLY fetch hook
+// for both the elevation and the water-body granules, and both opt into
+// responseWire "raw-body-v1" — the $HRB frame the cell-tower lane set the
+// precedent for. A 40 MB granule expands to 54 MB of base64 in the default
+// JSON dialect and is then copied through several string buffers before this
+// module sees a byte of it; $HRB hands over the bytes verbatim.
+//
+//   0..3  "$HRB"
+//   4..7  HTTP status, little endian (0 means connector failure)
+//   8..N  response body, verbatim
+//
+// The JSON dialect is still read, because a plan may be replayed from a
+// recorded fixture that predates the raw lane.
+struct HttpFrame {
+    bool present = false;
+    long status = 0;
+    std::string body;
+    bool raw = false;
+};
+
+HttpFrame http_input_at(const char* port_id, uint32_t ordinal) {
+    HttpFrame f;
+    const int32_t idx = plugin_find_input_index(port_id, ordinal);
+    if (idx < 0) return f;
+    const plugin_input_frame_t* frame = plugin_get_input_frame(static_cast<uint32_t>(idx));
+    if (!frame || !frame->payload || frame->payload_length == 0) return f;
+    f.present = true;
+    const uint8_t* p = frame->payload;
+    if (frame->payload_length >= 8 && p[0] == '$' && p[1] == 'H' && p[2] == 'R' && p[3] == 'B') {
+        const uint32_t raw_status = static_cast<uint32_t>(p[4]) |
+                                    (static_cast<uint32_t>(p[5]) << 8) |
+                                    (static_cast<uint32_t>(p[6]) << 16) |
+                                    (static_cast<uint32_t>(p[7]) << 24);
+        f.status = static_cast<long>(static_cast<int32_t>(raw_status));
+        f.body.assign(reinterpret_cast<const char*>(p + 8),
+                      static_cast<size_t>(frame->payload_length) - 8);
+        f.raw = true;
+        return f;
+    }
+    const std::string json(reinterpret_cast<const char*>(p),
+                           static_cast<size_t>(frame->payload_length));
+    f.status = response_status(json);
+    f.body = response_body(json);
+    return f;
+}
+
+// ── one tile of the plan ───────────────────────────────────────────────────
+
+struct TileJob {
+    uint32_t level = 0;
+    uint32_t x = 0;
+    uint32_t y = 0;
+    uint32_t child_availability = 0;
+};
+
+struct TileStats {
+    uint64_t nodata = 0;
+    uint64_t uncovered = 0;
+    uint64_t mask_fallback = 0;
+    double coverage = 0;
+    double min_h = 0;
+    double max_h = 0;
+    size_t mesh_bytes = 0;
+    size_t payload_bytes = 0;
+    std::string water_kind;
+    std::string digest;
+    bool skipped_ocean = false;
+};
+
+struct TileExtent {
+    double west, east, south, north;
+};
+
+// GEOGRAPHIC_WGS84: level z has 2^(z+1) x 2^z tiles of (180/2^z) degrees, row
+// 0 at the SOUTH edge (TMS).
+bool tile_extent(const TileJob& job, TileExtent* out) {
+    const double span = 180.0 / static_cast<double>(1u << job.level);
+    const uint32_t tiles_x = 2u << job.level;
+    const uint32_t tiles_y = 1u << job.level;
+    if (job.x >= tiles_x || job.y >= tiles_y) return false;
+    out->west = -180.0 + job.x * span;
+    out->east = out->west + span;
+    out->south = -90.0 + job.y * span;
+    out->north = out->south + span;
+    return true;
+}
+
+// ── the water mask, cut from ONE GLOBAL POST LATTICE ───────────────────────
+//
+// At level z the mask lattice has (2^(z+1) * (N-1) + 1) x (2^z * (N-1) + 1)
+// posts spanning the whole ellipsoid, and tile (x, y) takes posts
+// [x*(N-1), x*(N-1)+N-1] across. Column N-1 of tile x is therefore THE SAME
+// GLOBAL POST as column 0 of tile x+1, and row N-1 of tile y is the same post
+// as row 0 of the tile to its south. Classification is a pure function of the
+// global position, so the shared bytes are EQUAL by construction rather than
+// by a seam fix-up — which is the only construction under which "boundary
+// cells of adjacent tiles are byte-identical" is even expressible, and it is
+// what the encoder is tested on.
+//
+// Source classes are categorical (0 = no water, non-zero = a water body), so
+// the sample is NEAREST-NEIGHBOUR: averaging class ordinals would invent a
+// class the source never stated. Output is the served convention: 255 water,
+// 0 land, row 0 the NORTH edge.
+void classify_water_mask(const TileExtent& extent, const std::vector<DemGrid>& water_granules,
+                         bool dem_absent, std::vector<uint8_t>* raster, uint64_t* fallback) {
+    raster->assign(static_cast<size_t>(kMaskSize) * kMaskSize, 0);
+    const double dlon = (extent.east - extent.west) / (kMaskSize - 1);
+    const double dlat = (extent.north - extent.south) / (kMaskSize - 1);
+    for (uint32_t r = 0; r < kMaskSize; r++) {
+        const double lat = extent.north - r * dlat;  // row 0 = NORTH
+        for (uint32_t c = 0; c < kMaskSize; c++) {
+            const double lon = extent.west + c * dlon;
+            uint8_t cls = 0;
+            bool classified = false;
+            for (const DemGrid& w : water_granules) {
+                if (sample_water_class(w, lon, lat, &cls)) { classified = true; break; }
+            }
+            uint8_t value;
+            if (classified) {
+                value = cls != 0 ? 0xff : 0x00;
+            } else {
+                // No water granule covers this post. The dataset's own
+                // publication pattern is the only remaining evidence: an
+                // absent elevation granule is open ocean. Counted, never
+                // presented as a classification.
+                (*fallback)++;
+                value = dem_absent ? 0xff : 0x00;
+            }
+            (*raster)[static_cast<size_t>(r) * kMaskSize + c] = value;
+        }
+    }
+}
+
 constexpr const char* kGeoidRemark =
     "Heights are geoid-referenced as the source dataset publishes them (VERTICAL_DATUM "
     "GEOID); no geoid-to-ellipsoid conversion is applied at this parity floor. A consumer "
@@ -923,8 +1358,19 @@ constexpr const char* kGeoidRemark =
 extern "C" {
 
 // ---------------------------------------------------------------------------
-// tile — DEM granule responses + plan -> one $DTT record (quantized-mesh
-// payload inline) + report.
+// tile — plan + DEM granule responses (+ optional water-body granule
+// responses) -> a size-prefixed $DTT record stream + one report.
+//
+// AMORTIZED. The plan may address ONE tile (level/x/y) or a BLOCK of them
+// (tiles[]). A block decodes its granule set ONCE, over the union extent, and
+// emits every tile the set covers. The first cut re-decoded the whole granule
+// per tile: 1839 ms/tile, of which about 97% was inflating the same bytes
+// again. Decoding is per PLAN now, sampling is per tile, and the per-tile cost
+// falls to the encode itself.
+//
+// The union extent is what bounds memory, so the CALLER sizes the block. A
+// block whose union window would cross kDecodeByteBudget is refused by name
+// (decode-budget-exceeded), never attempted.
 // ---------------------------------------------------------------------------
 int tile(void) {
     if (refuse_batched()) return 500;
@@ -952,13 +1398,8 @@ int tile(void) {
         plugin_set_error("missing-tileset-id", "the plan frame must state tilesetId.");
         return 400;
     }
-    const uint32_t level = static_cast<uint32_t>(json_number(plan, "level", 0));
-    const uint32_t tx = static_cast<uint32_t>(json_number(plan, "x", 0));
-    const uint32_t ty = static_cast<uint32_t>(json_number(plan, "y", 0));
     const uint32_t grid = static_cast<uint32_t>(json_number(plan, "gridSize", 65));
     const uint32_t max_level = static_cast<uint32_t>(json_number(plan, "maxLevel", 0));
-    const uint32_t child_availability =
-        static_cast<uint32_t>(json_number(plan, "childAvailability", 0));
     if (grid < 2 || grid > 255) {
         plugin_set_error("bad-grid-size", "gridSize must lie in [2, 255].");
         return 400;
@@ -976,50 +1417,89 @@ int tile(void) {
                          "only the GEOGRAPHIC_WGS84 two-root scheme is modelled.");
         return 400;
     }
+    // Ocean tiles are NOT STORED (Atlas): the tileset's availability index
+    // stays exact, the store holds no tile whose every byte is sea level, and
+    // the serving lane synthesizes such an address on demand. Off by default
+    // so a single-tile plan still gets the record it asked for.
+    const bool skip_ocean = json_bool(plan, "skipOceanTiles", false);
 
-    // GEOGRAPHIC_WGS84: level z has 2^(z+1) x 2^z tiles of (180/2^z) degrees,
-    // row 0 at the SOUTH edge (TMS).
-    const double span = 180.0 / static_cast<double>(1u << level);
-    const uint32_t tiles_x = 2u << level;
-    const uint32_t tiles_y = 1u << level;
-    if (tx >= tiles_x || ty >= tiles_y) {
-        plugin_set_error("tile-address-out-of-range",
-                         "the x/y address does not exist at this level of the two-root "
-                         "geographic pyramid.");
-        return 400;
+    // ── the tile block ──────────────────────────────────────────────────────
+    std::vector<TileJob> jobs;
+    std::string tiles_json;
+    if (json_raw_value(plan, "tiles", &tiles_json) && !tiles_json.empty() &&
+        tiles_json[0] == '[') {
+        const uint32_t default_level = static_cast<uint32_t>(json_number(plan, "level", 0));
+        for (const std::string& entry : split_json_objects(tiles_json)) {
+            TileJob job;
+            job.level = static_cast<uint32_t>(json_number(entry, "level", default_level));
+            job.x = static_cast<uint32_t>(json_number(entry, "x", 0));
+            job.y = static_cast<uint32_t>(json_number(entry, "y", 0));
+            job.child_availability =
+                static_cast<uint32_t>(json_number(entry, "childAvailability", 0));
+            jobs.push_back(job);
+        }
+        if (jobs.empty()) {
+            plugin_set_error("empty-tile-block",
+                             "the plan carries a tiles[] block with no addresses in it.");
+            return 400;
+        }
+    } else {
+        TileJob job;
+        job.level = static_cast<uint32_t>(json_number(plan, "level", 0));
+        job.x = static_cast<uint32_t>(json_number(plan, "x", 0));
+        job.y = static_cast<uint32_t>(json_number(plan, "y", 0));
+        job.child_availability =
+            static_cast<uint32_t>(json_number(plan, "childAvailability", 0));
+        jobs.push_back(job);
     }
-    const double west = -180.0 + tx * span;
-    const double east = west + span;
-    const double south = -90.0 + ty * span;
-    const double north = south + span;
 
-    // ── decode every granule frame ──────────────────────────────────────────
+    std::vector<TileExtent> extents(jobs.size());
+    for (size_t i = 0; i < jobs.size(); i++) {
+        if (!tile_extent(jobs[i], &extents[i])) {
+            plugin_set_error("tile-address-out-of-range",
+                             "an x/y address in this plan does not exist at its level of the "
+                             "two-root geographic pyramid.");
+            return 400;
+        }
+    }
+    // The union extent every granule window must cover.
+    TileExtent bbox = extents[0];
+    for (const TileExtent& e : extents) {
+        bbox.west = std::min(bbox.west, e.west);
+        bbox.east = std::max(bbox.east, e.east);
+        bbox.south = std::min(bbox.south, e.south);
+        bbox.north = std::max(bbox.north, e.north);
+    }
+
+    // ── decode the granule set ONCE, windowed to the union extent ───────────
+    DecodeBudget budget;
     std::vector<DemGrid> granules;
     uint32_t responses = 0, absent_granules = 0;
     for (uint32_t ordinal = 0; ordinal < 4; ordinal++) {
-        const std::string response = input_text_at("dem", ordinal);
-        if (response.empty()) break;
+        const HttpFrame f = http_input_at("dem", ordinal);
+        if (!f.present) break;
         responses++;
-        const long status = response_status(response);
         // 404 = the dataset publishes no granule here (open ocean). That is
         // DATA — sea level — not a failure.
-        if (status == 404) { absent_granules++; continue; }
-        if (status != 0 && (status < 200 || status >= 300)) {
+        if (f.status == 404) { absent_granules++; continue; }
+        if (f.status != 0 && (f.status < 200 || f.status >= 300)) {
             char message[192];
             std::snprintf(message, sizeof(message),
                           "a DEM granule fetch answered HTTP %ld; a failed fetch and open "
                           "ocean are not the same observation, so this is refused rather "
                           "than encoded as sea level.",
-                          status);
+                          f.status);
             plugin_set_error("upstream-status", message);
             return 502;
         }
-        DemGrid g = decode_geotiff(response_body(response));
+        DemGrid g = decode_geotiff_window(f.body, bbox.west, bbox.east, bbox.south, bbox.north,
+                                          false, &budget);
+        if (g.budget_refused) return 413;
         if (!g.ok) {
             plugin_set_error("geotiff-undecodable", g.error.c_str());
             return 422;
         }
-        granules.push_back(std::move(g));
+        if (g.covers) granules.push_back(std::move(g));
     }
     if (responses == 0) {
         plugin_set_error("missing-dem-frame",
@@ -1028,294 +1508,448 @@ int tile(void) {
     }
     const bool all_ocean = granules.empty();
 
-    // ── sample the post lattice ─────────────────────────────────────────────
-    const uint32_t n_verts = grid * grid;
-    std::vector<double> heights(n_verts, 0.0);
-    std::vector<double> lats(n_verts), lons(n_verts);
-    uint64_t nodata_count = 0, uncovered_count = 0;
-    for (uint32_t j = 0; j < grid; j++) {  // j = 0 at the SOUTH edge
-        const double lat = south + (north - south) * j / (grid - 1);
-        for (uint32_t i = 0; i < grid; i++) {
-            const double lon = west + (east - west) * i / (grid - 1);
-            const uint32_t v = j * grid + i;
-            lats[v] = lat;
-            lons[v] = lon;
-            double h = 0.0;
-            bool nodata = false;
-            bool covered = false;
-            for (const DemGrid& g : granules) {
-                if (sample_granule(g, lon, lat, &h, &nodata)) { covered = true; break; }
-            }
-            if (!covered) {
-                uncovered_count++;
-                h = 0.0;  // absent granule ground truth: the dataset states sea level nowhere,
-                          // so 0 is used and COUNTED, never presented as a measurement
-            } else if (nodata) {
-                nodata_count++;
-                h = 0.0;
-            }
-            heights[v] = h;
+    // ── the water-body granule set, same lane, same window ──────────────────
+    std::vector<DemGrid> water_granules;
+    uint32_t water_responses = 0, water_absent = 0;
+    for (uint32_t ordinal = 0; ordinal < 4; ordinal++) {
+        const HttpFrame f = http_input_at("water", ordinal);
+        if (!f.present) break;
+        water_responses++;
+        if (f.status == 404) { water_absent++; continue; }
+        if (f.status != 0 && (f.status < 200 || f.status >= 300)) {
+            char message[208];
+            std::snprintf(message, sizeof(message),
+                          "a water-body granule fetch answered HTTP %ld; the mask decides "
+                          "which of this tile renders as reflective ocean, so a failed fetch "
+                          "is refused rather than defaulted to land.",
+                          f.status);
+            plugin_set_error("upstream-status", message);
+            return 502;
         }
-    }
-    double min_h = heights[0], max_h = heights[0];
-    for (const double h : heights) {
-        min_h = std::min(min_h, h);
-        max_h = std::max(max_h, h);
-    }
-    const double coverage =
-        1.0 - static_cast<double>(nodata_count + uncovered_count) / n_verts;
-
-    // ── water mask directive ────────────────────────────────────────────────
-    std::string water_json;
-    json_raw_value(plan, "waterMask", &water_json);
-    std::string water_kind = json_string(water_json, "kind", "");
-    std::string water_raster;
-    uint32_t water_w = 0, water_h = 0;
-    if (water_kind.empty()) {
-        // A tile whose every granule is absent is open ocean by the dataset's
-        // own publication pattern — unless the plan states otherwise.
-        water_kind = all_ocean ? "UNIFORM_WATER" : "UNIFORM_LAND";
-    }
-    if (water_kind == "RASTER") {
-        water_raster = base64_decode(json_string(water_json, "bodyB64", ""));
-        water_w = static_cast<uint32_t>(json_number(water_json, "width", 256));
-        water_h = static_cast<uint32_t>(json_number(water_json, "height", 256));
-        if (water_raster.size() != static_cast<size_t>(water_w) * water_h) {
-            plugin_set_error("water-mask-size-mismatch",
-                             "the plan's raster water mask does not carry width*height bytes; "
-                             "a truncated mask is refused rather than rendered as coastline.");
+        DemGrid w = decode_geotiff_window(f.body, bbox.west, bbox.east, bbox.south, bbox.north,
+                                          true, &budget);
+        if (w.budget_refused) return 413;
+        if (!w.ok) {
+            plugin_set_error("water-granule-undecodable", w.error.c_str());
             return 422;
         }
-    } else if (water_kind != "UNIFORM_LAND" && water_kind != "UNIFORM_WATER") {
+        if (w.covers) water_granules.push_back(std::move(w));
+    }
+
+    // ── the water-mask DIRECTIVE (Janus (e): kind + geometry + lineage, never
+    //    a base64 raster riding inside a JSON control frame) ─────────────────
+    std::string water_json;
+    json_raw_value(plan, "waterMask", &water_json);
+    const std::string directive_kind = json_string(water_json, "kind", "");
+    if (!directive_kind.empty() && directive_kind != "UNIFORM_LAND" &&
+        directive_kind != "UNIFORM_WATER" && directive_kind != "RASTER") {
         plugin_set_error("bad-water-mask-kind",
                          "waterMask.kind must be UNIFORM_LAND, UNIFORM_WATER or RASTER.");
         return 422;
     }
-
-    // ── quantize + triangulate ──────────────────────────────────────────────
-    std::vector<uint16_t> qu(n_verts), qv(n_verts), qh(n_verts);
-    const double h_range = max_h - min_h;
-    for (uint32_t j = 0; j < grid; j++) {
-        for (uint32_t i = 0; i < grid; i++) {
-            const uint32_t v = j * grid + i;
-            qu[v] = static_cast<uint16_t>((32767ull * i) / (grid - 1));
-            qv[v] = static_cast<uint16_t>((32767ull * j) / (grid - 1));
-            qh[v] = h_range > 0
-                        ? static_cast<uint16_t>(
-                              std::lround(32767.0 * (heights[v] - min_h) / h_range))
-                        : 0;
+    if (!water_json.empty()) {
+        const uint32_t declared_w =
+            static_cast<uint32_t>(json_number(water_json, "width", kMaskSize));
+        const uint32_t declared_h =
+            static_cast<uint32_t>(json_number(water_json, "height", kMaskSize));
+        if (declared_w != kMaskSize || declared_h != kMaskSize) {
+            plugin_set_error("water-mask-size-mismatch",
+                             "this encoder cuts 256x256 water-mask rasters at every level "
+                             "(the shared-edge identity between adjacent tiles depends on it); "
+                             "a directive declaring another geometry is refused rather than "
+                             "rendered as coastline at the wrong scale.");
+            return 422;
         }
     }
-    // Regular-grid triangulation, CCW in the u-v plane.
-    std::vector<uint32_t> indices;
-    indices.reserve(static_cast<size_t>(grid - 1) * (grid - 1) * 6);
-    for (uint32_t j = 0; j + 1 < grid; j++) {
-        for (uint32_t i = 0; i + 1 < grid; i++) {
-            const uint32_t bl = j * grid + i;
-            const uint32_t br = bl + 1;
-            const uint32_t tl = bl + grid;
-            const uint32_t tr = tl + 1;
-            indices.push_back(bl); indices.push_back(br); indices.push_back(tr);
-            indices.push_back(bl); indices.push_back(tr); indices.push_back(tl);
-        }
-    }
+    std::string water_provenance_json;
+    json_raw_value(water_json, "provenance", &water_provenance_json);
+    const DatasetContract water_contract = contract_of(water_provenance_json);
 
-    // HIGH-WATER-MARK PRECONDITION: a vertex's first appearance in the index
-    // stream must land exactly when it becomes the highest index seen, so the
-    // vertices are renumbered by first appearance and every array permuted to
-    // match. The decode loop (`index = highest - code; if (code == 0) ++highest`)
-    // then reproduces the stream exactly.
-    std::vector<uint32_t> remap(n_verts, UINT32_MAX);
-    {
-        uint32_t next = 0;
-        for (uint32_t& idx : indices) {
-            if (remap[idx] == UINT32_MAX) remap[idx] = next++;
-        }
-        // A regular grid triangulation touches every vertex.
-        std::vector<uint16_t> pu(n_verts), pv(n_verts), ph(n_verts);
-        std::vector<double> ph_m(n_verts), plat(n_verts), plon(n_verts);
-        for (uint32_t v = 0; v < n_verts; v++) {
-            const uint32_t nv = remap[v];
-            pu[nv] = qu[v]; pv[nv] = qv[v]; ph[nv] = qh[v];
-            ph_m[nv] = heights[v]; plat[nv] = lats[v]; plon[nv] = lons[v];
-        }
-        qu.swap(pu); qv.swap(pv); qh.swap(ph);
-        heights.swap(ph_m); lats.swap(plat); lons.swap(plon);
-        for (uint32_t& idx : indices) idx = remap[idx];
-    }
-
-    // ── header geometry (ECEF, metres, real heights) ────────────────────────
-    std::vector<Vec3> positions(n_verts);
-    for (uint32_t v = 0; v < n_verts; v++) {
-        positions[v] = geodetic_to_ecef(lats[v], lons[v], heights[v]);
-    }
-    Vec3 centroid;
-    for (const Vec3& p : positions) { centroid.x += p.x; centroid.y += p.y; centroid.z += p.z; }
-    centroid.x /= n_verts; centroid.y /= n_verts; centroid.z /= n_verts;
-    double radius = 0.0;
-    for (const Vec3& p : positions) {
-        const double dx = p.x - centroid.x, dy = p.y - centroid.y, dz = p.z - centroid.z;
-        radius = std::max(radius, std::sqrt(dx * dx + dy * dy + dz * dz));
-    }
-    const Vec3 occlusion = horizon_occlusion_point(positions, centroid);
-
-    // ── serialize quantized-mesh-1.0 ────────────────────────────────────────
-    std::vector<uint8_t> mesh;
-    mesh.reserve(n_verts * 6 + indices.size() * 2 + 256);
-    put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
-    put_f32(&mesh, static_cast<float>(min_h)); put_f32(&mesh, static_cast<float>(max_h));
-    put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
-    put_f64(&mesh, radius);
-    put_f64(&mesh, occlusion.x); put_f64(&mesh, occlusion.y); put_f64(&mesh, occlusion.z);
-
-    put_u32(&mesh, n_verts);
-    auto put_zigzag_array = [&](const std::vector<uint16_t>& vals) {
-        int32_t prev = 0;
-        for (const uint16_t v : vals) {
-            put_u16(&mesh, zigzag16(static_cast<int32_t>(v) - prev));
-            prev = static_cast<int32_t>(v);
-        }
-    };
-    put_zigzag_array(qu);
-    put_zigzag_array(qv);
-    put_zigzag_array(qh);
-
-    const bool wide = n_verts > 65536;
-    // Padding before the index data: 2-byte alignment for 16-bit indices,
-    // 4-byte for 32-bit, per the spec.
-    const size_t align = wide ? 4 : 2;
-    while (mesh.size() % align != 0) put_u8(&mesh, 0);
-    put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
-    {
-        uint32_t highest = 0;
-        for (const uint32_t idx : indices) {
-            const uint32_t code = highest - idx;
-            if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
-            if (code == 0) highest++;
-        }
-    }
-    auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
-        std::vector<uint32_t> edge;
-        for (uint32_t v = 0; v < n_verts; v++) {
-            if (is_edge(qu[v], qv[v])) edge.push_back(v);
-        }
-        put_u32(&mesh, static_cast<uint32_t>(edge.size()));
-        for (const uint32_t v : edge) {
-            if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
-        }
-    };
-    put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
-    put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
-    put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
-    put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
-
-    // Watermask extension (extensionId 2): one byte uniform, or the raster.
-    put_u8(&mesh, 2);
-    if (water_kind == "RASTER") {
-        put_u32(&mesh, static_cast<uint32_t>(water_raster.size()));
-        mesh.insert(mesh.end(), water_raster.begin(), water_raster.end());
-    } else {
-        put_u32(&mesh, 1);
-        put_u8(&mesh, water_kind == "UNIFORM_WATER" ? 0xff : 0x00);
-    }
-
-    // ── gzip the payload (CONTENT_ENCODING states it; a failed compress is
-    //    served uncompressed rather than failing the tile) ───────────────────
-    std::vector<uint8_t> payload_bytes;
-    bool gzipped = gzip_compress(mesh, &payload_bytes);
-    if (!gzipped) payload_bytes = mesh;
-
-    // ── build the $DTT record ───────────────────────────────────────────────
-    flatbuffers::FlatBufferBuilder b(payload_bytes.size() + 2048);
-    const auto provenance = build_provenance(b, contract);
-    const auto payload_media = b.CreateString("application/vnd.quantized-mesh");
-    const auto payload_encoding = gzipped ? b.CreateString("gzip") : 0;
-    const auto payload_vec = b.CreateVector(payload_bytes.data(), payload_bytes.size());
-    flatbuffers::Offset<DTTPayloadRef> payload;
-    {
-        DTTPayloadRefBuilder prb(b);
-        prb.add_BYTES(payload_vec);
-        prb.add_SIZE_BYTES(payload_bytes.size());
-        prb.add_MEDIA_TYPE(payload_media);
-        if (payload_encoding.o) prb.add_CONTENT_ENCODING(payload_encoding);
-        payload = prb.Finish();
-    }
-    flatbuffers::Offset<DTTPayloadRef> water_ref;
-    if (water_kind == "RASTER") {
-        const auto media = b.CreateString("application/octet-stream");
-        const auto vec = b.CreateVector(reinterpret_cast<const uint8_t*>(water_raster.data()),
-                                        water_raster.size());
-        DTTPayloadRefBuilder wrb(b);
-        wrb.add_BYTES(vec);
-        wrb.add_SIZE_BYTES(water_raster.size());
-        wrb.add_MEDIA_TYPE(media);
-        water_ref = wrb.Finish();
-    }
-    const auto f_tileset = b.CreateString(tileset_id);
-    const auto f_version = b.CreateString("1.0");
-    const auto f_datum_name = b.CreateString(json_string(plan, "verticalDatumName", "EGM2008"));
-    const auto f_remarks = b.CreateString(kGeoidRemark);
-    const double post_spacing =
-        (north - south) / (grid - 1) * (kPi / 180.0) * 6371008.8;
-
-    DTTBuilder db(b);
-    db.add_TILESET_ID(f_tileset);
-    db.add_TILING_SCHEME(dttTilingScheme_GEOGRAPHIC_WGS84);
-    db.add_LEVEL(level);
-    db.add_X(tx);
-    db.add_Y(ty);
-    db.add_WEST_DEG(west);
-    db.add_SOUTH_DEG(south);
-    db.add_EAST_DEG(east);
-    db.add_NORTH_DEG(north);
-    db.add_MIN_HEIGHT_M(min_h);
-    db.add_MAX_HEIGHT_M(max_h);
-    db.add_PAYLOAD_FORMAT(dttPayloadFormat_QUANTIZED_MESH);
-    db.add_PAYLOAD_FORMAT_VERSION(f_version);
-    db.add_PAYLOAD(payload);
-    db.add_GRID_WIDTH(grid);
-    db.add_GRID_HEIGHT(grid);
-    db.add_POST_SPACING_M(post_spacing);
-    db.add_VERTICAL_DATUM(dttVerticalDatum_GEOID);
-    db.add_VERTICAL_DATUM_NAME(f_datum_name);
-    db.add_DATA_COVERAGE_FRACTION(coverage);
-    db.add_NO_DATA_VALUE(kNoData);
-    db.add_WATER_MASK_KIND(water_kind == "UNIFORM_WATER"
-                               ? dttWaterMask_UNIFORM_WATER
-                               : (water_kind == "RASTER" ? dttWaterMask_RASTER
-                                                         : dttWaterMask_UNIFORM_LAND));
-    if (water_ref.o) {
-        db.add_WATER_MASK(water_ref);
-        db.add_WATER_MASK_WIDTH(water_w);
-        db.add_WATER_MASK_HEIGHT(water_h);
-    }
-    db.add_CHILD_AVAILABILITY(static_cast<uint8_t>(child_availability & 0x0f));
-    db.add_MAX_LEVEL(max_level);
-    db.add_SOURCE_CLASS(dttSourceClass_SPACEBORNE_RADAR_INTERFEROMETRIC);
-    db.add_PROVENANCE(provenance);
-    db.add_REMARKS(f_remarks);
-    FinishDTTBuffer(b, db.Finish());
-
-    // Size-prefixed record stream: [uint32 LE length][record], one tile here.
+    // ── encode every tile in the block ──────────────────────────────────────
     std::vector<uint8_t> stream;
-    const uint32_t len = b.GetSize();
-    put_u32(&stream, len);
-    stream.insert(stream.end(), b.GetBufferPointer(), b.GetBufferPointer() + len);
+    std::string tiles_report;
+    uint32_t emitted = 0, skipped_ocean_count = 0;
+    TileStats first{};
+
+    for (size_t t = 0; t < jobs.size(); t++) {
+        const TileJob& job = jobs[t];
+        const TileExtent& ext = extents[t];
+        TileStats stats;
+
+        // ── sample the post lattice ─────────────────────────────────────────
+        const uint32_t n_verts = grid * grid;
+        std::vector<double> heights(n_verts, 0.0);
+        std::vector<double> lats(n_verts), lons(n_verts);
+        for (uint32_t j = 0; j < grid; j++) {  // j = 0 at the SOUTH edge
+            const double lat = ext.south + (ext.north - ext.south) * j / (grid - 1);
+            for (uint32_t i = 0; i < grid; i++) {
+                const double lon = ext.west + (ext.east - ext.west) * i / (grid - 1);
+                const uint32_t v = j * grid + i;
+                lats[v] = lat;
+                lons[v] = lon;
+                double h = 0.0;
+                bool nodata = false;
+                bool covered = false;
+                for (const DemGrid& g : granules) {
+                    if (sample_granule(g, lon, lat, &h, &nodata)) { covered = true; break; }
+                }
+                if (!covered) {
+                    stats.uncovered++;
+                    h = 0.0;  // absent granule: the dataset states sea level nowhere, so 0
+                              // is used and COUNTED, never presented as a measurement
+                } else if (nodata) {
+                    stats.nodata++;
+                    h = 0.0;
+                }
+                heights[v] = h;
+            }
+        }
+        double min_h = heights[0], max_h = heights[0];
+        for (const double h : heights) {
+            min_h = std::min(min_h, h);
+            max_h = std::max(max_h, h);
+        }
+        stats.min_h = min_h;
+        stats.max_h = max_h;
+        stats.coverage = 1.0 - static_cast<double>(stats.nodata + stats.uncovered) / n_verts;
+
+        // ── the water mask ──────────────────────────────────────────────────
+        std::string water_kind;
+        std::vector<uint8_t> water_raster;
+        if (!water_granules.empty()) {
+            classify_water_mask(ext, water_granules, all_ocean, &water_raster,
+                                &stats.mask_fallback);
+            bool uniform = true;
+            const uint8_t first_byte = water_raster[0];
+            for (const uint8_t b : water_raster) {
+                if (b != first_byte) { uniform = false; break; }
+            }
+            if (uniform) {
+                water_kind = first_byte == 0xff ? "UNIFORM_WATER" : "UNIFORM_LAND";
+                water_raster.clear();
+            } else {
+                water_kind = "RASTER";
+            }
+        } else if (!directive_kind.empty()) {
+            water_kind = directive_kind;
+            if (water_kind == "RASTER") {
+                plugin_set_error("missing-water-granule",
+                                 "the plan directs a RASTER water mask but no water-body "
+                                 "granule reached port \"water\"; a mask is classified from "
+                                 "source bytes, never fabricated from the directive.");
+                return 400;
+            }
+        } else {
+            // A tile whose every granule is absent is open ocean by the
+            // dataset's own publication pattern.
+            water_kind = all_ocean ? "UNIFORM_WATER" : "UNIFORM_LAND";
+        }
+        stats.water_kind = water_kind;
+
+        // An all-ocean tile is DATA the client can synthesize exactly; storing
+        // it would inflate the pyramid with identical flat records.
+        const bool is_ocean_tile = min_h == 0.0 && max_h == 0.0 &&
+                                   water_kind == "UNIFORM_WATER" &&
+                                   stats.coverage == 0.0;
+        if (skip_ocean && is_ocean_tile) {
+            stats.skipped_ocean = true;
+            skipped_ocean_count++;
+            if (t == 0) first = stats;
+            if (!tiles_report.empty()) tiles_report += ",";
+            tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
+                            ",\"x\":" + std::to_string(job.x) + ",\"y\":" +
+                            std::to_string(job.y) + ",\"skippedOcean\":true}";
+            continue;
+        }
+
+        // ── quantize + triangulate ──────────────────────────────────────────
+        std::vector<uint16_t> qu(n_verts), qv(n_verts), qh(n_verts);
+        const double h_range = max_h - min_h;
+        for (uint32_t j = 0; j < grid; j++) {
+            for (uint32_t i = 0; i < grid; i++) {
+                const uint32_t v = j * grid + i;
+                qu[v] = static_cast<uint16_t>((32767ull * i) / (grid - 1));
+                qv[v] = static_cast<uint16_t>((32767ull * j) / (grid - 1));
+                qh[v] = h_range > 0
+                            ? static_cast<uint16_t>(
+                                  std::lround(32767.0 * (heights[v] - min_h) / h_range))
+                            : 0;
+            }
+        }
+        // Regular-grid triangulation, CCW in the u-v plane.
+        std::vector<uint32_t> indices;
+        indices.reserve(static_cast<size_t>(grid - 1) * (grid - 1) * 6);
+        for (uint32_t j = 0; j + 1 < grid; j++) {
+            for (uint32_t i = 0; i + 1 < grid; i++) {
+                const uint32_t bl = j * grid + i;
+                const uint32_t br = bl + 1;
+                const uint32_t tl = bl + grid;
+                const uint32_t tr = tl + 1;
+                indices.push_back(bl); indices.push_back(br); indices.push_back(tr);
+                indices.push_back(bl); indices.push_back(tr); indices.push_back(tl);
+            }
+        }
+
+        // HIGH-WATER-MARK PRECONDITION: a vertex's first appearance in the
+        // index stream must land exactly when it becomes the highest index
+        // seen, so the vertices are renumbered by first appearance and every
+        // array permuted to match. The decode loop
+        // (`index = highest - code; if (code == 0) ++highest`) then reproduces
+        // the stream exactly.
+        {
+            std::vector<uint32_t> remap(n_verts, UINT32_MAX);
+            uint32_t next = 0;
+            for (uint32_t& idx : indices) {
+                if (remap[idx] == UINT32_MAX) remap[idx] = next++;
+            }
+            std::vector<uint16_t> pu(n_verts), pv(n_verts), ph(n_verts);
+            std::vector<double> ph_m(n_verts), plat(n_verts), plon(n_verts);
+            for (uint32_t v = 0; v < n_verts; v++) {
+                const uint32_t nv = remap[v];
+                pu[nv] = qu[v]; pv[nv] = qv[v]; ph[nv] = qh[v];
+                ph_m[nv] = heights[v]; plat[nv] = lats[v]; plon[nv] = lons[v];
+            }
+            qu.swap(pu); qv.swap(pv); qh.swap(ph);
+            heights.swap(ph_m); lats.swap(plat); lons.swap(plon);
+            for (uint32_t& idx : indices) idx = remap[idx];
+        }
+
+        // ── header geometry (ECEF, metres, real heights) ────────────────────
+        std::vector<Vec3> positions(n_verts);
+        for (uint32_t v = 0; v < n_verts; v++) {
+            positions[v] = geodetic_to_ecef(lats[v], lons[v], heights[v]);
+        }
+        Vec3 centroid;
+        for (const Vec3& p : positions) { centroid.x += p.x; centroid.y += p.y; centroid.z += p.z; }
+        centroid.x /= n_verts; centroid.y /= n_verts; centroid.z /= n_verts;
+        double radius = 0.0;
+        for (const Vec3& p : positions) {
+            const double dx = p.x - centroid.x, dy = p.y - centroid.y, dz = p.z - centroid.z;
+            radius = std::max(radius, std::sqrt(dx * dx + dy * dy + dz * dz));
+        }
+        const Vec3 occlusion = horizon_occlusion_point(positions, centroid);
+
+        // ── serialize quantized-mesh-1.0 ────────────────────────────────────
+        std::vector<uint8_t> mesh;
+        mesh.reserve(n_verts * 6 + indices.size() * 2 + 256);
+        put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
+        put_f32(&mesh, static_cast<float>(min_h)); put_f32(&mesh, static_cast<float>(max_h));
+        put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
+        put_f64(&mesh, radius);
+        put_f64(&mesh, occlusion.x); put_f64(&mesh, occlusion.y); put_f64(&mesh, occlusion.z);
+
+        put_u32(&mesh, n_verts);
+        auto put_zigzag_array = [&](const std::vector<uint16_t>& vals) {
+            int32_t prev = 0;
+            for (const uint16_t v : vals) {
+                put_u16(&mesh, zigzag16(static_cast<int32_t>(v) - prev));
+                prev = static_cast<int32_t>(v);
+            }
+        };
+        put_zigzag_array(qu);
+        put_zigzag_array(qv);
+        put_zigzag_array(qh);
+
+        const bool wide = n_verts > 65536;
+        // Padding before the index data: 2-byte alignment for 16-bit indices,
+        // 4-byte for 32-bit, per the spec.
+        const size_t align = wide ? 4 : 2;
+        while (mesh.size() % align != 0) put_u8(&mesh, 0);
+        put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
+        {
+            uint32_t highest = 0;
+            for (const uint32_t idx : indices) {
+                const uint32_t code = highest - idx;
+                if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
+                if (code == 0) highest++;
+            }
+        }
+        auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
+            std::vector<uint32_t> edge;
+            for (uint32_t v = 0; v < n_verts; v++) {
+                if (is_edge(qu[v], qv[v])) edge.push_back(v);
+            }
+            put_u32(&mesh, static_cast<uint32_t>(edge.size()));
+            for (const uint32_t v : edge) {
+                if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
+            }
+        };
+        put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
+        put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
+        put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
+        put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
+
+        // Watermask extension (extensionId 2): one byte uniform, or the raster.
+        put_u8(&mesh, 2);
+        if (water_kind == "RASTER") {
+            put_u32(&mesh, static_cast<uint32_t>(water_raster.size()));
+            mesh.insert(mesh.end(), water_raster.begin(), water_raster.end());
+        } else {
+            put_u32(&mesh, 1);
+            put_u8(&mesh, water_kind == "UNIFORM_WATER" ? 0xff : 0x00);
+        }
+        stats.mesh_bytes = mesh.size();
+
+        // ── gzip the payload (CONTENT_ENCODING states it; a failed compress is
+        //    served uncompressed rather than failing the tile) ───────────────
+        std::vector<uint8_t> payload_bytes;
+        bool gzipped = gzip_compress(mesh, &payload_bytes);
+        if (!gzipped) payload_bytes = mesh;
+        stats.payload_bytes = payload_bytes.size();
+
+        // THE PER-TILE CEILING, at ENCODE time. Refused here, where it can be
+        // fixed by a coarser grid, rather than discovered by a client that has
+        // already paid for the transfer.
+        if (payload_bytes.size() > kTileGzipCeilingBytes) {
+            char message[288];
+            std::snprintf(message, sizeof(message),
+                          "tile %u/%u/%u encodes to %llu gzipped bytes, past the %llu-byte "
+                          "per-tile serving ceiling. Refused at encode time: a pyramid that "
+                          "stores it has already committed every client to the transfer.",
+                          job.level, job.x, job.y,
+                          static_cast<unsigned long long>(payload_bytes.size()),
+                          static_cast<unsigned long long>(kTileGzipCeilingBytes));
+            plugin_set_error("tile-size-ceiling-exceeded", message);
+            return 413;
+        }
+
+        // Themis: DIGEST and SIZE_BYTES are stated over the GZIPPED bytes —
+        // what a cache stores and a client receives — and the strong ETag is
+        // that digest, so revalidation compares the served bytes themselves.
+        const std::string digest = sha256_multihash(payload_bytes);
+        stats.digest = digest;
+        const std::string etag = "\"" + digest + "\"";
+
+        // ── build the $DTT record ───────────────────────────────────────────
+        flatbuffers::FlatBufferBuilder b(payload_bytes.size() + water_raster.size() + 2048);
+        const auto provenance = build_provenance(b, contract);
+        const auto f_water_provenance =
+            water_contract.complete() && water_contract.license != contract.license
+                ? build_provenance(b, water_contract)
+                : flatbuffers::Offset<DTTProvenance>(0);
+        const auto payload_media = b.CreateString("application/vnd.quantized-mesh");
+        const auto payload_encoding = gzipped ? b.CreateString("gzip") : 0;
+        const auto payload_digest = b.CreateString(digest);
+        const auto payload_vec = b.CreateVector(payload_bytes.data(), payload_bytes.size());
+        flatbuffers::Offset<DTTPayloadRef> payload;
+        {
+            DTTPayloadRefBuilder prb(b);
+            prb.add_BYTES(payload_vec);
+            prb.add_SIZE_BYTES(payload_bytes.size());
+            prb.add_DIGEST(payload_digest);
+            prb.add_MEDIA_TYPE(payload_media);
+            if (payload_encoding.o) prb.add_CONTENT_ENCODING(payload_encoding);
+            payload = prb.Finish();
+        }
+        flatbuffers::Offset<DTTPayloadRef> water_ref;
+        if (water_kind == "RASTER") {
+            const auto media = b.CreateString("application/octet-stream");
+            const auto mask_digest = b.CreateString(sha256_multihash(water_raster));
+            const auto vec = b.CreateVector(water_raster.data(), water_raster.size());
+            DTTPayloadRefBuilder wrb(b);
+            wrb.add_BYTES(vec);
+            wrb.add_SIZE_BYTES(water_raster.size());
+            wrb.add_DIGEST(mask_digest);
+            wrb.add_MEDIA_TYPE(media);
+            water_ref = wrb.Finish();
+        }
+        const auto f_tileset = b.CreateString(tileset_id);
+        const auto f_version = b.CreateString("1.0");
+        const auto f_datum_name =
+            b.CreateString(json_string(plan, "verticalDatumName", "EGM2008"));
+        const auto f_etag = b.CreateString(etag);
+        const auto f_remarks = b.CreateString(kGeoidRemark);
+        const double post_spacing =
+            (ext.north - ext.south) / (grid - 1) * (kPi / 180.0) * 6371008.8;
+
+        DTTBuilder db(b);
+        db.add_TILESET_ID(f_tileset);
+        db.add_TILING_SCHEME(dttTilingScheme_GEOGRAPHIC_WGS84);
+        db.add_LEVEL(job.level);
+        db.add_X(job.x);
+        db.add_Y(job.y);
+        db.add_WEST_DEG(ext.west);
+        db.add_SOUTH_DEG(ext.south);
+        db.add_EAST_DEG(ext.east);
+        db.add_NORTH_DEG(ext.north);
+        db.add_MIN_HEIGHT_M(min_h);
+        db.add_MAX_HEIGHT_M(max_h);
+        db.add_PAYLOAD_FORMAT(dttPayloadFormat_QUANTIZED_MESH);
+        db.add_PAYLOAD_FORMAT_VERSION(f_version);
+        db.add_PAYLOAD(payload);
+        db.add_GRID_WIDTH(grid);
+        db.add_GRID_HEIGHT(grid);
+        db.add_POST_SPACING_M(post_spacing);
+        db.add_VERTICAL_DATUM(dttVerticalDatum_GEOID);
+        db.add_VERTICAL_DATUM_NAME(f_datum_name);
+        db.add_DATA_COVERAGE_FRACTION(stats.coverage);
+        db.add_NO_DATA_VALUE(kNoData);
+        db.add_WATER_MASK_KIND(water_kind == "UNIFORM_WATER"
+                                   ? dttWaterMask_UNIFORM_WATER
+                                   : (water_kind == "RASTER" ? dttWaterMask_RASTER
+                                                             : dttWaterMask_UNIFORM_LAND));
+        if (water_ref.o) {
+            // Themis: WATER_MASK and its two dimensions are set TOGETHER or
+            // not at all — a mask whose geometry is unstated is undecodable.
+            db.add_WATER_MASK(water_ref);
+            db.add_WATER_MASK_WIDTH(kMaskSize);
+            db.add_WATER_MASK_HEIGHT(kMaskSize);
+        }
+        if (f_water_provenance.o) db.add_WATER_MASK_PROVENANCE(f_water_provenance);
+        db.add_CHILD_AVAILABILITY(static_cast<uint8_t>(job.child_availability & 0x0f));
+        db.add_MAX_LEVEL(max_level);
+        db.add_SOURCE_CLASS(dttSourceClass_SPACEBORNE_RADAR_INTERFEROMETRIC);
+        db.add_PROVENANCE(provenance);
+        db.add_ETAG(f_etag);
+        db.add_REMARKS(f_remarks);
+        FinishDTTBuffer(b, db.Finish());
+
+        // Size-prefixed record stream: [uint32 LE length][record], per tile.
+        const uint32_t len = b.GetSize();
+        put_u32(&stream, len);
+        stream.insert(stream.end(), b.GetBufferPointer(), b.GetBufferPointer() + len);
+        emitted++;
+        if (t == 0) first = stats;
+
+        if (!tiles_report.empty()) tiles_report += ",";
+        tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
+                        ",\"x\":" + std::to_string(job.x) + ",\"y\":" + std::to_string(job.y) +
+                        ",\"minHeightM\":" + fmt_double(min_h) +
+                        ",\"maxHeightM\":" + fmt_double(max_h) +
+                        ",\"coverageFraction\":" + fmt_double(stats.coverage) +
+                        ",\"waterMaskKind\":\"" + water_kind + "\"" +
+                        ",\"maskFallbackSamples\":" + std::to_string(stats.mask_fallback) +
+                        ",\"meshBytes\":" + std::to_string(stats.mesh_bytes) +
+                        ",\"payloadBytes\":" + std::to_string(stats.payload_bytes) +
+                        ",\"digest\":\"" + digest + "\"}";
+    }
 
     const std::string report =
         std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
-        ",\"level\":" + std::to_string(level) + ",\"x\":" + std::to_string(tx) +
-        ",\"y\":" + std::to_string(ty) + ",\"gridSize\":" + std::to_string(grid) +
+        ",\"level\":" + std::to_string(jobs[0].level) +
+        ",\"x\":" + std::to_string(jobs[0].x) + ",\"y\":" + std::to_string(jobs[0].y) +
+        ",\"gridSize\":" + std::to_string(grid) +
+        ",\"tileCount\":" + std::to_string(jobs.size()) +
+        ",\"tilesEmitted\":" + std::to_string(emitted) +
+        ",\"tilesSkippedOcean\":" + std::to_string(skipped_ocean_count) +
         ",\"granulesDecoded\":" + std::to_string(granules.size()) +
         ",\"granulesAbsent\":" + std::to_string(absent_granules) +
-        ",\"noDataSamples\":" + std::to_string(nodata_count) +
-        ",\"uncoveredSamples\":" + std::to_string(uncovered_count) +
-        ",\"coverageFraction\":" + fmt_double(coverage) +
-        ",\"minHeightM\":" + fmt_double(min_h) + ",\"maxHeightM\":" + fmt_double(max_h) +
-        ",\"waterMaskKind\":\"" + json_escape(water_kind) + "\"" +
-        ",\"meshBytes\":" + std::to_string(mesh.size()) +
-        ",\"payloadBytes\":" + std::to_string(payload_bytes.size()) +
-        ",\"contentEncoding\":\"" + (gzipped ? "gzip" : "") + "\"" +
+        ",\"waterGranulesDecoded\":" + std::to_string(water_granules.size()) +
+        ",\"waterGranulesAbsent\":" + std::to_string(water_absent) +
+        ",\"decodeResidentBytes\":" + std::to_string(budget.used) +
+        ",\"decodeBudgetBytes\":" + std::to_string(kDecodeByteBudget) +
+        ",\"tileGzipCeilingBytes\":" + std::to_string(kTileGzipCeilingBytes) +
+        ",\"noDataSamples\":" + std::to_string(first.nodata) +
+        ",\"uncoveredSamples\":" + std::to_string(first.uncovered) +
+        ",\"coverageFraction\":" + fmt_double(first.coverage) +
+        ",\"minHeightM\":" + fmt_double(first.min_h) +
+        ",\"maxHeightM\":" + fmt_double(first.max_h) +
+        ",\"waterMaskKind\":\"" + json_escape(first.water_kind) + "\"" +
+        ",\"meshBytes\":" + std::to_string(first.mesh_bytes) +
+        ",\"payloadBytes\":" + std::to_string(first.payload_bytes) +
+        ",\"digest\":\"" + first.digest + "\"" +
+        ",\"contentEncoding\":\"gzip\"" +
+        ",\"tiles\":[" + tiles_report + "]" +
         ",\"verticalDatum\":\"GEOID\",\"verticalDatumNote\":\"heights redistributed on the "
         "source geoid datum, not converted to ellipsoidal; bounded <~100 m offset if "
         "rendered as above-ellipsoid\"}";

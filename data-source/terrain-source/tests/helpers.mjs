@@ -31,6 +31,13 @@ function predictor3Encode(floatRow) {
   return out;
 }
 
+// General little-endian TIFF writer: single-band Float32 (the elevation lane)
+// or single-band uint8 (the categorical water-body lane), strip or TILED
+// layout with a REAL multi-chunk grid, predictor 1/2/3, DEFLATE or none.
+//
+// The multi-chunk grid is the point: a single-chunk granule cannot tell a
+// windowed decoder from a whole-granule one, so every windowing assertion in
+// this suite is written against a granule with many internal chunks.
 export function buildGeoTiff({
   width = 64,
   height = 64,
@@ -38,95 +45,155 @@ export function buildGeoTiff({
   originLat,
   scaleLon,
   scaleLat,
-  heightFn,
+  heightFn, // (px, py) -> metres, float32 lane
+  classFn, // (px, py) -> 0..255 category, uint8 lane
   layout = "strip", // "strip" | "tile"
-  predictor = 1, // 1 | 3
+  predictor = 1, // 1 | 2 (uint8) | 3 (float32)
+  tileWidth, // layout "tile": internal tile grid (default: the whole image)
+  tileHeight,
+  rowsPerStrip, // layout "strip" (default: the whole image)
+  compression = 8, // 8 = DEFLATE, 1 = none
 }) {
-  const rows = [];
-  for (let py = 0; py < height; py++) {
-    const row = new Array(width);
-    for (let px = 0; px < width; px++) row[px] = Math.fround(heightFn(px, py));
-    rows.push(row);
-  }
-  let raw;
-  if (predictor === 3) {
-    raw = Buffer.concat(rows.map(predictor3Encode));
-  } else {
-    raw = Buffer.alloc(width * height * 4);
-    for (let py = 0; py < height; py++) {
-      for (let px = 0; px < width; px++) {
-        raw.writeFloatLE(rows[py][px], (py * width + px) * 4);
+  const isMask = typeof classFn === "function";
+  const sampleBytes = isMask ? 1 : 4;
+
+  const sampleAt = (px, py) => {
+    const cx = Math.min(Math.max(px, 0), width - 1);
+    const cy = Math.min(Math.max(py, 0), height - 1);
+    return isMask ? classFn(cx, cy) & 0xff : Math.fround(heightFn(cx, cy));
+  };
+
+  // One chunk of chunkW x chunkH samples starting at (x0, y0), predictor-encoded.
+  const chunkBytes = (x0, y0, chunkW, chunkH) => {
+    const rowBytes = chunkW * sampleBytes;
+    const out = Buffer.alloc(rowBytes * chunkH);
+    for (let r = 0; r < chunkH; r++) {
+      const raw = Buffer.alloc(rowBytes);
+      for (let c = 0; c < chunkW; c++) {
+        const v = sampleAt(x0 + c, y0 + r);
+        if (isMask) raw[c] = v;
+        else raw.writeFloatLE(v, c * 4);
       }
+      let encoded;
+      if (!isMask && predictor === 3) {
+        const planes = Buffer.alloc(rowBytes);
+        for (let c = 0; c < chunkW; c++) {
+          planes[c] = raw[c * 4 + 3]; // MSB plane first
+          planes[chunkW + c] = raw[c * 4 + 2];
+          planes[chunkW * 2 + c] = raw[c * 4 + 1];
+          planes[chunkW * 3 + c] = raw[c * 4];
+        }
+        encoded = Buffer.alloc(rowBytes);
+        encoded[0] = planes[0];
+        for (let i = 1; i < rowBytes; i++) encoded[i] = (planes[i] - planes[i - 1]) & 0xff;
+      } else if (isMask && predictor === 2) {
+        encoded = Buffer.alloc(rowBytes);
+        encoded[0] = raw[0];
+        for (let i = 1; i < rowBytes; i++) encoded[i] = (raw[i] - raw[i - 1]) & 0xff;
+      } else {
+        encoded = raw;
+      }
+      encoded.copy(out, r * rowBytes);
+    }
+    return compression === 8 ? zlib.deflateSync(out, { level: 6 }) : out;
+  };
+
+  const chunks = [];
+  const tw = layout === "tile" ? (tileWidth ?? width) : width;
+  const th = layout === "tile" ? (tileHeight ?? height) : (rowsPerStrip ?? height);
+  if (layout === "tile") {
+    const across = Math.ceil(width / tw);
+    const down = Math.ceil(height / th);
+    for (let ty = 0; ty < down; ty++) {
+      for (let tx = 0; tx < across; tx++) chunks.push(chunkBytes(tx * tw, ty * th, tw, th));
+    }
+  } else {
+    for (let y0 = 0; y0 < height; y0 += th) {
+      chunks.push(chunkBytes(0, y0, width, Math.min(th, height - y0)));
     }
   }
-  const compressed = zlib.deflateSync(raw, { level: 9 });
 
   const SHORT = 3;
   const LONG = 4;
   const DOUBLE = 12;
+  // Tag values are either inline (<= 4 bytes) or an offset into the extra area.
   const tags = [];
-  const tag = (id, type, count, value) => tags.push({ id, type, count, value });
+  const tag = (id, type, values) => tags.push({ id, type, values: [].concat(values) });
 
-  // Extra data area (pixel scale + tiepoint + pixel data) starts after the
-  // header (8) + entry count (2) + entries (12 each) + next-IFD offset (4).
-  const entryCount = layout === "tile" ? 13 : 12;
-  const ifdBytes = 2 + entryCount * 12 + 4;
-  let cursor = 8 + ifdBytes;
-  const scaleOffset = cursor;
-  cursor += 24;
-  const tiepointOffset = cursor;
-  cursor += 48;
-  const dataOffset = cursor;
-
-  tag(256, SHORT, 1, width);
-  tag(257, SHORT, 1, height);
-  tag(258, SHORT, 1, 32);
-  tag(259, SHORT, 1, 8); // DEFLATE
+  tag(256, LONG, width);
+  tag(257, LONG, height);
+  tag(258, SHORT, isMask ? 8 : 32);
+  tag(259, SHORT, compression);
+  tag(277, SHORT, 1);
   if (layout === "tile") {
-    tag(277, SHORT, 1, 1);
-    tag(317, SHORT, 1, predictor);
-    tag(322, SHORT, 1, width);
-    tag(323, SHORT, 1, height);
-    tag(324, LONG, 1, dataOffset);
-    tag(325, LONG, 1, compressed.length);
+    tag(317, SHORT, predictor);
+    tag(322, SHORT, tw);
+    tag(323, SHORT, th);
+    tag(324, LONG, chunks.map(() => 0)); // offsets, patched below
+    tag(325, LONG, chunks.map((c) => c.length));
   } else {
-    tag(273, LONG, 1, dataOffset);
-    tag(277, SHORT, 1, 1);
-    tag(278, SHORT, 1, height);
-    tag(279, LONG, 1, compressed.length);
-    tag(317, SHORT, 1, predictor);
+    tag(273, LONG, chunks.map(() => 0)); // offsets, patched below
+    tag(278, LONG, th);
+    tag(279, LONG, chunks.map((c) => c.length));
+    tag(317, SHORT, predictor);
   }
-  tag(339, SHORT, 1, 3); // IEEE float
-  tag(33550, DOUBLE, 3, scaleOffset);
-  tag(33922, DOUBLE, 6, tiepointOffset);
+  tag(339, SHORT, isMask ? 1 : 3);
+  tag(33550, DOUBLE, [scaleLon, scaleLat, 0]);
+  tag(33922, DOUBLE, [0, 0, 0, originLon, originLat, 0]);
   tags.sort((a, b) => a.id - b.id);
-  assert.equal(tags.length, entryCount);
 
-  const file = Buffer.alloc(dataOffset + compressed.length);
+  const typeSize = { [SHORT]: 2, [LONG]: 4, [DOUBLE]: 8 };
+  const ifdBytes = 2 + tags.length * 12 + 4;
+  // Extra area: out-of-line tag values first, then the chunk data.
+  let cursor = 8 + ifdBytes;
+  for (const t of tags) {
+    const bytes = typeSize[t.type] * t.values.length;
+    if (bytes > 4) {
+      t.offset = cursor;
+      cursor += bytes;
+    }
+  }
+  const chunkOffsets = [];
+  for (const c of chunks) {
+    chunkOffsets.push(cursor);
+    cursor += c.length;
+  }
+  const offsetTag = tags.find((t) => t.id === (layout === "tile" ? 324 : 273));
+  offsetTag.values = chunkOffsets;
+
+  const file = Buffer.alloc(cursor);
   file.write("II", 0, "latin1");
   file.writeUInt16LE(42, 2);
   file.writeUInt32LE(8, 4);
-  file.writeUInt16LE(entryCount, 8);
+  file.writeUInt16LE(tags.length, 8);
+  const writeValues = (t, at) => {
+    t.values.forEach((v, i) => {
+      if (t.type === SHORT) file.writeUInt16LE(v, at + i * 2);
+      else if (t.type === LONG) file.writeUInt32LE(v, at + i * 4);
+      else file.writeDoubleLE(v, at + i * 8);
+    });
+  };
   tags.forEach((t, n) => {
     const at = 10 + n * 12;
     file.writeUInt16LE(t.id, at);
     file.writeUInt16LE(t.type, at + 2);
-    file.writeUInt32LE(t.count, at + 4);
-    if (t.type === SHORT && t.count === 1) file.writeUInt16LE(t.value, at + 8);
-    else file.writeUInt32LE(t.value, at + 8);
+    file.writeUInt32LE(t.values.length, at + 4);
+    const bytes = typeSize[t.type] * t.values.length;
+    if (bytes > 4) {
+      file.writeUInt32LE(t.offset, at + 8);
+      writeValues(t, t.offset);
+    } else {
+      writeValues(t, at + 8);
+    }
   });
-  file.writeDoubleLE(scaleLon, scaleOffset);
-  file.writeDoubleLE(scaleLat, scaleOffset + 8);
-  file.writeDoubleLE(0, scaleOffset + 16);
-  // Tiepoint: raster (0,0,0) -> model (lon, lat, 0).
-  file.writeDoubleLE(0, tiepointOffset);
-  file.writeDoubleLE(0, tiepointOffset + 8);
-  file.writeDoubleLE(0, tiepointOffset + 16);
-  file.writeDoubleLE(originLon, tiepointOffset + 24);
-  file.writeDoubleLE(originLat, tiepointOffset + 32);
-  file.writeDoubleLE(0, tiepointOffset + 40);
-  compressed.copy(file, dataOffset);
+  chunks.forEach((c, i) => c.copy(file, chunkOffsets[i]));
   return file;
+}
+
+// The water-body granule the mask lane classifies: single-band uint8, source
+// convention 0 = no water and any non-zero class a water body.
+export function buildWaterTiff(options) {
+  return buildGeoTiff({ ...options, heightFn: undefined });
 }
 
 // ── quantized-mesh-1.0 decoder (written from the spec, not from the module,

@@ -86,9 +86,12 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // Pure single-pass transform, provably no threads (see
-  // manifest.sequentialJustification). NOT "wasi-sequential": that lane emits
-  // a shared non-growable 2-page memory and DEM tiles are multi-megabyte.
+  // Single-thread pending the fleet migration off legacy Emscripten; blocked
+  // by flowCompiler mixed-guest-thread-models against hostcap/* (Janus
+  // 2026-08-26). A pure transform is INSIDE the threads law — threads are
+  // forbidden here, not merely unused — and the standalone single-thread lane
+  // is the compliant form until the cutover task
+  // modules-wasi-sequential-cutover-off-legacy-emscripten lands.
   threadModel: "single-thread",
   allowUndefinedImports: true,
 });

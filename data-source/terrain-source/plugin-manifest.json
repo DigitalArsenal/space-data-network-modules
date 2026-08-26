@@ -33,7 +33,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The tile plan from terrain-ingest: tileset identity, z/x/y address, grid size, water-mask directive, pyramid limits, and the dataset provenance every record must be published under.",
+              "description": "The tile plan from terrain-ingest: tileset identity, either one z/x/y address or a tiles[] BLOCK of them, grid size, the water-mask DIRECTIVE (kind + 256x256 geometry + optional mask lineage - never raster bytes), pyramid limits, skipOceanTiles, and the dataset provenance every record must be published under.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -50,24 +50,47 @@
           "portId": "dem",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-hostcap-http-response-json",
+              "setId": "sdn-hostcap-http-response",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "hostcap/http-request responses carrying the source DEM GeoTIFF granules intersecting the requested tile. A 404 is a granule the dataset does not publish (open ocean), which is data, not an error.",
+              "description": "hostcap/http-request responses carrying the source DEM GeoTIFF granules intersecting the plan's union extent, over responseWire \"raw-body-v1\" ($HRB: magic, little-endian status, body verbatim). The default JSON/bodyB64 dialect is still read so a recorded fixture stays replayable. A 404 is a granule the dataset does not publish (open ocean), which is data, not an error.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op that feeds it, not by SDS."
+                "mediaType": "image/tiff; application=geotiff",
+                "detail": "Intra-flow connector frame produced and consumed inside this flow: hostcap/http-request's responseWire \"raw-body-v1\" $HRB frame (magic, little-endian status, body verbatim) carrying one DEFLATE-compressed Cloud-Optimized GeoTIFF elevation granule, or the same response in the connector's default JSON/bodyB64 dialect. The frame's shape is defined by that host op and the body by the source dataset, neither by SDS."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 4,
           "required": true,
-          "description": "One response frame per 1x1-degree source granule intersecting the tile; a tile corner-spanning four granules needs four."
+          "description": "One response frame per source elevation granule intersecting the plan's union extent; an extent straddling a 2x2 granule neighbourhood needs four."
+        },
+        {
+          "portId": "water",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-water",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request responses carrying the source WATER-BODY granules covering the same extent, over responseWire \"raw-body-v1\" ($HRB). Single-band 8-bit categorical rasters: 0 is no water, any non-zero class is a water body. Sampled NEAREST-NEIGHBOUR - a land/water class is never interpolated, because averaging class ordinals invents a class the source never stated. Absent (404) leaves the tile on the plan's directive.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "image/tiff; application=geotiff",
+                "detail": "Intra-flow connector frame produced and consumed inside this flow: hostcap/http-request's responseWire \"raw-body-v1\" $HRB frame (magic, little-endian status, body verbatim) carrying one DEFLATE-compressed Cloud-Optimized GeoTIFF water-body granule, or the same response in the connector's default JSON/bodyB64 dialect. The frame's shape is defined by that host op and the body by the source dataset, neither by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4,
+          "required": false,
+          "description": "Water-body granule responses covering the plan's union extent; the mask is classified from these bytes and never fabricated from the directive."
         }
       ],
       "outputPorts": [
@@ -84,13 +107,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $DTT FlatBuffer record stream: one Digital Terrain Tile per invocation, quantized-mesh payload inline."
+              "description": "Size-prefixed $DTT FlatBuffer record stream: one Digital Terrain Tile per address the plan's granule set covers, quantized-mesh payload inline. All-ocean addresses are omitted when the plan sets skipOceanTiles."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Size-prefixed $DTT FlatBuffer record stream."
+          "description": "Size-prefixed $DTT FlatBuffer record stream, one record per emitted tile."
         },
         {
           "portId": "report",
@@ -116,7 +139,7 @@
           "description": "Encode summary for this tile."
         }
       ],
-      "description": "Decodes the DEM GeoTIFF granules intersecting one z/x/y address of the GEOGRAPHIC_WGS84 pyramid (two root tiles, TMS row origin south), samples a gridSize x gridSize post lattice bilinearly, and encodes one quantized-mesh-1.0 tile: ECEF header with bounding sphere and horizon occlusion point, zigzag-delta 16-bit vertex arrays, high-water-mark index encoding, edge index lists, and the watermask extension (id 2). The tile bytes ride INLINE in DTTPayloadRef.BYTES (gzip via the vendored deflate, CONTENT_ENCODING \"gzip\"), which is within the small-block inline allowance; the CID lane is the growth path. HEIGHTS ARE NOT CONVERTED: the source dataset publishes geoid-referenced heights and the record states VERTICAL_DATUM GEOID with the model named verbatim - a consumer that renders them as ellipsoidal accepts a stated, bounded error and the record and report both say so. A granule the dataset does not publish (HTTP 404, open ocean) decodes to height 0 with WATER_MASK_KIND UNIFORM_WATER unless the plan states otherwise; the source NO_DATA value (-32767) decodes to 0 and is counted in DATA_COVERAGE_FRACTION rather than hidden. A plan that cannot state the dataset identity, epoch, retrieval time and licence is REFUSED, never defaulted. BATCHING: the plan port is single-stream and the dem port carries at most the four corner granules, ENFORCED IN CODE; maxStreams/maxBatch/drainPolicy are purely declarative in the compiled flow runtime, which drains a node's queue port-blind, so any surplus is refused with error code \"batched-input-frames\" rather than silently destroyed.",
+      "description": "Decodes the source granules covering the plan's extent and encodes quantized-mesh-1.0 tiles of the GEOGRAPHIC_WGS84 pyramid (two root tiles, TMS row origin south): ECEF header with bounding sphere and horizon occlusion point, zigzag-delta 16-bit vertex arrays, high-water-mark index encoding, edge index lists, and the watermask extension (id 2). AMORTIZED: a plan may address ONE tile or a tiles[] BLOCK, and a block decodes its granule set ONCE over the union extent and emits every tile the set covers - the per-tile re-decode it replaces spent about 97% of its time inflating the same bytes again. WINDOWED: only the internal chunks intersecting the extent are inflated, so resident memory is proportional to the OUTPUT, not to the granule; a named 256 MiB in-guest decode budget is checked before every raster allocation and against the running total across granules, refusing with \"decode-budget-exceeded\" rather than trapping a pooled flow instance. WATER MASK: classified from the water-body granules on ONE GLOBAL POST LATTICE per level, so the posts two adjacent tiles share are the same global posts and their bytes are equal by construction; 256x256 at every level, row 0 the NORTH edge, 255 water and 0 land, reduced to a single uniform byte where the whole tile agrees. WATER_MASK is set together with its width and height, and carries WATER_MASK_PROVENANCE when the mask's licence differs from the elevation dataset's. The tile bytes ride INLINE in DTTPayloadRef.BYTES (gzip via the vendored deflate, CONTENT_ENCODING \"gzip\"); SIZE_BYTES and DIGEST are stated over those GZIPPED bytes and the record's ETAG is that digest, so a cache revalidates against the bytes it actually holds. A tile past the 32 KiB gzipped per-tile serving ceiling is REFUSED at encode time. HEIGHTS ARE NOT CONVERTED: the source dataset publishes geoid-referenced heights and the record states VERTICAL_DATUM GEOID with the model named verbatim - a consumer that renders them as ellipsoidal accepts a stated, bounded error and the record and report both say so. A granule the dataset does not publish (HTTP 404, open ocean) decodes to height 0 with WATER_MASK_KIND UNIFORM_WATER unless the plan states otherwise; the source NO_DATA value (-32767) decodes to 0 and is counted in DATA_COVERAGE_FRACTION rather than hidden. A plan that cannot state the dataset identity, epoch, retrieval time and licence is REFUSED, never defaulted. BATCHING: the plan port is single-stream and the dem and water ports carry at most four frames each, ENFORCED IN CODE; maxStreams/maxBatch/drainPolicy are purely declarative in the compiled flow runtime, which drains a node's queue port-blind, so any surplus is refused with error code \"batched-input-frames\" rather than silently destroyed.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },

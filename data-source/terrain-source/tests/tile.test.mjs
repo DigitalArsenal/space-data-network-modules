@@ -16,6 +16,7 @@ import { decodeHttpResponse } from "space-data-module-sdk/http";
 
 import {
   buildGeoTiff,
+  buildWaterTiff,
   decodeQuantizedMesh,
   decodeDtt,
   splitStream,
@@ -102,6 +103,19 @@ const responseFrame = (portId, body, extra = {}) =>
     ...extra,
   });
 
+// hostcap/http-request responseWire "raw-body-v1": "$HRB", little-endian
+// status, body verbatim. This is the lane both granule ports actually run on;
+// the JSON dialect above stays exercised so a recorded fixture keeps working.
+export function rawBody(body, status = 200) {
+  const out = Buffer.alloc(8 + body.length);
+  out.write("$HRB", 0, "latin1");
+  out.writeUInt32LE(status >>> 0, 4);
+  Buffer.from(body).copy(out, 8);
+  return out;
+}
+
+const rawBodyFrame = (portId, body, status = 200) => frame(portId, rawBody(body, status));
+
 async function invoke(t, methodId, inputs) {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
@@ -154,14 +168,21 @@ function expectedHeights(granule = GRANULE) {
   return heights;
 }
 
-async function encodeTile(t, { layout = "strip", predictor = 1, plan = PLAN } = {}) {
+async function encodeTile(
+  t,
+  { layout = "strip", predictor = 1, plan = PLAN, water = null, records: expect = 1 } = {},
+) {
   const tiff = buildGeoTiff({ ...GRANULE, layout, predictor });
-  const outputs = outputsByPort(
-    await invoke(t, "tile", [jsonFrame("plan", plan), responseFrame("dem", tiff)]),
-  );
+  const inputs = [jsonFrame("plan", plan), rawBodyFrame("dem", tiff)];
+  if (water) inputs.push(rawBodyFrame("water", water));
+  const outputs = outputsByPort(await invoke(t, "tile", inputs));
   const records = splitStream(outputs.get("records"));
-  assert.equal(records.length, 1, "one tile plan yields exactly one $DTT record");
-  return { dtt: decodeDtt(records[0]), report: asJson(outputs.get("report")) };
+  assert.equal(records.length, expect, "the plan yields exactly the records it addresses");
+  return {
+    dtt: expect === 1 ? decodeDtt(records[0]) : undefined,
+    records: records.map((r) => decodeDtt(r)),
+    report: asJson(outputs.get("report")),
+  };
 }
 
 function meshOf(dtt) {
@@ -321,7 +342,7 @@ test("tile carries the $DTT contract: address, extents, datum, class, provenance
   assert.equal(dtt.provenance.sourceUrl, PROVENANCE.sourceUrl);
 });
 
-test("tile writes the watermask extension: uniform land by default, raster when the plan states one", async (t) => {
+test("tile writes the watermask extension: uniform by default, raster from the water granule", async (t) => {
   const land = await encodeTile(t);
   assert.equal(land.dtt.waterMaskKind, 1, "UNIFORM_LAND when a granule exists and the plan is silent");
   const landMesh = meshOf(land.dtt);
@@ -330,21 +351,72 @@ test("tile writes the watermask extension: uniform land by default, raster when 
   assert.equal(landExt.bytes.length, 1);
   assert.equal(landExt.bytes[0], 0x00);
 
-  const raster = Buffer.alloc(256 * 256);
-  raster.fill(255, 0, 256 * 128); // north half water… content is the plan's to state
-  const { dtt } = await encodeTile(t, {
-    plan: {
-      ...PLAN,
-      waterMask: { kind: "RASTER", bodyB64: raster.toString("base64"), width: 256, height: 256 },
-    },
+  // Janus (e): the mask is CLASSIFIED from a water-body granule that arrived
+  // over the same http lane, never handed to the encoder as base64 inside the
+  // plan. The granule below is water north of a fixed parallel inside the
+  // tile, so the cut mask must be a RASTER, not a uniform byte.
+  const CUT = (NORTH + SOUTH) / 2;
+  const waterGranule = buildWaterTiff({
+    width: 240,
+    height: 240,
+    originLon: GRANULE.originLon,
+    originLat: GRANULE.originLat,
+    scaleLon: 0.8 / 239,
+    scaleLat: 0.9 / 239,
+    // class 1 = ocean in the source convention; 0 = no water.
+    classFn: (px, py) => (GRANULE.originLat - (py * 0.9) / 239 > CUT ? 1 : 0),
+    layout: "tile",
+    tileWidth: 64,
+    tileHeight: 64,
   });
+  const { dtt } = await encodeTile(t, { water: waterGranule });
   assert.equal(dtt.waterMaskKind, 3, "RASTER");
-  assert.equal(dtt.waterMaskWidth, 256);
+  assert.equal(dtt.waterMaskWidth, 256, "WATER_MASK_WIDTH is set with the bytes, never alone");
   assert.equal(dtt.waterMaskHeight, 256);
-  assert.deepEqual(Buffer.from(dtt.waterMask.bytes), raster, "mask bytes ride verbatim");
+  const mask = Buffer.from(dtt.waterMask.bytes);
+  assert.equal(mask.length, 256 * 256);
+  assert.ok(dtt.waterMask.digest?.startsWith("1220"), "the mask states its own sha2-256 multihash");
+
+  // Row 0 is the NORTH edge (Atlas), and the classification is the granule's,
+  // sampled NEAREST-NEIGHBOUR — a category is never interpolated, so the
+  // expectation is the class of the NEAREST SOURCE PIXEL, not of the
+  // continuous cut. Mirrored here independently of the module.
+  const nearestClass = (lat) => {
+    const py = Math.round((GRANULE.originLat - lat) / (0.9 / 239));
+    const clamped = Math.min(Math.max(py, 0), 239);
+    return GRANULE.originLat - (clamped * 0.9) / 239 > CUT ? 255 : 0;
+  };
+  let water = 0;
+  for (let r = 0; r < 256; r++) {
+    const expected = nearestClass(NORTH - (r * (NORTH - SOUTH)) / 255);
+    for (let c = 0; c < 256; c++) {
+      assert.equal(mask[r * 256 + c], expected, `mask post r=${r} c=${c}`);
+    }
+    if (expected === 255) water += 256;
+  }
+  assert.ok(water > 0 && water < 256 * 256, "the cut tile really is mixed, not uniform");
+
+  // The extension carries exactly those bytes.
   const ext = meshOf(dtt).extensions.find((e) => e.id === 2);
   assert.equal(ext.bytes.length, 256 * 256);
-  assert.deepEqual(Buffer.from(ext.bytes), raster);
+  assert.deepEqual(Buffer.from(ext.bytes), mask);
+
+  // A directive whose geometry is not the 256x256 this encoder cuts is
+  // refused: the shared-edge identity between adjacent tiles depends on it.
+  const mismatch = await invoke(t, "tile", [
+    jsonFrame("plan", { ...PLAN, waterMask: { kind: "RASTER", width: 128, height: 128 } }),
+    rawBodyFrame("dem", buildGeoTiff({ ...GRANULE })),
+    rawBodyFrame("water", waterGranule),
+  ]);
+  assert.equal(mismatch.errorCode, "water-mask-size-mismatch");
+
+  // And a RASTER directive with no granule to classify is refused rather than
+  // fabricated from the directive alone.
+  const noGranule = await invoke(t, "tile", [
+    jsonFrame("plan", { ...PLAN, waterMask: { kind: "RASTER" } }),
+    rawBodyFrame("dem", buildGeoTiff({ ...GRANULE })),
+  ]);
+  assert.equal(noGranule.errorCode, "missing-water-granule");
 });
 
 test("an absent granule (404) is open ocean: height 0, UNIFORM_WATER, coverage 0", async (t) => {
