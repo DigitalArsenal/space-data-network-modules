@@ -1,0 +1,108 @@
+{
+  "pluginId": "com.digitalarsenal.hostcap.storage-write",
+  "name": "SDN Host Schema-Typed Record Write Node",
+  "version": "0.1.0",
+  "description": "Capability node wrapping the host storage.write hostcall: the SCHEMA-TYPED single-record write lane. Takes one SDS record's FlatBuffer bytes plus an optional {source,type} meta, and emits the host's verbatim {cid,source,type} result. WHY IT EXISTS: mod-cell-tower-ingest-flow shipped a chunked bulk-ingest flow whose resume mark had nowhere durable to go, and all three candidate lanes were ruled out by measurement - hostcap/flatsql-store is wasi-threads (the flow compiler refuses to link it into a single-thread flow at all) and its records port admits only $OMM/$OCM/$OBD; hostcap/file fits but the Go server host has no filesystem capability handler, so it fails closed on the target box; storage.write was exactly right but schema-typed, and using it meant inventing an SDS record for a bookkeeping row, which is Themis's call. Themis ruled: $IRM was minted and ratified in spacedatastandards.org 1.196.0, so this node was built - and built GENERICALLY. Nothing here knows what $IRM is; any flow with a schema-typed row to persist gets a durable write lane out of this node and the existing storage_write grant, with ZERO Go host changes. THE TYPE AND THE BYTES MUST AGREE: storage.write files bytes under whatever type it is told, so a meta saying OMM over a buffer whose file identifier is $IRM would write a mark into the orbit table where it is indistinguishable from a corrupt element set and where nothing will look for it again. When both a declared type and an intrinsic file identifier are present and disagree, the write is REFUSED - neither value is preferred and neither is coerced. Policy is the host's: storage.write is gated by the dedicated storage_write grant, which storage_query explicitly does NOT imply. RUNTIME TARGETS ARE [wasmedge] AND THAT IS THE TRUTHFUL DECLARATION, not a narrowing for convenience: storage_write is in the SDK's browser-incompatible capability set because a browser has no node store to write to, so declaring browser here would claim a lane that cannot exist. A flow that links this node is a server-side lane by construction.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "storage_write"
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-storage-write",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_write",
+      "resource": "sdn://storage/write",
+      "description": "Schema-typed single-record write through the host storage.write hostcall (kubo/sdn/sdnservices/storage_cap.go).",
+      "properties": {
+        "hostOps": [
+          "storage.write"
+        ]
+      }
+    }
+  ],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "write_record",
+      "displayName": "Write One Schema-Typed Record",
+      "inputPorts": [
+        {
+          "portId": "record",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-write-record",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The FlatBuffer bytes of ONE SDS record. Its file identifier (bytes 4..7) is read as the record's intrinsic SDS type when the meta declares none."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The FlatBuffer bytes of ONE SDS record. Its file identifier (bytes 4..7) is read as the record's intrinsic SDS type when the meta declares none."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-write-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "OPTIONAL UTF-8 JSON {\"source\":\"...\",\"type\":\"IRM\"}. `source` is the record's attribution string; absent, the host falls back to the module's own attribution. `type` is the SDS type code; absent, it is derived from the record's own file identifier."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "OPTIONAL UTF-8 JSON {\"source\":\"...\",\"type\":\"IRM\"}. `source` is the record's attribution string; absent, the host falls back to the module's own attribution. `type` is the SDS type code; absent, it is derived from the record's own file identifier."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-write-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The host's verbatim result object: {\"cid\",\"source\",\"type\"}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The host's verbatim result object: {\"cid\",\"source\",\"type\"}."
+        }
+      ],
+      "description": "Persists ONE schema-typed SDS record through the policy-mediated storage.write hostcall and emits the content id the host assigned. The node makes no policy decision: it moves bytes and refuses contradictions. A record whose declared type disagrees with its own file identifier is refused with error code \"record-type-disagreement\"; a record with neither is refused with \"missing-record-type\", because a write filed under a guessed type is a write nothing will ever find. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). write_record persists ONE record and answers with ONE cid, so a surplus cannot be merged into a correct answer - a second record silently dropped is a mark that was never durable, which is the exact failure this lane exists to fix. A surplus is refused with error code \"batched-input-frames\".",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "hostcap-storage-write-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
