@@ -1,0 +1,785 @@
+{
+  "pluginId": "com.digitalarsenal.flows.terrain-ingest",
+  "name": "Terrain Pyramid Ingest Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "OFF-FLEET pyramid builder for the quantized-mesh terrain tileset. One timer tick is ONE GRANULE CELL of work. mark_query reads the durable resume mark through hostcap/flatsql-query; granule_plan resolves the next cell of a REGION-PRIORITY enumeration that is a pure function of the config, and emits EIGHT hostcap/http-request descriptors - the 2x2 granule neighbourhood in elevation and water-body form, all over responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third - plus ONE plan frame carrying every tile of that level whose SOUTH-WEST CORNER lies in the cell. terrain-source:tile decodes that granule set ONCE, windowed to the union extent under a 256 MiB in-guest budget, and emits one $DTT record per tile with the water mask classified on the level's global post lattice; all-ocean tiles are NOT stored (they are identical, there are millions, and the serving flow synthesizes an unstored address inside published availability as exactly that). ingest_meta authors the storage attribution the storage lane cannot invent - dataset, batch, epoch - reading the tile report's recordsOut to catch a batch that reports success and stores nothing, and the primary granule response's ETag; hostcap/storage-ingest appends the batch; publish_request advances the resume mark FROM THE VERIFIED STORE RESULT, never at dispatch, so a crash between fetch and store re-runs the cell instead of leaving an invisible hole. NO PUBSUB ANNOUNCE IN V1 (Themis: a tileset-epoch announcement would be a SIGNED record and that contract is not cut). publish_request's optional announce request output is deliberately left UNWIRED rather than pointed at a placeholder; the $DTT records reach the fleet through the existing dataset-publication lane. Levels shallower than 8 are not built here: a tile wider than a granule breaks the containment the 2x2 neighbourhood rests on, and those levels are built by DOWNSAMPLING deeper tiles over the record store. granule_plan refuses them by name. PLACEMENT: this flow runs OFF-FLEET on the build machine under Docker linux/amd64 WasmEdge, the same law binaries are built under - never on host-01 or host-02, whose workload placement is the owner's.",
+  "capabilities": [
+    "http",
+    "storage_ingest",
+    "storage_query"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-query-stream",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
+      "properties": {
+        "hostOps": [
+          "storage.flatsql_query_stream",
+          "storage.query_sandboxed",
+          "storage.query_surface"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "timer_terrain_ingest",
+      "displayName": "Flow trigger timer-terrain-ingest",
+      "description": "Compiled-flow ingress for trigger \"timer-terrain-ingest\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Cron timer tick (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick (content ignored)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The advanced resume mark: next_tile_index = first_tile_index + tiles_planned, plus the upstream ETag that rides out on the next batch's plan entries.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The advanced resume mark."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_terrain_ingest-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "mark_q",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "mark_query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "mark_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "granule_plan",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_dem_0",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_wbm_0",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_dem_1",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_wbm_1",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_dem_2",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_wbm_2",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_dem_3",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_wbm_3",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "tile",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "tile",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "meta",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "ingest_meta",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "mark_q-query-mark_read",
+      "fromNodeId": "mark_q",
+      "fromPortId": "query",
+      "toNodeId": "mark_read",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "mark_read-stream-plan",
+      "fromNodeId": "mark_read",
+      "fromPortId": "stream",
+      "toNodeId": "plan",
+      "toPortId": "mark",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-dem_0-http_dem_0",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_0",
+      "toNodeId": "http_dem_0",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-wbm_0-http_wbm_0",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_0",
+      "toNodeId": "http_wbm_0",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_dem_0-response-tile",
+      "fromNodeId": "http_dem_0",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_wbm_0-response-tile",
+      "fromNodeId": "http_wbm_0",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-dem_1-http_dem_1",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_1",
+      "toNodeId": "http_dem_1",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-wbm_1-http_wbm_1",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_1",
+      "toNodeId": "http_wbm_1",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_dem_1-response-tile",
+      "fromNodeId": "http_dem_1",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_wbm_1-response-tile",
+      "fromNodeId": "http_wbm_1",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-dem_2-http_dem_2",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_2",
+      "toNodeId": "http_dem_2",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-wbm_2-http_wbm_2",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_2",
+      "toNodeId": "http_wbm_2",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_dem_2-response-tile",
+      "fromNodeId": "http_dem_2",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_wbm_2-response-tile",
+      "fromNodeId": "http_wbm_2",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-dem_3-http_dem_3",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_3",
+      "toNodeId": "http_dem_3",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-wbm_3-http_wbm_3",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_3",
+      "toNodeId": "http_wbm_3",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_dem_3-response-tile",
+      "fromNodeId": "http_dem_3",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_wbm_3-response-tile",
+      "fromNodeId": "http_wbm_3",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-plan-tile",
+      "fromNodeId": "plan",
+      "fromPortId": "plan",
+      "toNodeId": "tile",
+      "toPortId": "plan",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-job-meta",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "meta",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tile-records-meta",
+      "fromNodeId": "tile",
+      "fromPortId": "records",
+      "toNodeId": "meta",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "DTT.fbs",
+          "fileIdentifier": "$DTT",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DTT",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tile-report-meta",
+      "fromNodeId": "tile",
+      "fromPortId": "report",
+      "toNodeId": "meta",
+      "toPortId": "decision",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_dem_0-response-meta",
+      "fromNodeId": "http_dem_0",
+      "fromPortId": "response",
+      "toNodeId": "meta",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "meta-meta-ingest",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "meta-records-ingest",
+      "fromNodeId": "meta",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-result-publish",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "publish",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "meta-meta-publish",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "publish",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-mark-egress",
+      "fromNodeId": "publish",
+      "fromPortId": "mark",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-result-egress",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "tile-report-egress",
+      "fromNodeId": "tile",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "timer-terrain-ingest",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 15000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "timer-terrain-ingest",
+      "targetNodeId": "mark_q",
+      "targetPortId": "tick"
+    },
+    {
+      "triggerId": "timer-terrain-ingest",
+      "targetNodeId": "plan",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}

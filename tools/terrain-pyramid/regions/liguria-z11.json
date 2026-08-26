@@ -1,0 +1,20 @@
+{
+  "//": "The bounded regional proof: a 4x4-degree coastal region (Ligurian Sea and the Apennines, lon 8-12 E, lat 43-47 N) built to z11, plus a z13 inset over the Cinque Terre coast. Coastal on purpose: an inland region would never exercise the water mask, and the mask is what the console's reflective ocean reads.",
+  "out": "tools/terrain-pyramid/out/liguria",
+  "flow_config": {
+    "dataset_id": "copernicus-glo30-quantized-mesh",
+    "tileset_id": "spaceaware-terrain",
+    "dataset_epoch": "2023-04-01T00:00:00.000Z",
+    "retrieved_at": "2026-08-26T00:00:00.000Z",
+    "provider_id": "copernicus",
+    "source_name": "copernicus-glo30",
+    "grid_size": 65,
+    "min_level": 8,
+    "max_level": 11,
+    "timeout_ms": 120000,
+    "regions": [
+      { "name": "liguria-z11", "west": 8, "south": 43, "east": 12, "north": 47, "max_level": 11, "priority": 10 },
+      { "name": "cinque-terre-z13", "west": 9, "south": 44, "east": 10, "north": 45, "max_level": 13, "priority": 20 }
+    ]
+  }
+}

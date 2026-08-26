@@ -1066,7 +1066,14 @@ int granule_plan(void) {
         json_escape(dataset) + "\"" + ",\"tileset_id\":\"" + json_escape(tileset) + "\"" +
         ",\"dataset_epoch\":\"" + json_escape(epoch) + "\"" +
         ",\"first_tile_index\":" + std::to_string(index) +
-        ",\"tiles_planned\":" + std::to_string(tile_count) + ",\"total_tiles\":" +
+        // THE MARK'S STRIDE, and it is 1 BY CONTRACT. publish_request advances
+        // the durable mark by first_tile_index + tiles_planned, and the unit of
+        // this enumeration is ONE CELL — so a stride of tile_count here would
+        // skip every cell but the first and leave the rest of the pyramid
+        // unbuilt with nothing to show for it. The tile count rides as
+        // cell_tiles, for reporting.
+        ",\"tiles_planned\":1" +
+        ",\"cell_tiles\":" + std::to_string(tile_count) + ",\"total_tiles\":" +
         std::to_string(total) + ",\"cell_index\":" + std::to_string(index) +
         ",\"cell_lon\":" + std::to_string(cell.lon) + ",\"cell_lat\":" +
         std::to_string(cell.lat) + ",\"level\":" + std::to_string(cell.level) +

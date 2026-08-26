@@ -1,0 +1,425 @@
+{
+  "programId": "com.digitalarsenal.flows.terrain-ingest",
+  "name": "Terrain Pyramid Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "OFF-FLEET pyramid builder for the quantized-mesh terrain tileset. One timer tick is ONE GRANULE CELL of work. mark_query reads the durable resume mark through hostcap/flatsql-query; granule_plan resolves the next cell of a REGION-PRIORITY enumeration that is a pure function of the config, and emits EIGHT hostcap/http-request descriptors - the 2x2 granule neighbourhood in elevation and water-body form, all over responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third - plus ONE plan frame carrying every tile of that level whose SOUTH-WEST CORNER lies in the cell. terrain-source:tile decodes that granule set ONCE, windowed to the union extent under a 256 MiB in-guest budget, and emits one $DTT record per tile with the water mask classified on the level's global post lattice; all-ocean tiles are NOT stored (they are identical, there are millions, and the serving flow synthesizes an unstored address inside published availability as exactly that). ingest_meta authors the storage attribution the storage lane cannot invent - dataset, batch, epoch - reading the tile report's recordsOut to catch a batch that reports success and stores nothing, and the primary granule response's ETag; hostcap/storage-ingest appends the batch; publish_request advances the resume mark FROM THE VERIFIED STORE RESULT, never at dispatch, so a crash between fetch and store re-runs the cell instead of leaving an invisible hole. NO PUBSUB ANNOUNCE IN V1 (Themis: a tileset-epoch announcement would be a SIGNED record and that contract is not cut). publish_request's optional announce request output is deliberately left UNWIRED rather than pointed at a placeholder; the $DTT records reach the fleet through the existing dataset-publication lane. Levels shallower than 8 are not built here: a tile wider than a granule breaks the containment the 2x2 neighbourhood rests on, and those levels are built by DOWNSAMPLING deeper tiles over the record store. granule_plan refuses them by name. PLACEMENT: this flow runs OFF-FLEET on the build machine under Docker linux/amd64 WasmEdge, the same law binaries are built under - never on host-01 or host-02, whose workload placement is the owner's.",
+  "nodes": [
+    {
+      "nodeId": "mark_q",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "mark_query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "mark_read",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "granule_plan",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_dem_0",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_wbm_0",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_dem_1",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_wbm_1",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_dem_2",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_wbm_2",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_dem_3",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_wbm_3",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "tile",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "tile",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "meta",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "ingest_meta",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "mark_q-query-mark_read",
+      "fromNodeId": "mark_q",
+      "fromPortId": "query",
+      "toNodeId": "mark_read",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "mark_read-stream-plan",
+      "fromNodeId": "mark_read",
+      "fromPortId": "stream",
+      "toNodeId": "plan",
+      "toPortId": "mark",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-dem_0-http_dem_0",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_0",
+      "toNodeId": "http_dem_0",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-wbm_0-http_wbm_0",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_0",
+      "toNodeId": "http_wbm_0",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_dem_0-response-tile",
+      "fromNodeId": "http_dem_0",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_wbm_0-response-tile",
+      "fromNodeId": "http_wbm_0",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-dem_1-http_dem_1",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_1",
+      "toNodeId": "http_dem_1",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-wbm_1-http_wbm_1",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_1",
+      "toNodeId": "http_wbm_1",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_dem_1-response-tile",
+      "fromNodeId": "http_dem_1",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_wbm_1-response-tile",
+      "fromNodeId": "http_wbm_1",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-dem_2-http_dem_2",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_2",
+      "toNodeId": "http_dem_2",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-wbm_2-http_wbm_2",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_2",
+      "toNodeId": "http_wbm_2",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_dem_2-response-tile",
+      "fromNodeId": "http_dem_2",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_wbm_2-response-tile",
+      "fromNodeId": "http_wbm_2",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-dem_3-http_dem_3",
+      "fromNodeId": "plan",
+      "fromPortId": "dem_3",
+      "toNodeId": "http_dem_3",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-wbm_3-http_wbm_3",
+      "fromNodeId": "plan",
+      "fromPortId": "wbm_3",
+      "toNodeId": "http_wbm_3",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_dem_3-response-tile",
+      "fromNodeId": "http_dem_3",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "dem",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_wbm_3-response-tile",
+      "fromNodeId": "http_wbm_3",
+      "fromPortId": "response",
+      "toNodeId": "tile",
+      "toPortId": "water",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-plan-tile",
+      "fromNodeId": "plan",
+      "fromPortId": "plan",
+      "toNodeId": "tile",
+      "toPortId": "plan",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-job-meta",
+      "fromNodeId": "plan",
+      "fromPortId": "job",
+      "toNodeId": "meta",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tile-records-meta",
+      "fromNodeId": "tile",
+      "fromPortId": "records",
+      "toNodeId": "meta",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tile-report-meta",
+      "fromNodeId": "tile",
+      "fromPortId": "report",
+      "toNodeId": "meta",
+      "toPortId": "decision",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_dem_0-response-meta",
+      "fromNodeId": "http_dem_0",
+      "fromPortId": "response",
+      "toNodeId": "meta",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "meta-meta-ingest",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "meta-records-ingest",
+      "fromNodeId": "meta",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "ingest-result-publish",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "publish",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "meta-meta-publish",
+      "fromNodeId": "meta",
+      "fromPortId": "meta",
+      "toNodeId": "publish",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "publish-mark-egress",
+      "fromNodeId": "publish",
+      "fromPortId": "mark",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "ingest-result-egress",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "tile-report-egress",
+      "fromNodeId": "tile",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-terrain-ingest",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 15000,
+      "description": "One tick is ONE GRANULE CELL: eight ranged fetches and every tile of one level whose corner lies in the cell. The runtime re-invokes until the enumeration drains (granule_plan reports the remainder through the backlog counter), and because the mark advances only from a verified store, an overrun tick is naturally idempotent - the next one re-derives the same cell and finds it already marked."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-terrain-ingest",
+      "targetNodeId": "mark_q",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "triggerId": "timer-terrain-ingest",
+      "targetNodeId": "plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.terrain-ingest",
+    "com.digitalarsenal.data-source.terrain-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.flatsql-query",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

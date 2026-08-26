@@ -448,7 +448,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The run contract for this cell: dataset and tileset identity, epoch, the cell index and its lon/lat, the level, the region name, and the tile count planned.",
+              "description": "The run contract for this cell: dataset and tileset identity, epoch, the cell index and its lon/lat, the level, the region name, and cell_tiles - the number of tiles this cell plans. tiles_planned is 1 BY CONTRACT and is the MARK'S STRIDE, not a tile count: publish_request advances the durable mark by first_tile_index + tiles_planned and the unit of this enumeration is ONE CELL, so any other value would skip cells and leave the pyramid unbuilt with nothing to show for it.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
