@@ -442,6 +442,8 @@ export function decodeDtt(record) {
     maxLevel: u32At(buf, pos, 36),
     sourceClass: i8At(buf, pos, 37),
     provenance: provenance(buf, pos, 38),
+    waterMaskProvenance: provenance(buf, pos, 32),
+    etag: str(buf, pos, 40),
     remarks: str(buf, pos, 42),
   };
 }

@@ -139,6 +139,11 @@ test("route turns a tile path into the DTT select plus serve context", async (t)
     x: 271,
     y: 192,
     ifNoneMatch: 'W/"probe"',
+    // The miss verdict travels WITH the address: route holds the configured
+    // availability index, respond holds the store answer, and only the pair
+    // decides whether a miss is normal traffic or a broken promise.
+    insideAvailability: false,
+    synthGridSize: 65,
   });
 });
 

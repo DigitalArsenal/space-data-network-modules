@@ -1372,6 +1372,203 @@ void classify_water_mask(const TileExtent& extent, const std::vector<DemGrid>& w
     }
 }
 
+// ── THE quantized-mesh encoder ─────────────────────────────────────────────
+//
+// `heights` is grid*grid metres in SOUTH-row-major order (j = 0 at the south
+// edge), the lattice tile() samples. `water_raster` is either empty (a uniform
+// mask, whose single byte `uniform_water` picks) or exactly kMaskSize^2 bytes.
+//
+// It lives here rather than inline in tile() because respond() must be able to
+// synthesize a tile the store does not hold, and two encoders for one wire
+// format is two encoders to keep in agreement.
+void encode_quantized_mesh(uint32_t grid, const TileExtent& ext,
+                           const std::vector<double>& heights_in,
+                           const std::vector<uint8_t>& water_raster, bool uniform_water,
+                           std::vector<uint8_t>* out) {
+    const uint32_t n_verts = grid * grid;
+    std::vector<double> heights = heights_in;
+    std::vector<double> lats(n_verts), lons(n_verts);
+    for (uint32_t j = 0; j < grid; j++) {
+        const double lat = ext.south + (ext.north - ext.south) * j / (grid - 1);
+        for (uint32_t i = 0; i < grid; i++) {
+            const uint32_t v = j * grid + i;
+            lats[v] = lat;
+            lons[v] = ext.west + (ext.east - ext.west) * i / (grid - 1);
+        }
+    }
+    double min_h = heights[0], max_h = heights[0];
+    for (const double h : heights) {
+        min_h = std::min(min_h, h);
+        max_h = std::max(max_h, h);
+    }
+
+    std::vector<uint16_t> qu(n_verts), qv(n_verts), qh(n_verts);
+    const double h_range = max_h - min_h;
+    for (uint32_t j = 0; j < grid; j++) {
+        for (uint32_t i = 0; i < grid; i++) {
+            const uint32_t v = j * grid + i;
+            qu[v] = static_cast<uint16_t>((32767ull * i) / (grid - 1));
+            qv[v] = static_cast<uint16_t>((32767ull * j) / (grid - 1));
+            qh[v] = h_range > 0 ? static_cast<uint16_t>(
+                                      std::lround(32767.0 * (heights[v] - min_h) / h_range))
+                                : 0;
+        }
+    }
+    // Regular-grid triangulation, CCW in the u-v plane.
+    std::vector<uint32_t> indices;
+    indices.reserve(static_cast<size_t>(grid - 1) * (grid - 1) * 6);
+    for (uint32_t j = 0; j + 1 < grid; j++) {
+        for (uint32_t i = 0; i + 1 < grid; i++) {
+            const uint32_t bl = j * grid + i;
+            const uint32_t br = bl + 1;
+            const uint32_t tl = bl + grid;
+            const uint32_t tr = tl + 1;
+            indices.push_back(bl); indices.push_back(br); indices.push_back(tr);
+            indices.push_back(bl); indices.push_back(tr); indices.push_back(tl);
+        }
+    }
+
+    // HIGH-WATER-MARK PRECONDITION: a vertex's first appearance in the index
+    // stream must land exactly when it becomes the highest index seen, so the
+    // vertices are renumbered by first appearance and every array permuted to
+    // match. The decode loop (`index = highest - code; if (code == 0)
+    // ++highest`) then reproduces the stream exactly.
+    {
+        std::vector<uint32_t> remap(n_verts, UINT32_MAX);
+        uint32_t next = 0;
+        for (uint32_t& idx : indices) {
+            if (remap[idx] == UINT32_MAX) remap[idx] = next++;
+        }
+        std::vector<uint16_t> pu(n_verts), pv(n_verts), ph(n_verts);
+        std::vector<double> ph_m(n_verts), plat(n_verts), plon(n_verts);
+        for (uint32_t v = 0; v < n_verts; v++) {
+            const uint32_t nv = remap[v];
+            pu[nv] = qu[v]; pv[nv] = qv[v]; ph[nv] = qh[v];
+            ph_m[nv] = heights[v]; plat[nv] = lats[v]; plon[nv] = lons[v];
+        }
+        qu.swap(pu); qv.swap(pv); qh.swap(ph);
+        heights.swap(ph_m); lats.swap(plat); lons.swap(plon);
+        for (uint32_t& idx : indices) idx = remap[idx];
+    }
+
+    // ── header geometry (ECEF, metres, real heights) ────────────────────────
+    std::vector<Vec3> positions(n_verts);
+    for (uint32_t v = 0; v < n_verts; v++) {
+        positions[v] = geodetic_to_ecef(lats[v], lons[v], heights[v]);
+    }
+    Vec3 centroid;
+    for (const Vec3& p : positions) { centroid.x += p.x; centroid.y += p.y; centroid.z += p.z; }
+    centroid.x /= n_verts; centroid.y /= n_verts; centroid.z /= n_verts;
+    double radius = 0.0;
+    for (const Vec3& p : positions) {
+        const double dx = p.x - centroid.x, dy = p.y - centroid.y, dz = p.z - centroid.z;
+        radius = std::max(radius, std::sqrt(dx * dx + dy * dy + dz * dz));
+    }
+    const Vec3 occlusion = horizon_occlusion_point(positions, centroid);
+
+    std::vector<uint8_t>& mesh = *out;
+    mesh.clear();
+    mesh.reserve(n_verts * 6 + indices.size() * 2 + water_raster.size() + 256);
+    put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
+    put_f32(&mesh, static_cast<float>(min_h)); put_f32(&mesh, static_cast<float>(max_h));
+    put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
+    put_f64(&mesh, radius);
+    put_f64(&mesh, occlusion.x); put_f64(&mesh, occlusion.y); put_f64(&mesh, occlusion.z);
+
+    put_u32(&mesh, n_verts);
+    auto put_zigzag_array = [&](const std::vector<uint16_t>& vals) {
+        int32_t prev = 0;
+        for (const uint16_t v : vals) {
+            put_u16(&mesh, zigzag16(static_cast<int32_t>(v) - prev));
+            prev = static_cast<int32_t>(v);
+        }
+    };
+    put_zigzag_array(qu);
+    put_zigzag_array(qv);
+    put_zigzag_array(qh);
+
+    const bool wide = n_verts > 65536;
+    // Padding before the index data: 2-byte alignment for 16-bit indices,
+    // 4-byte for 32-bit, per the spec.
+    const size_t align = wide ? 4 : 2;
+    while (mesh.size() % align != 0) put_u8(&mesh, 0);
+    put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
+    {
+        uint32_t highest = 0;
+        for (const uint32_t idx : indices) {
+            const uint32_t code = highest - idx;
+            if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
+            if (code == 0) highest++;
+        }
+    }
+    auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
+        std::vector<uint32_t> edge;
+        for (uint32_t v = 0; v < n_verts; v++) {
+            if (is_edge(qu[v], qv[v])) edge.push_back(v);
+        }
+        put_u32(&mesh, static_cast<uint32_t>(edge.size()));
+        for (const uint32_t v : edge) {
+            if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
+        }
+    };
+    put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
+    put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
+    put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
+    put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
+
+    // Watermask extension (extensionId 2): one byte uniform, or the raster.
+    put_u8(&mesh, 2);
+    if (!water_raster.empty()) {
+        put_u32(&mesh, static_cast<uint32_t>(water_raster.size()));
+        mesh.insert(mesh.end(), water_raster.begin(), water_raster.end());
+    } else {
+        put_u32(&mesh, 1);
+        put_u8(&mesh, uniform_water ? 0xff : 0x00);
+    }
+}
+
+// ── the availability index, read the way the client reads it ───────────────
+//
+// layer.json `available` is an array indexed by LEVEL, each entry an array of
+// {startX,startY,endX,endY} rectangles. It is the contract the client plans
+// its requests against: everything inside it will be answered, everything
+// outside it is never asked for. That makes it the exact test for whether a
+// store miss is normal traffic or a broken promise.
+std::vector<std::string> split_json_arrays(const std::string& outer) {
+    std::vector<std::string> out;
+    int depth = 0;
+    bool in_string = false;
+    size_t start = 0;
+    // Skip the opening bracket of the OUTER array so its members are depth 1.
+    for (size_t i = 0; i < outer.size(); i++) {
+        const char c = outer[i];
+        if (in_string) {
+            if (c == '\\') i++;
+            else if (c == '"') in_string = false;
+            continue;
+        }
+        if (c == '"') in_string = true;
+        else if (c == '[') { if (depth++ == 1) start = i; }
+        else if (c == ']') { if (--depth == 1) out.push_back(outer.substr(start, i - start + 1)); }
+    }
+    return out;
+}
+
+bool address_inside_availability(const std::string& available, uint32_t level, uint32_t x,
+                                 uint32_t y) {
+    const std::vector<std::string> levels = split_json_arrays(available);
+    if (level >= levels.size()) return false;
+    for (const std::string& rect : split_json_objects(levels[level])) {
+        const double sx = json_number(rect, "startX", -1);
+        const double sy = json_number(rect, "startY", -1);
+        const double ex = json_number(rect, "endX", -1);
+        const double ey = json_number(rect, "endY", -1);
+        if (sx < 0 || sy < 0 || ex < 0 || ey < 0) continue;
+        if (x >= sx && x <= ex && y >= sy && y <= ey) return true;
+    }
+    return false;
+}
+
 constexpr const char* kGeoidRemark =
     "Heights are geoid-referenced as the source dataset publishes them (VERTICAL_DATUM "
     "GEOID); no geoid-to-ellipsoid conversion is applied at this parity floor. A consumer "
@@ -1686,132 +1883,13 @@ int tile(void) {
             continue;
         }
 
-        // ── quantize + triangulate ──────────────────────────────────────────
-        std::vector<uint16_t> qu(n_verts), qv(n_verts), qh(n_verts);
-        const double h_range = max_h - min_h;
-        for (uint32_t j = 0; j < grid; j++) {
-            for (uint32_t i = 0; i < grid; i++) {
-                const uint32_t v = j * grid + i;
-                qu[v] = static_cast<uint16_t>((32767ull * i) / (grid - 1));
-                qv[v] = static_cast<uint16_t>((32767ull * j) / (grid - 1));
-                qh[v] = h_range > 0
-                            ? static_cast<uint16_t>(
-                                  std::lround(32767.0 * (heights[v] - min_h) / h_range))
-                            : 0;
-            }
-        }
-        // Regular-grid triangulation, CCW in the u-v plane.
-        std::vector<uint32_t> indices;
-        indices.reserve(static_cast<size_t>(grid - 1) * (grid - 1) * 6);
-        for (uint32_t j = 0; j + 1 < grid; j++) {
-            for (uint32_t i = 0; i + 1 < grid; i++) {
-                const uint32_t bl = j * grid + i;
-                const uint32_t br = bl + 1;
-                const uint32_t tl = bl + grid;
-                const uint32_t tr = tl + 1;
-                indices.push_back(bl); indices.push_back(br); indices.push_back(tr);
-                indices.push_back(bl); indices.push_back(tr); indices.push_back(tl);
-            }
-        }
-
-        // HIGH-WATER-MARK PRECONDITION: a vertex's first appearance in the
-        // index stream must land exactly when it becomes the highest index
-        // seen, so the vertices are renumbered by first appearance and every
-        // array permuted to match. The decode loop
-        // (`index = highest - code; if (code == 0) ++highest`) then reproduces
-        // the stream exactly.
-        {
-            std::vector<uint32_t> remap(n_verts, UINT32_MAX);
-            uint32_t next = 0;
-            for (uint32_t& idx : indices) {
-                if (remap[idx] == UINT32_MAX) remap[idx] = next++;
-            }
-            std::vector<uint16_t> pu(n_verts), pv(n_verts), ph(n_verts);
-            std::vector<double> ph_m(n_verts), plat(n_verts), plon(n_verts);
-            for (uint32_t v = 0; v < n_verts; v++) {
-                const uint32_t nv = remap[v];
-                pu[nv] = qu[v]; pv[nv] = qv[v]; ph[nv] = qh[v];
-                ph_m[nv] = heights[v]; plat[nv] = lats[v]; plon[nv] = lons[v];
-            }
-            qu.swap(pu); qv.swap(pv); qh.swap(ph);
-            heights.swap(ph_m); lats.swap(plat); lons.swap(plon);
-            for (uint32_t& idx : indices) idx = remap[idx];
-        }
-
-        // ── header geometry (ECEF, metres, real heights) ────────────────────
-        std::vector<Vec3> positions(n_verts);
-        for (uint32_t v = 0; v < n_verts; v++) {
-            positions[v] = geodetic_to_ecef(lats[v], lons[v], heights[v]);
-        }
-        Vec3 centroid;
-        for (const Vec3& p : positions) { centroid.x += p.x; centroid.y += p.y; centroid.z += p.z; }
-        centroid.x /= n_verts; centroid.y /= n_verts; centroid.z /= n_verts;
-        double radius = 0.0;
-        for (const Vec3& p : positions) {
-            const double dx = p.x - centroid.x, dy = p.y - centroid.y, dz = p.z - centroid.z;
-            radius = std::max(radius, std::sqrt(dx * dx + dy * dy + dz * dz));
-        }
-        const Vec3 occlusion = horizon_occlusion_point(positions, centroid);
-
-        // ── serialize quantized-mesh-1.0 ────────────────────────────────────
+        // ── the quantized-mesh payload ──────────────────────────────────────
+        // ONE encoder, shared with the synthesized-miss path in respond(), so
+        // a tile the store holds and a tile the server synthesizes can never
+        // be encoded two different ways.
         std::vector<uint8_t> mesh;
-        mesh.reserve(n_verts * 6 + indices.size() * 2 + 256);
-        put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
-        put_f32(&mesh, static_cast<float>(min_h)); put_f32(&mesh, static_cast<float>(max_h));
-        put_f64(&mesh, centroid.x); put_f64(&mesh, centroid.y); put_f64(&mesh, centroid.z);
-        put_f64(&mesh, radius);
-        put_f64(&mesh, occlusion.x); put_f64(&mesh, occlusion.y); put_f64(&mesh, occlusion.z);
-
-        put_u32(&mesh, n_verts);
-        auto put_zigzag_array = [&](const std::vector<uint16_t>& vals) {
-            int32_t prev = 0;
-            for (const uint16_t v : vals) {
-                put_u16(&mesh, zigzag16(static_cast<int32_t>(v) - prev));
-                prev = static_cast<int32_t>(v);
-            }
-        };
-        put_zigzag_array(qu);
-        put_zigzag_array(qv);
-        put_zigzag_array(qh);
-
-        const bool wide = n_verts > 65536;
-        // Padding before the index data: 2-byte alignment for 16-bit indices,
-        // 4-byte for 32-bit, per the spec.
-        const size_t align = wide ? 4 : 2;
-        while (mesh.size() % align != 0) put_u8(&mesh, 0);
-        put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
-        {
-            uint32_t highest = 0;
-            for (const uint32_t idx : indices) {
-                const uint32_t code = highest - idx;
-                if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
-                if (code == 0) highest++;
-            }
-        }
-        auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
-            std::vector<uint32_t> edge;
-            for (uint32_t v = 0; v < n_verts; v++) {
-                if (is_edge(qu[v], qv[v])) edge.push_back(v);
-            }
-            put_u32(&mesh, static_cast<uint32_t>(edge.size()));
-            for (const uint32_t v : edge) {
-                if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
-            }
-        };
-        put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
-        put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
-        put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
-        put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
-
-        // Watermask extension (extensionId 2): one byte uniform, or the raster.
-        put_u8(&mesh, 2);
-        if (water_kind == "RASTER") {
-            put_u32(&mesh, static_cast<uint32_t>(water_raster.size()));
-            mesh.insert(mesh.end(), water_raster.begin(), water_raster.end());
-        } else {
-            put_u32(&mesh, 1);
-            put_u8(&mesh, water_kind == "UNIFORM_WATER" ? 0xff : 0x00);
-        }
+        encode_quantized_mesh(grid, ext, heights, water_raster,
+                              water_kind == "UNIFORM_WATER", &mesh);
         stats.mesh_bytes = mesh.size();
 
         // ── gzip the payload (CONTENT_ENCODING states it; a failed compress is
@@ -2156,11 +2234,30 @@ int route(void) {
             }
         }
     }
+    // THE MISS VERDICT, decided here because this is where the configured
+    // availability index lives. `available` is the promise layer.json makes to
+    // the client: it plans its requests against exactly these rectangles, so a
+    // store miss INSIDE them is a broken promise and a 404 the client never
+    // asked to handle. Atlas: a 404 must never reach the browser. respond()
+    // synthesizes such an address as height-0 UNIFORM_WATER — which is what an
+    // address inside a published region with nothing stored IS, since the
+    // encoder never stores an all-ocean tile. A miss OUTSIDE availability stays
+    // a cheap cacheable 404: nobody was promised it.
+    std::string available_for_miss;
+    if (!json_raw_value(config, "terrain_available", &available_for_miss) ||
+        available_for_miss.empty() || available_for_miss[0] != '[') {
+        available_for_miss = "[[{\"startX\":0,\"startY\":0,\"endX\":1,\"endY\":0}]]";
+    }
+    const bool inside = address_inside_availability(available_for_miss, z, x, y);
+    const uint32_t synth_grid =
+        static_cast<uint32_t>(json_number(config, "terrain_synth_grid_size", 65));
+
     const std::string context =
         std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
         ",\"level\":" + std::to_string(z) + ",\"x\":" + std::to_string(x) +
         ",\"y\":" + std::to_string(y) + ",\"ifNoneMatch\":\"" + json_escape(if_none_match) +
-        "\"}";
+        "\",\"insideAvailability\":" + (inside ? "true" : "false") +
+        ",\"synthGridSize\":" + std::to_string(synth_grid) + "}";
     return push_json("context", context) < 0 ? 500 : 0;
 }
 
@@ -2237,6 +2334,45 @@ int respond(void) {
     }
 
     if (!record) {
+        // INSIDE the published availability, a miss is not an error and must
+        // not be a 404: the encoder never stores an all-ocean tile, so an
+        // address the tileset promised and the store does not hold IS ocean.
+        // Synthesize it — height 0 everywhere, UNIFORM_WATER — so the client
+        // gets the terrain the tileset promised rather than a hole and a
+        // console full of failed requests.
+        if (json_bool(context, "insideAvailability", false)) {
+            TileJob job;
+            job.level = static_cast<uint32_t>(json_number(context, "level", 0));
+            job.x = static_cast<uint32_t>(json_number(context, "x", 0));
+            job.y = static_cast<uint32_t>(json_number(context, "y", 0));
+            TileExtent ext;
+            if (!tile_extent(job, &ext)) {
+                return push_htr_not_found("address does not exist at this level");
+            }
+            uint32_t grid = static_cast<uint32_t>(json_number(context, "synthGridSize", 65));
+            if (grid < 2 || grid > 255) grid = 65;
+
+            std::vector<uint8_t> mesh;
+            encode_quantized_mesh(grid, ext, std::vector<double>(grid * grid, 0.0),
+                                  std::vector<uint8_t>(), true, &mesh);
+            std::vector<uint8_t> body;
+            const bool gzipped = gzip_compress(mesh, &body);
+            if (!gzipped) body = mesh;
+            const std::string synth_etag = "\"" + sha256_multihash(body) + "\"";
+
+            std::vector<HeaderEntry> headers;
+            headers.push_back({"cache-control", "public, max-age=86400"});
+            headers.push_back({"etag", synth_etag});
+            const std::string inm = json_string(context, "ifNoneMatch", "");
+            if (!inm.empty() && inm == synth_etag) return push_htr(304, headers, nullptr, 0);
+            headers.push_back({"content-type", "application/vnd.quantized-mesh"});
+            if (gzipped) headers.push_back({"content-encoding", "gzip"});
+            // Says WHY these bytes exist. A synthesized ocean tile and a
+            // measured one are not the same claim, and a cache, a proxy or a
+            // person reading the wire is entitled to know which this is.
+            headers.push_back({"x-terrain-synthesized", "uniform-water"});
+            return push_htr(200, headers, body.data(), body.size());
+        }
         std::string detail = "no stored tile at this address";
         if (!context.empty()) {
             detail += " (" + json_string(context, "tilesetId", "?") + " " +
