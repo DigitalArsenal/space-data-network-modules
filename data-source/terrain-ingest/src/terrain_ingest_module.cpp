@@ -545,6 +545,96 @@ std::string header_value(const std::string& headers, const char* lower, const ch
     return std::string();
 }
 
+constexpr long kGranuleMinLevel = 8;   // 180/2^8 = 0.703125 deg <= one granule
+constexpr long kDefaultGridSize = 65;
+
+// The whole-degree cell block a region's bbox covers.
+struct CellBlock {
+    long lon0, lon1, lat0, lat1;
+    long nx() const { return lon1 - lon0 + 1; }
+    long ny() const { return lat1 - lat0 + 1; }
+    long long count() const { return static_cast<long long>(nx()) * ny(); }
+};
+
+CellBlock region_cells(const Region& r, long min_level) {
+    // The west/south edges reach BACK past the region. A tile is assigned to
+    // the cell holding its SOUTH-WEST CORNER, and the westmost tile the region
+    // overlaps starts west of the region's own west edge (its extent contains
+    // that edge) — so its corner lands in the PREVIOUS cell. Bounding the walk
+    // by the region's own degrees would drop that whole column and row: a hole
+    // in the pyramid nothing downstream could see. The shallowest level has
+    // the largest tiles and therefore reaches back furthest, so it sets the
+    // floor for every level.
+    const double size = tile_size_deg(min_level);
+    const long max_x = (2L << min_level) - 1;
+    const long max_y = (1L << min_level) - 1;
+    const long first_x =
+        clampl(static_cast<long>(std::floor((r.west + 180.0) / size)), 0, max_x);
+    const long first_y =
+        clampl(static_cast<long>(std::floor((r.south + 90.0) / size)), 0, max_y);
+    CellBlock b;
+    b.lon0 = clampl(static_cast<long>(std::floor(-180.0 + first_x * size)), -180, 179);
+    b.lon1 = clampl(static_cast<long>(std::floor(r.east - 1e-9)), -180, 179);
+    b.lat0 = clampl(static_cast<long>(std::floor(-90.0 + first_y * size)), -90, 89);
+    b.lat1 = clampl(static_cast<long>(std::floor(r.north - 1e-9)), -90, 89);
+    if (b.lon1 < b.lon0) b.lon1 = b.lon0;
+    if (b.lat1 < b.lat0) b.lat1 = b.lat0;
+    return b;
+}
+
+struct PlannedCell {
+    const Region* region;
+    long level;
+    long lon;  // west edge of the granule cell, whole degrees
+    long lat;  // south edge
+};
+
+long long total_cells(const std::vector<Region>& regions, long min_level) {
+    long long total = 0;
+    for (const Region& r : regions) {
+        if (r.max_level < min_level) continue;
+        total += (r.max_level - min_level + 1) * region_cells(r, min_level).count();
+    }
+    return total;
+}
+
+bool cell_at_index(const std::vector<Region>& regions, long min_level, long long index,
+                   PlannedCell* out) {
+    for (const Region& r : regions) {
+        if (r.max_level < min_level) continue;
+        const CellBlock b = region_cells(r, min_level);
+        for (long level = min_level; level <= r.max_level; level++) {
+            if (index >= b.count()) {
+                index -= b.count();
+                continue;
+            }
+            out->region = &r;
+            out->level = level;
+            out->lon = b.lon0 + static_cast<long>(index % b.nx());
+            out->lat = b.lat0 + static_cast<long>(index / b.nx());
+            return true;
+        }
+    }
+    return false;
+}
+
+// Longitude WRAPS (the globe does); latitude clamps (it does not).
+long wrap_lon(long lon) {
+    while (lon < -180) lon += 360;
+    while (lon > 179) lon -= 360;
+    return lon;
+}
+
+std::string granule_request(const std::string& url, long timeout_ms) {
+    // responseWire raw-body-v1: a granule is megabytes of binary and the
+    // connector's default JSON dialect would base64-expand it by a third
+    // before the decoder saw a byte. allow_404 because the dataset publishes
+    // NO object over open ocean — an expected outcome, never an error.
+    return std::string("{\"method\":\"GET\",\"url\":\"") + json_escape(url) + "\"" +
+           ",\"responseWire\":\"raw-body-v1\",\"allow_404\":true" +
+           ",\"timeoutMs\":" + std::to_string(timeout_ms) + "}";
+}
+
 }  // namespace
 
 extern "C" {
@@ -722,6 +812,277 @@ int ingest_plan(void) {
     const long long backlog = total - end;
     plugin_set_backlog_remaining(
         backlog > 0xffffffffLL ? 0xffffffffu : static_cast<uint32_t>(backlog));
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// granule_plan — the GRANULE-MAJOR planner, and the one the pyramid builder
+// runs.
+//
+// WHY A SECOND ENUMERATION EXISTS. ingest_plan above is TILE-MAJOR: one plan
+// frame per tile, each naming the granules that tile needs. That was the right
+// shape when the encoder decoded per tile, and it is the wrong shape now that
+// it does not: the encoder amortizes a granule decode across every tile the
+// granule covers, and a tile-major plan can never hand it more than one tile
+// at a time. A z11 tile is 0.088 degrees and a granule is a whole degree, so
+// tile-major planning re-fetches and re-decodes the SAME granule about 130
+// times per cell.
+//
+// This planner inverts it. The unit of work is ONE GRANULE CELL at one level:
+//
+//   * the 2x2 granule neighbourhood is fetched (four DEM + four water-body
+//     descriptors, always exactly four so the flow's http nodes are fed
+//     unconditionally), and
+//   * ONE plan frame carries every tile of that level whose SOUTH-WEST CORNER
+//     falls in the cell.
+//
+// The south-west corner is the assignment rule for a reason: a tile so
+// assigned extends at most one tile-span north and east, so its extent lies
+// inside the 2x2 neighbourhood and NEVER needs a third cell. Assigning by
+// tile CENTRE would reach into the west and south neighbours as well and make
+// the granule set 3x3.
+//
+// LEVEL FLOOR. That argument holds only while a tile is no wider than a
+// granule, which is level 8 (180/2^8 = 0.703 degrees) and deeper. Shallower
+// levels need many granules per tile and are built by DOWNSAMPLING deeper
+// tiles, which is a different lane over the record store and not this one; a
+// plan that asks for them is REFUSED by name rather than served a tile with
+// most of its extent missing. See the task md.
+//
+// The enumeration — regions by priority, then level, then cell row-major — is
+// a pure function of the config, exactly like the tile-major one, so the
+// durable mark stays a single integer: the next CELL index.
+// ---------------------------------------------------------------------------
+
+int granule_plan(void) {
+    if (refuse_batched()) return 500;
+
+    const std::string tick = input_text("tick");
+    const std::string config = load_config();
+
+    const std::string dataset = config_string(config, "dataset_id", kDefaultDatasetId);
+    const std::string tileset = config_string(config, "tileset_id", "");
+    if (tileset.empty()) {
+        plugin_set_error("missing-tileset-id",
+                         "granule_plan needs tileset_id; a pyramid with no identity cannot be "
+                         "resumed, served or superseded.");
+        return 400;
+    }
+    const std::string epoch = config_string(config, "dataset_epoch", "");
+    if (epoch.empty()) {
+        plugin_set_error("missing-dataset-epoch",
+                         "granule_plan needs dataset_epoch: two tiles are comparable only when "
+                         "they name the edition they were cut from.");
+        return 400;
+    }
+    // RETRIEVED_AT is required on every record and is never invented here: the
+    // tick carries the run's clock, or the config states it.
+    std::string retrieved_at = config_string(config, "retrieved_at", "");
+    if (retrieved_at.empty()) json_string_field(tick, "now", &retrieved_at);
+    if (retrieved_at.empty()) json_string_field(tick, "timestamp", &retrieved_at);
+    if (retrieved_at.empty()) json_string_field(tick, "at", &retrieved_at);
+    if (retrieved_at.empty()) {
+        plugin_set_error("missing-retrieved-at",
+                         "DTTProvenance.RETRIEVED_AT is required on every record and this "
+                         "scheduler will not invent a clock: state retrieved_at in the flow "
+                         "config or carry now/timestamp/at on the tick frame.");
+        return 400;
+    }
+
+    const long global_max_level = static_cast<long>(json_number_or(config, "max_level", -1));
+    const std::vector<Region> regions =
+        parse_regions(config, global_max_level < 0 ? 0 : global_max_level);
+    if (regions.empty()) {
+        plugin_set_error("no-regions",
+                         "granule_plan fails closed with an empty regions list rather than "
+                         "inventing a whole-earth plan.");
+        return 400;
+    }
+    long min_level = static_cast<long>(json_number_or(config, "min_level", kGranuleMinLevel));
+    if (min_level < kGranuleMinLevel) {
+        char message[352];
+        std::snprintf(message, sizeof(message),
+                      "min_level %ld is shallower than %ld, where one tile stops fitting inside "
+                      "one granule (180/2^%ld = %.4f degrees). Shallower levels are built by "
+                      "DOWNSAMPLING deeper tiles over the record store, not by fetching; a plan "
+                      "that asks this lane for them would build tiles with most of their extent "
+                      "missing.",
+                      min_level, kGranuleMinLevel, kGranuleMinLevel,
+                      180.0 / static_cast<double>(1L << kGranuleMinLevel));
+        plugin_set_error("level-below-granule-floor", message);
+        return 400;
+    }
+
+    const long long total = total_cells(regions, min_level);
+    if (total == 0) {
+        plugin_set_error("no-cells",
+                         "every configured region tops out below min_level; there is nothing "
+                         "this lane can build.");
+        return 400;
+    }
+
+    long long start = 0;
+    {
+        const std::string mark = input_text("mark");
+        if (!mark.empty()) {
+            std::string mark_tileset, mark_epoch, mark_dataset;
+            json_string_field(mark, "tileset_id", &mark_tileset);
+            json_string_field(mark, "dataset_epoch", &mark_epoch);
+            json_string_field(mark, "dataset_id", &mark_dataset);
+            // A mark for another dataset, tileset or edition says nothing
+            // about this walk and is IGNORED rather than half-applied.
+            if ((mark_tileset.empty() || mark_tileset == tileset) &&
+                (mark_epoch.empty() || mark_epoch == epoch) &&
+                (mark_dataset.empty() || mark_dataset == dataset)) {
+                start = static_cast<long long>(json_number_or(mark, "next_tile_index", 0));
+                if (start < 0) start = 0;
+            }
+        }
+    }
+    if (start >= total) {
+        // A drained enumeration is a clean no-op, not an error.
+        plugin_set_backlog_remaining(0);
+        return 0;
+    }
+
+    // Scan forward to the next cell that actually holds tiles for its region.
+    // A cell the region bbox clips to nothing would otherwise cost four
+    // granule fetches to build zero tiles.
+    const std::string base = config_string(config, "granule_base_url", kDefaultGranuleBase);
+    const long grid = static_cast<long>(json_number_or(config, "grid_size", kDefaultGridSize));
+    const long timeout_ms = config_timeout_ms(config);
+
+    PlannedCell cell;
+    std::string tiles_json;
+    long long index = start;
+    long tile_count = 0;
+    for (; index < total; index++) {
+        if (!cell_at_index(regions, min_level, index, &cell)) break;
+        const Region& r = *cell.region;
+        const double size = tile_size_deg(cell.level);
+        const TileBlock block = region_block(r, cell.level);
+        // Tiles of this level whose SOUTH-WEST CORNER lies in the cell.
+        const long x0 = clampl(static_cast<long>(std::ceil((cell.lon + 180.0) / size - 1e-9)),
+                               block.x0, block.x1);
+        const long x1 = clampl(static_cast<long>(std::floor((cell.lon + 1 + 180.0) / size - 1e-9)),
+                               block.x0, block.x1);
+        const long y0 = clampl(static_cast<long>(std::ceil((cell.lat + 90.0) / size - 1e-9)),
+                               block.y0, block.y1);
+        const long y1 = clampl(static_cast<long>(std::floor((cell.lat + 1 + 90.0) / size - 1e-9)),
+                               block.y0, block.y1);
+        tiles_json.clear();
+        tile_count = 0;
+        for (long y = y0; y <= y1; y++) {
+            for (long x = x0; x <= x1; x++) {
+                const double west = -180.0 + x * size;
+                const double south = -90.0 + y * size;
+                if (west < cell.lon || west >= cell.lon + 1) continue;
+                if (south < cell.lat || south >= cell.lat + 1) continue;
+                // CHILD_AVAILABILITY is a STATEMENT ABOUT THIS TILESET, so it
+                // is computed against the region's own block at level+1 rather
+                // than assumed to be "all four".
+                unsigned children = 0;
+                if (cell.level < r.max_level) {
+                    const TileBlock cb = region_block(r, cell.level + 1);
+                    const long cx = x * 2, cy = y * 2;
+                    const auto has = [&](long ax, long ay) {
+                        return ax >= cb.x0 && ax <= cb.x1 && ay >= cb.y0 && ay <= cb.y1;
+                    };
+                    if (has(cx, cy)) children |= 1u;          // south-west
+                    if (has(cx + 1, cy)) children |= 2u;      // south-east
+                    if (has(cx, cy + 1)) children |= 4u;      // north-west
+                    if (has(cx + 1, cy + 1)) children |= 8u;  // north-east
+                }
+                if (!tiles_json.empty()) tiles_json += ",";
+                tiles_json += "{\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
+                              ",\"childAvailability\":" + std::to_string(children) + "}";
+                tile_count++;
+            }
+        }
+        if (tile_count > 0) break;
+    }
+    if (tile_count == 0) {
+        plugin_set_backlog_remaining(0);
+        return 0;
+    }
+
+    // The 2x2 granule neighbourhood, ALWAYS four descriptors so the flow's
+    // http nodes are fed unconditionally. Longitude wraps, latitude clamps.
+    const std::string primary_dem =
+        dem_url(base, static_cast<int>(cell.lat), static_cast<int>(wrap_lon(cell.lon)));
+    for (int dy = 0; dy < 2; dy++) {
+        for (int dx = 0; dx < 2; dx++) {
+            const long lat = clampl(cell.lat + dy, -90, 89);
+            const long lon = wrap_lon(cell.lon + dx);
+            const int slot = dy * 2 + dx;
+            char dem_port[16], wbm_port[16];
+            std::snprintf(dem_port, sizeof(dem_port), "dem_%d", slot);
+            std::snprintf(wbm_port, sizeof(wbm_port), "wbm_%d", slot);
+            if (push_json(dem_port,
+                          granule_request(dem_url(base, static_cast<int>(lat),
+                                                  static_cast<int>(lon)),
+                                          timeout_ms)) < 0) {
+                return 500;
+            }
+            if (push_json(wbm_port,
+                          granule_request(wbm_url(base, static_cast<int>(lat),
+                                                  static_cast<int>(lon)),
+                                          timeout_ms)) < 0) {
+                return 500;
+            }
+        }
+    }
+
+    // The encoder's plan. Provenance keys are the ones DTTProvenance is built
+    // from, verbatim — this is where the scheduler's snake_case config becomes
+    // the record contract, and nothing in it is defaulted.
+    const std::string provenance =
+        std::string("{\"datasetId\":\"") + json_escape(dataset) + "\"" + ",\"datasetName\":\"" +
+        json_escape(config_string(config, "dataset_name", kDefaultSourceName)) + "\"" +
+        ",\"datasetEpoch\":\"" + json_escape(epoch) + "\"" + ",\"retrievedAt\":\"" +
+        json_escape(retrieved_at) + "\"" + ",\"license\":\"" +
+        json_escape(config_string(config, "license", kDefaultLicense)) + "\"" +
+        ",\"licenseUrl\":\"" + json_escape(config_string(config, "license_url", kDefaultLicenseUrl)) +
+        "\"" + ",\"attribution\":\"" +
+        json_escape(config_string(config, "attribution", kDefaultAttribution)) + "\"" +
+        ",\"sourceUrl\":\"" + json_escape(primary_dem) + "\"}";
+
+    const std::string plan =
+        std::string("{\"tilesetId\":\"") + json_escape(tileset) + "\"" +
+        ",\"scheme\":\"GEOGRAPHIC_WGS84\",\"rowOriginNorth\":false" +
+        ",\"level\":" + std::to_string(cell.level) + ",\"gridSize\":" + std::to_string(grid) +
+        ",\"maxLevel\":" + std::to_string(cell.region->max_level) +
+        // Ocean tiles are NOT stored: they are identical, there are millions of
+        // them, and the serving lane synthesizes an unstored address inside
+        // published availability as exactly that.
+        ",\"skipOceanTiles\":true" +
+        ",\"verticalDatumName\":\"" +
+        json_escape(config_string(config, "vertical_datum_name", "EGM2008")) + "\"" +
+        ",\"provenance\":" + provenance + ",\"tiles\":[" + tiles_json + "]}";
+    if (push_json("plan", plan) < 0) return 500;
+
+    const std::string job =
+        std::string("{\"lane\":\"") + kLane + "\"" + ",\"dataset_id\":\"" +
+        json_escape(dataset) + "\"" + ",\"tileset_id\":\"" + json_escape(tileset) + "\"" +
+        ",\"dataset_epoch\":\"" + json_escape(epoch) + "\"" +
+        ",\"first_tile_index\":" + std::to_string(index) +
+        ",\"tiles_planned\":" + std::to_string(tile_count) + ",\"total_tiles\":" +
+        std::to_string(total) + ",\"cell_index\":" + std::to_string(index) +
+        ",\"cell_lon\":" + std::to_string(cell.lon) + ",\"cell_lat\":" +
+        std::to_string(cell.lat) + ",\"level\":" + std::to_string(cell.level) +
+        ",\"region\":\"" + json_escape(cell.region->name) + "\"" + ",\"provider_id\":\"" +
+        json_escape(config_string(config, "provider_id", kDefaultProviderId)) + "\"" +
+        ",\"source_name\":\"" +
+        json_escape(config_string(config, "source_name", kDefaultSourceName)) + "\"" +
+        ",\"granule_base_url\":\"" + json_escape(base) + "\"" + ",\"license\":\"" +
+        json_escape(config_string(config, "license", kDefaultLicense)) + "\"" +
+        ",\"attribution\":\"" +
+        json_escape(config_string(config, "attribution", kDefaultAttribution)) + "\"}";
+    if (push_json("job", job) < 0) return 500;
+
+    const long long backlog = total - (index + 1);
+    plugin_set_backlog_remaining(
+        backlog > 0xffffffffLL ? 0xffffffffu : static_cast<uint32_t>(backlog < 0 ? 0 : backlog));
     return 0;
 }
 

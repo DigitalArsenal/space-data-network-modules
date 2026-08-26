@@ -175,7 +175,294 @@
           "description": "The run contract for this batch: dataset and tileset identity, epoch, first tile index, tiles planned, total tiles."
         }
       ],
-      "description": "ONE INVOCATION IS ONE BOUNDED BATCH. The plan walks the TMS GEOGRAPHIC_WGS84 pyramid (2x1 level-0 roots, row origin SOUTH) REGION-PRIORITY ordered: regions by priority descending (config order breaks ties), shallow levels before deep within a region, tiles row-major within a level. That order is a pure function of the config, so a tile's global index is stable and the durable mark is a single integer - the next tile to plan. At most batch_tiles (default 64) plan frames are emitted per invocation and the remainder is reported through the backlog counter, so the runtime re-invokes until the pyramid drains. Granule lists are the tile extent CLIPPED to the region bbox, expanded to whole-degree cells: a level-0 tile intersects tens of thousands of 1-degree granules, and the ones outside the region render from the ellipsoid either way. Every granule is planned with allow_404 true because Copernicus publishes NO object for open-ocean cells and the guest cannot cheaply know land from ocean; the fetcher treats 404 as no-data, never an error. Fails closed with no tileset_id or an empty regions list rather than inventing a whole-earth plan. A mark for a different dataset, tileset or epoch is ignored; a drained enumeration is a clean no-op. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "description": "SUPERSEDED BY granule_plan FOR PYRAMID BUILDS (2026-08-26): this lane emits one plan frame per TILE, which cannot feed an encoder that amortizes a granule decode across every tile the granule covers - it re-fetches and re-decodes the same granule about 130 times per 1-degree cell at z11. It is kept for a caller that genuinely wants one tile per fetch and is slated for removal once the pyramid lane is live. ONE INVOCATION IS ONE BOUNDED BATCH. The plan walks the TMS GEOGRAPHIC_WGS84 pyramid (2x1 level-0 roots, row origin SOUTH) REGION-PRIORITY ordered: regions by priority descending (config order breaks ties), shallow levels before deep within a region, tiles row-major within a level. That order is a pure function of the config, so a tile's global index is stable and the durable mark is a single integer - the next tile to plan. At most batch_tiles (default 64) plan frames are emitted per invocation and the remainder is reported through the backlog counter, so the runtime re-invokes until the pyramid drains. Granule lists are the tile extent CLIPPED to the region bbox, expanded to whole-degree cells: a level-0 tile intersects tens of thousands of 1-degree granules, and the ones outside the region render from the ellipsoid either way. Every granule is planned with allow_404 true because Copernicus publishes NO object for open-ocean cells and the guest cannot cheaply know land from ocean; the fetcher treats 404 as no-data, never an error. Fails closed with no tileset_id or an empty regions list rather than inventing a whole-earth plan. A mark for a different dataset, tileset or epoch is ignored; a drained enumeration is a clean no-op. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned would destroy every other frame it was handed. A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "granule_plan",
+      "displayName": "Plan ONE granule cell and every tile whose corner falls in it",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The scheduler tick. Carries the run clock as now/timestamp/at when the flow config does not state retrieved_at; RETRIEVED_AT is required on every record and is never invented here.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One scheduler tick."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-mark",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The durable resume mark: the next CELL index of this enumeration. A mark naming another dataset, tileset or edition says nothing about this walk and is IGNORED rather than half-applied.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The durable resume mark, when one is stored."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "dem_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dem-request-0",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the elevation granule at slot 0 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "elevation granule request, slot 0. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "wbm_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-wbm-request-0",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the water-body granule at slot 0 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "water-body granule request, slot 0. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "dem_1",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dem-request-1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the elevation granule at slot 1 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "elevation granule request, slot 1. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "wbm_1",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-wbm-request-1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the water-body granule at slot 1 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "water-body granule request, slot 1. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "dem_2",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dem-request-2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the elevation granule at slot 2 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "elevation granule request, slot 2. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "wbm_2",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-wbm-request-2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the water-body granule at slot 2 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "water-body granule request, slot 2. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "dem_3",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dem-request-3",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the elevation granule at slot 3 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "elevation granule request, slot 3. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "wbm_3",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-wbm-request-3",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor for the water-body granule at slot 3 of the 2x2 neighbourhood (slot = dy*2+dx from the cell's south-west corner). responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third; allow_404 because the dataset publishes NO object over open ocean.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "water-body granule request, slot 3. All four slots are ALWAYS emitted so the flow's http nodes are fed unconditionally."
+        },
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-granule-plan",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The encoder plan for this cell: tileset identity, the level, gridSize, maxLevel, skipOceanTiles, the vertical datum name, the DTTProvenance block with the keys the record is built from verbatim, and the tiles[] BLOCK \u2014 every tile of the level whose south-west corner lies in the cell. ONE plan frame per cell, so the encoder decodes the granule set ONCE for all of them.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The amortized encoder plan for one granule cell."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-granule-job",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The run contract for this cell: dataset and tileset identity, epoch, the cell index and its lon/lat, the level, the region name, and the tile count planned.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain node or the host op it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The run contract for this cell."
+        }
+      ],
+      "description": "THE GRANULE-MAJOR PLANNER, and the one the pyramid builder runs. ingest_plan is TILE-MAJOR: one plan frame per tile, each naming the granules that tile needs. That was the right shape when the encoder decoded per tile and it is the wrong shape now that it does not - the encoder amortizes a granule decode across every tile the granule covers, and a tile-major plan can never hand it more than one tile at a time. A z11 tile is 0.088 degrees and a granule is a whole degree, so tile-major planning re-fetches and re-decodes the SAME granule about 130 times per cell. This planner inverts it: the unit of work is ONE GRANULE CELL at one level. The 2x2 granule neighbourhood is fetched (four elevation + four water-body descriptors, ALWAYS exactly four so the flow's http nodes are fed unconditionally; longitude wraps, latitude clamps) and ONE plan frame carries every tile of that level whose SOUTH-WEST CORNER falls in the cell. The south-west corner is the assignment rule for a reason: a tile so assigned extends at most one tile-span north and east, so its extent lies inside the 2x2 neighbourhood and NEVER needs a third cell - assigning by tile CENTRE would reach into the west and south neighbours too and make the granule set 3x3. LEVEL FLOOR: that argument holds only while a tile is no wider than a granule, which is level 8 (180/2^8 = 0.703 degrees) and deeper. Shallower levels need many granules per tile and are built by DOWNSAMPLING deeper tiles over the record store, a different lane; a plan that asks this one for them is REFUSED with error code \"level-below-granule-floor\" rather than served tiles with most of their extent missing. The enumeration - regions by priority, then level, then cell row-major - is a pure function of the config, so the durable mark stays a single integer: the next CELL index. Cells the region bbox clips to nothing are skipped rather than fetched to build zero tiles. Fails closed without tileset_id, dataset_epoch, a retrieved_at (config or tick) or a non-empty regions list. BATCHING: every input port is single-stream BY CONTRACT and that is ENFORCED IN CODE; maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind, so a surplus is refused with error code \"batched-input-frames\".",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },

@@ -2033,6 +2033,9 @@ int tile(void) {
         ",\"gridSize\":" + std::to_string(grid) +
         ",\"tileCount\":" + std::to_string(jobs.size()) +
         ",\"tilesEmitted\":" + std::to_string(emitted) +
+        // ingest_meta reads recordsOut to catch a batch that reported success
+        // while storing nothing; the name is its contract, not ours.
+        ",\"recordsOut\":" + std::to_string(emitted) +
         ",\"tilesSkippedOcean\":" + std::to_string(skipped_ocean_count) +
         ",\"granulesDecoded\":" + std::to_string(granules.size()) +
         ",\"granulesAbsent\":" + std::to_string(absent_granules) +
