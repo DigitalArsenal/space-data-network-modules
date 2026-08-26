@@ -561,11 +561,20 @@ test("the four national bulk archives are fetched, not skipped", async (t) => {
 
 test("the providers that could not be reached at all are GONE, not carried dead", async (t) => {
   // Measured dead on 2026-08-10: a maintenance page, an export switched off in
-  // the viewer's own config, an approvals-gated bulk lane, and a host that no
-  // longer resolves. An honest smaller list beats twelve dead ones, and the
-  // proof that one is really gone is that the registry no longer KNOWS it —
-  // not merely that it is skipped, which is a different and weaker claim.
-  const gone = ["bnetza-emf", "nl-antenneregister", "nz-rsm-rrf", "mls-archive"];
+  // the viewer's own config, and a host that no longer resolves. An honest
+  // smaller list beats twelve dead ones, and the proof that one is really gone
+  // is that the registry no longer KNOWS it — not merely that it is skipped,
+  // which is a different and weaker claim.
+  //
+  // `mls-archive` LEFT THIS LIST ON 2026-08-26, on evidence. What was measured
+  // dead in August was location.services.mozilla.com — the retired service. The
+  // register itself survives as one final full cell export on the Internet
+  // Archive, which answered live that day: 302 -> 200, 1,565,271,921 B,
+  // `Range: bytes=0-3145727` -> 206 with exactly 3,145,728 B, inflating to
+  // 9,749,556 B / 127,940 rows of the OpenCelliD bulk column contract. "The
+  // service is retired" and "the data is unreachable" are different claims and
+  // only the first one was true (graph: sdn-cellular-ingest-lands-no-batch).
+  const gone = ["bnetza-emf", "nl-antenneregister", "nz-rsm-rrf"];
   const { descriptors, outcome } = await routeFor(t, {
     PROVIDERS: gone,
     METHOD: "CENTROID",

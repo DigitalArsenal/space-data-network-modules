@@ -1,125 +1,652 @@
 {
-  "registryVersion": "2026.08.05",
-  "reviewedAt": "2026-08-05",
+  "registryVersion": "2026.08.26",
+  "reviewedAt": "2026-08-26",
   "inclusionPolicy": "Publicly reachable cell, antenna, transmitter, or licensed-radio-site data with coordinates or a documented coordinate-bearing export. Login, API-key, attribution, share-alike, non-commercial, and provider-specific terms are recorded but are not exclusion criteria.",
   "providers": [
     {
-      "id": "opencellid", "name": "OpenCelliD", "authority": "Unwired Labs / OpenCelliD contributors", "homepage": "https://opencellid.org/", "scope": "Crowdsourced cellular cells with MCC/MNC/LAC/TAC/radio and estimated coordinates", "coverage": ["global"], "adapter": "opencellid-csv", "verifiedAt": "2026-08-14",
-      "access": { "mode": "registration-token", "loginRequired": true, "credentialEnv": "OPENCELLID_TOKEN", "credentialLane": "cell_opencellid", "registrationUrl": "https://opencellid.org/", "termsUrl": "https://wiki.opencellid.org/wiki/Server_usage_policy", "notes": "The token is a QUERY PARAMETER on both endpoints, never a header. `credentialLane` is where it actually lives on an SDN node: the machine-bound credential store, lane cell_opencellid. `credentialEnv` is retained because it is part of this package's published seam, but it is the LESSER path — a credential in the environment is a credential in every child process — and the node flow reads the lane, not the variable. Daily request limits apply, so verification probes are spent deliberately." },
-      "license": { "name": "CC BY-SA 4.0", "url": "https://wiki.opencellid.org/wiki/Menu_map_view", "attribution": "OpenCelliD Project (https://opencellid.org/)" },
-      "endpoints": [{ "kind": "bulk", "url": "https://opencellid.org/ocid/downloads?token=<token>&type=full&file=cell_towers.csv.gz", "format": "csv-gz", "refresh": "daily", "verifiedAt": "2026-08-14", "notes": "CORRECTED 2026-08-14. This was https://opencellid.org/downloads.php with format csv-zip; both were wrong. That URL is a human HTML download PAGE (verified live: 200, text/html, 14,729 bytes) and the payload is GZIP, not ZIP. The real route was verified live unauthenticated the same day: token=INVALID -> 200, application/json, {\"status\":\"error\",\"message\":\"INVALID_TOKEN\"}, which proves the path, the parameter names and the token check. TRAP: a bad token answers 200 with JSON, not 4xx, so a consumer that hands the body straight to a gz decoder reports an expired credential as an empty register. ~40M cells; consumers are expected to collapse to sites rather than store per-cell." }, { "kind": "api", "url": "https://opencellid.org/cell/getInArea", "format": "api-json", "refresh": "live", "verifiedAt": "2026-08-09", "notes": "GET ?key=<token>&BBOX=<latmin>,<lonmin>,<latmax>,<lonmax>&format=json|csv&limit=<n>. BBOX is lat,lon,lat,lon. Its CSV header is NOT the bulk export's: net->mnc, area->lac, cell->cellid, averageSignal->averageSignalStrength, and there is no updated column at all." }],
-      "fieldMap": { "mnc": "net", "lac": "area", "cellId": "cell", "rangeMeters": "range", "updatedAt": "updated", "createdAt": "created" }
+      "id": "opencellid",
+      "name": "OpenCelliD",
+      "authority": "Unwired Labs / OpenCelliD contributors",
+      "homepage": "https://opencellid.org/",
+      "scope": "Crowdsourced cellular cells with MCC/MNC/LAC/TAC/radio and estimated coordinates",
+      "coverage": [
+        "global"
+      ],
+      "adapter": "opencellid-csv",
+      "verifiedAt": "2026-08-14",
+      "access": {
+        "mode": "registration-token",
+        "loginRequired": true,
+        "credentialEnv": "OPENCELLID_TOKEN",
+        "credentialLane": "cell_opencellid",
+        "registrationUrl": "https://opencellid.org/",
+        "termsUrl": "https://wiki.opencellid.org/wiki/Server_usage_policy",
+        "notes": "The token is a QUERY PARAMETER on both endpoints, never a header. `credentialLane` is where it actually lives on an SDN node: the machine-bound credential store, lane cell_opencellid. `credentialEnv` is retained because it is part of this package's published seam, but it is the LESSER path — a credential in the environment is a credential in every child process — and the node flow reads the lane, not the variable. Daily request limits apply, so verification probes are spent deliberately."
+      },
+      "license": {
+        "name": "CC BY-SA 4.0",
+        "url": "https://wiki.opencellid.org/wiki/Menu_map_view",
+        "attribution": "OpenCelliD Project (https://opencellid.org/)"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://opencellid.org/ocid/downloads?token=<token>&type=full&file=cell_towers.csv.gz",
+          "format": "csv-gz",
+          "refresh": "daily",
+          "verifiedAt": "2026-08-14",
+          "notes": "CORRECTED 2026-08-14. This was https://opencellid.org/downloads.php with format csv-zip; both were wrong. That URL is a human HTML download PAGE (verified live: 200, text/html, 14,729 bytes) and the payload is GZIP, not ZIP. The real route was verified live unauthenticated the same day: token=INVALID -> 200, application/json, {\"status\":\"error\",\"message\":\"INVALID_TOKEN\"}, which proves the path, the parameter names and the token check. TRAP: a bad token answers 200 with JSON, not 4xx, so a consumer that hands the body straight to a gz decoder reports an expired credential as an empty register. ~40M cells; consumers are expected to collapse to sites rather than store per-cell."
+        },
+        {
+          "kind": "api",
+          "url": "https://opencellid.org/cell/getInArea",
+          "format": "api-json",
+          "refresh": "live",
+          "verifiedAt": "2026-08-09",
+          "notes": "GET ?key=<token>&BBOX=<latmin>,<lonmin>,<latmax>,<lonmax>&format=json|csv&limit=<n>. BBOX is lat,lon,lat,lon. Its CSV header is NOT the bulk export's: net->mnc, area->lac, cell->cellid, averageSignal->averageSignalStrength, and there is no updated column at all."
+        }
+      ],
+      "fieldMap": {
+        "mnc": "net",
+        "lac": "area",
+        "cellId": "cell",
+        "rangeMeters": "range",
+        "updatedAt": "updated",
+        "createdAt": "created"
+      }
     },
     {
-      "id": "openstreetmap-overpass", "name": "OpenStreetMap / Overpass", "authority": "OpenStreetMap contributors", "homepage": "https://www.openstreetmap.org/", "scope": "Mapped communications towers, masts, antennas, and cellular base stations", "coverage": ["global"], "adapter": "osm-overpass", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-api", "loginRequired": false, "termsUrl": "https://operations.osmfoundation.org/policies/overpass/", "notes": "Public Overpass instances are shared services; large extracts should use planet or regional downloads." },
-      "license": { "name": "ODbL 1.0", "url": "https://www.openstreetmap.org/copyright", "attribution": "© OpenStreetMap contributors" },
-      "endpoints": [{ "kind": "api", "url": "https://overpass-api.de/api/interpreter", "format": "osm-json", "refresh": "continuous" }, { "kind": "bulk", "url": "https://planet.openstreetmap.org/", "format": "osm-json", "refresh": "weekly/daily diffs" }]
+      "id": "openstreetmap-overpass",
+      "name": "OpenStreetMap / Overpass",
+      "authority": "OpenStreetMap contributors",
+      "homepage": "https://www.openstreetmap.org/",
+      "scope": "Mapped communications towers, masts, antennas, and cellular base stations",
+      "coverage": [
+        "global"
+      ],
+      "adapter": "osm-overpass",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-api",
+        "loginRequired": false,
+        "termsUrl": "https://operations.osmfoundation.org/policies/overpass/",
+        "notes": "Public Overpass instances are shared services; large extracts should use planet or regional downloads."
+      },
+      "license": {
+        "name": "ODbL 1.0",
+        "url": "https://www.openstreetmap.org/copyright",
+        "attribution": "© OpenStreetMap contributors"
+      },
+      "endpoints": [
+        {
+          "kind": "api",
+          "url": "https://overpass-api.de/api/interpreter",
+          "format": "osm-json",
+          "refresh": "continuous"
+        },
+        {
+          "kind": "bulk",
+          "url": "https://planet.openstreetmap.org/",
+          "format": "osm-json",
+          "refresh": "weekly/daily diffs"
+        }
+      ]
     },
     {
-      "id": "fcc-asr", "name": "FCC Antenna Structure Registration", "authority": "United States Federal Communications Commission", "homepage": "https://www.fcc.gov/antenna-structure-registration", "scope": "Registered US antenna structures; structures are not necessarily cellular and must be classified downstream", "coverage": ["US"], "adapter": "fcc-asr-csv", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://www.fcc.gov/antenna-structure-registration", "notes": "Bulk public-access files are anonymous." },
-      "license": { "name": "US federal public data / FCC terms", "url": "https://www.fcc.gov/about/website-policies-notices", "attribution": "Federal Communications Commission" },
-      "endpoints": [{ "kind": "bulk", "url": "https://www.fcc.gov/wireless/data/public-access-files-database-downloads", "format": "csv-zip", "refresh": "daily" }],
-      "fieldMap": { "nativeId": "registration_number", "latitude": "latitude", "longitude": "longitude", "siteName": "location_name", "operator": "entity_name" }
+      "id": "fcc-asr",
+      "name": "FCC Antenna Structure Registration",
+      "authority": "United States Federal Communications Commission",
+      "homepage": "https://www.fcc.gov/antenna-structure-registration",
+      "scope": "Registered US antenna structures; structures are not necessarily cellular and must be classified downstream",
+      "coverage": [
+        "US"
+      ],
+      "adapter": "fcc-asr-csv",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://www.fcc.gov/antenna-structure-registration",
+        "notes": "Bulk public-access files are anonymous."
+      },
+      "license": {
+        "name": "US federal public data / FCC terms",
+        "url": "https://www.fcc.gov/about/website-policies-notices",
+        "attribution": "Federal Communications Commission"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://www.fcc.gov/wireless/data/public-access-files-database-downloads",
+          "format": "csv-zip",
+          "refresh": "daily"
+        }
+      ],
+      "fieldMap": {
+        "nativeId": "registration_number",
+        "latitude": "latitude",
+        "longitude": "longitude",
+        "siteName": "location_name",
+        "operator": "entity_name"
+      }
     },
     {
-      "id": "fcc-uls", "name": "FCC Universal Licensing System", "authority": "United States Federal Communications Commission", "homepage": "https://www.fcc.gov/wireless/universal-licensing-system", "scope": "US wireless licences, locations, frequencies, and antenna records including cellular services", "coverage": ["US"], "adapter": "fcc-uls-csv", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://www.fcc.gov/wireless/universal-licensing-system", "notes": "Weekly complete and daily transaction files are public; joins across ULS record types are required." },
-      "license": { "name": "US federal public data / FCC terms", "url": "https://www.fcc.gov/about/website-policies-notices", "attribution": "Federal Communications Commission" },
-      "endpoints": [{ "kind": "bulk", "url": "https://www.fcc.gov/wireless/data/public-access-files-database-downloads", "format": "csv-zip", "refresh": "daily/weekly" }]
+      "id": "fcc-uls",
+      "name": "FCC Universal Licensing System",
+      "authority": "United States Federal Communications Commission",
+      "homepage": "https://www.fcc.gov/wireless/universal-licensing-system",
+      "scope": "US wireless licences, locations, frequencies, and antenna records including cellular services",
+      "coverage": [
+        "US"
+      ],
+      "adapter": "fcc-uls-csv",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://www.fcc.gov/wireless/universal-licensing-system",
+        "notes": "Weekly complete and daily transaction files are public; joins across ULS record types are required."
+      },
+      "license": {
+        "name": "US federal public data / FCC terms",
+        "url": "https://www.fcc.gov/about/website-policies-notices",
+        "attribution": "Federal Communications Commission"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://www.fcc.gov/wireless/data/public-access-files-database-downloads",
+          "format": "csv-zip",
+          "refresh": "daily/weekly"
+        }
+      ]
     },
     {
-      "id": "fcc-uls-3650", "name": "FCC ULS 3650 MHz base-station locations", "authority": "United States Federal Communications Commission", "homepage": "https://opendata.fcc.gov/", "scope": "US licensed 3650 MHz fixed base-station locations with coordinates and licensee; a licensed site, NOT a cellular cell — no MCC/MNC/cell id is published, so records carry site identity and position only", "coverage": ["US"], "adapter": "socrata-soql-json", "verifiedAt": "2026-08-08",
-      "access": { "mode": "anonymous-api", "loginRequired": false, "termsUrl": "https://opendata.fcc.gov/", "notes": "Row API, no key required for modest volumes. Latitude/longitude are TEXT columns, so a numeric bbox filter must cast (`u_latitude::number`); comparing them as text silently matches nothing." },
-      "license": { "name": "US federal public data / FCC terms", "url": "https://www.fcc.gov/about/website-policies-notices", "attribution": "Federal Communications Commission" },
-      "endpoints": [{ "kind": "rows", "url": "https://opendata.fcc.gov/resource/euz5-46g2.json", "format": "json", "query": "$where=<bbox filter> AND u_yn_base_station='true'&$limit=<n>", "refresh": "as published" }],
-      "fieldMap": { "nativeId": "u_location_id", "latitude": "u_latitude", "longitude": "u_longitude", "siteName": "u_location_name", "operator": "u_license_name" },
+      "id": "fcc-uls-3650",
+      "name": "FCC ULS 3650 MHz base-station locations",
+      "authority": "United States Federal Communications Commission",
+      "homepage": "https://opendata.fcc.gov/",
+      "scope": "US licensed 3650 MHz fixed base-station locations with coordinates and licensee; a licensed site, NOT a cellular cell — no MCC/MNC/cell id is published, so records carry site identity and position only",
+      "coverage": [
+        "US"
+      ],
+      "adapter": "socrata-soql-json",
+      "verifiedAt": "2026-08-08",
+      "access": {
+        "mode": "anonymous-api",
+        "loginRequired": false,
+        "termsUrl": "https://opendata.fcc.gov/",
+        "notes": "Row API, no key required for modest volumes. Latitude/longitude are TEXT columns, so a numeric bbox filter must cast (`u_latitude::number`); comparing them as text silently matches nothing."
+      },
+      "license": {
+        "name": "US federal public data / FCC terms",
+        "url": "https://www.fcc.gov/about/website-policies-notices",
+        "attribution": "Federal Communications Commission"
+      },
+      "endpoints": [
+        {
+          "kind": "rows",
+          "url": "https://opendata.fcc.gov/resource/euz5-46g2.json",
+          "format": "json",
+          "query": "$where=<bbox filter> AND u_yn_base_station='true'&$limit=<n>",
+          "refresh": "as published"
+        }
+      ],
+      "fieldMap": {
+        "nativeId": "u_location_id",
+        "latitude": "u_latitude",
+        "longitude": "u_longitude",
+        "siteName": "u_location_name",
+        "operator": "u_license_name"
+      },
       "notes": "This is the FCC dataset that serves ROWS. `fcc-asr` and `fcc-uls` above are the same authority published only as bulk ZIP archives — documented here, but no query against them can return parseable rows, which is why the module fetches this one instead."
     },
     {
-      "id": "anfr-cartoradio", "name": "ANFR radio installations >5W", "authority": "Agence nationale des fréquences", "homepage": "https://www.cartoradio.fr/", "scope": "French radio installations over 5 watts, including mobile-network supports and antennas", "coverage": ["FR"], "adapter": "anfr-csv", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://www.data.gouv.fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1", "notes": "Monthly/current ZIP resources are published on data.gouv.fr." },
-      "license": { "name": "Licence Ouverte 2.0", "url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/", "attribution": "Agence nationale des fréquences (ANFR)" },
-      "endpoints": [{ "kind": "bulk", "url": "https://www.data.gouv.fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1", "format": "csv-zip", "refresh": "monthly" }]
+      "id": "anfr-cartoradio",
+      "name": "ANFR radio installations >5W",
+      "authority": "Agence nationale des fréquences",
+      "homepage": "https://www.cartoradio.fr/",
+      "scope": "French radio installations over 5 watts, including mobile-network supports and antennas",
+      "coverage": [
+        "FR"
+      ],
+      "adapter": "anfr-csv",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://www.data.gouv.fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1",
+        "notes": "Monthly/current ZIP resources are published on data.gouv.fr."
+      },
+      "license": {
+        "name": "Licence Ouverte 2.0",
+        "url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+        "attribution": "Agence nationale des fréquences (ANFR)"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://www.data.gouv.fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1",
+          "format": "csv-zip",
+          "refresh": "monthly"
+        }
+      ]
     },
     {
-      "id": "acma-rrl", "name": "ACMA Register of Radiocommunications Licences", "authority": "Australian Communications and Media Authority", "homepage": "https://www.acma.gov.au/register-radiocommunications-licences-rrl", "scope": "Australian licensed radio sites, assignments, antennas, frequencies, and coordinates", "coverage": ["AU"], "adapter": "acma-rrl-csv", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://www.acma.gov.au/radiocomms-licence-data", "notes": "Complete/difference downloads are anonymous; the live API separately requires Digital ID authentication." },
-      "license": { "name": "ACMA RRL data licence", "url": "https://www.acma.gov.au/radiocomms-licence-data", "attribution": "Australian Communications and Media Authority" },
-      "endpoints": [{ "kind": "bulk", "url": "https://www.acma.gov.au/radiocomms-licence-data", "format": "csv-zip", "refresh": "several times daily" }, { "kind": "api", "url": "https://www.acma.gov.au/radiocomms-licence-data", "format": "api-json", "refresh": "live", "loginRequired": true }]
+      "id": "acma-rrl",
+      "name": "ACMA Register of Radiocommunications Licences",
+      "authority": "Australian Communications and Media Authority",
+      "homepage": "https://www.acma.gov.au/register-radiocommunications-licences-rrl",
+      "scope": "Australian licensed radio sites, assignments, antennas, frequencies, and coordinates",
+      "coverage": [
+        "AU"
+      ],
+      "adapter": "acma-rrl-csv",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://www.acma.gov.au/radiocomms-licence-data",
+        "notes": "Complete/difference downloads are anonymous; the live API separately requires Digital ID authentication."
+      },
+      "license": {
+        "name": "ACMA RRL data licence",
+        "url": "https://www.acma.gov.au/radiocomms-licence-data",
+        "attribution": "Australian Communications and Media Authority"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://www.acma.gov.au/radiocomms-licence-data",
+          "format": "csv-zip",
+          "refresh": "several times daily"
+        },
+        {
+          "kind": "api",
+          "url": "https://www.acma.gov.au/radiocomms-licence-data",
+          "format": "api-json",
+          "refresh": "live",
+          "loginRequired": true
+        }
+      ]
     },
     {
-      "id": "ised-sms-tafl", "name": "ISED Spectrum Management System / TAFL", "authority": "Innovation, Science and Economic Development Canada", "homepage": "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates", "scope": "Canadian radio frequency assignments and station locations, including land-mobile base stations", "coverage": ["CA"], "adapter": "ised-tafl-csv", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates", "notes": "Public spectrum/licence data; cellular classification requires service/frequency filters." },
-      "license": { "name": "Open Government Licence – Canada", "url": "https://open.canada.ca/en/open-government-licence-canada", "attribution": "Innovation, Science and Economic Development Canada" },
-      "endpoints": [{ "kind": "bulk", "url": "https://ised-isde.canada.ca/site/spectrum-management-system/en/download-sms-data", "format": "csv-zip", "refresh": "monthly" }]
+      "id": "ised-sms-tafl",
+      "name": "ISED Spectrum Management System / TAFL",
+      "authority": "Innovation, Science and Economic Development Canada",
+      "homepage": "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates",
+      "scope": "Canadian radio frequency assignments and station locations, including land-mobile base stations",
+      "coverage": [
+        "CA"
+      ],
+      "adapter": "ised-tafl-csv",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates",
+        "notes": "Public spectrum/licence data; cellular classification requires service/frequency filters."
+      },
+      "license": {
+        "name": "Open Government Licence – Canada",
+        "url": "https://open.canada.ca/en/open-government-licence-canada",
+        "attribution": "Innovation, Science and Economic Development Canada"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://ised-isde.canada.ca/site/spectrum-management-system/en/download-sms-data",
+          "format": "csv-zip",
+          "refresh": "monthly"
+        }
+      ]
     },
     {
-      "id": "ofcom-connected-nations", "name": "Ofcom Connected Nations mobile coverage", "authority": "Ofcom", "homepage": "https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-2024", "scope": "UK mobile coverage and infrastructure-related open datasets; primarily coverage rather than exact cell identities", "coverage": ["GB"], "adapter": "generic-tabular", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://www.ofcom.org.uk/about-ofcom/website/terms-of-use", "notes": "Dataset inventory varies by Connected Nations release; retain release URL in provenance." },
-      "license": { "name": "Open Government Licence / Ofcom terms as stated per release", "url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/", "attribution": "Ofcom" },
-      "endpoints": [{ "kind": "bulk", "url": "https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-2024", "format": "csv-zip", "refresh": "annual/periodic" }]
+      "id": "ofcom-connected-nations",
+      "name": "Ofcom Connected Nations mobile coverage",
+      "authority": "Ofcom",
+      "homepage": "https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-2024",
+      "scope": "UK mobile coverage and infrastructure-related open datasets; primarily coverage rather than exact cell identities",
+      "coverage": [
+        "GB"
+      ],
+      "adapter": "generic-tabular",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://www.ofcom.org.uk/about-ofcom/website/terms-of-use",
+        "notes": "Dataset inventory varies by Connected Nations release; retain release URL in provenance."
+      },
+      "license": {
+        "name": "Open Government Licence / Ofcom terms as stated per release",
+        "url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        "attribution": "Ofcom"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-2024",
+          "format": "csv-zip",
+          "refresh": "annual/periodic"
+        }
+      ]
     },
     {
-      "id": "bnetza-emf", "name": "Bundesnetzagentur EMF database", "authority": "Bundesnetzagentur", "homepage": "https://www.bundesnetzagentur.de/emf", "scope": "German fixed radio installations requiring site certification, exposed through the public EMF map", "coverage": ["DE"], "adapter": "interactive-catalog", "verifiedAt": "2026-08-05",
-      "access": { "mode": "interactive-public", "loginRequired": false, "termsUrl": "https://www.bundesnetzagentur.de/DE/Allgemeines/DieBundesnetzagentur/Datenschutz/start.html", "notes": "Public map/search; no stable supported bulk API is asserted. Adapter seam records discovery until an official export is published." },
-      "license": { "name": "Bundesnetzagentur website/data terms", "url": "https://www.bundesnetzagentur.de/DE/Allgemeines/DieBundesnetzagentur/Impressum/start.html", "attribution": "Bundesnetzagentur" },
-      "endpoints": [{ "kind": "catalog", "url": "https://www.bundesnetzagentur.de/emf", "format": "html", "refresh": "continuous" }]
+      "id": "bnetza-emf",
+      "name": "Bundesnetzagentur EMF database",
+      "authority": "Bundesnetzagentur",
+      "homepage": "https://www.bundesnetzagentur.de/emf",
+      "scope": "German fixed radio installations requiring site certification, exposed through the public EMF map",
+      "coverage": [
+        "DE"
+      ],
+      "adapter": "interactive-catalog",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "interactive-public",
+        "loginRequired": false,
+        "termsUrl": "https://www.bundesnetzagentur.de/DE/Allgemeines/DieBundesnetzagentur/Datenschutz/start.html",
+        "notes": "Public map/search; no stable supported bulk API is asserted. Adapter seam records discovery until an official export is published."
+      },
+      "license": {
+        "name": "Bundesnetzagentur website/data terms",
+        "url": "https://www.bundesnetzagentur.de/DE/Allgemeines/DieBundesnetzagentur/Impressum/start.html",
+        "attribution": "Bundesnetzagentur"
+      },
+      "endpoints": [
+        {
+          "kind": "catalog",
+          "url": "https://www.bundesnetzagentur.de/emf",
+          "format": "html",
+          "refresh": "continuous"
+        }
+      ]
     },
     {
-      "id": "nl-antenneregister", "name": "Dutch Antenneregister", "authority": "Rijksinspectie Digitale Infrastructuur", "homepage": "https://www.antenneregister.nl/", "scope": "Netherlands antenna installations including mobile communications", "coverage": ["NL"], "adapter": "interactive-catalog", "verifiedAt": "2026-08-05",
-      "access": { "mode": "interactive-public", "loginRequired": false, "termsUrl": "https://www.antenneregister.nl/", "notes": "Public official map. Registry keeps the source even where a stable bulk endpoint is not documented." },
-      "license": { "name": "Dutch government website/data terms", "url": "https://www.rijksoverheid.nl/copyright", "attribution": "Rijksinspectie Digitale Infrastructuur" },
-      "endpoints": [{ "kind": "catalog", "url": "https://www.antenneregister.nl/", "format": "html", "refresh": "continuous" }]
+      "id": "nl-antenneregister",
+      "name": "Dutch Antenneregister",
+      "authority": "Rijksinspectie Digitale Infrastructuur",
+      "homepage": "https://www.antenneregister.nl/",
+      "scope": "Netherlands antenna installations including mobile communications",
+      "coverage": [
+        "NL"
+      ],
+      "adapter": "interactive-catalog",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "interactive-public",
+        "loginRequired": false,
+        "termsUrl": "https://www.antenneregister.nl/",
+        "notes": "Public official map. Registry keeps the source even where a stable bulk endpoint is not documented."
+      },
+      "license": {
+        "name": "Dutch government website/data terms",
+        "url": "https://www.rijksoverheid.nl/copyright",
+        "attribution": "Rijksinspectie Digitale Infrastructuur"
+      },
+      "endpoints": [
+        {
+          "kind": "catalog",
+          "url": "https://www.antenneregister.nl/",
+          "format": "html",
+          "refresh": "continuous"
+        }
+      ]
     },
     {
-      "id": "bakom-mobile-sites", "name": "OFCOM/BAKOM mobile radio transmitter sites", "authority": "Swiss Federal Office of Communications", "homepage": "https://www.bakom.admin.ch/", "scope": "Swiss mobile-radio transmitter locations by technology", "coverage": ["CH"], "adapter": "swisstopo-geojson", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-api", "loginRequired": false, "termsUrl": "https://www.geo.admin.ch/en/terms-of-use", "notes": "Published through the federal geodata infrastructure; layer/version metadata should be refreshed before ingest." },
-      "license": { "name": "Federal geodata terms", "url": "https://www.geo.admin.ch/en/terms-of-use", "attribution": "Federal Office of Communications (OFCOM)" },
-      "endpoints": [{ "kind": "api", "url": "https://api3.geo.admin.ch/", "format": "geojson", "refresh": "periodic" }]
+      "id": "bakom-mobile-sites",
+      "name": "OFCOM/BAKOM mobile radio transmitter sites",
+      "authority": "Swiss Federal Office of Communications",
+      "homepage": "https://www.bakom.admin.ch/",
+      "scope": "Swiss mobile-radio transmitter locations by technology",
+      "coverage": [
+        "CH"
+      ],
+      "adapter": "swisstopo-geojson",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-api",
+        "loginRequired": false,
+        "termsUrl": "https://www.geo.admin.ch/en/terms-of-use",
+        "notes": "Published through the federal geodata infrastructure; layer/version metadata should be refreshed before ingest."
+      },
+      "license": {
+        "name": "Federal geodata terms",
+        "url": "https://www.geo.admin.ch/en/terms-of-use",
+        "attribution": "Federal Office of Communications (OFCOM)"
+      },
+      "endpoints": [
+        {
+          "kind": "api",
+          "url": "https://api3.geo.admin.ch/",
+          "format": "geojson",
+          "refresh": "periodic"
+        }
+      ]
     },
     {
-      "id": "anatel-mobile-stations", "name": "Anatel licensed mobile stations", "authority": "Agência Nacional de Telecomunicações", "homepage": "https://dados.gov.br/dados/conjuntos-dados/estacoes-licenciadas", "scope": "Brazilian licensed stations, including Serviço Móvel Pessoal base stations", "coverage": ["BR"], "adapter": "anatel-csv", "verifiedAt": "2026-08-05",
-      "access": { "mode": "anonymous-download", "loginRequired": false, "termsUrl": "https://www.gov.br/anatel/pt-br/acesso-a-informacao/dados-abertos", "notes": "Official open-data resources may be partitioned by service or state." },
-      "license": { "name": "Brazilian federal open-data terms", "url": "https://www.gov.br/anatel/pt-br/acesso-a-informacao/dados-abertos", "attribution": "Agência Nacional de Telecomunicações (Anatel)" },
-      "endpoints": [{ "kind": "bulk", "url": "https://dados.gov.br/dados/conjuntos-dados/estacoes-licenciadas", "format": "csv-zip", "refresh": "monthly" }]
+      "id": "anatel-mobile-stations",
+      "name": "Anatel licensed mobile stations",
+      "authority": "Agência Nacional de Telecomunicações",
+      "homepage": "https://dados.gov.br/dados/conjuntos-dados/estacoes-licenciadas",
+      "scope": "Brazilian licensed stations, including Serviço Móvel Pessoal base stations",
+      "coverage": [
+        "BR"
+      ],
+      "adapter": "anatel-csv",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://www.gov.br/anatel/pt-br/acesso-a-informacao/dados-abertos",
+        "notes": "Official open-data resources may be partitioned by service or state."
+      },
+      "license": {
+        "name": "Brazilian federal open-data terms",
+        "url": "https://www.gov.br/anatel/pt-br/acesso-a-informacao/dados-abertos",
+        "attribution": "Agência Nacional de Telecomunicações (Anatel)"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://dados.gov.br/dados/conjuntos-dados/estacoes-licenciadas",
+          "format": "csv-zip",
+          "refresh": "monthly"
+        }
+      ]
     },
     {
-      "id": "comreg-siteviewer", "name": "ComReg SiteViewer", "authority": "Commission for Communications Regulation", "homepage": "https://siteviewer.comreg.ie/", "scope": "Irish licensed radio transmitter sites including mobile operators", "coverage": ["IE"], "adapter": "interactive-catalog", "verifiedAt": "2026-08-05",
-      "access": { "mode": "interactive-public", "loginRequired": false, "termsUrl": "https://www.comreg.ie/about/terms-conditions/", "notes": "Official public map; do not rely on undocumented private endpoints." },
-      "license": { "name": "ComReg terms", "url": "https://www.comreg.ie/about/terms-conditions/", "attribution": "Commission for Communications Regulation" },
-      "endpoints": [{ "kind": "catalog", "url": "https://siteviewer.comreg.ie/", "format": "html", "refresh": "continuous" }]
+      "id": "comreg-siteviewer",
+      "name": "ComReg SiteViewer",
+      "authority": "Commission for Communications Regulation",
+      "homepage": "https://siteviewer.comreg.ie/",
+      "scope": "Irish licensed radio transmitter sites including mobile operators",
+      "coverage": [
+        "IE"
+      ],
+      "adapter": "interactive-catalog",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "interactive-public",
+        "loginRequired": false,
+        "termsUrl": "https://www.comreg.ie/about/terms-conditions/",
+        "notes": "Official public map; do not rely on undocumented private endpoints."
+      },
+      "license": {
+        "name": "ComReg terms",
+        "url": "https://www.comreg.ie/about/terms-conditions/",
+        "attribution": "Commission for Communications Regulation"
+      },
+      "endpoints": [
+        {
+          "kind": "catalog",
+          "url": "https://siteviewer.comreg.ie/",
+          "format": "html",
+          "refresh": "continuous"
+        }
+      ]
     },
     {
-      "id": "nz-rsm-rrf", "name": "New Zealand Register of Radio Frequencies", "authority": "Radio Spectrum Management, MBIE", "homepage": "https://rrf.rsm.govt.nz/", "scope": "New Zealand radio licences, frequencies, and transmit locations", "coverage": ["NZ"], "adapter": "generic-tabular", "verifiedAt": "2026-08-05",
-      "access": { "mode": "interactive-public", "loginRequired": false, "termsUrl": "https://www.rsm.govt.nz/about/terms-of-use", "notes": "Public register search; account functions are separate. Bulk/API availability must be verified per RSM release." },
-      "license": { "name": "New Zealand Government copyright/data terms", "url": "https://www.rsm.govt.nz/about/copyright", "attribution": "Radio Spectrum Management, MBIE" },
-      "endpoints": [{ "kind": "catalog", "url": "https://rrf.rsm.govt.nz/", "format": "html", "refresh": "continuous" }]
+      "id": "nz-rsm-rrf",
+      "name": "New Zealand Register of Radio Frequencies",
+      "authority": "Radio Spectrum Management, MBIE",
+      "homepage": "https://rrf.rsm.govt.nz/",
+      "scope": "New Zealand radio licences, frequencies, and transmit locations",
+      "coverage": [
+        "NZ"
+      ],
+      "adapter": "generic-tabular",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "interactive-public",
+        "loginRequired": false,
+        "termsUrl": "https://www.rsm.govt.nz/about/terms-of-use",
+        "notes": "Public register search; account functions are separate. Bulk/API availability must be verified per RSM release."
+      },
+      "license": {
+        "name": "New Zealand Government copyright/data terms",
+        "url": "https://www.rsm.govt.nz/about/copyright",
+        "attribution": "Radio Spectrum Management, MBIE"
+      },
+      "endpoints": [
+        {
+          "kind": "catalog",
+          "url": "https://rrf.rsm.govt.nz/",
+          "format": "html",
+          "refresh": "continuous"
+        }
+      ]
     },
     {
-      "id": "cellmapper", "name": "CellMapper", "authority": "CellMapper contributors", "homepage": "https://www.cellmapper.net/", "scope": "Crowdsourced cellular cells, sectors, trails, and estimated tower positions", "coverage": ["global"], "adapter": "interactive-catalog", "verifiedAt": "2026-08-05",
-      "access": { "mode": "interactive-public", "loginRequired": false, "registrationUrl": "https://www.cellmapper.net/register", "termsUrl": "https://www.cellmapper.net/terms", "notes": "Map browsing is public; contribution/account features require login. No unsupported scraping or undocumented API use." },
-      "license": { "name": "CellMapper terms", "url": "https://www.cellmapper.net/terms", "attribution": "CellMapper contributors" },
-      "endpoints": [{ "kind": "catalog", "url": "https://www.cellmapper.net/map", "format": "html", "refresh": "continuous" }]
+      "id": "cellmapper",
+      "name": "CellMapper",
+      "authority": "CellMapper contributors",
+      "homepage": "https://www.cellmapper.net/",
+      "scope": "Crowdsourced cellular cells, sectors, trails, and estimated tower positions",
+      "coverage": [
+        "global"
+      ],
+      "adapter": "interactive-catalog",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "interactive-public",
+        "loginRequired": false,
+        "registrationUrl": "https://www.cellmapper.net/register",
+        "termsUrl": "https://www.cellmapper.net/terms",
+        "notes": "Map browsing is public; contribution/account features require login. No unsupported scraping or undocumented API use."
+      },
+      "license": {
+        "name": "CellMapper terms",
+        "url": "https://www.cellmapper.net/terms",
+        "attribution": "CellMapper contributors"
+      },
+      "endpoints": [
+        {
+          "kind": "catalog",
+          "url": "https://www.cellmapper.net/map",
+          "format": "html",
+          "refresh": "continuous"
+        }
+      ]
     },
     {
-      "id": "wigle", "name": "WiGLE", "authority": "WiGLE.net contributors", "homepage": "https://wigle.net/", "scope": "Crowdsourced cellular and wireless observations", "coverage": ["global"], "adapter": "wigle-api", "verifiedAt": "2026-08-05",
-      "access": { "mode": "account-api", "loginRequired": true, "credentialEnv": "WIGLE_API_TOKEN", "registrationUrl": "https://wigle.net/register", "termsUrl": "https://wigle.net/legal", "notes": "API and downloads require an account/token and are rate/terms constrained." },
-      "license": { "name": "WiGLE terms", "url": "https://wigle.net/legal", "attribution": "WiGLE.net" },
-      "endpoints": [{ "kind": "api", "url": "https://api.wigle.net/swagger", "format": "api-json", "refresh": "live" }]
+      "id": "wigle",
+      "name": "WiGLE",
+      "authority": "WiGLE.net contributors",
+      "homepage": "https://wigle.net/",
+      "scope": "Crowdsourced cellular and wireless observations",
+      "coverage": [
+        "global"
+      ],
+      "adapter": "wigle-api",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "account-api",
+        "loginRequired": true,
+        "credentialEnv": "WIGLE_API_TOKEN",
+        "registrationUrl": "https://wigle.net/register",
+        "termsUrl": "https://wigle.net/legal",
+        "notes": "API and downloads require an account/token and are rate/terms constrained."
+      },
+      "license": {
+        "name": "WiGLE terms",
+        "url": "https://wigle.net/legal",
+        "attribution": "WiGLE.net"
+      },
+      "endpoints": [
+        {
+          "kind": "api",
+          "url": "https://api.wigle.net/swagger",
+          "format": "api-json",
+          "refresh": "live"
+        }
+      ]
     },
     {
-      "id": "mls-archive", "name": "Mozilla Location Service historical exports", "authority": "Mozilla / community contributors", "homepage": "https://location.services.mozilla.com/", "scope": "Historical crowdsourced cellular observations; service and public downloads are retired", "coverage": ["global", "historical"], "adapter": "archive-csv", "verifiedAt": "2026-08-05",
-      "access": { "mode": "interactive-public", "loginRequired": false, "termsUrl": "https://www.mozilla.org/en-US/about/legal/terms/mozilla/", "notes": "Retained for provenance and archive discovery; Mozilla stopped accepting submissions and retired public data downloads. Do not treat it as a current live feed." },
-      "license": { "name": "Historical MLS data terms", "url": "https://location.services.mozilla.com/", "attribution": "Mozilla Location Service contributors" },
-      "endpoints": [{ "kind": "catalog", "url": "https://location.services.mozilla.com/", "format": "html", "refresh": "retired" }]
+      "id": "mls-archive",
+      "name": "Mozilla Location Service historical exports",
+      "authority": "Mozilla / community contributors",
+      "homepage": "https://location.services.mozilla.com/",
+      "scope": "Historical crowdsourced cellular observations; the service is retired and its register survives as ONE final full cell export",
+      "coverage": [
+        "global",
+        "historical"
+      ],
+      "adapter": "opencellid-csv",
+      "verifiedAt": "2026-08-26",
+      "access": {
+        "mode": "anonymous-download",
+        "loginRequired": false,
+        "termsUrl": "https://www.mozilla.org/en-US/about/legal/terms/mozilla/",
+        "notes": "Mozilla stopped accepting submissions and retired the service; the final full cell export is anonymously downloadable from the Internet Archive and is the only copy. Verified live 2026-08-26: 302 -> 200, 1,565,271,921 B, Range answers 206, and the header row is the OpenCelliD bulk-export column contract (radio,mcc,net,area,cell,unit,lon,lat,range,samples,changeable,created,updated,averageSignal). It is a SNAPSHOT, never a live feed."
+      },
+      "license": {
+        "name": "Public Domain Mark 1.0",
+        "url": "https://creativecommons.org/publicdomain/mark/1.0/",
+        "attribution": "Mozilla Location Service contributors"
+      },
+      "endpoints": [
+        {
+          "kind": "bulk",
+          "url": "https://archive.org/download/MLS_Full_Cell_Export_Final/MLS-full-cell-export-final.csv.gz",
+          "format": "csv-gz",
+          "refresh": "retired"
+        }
+      ]
     },
     {
-      "id": "gsma-operator-reference", "name": "GSMA operator and network reference data", "authority": "GSMA", "homepage": "https://www.gsma.com/", "scope": "Operator, MCC/MNC, roaming, and network reference enrichment; not a tower-location source", "coverage": ["global", "reference"], "adapter": "reference-catalog", "verifiedAt": "2026-08-05",
-      "access": { "mode": "account-api", "loginRequired": true, "registrationUrl": "https://www.gsma.com/services/", "termsUrl": "https://www.gsma.com/about-us/legal/", "notes": "Included as an enrichment source. Product access and licence vary; never infer tower coordinates from operator metadata." },
-      "license": { "name": "GSMA product terms", "url": "https://www.gsma.com/about-us/legal/", "attribution": "GSMA" },
-      "endpoints": [{ "kind": "catalog", "url": "https://www.gsma.com/services/", "format": "html", "refresh": "product-specific" }]
+      "id": "gsma-operator-reference",
+      "name": "GSMA operator and network reference data",
+      "authority": "GSMA",
+      "homepage": "https://www.gsma.com/",
+      "scope": "Operator, MCC/MNC, roaming, and network reference enrichment; not a tower-location source",
+      "coverage": [
+        "global",
+        "reference"
+      ],
+      "adapter": "reference-catalog",
+      "verifiedAt": "2026-08-05",
+      "access": {
+        "mode": "account-api",
+        "loginRequired": true,
+        "registrationUrl": "https://www.gsma.com/services/",
+        "termsUrl": "https://www.gsma.com/about-us/legal/",
+        "notes": "Included as an enrichment source. Product access and licence vary; never infer tower coordinates from operator metadata."
+      },
+      "license": {
+        "name": "GSMA product terms",
+        "url": "https://www.gsma.com/about-us/legal/",
+        "attribution": "GSMA"
+      },
+      "endpoints": [
+        {
+          "kind": "catalog",
+          "url": "https://www.gsma.com/services/",
+          "format": "html",
+          "refresh": "product-specific"
+        }
+      ]
     }
   ]
 }

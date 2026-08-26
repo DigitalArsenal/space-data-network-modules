@@ -333,7 +333,19 @@ int write_record(void) {
     }
 
     const std::string source = json_string_field(meta, "source");
-    std::string payload = std::string("{\"type\":\"") + json_escape(type) + "\"";
+    // THE HOSTCALL KEY IS `schema`, NOT `type`.
+    //
+    // `storage.write {schema, data:base64}` is the contract every host
+    // implements — the Go node (sdn-server internal/modulert/caps/storage.go,
+    // which reads str("schema")) and the SDK hosts, which mirror it by name.
+    // This module sent `type`, so the host saw an EMPTY schema and refused with
+    // "missing schema" on every call: the durable $IRM resume mark this node
+    // exists to persist was never written even once, on either runtime, and the
+    // cellular ingest lane refetched chunk 0 forever (graph:
+    // sdn-cellular-ingest-lands-no-batch). `type` remains the META frame's key,
+    // which is where the module reads the declared type FROM; it was never the
+    // hostcall's.
+    std::string payload = std::string("{\"schema\":\"") + json_escape(type) + "\"";
     if (!source.empty()) payload += ",\"source\":\"" + json_escape(source) + "\"";
     payload += ",\"data\":\"" + base64_encode(record->payload, record->payload_length) + "\"}";
 

@@ -401,6 +401,46 @@ constexpr ProviderSpec kProviders[] = {
    "CC BY-SA 4.0","https://wiki.opencellid.org/wiki/Menu_map_view","OpenCelliD Project",true,false,
    "bulk",nullptr},
 
+  // ── Mozilla Location Service, final full cell export ──────────────────────
+  // THE PROVIDER THE WORLDWIDE INGEST LANE ACTUALLY RUNS, and the one whose
+  // absence from this table made three host-02 runs land nothing in silence
+  // (graph: sdn-cellular-ingest-lands-no-batch). The retriever's flow config
+  // named a provider this table did not have; `find_provider` returned nullptr;
+  // `parse` dropped the body.
+  // A registry that cannot name the source an operator configured does not
+  // prevent a wrong ingest — it produces an empty one that reports success.
+  //
+  // THE ID IS `mls-archive`, which is the id packages/cell-towers-worldwide
+  // already published for this source. Two names for one provider is how a
+  // registry and a catalog drift apart; the catalog's entry is updated with the
+  // endpoint and licence verified here rather than a second id being minted.
+  //
+  // MLS was retired in 2024 and its register was published ONCE as a final
+  // export. That is why the URL is an archive item and not a live service
+  // endpoint: there is no newer copy to point at, and a dead upstream would be
+  // the dishonest alternative. Verified live 2026-08-26: 302 -> 200,
+  // 1,565,271,921 B, `Range: bytes=0-3145727` answers 206 with exactly
+  // 3,145,728 B, and that chunk inflates to 9,749,556 B / 127,940 lines.
+  //
+  // The FORMAT is byte-identical to the OpenCelliD bulk export — verified
+  // against the live header row, `radio,mcc,net,area,cell,unit,lon,lat,range,
+  // samples,changeable,created,updated,averageSignal` — so it decodes through
+  // `decode_opencellid_bulk_gz` with no new decoder. Sharing a decoder is NOT
+  // sharing an identity: the rows are Mozilla's, published under a public
+  // domain mark, and attributing them to OpenCelliD's CC BY-SA register would
+  // put a licence and an authority on stored records that never asserted them.
+  //
+  // No login: the archive item is anonymously downloadable, which is what makes
+  // this the worldwide lane that runs today while the OpenCelliD bulk route
+  // waits on a credential.
+  {"mls-archive","Mozilla Corporation",
+   "https://archive.org/download/MLS_Full_Cell_Export_Final/MLS-full-cell-export-final.csv.gz",
+   {nullptr,nullptr,nullptr},
+   "","","csv-gz",
+   "Public Domain Mark 1.0","https://creativecommons.org/publicdomain/mark/1.0/",
+   "Mozilla Location Service contributors",false,false,
+   "bulk",nullptr},
+
   // ── OpenStreetMap via Overpass ────────────────────────────────────────────
   // Bounded-region only: an unbounded Overpass program against a public
   // interpreter times out and is an abuse of a donated service. Three mirrors
@@ -1640,8 +1680,13 @@ const char* detect_body_format(const std::string& body) {
     // ships `TAFL_LTAF.csv`, only ANFR ships `SUP_SUPPORT.txt`. Reading the
     // central directory to check is cheap (a backward scan over the last 64 KiB
     // plus one walk of the entry table) and inflates nothing.
-    // gzip. Unlike the ZIPs there is only ONE gzip provider, so the magic
-    // number is unambiguous on its own and no member table needs walking.
+    // gzip. Unlike the ZIPs a gzip member carries no member table to walk, so
+    // the magic number is all there is. It identifies the FORMAT, not the
+    // provider: two providers now serve `csv-gz` (the OpenCelliD bulk export
+    // and the MLS final export), which is why the unique-format attribution
+    // above checks for ambiguity and falls back to position. The corroboration
+    // check is unaffected — both providers declare `csv-gz`, so neither is ever
+    // vetoed by the other's body.
     //
     // This check earns its keep on the FAILURE path, not the success one.
     // OpenCelliD answers a bad or expired token with **200 and a JSON body**
@@ -3229,6 +3274,38 @@ int parse(void) {
         g_job = job;
         g_request_providers = json_string_array(job, "request_providers");
         g_providers_consulted = json_string_array(job, "providers_consulted");
+        // A RUN CONTRACT NAMING A PROVIDER THIS BUILD DOES NOT HAVE IS REFUSED
+        // HERE, LOUDLY, BEFORE A SINGLE BODY IS LOOKED AT.
+        //
+        // This is the defect the cellular worldwide ingest died of for three
+        // days (graph: sdn-cellular-ingest-lands-no-batch). host-02's flow
+        // config named provider `mls`; nothing in this table answered to that
+        // name; the per-frame `find_provider` below returned nullptr and
+        // `continue`d. The run then fetched 3,145,728 B, decoded nothing,
+        // emitted an empty `reports` list, returned 0, and the daemon booked
+        // "run completed but landed no batch" with no cause anywhere — three
+        // times, ~177 s each.
+        //
+        // `route` has always refused an unknown id with a named skip reason
+        // (see the `wanted` loop). The INGEST lane authors its own job and
+        // never passed through that check, so the one lane running unattended
+        // on a timer was the one lane that could fail in silence. An unknown
+        // provider id is a CONFIGURATION fault, not an upstream one: it is
+        // deterministic, it cannot heal on the next tick, and there is no
+        // version of it that should read as success.
+        for (const std::string& id : g_request_providers) {
+            if (find_provider(id)) continue;
+            std::string message = "run contract names provider \"" + id +
+                                  "\", which is not in this module's registry. Known providers:";
+            for (size_t i = 0; i < kProviderCount; ++i) {
+                message += (i ? ", " : " ");
+                message += kProviders[i].id;
+            }
+            message += ". Nothing was decoded and nothing will be: fix the "
+                       "configured provider id.";
+            plugin_set_error("unknown-provider", message.c_str());
+            return 400;
+        }
         // Adopt the resume mark route carried through. The DECODER half is what
         // makes this a resume rather than a restart; without it the next chunk
         // would inflate from a byte that is not a symbol boundary and fail.
@@ -3318,7 +3395,21 @@ int parse(void) {
             provider_id = request_providers[k];
         }
         const ProviderSpec* spec = find_provider(provider_id);
-        if (!spec) continue;
+        // A body that could not be attributed to ANY provider is dropped: that
+        // is the deliberate fail-closed above, and it is a per-frame verdict.
+        // A body attributed to a NAMED id that this build has no entry for is a
+        // different animal — the run contract is wrong — and the job-capture
+        // guard above has already refused it. Reaching here means an id got in
+        // some other way, so it is refused too rather than dropped quietly.
+        if (!spec) {
+            if (provider_id.empty()) continue;
+            const std::string message = "response frame is attributed to provider \"" +
+                                        provider_id +
+                                        "\", which is not in this module's registry; refusing to "
+                                        "report an unattributable decode as an empty register.";
+            plugin_set_error("unknown-provider", message.c_str());
+            return 400;
+        }
         // A provider that failed is simply absent from the answer. It stays in
         // providers_consulted, so "asked and got nothing" remains visible and
         // never reads as "agreed".

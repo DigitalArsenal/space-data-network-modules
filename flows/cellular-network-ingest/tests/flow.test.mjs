@@ -9,7 +9,7 @@
  *   - the 4 MiB clamp that the Go host's response-body cap imposes,
  *   - the row-boundary correction (a chunk ends mid-row; the next must not),
  *   - the record counts that actually reached storage.ingest_with_source,
- *   - reconcile=append and one batch id per chunk,
+ *   - reconcile=none and one batch id per chunk,
  *   - the inserted=0 refusal,
  *   - fail-closed publication.
  *
@@ -191,10 +191,23 @@ function createHostStub({ config = {}, body = BODY, ingestResult, store = create
         // spacedatastandards.org 1.196.0. This is the gap the ingest flow
         // recorded and could not close before that standard existed.
         if (operation === "storage.write") {
+          // THE STUB REFUSES WHAT THE REAL HOST REFUSES. The Go node reads
+          // `schema` (internal/modulert/caps/storage.go) and answers
+          // {"ok":false,"error":{"message":"missing schema"}} without it. This
+          // stub used to accept anything, so the module could send `type`
+          // forever and every test agreed while the live node refused every
+          // single mark write (graph: sdn-cellular-ingest-lands-no-batch).
+          if (!meta.schema) {
+            response = encodeHostcallEnvelope({
+              ok: false,
+              error: { message: "missing schema" },
+            });
+            return 0;
+          }
           store.marks.push(Buffer.from(String(meta.data ?? ""), "base64"));
           response = encodeHostcallEnvelope({
             ok: true,
-            result: { cid: `bafyMark${store.marks.length}`, source: meta.source, type: meta.type },
+            result: { cid: `bafyMark${store.marks.length}`, source: meta.source, schema: meta.schema },
           });
           return 0;
         }
@@ -309,7 +322,7 @@ test("the whole fixture in one chunk: every distinct site reaches storage", asyn
   assert.equal(stored, 4, "duplicate cell collapsed by deconfliction; 4 distinct sites stored");
 });
 
-test("storage attribution: $TBS, append reconcile, one batch id per chunk offset", async () => {
+test("storage attribution: $TBS, non-destructive reconcile, one batch id per chunk offset", async () => {
   const stub = createHostStub({
     config: { cell_ingest_url: SOURCE_URL, cell_ingest_chunk_bytes: 65536 },
   });
@@ -319,9 +332,16 @@ test("storage attribution: $TBS, append reconcile, one batch id per chunk offset
   assert.equal(meta.schema, "TBS");
   assert.equal(meta.provider_id, "opencellid");
   assert.equal(meta.source_url, SOURCE_URL);
+  // A MODE THE HOST ACTUALLY HAS. This pinned "append", which
+  // storage.ingest_with_source has never accepted (none|duplicates|current), so
+  // the test agreed with the module while the host refused every chunk (graph:
+  // sdn-cellular-ingest-lands-no-batch). `none` is the mode that means what
+  // "append" was reaching for; `duplicates` is worse than wrong here, because
+  // the host's intra-batch dedupe partitions on the satellite index and a $TBS
+  // site populates none of it — six distinct sites collapse to one.
   // NOT the celestrak lane's source-batch reconcile: each batch is one CHUNK of
   // the provider's set, and reconciling would delete every earlier chunk.
-  assert.equal(meta.reconcile, "append");
+  assert.equal(meta.reconcile, "none");
   assert.equal(meta.batch_id, "opencellid@0", "batch id keyed by chunk offset");
 });
 
@@ -439,7 +459,11 @@ test("a multi-chunk ingest CRASHES between chunks and RESUMES from the durable m
   // THE MARK IS DURABLE: a schema-typed $IRM record went through storage.write.
   const firstWrites = writeCalls(first);
   assert.equal(firstWrites.length, 1, "chunk 0 must persist exactly one resume mark");
-  assert.equal(firstWrites[0].meta.type, "IRM", "the mark is filed as an $IRM record");
+  // `schema`, not `type`: storage.write {schema, data:base64} is the hostcall
+  // every host implements. The module sent `type`, so the Go node saw an empty
+  // schema and refused every mark write — this assertion agreed with the module
+  // and not with the host (graph: sdn-cellular-ingest-lands-no-batch).
+  assert.equal(firstWrites[0].meta.schema, "IRM", "the mark is filed as an $IRM record");
   assert.equal(firstWrites[0].meta.source, "opencellid");
   const markBytes = Buffer.from(String(firstWrites[0].meta.data), "base64");
   assert.equal(
@@ -486,10 +510,10 @@ test("a multi-chunk ingest CRASHES between chunks and RESUMES from the durable m
   );
 
   // (3) NO GAP AND NO OVERLAP: a new batch keyed by this chunk's offset, so the
-  // append reconcile cannot delete chunk 0's batch.
+  // a non-destructive reconcile cannot delete chunk 0's batch.
   assert.equal(secondIngests[0].meta.batch_id, `opencellid@${resumeStart}`);
   assert.notEqual(secondIngests[0].meta.batch_id, firstIngests[0].meta.batch_id);
-  assert.equal(secondIngests[0].meta.reconcile, "append");
+  assert.equal(secondIngests[0].meta.reconcile, "none");
 
   // (4) THE MARK ADVANCED CUMULATIVELY. 1 site from chunk 0 + 3 from chunk 1.
   assert.equal(store.marks.length, 2, "the resumed chunk persists its own mark");
@@ -611,7 +635,7 @@ test("a mark belonging to a DIFFERENT provider is ignored, not resumed into", as
 //
 // Consequence: one physical site can reach the store twice, in two different
 // batches (the partial from chunk N, the whole row from chunk N+1). The
-// `append` reconcile is correct to keep both — it cannot know they are the same
+// a non-destructive reconcile is correct to keep both — it cannot know they are the same
 // — so the duplicate survives, and a duplicated site set is indistinguishable
 // from a larger one, which is exactly the failure mode the deconfliction rules
 // exist to prevent.

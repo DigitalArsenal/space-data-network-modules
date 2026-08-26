@@ -183,12 +183,33 @@ double json_number_or(const std::string& json, const char* key, double fallback)
     return json_number_field(json, key, &v) ? v : fallback;
 }
 
+// CONTROL CHARACTERS ARE ESCAPED, not passed through.
+//
+// This used to handle only `"`, `\` and newline, and every other byte went out
+// verbatim — which is fine right up until a field carries something that is not
+// text. It did: `ingest_meta` sliced a "CSV header" out of a still-GZIPPED
+// response body, so the meta JSON handed to storage.ingest_with_source began
+// `"csv_header":"\x1f\x8b\x08..."`. The host's envelope decoder refused the
+// whole hostcall with `invalid character '\x1f' in string literal`, the ingest
+// node answered 502, and the run stored nothing (graph:
+// sdn-cellular-ingest-lands-no-batch). The header slice is fixed at its source
+// below, but a serializer that can emit invalid JSON at all is the deeper
+// fault: ONE unescaped byte anywhere destroys the entire message.
 std::string json_escape(const std::string& s) {
+    static const char kHex[] = "0123456789abcdef";
     std::string out;
     out.reserve(s.size());
     for (const char c : s) {
+        const unsigned char u = static_cast<unsigned char>(c);
         if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
         else if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
+        else if (c == '\t') out += "\\t";
+        else if (u < 0x20 || u == 0x7f) {
+            out += "\\u00";
+            out.push_back(kHex[(u >> 4) & 0xF]);
+            out.push_back(kHex[u & 0xF]);
+        }
         else out.push_back(c);
     }
     return out;
@@ -453,7 +474,16 @@ constexpr const char* kIrmType = "IRM";
 constexpr const char* kIrmDecoderStateFormat = "cell-tower-source/bulk-resume-v1";
 constexpr const char* kIrmDecoderStateVersion = "1";
 constexpr const char* kIrmDecoderStateMediaType = "application/json";
-constexpr const char* kDefaultMarkSql = "SELECT data FROM sds_irm ORDER BY rowid DESC LIMIT ?";
+// THE ENGINE-ROUTED READ FORM, which is the only one a current node answers.
+// Every embedded standard is served through a generated FlatSQL unified view
+// named by its SDS CODE over `_data`/`_rowid` (owner law 2026-08-25; sdn
+// storage/engine_records.go builds `CREATE VIEW "<CODE>" AS SELECT ... FROM
+// "<CODE>@<source>"`). The old `sds_irm`/`rowid` spelling named a table that
+// no longer exists, so this default read back NOTHING on a current node and a
+// resume mark could never be found — every run would have restarted at byte 0
+// even after the mark lane started working. Operators overrode it in node
+// CONFIG; a default that only works when it is overridden is not a default.
+constexpr const char* kDefaultMarkSql = "SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?";
 constexpr long kDefaultMarkScanRows = 32;
 
 // Everything the read side needs, from EITHER a durable $IRM record or the
@@ -603,7 +633,10 @@ std::vector<uint8_t> build_irm(const std::string& provider, const std::string& s
     const auto ingestor_off = b.CreateString("cell-tower-ingest-wasm/v1");
     const auto updated_off = b.CreateString(updated_at);
     const auto target_off = b.CreateString(kSchema);
-    const auto reconcile_off = b.CreateString("append");
+    // The $IRM mark records the mode the storage lane was actually asked for,
+    // so it must be a mode the host has (none|duplicates|current) — see the
+    // ingest_meta note on why this is `none`.
+    const auto reconcile_off = b.CreateString("none");
     const auto merge_off = merge_policy.empty() ? 0 : b.CreateString(merge_policy);
 
     const auto source_url_off = b.CreateString(source_url);
@@ -773,11 +806,12 @@ bool path_has_segment(const std::string& path, const char* segment) {
 // `sdn-dataset-default-query-materialized-cache`, in its first concrete
 // instance: the SQL is node CONFIG (`cell_cache_sql`), not a compiled-in
 // constant, so an operator retargets the cache without a rebuild. The default
-// names the table the cellular ingest lane's storage writes land in
-// (`sds_<lowercased SDS type>`, the convention hostcap/flatsql-store encodes at
-// flatsql_store_module.cpp:137) and takes the row cap as a bound parameter, so
-// the caller's LIMIT still bounds the answer.
-constexpr const char* kDefaultCacheSql = "SELECT data FROM sds_tbs ORDER BY rowid DESC LIMIT ?";
+// names the generated FlatSQL unified view the cellular ingest lane's storage
+// writes land in — the SDS CODE itself, over `_data`/`_rowid` (owner law
+// 2026-08-25: every embedded standard is engine-routed, never per-standard
+// hardcoded) — and takes the row cap as a bound parameter, so the caller's
+// LIMIT still bounds the answer.
+constexpr const char* kDefaultCacheSql = "SELECT _data FROM TBS ORDER BY _rowid DESC LIMIT ?";
 constexpr long kDefaultCacheMaxRows = 5000;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -828,7 +862,7 @@ constexpr double kTileIndexEpsilon = 1e-9;
 // CONFIG, not a compiled-in constant, so an operator with a spatial index can
 // push the bbox into SQL without a rebuild. The default reads the rows the
 // cellular ingest lane's storage writes land in and bounds the scan.
-constexpr const char* kDefaultTileSql = "SELECT data FROM sds_tbs ORDER BY rowid DESC LIMIT ?";
+constexpr const char* kDefaultTileSql = "SELECT _data FROM TBS ORDER BY _rowid DESC LIMIT ?";
 constexpr long kDefaultTileMaxRows = 100000;
 
 // The dataset identity the envelope names. The client only requires a non-empty
@@ -1748,7 +1782,17 @@ int ingest_plan(void) {
     const std::string job =
         std::string("{\"method\":") + nums + ",\"method_name\":\"" +
         json_escape(config_string(config, "cell_ingest_merge_method_name", "HIGHEST_SAMPLE_COUNT")) +
-        "\"" + ",\"providers_consulted\":[\"" + json_escape(provider) + "\"]" +
+        "\"" +
+        // THE INGEST LANE DECODES THE WHOLE CHUNK. cell-tower-source clamps a
+        // request-scoped decode to 1,000 rows unless the run contract says
+        // otherwise, and this job never said otherwise: a 3 MiB chunk carrying
+        // 127,939 rows was truncated to 1,000 sites, and — worse — the decoder
+        // stopped at the cap, so the resume mark it published still pointed at
+        // byte 0. Every tick refetched chunk 0 and stored the same first 1,000
+        // sites forever (graph: sdn-cellular-ingest-lands-no-batch, measured
+        // locally: inserted=1000, next_offset=0 out of 3,145,689 bytes).
+        ",\"full_population\":true" +
+        ",\"providers_consulted\":[\"" + json_escape(provider) + "\"]" +
         ",\"request_providers\":[\"" + json_escape(provider) + "\"]" + ",\"skipped\":[]" +
         ",\"provider_id\":\"" + json_escape(provider) + "\"" + ",\"source_url\":\"" +
         json_escape(url) + "\"" + ",\"prior_stored_rows\":" + std::to_string(prior_stored_rows) +
@@ -1870,8 +1914,32 @@ int ingest_meta(void) {
         if (chunk_offset == 0) {
             const size_t first = body.find('\n');
             if (first != std::string::npos) {
-                header_line = body.substr(0, first);
-                if (!header_line.empty() && header_line.back() == '\r') header_line.pop_back();
+                std::string candidate = body.substr(0, first);
+                if (!candidate.empty() && candidate.back() == '\r') candidate.pop_back();
+                // A CSV HEADER ROW IS TEXT. THIS BODY MAY NOT BE.
+                //
+                // The same reasoning the resume-offset correction below spells
+                // out applies here and was not applied: a `csv-gz` chunk 0 is a
+                // DEFLATE STREAM, and `find('\n')` finds a 0x0A that happens to
+                // occur in compressed bytes. What came back was 200-odd bytes of
+                // gzip sliced out as a "column contract" — which then went into
+                // the ingest meta unescaped and made the whole hostcall invalid
+                // JSON, so nothing was stored at all (graph:
+                // sdn-cellular-ingest-lands-no-batch).
+                //
+                // The test is on the BYTES, not on a configured format: a header
+                // row is printable ASCII plus tabs, and nothing else can be one.
+                // A compressed lane loses nothing by this — cell-tower-source's
+                // bulk decoder carries its column contract in its own resume
+                // state and falls back to the canonical bulk-export columns on a
+                // resumed chunk, so it never needed this field.
+                bool textual = !candidate.empty();
+                for (const char ch : candidate) {
+                    const unsigned char u = static_cast<unsigned char>(ch);
+                    if (u == '\t') continue;
+                    if (u < 0x20 || u == 0x7f) { textual = false; break; }
+                }
+                if (textual) header_line = candidate;
             }
         }
     }
@@ -1924,10 +1992,27 @@ int ingest_meta(void) {
         json_escape(config_string(config, "cell_ingest_source_name", "cell-tower-bulk")) + "\"" +
         ",\"source_url\":\"" + json_escape(source_url) + "\"" + ",\"batch_id\":\"" +
         json_escape(batch_id) + "\"" +
-        // `append` and NOT the celestrak lane's source-batch reconcile: this
-        // batch is one CHUNK of the provider's set, not the set. Reconciling
-        // here would delete every earlier chunk on arrival of the next one.
-        ",\"reconcile\":\"append\"" +
+        // `duplicates` and NOT `current`: this batch is one CHUNK of the
+        // provider's set, not the set. `current` is the celestrak lane's
+        // whole-snapshot mode and would delete every earlier chunk the moment
+        // the next one arrived; `duplicates` reconciles only WITHIN this batch
+        // id (`<provider>@<chunk offset>`) and leaves every sibling chunk alone.
+        //
+        // MEASURED, NOT ASSUMED. The word this used to emit was `append`, which
+        // the host has never had: `storage.ingest_with_source` takes
+        // none|duplicates|current and refuses anything else, so EVERY chunk was
+        // rejected with "unknown reconcile mode append" and the whole run stored
+        // nothing (graph: sdn-cellular-ingest-lands-no-batch).
+        //
+        // `duplicates` was tried next and is WORSE than wrong here: the host's
+        // intra-batch duplicate reconcile partitions on the SATELLITE index
+        // (norad_cat_id / entity_id / object_type / ops_status / epoch), which a
+        // $TBS cell site populates with none of. Six distinct sites therefore
+        // shared one partition key and five were deleted as "duplicates" — a
+        // six-row chunk landed as ONE row. The host-side guard against that is
+        // landing alongside this, but the mode this lane WANTS was never
+        // duplicate collapse: it is "store this chunk, touch nothing else".
+        ",\"reconcile\":\"none\"" +
         // Chunk state rides on the meta because the meta is the ONLY frame that
         // reaches publish_request alongside the storage result, and that is
         // where the resume mark is authored.
@@ -1947,7 +2032,17 @@ int ingest_meta(void) {
                              : ",\"csv_header\":\"" + json_escape(header_line) + "\"") +
         (bulk_resume_next.empty() ? std::string()
                                   : ",\"bulk_resume_next\":" + bulk_resume_next) +
-        ",\"provenance\":{\"source\":\"cell-tower-ingest-wasm/v1\"" + ",\"json\":\"" +
+        // A PATH COMPONENT, NOT A VERSION STRING. The host writes provenance to
+        // <raw>/provenance/<source>/<ts>.json and refuses any source carrying a
+        // separator (caps/storage.go sanitizePathComponent). This read
+        // "cell-tower-ingest-wasm/v1", which sanitized to the empty string, so
+        // the hostcall was refused with "provenance requires source and json
+        // bytes" AFTER the records had already been stored — the batch landed
+        // and the run still reported failure, leaving the resume mark unwritten
+        // so the next tick refetched the same chunk (graph:
+        // sdn-cellular-ingest-lands-no-batch). The version lives in the $IRM
+        // INGESTOR field, which is a record field and can keep its slash.
+        ",\"provenance\":{\"source\":\"cell-tower-ingest-wasm-v1\"" + ",\"json\":\"" +
         base64_encode(reinterpret_cast<const uint8_t*>(provenance.data()), provenance.size()) +
         "\"}}";
 
