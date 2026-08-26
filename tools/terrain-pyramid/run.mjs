@@ -374,6 +374,44 @@ async function main() {
     };
   };
 
+  // THE FLOW AND THE PLANNER MUST BE THE SAME BUILD.
+  //
+  // Pass 1 plans with the standalone terrain-ingest artifact; pass 2 runs a
+  // compiled flow that STATICALLY LINKED its own copy. Rebuild one without the
+  // other and the two disagree silently — which is not hypothetical: a flow
+  // built before the resume mark's stride was corrected advanced the mark by
+  // the tile count instead of by one cell, skipped most of the enumeration,
+  // and reported a clean drained run with a quarter of the pyramid built. The
+  // compiled flow records the SHA-256 of every dependency it linked, so the
+  // disagreement is checkable before a single granule is fetched.
+  {
+    const probe = await createFlowRuntimeHost({
+      wasmSource: new Uint8Array(fs.readFileSync(RUNTIME_WASM)),
+      extraImports: imports,
+      runtimeTarget: "wasmedge",
+    });
+    memoryRef.memory = probe.memory;
+    const linked = new Map();
+    for (let i = 0; i < probe.dependencyCount; i += 1) {
+      const descriptor = probe.getDependencyDescriptor(i);
+      linked.set(descriptor.pluginId, descriptor.sha256);
+    }
+    for (const [pluginId, artifact] of [
+      ["com.digitalarsenal.data-source.terrain-ingest", INGEST_WASM],
+      ["com.digitalarsenal.data-source.terrain-source", path.join(REPO, "data-source", "terrain-source", "dist", "isomorphic", "module.wasm")],
+    ]) {
+      const onDisk = createHash("sha256").update(fs.readFileSync(artifact)).digest("hex");
+      const inFlow = linked.get(pluginId);
+      if (inFlow && inFlow !== onDisk) {
+        throw new Error(
+          `${pluginId} in ${path.basename(RUNTIME_WASM)} is ${inFlow} but the built artifact is ` +
+            `${onDisk}. Rebuild the flow (flows/terrain-ingest: npm run build) before building a ` +
+            "pyramid: a flow and a planner from different builds disagree silently.",
+        );
+      }
+    }
+  }
+
   async function planCell() {
     const harness = await createBrowserModuleHarness({
       wasmSource: fs.readFileSync(INGEST_WASM),

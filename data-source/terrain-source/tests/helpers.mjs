@@ -449,6 +449,9 @@ export function decodeDtt(record) {
 }
 
 // Walk a size-prefixed record stream: [uint32 LE length][record] repeated.
+// A ZERO-LENGTH PREFIX IS ALIGNMENT PADDING, not a record — the same rule the
+// module's own `respond` applies when it walks the store's stream, and the
+// framing an empty batch is emitted in.
 export function splitStream(bytes) {
   const buf = Buffer.from(bytes);
   const records = [];
@@ -456,6 +459,7 @@ export function splitStream(bytes) {
   while (off + 4 <= buf.length) {
     const len = buf.readUInt32LE(off);
     off += 4;
+    if (len === 0) continue;
     assert.ok(off + len <= buf.length, "a length prefix must not run past the stream");
     records.push(buf.subarray(off, off + len));
     off += len;

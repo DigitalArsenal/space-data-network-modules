@@ -978,6 +978,25 @@ int granule_plan(void) {
                 const double south = -90.0 + y * size;
                 if (west < cell.lon || west >= cell.lon + 1) continue;
                 if (south < cell.lat || south >= cell.lat + 1) continue;
+                // A TILE BELONGS TO THE HIGHEST-PRIORITY REGION THAT CONTAINS
+                // IT. Regions are sorted priority-descending, so any region
+                // EARLIER in the list already claimed this address at this
+                // level and will plan it itself. Without this, a deep inset
+                // nested inside a broader region — which is the whole point of
+                // insets — makes every tile of their shared levels twice: two
+                // fetch-and-encode passes and two records at one address, and
+                // the serving lane's "newest record wins" hides it.
+                bool claimed = false;
+                for (const Region& other : regions) {
+                    if (&other == &r) break;
+                    if (cell.level > other.max_level) continue;
+                    const TileBlock ob = region_block(other, cell.level);
+                    if (x >= ob.x0 && x <= ob.x1 && y >= ob.y0 && y <= ob.y1) {
+                        claimed = true;
+                        break;
+                    }
+                }
+                if (claimed) continue;
                 // CHILD_AVAILABILITY is a STATEMENT ABOUT THIS TILESET, so it
                 // is computed against the region's own block at level+1 rather
                 // than assumed to be "all four".

@@ -84,6 +84,7 @@ function readDtt(record) {
     minHeightM: f64(11),
     maxHeightM: f64(12),
     payload: payload(15),
+    waterMask: payload(29),
     waterMaskKind: i8(28),
     waterMaskWidth: u32(30),
     waterMaskHeight: u32(31),
@@ -151,6 +152,7 @@ let oceanStored = 0;
 let digestMismatch = 0;
 let overCeiling = 0;
 let maxLevel = 0;
+let maskBytes = 0;
 const problems = [];
 
 for (const record of records) {
@@ -173,9 +175,13 @@ for (const record of records) {
 
   if (dtt.waterMaskKind === 3) {
     raster += 1;
+    maskBytes += dtt.waterMask?.bytes?.length ?? 0;
     if (dtt.waterMaskWidth !== 256 || dtt.waterMaskHeight !== 256) {
       problems.push(`raster mask at ${key} is ${dtt.waterMaskWidth}x${dtt.waterMaskHeight}`);
     }
+    // Stored gzipped, and it must really decompress to the stated geometry.
+    const raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
+    if (raw.length !== 256 * 256) problems.push(`mask at ${key} decompresses to ${raw.length} B`);
   } else {
     uniform += 1;
   }
@@ -224,6 +230,7 @@ const summary = {
   uniformMasks: uniform,
   rasterMasks: raster,
   uniformMaskRatio: records.length ? +(uniform / records.length).toFixed(4) : 0,
+  maskBytesStored: maskBytes,
   oceanTilesStored: oceanStored,
   digestMismatches: digestMismatch,
   tilesOverCeiling: overCeiling,

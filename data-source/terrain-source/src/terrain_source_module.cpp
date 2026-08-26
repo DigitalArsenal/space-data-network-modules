@@ -1869,9 +1869,15 @@ int tile(void) {
 
         // An all-ocean tile is DATA the client can synthesize exactly; storing
         // it would inflate the pyramid with identical flat records.
-        const bool is_ocean_tile = min_h == 0.0 && max_h == 0.0 &&
-                                   water_kind == "UNIFORM_WATER" &&
-                                   stats.coverage == 0.0;
+        //
+        // COVERAGE IS NOT PART OF THE TEST, and an earlier cut that required
+        // coverage == 0 stored every ocean tile it met. The source dataset
+        // publishes real granules over most sea — full of measured 0.0 metres —
+        // so a tile in the middle of a bay has coverage 1.0 and is ocean all
+        // the same. What makes a tile ocean is what it SAYS: flat at exactly
+        // sea level, and water everywhere.
+        const bool is_ocean_tile =
+            min_h == 0.0 && max_h == 0.0 && water_kind == "UNIFORM_WATER";
         if (skip_ocean && is_ocean_tile) {
             stats.skipped_ocean = true;
             skipped_ocean_count++;
@@ -1945,14 +1951,27 @@ int tile(void) {
         }
         flatbuffers::Offset<DTTPayloadRef> water_ref;
         if (water_kind == "RASTER") {
+            // THE MASK IS STORED GZIPPED. It is 65,536 bytes of two distinct
+            // values, so it deflates to a fraction of that — and the record
+            // already carries the same bytes a second time inside the gzipped
+            // mesh payload, so storing this copy raw made the mask, not the
+            // terrain, the largest thing in a coastal tile. DTTPayloadRef
+            // carries CONTENT_ENCODING for exactly this, and SIZE_BYTES and
+            // DIGEST are stated over the STORED bytes, as they are for the
+            // payload.
+            std::vector<uint8_t> mask_bytes;
+            const bool mask_gzipped = gzip_compress(water_raster, &mask_bytes);
+            if (!mask_gzipped) mask_bytes = water_raster;
             const auto media = b.CreateString("application/octet-stream");
-            const auto mask_digest = b.CreateString(sha256_multihash(water_raster));
-            const auto vec = b.CreateVector(water_raster.data(), water_raster.size());
+            const auto mask_encoding = mask_gzipped ? b.CreateString("gzip") : 0;
+            const auto mask_digest = b.CreateString(sha256_multihash(mask_bytes));
+            const auto vec = b.CreateVector(mask_bytes.data(), mask_bytes.size());
             DTTPayloadRefBuilder wrb(b);
             wrb.add_BYTES(vec);
-            wrb.add_SIZE_BYTES(water_raster.size());
+            wrb.add_SIZE_BYTES(mask_bytes.size());
             wrb.add_DIGEST(mask_digest);
             wrb.add_MEDIA_TYPE(media);
+            if (mask_encoding.o) wrb.add_CONTENT_ENCODING(mask_encoding);
             water_ref = wrb.Finish();
         }
         const auto f_tileset = b.CreateString(tileset_id);
@@ -2059,6 +2078,15 @@ int tile(void) {
         "source geoid datum, not converted to ellipsoidal; bounded <~100 m offset if "
         "rendered as above-ellipsoid\"}";
 
+    // A CELL WHOSE EVERY TILE IS OCEAN STILL EMITS A FRAME. Skipping the push
+    // leaves the downstream scheduler with no `records` input, its node never
+    // runs, the resume mark never advances and the walk STALLS FOREVER on the
+    // first open-ocean cell — which is exactly what happened on the first
+    // regional run. A single zero-length size prefix is the store's own
+    // framing for "no records here" (every reader already treats a zero prefix
+    // as alignment padding), so the frame is well-formed and decodes to
+    // nothing.
+    if (stream.empty()) put_u32(&stream, 0);
     if (push_dtt_stream("records", stream) < 0) return 500;
     return push_json("report", report) < 0 ? 500 : 0;
 }

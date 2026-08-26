@@ -19,6 +19,7 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
+import zlib from "node:zlib";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -113,8 +114,15 @@ function maskOf(dtt) {
   if (dtt.waterMaskKind === 3) {
     assert.equal(dtt.waterMaskWidth, 256);
     assert.equal(dtt.waterMaskHeight, 256);
-    const bytes = Buffer.from(dtt.waterMask.bytes);
+    // Stored GZIPPED: 65,536 bytes of two distinct values, and the same bytes
+    // already ride inside the gzipped mesh payload.
+    assert.equal(dtt.waterMask.contentEncoding, "gzip");
+    const bytes = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
     assert.equal(bytes.length, 256 * 256);
+    assert.ok(
+      dtt.waterMask.bytes.length < bytes.length / 4,
+      `a two-valued 64 KiB raster must compress hard, got ${dtt.waterMask.bytes.length} B`,
+    );
     return bytes;
   }
   assert.ok(dtt.waterMaskKind === 1 || dtt.waterMaskKind === 2, "uniform land or uniform water");
@@ -251,4 +259,79 @@ test("every record states DIGEST and ETAG over the GZIPPED bytes, MEDIA_TYPE onl
     );
     assert.equal(dtt.etag, `"${dtt.payload.digest}"`, "ETAG is that digest, strong");
   }
+});
+
+test("a MEASURED flat-at-zero water tile is skipped as ocean, coverage notwithstanding", async (t) => {
+  // The trap this closes: the source dataset publishes real granules over most
+  // sea, full of measured 0.0 metres. A tile in the middle of a bay therefore
+  // has coverage 1.0, and an ocean test that required coverage == 0 stored
+  // every one of them — 1,217 identical flat records in the first regional
+  // run. What makes a tile ocean is what it SAYS, not how it was covered.
+  const seaGeo = { originLon: 10, originLat: 46, scaleLon: 1 / 600, scaleLat: 1 / 600, width: 600, height: 600 };
+  const seaDem = buildGeoTiff({ ...seaGeo, heightFn: () => 0, layout: "tile", tileWidth: 256, tileHeight: 256 });
+  const seaWater = buildWaterTiff({ ...seaGeo, classFn: () => 1, layout: "tile", tileWidth: 256, tileHeight: 256 });
+
+  const harness = await createBrowserModuleHarness({ wasmSource: WASM, manifest: MANIFEST, surface: "direct" });
+  t.after(() => harness.destroy());
+  const address = { x: X0 + 5, y: Y0 + 5 };
+  const inputs = (skipOceanTiles) => [
+    jsonFrame("plan", {
+      tilesetId: "spaceaware-terrain",
+      level: LEVEL,
+      gridSize: 65,
+      maxLevel: 13,
+      provenance: PROVENANCE,
+      skipOceanTiles,
+      tiles: [address],
+    }),
+    frame("dem", rawBodyFrameBytes(seaDem)),
+    frame("water", rawBodyFrameBytes(seaWater)),
+  ];
+
+  const kept = await harness.invoke({ methodId: "tile", inputs: inputs(false) });
+  assert.equal(kept.statusCode, 0, `${kept.errorCode}: ${kept.errorMessage}`);
+  const keptRecords = splitStream(kept.outputs.find((o) => o.portId === "records").payload);
+  assert.equal(keptRecords.length, 1, "without the flag the record is produced as asked");
+  const dtt = decodeDtt(keptRecords[0]);
+  assert.equal(dtt.waterMaskKind, 2, "UNIFORM_WATER");
+  assert.equal(dtt.minHeightM, 0);
+  assert.equal(dtt.maxHeightM, 0);
+  assert.equal(dtt.dataCoverageFraction, 1, "…and it was FULLY covered by real measurements");
+
+  const skipped = await harness.invoke({ methodId: "tile", inputs: inputs(true) });
+  assert.equal(skipped.statusCode, 0, `${skipped.errorCode}: ${skipped.errorMessage}`);
+  const report = JSON.parse(new TextDecoder().decode(skipped.outputs.find((o) => o.portId === "report").payload));
+  assert.equal(report.tilesEmitted, 0, "nothing stored");
+  assert.equal(report.tilesSkippedOcean, 1, "…and it is COUNTED as skipped, not silently dropped");
+});
+
+test("an all-ocean cell still emits a records frame, so the walk cannot stall", async (t) => {
+  // Skipping the push on an empty batch leaves the downstream scheduler with
+  // no `records` input: its node never runs, the resume mark never advances,
+  // and the pyramid walk stops dead at the first open-ocean cell. The first
+  // regional run did exactly that, four cells in.
+  const seaGeo = { originLon: 10, originLat: 46, scaleLon: 1 / 600, scaleLat: 1 / 600, width: 600, height: 600 };
+  const harness = await createBrowserModuleHarness({ wasmSource: WASM, manifest: MANIFEST, surface: "direct" });
+  t.after(() => harness.destroy());
+  const response = await harness.invoke({
+    methodId: "tile",
+    inputs: [
+      jsonFrame("plan", {
+        tilesetId: "spaceaware-terrain",
+        level: LEVEL,
+        gridSize: 65,
+        maxLevel: 13,
+        provenance: PROVENANCE,
+        skipOceanTiles: true,
+        tiles: [{ x: X0 + 5, y: Y0 + 5 }],
+      }),
+      frame("dem", rawBodyFrameBytes(buildGeoTiff({ ...seaGeo, heightFn: () => 0, layout: "tile", tileWidth: 256, tileHeight: 256 }))),
+      frame("water", rawBodyFrameBytes(buildWaterTiff({ ...seaGeo, classFn: () => 1, layout: "tile", tileWidth: 256, tileHeight: 256 }))),
+    ],
+  });
+  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  const records = response.outputs.find((o) => o.portId === "records");
+  assert.ok(records, "the frame EXISTS even though it carries no records");
+  assert.equal(records.payload.length, 4, "one zero-length size prefix: the store's own empty framing");
+  assert.deepEqual(splitStream(records.payload), [], "…and it decodes to no records at all");
 });

@@ -373,7 +373,10 @@ test("tile writes the watermask extension: uniform by default, raster from the w
   assert.equal(dtt.waterMaskKind, 3, "RASTER");
   assert.equal(dtt.waterMaskWidth, 256, "WATER_MASK_WIDTH is set with the bytes, never alone");
   assert.equal(dtt.waterMaskHeight, 256);
-  const mask = Buffer.from(dtt.waterMask.bytes);
+  // Stored GZIPPED (DTTPayloadRef.CONTENT_ENCODING): a 64 KiB two-valued
+  // raster whose bytes also ride inside the gzipped mesh payload.
+  assert.equal(dtt.waterMask.contentEncoding, "gzip");
+  const mask = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
   assert.equal(mask.length, 256 * 256);
   assert.ok(dtt.waterMask.digest?.startsWith("1220"), "the mask states its own sha2-256 multihash");
 

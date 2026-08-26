@@ -234,3 +234,36 @@ test("the planner fails closed on identity it must not invent", async (t) => {
   const noRegions = await planOnce(t, { config: { ...CONFIG, regions: [] } });
   assert.equal(noRegions.error, "no-regions");
 });
+
+test("an inset nested inside a broader region does not duplicate its tiles", async (t) => {
+  // Insets are the point of the priority list: a small region built deeper,
+  // inside a broader one built shallower. Their shared levels overlap
+  // GEOGRAPHICALLY, so without an owner rule both regions plan the same
+  // addresses — two fetch-and-encode passes and two records at one address,
+  // which the serving lane's "newest record wins" would hide completely.
+  const config = {
+    ...CONFIG,
+    max_level: 10,
+    regions: [
+      { name: "broad", west: 10, south: 45, east: 12, north: 47, max_level: 9, priority: 10 },
+      { name: "inset", west: 10.5, south: 45.5, east: 11.5, north: 46.5, max_level: 10, priority: 20 },
+    ],
+  };
+  const cells = await walkAll(t, config);
+  assert.ok(cells.length > 0);
+
+  const owner = new Map();
+  for (const { job, plan } of cells) {
+    for (const tile of plan.tiles) {
+      const key = `${job.level}/${tile.x}/${tile.y}`;
+      assert.ok(!owner.has(key), `tile ${key} planned by ${owner.get(key)} and again by ${job.region}`);
+      owner.set(key, job.region);
+    }
+  }
+
+  // …and the higher-priority region is the one that owns the shared ground.
+  const size = 180 / 2 ** 9;
+  const insetX = Math.floor((10.75 + 180) / size);
+  const insetY = Math.floor((45.75 + 90) / size);
+  assert.equal(owner.get(`9/${insetX}/${insetY}`), "inset", "priority decides, not config order");
+});
