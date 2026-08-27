@@ -575,7 +575,11 @@ CellBlock region_cells(const Region& r, long min_level) {
     CellBlock b;
     b.lon0 = clampl(static_cast<long>(std::floor(-180.0 + first_x * size)), -180, 179);
     b.lon1 = clampl(static_cast<long>(std::floor(r.east - 1e-9)), -180, 179);
-    b.lat0 = clampl(static_cast<long>(std::floor(-90.0 + first_y * size)), -90, 89);
+    // ...and one cell FURTHER SOUTH than that, because a tile whose south edge
+    // falls exactly on a whole-degree parallel is assigned to the granule cell
+    // BELOW it (that granule is the one holding the edge post). Without this
+    // the southmost such tile row is never planned at all.
+    b.lat0 = clampl(static_cast<long>(std::floor(-90.0 + first_y * size)) - 1, -90, 89);
     b.lat1 = clampl(static_cast<long>(std::floor(r.north - 1e-9)), -90, 89);
     if (b.lon1 < b.lon0) b.lon1 = b.lon0;
     if (b.lat1 < b.lat0) b.lat1 = b.lat0;
@@ -757,9 +761,16 @@ int ingest_plan(void) {
         const double gn = t.north < t.region->north ? t.north : t.region->north;
         std::string dem_urls, wbm_urls;
         if (ge > gw && gn > gs) {
+            // A GRANULE'S TIEPOINT IS ITS NORTH-WEST CORNER AND ITS POSTS STOP
+            // ONE SPACING SHORT OF ITS SOUTH AND EAST EDGES. So granule (lat,
+            // lon) holds latitudes (lat, lat+1] and longitudes [lon, lon+1):
+            // the post at latitude exactly `gs` is row 0 of granule gs-1, and
+            // the post at longitude exactly `ge` is column 0 of granule ge.
+            // Bracketing with floor(gs) and floor(ge - eps) drops both, which
+            // is a whole edge row/column of a tile read as height 0.
             const long lon0 = clampl(static_cast<long>(std::floor(gw)), -180, 179);
-            const long lon1 = clampl(static_cast<long>(std::floor(ge - 1e-9)), -180, 179);
-            const long lat0 = clampl(static_cast<long>(std::floor(gs)), -90, 89);
+            const long lon1 = clampl(static_cast<long>(std::floor(ge)), -180, 179);
+            const long lat0 = clampl(static_cast<long>(std::floor(gs - 1e-9)), -90, 89);
             const long lat1 = clampl(static_cast<long>(std::floor(gn - 1e-9)), -90, 89);
             for (long lat = lat0; lat <= lat1; lat++) {
                 for (long lon = lon0; lon <= lon1; lon++) {
@@ -834,13 +845,28 @@ int ingest_plan(void) {
 //     descriptors, always exactly four so the flow's http nodes are fed
 //     unconditionally), and
 //   * ONE plan frame carries every tile of that level whose SOUTH-WEST CORNER
-//     falls in the cell.
+//     POST is held by the cell.
 //
-// The south-west corner is the assignment rule for a reason: a tile so
-// assigned extends at most one tile-span north and east, so its extent lies
-// inside the 2x2 neighbourhood and NEVER needs a third cell. Assigning by
-// tile CENTRE would reach into the west and south neighbours as well and make
-// the granule set 3x3.
+// "HELD BY", NOT "INSIDE". A Copernicus granule's tiepoint is its NORTH-WEST
+// corner and its posts stop one spacing short of its south edge, so granule
+// (lat, lon) holds latitudes (lat, lat+1] and longitudes [lon, lon+1) — the
+// post at latitude exactly `lat` is row 0 of the granule BELOW it. The rule
+// used to be the half-open square [lat, lat+1) x [lon, lon+1), and for every
+// tile whose south edge lands on a whole-degree parallel that put the tile in
+// a cell whose 2x2 neighbourhood does NOT contain its own south-edge posts:
+// the encoder found no granule for them and emitted height 0. Measured on the
+// real regional pyramid before the fix: 90 tiles at lat 45.000 across levels
+// 8-11, every one with all 65 posts of mesh row 0 at 0.00 m against a source
+// DEM of up to 340 m there, i.e. a 340-metre cliff at the shared edge with
+// the tile to the south. Globally that is a zero-metre notch line along the
+// equator, both 45th parallels and the poles at every level >= 8.
+//
+// Under the corrected rule a tile assigned to cell (lat, lon) has its south
+// edge in (lat, lat+1] and extends at most one tile-span north and east, so
+// every post it needs lies in latitudes (lat, lat+2] and longitudes
+// [lon, lon+2) — exactly the 2x2 neighbourhood, still never a third cell.
+// Assigning by tile CENTRE would reach into the west and south neighbours as
+// well and make the granule set 3x3.
 //
 // LEVEL FLOOR. That argument holds only while a tile is no wider than a
 // granule, which is level 8 (180/2^8 = 0.703 degrees) and deeper. Shallower
@@ -966,9 +992,12 @@ int granule_plan(void) {
                                block.x0, block.x1);
         const long x1 = clampl(static_cast<long>(std::floor((cell.lon + 1 + 180.0) / size - 1e-9)),
                                block.x0, block.x1);
-        const long y0 = clampl(static_cast<long>(std::ceil((cell.lat + 90.0) / size - 1e-9)),
+        // The bracket is deliberately one row wider than the rule on each side;
+        // the exact test in the loop decides membership, and a row that fails
+        // it costs one comparison.
+        const long y0 = clampl(static_cast<long>(std::floor((cell.lat + 90.0) / size)) - 1,
                                block.y0, block.y1);
-        const long y1 = clampl(static_cast<long>(std::floor((cell.lat + 1 + 90.0) / size - 1e-9)),
+        const long y1 = clampl(static_cast<long>(std::floor((cell.lat + 1 + 90.0) / size)) + 1,
                                block.y0, block.y1);
         tiles_json.clear();
         tile_count = 0;
@@ -976,8 +1005,16 @@ int granule_plan(void) {
             for (long x = x0; x <= x1; x++) {
                 const double west = -180.0 + x * size;
                 const double south = -90.0 + y * size;
+                // Longitude is half-open WEST-inclusive and latitude is
+                // half-open NORTH-inclusive, because that is the shape of the
+                // granule that HOLDS the corner post (see the header). The
+                // south pole is the one exception: no granule exists below
+                // -90, so a tile sitting on it stays in cell -90.
                 if (west < cell.lon || west >= cell.lon + 1) continue;
-                if (south < cell.lat || south >= cell.lat + 1) continue;
+                const double south_cell =
+                    (south == std::floor(south) && south > -90.0) ? south - 1.0
+                                                                  : std::floor(south);
+                if (south_cell != static_cast<double>(cell.lat)) continue;
                 // A TILE BELONGS TO THE HIGHEST-PRIORITY REGION THAT CONTAINS
                 // IT. Regions are sorted priority-descending, so any region
                 // EARLIER in the list already claimed this address at this

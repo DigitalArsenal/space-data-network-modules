@@ -187,39 +187,69 @@ test("granule URLs handle the N00 / S01 / E000 / W001 edge cells exactly", async
 
   const west = plans.find((p) => p.tile.x === 0);
   const east = plans.find((p) => p.tile.x === 1);
-  // Western root tile: only the [-1,0) longitude column -> W001; both latitude
-  // cells -> S01 below the equator, N00 above it.
-  assert.deepEqual(west.dem_urls, [dem("S01", "W001"), dem("N00", "W001")]);
-  assert.deepEqual(west.wbm_urls, [wbm("S01", "W001"), wbm("N00", "W001")]);
-  // Eastern root tile: only the [0,1) column -> E000.
-  assert.deepEqual(east.dem_urls, [dem("S01", "E000"), dem("N00", "E000")]);
-  assert.deepEqual(east.wbm_urls, [wbm("S01", "E000"), wbm("N00", "E000")]);
+  // The cell list covers the posts, not the square. A granule's tiepoint is
+  // its NORTH-WEST corner, so it holds latitudes (lat, lat+1] and longitudes
+  // [lon, lon+1): the post at latitude exactly -1 is row 0 of S02, and the
+  // post at longitude exactly 0 is column 0 of E000. Bracketing by the square
+  // alone dropped an entire edge row and column of posts, which the encoder
+  // then emitted as height 0.
+  assert.deepEqual(west.dem_urls, [
+    dem("S02", "W001"), dem("S02", "E000"),
+    dem("S01", "W001"), dem("S01", "E000"),
+    dem("N00", "W001"), dem("N00", "E000"),
+  ]);
+  assert.deepEqual(west.wbm_urls, [
+    wbm("S02", "W001"), wbm("S02", "E000"),
+    wbm("S01", "W001"), wbm("S01", "E000"),
+    wbm("N00", "W001"), wbm("N00", "E000"),
+  ]);
+  assert.deepEqual(east.dem_urls, [
+    dem("S02", "E000"), dem("S02", "E001"),
+    dem("S01", "E000"), dem("S01", "E001"),
+    dem("N00", "E000"), dem("N00", "E001"),
+  ]);
+  assert.deepEqual(east.wbm_urls, [
+    wbm("S02", "E000"), wbm("S02", "E001"),
+    wbm("S01", "E000"), wbm("S01", "E001"),
+    wbm("N00", "E000"), wbm("N00", "E001"),
+  ]);
 });
 
 test("granule URLs carry zero-padded lat/lon for an ordinary land tile", async (t) => {
   const harness = await createHarness(t, createConfigStub(CONFIG));
   const plans = planFrames(await harness.invoke({ methodId: "ingest_plan", inputs: [tickInput()] }));
   // Plan index 0 is the alps' level-0 tile; its granules are the region bbox
-  // [5,44]-[8,47] expanded to whole-degree cells: lon 5..7, lat 44..46.
+  // [5,44]-[8,47] expanded to the whole-degree cells that HOLD its posts:
+  // lon 5..8 (the post at longitude 8 is column 0 of E008) and lat 43..46
+  // (the post at latitude 44 is row 0 of N43), so 4x4.
   const first = plans[0];
-  assert.equal(first.dem_urls.length, 9);
+  assert.equal(first.dem_urls.length, 16);
   assert.equal(
     first.dem_urls[0],
-    `${S3}Copernicus_DSM_COG_10_N44_00_E005_00_DEM/Copernicus_DSM_COG_10_N44_00_E005_00_DEM.tif`,
+    `${S3}Copernicus_DSM_COG_10_N43_00_E005_00_DEM/Copernicus_DSM_COG_10_N43_00_E005_00_DEM.tif`,
+  );
+  assert.ok(
+    first.dem_urls.some((u) => u.endsWith("Copernicus_DSM_COG_10_N44_00_E005_00_DEM.tif")),
+    "the cell the region's own south-west corner sits in is still listed",
   );
   assert.equal(
     first.wbm_urls[0],
-    `${S3}Copernicus_DSM_COG_10_N44_00_E005_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N44_00_E005_00_WBM.tif`,
+    `${S3}Copernicus_DSM_COG_10_N43_00_E005_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N43_00_E005_00_WBM.tif`,
   );
 });
 
 test("a western-hemisphere region names W granules with three digits", async (t) => {
   const harness = await createHarness(t, createConfigStub(CONFIG));
   const plans = planFrames(await harness.invoke({ methodId: "ingest_plan", inputs: [tickInput()] }));
-  // Index 4 is iceland's level-0 tile: lon -24..-14 -> W024..W014, lat 63..66.
+  // Index 4 is iceland's level-0 tile: lon -24..-13 -> W024..W013, lat 62..66
+  // (the row below the bbox holds the posts on the region's south parallel).
   const iceland = plans[4];
   assert.equal(iceland.region, "iceland");
-  assert.match(iceland.dem_urls[0], /Copernicus_DSM_COG_10_N63_00_W024_00_DEM\.tif$/);
+  assert.match(iceland.dem_urls[0], /Copernicus_DSM_COG_10_N62_00_W024_00_DEM\.tif$/);
+  assert.ok(
+    iceland.dem_urls.some((u) => /Copernicus_DSM_COG_10_N63_00_W024_00_DEM\.tif$/.test(u)),
+    "W024 is still three-digit and still listed",
+  );
 });
 
 // ---------------------------------------------------------------------------

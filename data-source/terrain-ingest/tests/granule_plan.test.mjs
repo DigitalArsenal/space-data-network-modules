@@ -95,12 +95,16 @@ test("one invocation plans ONE cell: four DEM + four water descriptors and one t
   const job = byPort.get("job");
 
   assert.equal(job.level, 8, "the shallowest planned level first");
-  // The walk starts at cell (9, 45), not (10, 45), and that is the point. The
+  // The walk starts at cell (9, 44), not (10, 45), and that is the point. The
   // westmost z8 tile the region overlaps is x=270, whose west edge is 9.84375
-  // — its SOUTH-WEST CORNER is in the cell to the WEST of the region. Bounding
-  // the walk by the region's own degrees would drop that entire column.
+  // — its SOUTH-WEST CORNER is in the cell to the WEST of the region. And the
+  // southmost is y=192, whose south edge is exactly 45.0: the granule that
+  // HOLDS that post row is N44, one cell SOUTH of the region, because a
+  // granule's posts run from its north edge down to one spacing above its
+  // south edge. Bounding the walk by the region's own degrees would drop that
+  // entire column and that entire row.
   assert.equal(job.cell_lon, 9);
-  assert.equal(job.cell_lat, 45);
+  assert.equal(job.cell_lat, 44);
   assert.equal(plan.tilesetId, "spaceaware-terrain");
   assert.equal(plan.scheme, "GEOGRAPHIC_WGS84");
   assert.equal(plan.rowOriginNorth, false);
@@ -118,10 +122,10 @@ test("one invocation plans ONE cell: four DEM + four water descriptors and one t
   const demUrls = [0, 1, 2, 3].map((s) => byPort.get(`dem_${s}`).url);
   const wbmUrls = [0, 1, 2, 3].map((s) => byPort.get(`wbm_${s}`).url);
   assert.deepEqual(demUrls.map((u) => u.match(/_(N\d\d|S\d\d)_00_(E\d\d\d|W\d\d\d)/).slice(1)), [
+    ["N44", "E009"],
+    ["N44", "E010"],
     ["N45", "E009"],
     ["N45", "E010"],
-    ["N46", "E009"],
-    ["N46", "E010"],
   ]);
   for (const descriptor of [0, 1, 2, 3].map((s) => byPort.get(`dem_${s}`))) {
     assert.equal(descriptor.responseWire, "raw-body-v1", "binary granules never ride base64 JSON");
@@ -161,21 +165,43 @@ test("the enumeration PARTITIONS the region: every tile once, none missed", asyn
   }
 });
 
-test("every planned tile lies inside its cell's 2x2 granule neighbourhood", async (t) => {
+test("EVERY POST of every planned tile is inside the cell's 2x2 granule neighbourhood", async (t) => {
+  // The property is about POSTS, not about squares, and that distinction is
+  // the whole bug this test failed to catch before 2026-08-26.
+  //
+  // A Copernicus granule's tiepoint is its NORTH-WEST corner and its posts stop
+  // one spacing short of its south edge, so granule (lat, lon) holds
+  // latitudes (lat, lat+1] and longitudes [lon, lon+1). The 2x2 neighbourhood
+  // {cell_lat, cell_lat+1} x {cell_lon, cell_lon+1} therefore holds
+  // latitudes (cell_lat, cell_lat+2] and longitudes [cell_lon, cell_lon+2).
+  //
+  // Under the old assignment rule (south-west corner INSIDE the square) a tile
+  // whose south edge sat exactly on a whole-degree parallel had its entire
+  // south post row OUTSIDE that latitude range: the encoder found no granule
+  // for those 65 posts and emitted 0 m, a 340-metre cliff against the tile to
+  // the south on the real pyramid. Asserting `south >= cell_lat` passed
+  // happily on exactly the tiles that were broken, which is why the assertion
+  // below is written against the granule's real coverage instead.
+  let onParallel = 0;
   for (const { job, plan } of await walkAll(t)) {
     const size = 180 / 2 ** job.level;
     for (const tile of plan.tiles) {
       const west = -180 + tile.x * size;
       const south = -90 + tile.y * size;
-      // The south-west corner is IN the cell …
-      assert.ok(west >= job.cell_lon && west < job.cell_lon + 1, `west ${west} in cell ${job.cell_lon}`);
-      assert.ok(south >= job.cell_lat && south < job.cell_lat + 1, `south ${south} in cell ${job.cell_lat}`);
-      // … and the whole extent is inside the 2x2 neighbourhood, so the encoder
-      // is never asked to sample bytes it was not given.
-      assert.ok(west + size <= job.cell_lon + 2, "east edge inside the neighbourhood");
+      if (south === Math.floor(south)) onParallel += 1;
+      // Latitude: (cell_lat, cell_lat + 2] — STRICT at the south end, because
+      // the granule below the cell is not fetched.
+      assert.ok(
+        south > job.cell_lat,
+        `south ${south} is not held by cell ${job.cell_lat} (its posts belong to ${job.cell_lat - 1})`,
+      );
       assert.ok(south + size <= job.cell_lat + 2, "north edge inside the neighbourhood");
+      // Longitude: [cell_lon, cell_lon + 2) — inclusive at the west end.
+      assert.ok(west >= job.cell_lon, `west ${west} in cell ${job.cell_lon}`);
+      assert.ok(west + size < job.cell_lon + 2, "east edge inside the neighbourhood");
     }
   }
+  assert.ok(onParallel > 0, "the fixture must actually contain tiles sitting on a whole degree");
 });
 
 test("CHILD_AVAILABILITY states this tileset's children, not four by assumption", async (t) => {
