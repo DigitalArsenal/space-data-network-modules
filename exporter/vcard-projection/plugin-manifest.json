@@ -1,0 +1,195 @@
+{
+  "pluginId": "com.digitalarsenal.exporter.vcard-projection",
+  "name": "vCard Projection",
+  "version": "0.1.0",
+  "description": "Pure WASM vCard 3.0 projection of $EPM (\u00a721 literal-key): card_full (full contact card + verification chain + photo), card_compact (QR-density card: sign/encrypt/epmsig only), card_parse (vCard \u2192 EPM fields). No capabilities: this module performs no I/O, no signing, no key derivation \u2014 it projects record bytes to text.",
+  "pluginFamily": "exporter",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "abiVersion": 1,
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "vCard 3.0 text projection of $EPM \u2014 stateless byte-to-text transform, no host calls, no threading"
+  },
+  "buildArtifacts": [
+    {
+      "artifactId": "vcard-projection-wasm",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "card_full",
+      "displayName": "Full vCard",
+      "inputPorts": [
+        {
+          "portId": "epm",
+          "acceptedTypeSets": [
+            {
+              "setId": "epm-record",
+              "allowedTypes": [
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM"
+                }
+              ],
+              "description": "Size-prefixed $EPM FlatBuffer record (the node's signed identity record)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $EPM record to project."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "vcard",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcard-text",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "detail": "vCard 3.0 (RFC 2426) text \u2014 a text format with no FlatBuffer schema; $VCF is a normative annex, not a .fbs",
+                "mediaType": "text/vcard"
+              },
+              "description": "UTF-8 vCard 3.0 text (the full contact card with verification chain + photo).",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The projected vCard 3.0 text."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "card_compact",
+      "displayName": "Compact QR vCard",
+      "inputPorts": [
+        {
+          "portId": "epm",
+          "acceptedTypeSets": [
+            {
+              "setId": "epm-record",
+              "allowedTypes": [
+                {
+                  "schemaName": "EPM.fbs",
+                  "fileIdentifier": "$EPM",
+                  "rootTypeName": "EPM"
+                }
+              ],
+              "description": "Size-prefixed $EPM FlatBuffer record."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $EPM record to project."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "vcard",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcard-text",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "detail": "vCard 3.0 (RFC 2426) text \u2014 a text format with no FlatBuffer schema; $VCF is a normative annex, not a .fbs",
+                "mediaType": "text/vcard"
+              },
+              "description": "UTF-8 vCard 3.0 text (the compact QR card: sign/encrypt/epmsig aliases only, \u22641200 bytes).",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The compact vCard 3.0 text."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "card_parse",
+      "displayName": "Parse vCard to EPM fields",
+      "inputPorts": [
+        {
+          "portId": "vcard",
+          "acceptedTypeSets": [
+            {
+              "setId": "vcard-text",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "detail": "vCard 3.0 (RFC 2426) text \u2014 a text format with no FlatBuffer schema; $VCF is a normative annex, not a .fbs",
+                "mediaType": "text/vcard"
+              },
+              "description": "UTF-8 vCard 3.0 text to parse.",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The vCard text to parse back into EPM fields."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "epm_fields",
+          "acceptedTypeSets": [
+            {
+              "setId": "epm-fields-json",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "detail": "UTF-8 JSON of recovered EPM fields \u2014 not a FlatBuffer record; a control-frame projection for the flow runtime",
+                "mediaType": "application/json"
+              },
+              "description": "UTF-8 JSON of the EPM fields recovered from the vCard.",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The recovered EPM fields as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
