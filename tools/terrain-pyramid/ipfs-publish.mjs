@@ -151,6 +151,14 @@ const servingConfig = {
   terrain_description: layerConfig.terrain_description ?? "",
   terrain_tiles_template: IPFS_TILES_TEMPLATE,
 };
+// Whatever lattice the MOUNT would synthesize a miss on, this uses too. Left
+// unset the module defaults it, and the directory would then hold different
+// bytes at an address than the same node would serve from its own store — the
+// two are meant to be the same tile, and a fallback that disagrees with the
+// primary is worse than no fallback.
+if (layerConfig.terrain_synth_grid_size !== undefined) {
+  servingConfig.terrain_synth_grid_size = layerConfig.terrain_synth_grid_size;
+}
 
 const harness = await createBrowserModuleHarness({
   wasmSource: wasm,

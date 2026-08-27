@@ -96,6 +96,18 @@ levels in the seam ruling, so changing it is Atlas's call. The alternative
 lever is compression at the node's `/ipfs` proxy, which is Hermes/Hephaestus
 territory and outside this lane's components.
 
+A smaller, independent lever sits on the SYNTHESIZED tiles: they are flat by
+construction and cut on the mount's synth lattice (default 65×65 = 4,225
+vertices), so `0/0/0.terrain` is 75,140 bytes of mesh describing a plane four
+vertices would describe exactly. `terrain_synth_grid_size` already exists, and
+the publisher now honours whatever the mount configures rather than defaulting
+independently — a fallback that disagrees byte-for-byte with the primary is
+worse than no fallback. Setting it small shrinks those files by two orders of
+magnitude, but it changes what the MOUNT serves too, and here it is 36 files
+against 4,615, so it is not the bound that matters. Named so it is not
+rediscovered as a surprise on a global build, where the shallow levels are a
+larger share.
+
 **The 304 is lost in the legacy proxy, not in IPFS.** kubo at `127.0.0.1:8091`
 answers `If-None-Match` with `304` on all four probes. The node's
 `admin.ipfs_gateway_url` currently points at `127.0.0.1:8081` — the legacy
