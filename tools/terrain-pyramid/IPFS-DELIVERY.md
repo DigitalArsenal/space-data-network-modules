@@ -243,3 +243,19 @@ Outputs, beside the ones `run.mjs` and `verify.mjs` already write:
 A local kubo works identically and is what a development run should use; the
 only thing host-01's API gives you is a pin on the box that serves the public
 gateway.
+
+## Why this talks to kubo directly, and not through the node's ipfs hook
+
+The node HAS an IPFS capability — `io.spacedatanetwork.ipfs:add` in both
+`sdn-server/internal/flowrt/capabilities/ipfs.go` and
+`internal/modulert/caps/ipfs.go` — and it is the right hook for what it does.
+It is not usable here: both implementations post ONE multipart part named
+`data` and return that blob's CID. A pyramid is a directory of 4,652 files
+whose identity is the directory's CID, which kubo builds from the multipart
+FILENAMES; there is no arity of single-blob adds that produces it.
+
+So the off-fleet builder speaks to the kubo RPC directly, which it is entitled
+to do — it is a build machine, not a node, and the API endpoint is
+configuration. If a pyramid publish should ever move INTO a flow, the hook
+needs a directory-capable add (or a `wrap-with-directory` multipart form) and
+that is a module-SDK/host change, not something to work around from a guest.
