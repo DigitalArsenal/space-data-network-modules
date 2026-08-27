@@ -289,10 +289,80 @@ test("tile's header geometry bounds every vertex and the occlusion point clears 
     center.z - mesh.header.centerZ,
   );
   assert.ok(centerError < 100e3, "tile centre is where the tile is");
-  // The horizon occlusion point lies outside the ellipsoid, beyond the tile.
-  const occMag = Math.hypot(mesh.header.occlusionX, mesh.header.occlusionY, mesh.header.occlusionZ);
-  assert.ok(occMag > 6356752.0, "occlusion point must clear the ellipsoid surface");
+  // THE HORIZON OCCLUSION POINT IS IN ELLIPSOID-SCALED SPACE, NOT ECEF METRES.
+  // CesiumTerrainProvider reads this field verbatim into
+  // QuantizedMeshTerrainData._horizonOcclusionPoint and passes it to
+  // EllipsoidalOccluder.isScaledSpacePointVisible as `occludeePointInScaledSpace`,
+  // so a spec-conforming value has magnitude of order 1, never of order 1e6.
+  // (Until 2026-08-26 the encoder multiplied the radii back in and THIS test
+  // asserted `> 6356752.0`, i.e. it enforced the violation. The bound below is
+  // the contract; the reference recomputation under it is the proof.)
+  const occ = {
+    x: mesh.header.occlusionX,
+    y: mesh.header.occlusionY,
+    z: mesh.header.occlusionZ,
+  };
+  const occMag = Math.hypot(occ.x, occ.y, occ.z);
   assert.ok(Number.isFinite(occMag));
+  assert.ok(occMag >= 1.0, "occlusion point must lie on or outside the unit (scaled) ellipsoid");
+  assert.ok(occMag < 10.0, `occlusion point must be SCALED, not ECEF metres (got ${occMag})`);
+
+  // Reference implementation: Cesium EllipsoidalOccluder.computeHorizonCullingPoint
+  // (computeMagnitude + magnitudeToPoint), transcribed and run over the same
+  // vertices this tile encoded.
+  const A = 6378137.0;
+  const B = 6356752.3142451793;
+  const toScaled = (p) => ({ x: p.x / A, y: p.y / A, z: p.z / B });
+  const positions = [];
+  for (let n = 0; n < mesh.vertexCount; n++) {
+    const lon = WEST + (mesh.u[n] / 32767) * (EAST - WEST);
+    const lat = SOUTH + (mesh.v[n] / 32767) * (NORTH - SOUTH);
+    const i = Math.round((mesh.u[n] * (GRID - 1)) / 32767);
+    const j = Math.round((mesh.v[n] * (GRID - 1)) / 32767);
+    positions.push(geodeticToEcef(lat, lon, expected[j * GRID + i]));
+  }
+  const sc = toScaled({ x: mesh.header.centerX, y: mesh.header.centerY, z: mesh.header.centerZ });
+  const cMag = Math.hypot(sc.x, sc.y, sc.z);
+  const dir = { x: sc.x / cMag, y: sc.y / cMag, z: sc.z / cMag };
+  let maxMagnitude = 0;
+  for (const p of positions) {
+    const sp = toScaled(p);
+    let magSq = sp.x * sp.x + sp.y * sp.y + sp.z * sp.z;
+    let mag = Math.sqrt(magSq);
+    const u = { x: sp.x / mag, y: sp.y / mag, z: sp.z / mag };
+    magSq = Math.max(1.0, magSq);
+    mag = Math.max(1.0, mag);
+    const cosAlpha = u.x * dir.x + u.y * dir.y + u.z * dir.z;
+    const cross = {
+      x: u.y * dir.z - u.z * dir.y,
+      y: u.z * dir.x - u.x * dir.z,
+      z: u.x * dir.y - u.y * dir.x,
+    };
+    const sinAlpha = Math.hypot(cross.x, cross.y, cross.z);
+    const cosBeta = 1.0 / mag;
+    const sinBeta = Math.sqrt(magSq - 1.0) * cosBeta;
+    const denom = cosAlpha * cosBeta - sinAlpha * sinBeta;
+    if (denom <= 0) continue;
+    maxMagnitude = Math.max(maxMagnitude, 1.0 / denom);
+  }
+  const reference = { x: dir.x * maxMagnitude, y: dir.y * maxMagnitude, z: dir.z * maxMagnitude };
+  for (const axis of ["x", "y", "z"]) {
+    assert.ok(
+      Math.abs(occ[axis] - reference[axis]) <= 1e-9 * Math.max(1, Math.abs(reference[axis])),
+      `occlusion ${axis}: ${occ[axis]} != Cesium reference ${reference[axis]}`,
+    );
+  }
+  // The point must actually occlude every vertex: each scaled vertex lies on
+  // the near side of the plane through it, which is what the culling test asks.
+  for (const p of positions) {
+    const sp = toScaled(p);
+    // Vertices BELOW the ellipsoid are the clamped case in Cesium's own
+    // computeMagnitude and carry no such guarantee; the client recomputes the
+    // point for those tiles (minimumHeight < 0) anyway.
+    if (Math.hypot(sp.x, sp.y, sp.z) < 1.0) continue;
+    const dot = sp.x * occ.x + sp.y * occ.y + sp.z * occ.z;
+    assert.ok(dot >= 1.0 - 1e-9, "every vertex must be occluded by the emitted point");
+  }
 });
 
 test("tile decodes the tiled + floating-point-predictor layout to the same heights", async (t) => {

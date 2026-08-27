@@ -159,15 +159,35 @@ test("peak <= 1024 pages and ZERO growth over a 64-invoke A/B/A interleave", asy
     `peak ${peak} pages (${(peak / 16).toFixed(1)} MiB) must stay at or under ${PEAK_PAGE_CEILING} ` +
       `pages (64 MiB) at gridSize ${GRID} across four full-size granules`,
   );
+  // ZERO GROWTH, over EVERY settled invoke rather than two sampled ones.
+  //
+  // The interleave is A/B/A, so the allocator's high-water is only known once
+  // each member of the cycle has run at least once with the other's blocks
+  // already placed — invokes 1..3. From the first COMPLETE cycle onwards the
+  // page count must never move again, and that is asserted over all 61
+  // remaining points, not over a pair. (Measured 2026-08-26 at 128 invokes:
+  // 926 pages at invoke 1, 927 from invoke 3, and 927 at every invoke through
+  // 128 — a one-time settle, not a per-invoke leak. The earlier form of this
+  // assertion compared invoke 2 against invoke 64, which happened to straddle
+  // that settle and so measured cycle phase rather than growth.)
+  const settled = pagesAfter.slice(3);
+  const settledMin = Math.min(...settled);
+  const settledMax = Math.max(...settled);
   assert.equal(
-    pagesAfter[1],
+    settledMin,
+    settledMax,
+    `pages across invokes 4..64 moved between ${settledMin} and ${settledMax}: ` +
+      "any movement after the first full A/B/A cycle is a per-invoke leak",
+  );
+  assert.equal(
     pagesAfter[63],
-    `pages after invoke 2 (${pagesAfter[1]}) must equal pages after invoke 64 (${pagesAfter[63]}): ` +
-      "any difference is a per-invoke leak",
+    settledMax,
+    "the last invoke must sit at the settled page count",
   );
   console.log(
     `[memory-bound] gridSize ${GRID}, 4 granules of ${GRANULE_PX}x${GRANULE_PX}: ` +
-      `peak ${peak} pages (${(peak / 16).toFixed(1)} MiB), pages@2 ${pagesAfter[1]}, pages@64 ${pagesAfter[63]}`,
+      `peak ${peak} pages (${(peak / 16).toFixed(1)} MiB), pages@1 ${pagesAfter[0]}, ` +
+      `settled ${settledMax} from invoke 4 through 64`,
   );
 });
 

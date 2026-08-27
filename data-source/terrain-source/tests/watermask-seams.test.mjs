@@ -200,6 +200,47 @@ test("adjacent tiles share their boundary posts BYTE FOR BYTE, north-south", asy
   );
 });
 
+test("EVERY adjacent pair in the block agrees on its shared posts, both axes", async (t) => {
+  // Two hand-picked pairs are not the property. On the real regional pyramid
+  // 34 of 4,446 vertically adjacent pairs disagreed on 1-4 shared posts while
+  // the two pairs above passed: 31 of them from the zeroed-south-row planner
+  // bug, and 3 at ordinary latitudes purely because tile y computed the shared
+  // parallel as `north - 255*dlat` and tile y+1 computed it as
+  // `south' + 0*dlat'` — equal in exact arithmetic, not always equal in
+  // doubles, and std::lround then flipped on the tie. The lattice is addressed
+  // by GLOBAL POST INDEX now, so both tiles evaluate the same expression and
+  // the identity is structural. This sweeps all 220 adjacencies in the block.
+  const addresses = [];
+  for (let dx = 0; dx < 11; dx++) {
+    for (let dy = 0; dy < 11; dy++) addresses.push({ x: X0 + dx, y: Y0 + dy });
+  }
+  const { tiles } = await encodeBlock(t, addresses);
+  const masks = new Map(tiles.map((dtt) => [`${dtt.x}/${dtt.y}`, maskOf(dtt)]));
+  assert.equal(masks.size, addresses.length);
+
+  let eastWest = 0;
+  let northSouth = 0;
+  for (const { x, y } of addresses) {
+    const here = masks.get(`${x}/${y}`);
+    const east = masks.get(`${x + 1}/${y}`);
+    if (east) {
+      assert.deepEqual(column(here, 255), column(east, 0), `east-west seam at ${x}/${y}`);
+      eastWest += 1;
+    }
+    const north = masks.get(`${x}/${y + 1}`);
+    if (north) {
+      assert.deepEqual(
+        Buffer.from(row(here, 0)),
+        Buffer.from(row(north, 255)),
+        `north-south seam at ${x}/${y}`,
+      );
+      northSouth += 1;
+    }
+  }
+  assert.equal(eastWest, 110);
+  assert.equal(northSouth, 110);
+});
+
 test("ocean and interior tiles are >= 95% uniform, and ocean is EXACTLY zero", async (t) => {
   // Sample the whole 1-degree square, then split it: a tile whose own extent is
   // entirely on one side of the coast is an ocean or interior tile, and those
