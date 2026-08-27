@@ -84,6 +84,9 @@ function readDtt(record) {
     minHeightM: f64(11),
     maxHeightM: f64(12),
     payload: payload(15),
+    gridWidth: u32(16),
+    gridHeight: u32(17),
+    dataCoverageFraction: f64(26),
     waterMask: payload(29),
     waterMaskKind: i8(28),
     waterMaskWidth: u32(30),
@@ -91,6 +94,50 @@ function readDtt(record) {
     maxLevel: u32(36),
     etag: str(40),
   };
+}
+
+// ── the four EDGE post rows of a quantized mesh, in metres ─────────────────
+//
+// Only the edges are kept: 4,621 tiles x 4,225 vertices x three arrays is half
+// a gigabyte, and the property under test is entirely about shared posts.
+// Vertices are identified by their QUANTISED u/v, so the encoder's index
+// reordering cannot move them.
+function meshEdges(mesh, dtt) {
+  const grid = dtt.gridWidth || 65;
+  const count = mesh.readUInt32LE(88);
+  let at = 92;
+  const zigzag = () => {
+    const out = new Uint16Array(count);
+    let prev = 0;
+    for (let i = 0; i < count; i += 1) {
+      const raw = mesh.readUInt16LE(at);
+      at += 2;
+      prev += (raw >> 1) ^ -(raw & 1);
+      out[i] = prev & 0xffff;
+    }
+    return out;
+  };
+  const u = zigzag();
+  const v = zigzag();
+  const h = zigzag();
+  const range = dtt.maxHeightM - dtt.minHeightM;
+  const edges = {
+    north: new Float64Array(grid).fill(NaN),
+    south: new Float64Array(grid).fill(NaN),
+    west: new Float64Array(grid).fill(NaN),
+    east: new Float64Array(grid).fill(NaN),
+    step: range / 32767,
+    grid,
+  };
+  const index = (q) => Math.round((q * (grid - 1)) / 32767);
+  for (let i = 0; i < count; i += 1) {
+    const metres = dtt.minHeightM + (h[i] / 32767) * range;
+    if (v[i] === 32767) edges.north[index(u[i])] = metres;
+    if (v[i] === 0) edges.south[index(u[i])] = metres;
+    if (u[i] === 0) edges.west[index(v[i])] = metres;
+    if (u[i] === 32767) edges.east[index(v[i])] = metres;
+  }
+  return edges;
 }
 
 function splitStream(bytes) {
@@ -153,6 +200,10 @@ let digestMismatch = 0;
 let overCeiling = 0;
 let maxLevel = 0;
 let maskBytes = 0;
+let minLevel = Infinity;
+let partialCoverage = 0;
+let wholeRowsMissing = 0;
+const edgesByAddress = new Map();
 const problems = [];
 
 for (const record of records) {
@@ -161,6 +212,7 @@ for (const record of records) {
   if (seen.has(key)) problems.push(`duplicate address ${key}`);
   seen.add(key);
   maxLevel = Math.max(maxLevel, dtt.level);
+  minLevel = Math.min(minLevel, dtt.level);
   if (!byLevel.has(dtt.level)) byLevel.set(dtt.level, []);
   byLevel.get(dtt.level).push({ x: dtt.x, y: dtt.y });
 
@@ -202,6 +254,67 @@ for (const record of records) {
   if (Math.abs(minHeight - dtt.minHeightM) > 1e-3 || Math.abs(maxHeight - dtt.maxHeightM) > 1e-3) {
     problems.push(`mesh header height range disagrees with the record at ${key}`);
   }
+
+  // ── COVERAGE, which the run itself wrote and this verifier used to ignore ──
+  // The encoder states the fraction of posts it actually sampled. A deficit
+  // that is an exact non-zero multiple of the grid width is a WHOLE POST ROW OR
+  // COLUMN with no source behind it — the signature of a granule the planner
+  // did not fetch, and exactly the shape of the 90 zeroed-south-row tiles a
+  // clean-looking run shipped in August 2026. A ragged deficit is ordinary
+  // coastline against an absent ocean granule and is only counted.
+  const posts = (dtt.gridWidth || 65) * (dtt.gridHeight || 65);
+  const missing = Math.round((1 - dtt.dataCoverageFraction) * posts);
+  if (missing > 0) {
+    partialCoverage += 1;
+    const width = dtt.gridWidth || 65;
+    if (missing % width === 0 && missing / width <= 4) {
+      wholeRowsMissing += 1;
+      problems.push(
+        `${key} is missing ${missing / width} whole post row(s)/column(s) ` +
+          `(coverage ${dtt.dataCoverageFraction.toFixed(6)}): a granule the plan did not fetch`,
+      );
+    }
+  }
+
+  edgesByAddress.set(key, meshEdges(mesh, dtt));
+}
+
+// ── EDGE CONTINUITY, which no per-tile check can see ───────────────────────
+// Two adjacent tiles share a post row. They sample it from the same global
+// lattice, so the only thing that may separate their answers is their own
+// quantisation step. Anything larger is a seam a person will see: the zeroed
+// south row showed up here as a 340-metre disagreement.
+let adjacencies = 0;
+let worstSeam = 0;
+let worstSeamAt = null;
+for (const [key, here] of edgesByAddress) {
+  const [level, x, y] = key.split("/").map(Number);
+  const pairs = [
+    [`${level}/${x + 1}/${y}`, "east", "west"],
+    [`${level}/${x}/${y + 1}`, "north", "south"],
+  ];
+  for (const [otherKey, mine, theirs] of pairs) {
+    const other = edgesByAddress.get(otherKey);
+    if (!other) continue;
+    adjacencies += 1;
+    const tolerance = Math.max(here.step, other.step) + 1e-6;
+    for (let i = 0; i < here.grid; i += 1) {
+      const a = here[mine][i];
+      const b = other[theirs][i];
+      if (Number.isNaN(a) || Number.isNaN(b)) continue;
+      const delta = Math.abs(a - b);
+      if (delta > worstSeam) {
+        worstSeam = delta;
+        worstSeamAt = `${key} ${mine} vs ${otherKey} ${theirs} post ${i}`;
+      }
+      if (delta > tolerance) {
+        problems.push(
+          `seam at ${key} ${mine} vs ${otherKey} ${theirs} post ${i}: ` +
+            `${a.toFixed(3)} m vs ${b.toFixed(3)} m (tolerance ${tolerance.toFixed(3)} m)`,
+        );
+      }
+    }
+  }
 }
 
 sizes.sort((a, b) => a - b);
@@ -234,6 +347,11 @@ const summary = {
   oceanTilesStored: oceanStored,
   digestMismatches: digestMismatch,
   tilesOverCeiling: overCeiling,
+  tilesWithPartialCoverage: partialCoverage,
+  tilesMissingWholePostRows: wholeRowsMissing,
+  edgeAdjacenciesChecked: adjacencies,
+  worstSharedEdgeDeltaM: +worstSeam.toFixed(6),
+  worstSharedEdgeAt: worstSeamAt,
   layerJson: { maxzoom: maxLevel, extensions: ["watermask"], available },
   problems,
 };
@@ -247,11 +365,25 @@ if (args.json) {
 fs.writeFileSync(path.join(outDir, "verify-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
 fs.writeFileSync(
   path.join(outDir, "layer-json-config.json"),
-  `${JSON.stringify({ terrain_maxzoom: maxLevel, terrain_available: available }, null, 2)}\n`,
+  `${JSON.stringify(
+    {
+      terrain_maxzoom: maxLevel,
+      // The shallowest level this run actually BUILT. Below it the store is not
+      // authoritative, so the serving module must not read a miss inside
+      // availability as "measured all-ocean and skipped" — it synthesizes flat
+      // LAND there instead of painting the continents as specular ocean. The
+      // key is written here rather than hand-set because only the run knows it.
+      terrain_ocean_synth_min_level: Number.isFinite(minLevel) ? minLevel : 0,
+      terrain_available: available,
+    },
+    null,
+    2,
+  )}\n`,
 );
 
 const failures = [
   problems.length ? `${problems.length} problems` : null,
+  wholeRowsMissing ? `${wholeRowsMissing} tiles missing a whole post row` : null,
   digestMismatch ? `${digestMismatch} digest mismatches` : null,
   overCeiling ? `${overCeiling} tiles over the ${BOUNDS.hard}-byte ceiling` : null,
   pct(0.5) > BOUNDS.p50 ? `p50 ${pct(0.5)} B over ${BOUNDS.p50}` : null,

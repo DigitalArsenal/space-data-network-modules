@@ -143,6 +143,10 @@ test("route turns a tile path into the DTT select plus serve context", async (t)
     // availability index, respond holds the store answer, and only the pair
     // decides whether a miss is normal traffic or a broken promise.
     insideAvailability: false,
+    // ...and whether a synthesized tile may claim WATER travels with it too.
+    // Absent terrain_ocean_synth_min_level no level is authoritative, so the
+    // answer is always false and no fabricated ocean can reach a client.
+    synthWater: false,
     synthGridSize: 65,
   });
 });
@@ -200,6 +204,70 @@ test("route answers unknown paths with a cacheable 404 and bad verbs with 405", 
   const http = decodeHttpResponse(new Uint8Array(post.outputs[0].payload));
   assert.equal(http.status, 405);
   assert.equal(http.headers.find((h) => h.name === "allow")?.value, "GET, HEAD");
+});
+
+test("ONE TILE, ONE URL: a junk prefix cannot alias a real address", async (t) => {
+  // The mount used to be found with rfind("/terrain/"), so every one of these
+  // resolved to the SAME tile and was answered 200 with `public, max-age=86400`
+  // — an unbounded number of distinct, publicly cacheable URLs for one
+  // resource, none of which a URL-keyed purge could ever reach. The mount is a
+  // PREFIX now, and anything left over that is not layer.json or a strict
+  // z/x/y.terrain is a 404.
+  const aliases = [
+    "/api/v1/terrain/a/terrain/8/271/192.terrain",
+    "/api/v1/terrain/ZZZ/terrain/8/271/192.terrain",
+    "/api/v1/terrain/1/2/3.terrain/terrain/8/271/192.terrain",
+    `/api/v1/terrain/${"x".repeat(8192)}/terrain/8/271/192.terrain`,
+  ];
+  for (const path of aliases) {
+    const response = await invoke(t, "route", [requestFrame(path)]);
+    assert.equal(response.statusCode, 0, `${path.slice(0, 40)}: a 404 is an answer`);
+    assert.deepEqual(
+      response.outputs.map((o) => o.portId),
+      ["response"],
+      "an aliased path must never reach the store query",
+    );
+    const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+    assert.equal(http.status, 404);
+  }
+  // …and the real address still routes.
+  const good = await invoke(t, "route", [requestFrame("/api/v1/terrain/8/271/192.terrain")]);
+  assert.deepEqual(new Set(good.outputs.map((o) => o.portId)), new Set(["query", "context"]));
+});
+
+test("the 404 body does not track the request: reflection is bounded", async (t) => {
+  // The detail carries the request path, which is client-controlled and — with
+  // the host's 1 MiB request-line default — can be ~1 MB. A 404 body that
+  // tracks it makes every junk URL a megabyte-scale PUBLICLY CACHEABLE entry.
+  const bodies = [];
+  for (const length of [100, 10_000, 200_000]) {
+    const response = await invoke(t, "route", [requestFrame(`/nope/${"a".repeat(length)}`)]);
+    const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+    assert.equal(http.status, 404);
+    bodies.push(http.body.length);
+  }
+  for (const size of bodies) {
+    assert.ok(size < 512, `404 body must stay bounded, got ${size} B`);
+  }
+  assert.equal(bodies[1], bodies[2], "the body stops tracking the path length entirely");
+});
+
+test("an over-long If-None-Match is dropped at the door, never carried", async (t) => {
+  // Every ETag this module issues is a quoted sha2-256 multihash (71 bytes), so
+  // a longer value cannot match one; carrying it across two guest invokes and a
+  // control frame buys nothing and costs an allocation per request.
+  const response = await invoke(t, "route", [
+    requestFrame("/api/v1/terrain/8/271/192.terrain", {
+      headers: { "if-none-match": `"${"9".repeat(100_000)}"` },
+    }),
+  ]);
+  const context = asJson(outputsByPort(response).get("context"));
+  assert.equal(context.ifNoneMatch, "", "dropped, which degrades to a 200");
+  // A real one still rides.
+  const ok = await invoke(t, "route", [
+    requestFrame("/api/v1/terrain/8/271/192.terrain", { headers: { "if-none-match": '"1220ab"' } }),
+  ]);
+  assert.equal(asJson(outputsByPort(ok).get("context")).ifNoneMatch, '"1220ab"');
 });
 
 // ---------------------------------------------------------------------------

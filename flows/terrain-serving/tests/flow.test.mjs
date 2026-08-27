@@ -182,7 +182,7 @@ async function storedRecordStream() {
 // Hostcall stub + request pump.
 // ---------------------------------------------------------------------------
 
-function createStub({ stream } = {}) {
+function createStub({ stream, config = CONFIG } = {}) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
@@ -195,7 +195,7 @@ function createStub({ stream } = {}) {
         const { meta } = decodeHostcallEnvelope(payload);
         calls.push({ operation, meta });
         if (operation === "plugin.getConfig") {
-          response = encodeHostcallEnvelope(CONFIG);
+          response = encodeHostcallEnvelope(config);
           return 0;
         }
         if (operation === "storage.flatsql_query_stream") {
@@ -354,13 +354,18 @@ test("a miss inside availability is synthesized by the COMPILED flow, never a 40
   assert.equal(header(http, "content-type"), "application/vnd.quantized-mesh");
   assert.equal(header(http, "content-encoding"), "gzip");
   assert.equal(header(http, "cache-control"), "public, max-age=86400");
-  assert.equal(header(http, "x-terrain-synthesized"), "uniform-water");
+  // LAND, not water: this config states no authoritative level
+  // (terrain_ocean_synth_min_level), nothing built level 0, and a
+  // hemisphere-wide root claiming an all-water mask is every continent
+  // rendered as specular ocean once the client upsamples from it.
+  assert.equal(header(http, "x-terrain-synthesized"), "uniform-land");
   assert.ok(header(http, "etag")?.startsWith('"1220'), "strong digest ETag");
 
   const mesh = zlib.gunzipSync(Buffer.from(http.body));
   assert.equal(mesh.readFloatLE(24), 0, "minHeight exactly zero");
   assert.equal(mesh.readFloatLE(28), 0, "maxHeight exactly zero");
   assert.equal(mesh.readUInt32LE(88), 65 * 65, "vertexCount after the 88-byte header");
+  assert.equal(mesh[mesh.length - 1], 0x00, "the one-byte water-mask extension says LAND");
 
   // It still went through the store first: synthesis is the ANSWER TO A MISS,
   // not a shortcut that stops the endpoint from serving real tiles.
@@ -368,6 +373,30 @@ test("a miss inside availability is synthesized by the COMPILED flow, never a 40
     stub.calls.some((c) => c.operation === "storage.flatsql_query_stream"),
     "the store was asked before anything was synthesized",
   );
+});
+
+test("with an authoritative floor configured, a miss at a BUILT level is water", async () => {
+  // The other half of the same rule: where the builder really did build,
+  // "published but not stored" means "measured all-ocean and skipped", and the
+  // console's reflective ocean depends on that mask being set.
+  const stub = createStub({
+    stream: new Uint8Array(4),
+    config: {
+      ...CONFIG,
+      terrain_maxzoom: 11,
+      terrain_ocean_synth_min_level: 11,
+      terrain_available: [
+        [{ startX: 0, startY: 0, endX: 1, endY: 0 }],
+        ...Array.from({ length: 10 }, () => []),
+        [{ startX: 2162, startY: 1536, endX: 2172, endY: 1546 }],
+      ],
+    },
+  });
+  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/11/2165/1540.terrain" });
+  assert.equal(http.status, 200);
+  assert.equal(header(http, "x-terrain-synthesized"), "uniform-water");
+  const mesh = zlib.gunzipSync(Buffer.from(http.body));
+  assert.equal(mesh[mesh.length - 1], 0xff, "the one-byte water-mask extension says WATER");
 });
 
 test("a miss OUTSIDE availability is still a cheap cacheable 404 through the flow", async () => {

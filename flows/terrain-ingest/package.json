@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../terrain-ingest.flow.json --deps ./deps.json",
-    "build": "node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../terrain-ingest.flow.json --deps ./deps.json --out ./dist",
+    "check": "node build.mjs check",
+    "build": "node build.mjs compile",
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {

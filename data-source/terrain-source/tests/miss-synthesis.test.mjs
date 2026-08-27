@@ -7,10 +7,21 @@
 // rejected tile promise, a hole in the globe and a console full of failures.
 //
 // The encoder never STORES an all-ocean tile (they are identical and there are
-// millions of them), which is what makes the resolution honest rather than a
-// papered-over error: an address the tileset published and the store does not
-// hold IS ocean, so the server synthesizes exactly that — height 0 everywhere,
-// UNIFORM_WATER — and says so on the wire with x-terrain-synthesized.
+// millions of them), so at a level the builder ACTUALLY BUILT, an address the
+// tileset published and the store does not hold really is ocean and the server
+// synthesizes exactly that — height 0, UNIFORM_WATER — saying so on the wire
+// with x-terrain-synthesized.
+//
+// THAT REASONING DOES NOT REACH LEVEL 0, and the encoder used to apply it
+// there anyway. The two level-0 roots are inside availability by construction
+// (a native provider with no level-0 entry never requests a tile at all) and
+// the builder builds NOTHING at level 0 — so an unconditional UNIFORM_WATER
+// root, which the client upsamples every uncovered level from, painted every
+// continent on Earth as specular ocean with a 24-hour public cache lifetime.
+// `terrain_ocean_synth_min_level` names the shallowest level where the store is
+// authoritative; below it a synthesized tile is flat LAND, and with the key
+// absent NOTHING is water — the fail-safe direction, since coarse terrain is a
+// gap and an ocean over Europe is a defect.
 //
 // Outside `available`, nothing was promised, and a miss stays the cheap
 // cacheable 404 it always was.
@@ -37,12 +48,18 @@ const Z11 = { startX: 2162, startY: 1536, endX: 2172, endY: 1546 };
 const CONFIG = {
   terrain_tileset_id: "spaceaware-terrain",
   terrain_maxzoom: 11,
+  // The builder built level 11 and nothing shallower; that is the level from
+  // which "published but not stored" means "measured all-ocean and skipped".
+  terrain_ocean_synth_min_level: 11,
   terrain_available: [
     [{ startX: 0, startY: 0, endX: 1, endY: 0 }],
     ...Array.from({ length: 10 }, () => []),
     [Z11],
   ],
 };
+// The same pyramid, published by a config that never states the floor.
+const CONFIG_NO_FLOOR = { ...CONFIG };
+delete CONFIG_NO_FLOOR.terrain_ocean_synth_min_level;
 
 const frame = (portId, payload) => {
   const bytes = typeof payload === "string" ? encoder.encode(payload) : Uint8Array.from(payload);
@@ -70,8 +87,8 @@ async function withHarness(t, config = CONFIG) {
 
 // route the path, then hand route's own context to respond with an EMPTY store
 // stream — the exact wiring the compiled flow produces on a store miss.
-async function serveMiss(t, path, { ifNoneMatch } = {}) {
-  const harness = await withHarness(t);
+async function serveMiss(t, path, { ifNoneMatch, config = CONFIG } = {}) {
+  const harness = await withHarness(t, config);
   const routed = await harness.invoke({
     methodId: "route",
     inputs: [
@@ -103,7 +120,7 @@ async function serveMiss(t, path, { ifNoneMatch } = {}) {
 
 const headerOf = (http, name) => http.headers.find((h) => h.name === name)?.value;
 
-test("a miss INSIDE availability is served as synthesized ocean, never a 404", async (t) => {
+test("a miss INSIDE availability at a BUILT level is synthesized ocean, never a 404", async (t) => {
   const { context, http } = await serveMiss(t, "/api/v1/terrain/11/2165/1540.terrain");
   assert.equal(context.insideAvailability, true, "route recognised the published address");
   assert.equal(http.status, 200, "the client asked for what the tileset promised; it gets terrain");
@@ -158,5 +175,39 @@ test("level 0 is inside availability, so the roots always answer", async (t) => 
     const { context, http } = await serveMiss(t, `/api/v1/terrain/0/${x}/0.terrain`);
     assert.equal(context.insideAvailability, true, `root ${x}/0 is published`);
     assert.equal(http.status, 200, `root ${x}/0 answers`);
+  }
+});
+
+test("THE LEVEL-0 ROOTS ARE NEVER WATER: nothing built them, so nothing measured them", async (t) => {
+  // The regression this file exists to hold: a hemisphere-wide root claiming
+  // an all-water mask is the whole globe rendered as specular ocean, because
+  // the client upsamples every level the pyramid does not cover from it.
+  for (const x of [0, 1]) {
+    const { http } = await serveMiss(t, `/api/v1/terrain/0/${x}/0.terrain`);
+    assert.equal(http.status, 200);
+    assert.equal(
+      headerOf(http, "x-terrain-synthesized"),
+      "uniform-land",
+      `root ${x}/0 must not claim water the builder never measured`,
+    );
+    const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(http.body)));
+    const watermask = mesh.extensions.find((e) => e.id === 2);
+    assert.equal(watermask.bytes.length, 1, "still a one-byte uniform mask");
+    assert.equal(watermask.bytes[0], 0x00, "0x00 = land: no reflective ocean over the continents");
+    assert.equal(mesh.header.minHeight, 0);
+    assert.equal(mesh.header.maxHeight, 0);
+  }
+});
+
+test("with no authoritative floor configured, NO synthesized tile claims water", async (t) => {
+  // Fail-safe: an operator who installs terrain_available without the floor
+  // gets coarse flat terrain, never fabricated ocean.
+  for (const path of ["/api/v1/terrain/0/0/0.terrain", "/api/v1/terrain/11/2165/1540.terrain"]) {
+    const { context, http } = await serveMiss(t, path, { config: CONFIG_NO_FLOOR });
+    assert.equal(context.synthWater, false, `${path}: route refuses to assume water`);
+    assert.equal(http.status, 200);
+    assert.equal(headerOf(http, "x-terrain-synthesized"), "uniform-land");
+    const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(http.body)));
+    assert.equal(mesh.extensions.find((e) => e.id === 2).bytes[0], 0x00);
   }
 });
