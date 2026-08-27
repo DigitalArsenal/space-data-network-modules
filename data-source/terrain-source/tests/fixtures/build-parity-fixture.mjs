@@ -225,6 +225,50 @@ const ctxMiss = respondContext("context-miss.json", {
   acceptsGzip: true,
   insideAvailability: false,
 });
+// ── route, THE OTHER SERVING METHOD THE GATE DID NOT COVER ─────────────────
+//
+// `route` is the method that evaluates Cesium's isTileAvailable rule and turns
+// a tile path into the DTT select plus the serve context, and it is where the
+// one-tile-one-URL decisions live: the mount prefix, the leading-zero refusal
+// and the query-string admission. It had a single-runtime node test and no
+// cross-runtime case at all, so the "tri-runtime identity for the encoder"
+// claim was one exported serving method short of the exported surface.
+//
+// It can be a parity case exactly as it stands. Its ONE host call is
+// plugin.getConfig, and the parity artifact stubs the host bridge to return
+// nothing — so route runs against its own documented DEFAULTS (mount
+// /api/v1/terrain/, tileset spaceaware-terrain, version 1.0.0, the two level-0
+// roots) identically in every lane. That is a real configuration, not a
+// degenerate one: it is what an operator gets before configuring anything.
+const { encodeHttpRequest, HTTP_REQUEST_TYPE_REF } = await import("space-data-module-sdk/http");
+const httpRequestBytes = (name, { method = "GET", path: reqPath, query = "", headers = {} }) =>
+  write(name, Buffer.from(encodeHttpRequest({ method, path: reqPath, query, headers })));
+
+// Inside the default availability (level 0 covers both roots), so this is the
+// select-and-serve branch, availability walk included.
+const reqTile = httpRequestBytes("request-tile.htq", { path: "/api/v1/terrain/0/0/0.terrain" });
+// layer.json: the branch that renders the plan frame, including its content
+// name (a sha2-256 multihash of the plan) — deterministic, so comparable.
+const reqLayer = httpRequestBytes("request-layer.htq", { path: "/api/v1/terrain/layer.json" });
+// ONE TILE, ONE URL: a query the tiles template never declares. The host
+// passes PATH and QUERY separately, so this is the query half of the rule and
+// it must 404 identically everywhere.
+const reqQuery = httpRequestBytes("request-query.htq", {
+  path: "/api/v1/terrain/0/0/0.terrain",
+  query: "cachebust=1",
+});
+// …and the token layer.json DOES declare is admitted, in every lane.
+const reqVersioned = httpRequestBytes("request-versioned.htq", {
+  path: "/api/v1/terrain/0/0/0.terrain",
+  query: "v=1.0.0",
+});
+
+const htqInput = (file) => ({
+  portId: "request",
+  payloadFile: `parity/${file.name}`,
+  typeRef: HTTP_REQUEST_TYPE_REF,
+});
+
 // A stream that is not a record stream at all: the refusal must be the same
 // named error, byte for byte, in every lane.
 const badStream = write("stream-malformed.bin", Buffer.from("not a size-prefixed $DTT stream", "utf8"));
@@ -333,6 +377,26 @@ const fixture = {
         methodId: "respond",
         inputs: [alignedInput("stream", badStream), alignedInput("context", ctxStored)],
       },
+    },
+    {
+      id: "route-tile-address",
+      expect: "ok",
+      request: { methodId: "route", inputs: [htqInput(reqTile)] },
+    },
+    {
+      id: "route-layer-json",
+      expect: "ok",
+      request: { methodId: "route", inputs: [htqInput(reqLayer)] },
+    },
+    {
+      id: "route-undeclared-query",
+      expect: "ok",
+      request: { methodId: "route", inputs: [htqInput(reqQuery)] },
+    },
+    {
+      id: "route-declared-version-token",
+      expect: "ok",
+      request: { methodId: "route", inputs: [htqInput(reqVersioned)] },
     },
     {
       id: "malformed-stdin",

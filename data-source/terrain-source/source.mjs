@@ -7,20 +7,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { minizSourceFragments } from "./miniz-source.mjs";
+import { readSdsHeader, sdsPackageVersion } from "./sds-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "terrain_source_module.cpp");
 
-// The sibling spacedatastandards.org checkout. SPACE_DATA_STANDARDS_ROOT wins
-// so this builds from a git worktree without editing the file.
-const defaultStandardsRoot = fileURLToPath(
-  new URL("../../../spacedatastandards.org/", import.meta.url),
-);
-const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
-  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
-  : defaultStandardsRoot;
-process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
+// SDS headers come from the PUBLISHED spacedatastandards.org package this
+// module pins (see sds-headers.mjs for why, and for what was wrong before).
+// SPACE_DATA_STANDARDS_ROOT still overrides, loudly.
 
 // flatc emits every SDS header with the same include guard; inlining a
 // standard requires stripping guard + self-include (same pattern as
@@ -37,7 +32,7 @@ function inlineGeneratedHeader(source) {
 
 
 
-export { packageRoot, standardsRoot };
+export { packageRoot, sdsPackageVersion };
 
 export async function composeTerrainSource() {
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
@@ -46,10 +41,8 @@ export async function composeTerrainSource() {
   // graph to order. TRN remains the terrain CONFIG standard and is not emitted
   // by this module.
   const inlineStandards = ["DTT"];
-    const headers = await Promise.all(
-    inlineStandards.map((standard) =>
-      fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
-    ),
+  const headers = await Promise.all(
+    inlineStandards.map((standard) => readSdsHeader(standard, import.meta.url)),
   );
   const implementationSource = await fs.readFile(sourcePath, "utf8");
 

@@ -27,6 +27,7 @@ const CONFIG = {
   terrain_maxzoom: 8,
   terrain_available: [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]],
   terrain_attribution: "test attribution",
+  terrain_version: "1.0.0",
 };
 
 function frame(portId, payload) {
@@ -67,10 +68,13 @@ function outputsByPort(response) {
 
 const asJson = (bytes) => JSON.parse(decoder.decode(bytes));
 
-const requestFrame = (path, { method = "GET", headers = {} } = {}) => ({
+const requestFrame = (path, { method = "GET", headers = {}, query = "" } = {}) => ({
   portId: "request",
   typeRef: HTTP_REQUEST_TYPE_REF,
-  payload: encodeHttpRequest({ method, path, headers }),
+  // PATH and QUERY are separate on the wire, exactly as the host stages them
+  // (flowrt/httpmount: EscapedPath and RawQuery), so a test can put a query on
+  // a request without smuggling it through the path.
+  payload: encodeHttpRequest({ method, path, query, headers }),
 });
 
 // One stored $DTT record, produced by the module's own encoder: [u32 len]
@@ -105,7 +109,17 @@ async function storedRecordStream(t) {
       jsonFrame("dem", { status: 200, headers: {}, bodyB64: Buffer.from(tiff).toString("base64") }),
     ]),
   );
-  return Buffer.from(outputs.get("records"));
+  // The report names the density the adaptive search settled on. Tests read
+  // it rather than assuming gridSize: the plan's gridSize is the CEILING of
+  // the search, and a tile whose relief a coarser mesh describes exactly ships
+  // at that coarser mesh (coordinator 2026-08-27 (a)). Here the source is a
+  // plane, so the coarsest candidate is exact and the tile is 5x5 — which is
+  // the feature working, not a defect, and a test that hard-coded 33 would be
+  // asserting the absence of the feature.
+  const report = JSON.parse(decoder.decode(outputs.get("report")));
+  const stream = Buffer.from(outputs.get("records"));
+  stream.shippedGrid = report.tiles[0].gridSize;
+  return stream;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,9 +183,116 @@ test("route turns layer.json into the config-derived layer plan", async (t) => {
   const layer = await invoke(t, "layer_json", [frame("plan", response.outputs[0].payload)]);
   assert.equal(layer.statusCode, 0);
   const http = decodeHttpResponse(new Uint8Array(layer.outputs[0].payload));
-  const body = JSON.parse(Buffer.from(http.body).toString("utf8"));
+  const headerOf = (n) => http.headers.find((h) => h.name === n)?.value;
+  assert.equal(headerOf("content-encoding"), "gzip", "layer.json compresses, like every tile");
+  const body = JSON.parse(zlib.gunzipSync(Buffer.from(http.body)).toString("utf8"));
   assert.equal(body.maxzoom, 8);
   assert.deepEqual(body.available, CONFIG.terrain_available);
+});
+
+// ── layer.json STATES A POLICY, LIKE EVERY OTHER RESPONSE ──────────────────
+//
+// It used to ship with exactly one header — content-type — while the tiles it
+// indexes carried cache-control, a strong ETag and a vary, and even the 404
+// argued its own max-age in a comment. So the ONE response every client
+// fetches first, and refetches in full on every session, could not be
+// revalidated, could not be reasoned about by an intermediary, and was not
+// compressed: 4.4 MB at the ruled ship configuration against 801 KB gzipped.
+test("layer.json carries the same explicit policy headers as a tile", async (t) => {
+  const routed = await invoke(t, "route", [requestFrame("/api/v1/terrain/layer.json")]);
+  const layer = await invoke(t, "layer_json", [frame("plan", routed.outputs[0].payload)]);
+  const http = decodeHttpResponse(new Uint8Array(layer.outputs[0].payload));
+  const headerOf = (n) => http.headers.find((h) => h.name === n)?.value;
+
+  assert.equal(http.status, 200);
+  assert.equal(headerOf("content-type"), "application/json");
+  assert.equal(headerOf("x-content-type-options"), "nosniff");
+  assert.equal(headerOf("vary"), "accept-encoding", "the body's coding is negotiated");
+  // 300 s, not the tiles' 86400: a tile at an address is immutable for an
+  // edition, but layer.json is the INDEX, and a stale one makes a client ask
+  // for tiles that do not exist yet or never learn about the ones that do.
+  assert.equal(headerOf("cache-control"), "public, max-age=300");
+
+  const etag = headerOf("etag");
+  assert.ok(etag, "a strong ETag, so a revalidation is a 304 and not 4.4 MB again");
+  assert.ok(!etag.startsWith("W/"), "strong, never weak");
+
+  // The tag revalidates: the same client, the same index, no body.
+  const conditional = await invoke(t, "route", [
+    requestFrame("/api/v1/terrain/layer.json", { headers: { "if-none-match": etag } }),
+  ]);
+  const revalidated = await invoke(t, "layer_json", [frame("plan", conditional.outputs[0].payload)]);
+  const notModified = decodeHttpResponse(new Uint8Array(revalidated.outputs[0].payload));
+  assert.equal(notModified.status, 304);
+  assert.equal(notModified.body.length, 0);
+  assert.equal(notModified.headers.find((h) => h.name === "etag")?.value, etag);
+
+  // Two representations, two tags — a shared cache holding one must not answer
+  // the other's revalidation with a 304.
+  const identityRouted = await invoke(t, "route", [
+    requestFrame("/api/v1/terrain/layer.json", { headers: { "accept-encoding": "identity" } }),
+  ]);
+  const identity = await invoke(t, "layer_json", [
+    frame("plan", identityRouted.outputs[0].payload),
+  ]);
+  const plainHttp = decodeHttpResponse(new Uint8Array(identity.outputs[0].payload));
+  const plainTag = plainHttp.headers.find((h) => h.name === "etag")?.value;
+  assert.equal(
+    plainHttp.headers.find((h) => h.name === "content-encoding")?.value,
+    undefined,
+    "identity was asked for",
+  );
+  assert.notEqual(plainTag, etag);
+  JSON.parse(Buffer.from(plainHttp.body).toString("utf8"));  // and it really is the JSON
+});
+
+// ── ONE TILE, ONE URL — THE QUERY HALF ─────────────────────────────────────
+//
+// route() read $HTQ PATH and nothing else, so a tile was answered 200
+// `public, max-age=86400` under unboundedly many distinct cache keys: append
+// any query at all and you had a fresh entry for identical bytes. The query
+// cannot simply be refused either — layer.json states its tiles template as
+// "{z}/{x}/{y}.terrain?v={version}", so every conforming native client sends
+// exactly one token.
+test("ONE TILE, ONE URL: only the version token layer.json declares is admitted", async (t) => {
+  // layer.json's own template, resolved: this is what a native client sends.
+  const declared = await (async () => {
+    const routed = await invoke(t, "route", [requestFrame("/api/v1/terrain/layer.json")]);
+    const layer = await invoke(t, "layer_json", [frame("plan", routed.outputs[0].payload)]);
+    const http = decodeHttpResponse(new Uint8Array(layer.outputs[0].payload));
+    return JSON.parse(zlib.gunzipSync(Buffer.from(http.body)).toString("utf8")).version;
+  })();
+  assert.equal(declared, CONFIG.terrain_version);
+
+  const routeWithQuery = (query) =>
+    invoke(t, "route", [requestFrame("/api/v1/terrain/8/271/192.terrain", { query })]);
+
+  for (const query of ["", `v=${declared}`]) {
+    const response = await routeWithQuery(query);
+    const ports = new Set(response.outputs.map((o) => o.portId));
+    assert.ok(ports.has("query"), `${JSON.stringify(query)} is the one addressed resource`);
+  }
+
+  // Everything else is the same cheap cacheable 404 an unknown path gets —
+  // and crucially it is not a SECOND spelling of a tile that already has one.
+  for (const query of [
+    "v=0.0.0",
+    "v=1.0.0&v=1.0.0",
+    "cachebust=1",
+    "V=1.0.0",
+    "v=1.0.0 ",
+    "".padEnd(4096, "x"),
+  ]) {
+    const response = await routeWithQuery(query);
+    assert.equal(response.outputs.length, 1, query);
+    assert.equal(response.outputs[0].portId, "response", query);
+    const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+    assert.equal(http.status, 404, `?${query} must not be a second key for one tile`);
+    assert.equal(
+      http.headers.find((h) => h.name === "cache-control")?.value,
+      "public, max-age=300",
+    );
+  }
 });
 
 test("route without configured availability defaults to the two level-0 roots only", async (t) => {
@@ -391,7 +512,7 @@ test("respond serves the stored record verbatim with record-stated headers", asy
   // The served body IS the record's payload: it gunzips to a valid
   // quantized-mesh whose vertex count matches the encode plan.
   const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(http.body)));
-  assert.equal(mesh.vertexCount, 33 * 33);
+  assert.equal(mesh.vertexCount, stream.shippedGrid ** 2, "the mesh the record's report named");
 
   // …and a conditional request with the served etag answers 304, bodiless.
   const conditional = await invoke(t, "respond", [
@@ -436,16 +557,35 @@ test("the encoding is NEGOTIATED, and each representation carries its own tag", 
   assert.equal(none.headerOf("content-encoding"), undefined, "identity was asked for");
   assert.equal(none.headerOf("vary"), "accept-encoding");
   const mesh = decodeQuantizedMesh(Buffer.from(none.http.body));
-  assert.equal(mesh.vertexCount, 33 * 33, "the identity body is the DECODED mesh, not relabelled");
+  assert.equal(
+    mesh.vertexCount,
+    stream.shippedGrid ** 2,
+    "the identity body is the DECODED mesh, not relabelled",
+  );
 
   // Two representations, two strong tags: one tag over both would let a cache
   // holding the gzip variant answer the identity variant's revalidation 304.
   assert.notEqual(gz.headerOf("etag"), none.headerOf("etag"));
+  // The identity tag is DERIVED from the stored representation's tag rather
+  // than hashed over the inflated bytes, so a conditional request that will be
+  // answered 304 never pays for an inflate whose result it discards. gunzip is
+  // deterministic, so the derivation is exact: two identity bodies share a tag
+  // exactly when their gzip forms are byte-identical.
   assert.equal(
     none.headerOf("etag"),
-    `"1220${createHash("sha256").update(Buffer.from(none.http.body)).digest("hex")}"`,
-    "the identity tag is over the identity bytes",
+    `"identity-${gz.headerOf("etag").slice(1, -1)}"`,
+    "one representation, one tag, derived without inflating anything",
   );
+  assert.ok(!none.headerOf("etag").startsWith("W/"), "strong stays strong");
+
+  // The 304 on the identity variant is BODILESS AND CHEAP — the property the
+  // derivation exists for.
+  const conditionalIdentity = await serve({
+    "accept-encoding": "identity",
+    "if-none-match": none.headerOf("etag"),
+  });
+  assert.equal(conditionalIdentity.http.status, 304);
+  assert.equal(conditionalIdentity.http.body.length, 0);
 
   // q=0 is a refusal; a bare * accepts.
   assert.equal((await serve({ "accept-encoding": "gzip;q=0, *" })).headerOf("content-encoding"), undefined);

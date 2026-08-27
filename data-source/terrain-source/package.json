@@ -20,6 +20,7 @@
   ],
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "space-data-module-sdk": "^0.8.15"
+    "space-data-module-sdk": "^0.8.15",
+    "spacedatastandards.org": "^1.196.0"
   }
 }

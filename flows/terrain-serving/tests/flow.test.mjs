@@ -154,6 +154,12 @@ async function storedRecordStream() {
           x: 271,
           y: 192,
           gridSize: 33,
+          // PINNED, because this test asserts the served bytes against a
+          // stated lattice. Density otherwise adapts to relief inside the
+          // 32 KiB cap (coordinator 2026-08-27 (a)) and this fixture is a
+          // plane, so the coarsest candidate is exact — correct, and not what
+          // the assertion below is about.
+          minGridSize: 33,
           maxLevel: 8,
           childAvailability: 0,
           provenance: {
@@ -253,7 +259,15 @@ test("GET layer.json serves the config-derived descriptor through the compiled f
   const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/layer.json" });
   assert.equal(http.status, 200);
   assert.equal(header(http, "content-type"), "application/json");
-  const body = JSON.parse(Buffer.from(http.body).toString("utf8"));
+  // layer.json states a full cache policy now and compresses like every tile,
+  // so it is read through the coding it declares.
+  assert.equal(header(http, "content-encoding"), "gzip");
+  assert.equal(header(http, "cache-control"), "public, max-age=300");
+  assert.equal(header(http, "vary"), "accept-encoding");
+  assert.equal(header(http, "x-content-type-options"), "nosniff");
+  const layerEtag = header(http, "etag");
+  assert.ok(layerEtag && !layerEtag.startsWith("W/"), `a strong ETag, got ${layerEtag}`);
+  const body = JSON.parse(zlib.gunzipSync(Buffer.from(http.body)).toString("utf8"));
   assert.equal(body.tilejson, "2.1.0");
   assert.equal(body.format, "quantized-mesh-1.0");
   assert.equal(body.scheme, "tms");

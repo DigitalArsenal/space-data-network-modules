@@ -74,6 +74,7 @@
  * so an unchanged granule costs the fetcher one conditional request.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -134,6 +135,12 @@ constexpr long kDefaultMarkScanRows = 32;
 constexpr const char* kIrmResumeStateFormat = "terrain-ingest/resume-v1";
 constexpr const char* kIrmResumeStateVersion = "1";
 constexpr const char* kIrmResumeStateMediaType = "application/json";
+// DECODER_BUILD_ID: which build produced the state. It is NOT compared on
+// resume and must not be — a mark written by yesterday's binary is a valid
+// resume for today's as long as the FORMAT/VERSION contract held, and refusing
+// it would restart the walk on every deploy. It is written so a human reading
+// a stuck mark can tell which build wrote it, which is the use $IRM states.
+constexpr const char* kIrmDecoderBuildId = "terrain-ingest-wasm/v1+resume-v1";
 constexpr const char* kLane = "terrain";
 constexpr const char* kDefaultDatasetId = "copernicus-glo30-quantized-mesh";
 constexpr const char* kDefaultProviderId = "copernicus";
@@ -571,6 +578,104 @@ std::string mark_json(const std::string& dataset_id, const std::string& tileset_
 
 // ── $IRM: the durable mark, read and written ───────────────────────────────
 
+// SHA-256, for the DECODER_STATE_SHA256 stamp. $IRM asks for 64 lowercase hex
+// characters over the DECODER_STATE bytes, so this is the raw digest and not
+// the multihash form the tile records use for payload DIGEST.
+struct Sha256 {
+    uint32_t h[8] = {0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au,
+                     0x510e527fu, 0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u};
+    uint8_t block[64] = {0};
+    size_t block_len = 0;
+    uint64_t total_bits = 0;
+
+    static uint32_t rotr(uint32_t v, int n) { return (v >> n) | (v << (32 - n)); }
+
+    void compress(const uint8_t* p) {
+        static const uint32_t k[64] = {
+            0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,
+            0x923f82a4u,0xab1c5ed5u,0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,
+            0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,0xe49b69c1u,0xefbe4786u,
+            0x0fc19dc6u,0x240ca1ccu,0x2de92c6fu,0x4a7484aau,0x5cb0a9dcu,0x76f988dau,
+            0x983e5152u,0xa831c66du,0xb00327c8u,0xbf597fc7u,0xc6e00bf3u,0xd5a79147u,
+            0x06ca6351u,0x14292967u,0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,
+            0x650a7354u,0x766a0abbu,0x81c2c92eu,0x92722c85u,0xa2bfe8a1u,0xa81a664bu,
+            0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
+            0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,
+            0x5b9cca4fu,0x682e6ff3u,0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,
+            0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u};
+        uint32_t w[64];
+        for (int i = 0; i < 16; i++) {
+            w[i] = (static_cast<uint32_t>(p[i * 4]) << 24) |
+                   (static_cast<uint32_t>(p[i * 4 + 1]) << 16) |
+                   (static_cast<uint32_t>(p[i * 4 + 2]) << 8) |
+                   static_cast<uint32_t>(p[i * 4 + 3]);
+        }
+        for (int i = 16; i < 64; i++) {
+            const uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
+            const uint32_t s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+        }
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3];
+        uint32_t e = h[4], f = h[5], g = h[6], hh = h[7];
+        for (int i = 0; i < 64; i++) {
+            const uint32_t S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+            const uint32_t ch = (e & f) ^ (~e & g);
+            const uint32_t t1 = hh + S1 + ch + k[i] + w[i];
+            const uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+            const uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+            const uint32_t t2 = S0 + maj;
+            hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d;
+        h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    }
+
+    void update(const uint8_t* data, size_t len) {
+        total_bits += static_cast<uint64_t>(len) * 8u;
+        while (len > 0) {
+            const size_t take = std::min(len, static_cast<size_t>(64) - block_len);
+            std::memcpy(block + block_len, data, take);
+            block_len += take;
+            data += take;
+            len -= take;
+            if (block_len == 64) { compress(block); block_len = 0; }
+        }
+    }
+
+    std::string hex() {
+        const uint64_t bits = total_bits;
+        uint8_t pad = 0x80;
+        update(&pad, 1);
+        total_bits = bits;  // the padding is not message length
+        pad = 0x00;
+        while (block_len != 56) { update(&pad, 1); total_bits = bits; }
+        uint8_t tail[8];
+        for (int i = 0; i < 8; i++) tail[i] = static_cast<uint8_t>((bits >> (56 - 8 * i)) & 0xff);
+        std::memcpy(block + block_len, tail, 8);
+        compress(block);
+        block_len = 0;
+        static const char* digits = "0123456789abcdef";
+        std::string out;
+        out.reserve(64);
+        for (int i = 0; i < 8; i++) {
+            for (int b = 3; b >= 0; b--) {
+                const uint8_t byte = static_cast<uint8_t>((h[i] >> (8 * b)) & 0xff);
+                out.push_back(digits[byte >> 4]);
+                out.push_back(digits[byte & 0x0f]);
+            }
+        }
+        return out;
+    }
+};
+
+std::string sha256_hex(const std::string& bytes) {
+    Sha256 sha;
+    if (!bytes.empty())
+        sha.update(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    return sha.hex();
+}
+
+
 // Locate an $IRM root inside a frame that may be the bare buffer or one element
 // of a size-prefixed stream. Returns nullptr when the bytes are not an $IRM
 // buffer at all — absent, never assumed.
@@ -615,19 +720,56 @@ std::string extract_mark_state(const std::string& frame, const std::string& want
             // one relation, so a non-match is skipped, never half-applied.
             if (want_job.empty() || want_job == job) {
                 if (const IRMDecodeContext* decode = irm->DECODE_CONTEXT()) {
-                    const std::string format =
-                        decode->DECODER_STATE_FORMAT() ? decode->DECODER_STATE_FORMAT()->str()
-                                                       : std::string();
-                    // THE VERSION STAMP IS WHAT MAKES VERBATIM CARRIAGE SAFE.
-                    // A state this build does not recognise is discarded and the
-                    // walk RESTARTS; reading a differently shaped state is not a
-                    // degraded resume, it is a resume into plausible nonsense
-                    // that stores cleanly.
-                    if (format == kIrmResumeStateFormat && decode->DECODER_STATE()) {
-                        return std::string(
-                            reinterpret_cast<const char*>(decode->DECODER_STATE()->Data()),
-                            decode->DECODER_STATE()->size());
+                    // ── EVERY STAMP THIS BUILD CAN COMPARE, COMPARED ────────
+                    //
+                    // The stamps used to be WRITE-ONLY: five of them were
+                    // authored and exactly one — FORMAT — was ever read, while
+                    // the comment above the check claimed the VERSION stamp was
+                    // what made verbatim carriage safe. It was the one stamp
+                    // never looked at. $IRM states the rule normatively: "A
+                    // consumer compares EVERY stamp it can before loading the
+                    // image, and on ANY disagreement - different format token,
+                    // different version, different byte length, different digest
+                    // - it discards the mark and restarts from offset 0 ... The
+                    // stamps exist so that refusal is possible."
+                    //
+                    // So refusal is possible here. A stamp the writer OMITTED is
+                    // not a disagreement (an older writer that never authored it
+                    // is exactly the compatibility case the stamps are for); a
+                    // stamp that is PRESENT and different is, and it restarts the
+                    // walk from cell 0 rather than resuming into a state of a
+                    // shape this build does not have.
+                    if (!decode->DECODER_STATE()) return std::string();
+                    const std::string state(
+                        reinterpret_cast<const char*>(decode->DECODER_STATE()->Data()),
+                        decode->DECODER_STATE()->size());
+
+                    const auto disagrees = [](const ::flatbuffers::String* stamped,
+                                              const char* expected) {
+                        return stamped != nullptr && stamped->str() != expected;
+                    };
+                    if (disagrees(decode->DECODER_STATE_FORMAT(), kIrmResumeStateFormat) ||
+                        decode->DECODER_STATE_FORMAT() == nullptr) {
+                        // FORMAT is the one stamp that is REQUIRED rather than
+                        // merely compared: an unstamped opaque blob names no
+                        // layout at all, and this build will not guess at one.
+                        return std::string();
                     }
+                    if (disagrees(decode->DECODER_STATE_VERSION(), kIrmResumeStateVersion))
+                        return std::string();
+                    if (disagrees(decode->DECODER_STATE_MEDIA_TYPE(), kIrmResumeStateMediaType))
+                        return std::string();
+                    if (decode->DECODER_STATE_BYTE_LENGTH() != 0 &&
+                        decode->DECODER_STATE_BYTE_LENGTH() != state.size()) {
+                        return std::string();
+                    }
+                    if (disagrees(decode->DECODER_STATE_SHA256(),
+                                  sha256_hex(state).c_str())) {
+                        return std::string();
+                    }
+                    // DECODER_BUILD_ID is deliberately NOT compared; see
+                    // kIrmDecoderBuildId.
+                    return state;
                 }
                 return std::string();
             }
@@ -688,6 +830,11 @@ std::vector<uint8_t> build_terrain_irm(const std::string& job_id, const std::str
     const auto state_format_off = b.CreateString(kIrmResumeStateFormat);
     const auto state_version_off = b.CreateString(kIrmResumeStateVersion);
     const auto state_media_off = b.CreateString(kIrmResumeStateMediaType);
+    // Written because the reader compares them, and the reader compares them
+    // because $IRM says a consumer must. SHA256 is over the DECODER_STATE bytes
+    // exactly as stored, 64 lowercase hex characters.
+    const auto state_sha_off = b.CreateString(sha256_hex(state_json));
+    const auto build_id_off = b.CreateString(kIrmDecoderBuildId);
     IRMDecodeContextBuilder dcb(b);
     dcb.add_FORMAT(format_off);
     dcb.add_DECODER_STATE(state_off);
@@ -695,6 +842,8 @@ std::vector<uint8_t> build_terrain_irm(const std::string& job_id, const std::str
     dcb.add_DECODER_STATE_VERSION(state_version_off);
     dcb.add_DECODER_STATE_MEDIA_TYPE(state_media_off);
     dcb.add_DECODER_STATE_BYTE_LENGTH(static_cast<uint64_t>(state_json.size()));
+    dcb.add_DECODER_STATE_SHA256(state_sha_off);
+    dcb.add_DECODER_BUILD_ID(build_id_off);
     const auto decode_off = dcb.Finish();
 
     const auto batch_off = b.CreateString(batch_id);

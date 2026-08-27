@@ -903,8 +903,9 @@ bool granule_holds(const DemGrid& g, double lon, double lat, double* px, double*
 // the set holds it. Posts sit at exact multiples of the granule's pixel scale
 // from its origin, so a coordinate generated on one granule's lattice lands on
 // an integer index in a neighbour that shares that lattice; a neighbour on a
-// DIFFERENT lattice (Copernicus widens its longitude spacing above 50 degrees)
-// does not, and is correctly reported as not holding the post.
+// DIFFERENT lattice (Copernicus widens its longitude spacing at every
+// latitude band boundary) does not, and is reported here as not holding the
+// post. `band_sample` below is what answers those.
 bool post_sample(const std::vector<DemGrid>& granules, double lon, double lat, float* out) {
     for (const DemGrid& g : granules) {
         if (!g.covers || g.samples.empty()) continue;
@@ -919,6 +920,62 @@ bool post_sample(const std::vector<DemGrid>& granules, double lon, double lat, f
         if (ri < 0 || rj < 0 || ri > g.width - 1 || rj > g.height - 1) continue;
         *out = g.samples[static_cast<size_t>(rj) * g.width + static_cast<size_t>(ri)];
         return true;
+    }
+    return false;
+}
+
+// ── THE LATITUDE-BAND BOUNDARY, WHERE THE LATTICE ITSELF CHANGES ───────────
+//
+// Copernicus GLO-30 keeps 1" of LATITUDE everywhere and widens its LONGITUDE
+// spacing by band: 1" below 50 degrees, 1.5" to 60, 2" to 70, 3" to 80, 5" to
+// 85 and 10" above. Two granules meeting across such a boundary therefore do
+// NOT share a post lattice — N49_00_E009 is 3600x3600 at 1" while N50_00_E009
+// is 2400x3600 at 1.5" — so post_sample rejects every stencil probe that
+// crosses it and sample_dem fell back to the clamp the stencil exists to
+// avoid. Measured on the real georeference with a 24-degree plane: the ENTIRE
+// grid row nearest 50N clamped (65 posts of a z11 tile), displaced 0.0001252
+// degrees = 13.9 m of ground, worth 6.331 m of vertical error there against
+// <0.1 m on every other row — and INVISIBLE to the record's own
+// VERTICAL_ACCURACY_M, because that probe compares the mesh against this same
+// sampler. At z11 the post lattice lands 0.549 posts from the boundary at
+// +/-50 and +/-85, i.e. across southern England, Belgium, Germany, Poland,
+// Ukraine, the Canada-US border and Kamchatka.
+//
+// A post the OTHER band holds is not missing — it is on a different lattice,
+// and the honest value there is that granule's own bilinear at the requested
+// coordinate. It is a genuine interpolation of published posts, not a
+// displacement of one, so it is used rather than counted as a clamp; the clamp
+// stays for the case it was written for, a neighbour that is genuinely ABSENT.
+bool granule_bilinear(const DemGrid& g, double lon, double lat, float* out) {
+    double px = 0, py = 0;
+    if (!granule_holds(g, lon, lat, &px, &py)) return false;
+    const double cx = std::min(std::max(px, 0.0), static_cast<double>(g.width - 1));
+    const double cy = std::min(std::max(py, 0.0), static_cast<double>(g.height - 1));
+    const uint32_t x0 = static_cast<uint32_t>(cx);
+    const uint32_t y0 = static_cast<uint32_t>(cy);
+    const uint32_t x1 = std::min(x0 + 1, g.width - 1);
+    const uint32_t y1 = std::min(y0 + 1, g.height - 1);
+    const double gx = cx - x0;
+    const double gy = cy - y0;
+    const float s00 = g.samples[static_cast<size_t>(y0) * g.width + x0];
+    const float s10 = g.samples[static_cast<size_t>(y0) * g.width + x1];
+    const float s01 = g.samples[static_cast<size_t>(y1) * g.width + x0];
+    const float s11 = g.samples[static_cast<size_t>(y1) * g.width + x1];
+    if (s00 == kNoData || s10 == kNoData || s01 == kNoData || s11 == kNoData) {
+        *out = kNoData;  // propagated; sample_dem reports it as no-data, not as height
+        return true;
+    }
+    *out = static_cast<float>((1 - gy) * ((1 - gx) * s00 + gx * s10) +
+                              gy * ((1 - gx) * s01 + gx * s11));
+    return true;
+}
+
+// The stencil probe that post_sample could not place on any granule's lattice,
+// answered by the granule that CONTAINS it, on that granule's own lattice.
+bool band_sample(const std::vector<DemGrid>& granules, double lon, double lat, float* out) {
+    for (const DemGrid& g : granules) {
+        if (!g.covers || g.samples.empty()) continue;
+        if (granule_bilinear(g, lon, lat, out)) return true;
     }
     return false;
 }
@@ -941,7 +998,7 @@ bool post_sample(const std::vector<DemGrid>& granules, double lon, double lat, f
 // ocean 404, the edge of the fetched set, or a granule on a different
 // longitude lattice) the old clamp is kept — but it is COUNTED, not silent.
 bool sample_dem(const std::vector<DemGrid>& granules, double lon, double lat, double* out,
-                bool* nodata, bool* clamped) {
+                bool* nodata, bool* clamped, bool* band_bridged = nullptr) {
     const DemGrid* home = nullptr;
     double px = 0, py = 0;
     for (const DemGrid& g : granules) {
@@ -963,6 +1020,10 @@ bool sample_dem(const std::vector<DemGrid>& granules, double lon, double lat, do
         const double plon = full_lon(*home, static_cast<double>(home->off_x) + i0 + di);
         const double plat = full_lat(*home, static_cast<double>(home->off_y) + j0 + dj);
         complete = post_sample(granules, plon, plat, &s[k]);
+        if (!complete && band_sample(granules, plon, plat, &s[k])) {
+            complete = true;
+            if (band_bridged) *band_bridged = true;
+        }
     }
     if (!complete) {
         // No neighbour holds the missing post: clamp inside the home granule,
@@ -1044,6 +1105,23 @@ bool sample_water(const std::vector<DemGrid>& granules, double lon, double lat, 
     const double plon = full_lon(*home, static_cast<double>(home->off_x) + ri);
     const double plat = full_lat(*home, static_cast<double>(home->off_y) + rj);
     if (post_class(granules, plon, plat, out)) return true;
+    // ACROSS A LATITUDE-BAND BOUNDARY the neighbour is on a different
+    // longitude lattice, so the post above does not exist there. The neighbour
+    // still CONTAINS the position, and its own nearest post is the class the
+    // source states for that ground — a category is chosen, never averaged.
+    for (const DemGrid& g : granules) {
+        if (!g.covers || g.classes.empty() || &g == home) continue;
+        double bx = 0, by = 0;
+        if (!granule_holds(g, plon, plat, &bx, &by)) continue;
+        long nx = static_cast<long>(std::floor(bx + 0.5));
+        long ny = static_cast<long>(std::floor(by + 0.5));
+        if (nx < 0) nx = 0;
+        if (ny < 0) ny = 0;
+        if (nx > static_cast<long>(g.width) - 1) nx = static_cast<long>(g.width) - 1;
+        if (ny > static_cast<long>(g.height) - 1) ny = static_cast<long>(g.height) - 1;
+        *out = g.classes[static_cast<size_t>(ny) * g.width + static_cast<size_t>(nx)];
+        return true;
+    }
     long x = static_cast<long>(ri), y = static_cast<long>(rj);
     if (x < 0) x = 0;
     if (y < 0) y = 0;
@@ -1325,7 +1403,7 @@ int32_t sdm_host_read_response(uint8_t* dst_ptr, int32_t dst_len);
 }
 #endif
 
-std::string load_config() {
+std::string fetch_config() {
     static const char* op = "plugin.getConfig";
     const std::string payload_json = "{}";
     std::vector<uint8_t> req(4 + payload_json.size() + 4, 0);
@@ -1346,6 +1424,45 @@ std::string load_config() {
                           (static_cast<uint32_t>(buf[3]) << 24);
     if (buf.size() < 4u + rlen) return "{}";
     return std::string(reinterpret_cast<const char*>(buf.data() + 4), rlen);
+}
+
+// ── THE SERVING CONFIG IS FETCHED ONCE PER INSTANCE, NOT ONCE PER REQUEST ──
+//
+// route() called plugin.getConfig on EVERY invoke, and at the configuration
+// ruled for ship — a global z11 availability index — that single call is
+// megabytes crossing the host boundary before anything about the request has
+// been looked at. Measured warm on one instance, same address, p50 over 300
+// invokes (60 above 408 KB): 0.054 ms at a 45-byte index, 0.210 ms at 11 KB,
+// 4.668 ms at 408 KB, 66.264 ms at 5.9 MB, 104.553 ms at 9.3 MB. Caching the
+// PARSE of the availability index (which this module already did) moved that
+// by ~5%, because the parse was never the cost: an A/B at 4.4 MB with the same
+// bytes parked in a key nothing reads still cost 5.96 ms/request — pure
+// transfer plus the scans that walk past the value looking for later keys.
+// At ship scale that is 15-18 tile requests/second per instance, against an
+// acceptance bound of dozens of tiles per camera pose per client.
+//
+// So the config is read ONCE and kept. That is not an optimisation with a
+// staleness risk bolted on, it is what the host contract already says: a
+// mount's config block is materialised at MOUNT CONSTRUCTION
+// (flowrt.mountNodeContext copies the map into the node context the mount's
+// pool sees) and the pool's instances live as long as the mount, so the bytes
+// plugin.getConfig returns cannot change under a running instance. An operator
+// editing config edits the daemon's YAML and restarts the daemon, which
+// rebuilds the mounts and the pools with them — the same restart the deploy
+// recipe already requires.
+//
+// Per-request cost after this is one branch. Measured in
+// tests/route-cost.test.mjs across 45 B / 9.7 KB / 318 KB / 6.9 MB indices,
+// which is the gate: the spread across four orders of magnitude of index size
+// must stay inside the noise of the smallest.
+const std::string& load_config() {
+    static std::string cached;
+    static bool loaded = false;
+    if (!loaded) {
+        cached = fetch_config();
+        loaded = true;
+    }
+    return cached;
 }
 
 struct HeaderEntry {
@@ -1549,11 +1666,23 @@ struct TileStats {
     // silent: it is the residual of the cross-granule sampling fix and the
     // signal that a neighbour granule is missing from the plan.
     uint64_t edge_clamped = 0;
+    // Posts whose bilinear stencil crossed a LATITUDE-BAND BOUNDARY, where the
+    // source changes longitude spacing and the neighbour granule has no post
+    // at the requested coordinate. Interpolated on that granule's own lattice
+    // rather than clamped — reported so the two cases stay distinguishable.
+    uint64_t band_bridged = 0;
     // The mesh's own measured departure from the source between posts, metres,
     // and how many probes it is a maximum over. Stated on the record as
     // VERTICAL_ACCURACY_M; 0 probes means the figure is not stated at all.
     double vertical_accuracy_m = 0;
     uint64_t accuracy_probes = 0;
+    // The density the adaptive search settled on, the target it was aiming at
+    // (2 x 77067/2^level m, coordinator 2026-08-27), and whether the 32 KiB
+    // ceiling — not the target — is what stopped it. `at_ceiling` is the tile
+    // saying out loud that it is as accurate as the cap allows and no more.
+    uint32_t grid = 0;
+    double error_target_m = 0;
+    bool at_ceiling = false;
     double coverage = 0;
     double min_h = 0;
     double max_h = 0;
@@ -1609,22 +1738,49 @@ double lattice_lon(uint32_t level, uint32_t x, uint32_t col, uint32_t grid) {
     return -180.0 + static_cast<double>(static_cast<uint64_t>(x) * (grid - 1) + col) * step;
 }
 
-// ── the water mask, cut from ONE GLOBAL POST LATTICE ───────────────────────
+// ── the water mask, cut from ONE GLOBAL CELL GRID (AREA REGISTRATION) ──────
 //
-// At level z the mask lattice has (2^(z+1) * (N-1) + 1) x (2^z * (N-1) + 1)
-// posts spanning the whole ellipsoid, and tile (x, y) takes posts
-// [x*(N-1), x*(N-1)+N-1] across. Column N-1 of tile x is therefore THE SAME
-// GLOBAL POST as column 0 of tile x+1, and row N-1 of tile y is the same post
-// as row 0 of the tile to its south. Classification is a pure function of the
-// global position, so the shared bytes are EQUAL by construction rather than
-// by a seam fix-up — which is the only construction under which "boundary
-// cells of adjacent tiles are byte-identical" is even expressible, and it is
-// what the encoder is tested on.
+// THE MASK IS AN IMAGE, NOT A POST LATTICE, because that is how the consumer
+// reads it. Cesium uploads the 256x256 mask as a LUMINANCE texture with a
+// LINEAR / CLAMP_TO_EDGE sampler (GlobeSurfaceTile.js:1077-1090) and samples
+// it at the tile's own texture coordinates (GlobeFS.glsl:399), so texel c
+// COVERS [c/256, (c+1)/256] of the tile and its centre sits at (c+0.5)/256.
+// This encoder used to cut it as 256 POSTS at c/255, edge post to edge post:
+// the served coastline was stretched by ~0.39% of a tile width and displaced
+// by up to half a texel, zero at the tile centre and worst at both edges
+// (~19 m at z11, ~5 m at z13). The classification of the source was exact —
+// measured against an independent decode of the real WBM granule, 0 of 65,536
+// bytes differ from the post-lattice truth — so the defect was the lattice
+// CONVENTION, and only the convention changes here.
+//
+// The cells still come from ONE GLOBAL GRID: at level z the ellipsoid carries
+// 2^(z+1)*N x 2^z*N cells and tile (x, y) takes the contiguous block starting
+// at (x*N, y*N), so a texel's class is a pure function of its ground extent
+// and no seam fix-up exists anywhere. Under AREA registration adjacent tiles
+// no longer share an edge texel — cell N-1 of tile x and cell 0 of tile x+1
+// cover DIFFERENT ground and are equal only when the coastline says so — so
+// the property that is tested is the one that is actually true: the two tiles'
+// texels tile the ground contiguously, with no gap, no overlap and no
+// duplication, which is exactly what a single 2N-wide cut of the global grid
+// across the pair reproduces.
 //
 // Source classes are categorical (0 = no water, non-zero = a water body), so
-// the sample is NEAREST-NEIGHBOUR: averaging class ordinals would invent a
-// class the source never stated. Output is the served convention: 255 water,
-// 0 land, row 0 the NORTH edge.
+// the sample is NEAREST-NEIGHBOUR at the cell CENTRE: averaging class ordinals
+// would invent a class the source never stated. Output is the served
+// convention: 255 water, 0 land, row 0 the NORTH edge.
+double mask_cell_lon(uint32_t level, uint32_t x, uint32_t col, uint32_t cells) {
+    const double step = 360.0 / (static_cast<double>(2u << level) * cells);
+    return -180.0 +
+           (static_cast<double>(static_cast<uint64_t>(x) * cells + col) + 0.5) * step;
+}
+
+double mask_cell_lat(uint32_t level, uint32_t y, uint32_t row_from_south, uint32_t cells) {
+    const double step = 180.0 / (static_cast<double>(1u << level) * cells);
+    return -90.0 +
+           (static_cast<double>(static_cast<uint64_t>(y) * cells + row_from_south) + 0.5) *
+               step;
+}
+
 // THE FALLBACK IS PER POST, NEVER PER BLOCK.
 //
 // It used to be `dem_absent ? water : land` where dem_absent was a flag over
@@ -1650,10 +1806,10 @@ void classify_water_mask(const TileJob& job, const std::vector<DemGrid>& water_g
                          uint64_t* from_absence, uint64_t* unclassified) {
     raster->assign(static_cast<size_t>(kMaskSize) * kMaskSize, 0);
     for (uint32_t r = 0; r < kMaskSize; r++) {
-        // row 0 = NORTH, so row r is post (kMaskSize - 1 - r) from the south.
-        const double lat = lattice_lat(job.level, job.y, kMaskSize - 1 - r, kMaskSize);
+        // row 0 = NORTH, so row r is cell (kMaskSize - 1 - r) from the south.
+        const double lat = mask_cell_lat(job.level, job.y, kMaskSize - 1 - r, kMaskSize);
         for (uint32_t c = 0; c < kMaskSize; c++) {
-            const double lon = lattice_lon(job.level, job.x, c, kMaskSize);
+            const double lon = mask_cell_lon(job.level, job.x, c, kMaskSize);
             uint8_t cls = 0;
             uint8_t value;
             if (sample_water(water_granules, lon, lat, &cls)) {
@@ -1834,6 +1990,68 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
     }
 }
 
+// ── THE TILE MEASURES ITS OWN VERTICAL ACCURACY ────────────────────────────
+//
+// $DTT.VERTICAL_ACCURACY_M used to be unset, i.e. 0, on every record —
+// "unstated" in a record that otherwise describes itself completely, and the
+// one field a consumer would read to reason about exactly the quantity the
+// pyramid is judged on. It is MEASURED, here, against the same source raster
+// the vertices came from.
+//
+// The rendered surface is planar per triangle, so the departure is largest
+// strictly BETWEEN posts — at the posts themselves the mesh is exact and
+// measuring there measures nothing. Each cell is probed at its centre (which
+// lies on the split diagonal) and at both triangle centroids; the maximum over
+// every probe is the number the record states, with ACCURACY_CONFIDENCE 1.0
+// because it is a measured maximum over the evaluated positions rather than a
+// statistical claim. Probes over absent or no-data source are EXCLUDED:
+// comparing against a substituted 0 would report the substitution, not the
+// mesh.
+//
+// It is a free function because the density search calls it once per candidate
+// — the number that selects the mesh and the number the record states are the
+// same measurement, taken by the same code, and cannot drift apart.
+double measure_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
+                             uint32_t grid, const std::vector<double>& heights,
+                             bool enabled, uint64_t* probes_out) {
+    if (probes_out) *probes_out = 0;
+    if (!enabled || grid < 2) return 0.0;
+    static const double kProbe[3] = {0.5, 1.0 / 3.0, 2.0 / 3.0};
+    double worst = 0.0;
+    uint64_t probes = 0;
+    std::vector<double> lat_of(grid), lon_of(grid);
+    for (uint32_t j = 0; j < grid; j++) lat_of[j] = lattice_lat(job.level, job.y, j, grid);
+    for (uint32_t i = 0; i < grid; i++) lon_of[i] = lattice_lon(job.level, job.x, i, grid);
+    for (uint32_t j = 0; j + 1 < grid; j++) {
+        for (uint32_t i = 0; i + 1 < grid; i++) {
+            const size_t bl = static_cast<size_t>(j) * grid + i;
+            const double h_bl = heights[bl], h_br = heights[bl + 1];
+            const double h_tl = heights[bl + grid], h_tr = heights[bl + grid + 1];
+            for (int p = 0; p < 3; p++) {
+                const double du = kProbe[p], dv = kProbe[p];
+                // The encoder's own triangulation: (bl,br,tr) below the
+                // diagonal, (bl,tr,tl) above it.
+                const double rendered = dv <= du
+                                            ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
+                                            : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
+                const double lon = lon_of[i] + du * (lon_of[i + 1] - lon_of[i]);
+                const double lat = lat_of[j] + dv * (lat_of[j + 1] - lat_of[j]);
+                double truth = 0.0;
+                bool probe_nodata = false, probe_clamped = false;
+                if (!sample_dem(granules, lon, lat, &truth, &probe_nodata, &probe_clamped) ||
+                    probe_nodata) {
+                    continue;
+                }
+                const double delta = std::fabs(rendered - truth);
+                if (delta > worst) worst = delta;
+                probes++;
+            }
+        }
+    }
+    if (probes_out) *probes_out = probes;
+    return worst;
+}
+
 // ── the availability index, read the way the client reads it ───────────────
 //
 // layer.json `available` is an array indexed by LEVEL, each entry an array of
@@ -1865,7 +2083,7 @@ struct AvailabilityRect {
     double sx, sy, ex, ey;
 };
 
-// ── THE INDEX IS PARSED ONCE PER DISTINCT INDEX, NOT ONCE PER REQUEST ──────
+// ── THE INDEX IS PARSED ONCE PER INSTANCE, NOT ONCE PER REQUEST ────────────
 //
 // route() consulted this on EVERY tile request, and consulting it meant
 // splitting the whole `terrain_available` array into a fresh std::string per
@@ -1876,20 +2094,24 @@ struct AvailabilityRect {
 // an index the SHIP PLAN makes far larger than the regional one, paid before
 // the store is even touched, on a four-instance pool.
 //
-// The parse is now cached against the exact bytes it came from, so a steady
-// state costs one length check and one memcmp. The cache is keyed by CONTENT,
-// never by "we have one already": a config reload that changes the index
-// re-parses, and an index that did not change never does.
+// Caching the PARSE against its own bytes was the first fix and it moved the
+// number by ~5%, because the parse was never the cost. An independent A/B at
+// 4.4 MB of config settled it: the same bytes parked in a key NOTHING reads
+// still cost 5.96 ms per request. The cost is the config crossing the host
+// boundary on every invoke, the four or five whole-buffer scans that walk past
+// the value looking for later keys, and the memcmp that keyed the cache — all
+// of it linear in a quantity that has nothing to do with the request.
+//
+// So nothing here is per-request any more. This is a pure parse, called ONCE
+// from serving_config() below, and what route() holds afterwards is the parsed
+// rectangles. See the ServingConfig comment for why once-per-instance is the
+// CORRECT lifetime and not merely a fast one.
 struct AvailabilityIndex {
-    std::string source;
     std::vector<std::vector<AvailabilityRect>> levels;
-    bool parsed = false;
 };
 
-const AvailabilityIndex& availability_index(const std::string& available) {
-    static AvailabilityIndex cache;
-    if (cache.parsed && cache.source == available) return cache;
-    cache.levels.clear();
+AvailabilityIndex parse_availability(const std::string& available) {
+    AvailabilityIndex index;
     for (const std::string& level_json : split_json_arrays(available)) {
         std::vector<AvailabilityRect> rects;
         for (const std::string& rect : split_json_objects(level_json)) {
@@ -1901,11 +2123,9 @@ const AvailabilityIndex& availability_index(const std::string& available) {
             if (r.sx < 0 || r.sy < 0 || r.ex < 0 || r.ey < 0) continue;
             rects.push_back(r);
         }
-        cache.levels.push_back(std::move(rects));
+        index.levels.push_back(std::move(rects));
     }
-    cache.source = available;
-    cache.parsed = true;
-    return cache;
+    return index;
 }
 
 // ── AVAILABILITY, AS THE CLIENT COMPUTES IT ────────────────────────────────
@@ -1931,9 +2151,8 @@ const AvailabilityIndex& availability_index(const std::string& available) {
 // written in; CesiumTerrainProvider flips it to its internal north-origin rows
 // when it loads the index). An address the client will ask for is inside
 // availability here, so respond() synthesizes it instead of 404-ing it.
-bool address_available_to_client(const std::string& available, uint32_t level, uint32_t x,
+bool address_available_to_client(const AvailabilityIndex& index, uint32_t level, uint32_t x,
                                  uint32_t y) {
-    const AvailabilityIndex& index = availability_index(available);
     if (index.levels.empty() || level >= 32u) return false;
 
     // Centre of (level, x, y): longitude over 2^(level+1) columns from -180,
@@ -1959,6 +2178,89 @@ bool address_available_to_client(const std::string& available, uint32_t level, u
         }
     }
     return false;
+}
+
+// ── THE SERVING CONFIG, READ ONCE AND KEPT ─────────────────────────────────
+//
+// Every serving decision this module makes is a function of the mount's config
+// block and the request. The config half used to be re-read, re-scanned and
+// re-concatenated on EVERY invoke, which made route()'s cost linear in the
+// size of the availability index — a quantity that has nothing to do with the
+// request being answered. At the configuration ruled for ship (a global z11
+// index, 4-6 MB) that was 66-105 ms per tile request, i.e. 15-18 requests per
+// second per instance, against an acceptance bound of dozens of tiles per
+// camera pose per client.
+//
+// ONCE PER INSTANCE IS THE CORRECT LIFETIME, not merely the fast one. A
+// mount's config block is materialised at MOUNT CONSTRUCTION — flowrt copies
+// the map into the node context the mount's pool sees — and a pool's instances
+// live as long as the mount, so the bytes plugin.getConfig returns cannot
+// change under a running instance. An operator editing config edits the
+// daemon's YAML and restarts the daemon, which rebuilds the mounts and their
+// pools; that restart is already what the deploy recipe requires. Off-node,
+// tests construct a fresh harness per config, which is the same lifetime.
+//
+// What is derived here is derived ONCE too, because it is a pure function of
+// the same bytes: the parsed availability rectangles, the layer_plan frame
+// route hands to layer_json, and the accepted query token. After this,
+// answering a tile request is a fixed number of small-string operations plus
+// the availability walk, whose cost is set by the DEPTH of the pyramid (at
+// most 32 levels) and not by the byte size of the index.
+//
+// tests/route-cost.test.mjs is the gate: p50 route() cost measured at 45 B,
+// 9.7 KB, 318 KB and 6.9 MB of index must stay flat across all four.
+struct ServingConfig {
+    std::string tileset_id;
+    std::string mount_prefix;
+    std::string version;
+    std::string layer_plan;  // the frame route pushes for the layer.json path
+    // A short content-derived name for layer_plan, so the downstream renderer
+    // can key its own cache on O(1) bytes instead of memcmp-ing megabytes.
+    std::string layer_plan_token;
+    AvailabilityIndex availability;
+    double ocean_synth_min_level = -1;  // < 0 = no level is authoritative
+    uint32_t synth_grid = 65;
+};
+
+ServingConfig build_serving_config(const std::string& config) {
+    ServingConfig sc;
+    sc.tileset_id = json_string(config, "terrain_tileset_id", "spaceaware-terrain");
+    sc.mount_prefix = json_string(config, "terrain_mount_path", "/api/v1/terrain/");
+    if (sc.mount_prefix.empty() || sc.mount_prefix.back() != '/') sc.mount_prefix += '/';
+    sc.version = json_string(config, "terrain_version", "1.0.0");
+
+    std::string available;
+    if (!json_raw_value(config, "terrain_available", &available) || available.empty() ||
+        available[0] != '[') {
+        // Default: the two level-0 roots of the two-root geographic scheme.
+        // Honest exactly when maxzoom is 0; a deeper pyramid MUST configure
+        // terrain_available.
+        available = "[[{\"startX\":0,\"startY\":0,\"endX\":1,\"endY\":0}]]";
+    }
+    sc.availability = parse_availability(available);
+
+    const long maxzoom = static_cast<long>(json_number(config, "terrain_maxzoom", 0));
+    sc.layer_plan = std::string("{\"tilesetId\":\"") + json_escape(sc.tileset_id) + "\"" +
+                    ",\"maxzoom\":" + std::to_string(maxzoom) + ",\"attribution\":\"" +
+                    json_escape(json_string(config, "terrain_attribution", "")) + "\"" +
+                    ",\"description\":\"" +
+                    json_escape(json_string(config, "terrain_description", "")) + "\"" +
+                    ",\"version\":\"" + json_escape(sc.version) + "\"" +
+                    ",\"available\":" + available + "}";
+
+    sc.layer_plan_token = sha256_multihash(
+        std::vector<uint8_t>(sc.layer_plan.begin(), sc.layer_plan.end()));
+
+    sc.ocean_synth_min_level = json_number(config, "terrain_ocean_synth_min_level", -1);
+    const double synth = json_number(config, "terrain_synth_grid_size", 65);
+    sc.synth_grid = static_cast<uint32_t>(synth < 2 || synth > 255 ? 65 : synth);
+    return sc;
+}
+
+const ServingConfig& serving_config() {
+    static ServingConfig* cached = nullptr;
+    if (!cached) cached = new ServingConfig(build_serving_config(load_config()));
+    return *cached;
 }
 
 // The dttSourceClass member names, by wire ordinal. Matched EXACTLY: a name
@@ -2042,7 +2344,16 @@ int tile(void) {
     }
     // The self-measurement is on by default and can be turned off for a run
     // that only wants bytes; it costs three extra source probes per grid cell.
-    const bool measure_accuracy = json_number(plan, "measureAccuracy", 1) != 0;
+    // READ AS A BOOLEAN, because that is what callers write. json_number
+    // refuses anything that does not start with a digit or '-', so
+    // `"measureAccuracy": false` fell through to the fallback and the flag
+    // never turned anything off — silently, because the only visible effect
+    // was that the measurement ran when it had been asked not to.
+    // tools/terrain-pyramid/measure-tradeoff.mjs has been passing it as JSON
+    // `false` since it was written. A NUMBER is still accepted, so a caller
+    // that wrote 0 or 1 keeps working.
+    const bool measure_accuracy = json_bool(plan, "measureAccuracy",
+                                            json_number(plan, "measureAccuracy", 1) != 0);
 
     // ── SOURCE_CLASS IS DATA, NOT A COMPILE-TIME CONSTANT ───────────────────
     //
@@ -2244,6 +2555,7 @@ int tile(void) {
     // mask post inferred from an absent granule, and one an elevation granule
     // covers but no water granule classifies.
     uint64_t block_mask_from_absence = 0, block_mask_unclassified = 0;
+    uint64_t block_at_ceiling = 0, block_band_bridged = 0, block_edge_clamped = 0;
     double block_worst_accuracy_m = 0;
     TileStats first{};
 
@@ -2252,10 +2564,28 @@ int tile(void) {
         const TileExtent& ext = extents[t];
         TileStats stats;
 
-        // ── sample the post lattice ─────────────────────────────────────────
+        // ── sample the FINEST post lattice the plan allows ──────────────────
+        //
+        // Sampled ONCE, at gridSize, and every coarser candidate the density
+        // search below considers is an exact SUBSET of these posts. At level z
+        // an N-post lattice puts post j at -90 + (y*(N-1)+j) * 180/(2^z*(N-1)),
+        // so post j of an M-post candidate whose (M-1) divides (N-1) is post
+        // j*(N-1)/(M-1) here — EXACTLY, in doubles, because the two
+        // expressions differ only by a factor that cancels. That is what makes
+        // the search cheap (one pass over the source per tile rather than one
+        // per candidate) and what keeps every candidate on the SAME global
+        // lattice, so two adjacent tiles that settle on different densities
+        // still agree on the posts they share.
         const uint32_t n_verts = grid * grid;
         std::vector<double> heights(n_verts, 0.0);
         std::vector<double> lats(n_verts), lons(n_verts);
+        // Per-post provenance, kept so the CHOSEN candidate can report the
+        // coverage of ITS OWN posts. dataCoverageFraction is read back against
+        // the mesh's vertex count, so a fraction measured over a denser
+        // lattice than the one that shipped is a number about a mesh nobody
+        // has.
+        std::vector<uint8_t> post_absent(n_verts, 0), post_nodata(n_verts, 0),
+            post_clamped(n_verts, 0), post_bridged(n_verts, 0);
         for (uint32_t j = 0; j < grid; j++) {  // j = 0 at the SOUTH edge
             const double lat = lattice_lat(job.level, job.y, j, grid);
             for (uint32_t i = 0; i < grid; i++) {
@@ -2266,14 +2596,17 @@ int tile(void) {
                 double h = 0.0;
                 bool nodata = false;
                 bool clamped = false;
-                const bool covered = sample_dem(granules, lon, lat, &h, &nodata, &clamped);
-                if (clamped) stats.edge_clamped++;
+                bool bridged = false;
+                const bool covered =
+                    sample_dem(granules, lon, lat, &h, &nodata, &clamped, &bridged);
+                post_clamped[v] = clamped ? 1 : 0;
+                post_bridged[v] = bridged ? 1 : 0;
                 if (!covered) {
-                    stats.uncovered++;
+                    post_absent[v] = 1;
                     h = 0.0;  // absent granule: the dataset states sea level nowhere, so 0
                               // is used and COUNTED, never presented as a measurement
                 } else if (nodata) {
-                    stats.nodata++;
+                    post_nodata[v] = 1;
                     h = 0.0;
                 }
                 heights[v] = h;
@@ -2284,58 +2617,14 @@ int tile(void) {
             min_h = std::min(min_h, h);
             max_h = std::max(max_h, h);
         }
+        uint64_t absent_posts = 0, nodata_posts = 0;
+        for (const uint8_t a : post_absent) absent_posts += a;
+        for (const uint8_t nd : post_nodata) nodata_posts += nd;
+        // Provisional, over the finest lattice: an ocean tile is skipped
+        // before the density search runs and still has to report itself.
         stats.min_h = min_h;
         stats.max_h = max_h;
-        stats.coverage = 1.0 - static_cast<double>(stats.nodata + stats.uncovered) / n_verts;
-
-        // ── THE TILE MEASURES ITS OWN VERTICAL ACCURACY ─────────────────────
-        //
-        // $DTT.VERTICAL_ACCURACY_M used to be unset, i.e. 0, on every record —
-        // "unstated" in a record that otherwise describes itself completely,
-        // and the one field a consumer would read to reason about exactly the
-        // quantity the pyramid is judged on. It is now MEASURED, here, against
-        // the same source raster the vertices came from.
-        //
-        // The rendered surface is planar per triangle, so the departure is
-        // largest strictly BETWEEN posts — at the posts themselves the mesh is
-        // exact and measuring there measures nothing. Each cell is probed at
-        // its centre (which lies on the split diagonal) and at both triangle
-        // centroids; the maximum over every probe is the number the record
-        // states, with ACCURACY_CONFIDENCE 1.0 because it is a measured
-        // maximum over the evaluated positions rather than a statistical
-        // claim. Probes over absent or no-data source are EXCLUDED: comparing
-        // against a substituted 0 would report the substitution, not the mesh.
-        if (measure_accuracy && grid >= 2) {
-            static const double kProbeU[3] = {0.5, 1.0 / 3.0, 2.0 / 3.0};
-            static const double kProbeV[3] = {0.5, 1.0 / 3.0, 2.0 / 3.0};
-            for (uint32_t j = 0; j + 1 < grid; j++) {
-                for (uint32_t i = 0; i + 1 < grid; i++) {
-                    const uint32_t bl = j * grid + i;
-                    const double h_bl = heights[bl], h_br = heights[bl + 1];
-                    const double h_tl = heights[bl + grid], h_tr = heights[bl + grid + 1];
-                    for (int p = 0; p < 3; p++) {
-                        const double du = kProbeU[p], dv = kProbeV[p];
-                        // The encoder's own triangulation: (bl,br,tr) below the
-                        // diagonal, (bl,tr,tl) above it.
-                        const double rendered =
-                            dv <= du ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
-                                     : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
-                        const double lon = lons[bl] + du * (lons[bl + 1] - lons[bl]);
-                        const double lat = lats[bl] + dv * (lats[bl + grid] - lats[bl]);
-                        double truth = 0.0;
-                        bool probe_nodata = false, probe_clamped = false;
-                        if (!sample_dem(granules, lon, lat, &truth, &probe_nodata,
-                                        &probe_clamped) ||
-                            probe_nodata) {
-                            continue;
-                        }
-                        const double delta = std::fabs(rendered - truth);
-                        if (delta > stats.vertical_accuracy_m) stats.vertical_accuracy_m = delta;
-                        stats.accuracy_probes++;
-                    }
-                }
-            }
-        }
+        stats.coverage = 1.0 - static_cast<double>(absent_posts + nodata_posts) / n_verts;
 
         // ── the water mask ──────────────────────────────────────────────────
         std::string water_kind;
@@ -2370,7 +2659,7 @@ int tile(void) {
             // anywhere is open ocean by the dataset's publication pattern,
             // while a tile that has elevation is land as far as this invoke
             // can tell.
-            water_kind = stats.uncovered == n_verts ? "UNIFORM_WATER" : "UNIFORM_LAND";
+            water_kind = absent_posts == n_verts ? "UNIFORM_WATER" : "UNIFORM_LAND";
         }
         stats.water_kind = water_kind;
 
@@ -2402,36 +2691,170 @@ int tile(void) {
             continue;
         }
 
-        // ── the quantized-mesh payload ──────────────────────────────────────
-        // ONE encoder, shared with the synthesized-miss path in respond(), so
-        // a tile the store holds and a tile the server synthesizes can never
-        // be encoded two different ways.
+        // ── DENSITY ADAPTS TO RELIEF, INSIDE A CAP THAT NEVER MOVES ─────────
+        //
+        // Coordinator reconciliation 2026-08-27 (a): the mesh is as dense as
+        // the tile's own relief requires and no denser, the 32 KiB gzipped
+        // ceiling is HARD, and a tile the ceiling cannot make accurate enough
+        // ships AT the ceiling STATING what it achieved rather than being
+        // refused or silently shipped coarse.
+        //
+        // A fixed gridSize was wrong in both directions at once: an ocean-flat
+        // or gently rolling tile paid 65x65 posts to describe a plane, while a
+        // z13 alpine tile could not be made accurate at all because the only
+        // lever — a coarser plan-wide gridSize — applied to every tile in the
+        // block.
+        //
+        // The search runs COARSEST FIRST and stops at the first candidate that
+        // meets the target, so the common case (most of the planet is not the
+        // Alps) is CHEAPER than the fixed grid it replaces, not dearer. Every
+        // candidate is a subset of the one lattice sampled above, so the
+        // source is read once per tile however many candidates are tried.
+        //
+        // TWO ADJACENT TILES MAY SETTLE ON DIFFERENT DENSITIES. Their shared
+        // edge posts still come from the same global lattice and still agree
+        // exactly; the finer tile simply carries posts between them, which is
+        // the same T-junction a native client already handles between adjacent
+        // LEVELS and which the format's edge indices (and the skirts a client
+        // builds from them) exist for.
+        const double error_target_m =
+            2.0 * 77067.0 / std::ldexp(1.0, static_cast<int>(job.level));
+
+        // The candidate ladder: gridSize and every halving of its interval
+        // down to the FLOOR, ascending. A gridSize whose interval does not
+        // halve (an operator's odd number) yields a one-element ladder, i.e.
+        // exactly the fixed-grid behaviour this replaces.
+        //
+        // `minGridSize` is that floor, and it exists because "as coarse as the
+        // measurement allows" is not always what a caller wants: a geometry
+        // test asserting where a post LANDS, a deterministic A/B, and a
+        // regional inset built to a guaranteed density all need to name the
+        // lattice rather than have it inferred. It floors the search only —
+        // the 32 KiB ceiling still wins over it, because the ceiling is hard
+        // and a floor that could breach it would not be a floor, it would be a
+        // second ceiling arguing with the first.
+        const double floor_raw = json_number(plan, "minGridSize", 5);
+        const uint32_t grid_floor =
+            floor_raw < 5 ? 5u : (floor_raw > grid ? grid : static_cast<uint32_t>(floor_raw));
+        std::vector<uint32_t> ladder;
+        for (uint32_t g = grid; g >= grid_floor; g = (g + 1) / 2) {
+            ladder.push_back(g);
+            if ((g - 1) % 2 != 0 || (g + 1) / 2 < grid_floor) break;
+        }
+        if (ladder.empty()) ladder.push_back(grid);
+        std::reverse(ladder.begin(), ladder.end());
+
+        uint32_t chosen_grid = 0;
+        std::vector<double> chosen_heights;
         std::vector<uint8_t> mesh;
-        encode_quantized_mesh(job, grid, ext, heights, water_raster,
-                              water_kind == "UNIFORM_WATER", &mesh);
-        stats.mesh_bytes = mesh.size();
-
-        // ── gzip the payload (CONTENT_ENCODING states it; a failed compress is
-        //    served uncompressed rather than failing the tile) ───────────────
         std::vector<uint8_t> payload_bytes;
-        bool gzipped = gzip_compress(mesh, &payload_bytes);
-        if (!gzipped) payload_bytes = mesh;
-        stats.payload_bytes = payload_bytes.size();
+        bool gzipped = false;
+        bool at_ceiling = false;  // shipped at the cap without meeting the target
+        for (size_t c = 0; c < ladder.size(); c++) {
+            const uint32_t cand = ladder[c];
+            const uint32_t stride = (grid - 1) / (cand - 1);
+            std::vector<double> cand_heights(static_cast<size_t>(cand) * cand, 0.0);
+            for (uint32_t j = 0; j < cand; j++) {
+                for (uint32_t i = 0; i < cand; i++) {
+                    cand_heights[static_cast<size_t>(j) * cand + i] =
+                        heights[static_cast<size_t>(j * stride) * grid + i * stride];
+                }
+            }
+            std::vector<uint8_t> cand_mesh;
+            encode_quantized_mesh(job, cand, ext, cand_heights, water_raster,
+                                  water_kind == "UNIFORM_WATER", &cand_mesh);
+            std::vector<uint8_t> cand_payload;
+            const bool cand_gzipped = gzip_compress(cand_mesh, &cand_payload);
+            if (!cand_gzipped) cand_payload = cand_mesh;
 
-        // THE PER-TILE CEILING, at ENCODE time. Refused here, where it can be
-        // fixed by a coarser grid, rather than discovered by a client that has
-        // already paid for the transfer.
-        if (payload_bytes.size() > kTileGzipCeilingBytes) {
-            char message[288];
+            if (cand_payload.size() > kTileGzipCeilingBytes) {
+                // Past the cap. Anything accepted so far is what ships, and it
+                // ships as the densest mesh the ceiling admits.
+                at_ceiling = chosen_grid != 0;
+                break;
+            }
+            const bool densest = c + 1 == ladder.size();
+            chosen_grid = cand;
+            chosen_heights.swap(cand_heights);
+            mesh.swap(cand_mesh);
+            payload_bytes.swap(cand_payload);
+            gzipped = cand_gzipped;
+
+            if (!measure_accuracy) {
+                // NO ERROR SIGNAL, NO COARSENING. With the measurement off
+                // there is nothing that could justify shipping fewer posts
+                // than the plan asked for, so the search does not choose — it
+                // takes the plan's own gridSize, which is exactly the
+                // fixed-density behaviour this replaced. (The first cut of
+                // this loop broke here on the FIRST candidate, which is the
+                // COARSEST one: it shipped 5x5 meshes for every tile whenever
+                // the caller turned accuracy measurement off, while the
+                // comment claimed the opposite.)
+                if (!densest) continue;
+                at_ceiling = false;
+                break;
+            }
+            const double achieved =
+                measure_mesh_accuracy(granules, job, cand, chosen_heights, measure_accuracy,
+                                      &stats.accuracy_probes);
+            stats.vertical_accuracy_m = achieved;
+            if (achieved <= error_target_m) { at_ceiling = false; break; }
+            // Provisional: a denser candidate may still clear the target. If
+            // none does, `at_ceiling` is the tile stating that it is as
+            // accurate as it was ALLOWED to be — by the byte cap or by the
+            // plan's own gridSize — and not as accurate as the target asks.
+            at_ceiling = true;
+        }
+
+        // THE CEILING IS HARD. If not even the coarsest candidate fits under
+        // it, nothing ships: it is the water mask, not the mesh, that can do
+        // that, and a tile whose mask alone will not compress under the cap is
+        // a plan defect a coarser grid cannot fix.
+        if (chosen_grid == 0) {
+            char message[320];
             std::snprintf(message, sizeof(message),
-                          "tile %u/%u/%u encodes to %llu gzipped bytes, past the %llu-byte "
-                          "per-tile serving ceiling. Refused at encode time: a pyramid that "
-                          "stores it has already committed every client to the transfer.",
+                          "tile %u/%u/%u will not encode under the %llu-byte per-tile "
+                          "serving ceiling at any mesh density down to %u posts (the water "
+                          "mask, not the mesh, dominates it). Refused at encode time: a "
+                          "pyramid that stores it has already committed every client to the "
+                          "transfer.",
                           job.level, job.x, job.y,
-                          static_cast<unsigned long long>(payload_bytes.size()),
-                          static_cast<unsigned long long>(kTileGzipCeilingBytes));
+                          static_cast<unsigned long long>(kTileGzipCeilingBytes), ladder[0]);
             plugin_set_error("tile-size-ceiling-exceeded", message);
             return 413;
+        }
+        stats.grid = chosen_grid;
+        stats.error_target_m = error_target_m;
+        stats.at_ceiling = at_ceiling;
+        stats.mesh_bytes = mesh.size();
+        stats.payload_bytes = payload_bytes.size();
+
+        // Coverage, clamps and band bridges are reported over the posts that
+        // ACTUALLY SHIPPED, on the candidate's own stride.
+        {
+            const uint32_t stride = (grid - 1) / (chosen_grid - 1);
+            for (uint32_t j = 0; j < chosen_grid; j++) {
+                for (uint32_t i = 0; i < chosen_grid; i++) {
+                    const size_t v = static_cast<size_t>(j * stride) * grid + i * stride;
+                    stats.uncovered += post_absent[v];
+                    stats.nodata += post_nodata[v];
+                    stats.edge_clamped += post_clamped[v];
+                    stats.band_bridged += post_bridged[v];
+                }
+            }
+            const double shipped_posts =
+                static_cast<double>(chosen_grid) * static_cast<double>(chosen_grid);
+            stats.coverage =
+                1.0 - static_cast<double>(stats.nodata + stats.uncovered) / shipped_posts;
+            double cmin = chosen_heights[0], cmax = chosen_heights[0];
+            for (const double h : chosen_heights) {
+                cmin = std::min(cmin, h);
+                cmax = std::max(cmax, h);
+            }
+            stats.min_h = cmin;
+            stats.max_h = cmax;
+            min_h = cmin;
+            max_h = cmax;
         }
 
         // Themis: DIGEST and SIZE_BYTES are stated over the GZIPPED bytes —
@@ -2562,6 +2985,9 @@ int tile(void) {
         if (stats.vertical_accuracy_m > block_worst_accuracy_m) {
             block_worst_accuracy_m = stats.vertical_accuracy_m;
         }
+        if (stats.at_ceiling) block_at_ceiling++;
+        block_band_bridged += stats.band_bridged;
+        block_edge_clamped += stats.edge_clamped;
 
         if (!tiles_report.empty()) tiles_report += ",";
         tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
@@ -2575,6 +3001,10 @@ int tile(void) {
                         ",\"maskUnclassifiedSamples\":" +
                         std::to_string(stats.mask_unclassified) +
                         ",\"edgeClampedPosts\":" + std::to_string(stats.edge_clamped) +
+                        ",\"bandBridgedPosts\":" + std::to_string(stats.band_bridged) +
+                        ",\"gridSize\":" + std::to_string(stats.grid) +
+                        ",\"errorTargetM\":" + fmt_double(stats.error_target_m) +
+                        ",\"atCeiling\":" + (stats.at_ceiling ? "true" : "false") +
                         ",\"verticalAccuracyM\":" +
                         fmt_double(stats.vertical_accuracy_m) +
                         ",\"accuracyProbes\":" + std::to_string(stats.accuracy_probes) +
@@ -2588,6 +3018,10 @@ int tile(void) {
         ",\"level\":" + std::to_string(jobs[0].level) +
         ",\"x\":" + std::to_string(jobs[0].x) + ",\"y\":" + std::to_string(jobs[0].y) +
         ",\"gridSize\":" + std::to_string(grid) +
+        ",\"maxGridSize\":" + std::to_string(grid) +
+        ",\"tilesAtCeiling\":" + std::to_string(block_at_ceiling) +
+        ",\"bandBridgedPosts\":" + std::to_string(block_band_bridged) +
+        ",\"edgeClampedPosts\":" + std::to_string(block_edge_clamped) +
         ",\"tileCount\":" + std::to_string(jobs.size()) +
         ",\"tilesEmitted\":" + std::to_string(emitted) +
         // ingest_meta reads recordsOut to catch a batch that reported success
@@ -2669,37 +3103,102 @@ int layer_json(void) {
         return 400;
     }
 
-    const std::string body =
-        std::string("{\"tilejson\":\"2.1.0\"") + ",\"name\":\"" + json_escape(tileset_id) +
-        "\"" + ",\"description\":\"" +
-        json_escape(json_string(plan, "description", "")) + "\"" +
-        ",\"version\":\"" + json_escape(json_string(plan, "version", "1.0.0")) + "\"" +
-        ",\"format\":\"quantized-mesh-1.0\",\"attribution\":\"" +
-        json_escape(json_string(plan, "attribution", "")) + "\"" +
-        ",\"scheme\":\"tms\",\"tiles\":[\"{z}/{x}/{y}.terrain?v={version}\"]" +
-        ",\"projection\":\"EPSG:4326\",\"bounds\":[-180,-90,180,90]" +
-        ",\"minzoom\":0,\"maxzoom\":" + std::to_string(maxzoom) +
-        ",\"extensions\":[\"watermask\"]" + ",\"available\":" + available + "}";
+    // ── THE RENDER IS CACHED AGAINST THE PLAN'S OWN NAME ────────────────────
+    //
+    // layer.json is a pure function of the mount's config, and route() derives
+    // a content name for that config once per instance (planToken). So the
+    // body, its strong ETag and its gzipped form are produced ONCE and reused
+    // until the config — and therefore the token — changes.
+    //
+    // It matters at the ruled ship configuration: a global z11 availability
+    // index renders a 4.4 MB body, and rendering + hashing + gzipping it on
+    // every request is 168 ms of guest CPU that one anonymous 40-byte GET can
+    // buy. Cached, a revalidation is a token compare and a 304.
+    //
+    // A plan with NO token (an operator wiring layer_json directly, or an
+    // older route) is rendered every time rather than cached under an empty
+    // key — a cache that answers for bytes it has not seen is worse than no
+    // cache.
+    struct RenderedLayer {
+        std::string token;
+        std::string body;
+        std::string etag;
+        std::vector<uint8_t> gzipped;  // empty when compression did not help
+    };
+    static RenderedLayer* cache = new RenderedLayer();
 
-    // The canonical $HTR envelope: the host is a dumb pipe and streams this
-    // back verbatim, so the content-type decision lives here.
-    flatbuffers::FlatBufferBuilder builder(body.size() + 512);
-    std::vector<::flatbuffers::Offset<sdn::http::HttpHeader>> headers;
-    headers.push_back(sdn::http::CreateHttpHeader(builder,
-                                                  builder.CreateString("content-type"),
-                                                  builder.CreateString("application/json")));
-    const auto headers_vector =
-        builder.CreateVectorOfSortedTables<sdn::http::HttpHeader>(&headers);
-    const auto body_vector = builder.CreateVector(
-        reinterpret_cast<const uint8_t*>(body.data()), body.size());
-    const auto response =
-        sdn::http::CreateHttpResponse(builder, 200, headers_vector, body_vector, 0, 0);
-    sdn::http::FinishHttpResponseBuffer(builder, response);
+    const std::string token = json_string(plan, "planToken", "");
+    if (token.empty() || cache->token != token) {
+        cache->body =
+            std::string("{\"tilejson\":\"2.1.0\"") + ",\"name\":\"" + json_escape(tileset_id) +
+            "\"" + ",\"description\":\"" +
+            json_escape(json_string(plan, "description", "")) + "\"" +
+            ",\"version\":\"" + json_escape(json_string(plan, "version", "1.0.0")) + "\"" +
+            ",\"format\":\"quantized-mesh-1.0\",\"attribution\":\"" +
+            json_escape(json_string(plan, "attribution", "")) + "\"" +
+            ",\"scheme\":\"tms\",\"tiles\":[\"{z}/{x}/{y}.terrain?v={version}\"]" +
+            ",\"projection\":\"EPSG:4326\",\"bounds\":[-180,-90,180,90]" +
+            ",\"minzoom\":0,\"maxzoom\":" + std::to_string(maxzoom) +
+            ",\"extensions\":[\"watermask\"]" + ",\"available\":" + available + "}";
+        cache->gzipped.clear();
+        std::vector<uint8_t> compressed;
+        if (gzip_compress(std::vector<uint8_t>(cache->body.begin(), cache->body.end()),
+                          &compressed) &&
+            compressed.size() < cache->body.size()) {
+            cache->gzipped.swap(compressed);
+        }
+        // The IDENTITY representation names the resource; the gzipped one is
+        // a second representation of it and gets its own tag below, because a
+        // strong ETag names ONE representation and a shared cache holding the
+        // other must not answer its revalidation with a 304.
+        cache->etag = "\"" + sha256_multihash(std::vector<uint8_t>(cache->body.begin(),
+                                                                   cache->body.end())) +
+                      "\"";
+        cache->token = token;
+    }
 
-    const int32_t pushed = plugin_push_output_ex(
-        "response", "HttpResponseAbi.fbs", "$HTR", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-        "HttpResponse", 0, 0, builder.GetBufferPointer(), builder.GetSize());
-    return pushed < 0 ? 500 : 0;
+    // ── layer.json STATES ITS CACHE POLICY, LIKE EVERY OTHER RESPONSE ───────
+    //
+    // It used to ship with exactly one header — content-type — while the tiles
+    // it indexes carried `public, max-age=86400`, a strong ETag and a vary,
+    // and even the 404 argued its own max-age in a comment. So the one
+    // response every client fetches FIRST, and refetches in full on every
+    // session, had no ETag to revalidate against, no freshness an intermediary
+    // could reason about, and no compression — 4.4 MB at the ruled ship
+    // configuration, against 801 KB gzipped, from a module that gzips its
+    // 1.6 KB tiles.
+    //
+    // max-age is 300, not the tiles' 86400, and the difference is deliberate:
+    // a tile at an address is immutable for an edition, but layer.json is the
+    // INDEX, and a client holding a stale one asks for tiles that do not exist
+    // yet or never learns about the ones that now do. Five minutes bounds that
+    // window while still collapsing the burst of a page load; the strong ETag
+    // makes every revalidation after it a 304.
+    const bool accepts_gzip = json_bool(plan, "acceptsGzip", true);
+    const bool serve_gzip = accepts_gzip && !cache->gzipped.empty();
+    // Two representations, two tags. The gzipped body's tag is DERIVED from
+    // the identity tag rather than hashed separately: gzip is deterministic
+    // here, so one is a pure function of the other, and deriving it costs
+    // nothing on a cache hit.
+    const std::string etag =
+        serve_gzip ? "\"gzip-" + cache->etag.substr(1) : cache->etag;
+
+    std::vector<HeaderEntry> headers;
+    headers.push_back({"cache-control", "public, max-age=300"});
+    headers.push_back({"etag", etag});
+    headers.push_back({"vary", "accept-encoding"});
+    const std::string if_none_match = json_string(plan, "ifNoneMatch", "");
+    if (!if_none_match.empty() && if_none_match == etag) {
+        return push_htr(304, headers, nullptr, 0);
+    }
+    headers.push_back({"content-type", "application/json"});
+    headers.push_back({"x-content-type-options", "nosniff"});
+    if (serve_gzip) {
+        headers.push_back({"content-encoding", "gzip"});
+        return push_htr(200, headers, cache->gzipped.data(), cache->gzipped.size());
+    }
+    return push_htr(200, headers, reinterpret_cast<const uint8_t*>(cache->body.data()),
+                    cache->body.size());
 }
 
 // ---------------------------------------------------------------------------
@@ -2752,85 +3251,24 @@ int route(void) {
                         body.size());
     }
     const std::string path = request->PATH() ? request->PATH()->str() : "";
+    const std::string raw_query = request->QUERY() ? request->QUERY()->str() : "";
 
-    const std::string config = load_config();
-    const std::string tileset_id =
-        json_string(config, "terrain_tileset_id", "spaceaware-terrain");
+    // O(1) in the size of the availability index: read once per instance, and
+    // everything derived from it derived once with it. See ServingConfig.
+    const ServingConfig& cfg = serving_config();
 
-    // ── THE MOUNT IS A PREFIX, AND ONLY A PREFIX ────────────────────────────
-    // This used to strip up to the LAST "/terrain/", which made one tile
-    // reachable at unboundedly many distinct URLs
-    // (/api/v1/terrain/<any junk>/terrain/8/271/192.terrain), each answered 200
-    // with `public, max-age=86400`: a cache-filling amplifier no URL-keyed
-    // purge could ever invalidate. The first fix left a SEARCH FALLBACK for the
-    // case where no mount is configured — and that fallback still answered
-    // /junk/terrain/8/271/192.terrain, and still did so when a mount WAS
-    // configured, which is the exact amplifier the fix claimed to have
-    // removed. There is no fallback now: the mount is owned by the flow's
-    // config (`terrain_mount_path`, default the flow's own basePath), a path
-    // that does not START with it is a 404, and one tile is reachable at
-    // exactly one URL.
-    std::string mount_prefix = json_string(config, "terrain_mount_path", "/api/v1/terrain/");
-    if (mount_prefix.empty() || mount_prefix.back() != '/') mount_prefix += '/';
-    if (path.size() < mount_prefix.size() ||
-        path.compare(0, mount_prefix.size(), mount_prefix) != 0) {
-        return push_htr_not_found(path);
-    }
-    const std::string rest = path.substr(mount_prefix.size());
-
-    if (rest == "layer.json") {
-        const long maxzoom = static_cast<long>(json_number(config, "terrain_maxzoom", 0));
-        std::string available;
-        if (!json_raw_value(config, "terrain_available", &available) || available.empty() ||
-            available[0] != '[') {
-            // Default: the two level-0 roots of the two-root geographic
-            // scheme. Honest exactly when maxzoom is 0; a deeper pyramid MUST
-            // configure terrain_available.
-            available = "[[{\"startX\":0,\"startY\":0,\"endX\":1,\"endY\":0}]]";
-        }
-        const std::string plan =
-            std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
-            ",\"maxzoom\":" + std::to_string(maxzoom) + ",\"attribution\":\"" +
-            json_escape(json_string(config, "terrain_attribution", "")) + "\"" +
-            ",\"description\":\"" +
-            json_escape(json_string(config, "terrain_description", "")) + "\"" +
-            ",\"version\":\"" + json_escape(json_string(config, "terrain_version", "1.0.0")) +
-            "\"" + ",\"available\":" + available + "}";
-        return push_json("layer_plan", plan) < 0 ? 500 : 0;
-    }
-
-    uint32_t z = 0, x = 0, y = 0;
-    if (!parse_tile_path(rest, &z, &x, &y)) return push_htr_not_found(path);
-
-    // The newest stored record for this address wins; the record BLOB is the
-    // whole answer ($DTT carries its own payload, encoding and etag).
+    // ── CONDITIONAL AND NEGOTIATION STATE, READ ONCE FOR BOTH PATHS ─────────
     //
-    // `_rowid`, NOT `rowid`. On a node the relation named `DTT` is not a table:
-    // sdn-server registers a source for every ingested record and rebuilds the
-    // unified views, and flatsqlrt.CreateUnifiedViews replaces each base table
-    // with a UNION ALL VIEW over its per-source shadow tables. A SQLite view
-    // has no implicit rowid, so `ORDER BY rowid` is `no such column: rowid` on
-    // every real node — and invisible off-node, where the same query runs
-    // against the base vtab, which does accept it. `_rowid` is the column the
-    // vtab declares and the form the owner's engine-routed law states
-    // (2026-08-25); tests/serve.test.mjs executes this SQL against an engine
-    // with a registered source so the difference cannot go unmeasured again.
-    const std::string sql =
-        "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? "
-        "ORDER BY _rowid DESC LIMIT 1";
-    const std::string query =
-        std::string("{\"sql\":\"") + sql + "\",\"params\":[{\"t\":\"str\",\"v\":\"" +
-        json_escape(tileset_id) + "\"},{\"t\":\"i64\",\"v\":" + std::to_string(z) +
-        "},{\"t\":\"i64\",\"v\":" + std::to_string(x) + "},{\"t\":\"i64\",\"v\":" +
-        std::to_string(y) + "}]}";
-    if (push_json("query", query) < 0) return 500;
-
-    // Conditional-request state for respond: the client's If-None-Match.
-    // BOUNDED AT THE DOOR. Every ETag this module issues is a quoted sha2-256
-    // multihash (71 bytes); a value longer than the bound cannot match one, so
-    // carrying it — client-controlled, unbounded, across two guest invokes and
-    // through a control frame — buys nothing and costs an allocation per
-    // request. Over-long values are DROPPED, which degrades to a 200.
+    // layer.json used to skip this entirely, which is why it shipped with one
+    // header and no policy at all. Both response paths need the same two
+    // facts, so both read them here.
+    //
+    // If-None-Match is BOUNDED AT THE DOOR. Every ETag this module issues is a
+    // quoted sha2-256 multihash (71 bytes); a value longer than the bound
+    // cannot match one, so carrying it — client-controlled, unbounded, across
+    // two guest invokes and through a control frame — buys nothing and costs
+    // an allocation per request. Over-long values are DROPPED, which degrades
+    // to a 200.
     constexpr size_t kMaxIfNoneMatchBytes = 256;
     std::string if_none_match;
     // CONTENT NEGOTIATION, actually negotiated. The stored bytes are gzipped
@@ -2858,6 +3296,91 @@ int route(void) {
             }
         }
     }
+
+    // ── THE MOUNT IS A PREFIX, AND ONLY A PREFIX ────────────────────────────
+    // This used to strip up to the LAST "/terrain/", which made one tile
+    // reachable at unboundedly many distinct URLs
+    // (/api/v1/terrain/<any junk>/terrain/8/271/192.terrain), each answered 200
+    // with `public, max-age=86400`: a cache-filling amplifier no URL-keyed
+    // purge could ever invalidate. The first fix left a SEARCH FALLBACK for the
+    // case where no mount is configured — and that fallback still answered
+    // /junk/terrain/8/271/192.terrain, and still did so when a mount WAS
+    // configured, which is the exact amplifier the fix claimed to have
+    // removed. There is no fallback now: the mount is owned by the flow's
+    // config (`terrain_mount_path`, default the flow's own basePath), a path
+    // that does not START with it is a 404, and one tile is reachable at
+    // exactly one URL.
+    const std::string& mount_prefix = cfg.mount_prefix;
+    if (path.size() < mount_prefix.size() ||
+        path.compare(0, mount_prefix.size(), mount_prefix) != 0) {
+        return push_htr_not_found(path);
+    }
+    const std::string rest = path.substr(mount_prefix.size());
+
+    // ── ONE TILE, ONE URL — INCLUDING THE QUERY STRING ──────────────────────
+    //
+    // The mount fixes the path half of that promise. The query half was simply
+    // never looked at: route() read $HTQ PATH and nothing else, so
+    // /api/v1/terrain/8/271/192.terrain?<anything at all> was answered 200
+    // `public, max-age=86400` under unboundedly many distinct cache keys — the
+    // exact amplifier class this module already closed twice on the path (the
+    // leading-zero addresses and the mount search fallback), left open in its
+    // unbounded form. The host passes the query separately and intact
+    // (flowrt/httpmount stages PATH from EscapedPath and QUERY from RawQuery),
+    // so it is readable here and now it is read.
+    //
+    // It cannot simply be rejected: layer.json states its tiles template as
+    // "{z}/{x}/{y}.terrain?v={version}", so a conforming native client sends
+    // exactly `v=<the version layer.json declared>` on every tile request.
+    // That ONE token is admitted, and it is checked against the configured
+    // version rather than accepted for its shape — a stale `v` names a
+    // tileset edition this mount is not serving and is not the same resource.
+    // Everything else is a 404, which is cheap, cacheable, and cannot be
+    // filled with junk keys because there is only one key that answers.
+    const std::string accepted_query = "v=" + cfg.version;
+    if (!raw_query.empty() && raw_query != accepted_query) {
+        return push_htr_not_found(path);
+    }
+
+    if (rest == "layer.json") {
+        // The negotiation state rides with the plan: layer_json renders the
+        // body, so layer_json is where the ETag, the coding and the 304 are
+        // decided.
+        std::string plan = cfg.layer_plan;
+        plan.insert(plan.size() - 1, std::string(",\"planToken\":\"") + cfg.layer_plan_token +
+                                         "\"" + ",\"ifNoneMatch\":\"" +
+                                         json_escape(if_none_match) + "\"" +
+                                         ",\"acceptsGzip\":" +
+                                         (accepts_gzip ? "true" : "false"));
+        return push_json("layer_plan", plan) < 0 ? 500 : 0;
+    }
+
+    uint32_t z = 0, x = 0, y = 0;
+    if (!parse_tile_path(rest, &z, &x, &y)) return push_htr_not_found(path);
+
+    // The newest stored record for this address wins; the record BLOB is the
+    // whole answer ($DTT carries its own payload, encoding and etag).
+    //
+    // `_rowid`, NOT `rowid`. On a node the relation named `DTT` is not a table:
+    // sdn-server registers a source for every ingested record and rebuilds the
+    // unified views, and flatsqlrt.CreateUnifiedViews replaces each base table
+    // with a UNION ALL VIEW over its per-source shadow tables. A SQLite view
+    // has no implicit rowid, so `ORDER BY rowid` is `no such column: rowid` on
+    // every real node — and invisible off-node, where the same query runs
+    // against the base vtab, which does accept it. `_rowid` is the column the
+    // vtab declares and the form the owner's engine-routed law states
+    // (2026-08-25); tests/serve.test.mjs executes this SQL against an engine
+    // with a registered source so the difference cannot go unmeasured again.
+    const std::string sql =
+        "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? "
+        "ORDER BY _rowid DESC LIMIT 1";
+    const std::string query =
+        std::string("{\"sql\":\"") + sql + "\",\"params\":[{\"t\":\"str\",\"v\":\"" +
+        json_escape(cfg.tileset_id) + "\"},{\"t\":\"i64\",\"v\":" + std::to_string(z) +
+        "},{\"t\":\"i64\",\"v\":" + std::to_string(x) + "},{\"t\":\"i64\",\"v\":" +
+        std::to_string(y) + "}]}";
+    if (push_json("query", query) < 0) return 500;
+
     // THE MISS VERDICT, decided here because this is where the configured
     // availability index lives. `available` is the promise layer.json makes to
     // the client: it plans its requests against exactly these rectangles, so a
@@ -2865,14 +3388,11 @@ int route(void) {
     // asked to handle. Atlas: a 404 must never reach the browser. respond()
     // synthesizes such an address at height 0. A miss OUTSIDE availability
     // stays a cheap cacheable 404: nobody was promised it.
-    std::string available_for_miss;
-    if (!json_raw_value(config, "terrain_available", &available_for_miss) ||
-        available_for_miss.empty() || available_for_miss[0] != '[') {
-        available_for_miss = "[[{\"startX\":0,\"startY\":0,\"endX\":1,\"endY\":0}]]";
-    }
-    const bool inside = address_available_to_client(available_for_miss, z, x, y);
-    const uint32_t synth_grid =
-        static_cast<uint32_t>(json_number(config, "terrain_synth_grid_size", 65));
+    //
+    // The rectangles were parsed once, at instance construction; the walk is
+    // over the pyramid's DEPTH (at most 32 levels), never over its byte size.
+    const bool inside = address_available_to_client(cfg.availability, z, x, y);
+    const uint32_t synth_grid = cfg.synth_grid;
 
     // ── WHETHER A SYNTHESIZED TILE MAY CLAIM WATER ──────────────────────────
     // It used to claim it unconditionally, and that was the worst defect on
@@ -2892,13 +3412,13 @@ int route(void) {
     // ABSENT, IT FAILS SAFE: no level is authoritative, every synthesized tile
     // is flat LAND, and the worst outcome is coarse terrain rather than an
     // ocean where Europe is.
-    const double ocean_min_raw = json_number(config, "terrain_ocean_synth_min_level", -1);
+    const double ocean_min_raw = cfg.ocean_synth_min_level;
     const bool ocean_configured = ocean_min_raw >= 0;
     const bool synth_water =
         ocean_configured && static_cast<double>(z) >= ocean_min_raw;
 
     const std::string context =
-        std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
+        std::string("{\"tilesetId\":\"") + json_escape(cfg.tileset_id) + "\"" +
         ",\"level\":" + std::to_string(z) + ",\"x\":" + std::to_string(x) +
         ",\"y\":" + std::to_string(y) + ",\"ifNoneMatch\":\"" + json_escape(if_none_match) +
         "\",\"acceptsGzip\":" + (accepts_gzip ? "true" : "false") +
@@ -3005,18 +3525,56 @@ int respond(void) {
             if (grid < 2 || grid > 255) grid = 65;
 
             const bool synth_water = json_bool(context, "synthWater", false);
-            std::vector<uint8_t> mesh;
-            encode_quantized_mesh(job, grid, ext, std::vector<double>(grid * grid, 0.0),
-                                  std::vector<uint8_t>(), synth_water, &mesh);
-            // The BODY is decided before the ETag, because a strong ETag names
-            // one representation: the gzipped and the identity forms of this
-            // tile are two, and giving them one tag would let a cache holding
-            // the wrong variant answer a revalidation with 304.
-            std::vector<uint8_t> body;
             const bool accepts_gzip = json_bool(context, "acceptsGzip", true);
-            const bool gzipped = accepts_gzip && gzip_compress(mesh, &body);
-            if (!gzipped) body = mesh;
-            const std::string synth_etag = "\"" + sha256_multihash(body) + "\"";
+
+            // ── THE WORK A 304 THROWS AWAY IS NOT DONE ──────────────────────
+            //
+            // The mesh encode, the gzip and the sha256 all used to run BEFORE
+            // If-None-Match was compared, so a conditional request answered
+            // 304 with an empty body cost 0.752 ms of guest CPU for nothing
+            // (measured p50, 2,000 warm invokes on the shipped artifact) — an
+            // anonymous, unmemoized, request-shaped amplifier.
+            //
+            // A synthesized tile is a PURE FUNCTION of the address, the grid,
+            // the mask verdict and the coding: same inputs, same bytes, every
+            // time, because encode_quantized_mesh is deterministic and the
+            // heights are all zero by construction. So the last one produced
+            // is kept and reused, keyed by exactly those inputs. ONE slot: a
+            // client revalidating the tile it just fetched — the shape that
+            // makes the 304 worth having — hits it, and a bounded slot cannot
+            // grow into a cache that has to be reasoned about. A synthesized
+            // tile is far below the 32 KiB per-tile ceiling, so the slot's
+            // footprint is bounded by that ceiling and nothing else.
+            struct SynthSlot {
+                std::string key;
+                std::string etag;
+                std::vector<uint8_t> body;
+                bool gzipped = false;
+            };
+            static SynthSlot* slot = new SynthSlot();
+
+            const std::string key = std::to_string(job.level) + "/" + std::to_string(job.x) +
+                                    "/" + std::to_string(job.y) + "@" + std::to_string(grid) +
+                                    (synth_water ? "w" : "l") + (accepts_gzip ? "z" : "i");
+            if (slot->key != key) {
+                std::vector<uint8_t> mesh;
+                encode_quantized_mesh(job, grid, ext, std::vector<double>(grid * grid, 0.0),
+                                      std::vector<uint8_t>(), synth_water, &mesh);
+                // The BODY is decided before the ETag, because a strong ETag
+                // names one representation: the gzipped and the identity forms
+                // of this tile are two, and giving them one tag would let a
+                // cache holding the wrong variant answer a revalidation with
+                // 304.
+                std::vector<uint8_t> body;
+                const bool gzipped = accepts_gzip && gzip_compress(mesh, &body);
+                if (!gzipped) body = mesh;
+                slot->etag = "\"" + sha256_multihash(body) + "\"";
+                slot->body.swap(body);
+                slot->gzipped = gzipped;
+                slot->key = key;
+            }
+            const std::string& synth_etag = slot->etag;
+            const bool gzipped = slot->gzipped;
 
             std::vector<HeaderEntry> headers;
             headers.push_back({"cache-control", "public, max-age=86400"});
@@ -3032,7 +3590,7 @@ int respond(void) {
             // person reading the wire is entitled to know which this is.
             headers.push_back(
                 {"x-terrain-synthesized", synth_water ? "uniform-water" : "uniform-land"});
-            return push_htr(200, headers, body.data(), body.size());
+            return push_htr(200, headers, slot->body.data(), slot->body.size());
         }
         std::string detail = "no stored tile at this address";
         if (!context.empty()) {
@@ -3081,17 +3639,32 @@ int respond(void) {
         payload->CONTENT_ENCODING() ? payload->CONTENT_ENCODING()->str() : "";
     const bool accepts_gzip = json_bool(context, "acceptsGzip", true);
     const bool serve_identity = stored_encoding == "gzip" && !accepts_gzip;
-    std::vector<uint8_t> identity;
     if (serve_identity) {
-        if (!gzip_decompress(payload->BYTES()->data(), payload->BYTES()->size(), &identity)) {
-            plugin_set_error("stored-encoding-undecodable",
-                             "the stored tile is gzipped, the request refused gzip, and the "
-                             "stored bytes did not decode; serving them anyway would send a "
-                             "coding the client stated it cannot read.");
-            return 500;
-        }
-        // Its own representation, so its own strong tag.
-        etag = "\"" + sha256_multihash(identity) + "\"";
+        // ── THE IDENTITY TAG IS DERIVED, NOT RE-HASHED ──────────────────────
+        //
+        // This used to inflate the stored bytes and sha256 the result BEFORE
+        // comparing If-None-Match — so a conditional request that was going to
+        // be answered 304 with an empty body still paid the full inflate and
+        // hash. Measured p50 on the shipped artifact over 2,000 warm invokes:
+        // 0.413 ms for zero bytes out, against 0.075 ms for the gzip 304.
+        //
+        // gunzip is deterministic, so the identity bytes are a pure FUNCTION of
+        // the stored bytes: naming them by the stored representation's own tag
+        // under a distinguishing prefix is exact — two identity bodies share a
+        // tag exactly when their gzip forms are byte-identical, which is when
+        // they are the same bytes — and it is computable without inflating
+        // anything. The prefix is what keeps the two representations apart, so
+        // a shared cache holding the gzipped variant can never answer the
+        // identity variant's revalidation with a 304.
+        // The weak form stays weak and the strong form stays strong; only the
+        // opaque part is renamed, so validator strength survives the derivation.
+        const bool weak = etag.compare(0, 2, "W/") == 0;
+        const size_t open_quote = etag.find('"');
+        const std::string opaque =
+            open_quote == std::string::npos || etag.size() < open_quote + 2
+                ? etag
+                : etag.substr(open_quote + 1, etag.size() - open_quote - 2);
+        etag = (weak ? std::string("W/\"") : std::string("\"")) + "identity-" + opaque + "\"";
     }
 
     const std::string if_none_match = json_string(context, "ifNoneMatch", "");
@@ -3108,7 +3681,18 @@ int respond(void) {
                                            ? payload->MEDIA_TYPE()->str()
                                            : "application/vnd.quantized-mesh"});
     headers.push_back({"x-content-type-options", "nosniff"});
-    if (serve_identity) return push_htr(200, headers, identity.data(), identity.size());
+    if (serve_identity) {
+        // Only now, on a body that is actually going to be sent.
+        std::vector<uint8_t> identity;
+        if (!gzip_decompress(payload->BYTES()->data(), payload->BYTES()->size(), &identity)) {
+            plugin_set_error("stored-encoding-undecodable",
+                             "the stored tile is gzipped, the request refused gzip, and the "
+                             "stored bytes did not decode; serving them anyway would send a "
+                             "coding the client stated it cannot read.");
+            return 500;
+        }
+        return push_htr(200, headers, identity.data(), identity.size());
+    }
     if (!stored_encoding.empty()) headers.push_back({"content-encoding", stored_encoding});
     return push_htr(200, headers, payload->BYTES()->data(), payload->BYTES()->size());
 }

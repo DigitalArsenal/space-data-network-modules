@@ -1,12 +1,29 @@
-// The water mask is cut from ONE GLOBAL POST LATTICE per level. Everything
-// below is a consequence of that, and none of it is checkable any other way:
+// The water mask is cut from ONE GLOBAL CELL GRID per level, with AREA
+// registration. Everything below is a consequence of that, and none of it is
+// checkable any other way:
 //
-//   * SEAM IDENTITY. Column 255 of tile x and column 0 of tile x+1 are the SAME
-//     global post; row 0 of tile y and row 255 of the tile above it are the
-//     same global post. Their bytes must be EQUAL — not similar, equal — or the
-//     reflective ocean draws a visible line down every tile boundary. Atlas
-//     ruled no encoder-side or client-side seam fix-ups, so the identity has to
-//     come from the construction, and this is where the construction is tested.
+//   * THE MASK IS AN IMAGE, NOT A POST LATTICE, because that is how the
+//     consumer reads it. Cesium uploads the 256x256 mask as a LUMINANCE
+//     texture with a LINEAR / CLAMP_TO_EDGE sampler and samples it at the
+//     tile's own texture coordinates, so texel c COVERS [c/256, (c+1)/256] of
+//     the tile and its centre sits at (c+0.5)/256. This encoder used to cut it
+//     as 256 POSTS at c/255, edge post to edge post — the served coastline was
+//     stretched by ~0.39% of a tile width and displaced by up to half a texel,
+//     zero at the tile centre and worst at both edges (~19 m at z11, ~5 m at
+//     z13). The classification of the source was exact; the LATTICE CONVENTION
+//     was half a texel off, and that is what changed.
+//
+//   * THE SEAM IS CONTIGUITY, NOT IDENTITY. Under area registration cell 255
+//     of tile x and cell 0 of tile x+1 cover DIFFERENT ground and are equal
+//     only when the coastline says so — so "adjacent tiles share their edge
+//     bytes" is no longer a true statement about a correct encoder, and a test
+//     that asserted it would be pinning the defect. What IS true, and what is
+//     asserted here, is that the pair's texels tile the ground with no gap, no
+//     overlap and no duplication: every texel of every tile carries the class
+//     the source states AT ITS OWN CELL CENTRE, which is only expressible on
+//     one global grid and is what makes seam fix-ups unnecessary. Atlas ruled
+//     no encoder-side or client-side seam fix-ups, so the property has to come
+//     from the construction, and this is where the construction is tested.
 //
 //   * UNIFORM RATIO. Over a sample of ocean and interior tiles, at least 95%
 //     must reduce to a single byte. A mask that stays a 65 KB raster where the
@@ -161,8 +178,83 @@ function coastalAddress({ needsEast = false, needsNorth = false } = {}) {
   throw new Error("no coastal tile in the fixture square — the fixture is wrong");
 }
 
-test("adjacent tiles share their boundary posts BYTE FOR BYTE, east-west", async (t) => {
-  // Two tiles side by side across the diagonal coast, so both are mixed.
+// THE GLOBAL CELL GRID, stated once, independently of the module. At level z
+// the ellipsoid carries 2^(z+1)*256 x 2^z*256 cells; tile (x, y) takes the
+// contiguous block starting at (x*256, y*256), and a texel's ground truth is
+// the source class at its CENTRE. Row 0 of the served mask is the NORTH edge.
+const CELLS = 256;
+const cellLon = (x, c) => -180 + ((x * CELLS + c) + 0.5) * (360 / ((2 ** (LEVEL + 1)) * CELLS));
+const cellLatFromSouth = (y, r) => -90 + ((y * CELLS + r) + 0.5) * (180 / ((2 ** LEVEL) * CELLS));
+// The class the SOURCE states for a position: its nearest published post,
+// never the analytic coastline. The source lattice here is 1/1200 degree and a
+// z11 texel is 1/2916 of a degree wide, so the source is COARSER than the mask
+// and a nearest-neighbour read is the only honest one — averaging class
+// ordinals would invent a class the source never stated, and comparing against
+// the analytic function would be asserting a resolution the granule does not
+// have.
+const sourceClassAt = (lon, lat) => {
+  const px = Math.min(Math.max(Math.floor((lon - 10) * PX + 0.5), 0), PX - 1);
+  const py = Math.min(Math.max(Math.floor((46 - lat) * PX + 0.5), 0), PX - 1);
+  return isWater(10 + px / PX, 46 - py / PX) ? 0xff : 0x00;
+};
+
+// THE GRANULE'S OWN MARGIN IS NOT PART OF THIS PROPERTY. A Copernicus granule's
+// posts stop one spacing short of its south and east edges, so a position in
+// that last strip is held by the granule BELOW or to the EAST — and this
+// fixture, deliberately, has only one granule. Whatever the encoder does there
+// is the per-post ABSENCE rule, which has its own test below ("A POST NO
+// GRANULE COVERS IS OCEAN, per post"). Comparing it here would be asserting two
+// unrelated properties in one place and would make a registration failure
+// indistinguishable from an absence-rule failure. One source spacing of margin
+// is excluded, and the count of texels actually compared is asserted so the
+// exclusion can never quietly swallow the test.
+const MARGIN = 1 / PX;
+const inSourceInterior = (lon, lat) =>
+  lon >= 10 + MARGIN && lon <= 11 - 2 * MARGIN && lat >= 45 + 2 * MARGIN && lat <= 46 - MARGIN;
+
+// Compare a served mask against the global grid, texel by texel, over the part
+// of it the single fixture granule actually states. Returns how many texels
+// were compared so a caller can assert the comparison was substantial.
+function assertMaskMatchesGrid(mask, x, y, label) {
+  let compared = 0;
+  for (let r = 0; r < CELLS; r++) {
+    const lat = cellLatFromSouth(y, CELLS - 1 - r);   // row 0 = NORTH
+    for (let c = 0; c < CELLS; c++) {
+      const lon = cellLon(x, c);
+      if (!inSourceInterior(lon, lat)) continue;
+      compared += 1;
+      const want = sourceClassAt(lon, lat);
+      const got = mask[r * CELLS + c];
+      if (got !== want) {
+        assert.fail(
+          `${label}: texel ${r}/${c} at ${lon},${lat} is ${got}, the source states ${want} ` +
+            `— the cut is not on the global CELL grid`,
+        );
+      }
+    }
+  }
+  return compared;
+}
+
+test("the mask is registered as an IMAGE: every texel is the class at its own cell centre", async (t) => {
+  // The half-texel that used to be wrong. A post-registered cut samples at
+  // c/255 instead of (c+0.5)/256; on a diagonal coast that moves the served
+  // coastline, and it moves it MOST at the tile edges — which is precisely
+  // where the old byte-identity property made it invisible.
+  const { x, y } = coastalAddress({ needsEast: true });
+  const { tiles } = await encodeBlock(t, [{ x, y }]);
+  const [tile] = tiles;
+  assert.equal(tile.waterMaskKind, 3, "the sample straddles the coast, so it is a real raster");
+  const compared = assertMaskMatchesGrid(maskOf(tile), x, y, `tile ${x}/${y}`);
+  assert.ok(compared > 60000, `the comparison must be substantial, got ${compared} texels`);
+});
+
+test("adjacent tiles TILE THE GROUND: no gap, no overlap, no duplicated edge", async (t) => {
+  // Under AREA registration the shared-edge bytes of two neighbours are equal
+  // only by coincidence — they cover different ground. The property that
+  // replaces identity is contiguity, and it is checkable exactly: the pair's
+  // texel centres are one continuous run of the global grid, so concatenating
+  // the two tiles' rows must reproduce a 512-wide cut of that grid.
   const { x, y } = coastalAddress({ needsEast: true });
   const { tiles } = await encodeBlock(t, [
     { x, y },
@@ -173,43 +265,50 @@ test("adjacent tiles share their boundary posts BYTE FOR BYTE, east-west", async
   assert.equal(west.waterMaskKind, 3, "the sample straddles the coast, so it is a real raster");
   const wm = maskOf(west);
   const em = maskOf(east);
-  assert.deepEqual(
-    column(wm, 255),
-    column(em, 0),
-    "the east edge of tile x IS the west edge of tile x+1: same global posts, same bytes",
+
+  // The centres either side of the shared meridian are ONE cell width apart —
+  // the grid neither skips ground nor covers any twice.
+  const width = 360 / ((2 ** (LEVEL + 1)) * CELLS);
+  assert.ok(
+    Math.abs(cellLon(x + 1, 0) - cellLon(x, CELLS - 1) - width) < 1e-12,
+    "cell 255 of tile x and cell 0 of tile x+1 are ADJACENT cells of one grid",
   );
+
+  // The pair, read as ONE 512-wide cut: concatenating the two tiles' rows must
+  // reproduce the global grid across the shared meridian with nothing skipped
+  // and nothing repeated.
+  let compared = 0;
+  for (let r = 0; r < CELLS; r++) {
+    const joined = Buffer.concat([Buffer.from(row(wm, r)), Buffer.from(row(em, r))]);
+    const lat = cellLatFromSouth(y, CELLS - 1 - r);
+    for (let c = 0; c < CELLS * 2; c++) {
+      const lon = -180 + (x * CELLS + c + 0.5) * width;
+      if (!inSourceInterior(lon, lat)) continue;
+      compared += 1;
+      assert.equal(
+        joined[c],
+        sourceClassAt(lon, lat),
+        `row ${r} cell ${c} at ${lon},${lat}: the pair is not one cut of the global grid`,
+      );
+    }
+  }
+  assert.ok(compared > 100000, `the comparison must be substantial, got ${compared} texels`);
 });
 
-test("adjacent tiles share their boundary posts BYTE FOR BYTE, north-south", async (t) => {
-  const { x, y } = coastalAddress({ needsNorth: true });
-  const { tiles } = await encodeBlock(t, [
-    { x, y },
-    { x, y: y + 1 },
-  ]);
-  const [lower, upper] = tiles;
-  assert.equal(lower.waterMaskKind, 3, "the sample straddles the coast, so it is a real raster");
-  assert.equal(upper.waterMaskKind, 3);
-  const lm = maskOf(lower);
-  const um = maskOf(upper);
-  // Row 0 is the NORTH edge. Tile y's north edge IS tile y+1's south edge,
-  // which is its row 255.
-  assert.deepEqual(
-    Buffer.from(row(lm, 0)),
-    Buffer.from(row(um, 255)),
-    "tile y's north edge IS tile y+1's south edge",
-  );
-});
-
-test("EVERY adjacent pair in the block agrees on its shared posts, both axes", async (t) => {
+test("EVERY tile in the block is the same cut of ONE global grid", async (t) => {
   // Two hand-picked pairs are not the property. On the real regional pyramid
   // 34 of 4,446 vertically adjacent pairs disagreed on 1-4 shared posts while
   // the two pairs above passed: 31 of them from the zeroed-south-row planner
   // bug, and 3 at ordinary latitudes purely because tile y computed the shared
   // parallel as `north - 255*dlat` and tile y+1 computed it as
   // `south' + 0*dlat'` — equal in exact arithmetic, not always equal in
-  // doubles, and std::lround then flipped on the tie. The lattice is addressed
-  // by GLOBAL POST INDEX now, so both tiles evaluate the same expression and
-  // the identity is structural. This sweeps all 220 adjacencies in the block.
+  // doubles, and std::lround then flipped on the tie.
+  //
+  // Cutting cells by GLOBAL CELL INDEX makes both the seam and the
+  // registration structural at once: every one of the block's 121 tiles is
+  // compared, texel for texel, against the global grid computed here — 7.9
+  // million independent classifications. If any tile were cut on a different
+  // lattice, or offset by half a texel, or seam-fixed, this fails.
   const addresses = [];
   for (let dx = 0; dx < 11; dx++) {
     for (let dy = 0; dy < 11; dy++) addresses.push({ x: X0 + dx, y: Y0 + dy });
@@ -218,21 +317,34 @@ test("EVERY adjacent pair in the block agrees on its shared posts, both axes", a
   const masks = new Map(tiles.map((dtt) => [`${dtt.x}/${dtt.y}`, maskOf(dtt)]));
   assert.equal(masks.size, addresses.length);
 
+  let checked = 0;
+  let compared = 0;
+  for (const { x, y } of addresses) {
+    compared += assertMaskMatchesGrid(masks.get(`${x}/${y}`), x, y, `tile ${x}/${y}`);
+    checked += 1;
+  }
+  assert.equal(checked, 121);
+  assert.ok(compared > 7_000_000, `${compared} texels compared against the global grid`);
+  console.log(`[watermask] ${compared.toLocaleString()} texels compared against the global cell grid`);
+
+  // …and the block's tiles are CONTIGUOUS, which is the seam property stated
+  // over every adjacency rather than over two hand-picked pairs.
   let eastWest = 0;
   let northSouth = 0;
+  const width = 360 / ((2 ** (LEVEL + 1)) * CELLS);
+  const height = 180 / ((2 ** LEVEL) * CELLS);
   for (const { x, y } of addresses) {
-    const here = masks.get(`${x}/${y}`);
-    const east = masks.get(`${x + 1}/${y}`);
-    if (east) {
-      assert.deepEqual(column(here, 255), column(east, 0), `east-west seam at ${x}/${y}`);
+    if (masks.get(`${x + 1}/${y}`)) {
+      assert.ok(
+        Math.abs(cellLon(x + 1, 0) - cellLon(x, CELLS - 1) - width) < 1e-12,
+        `east-west contiguity at ${x}/${y}`,
+      );
       eastWest += 1;
     }
-    const north = masks.get(`${x}/${y + 1}`);
-    if (north) {
-      assert.deepEqual(
-        Buffer.from(row(here, 0)),
-        Buffer.from(row(north, 255)),
-        `north-south seam at ${x}/${y}`,
+    if (masks.get(`${x}/${y + 1}`)) {
+      assert.ok(
+        Math.abs(cellLatFromSouth(y + 1, 0) - cellLatFromSouth(y, CELLS - 1) - height) < 1e-12,
+        `north-south contiguity at ${x}/${y}`,
       );
       northSouth += 1;
     }

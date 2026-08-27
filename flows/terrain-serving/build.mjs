@@ -3,23 +3,29 @@
 //
 // The compiler re-validates every dependency manifest's declared SDS types,
 // and $DTT only exists from spacedatastandards.org 1.196.0 — newer than the
-// 1.178.0 the transitive npm install pulls in. Without the root pointed at the
-// 1.196.0 checkout the compile fails with
+// 1.178.0 the SDK carries as its own nested pin, which is what the SDK's own
+// resolution finds. Without the root pointed at 1.196.0 the compile fails with
 // `unresolved-standards-type ... tile.records` and the flow silently keeps
 // serving a STALE dist, which is how an encoder fix can land in the module and
-// never reach the compiled runtime. Resolved exactly the way
-// data-source/terrain-source/source.mjs resolves it: the sibling checkout,
-// overridable by SPACE_DATA_STANDARDS_ROOT.
+// never reach the compiled runtime.
+//
+// It used to be resolved as a SIBLING GIT CHECKOUT outside both repositories,
+// which made the compiled runtime unreproducible for anyone without that
+// checkout at that commit. It is the PUBLISHED package now — the same one the
+// modules inline their headers from — resolved through node from this
+// package's own dependencies. SPACE_DATA_STANDARDS_ROOT still overrides.
 
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { publishedStandardsRoot } from "../../data-source/terrain-source/sds-headers.mjs";
+
 const packageRoot = fileURLToPath(new URL("./", import.meta.url));
 const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
   ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
-  : fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+  : publishedStandardsRoot(import.meta.url);
 
 const cli = path.join(packageRoot, "node_modules", "space-data-module-sdk", "bin", "space-data-module.js");
 const result = spawnSync(

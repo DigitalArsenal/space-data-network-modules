@@ -15,6 +15,7 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -113,9 +114,15 @@ function decodeIrm(record) {
       decoderState: state,
       decoderStateFormat: innerStr(12),
       decoderStateVersion: innerStr(13),
-      // id 17: the schema carries DECODER_STATE_SHA256 (15) and
-      // DECODER_BUILD_ID (16) between VERSION and MEDIA_TYPE — read off the
-      // generated header's VT_ offsets, not counted by eye.
+      // ids read off the generated header's VT_ offsets, not counted by eye:
+      // DECODER_STATE_BYTE_LENGTH 14, _SHA256 15, DECODER_BUILD_ID 16,
+      // _MEDIA_TYPE 17.
+      decoderStateByteLength: (() => {
+        const q = inner(14);
+        return q ? Number(buf.readBigUInt64LE(q)) : 0;
+      })(),
+      decoderStateSha256: innerStr(15),
+      decoderBuildId: innerStr(16),
       decoderStateMediaType: innerStr(17),
     };
   };
@@ -261,7 +268,7 @@ test("THE LOOP: the $IRM record publish_request wrote is the mark granule_plan r
   assert.equal(asJson(fresh.get("job")).cell_index, 0);
 });
 
-test("a mark for ANOTHER job, or an unrecognised state stamp, restarts rather than resumes", async (t) => {
+test("a mark for ANOTHER job restarts rather than resumes", async (t) => {
   const outputs = await publish(t, { tileset_id: "some-other-tileset" });
   const stream = sizePrefixed(outputs.get("mark_record"));
   const harness = await harnessFor(t);
@@ -276,6 +283,146 @@ test("a mark for ANOTHER job, or an unrecognised state stamp, restarts rather th
     0,
     "a mark whose JOB_ID is another lane's says nothing about this walk",
   );
+});
+
+// ── THE STAMPS ARE READ, AND A DISAGREEING ONE REFUSES ─────────────────────
+//
+// $IRM states the rule normatively: "A consumer compares EVERY stamp it can
+// before loading the image, and on ANY disagreement - different format token,
+// different version, different byte length, different digest - it discards the
+// mark and restarts from offset 0 ... The stamps exist so that refusal is
+// possible." Before this the stamps were WRITE-ONLY: five were authored, one
+// (FORMAT) was compared, and the test that named the case asserted only the
+// JOB_ID half of it — a gate that could not fail for the thing it existed to
+// catch.
+//
+// Each case below takes a mark this build WOULD resume from, corrupts exactly
+// ONE stamp in place, and asserts the walk restarts at cell 0. Patching in
+// place (rather than re-authoring the buffer) is what keeps the cases honest:
+// nothing but the named stamp differs, so a restart can only be that stamp.
+
+// Locate a string field of the DECODE_CONTEXT table and overwrite its bytes.
+// Same-length only — a FlatBuffer string's length prefix is authoritative and
+// this is a byte patch, not a rebuild.
+function patchDecodeContextString(record, fieldId, replacement) {
+  const buf = Buffer.from(record);
+  const rootAt = tableAt(buf, buf.readUInt32LE(0));
+  const ctxPtr = rootAt(10);
+  assert.ok(ctxPtr, "the record carries a decode context to patch");
+  const ctx = ctxPtr + buf.readUInt32LE(ctxPtr);
+  const inner = tableAt(buf, ctx);
+  const fieldPtr = inner(fieldId);
+  assert.ok(fieldPtr, `decode context field ${fieldId} is present`);
+  const strAt = fieldPtr + buf.readUInt32LE(fieldPtr);
+  const length = buf.readUInt32LE(strAt);
+  assert.equal(
+    replacement.length,
+    length,
+    "the patch is same-length so only the stamp's VALUE differs",
+  );
+  buf.write(replacement, strAt + 4, "utf8");
+  return buf;
+}
+
+function patchDecodeContextByteLength(record, value) {
+  const buf = Buffer.from(record);
+  const rootAt = tableAt(buf, buf.readUInt32LE(0));
+  const ctxPtr = rootAt(10);
+  const ctx = ctxPtr + buf.readUInt32LE(ctxPtr);
+  const fieldPtr = tableAt(buf, ctx)(14);
+  assert.ok(fieldPtr, "DECODER_STATE_BYTE_LENGTH is present");
+  buf.writeBigUInt64LE(BigInt(value), fieldPtr);
+  return buf;
+}
+
+async function resumesAtCell(t, recordBuffer) {
+  const harness = await harnessFor(t);
+  const planned = outputsByPort(
+    await harness.invoke({
+      methodId: "granule_plan",
+      inputs: [
+        jsonFrame("tick", { firedAt: RETRIEVED_AT }),
+        frame("mark", sizePrefixed(recordBuffer)),
+      ],
+    }),
+  );
+  return asJson(planned.get("job")).cell_index;
+}
+
+test("the stamps are WRITTEN — every one the reader compares, plus the build id", async (t) => {
+  const outputs = await publish(t);
+  const ctx = decodeIrm(outputs.get("mark_record")).decodeContext;
+  assert.equal(ctx.decoderStateFormat, "terrain-ingest/resume-v1");
+  assert.equal(ctx.decoderStateVersion, "1");
+  assert.equal(ctx.decoderStateMediaType, "application/json");
+  assert.equal(ctx.decoderStateByteLength, ctx.decoderState.length, "the length stamp is the truth");
+  assert.match(ctx.decoderStateSha256, /^[0-9a-f]{64}$/, "64 lowercase hex, as $IRM specifies");
+  assert.equal(
+    ctx.decoderStateSha256,
+    createHash("sha256").update(ctx.decoderState).digest("hex"),
+    "…and it is the digest of the state bytes, computed here independently",
+  );
+  // BUILD_ID is written for a human reading a stuck mark. It is deliberately
+  // NOT compared on resume — see the test below.
+  assert.equal(ctx.decoderBuildId, "terrain-ingest-wasm/v1+resume-v1");
+});
+
+test("an unrecognised DECODER_STATE_FORMAT restarts rather than resumes", async (t) => {
+  const outputs = await publish(t);
+  assert.equal(await resumesAtCell(t, outputs.get("mark_record")), 6, "the control: it DOES resume");
+  const foreign = patchDecodeContextString(
+    outputs.get("mark_record"),
+    12,
+    "terrain-ingest/resume-v9",
+  );
+  assert.equal(
+    await resumesAtCell(t, foreign),
+    0,
+    "a state naming a layout this build does not have is discarded, not read",
+  );
+});
+
+test("a mismatched DECODER_STATE_VERSION restarts rather than resumes", async (t) => {
+  const outputs = await publish(t);
+  const bumped = patchDecodeContextString(outputs.get("mark_record"), 13, "2");
+  assert.equal(await resumesAtCell(t, bumped), 0);
+});
+
+test("a mismatched DECODER_STATE_MEDIA_TYPE restarts rather than resumes", async (t) => {
+  const outputs = await publish(t);
+  const foreign = patchDecodeContextString(outputs.get("mark_record"), 17, "application/xson");
+  assert.equal(await resumesAtCell(t, foreign), 0);
+});
+
+test("a DECODER_STATE_BYTE_LENGTH that does not match the state restarts", async (t) => {
+  const outputs = await publish(t);
+  const record = outputs.get("mark_record");
+  const truth = decodeIrm(record).decodeContext.decoderState.length;
+  assert.equal(await resumesAtCell(t, patchDecodeContextByteLength(record, truth + 1)), 0);
+  // Zero is UNSTAMPED, not a disagreement: a writer that never authored the
+  // field is the compatibility case the stamps exist to tolerate.
+  assert.equal(await resumesAtCell(t, patchDecodeContextByteLength(record, 0)), 6);
+});
+
+test("a DECODER_STATE_SHA256 that does not match the state restarts", async (t) => {
+  const outputs = await publish(t);
+  const record = outputs.get("mark_record");
+  const truth = decodeIrm(record).decodeContext.decoderStateSha256;
+  const wrong = (truth[0] === "0" ? "1" : "0") + truth.slice(1);
+  assert.equal(await resumesAtCell(t, patchDecodeContextString(record, 15, wrong)), 0);
+});
+
+test("a DIFFERENT DECODER_BUILD_ID still resumes — a deploy is not a corrupt mark", async (t) => {
+  // Every other stamp is a claim about the SHAPE of the state. BUILD_ID is a
+  // claim about who wrote it, and refusing on it would restart the whole walk
+  // on every binary update while the format contract still held.
+  const outputs = await publish(t);
+  const other = patchDecodeContextString(
+    outputs.get("mark_record"),
+    16,
+    "terrain-ingest-wasm/v9+resume-v1",
+  );
+  assert.equal(await resumesAtCell(t, other), 6);
 });
 
 test("the legacy JSON mark still resumes, and is never confused with a record", async (t) => {

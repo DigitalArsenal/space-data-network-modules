@@ -4,14 +4,21 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
+import { publishedStandardsRoot, readSdsHeader } from "../terrain-source/sds-headers.mjs";
+
+// The manifest validator and the inlined headers read the SAME package; see
+// sds-headers.mjs (publishedStandardsRoot) for why this has to be said out loud.
+process.env.SPACE_DATA_STANDARDS_ROOT ??= publishedStandardsRoot(import.meta.url);
+
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "terrain_ingest_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+// SDS headers come from the PUBLISHED spacedatastandards.org package this
+// module pins; see ../terrain-source/sds-headers.mjs for why, and for what the
+// sibling-checkout resolution it replaced got wrong.
 
 // THE DURABLE RESUME MARK IS AN $IRM RECORD, so the $IRM generated header is
 // inlined here — the same pattern data-source/cell-tower-ingest uses, and for
@@ -35,7 +42,7 @@ function inlineGeneratedHeader(source) {
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 const irmHeader = inlineGeneratedHeader(
-  await fs.readFile(path.join(standardsRoot, "lib", "cpp", "IRM", "main_generated.h"), "utf8"),
+  await readSdsHeader("IRM", import.meta.url),
 );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
 const sourceCode = `${irmHeader}\n${implementationSource}`;

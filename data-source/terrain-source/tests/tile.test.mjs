@@ -79,6 +79,13 @@ const PLAN = {
   rowOriginNorth: false,
   scheme: "GEOGRAPHIC_WGS84",
   gridSize: GRID,
+  // THE LATTICE IS PINNED for the encoding invariants below. Density otherwise
+  // adapts to relief inside the 32 KiB cap (coordinator 2026-08-27 (a)), and
+  // this fixture is an exact plane — the coarsest candidate describes it to
+  // quantisation, which is the feature working, and would leave assertions
+  // about "the mesh at GRID posts" with a different mesh to look at. The
+  // adaptation itself has its own test at the end of this file.
+  minGridSize: GRID,
   maxLevel: 10,
   childAvailability: 15,
   sourceClass: "SPACEBORNE_RADAR_INTERFEROMETRIC",
@@ -654,7 +661,16 @@ test("layer_json renders the complete body inside the canonical $HTR envelope", 
     http.headers.find((h) => h.name === "content-type")?.value,
     "application/json",
   );
-  const body = JSON.parse(Buffer.from(http.body).toString("utf8"));
+  // The body is gzipped when the caller accepts it (a plan with no negotiation
+  // states nothing, and RFC 9110 12.5.3 reads that as "anything is
+  // acceptable"), so the policy headers say so and the body is read through
+  // the coding it declares.
+  assert.equal(
+    http.headers.find((h) => h.name === "content-encoding")?.value,
+    "gzip",
+    "layer.json compresses, like every tile",
+  );
+  const body = JSON.parse(zlib.gunzipSync(Buffer.from(http.body)).toString("utf8"));
   assert.equal(body.tilejson, "2.1.0");
   assert.equal(body.name, "spaceaware-terrain");
   assert.equal(body.format, "quantized-mesh-1.0");
@@ -680,4 +696,106 @@ test("layer_json refuses a plan that cannot state maxzoom or availability", asyn
   ]);
   assert.notEqual(noAvail.statusCode, 0);
   assert.equal(noAvail.errorCode, "missing-availability");
+});
+
+// ── DENSITY ADAPTS TO RELIEF, INSIDE A CAP THAT NEVER MOVES ────────────────
+//
+// Coordinator reconciliation 2026-08-27 (a): "Mesh density adapts per tile to
+// relief inside a 32 KiB gzipped HARD cap (never exceeded), targeting
+// worst-post vertical error <= 2 x 77067/2^level m; where the cap cannot meet
+// it the tile ships AT the cap with its measured VERTICAL_ACCURACY_M stated in
+// the record (never silently)."
+//
+// A fixed gridSize was wrong in both directions at once: a flat or gently
+// rolling tile paid 65x65 posts to describe a plane, while a tile whose relief
+// genuinely needed them could only be made coarser plan-wide. What is asserted
+// here is the RULING, in all three of its parts.
+const ERROR_TARGET_M = (level) => (2 * 77067) / 2 ** level;
+
+async function encodeRelief(t, heightFn, plan = {}) {
+  const tiff = buildGeoTiff({ ...GRANULE, width: 256, height: 256, scaleLon: 0.8 / 255, scaleLat: 0.9 / 255, heightFn, layout: "strip", predictor: 1 });
+  const outputs = outputsByPort(
+    await invoke(t, "tile", [
+      jsonFrame("plan", { ...PLAN, minGridSize: 5, ...plan }),
+      responseFrame("dem", tiff),
+    ]),
+  );
+  return {
+    dtt: decodeDtt(splitStream(outputs.get("records"))[0]),
+    tile: asJson(outputs.get("report")).tiles[0],
+  };
+}
+
+test("a tile the source describes exactly ships COARSE, and says which lattice it shipped", async (t) => {
+  // An exact plane: every candidate reproduces it, so the coarsest one meets
+  // the target and the search stops there.
+  const { dtt, tile } = await encodeRelief(t, (px, py) => 100 + px + 2 * py);
+  assert.ok(tile.gridSize < GRID, `a plane must not cost ${GRID} posts, got ${tile.gridSize}`);
+  assert.equal(tile.atCeiling, false, "the target was met, so nothing was compromised");
+  // The report renders doubles at a fixed precision, so the target is compared
+  // to the tolerance it is printed at rather than bit for bit.
+  assert.ok(
+    Math.abs(tile.errorTargetM - ERROR_TARGET_M(LEVEL)) < 1e-3,
+    `2 x 77067/2^level, as ruled: ${tile.errorTargetM} vs ${ERROR_TARGET_M(LEVEL)}`,
+  );
+  assert.ok(
+    dtt.verticalAccuracyM <= tile.errorTargetM,
+    `measured ${dtt.verticalAccuracyM} m against a target of ${tile.errorTargetM} m`,
+  );
+  // …and the record STATES what it achieved, always — an unstated accuracy is
+  // the one field a consumer would read to reason about exactly this.
+  assert.ok(tile.accuracyProbes > 0, "the figure is a measurement, not a default");
+});
+
+test("a tile with real relief ships DENSER, and still meets the target", async (t) => {
+  // Relief the coarse candidates cannot describe: the search must climb.
+  const rough = (px, py) => 800 * Math.sin(px / 3.1) + 700 * Math.cos(py / 2.7);
+  const flat = await encodeRelief(t, (px, py) => 100 + px + 2 * py);
+  const { dtt, tile } = await encodeRelief(t, rough);
+  assert.ok(
+    tile.gridSize > flat.tile.gridSize,
+    `relief must buy posts: rough ${tile.gridSize} vs flat ${flat.tile.gridSize}`,
+  );
+  if (!tile.atCeiling) {
+    assert.ok(
+      dtt.verticalAccuracyM <= tile.errorTargetM,
+      `measured ${dtt.verticalAccuracyM} m against a target of ${tile.errorTargetM} m`,
+    );
+  }
+});
+
+test("THE CAP IS HARD: a tile that cannot meet the target ships AT it, stating what it achieved", async (t) => {
+  // Relief no lattice this plan admits can describe, so the search runs out.
+  // Whatever happens, the two invariants hold: the payload is under the cap,
+  // and the record does not claim an accuracy it does not have.
+  const violent = (px, py) => 4000 * Math.sin(px * 1.7) * Math.cos(py * 1.9) + 3000 * Math.sin(px * 0.9 + py * 1.3);
+  const { dtt, tile } = await encodeRelief(t, violent);
+  assert.ok(
+    tile.payloadBytes <= 32 * 1024,
+    `the 32 KiB gzipped ceiling is HARD: ${tile.payloadBytes} B`,
+  );
+  assert.ok(tile.accuracyProbes > 0, "and it is measured, not asserted");
+  assert.ok(
+    Math.abs(dtt.verticalAccuracyM - tile.verticalAccuracyM) < 1e-3,
+    "the number the record states is the number the search measured — one measurement, not two",
+  );
+  if (tile.atCeiling) {
+    assert.ok(
+      dtt.verticalAccuracyM > tile.errorTargetM,
+      "atCeiling means the target was NOT met; a tile that met it must not claim otherwise",
+    );
+  }
+});
+
+test("with the accuracy measurement OFF, density is the plan's own gridSize — never the coarsest", async (t) => {
+  // The first cut of the search broke out of the loop on the FIRST candidate
+  // when there was no error signal, and the loop runs coarsest-first: it
+  // shipped 5x5 meshes for every tile whenever a caller turned measurement
+  // off, while the comment above it claimed the opposite. With no signal there
+  // is nothing that could justify shipping fewer posts than were asked for.
+  const { tile } = await encodeRelief(t, (px, py) => 100 + px + 2 * py, {
+    measureAccuracy: false,
+  });
+  assert.equal(tile.gridSize, GRID, "no measurement, no coarsening");
+  assert.equal(tile.accuracyProbes, 0, "…and no accuracy is claimed either");
 });

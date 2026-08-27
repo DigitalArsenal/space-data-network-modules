@@ -16,14 +16,23 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
+
+import { publishedStandardsRoot } from "../../terrain-source/sds-headers.mjs";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+// THE VALIDATOR READS THE PACKAGE THE BUILD READ. It used to default to a
+// SIBLING GIT CHECKOUT outside both repositories, which made compliance
+// unreproducible for anyone who did not have that checkout at that commit —
+// and the SDK's own resolution finds its NESTED copy of the standards
+// package (a GitHub tarball pin, 1.178.0 at SDK 0.8.15), which predates
+// $DTT and $IRM entirely. Both are wrong for the same reason: the artifact
+// is built from the PUBLISHED package this package.json pins, so that is
+// what compliance has to be measured against.
 const STANDARDS_ROOT =
-  process.env.SPACE_DATA_STANDARDS_ROOT ??
-  fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+  process.env.SPACE_DATA_STANDARDS_ROOT ?? publishedStandardsRoot(import.meta.url);
 
 const S3 = "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/";
 const encoder = new TextEncoder();

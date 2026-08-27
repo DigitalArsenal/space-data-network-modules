@@ -155,7 +155,7 @@
             "typeRef": {
               "wireFormat": "aligned-binary",
               "requiredAlignment": 1,
-              "byteLength": 3172
+              "byteLength": 1332
             }
           },
           {
@@ -182,7 +182,7 @@
             "typeRef": {
               "wireFormat": "aligned-binary",
               "requiredAlignment": 1,
-              "byteLength": 3172
+              "byteLength": 1332
             }
           },
           {
@@ -209,7 +209,7 @@
             "typeRef": {
               "wireFormat": "aligned-binary",
               "requiredAlignment": 1,
-              "byteLength": 3172
+              "byteLength": 1332
             }
           },
           {
@@ -300,6 +300,78 @@
               "wireFormat": "aligned-binary",
               "requiredAlignment": 1,
               "byteLength": 99
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-tile-address",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tile.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-layer-json",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-layer.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-undeclared-query",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-query.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-declared-version-token",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-versioned.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
             }
           }
         ]

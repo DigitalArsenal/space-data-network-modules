@@ -3,9 +3,13 @@ import path from "node:path";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
-import { composeTerrainSource, packageRoot, standardsRoot } from "./source.mjs";
+import { composeTerrainSource, packageRoot } from "./source.mjs";
+import { publishedStandardsRoot } from "./sds-headers.mjs";
 
-process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
+// The manifest validator and the inlined headers read the SAME package; see
+// sds-headers.mjs (publishedStandardsRoot) for why this has to be said out loud.
+process.env.SPACE_DATA_STANDARDS_ROOT ??= publishedStandardsRoot(import.meta.url);
+
 
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const distRoot = path.join(packageRoot, "dist");
