@@ -42,6 +42,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -502,9 +503,26 @@ struct DemGrid {
     std::vector<float> samples;    // float32 elevation posts, row-major
     std::vector<uint8_t> classes;  // uint8 categorical samples (water-body mask)
     bool is_mask = false;
-    // Georeference of the SUB-RASTER: model coordinate of ITS pixel (0,0).
+    // ── GEOREFERENCE OF THE WHOLE GRANULE, NEVER OF THE WINDOW ──────────────
+    //
+    // origin_lon/origin_lat are the model coordinate of the FULL raster's pixel
+    // (0,0), and off_x/off_y are the window's integer pixel offset inside it.
+    // Every sample index is therefore computed in FULL-granule coordinates and
+    // only then shifted by an integer — which is exact — so the index a
+    // coordinate resolves to is a pure function of that coordinate and the
+    // granule file, identical in every invoke.
+    //
+    // It used to store the WINDOW's own origin (full_origin + wx0*scale). That
+    // recomputation is NOT exact in doubles, and the window differs per invoke,
+    // so two neighbouring tiles asking for the SAME global post could round a
+    // half-post tie the opposite way: measured on the real regional pyramid,
+    // 3 of 8,885 tile adjacencies disagreed on exactly one shared water-mask
+    // byte, purely from this. The mask lattice is shared by construction
+    // (lattice_lat/lattice_lon); the SAMPLE it resolves to must be too.
     double origin_lon = 0.0;
     double origin_lat = 0.0;
+    long off_x = 0;  // window's first column in the full raster
+    long off_y = 0;  // window's first row in the full raster
     double scale_lon = 0.0;  // positive eastward
     double scale_lat = 0.0;  // positive (subtracted going south)
     bool covers = false;     // the requested extent intersected this granule
@@ -740,8 +758,12 @@ DemGrid decode_geotiff_window(const std::string& body, double west, double east,
     g.height = wh;
     if (expect_mask) g.classes.assign(need, 0);
     else g.samples.assign(static_cast<size_t>(ww) * wh, 0.0f);
-    g.origin_lon = full_origin_lon + wx0 * sx;
-    g.origin_lat = full_origin_lat - wy0 * sy;
+    // THE FULL granule's origin, plus the window's integer offset. Never the
+    // window's own recomputed origin — see the DemGrid comment.
+    g.origin_lon = full_origin_lon;
+    g.origin_lat = full_origin_lat;
+    g.off_x = wx0;
+    g.off_y = wy0;
     g.scale_lon = sx;
     g.scale_lat = sy;
 
@@ -856,11 +878,24 @@ DemGrid decode_geotiff_window(const std::string& body, double west, double east,
 
 constexpr float kNoData = -32767.0f;
 
+// ── FULL-GRANULE PIXEL COORDINATES ─────────────────────────────────────────
+//
+// The one place a geographic coordinate becomes a pixel index. It is expressed
+// against the WHOLE granule's georeference, so it does not depend on which
+// window this invoke happened to decode; the window's integer offset is
+// subtracted afterwards, and subtracting an integer from a double of this
+// magnitude is exact. Two invokes with different windows therefore resolve the
+// same coordinate to the same post, including on an exact half-post tie.
+double full_ix(const DemGrid& g, double lon) { return (lon - g.origin_lon) / g.scale_lon; }
+double full_iy(const DemGrid& g, double lat) { return (g.origin_lat - lat) / g.scale_lat; }
+double full_lon(const DemGrid& g, double ix) { return g.origin_lon + ix * g.scale_lon; }
+double full_lat(const DemGrid& g, double iy) { return g.origin_lat - iy * g.scale_lat; }
+
 // Does this granule window hold the position at all (half a post of slack at
 // the edges, which is where a granule's own lattice ends)?
 bool granule_holds(const DemGrid& g, double lon, double lat, double* px, double* py) {
-    *px = (lon - g.origin_lon) / g.scale_lon;
-    *py = (g.origin_lat - lat) / g.scale_lat;
+    *px = full_ix(g, lon) - static_cast<double>(g.off_x);
+    *py = full_iy(g, lat) - static_cast<double>(g.off_y);
     return !(*px < -0.5 || *py < -0.5 || *px > g.width - 0.5 || *py > g.height - 0.5);
 }
 
@@ -873,11 +908,14 @@ bool granule_holds(const DemGrid& g, double lon, double lat, double* px, double*
 bool post_sample(const std::vector<DemGrid>& granules, double lon, double lat, float* out) {
     for (const DemGrid& g : granules) {
         if (!g.covers || g.samples.empty()) continue;
-        const double fi = (lon - g.origin_lon) / g.scale_lon;
-        const double fj = (g.origin_lat - lat) / g.scale_lat;
-        const double ri = std::floor(fi + 0.5);
-        const double rj = std::floor(fj + 0.5);
-        if (std::fabs(fi - ri) > 1e-3 || std::fabs(fj - rj) > 1e-3) continue;
+        const double fi = full_ix(g, lon);
+        const double fj = full_iy(g, lat);
+        const double ri = std::floor(fi + 0.5) - static_cast<double>(g.off_x);
+        const double rj = std::floor(fj + 0.5) - static_cast<double>(g.off_y);
+        if (std::fabs(fi - std::floor(fi + 0.5)) > 1e-3 ||
+            std::fabs(fj - std::floor(fj + 0.5)) > 1e-3) {
+            continue;
+        }
         if (ri < 0 || rj < 0 || ri > g.width - 1 || rj > g.height - 1) continue;
         *out = g.samples[static_cast<size_t>(rj) * g.width + static_cast<size_t>(ri)];
         return true;
@@ -922,8 +960,8 @@ bool sample_dem(const std::vector<DemGrid>& granules, double lon, double lat, do
     for (int k = 0; k < 4 && complete; k++) {
         const double di = k & 1 ? 1.0 : 0.0;
         const double dj = k & 2 ? 1.0 : 0.0;
-        const double plon = home->origin_lon + (i0 + di) * home->scale_lon;
-        const double plat = home->origin_lat - (j0 + dj) * home->scale_lat;
+        const double plon = full_lon(*home, static_cast<double>(home->off_x) + i0 + di);
+        const double plat = full_lat(*home, static_cast<double>(home->off_y) + j0 + dj);
         complete = post_sample(granules, plon, plat, &s[k]);
     }
     if (!complete) {
@@ -971,11 +1009,14 @@ bool sample_dem(const std::vector<DemGrid>& granules, double lon, double lat, do
 bool post_class(const std::vector<DemGrid>& granules, double lon, double lat, uint8_t* out) {
     for (const DemGrid& g : granules) {
         if (!g.covers || g.classes.empty()) continue;
-        const double fi = (lon - g.origin_lon) / g.scale_lon;
-        const double fj = (g.origin_lat - lat) / g.scale_lat;
-        const double ri = std::floor(fi + 0.5);
-        const double rj = std::floor(fj + 0.5);
-        if (std::fabs(fi - ri) > 1e-3 || std::fabs(fj - rj) > 1e-3) continue;
+        const double fi = full_ix(g, lon);
+        const double fj = full_iy(g, lat);
+        const double ri = std::floor(fi + 0.5) - static_cast<double>(g.off_x);
+        const double rj = std::floor(fj + 0.5) - static_cast<double>(g.off_y);
+        if (std::fabs(fi - std::floor(fi + 0.5)) > 1e-3 ||
+            std::fabs(fj - std::floor(fj + 0.5)) > 1e-3) {
+            continue;
+        }
         if (ri < 0 || rj < 0 || ri > g.width - 1 || rj > g.height - 1) continue;
         *out = g.classes[static_cast<size_t>(rj) * g.width + static_cast<size_t>(ri)];
         return true;
@@ -1000,8 +1041,8 @@ bool sample_water(const std::vector<DemGrid>& granules, double lon, double lat, 
     }
     // The nearest post is over a granule boundary: ask the set for it before
     // falling back to the home granule's edge post.
-    const double plon = home->origin_lon + ri * home->scale_lon;
-    const double plat = home->origin_lat - rj * home->scale_lat;
+    const double plon = full_lon(*home, static_cast<double>(home->off_x) + ri);
+    const double plat = full_lat(*home, static_cast<double>(home->off_y) + rj);
     if (post_class(granules, plon, plat, out)) return true;
     long x = static_cast<long>(ri), y = static_cast<long>(rj);
     if (x < 0) x = 0;
@@ -1136,6 +1177,61 @@ bool gzip_compress(const std::vector<uint8_t>& in, std::vector<uint8_t>* out) {
     put_u32(out, crc);
     put_u32(out, static_cast<uint32_t>(in.size() & 0xffffffffu));
     return true;
+}
+
+// The reverse, for the one case the serving lane owes a client: bytes stored
+// gzipped, asked for by something that stated it does not accept gzip. The
+// header is only accepted in the exact shape gzip_compress writes — 10 bytes,
+// no optional fields — because this is not a general gzip reader and guessing
+// at a header shape this module never produces would be inventing a decoder.
+bool gzip_decompress(const uint8_t* data, size_t length, std::vector<uint8_t>* out) {
+    if (!data || length < 18) return false;
+    if (data[0] != 0x1f || data[1] != 0x8b || data[2] != 8 || data[3] != 0) return false;
+    const uint32_t isize = static_cast<uint32_t>(data[length - 4]) |
+                           (static_cast<uint32_t>(data[length - 3]) << 8) |
+                           (static_cast<uint32_t>(data[length - 2]) << 16) |
+                           (static_cast<uint32_t>(data[length - 1]) << 24);
+    // A tile's uncompressed mesh is bounded by the encoder's own ceiling; a
+    // stated ISIZE past that is refused rather than allocated.
+    if (isize == 0 || isize > 8u * 1024u * 1024u) return false;
+    size_t inflated_len = 0;
+    void* inflated = tinfl_decompress_mem_to_heap(data + 10, length - 18, &inflated_len, 0);
+    if (!inflated) return false;
+    const bool ok = inflated_len == isize;
+    if (ok) {
+        out->assign(static_cast<uint8_t*>(inflated),
+                    static_cast<uint8_t*>(inflated) + inflated_len);
+    }
+    mz_free(inflated);
+    return ok;
+}
+
+// Does this Accept-Encoding permit gzip? Token scan with the q-value read, so
+// `gzip;q=0` and `identity` both correctly mean NO, and `*` means yes unless
+// it is itself weighted zero.
+bool accept_encoding_allows_gzip(const std::string& value) {
+    bool star_allows = false, star_seen = false;
+    size_t i = 0;
+    while (i <= value.size()) {
+        const size_t comma = value.find(',', i);
+        const std::string field =
+            value.substr(i, comma == std::string::npos ? std::string::npos : comma - i);
+        i = comma == std::string::npos ? value.size() + 1 : comma + 1;
+        size_t a = field.find_first_not_of(" \t");
+        if (a == std::string::npos) continue;
+        size_t b = field.find_first_of("; \t", a);
+        std::string token = field.substr(a, b == std::string::npos ? std::string::npos : b - a);
+        for (char& c : token) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        bool weighted_zero = false;
+        const size_t q = field.find("q=");
+        if (q != std::string::npos) {
+            const double weight = std::atof(field.c_str() + q + 2);
+            weighted_zero = weight <= 0.0;
+        }
+        if (token == "gzip") return !weighted_zero;
+        if (token == "*") { star_seen = true; star_allows = !weighted_zero; }
+    }
+    return star_seen ? star_allows : false;
 }
 
 // ── the dataset contract carried on every plan frame ───────────────────────
@@ -1315,6 +1411,13 @@ int push_htr_not_found(const std::string& detail) {
 }
 
 // Parse "<z>/<x>/<y>.terrain" (all decimal, nothing else) after the mount.
+//
+// ONE ADDRESS, ONE URL — including the spelling of its digits. A LEADING ZERO
+// is refused: "8", "08", "008" and "000000008" all parsed to 8, so a single
+// tile was reachable at 9x7x7 = 441 distinct publicly-cacheable URLs, each one
+// a separate cache key costing a full store query and ~9 KB of cache for the
+// identical bytes. There is exactly one canonical decimal spelling of a tile
+// index and this accepts only that one; "0" itself is canonical and stays.
 bool parse_tile_path(const std::string& rest, uint32_t* z, uint32_t* x, uint32_t* y) {
     const size_t suffix = rest.rfind(".terrain");
     if (suffix == std::string::npos || suffix + 8 != rest.size()) return false;
@@ -1328,6 +1431,7 @@ bool parse_tile_path(const std::string& rest, uint32_t* z, uint32_t* x, uint32_t
     uint32_t vals[3];
     for (int i = 0; i < 3; i++) {
         if (parts[i].empty() || parts[i].size() > 9) return false;
+        if (parts[i].size() > 1 && parts[i][0] == '0') return false;
         uint64_t v = 0;
         for (const char c : parts[i]) {
             if (c < '0' || c > '9') return false;
@@ -1434,12 +1538,22 @@ struct TileJob {
 struct TileStats {
     uint64_t nodata = 0;
     uint64_t uncovered = 0;
-    uint64_t mask_fallback = 0;
+    // Mask posts no water granule classified. `mask_from_absence` is the
+    // honest ocean inference (no elevation granule covers the post either);
+    // `mask_unclassified` is a gap in the mask lane over terrain that DOES
+    // have elevation, which is a defect in the plan, not data.
+    uint64_t mask_from_absence = 0;
+    uint64_t mask_unclassified = 0;
     // Posts whose bilinear stencil could not be completed across the granule
     // set and fell back to the home granule's edge post. Reported, never
     // silent: it is the residual of the cross-granule sampling fix and the
     // signal that a neighbour granule is missing from the plan.
     uint64_t edge_clamped = 0;
+    // The mesh's own measured departure from the source between posts, metres,
+    // and how many probes it is a maximum over. Stated on the record as
+    // VERTICAL_ACCURACY_M; 0 probes means the figure is not stated at all.
+    double vertical_accuracy_m = 0;
+    uint64_t accuracy_probes = 0;
     double coverage = 0;
     double min_h = 0;
     double max_h = 0;
@@ -1511,8 +1625,29 @@ double lattice_lon(uint32_t level, uint32_t x, uint32_t col, uint32_t grid) {
 // the sample is NEAREST-NEIGHBOUR: averaging class ordinals would invent a
 // class the source never stated. Output is the served convention: 255 water,
 // 0 land, row 0 the NORTH edge.
+// THE FALLBACK IS PER POST, NEVER PER BLOCK.
+//
+// It used to be `dem_absent ? water : land` where dem_absent was a flag over
+// the WHOLE granule set (`granules.empty()`). Copernicus publishes NO object
+// over open ocean, so a 1-degree cell out at sea is a 404 for both the DEM and
+// the water mask; when such a cell shared a 2x2 block with a land cell the flag
+// was false and every unclassifiable post in it was written 0x00 = LAND.
+// Measured on the real regional pyramid that fabricated 40,527 LAND samples
+// over the open Ligurian Sea — hard-edged rectangles exactly the shape of the
+// missing granule footprint, on tiles that are flat at 0 m and kilometres deep.
+// The client renders them as non-reflective blocks in the middle of the water,
+// the ocean-skip rule never fires on them, and the pyramid verifier could not
+// see it because those tiles are RASTER rather than UNIFORM_WATER.
+//
+// So absence is now evaluated AT THE POST. A post no water granule classifies
+// and no elevation granule covers is open ocean by the dataset's own
+// publication pattern. A post no water granule classifies but an elevation
+// granule DOES cover is a genuine gap in the mask lane: it stays LAND (the
+// safe direction — a missing mask never invents reflective ocean over
+// measured terrain) and is counted SEPARATELY so a run cannot hide it.
 void classify_water_mask(const TileJob& job, const std::vector<DemGrid>& water_granules,
-                         bool dem_absent, std::vector<uint8_t>* raster, uint64_t* fallback) {
+                         const std::vector<DemGrid>& dem_granules, std::vector<uint8_t>* raster,
+                         uint64_t* from_absence, uint64_t* unclassified) {
     raster->assign(static_cast<size_t>(kMaskSize) * kMaskSize, 0);
     for (uint32_t r = 0; r < kMaskSize; r++) {
         // row 0 = NORTH, so row r is post (kMaskSize - 1 - r) from the south.
@@ -1520,17 +1655,23 @@ void classify_water_mask(const TileJob& job, const std::vector<DemGrid>& water_g
         for (uint32_t c = 0; c < kMaskSize; c++) {
             const double lon = lattice_lon(job.level, job.x, c, kMaskSize);
             uint8_t cls = 0;
-            bool classified = sample_water(water_granules, lon, lat, &cls);
             uint8_t value;
-            if (classified) {
+            if (sample_water(water_granules, lon, lat, &cls)) {
                 value = cls != 0 ? 0xff : 0x00;
             } else {
-                // No water granule covers this post. The dataset's own
-                // publication pattern is the only remaining evidence: an
-                // absent elevation granule is open ocean. Counted, never
-                // presented as a classification.
-                (*fallback)++;
-                value = dem_absent ? 0xff : 0x00;
+                bool dem_here = false;
+                for (const DemGrid& g : dem_granules) {
+                    if (!g.covers || g.samples.empty()) continue;
+                    double px = 0, py = 0;
+                    if (granule_holds(g, lon, lat, &px, &py)) { dem_here = true; break; }
+                }
+                if (dem_here) {
+                    (*unclassified)++;
+                    value = 0x00;
+                } else {
+                    (*from_absence)++;
+                    value = 0xff;
+                }
             }
             (*raster)[static_cast<size_t>(r) * kMaskSize + c] = value;
         }
@@ -1720,19 +1861,127 @@ std::vector<std::string> split_json_arrays(const std::string& outer) {
     return out;
 }
 
-bool address_inside_availability(const std::string& available, uint32_t level, uint32_t x,
+struct AvailabilityRect {
+    double sx, sy, ex, ey;
+};
+
+// ── THE INDEX IS PARSED ONCE PER DISTINCT INDEX, NOT ONCE PER REQUEST ──────
+//
+// route() consulted this on EVERY tile request, and consulting it meant
+// splitting the whole `terrain_available` array into a fresh std::string per
+// level and a fresh std::string per rectangle before testing one of them.
+// Measured warm on one instance, same address, 300 invokes: 0.065 ms/req on
+// the 45-byte default, 0.264 ms on this lane's 9.7 KB regional index, 5.374 ms
+// on a 318 KB index and 110.665 ms on a 6.9 MB one — cost linear in the size of
+// an index the SHIP PLAN makes far larger than the regional one, paid before
+// the store is even touched, on a four-instance pool.
+//
+// The parse is now cached against the exact bytes it came from, so a steady
+// state costs one length check and one memcmp. The cache is keyed by CONTENT,
+// never by "we have one already": a config reload that changes the index
+// re-parses, and an index that did not change never does.
+struct AvailabilityIndex {
+    std::string source;
+    std::vector<std::vector<AvailabilityRect>> levels;
+    bool parsed = false;
+};
+
+const AvailabilityIndex& availability_index(const std::string& available) {
+    static AvailabilityIndex cache;
+    if (cache.parsed && cache.source == available) return cache;
+    cache.levels.clear();
+    for (const std::string& level_json : split_json_arrays(available)) {
+        std::vector<AvailabilityRect> rects;
+        for (const std::string& rect : split_json_objects(level_json)) {
+            AvailabilityRect r;
+            r.sx = json_number(rect, "startX", -1);
+            r.sy = json_number(rect, "startY", -1);
+            r.ex = json_number(rect, "endX", -1);
+            r.ey = json_number(rect, "endY", -1);
+            if (r.sx < 0 || r.sy < 0 || r.ex < 0 || r.ey < 0) continue;
+            rects.push_back(r);
+        }
+        cache.levels.push_back(std::move(rects));
+    }
+    cache.source = available;
+    cache.parsed = true;
+    return cache;
+}
+
+// ── AVAILABILITY, AS THE CLIENT COMPUTES IT ────────────────────────────────
+//
+// A native terrain provider does NOT ask "is (level,x,y) listed at level".
+// Cesium's TileAvailability.isTileAvailable is
+//
+//     computeMaximumLevelAtPosition(centre of the tile) >= level
+//
+// (Core/TileAvailability.js:195-208), whose own comment states the assumption
+// this index has to satisfy: "if a tile at level n exists, then all its parent
+// tiles back to level 0 exist too". A per-level membership test therefore
+// answered a DIFFERENT question from the one the client asks, and the gap was
+// not hypothetical: on the regional pyramid, whose `available` is empty at
+// levels 1-7 and populated at 8-13, the client computed 14 shallow addresses
+// as available (2 at z6, 12 at z7) whose centres fall inside the deep
+// rectangles. Every one of them was a store miss the module answered 404 —
+// straight to the browser, against Atlas's rule that a store-miss 404 must
+// never get there and against the zero-4xx acceptance bound.
+//
+// This is now the client's own rule, evaluated on the client's own scheme
+// (two roots, TMS row order — which is the order layer.json `available` is
+// written in; CesiumTerrainProvider flips it to its internal north-origin rows
+// when it loads the index). An address the client will ask for is inside
+// availability here, so respond() synthesizes it instead of 404-ing it.
+bool address_available_to_client(const std::string& available, uint32_t level, uint32_t x,
                                  uint32_t y) {
-    const std::vector<std::string> levels = split_json_arrays(available);
-    if (level >= levels.size()) return false;
-    for (const std::string& rect : split_json_objects(levels[level])) {
-        const double sx = json_number(rect, "startX", -1);
-        const double sy = json_number(rect, "startY", -1);
-        const double ex = json_number(rect, "endX", -1);
-        const double ey = json_number(rect, "endY", -1);
-        if (sx < 0 || sy < 0 || ex < 0 || ey < 0) continue;
-        if (x >= sx && x <= ex && y >= sy && y <= ey) return true;
+    const AvailabilityIndex& index = availability_index(available);
+    if (index.levels.empty() || level >= 32u) return false;
+
+    // Centre of (level, x, y): longitude over 2^(level+1) columns from -180,
+    // latitude over 2^level rows from -90 (row 0 = SOUTH).
+    const double lon =
+        -180.0 + (static_cast<double>(x) + 0.5) * 360.0 / std::ldexp(1.0, static_cast<int>(level) + 1);
+    const double lat =
+        -90.0 + (static_cast<double>(y) + 0.5) * 180.0 / std::ldexp(1.0, static_cast<int>(level));
+
+    const size_t deepest = index.levels.size() - 1;
+    for (size_t L = deepest + 1; L-- > static_cast<size_t>(level);) {
+        if (L >= 32u) continue;
+        const double cols = std::ldexp(1.0, static_cast<int>(L) + 1);
+        const double rows = std::ldexp(1.0, static_cast<int>(L));
+        double lx = std::floor((lon + 180.0) * cols / 360.0);
+        double ly = std::floor((lat + 90.0) * rows / 180.0);
+        if (lx < 0) lx = 0;
+        if (ly < 0) ly = 0;
+        if (lx > cols - 1) lx = cols - 1;
+        if (ly > rows - 1) ly = rows - 1;
+        for (const AvailabilityRect& r : index.levels[L]) {
+            if (lx >= r.sx && lx <= r.ex && ly >= r.sy && ly <= r.ey) return true;
+        }
     }
     return false;
+}
+
+// The dttSourceClass member names, by wire ordinal. Matched EXACTLY: a name
+// this table does not hold is refused, never mapped to a neighbour.
+dttSourceClass parse_source_class(const std::string& name) {
+    static const struct { const char* name; dttSourceClass value; } kClasses[] = {
+        {"UNSPECIFIED", dttSourceClass_UNSPECIFIED},
+        {"SPACEBORNE_RADAR_INTERFEROMETRIC", dttSourceClass_SPACEBORNE_RADAR_INTERFEROMETRIC},
+        {"SPACEBORNE_OPTICAL_STEREO", dttSourceClass_SPACEBORNE_OPTICAL_STEREO},
+        {"SPACEBORNE_ALTIMETRIC", dttSourceClass_SPACEBORNE_ALTIMETRIC},
+        {"AIRBORNE_LIDAR", dttSourceClass_AIRBORNE_LIDAR},
+        {"AIRBORNE_RADAR", dttSourceClass_AIRBORNE_RADAR},
+        {"PHOTOGRAMMETRIC", dttSourceClass_PHOTOGRAMMETRIC},
+        {"GROUND_SURVEY", dttSourceClass_GROUND_SURVEY},
+        {"BATHYMETRIC_SOUNDING", dttSourceClass_BATHYMETRIC_SOUNDING},
+        {"CARTOGRAPHIC_CONTOUR", dttSourceClass_CARTOGRAPHIC_CONTOUR},
+        {"FUSED_MULTI_SOURCE", dttSourceClass_FUSED_MULTI_SOURCE},
+        {"SYNTHETIC", dttSourceClass_SYNTHETIC},
+    };
+    for (const auto& entry : kClasses) {
+        if (name == entry.name) return entry.value;
+    }
+    return dttSourceClass_UNSPECIFIED;
 }
 
 constexpr const char* kGeoidRemark =
@@ -1790,6 +2039,29 @@ int tile(void) {
     if (grid < 2 || grid > 255) {
         plugin_set_error("bad-grid-size", "gridSize must lie in [2, 255].");
         return 400;
+    }
+    // The self-measurement is on by default and can be turned off for a run
+    // that only wants bytes; it costs three extra source probes per grid cell.
+    const bool measure_accuracy = json_number(plan, "measureAccuracy", 1) != 0;
+
+    // ── SOURCE_CLASS IS DATA, NOT A COMPILE-TIME CONSTANT ───────────────────
+    //
+    // It used to be hard-coded to SPACEBORNE_RADAR_INTERFEROMETRIC. Every other
+    // provenance field the schema marks required — dataset id, epoch, licence,
+    // attribution — is supplied by the plan, so an operator who repoints this
+    // module at an optical-stereo or lidar dataset still published records
+    // asserting radar interferometry, a production technique the module never
+    // verifies and the config surface could not correct. The plan states it by
+    // the enum's own name; an unstated class is UNSPECIFIED, which is what
+    // ordinal 0 means, rather than a guess.
+    const std::string source_class_name = json_string(plan, "sourceClass", "");
+    const dttSourceClass source_class = parse_source_class(source_class_name);
+    if (!source_class_name.empty() && source_class == dttSourceClass_UNSPECIFIED) {
+        plugin_set_error("unknown-source-class",
+                         "plan.sourceClass must name a dttSourceClass member exactly (e.g. "
+                         "SPACEBORNE_RADAR_INTERFEROMETRIC); an unrecognised name is refused "
+                         "rather than published as a different production technique.");
+        return 422;
     }
     if (json_bool(plan, "rowOriginNorth", false)) {
         plugin_set_error("unsupported-row-origin",
@@ -1893,7 +2165,19 @@ int tile(void) {
                          "tile requires at least one granule response frame on port \"dem\".");
         return 400;
     }
-    const bool all_ocean = granules.empty();
+
+    // The SOURCE raster's native post spacing, metres, read off the granule
+    // set that was actually decoded rather than assumed. Latitude spacing is
+    // the invariant one: this dataset widens its LONGITUDE spacing above 50
+    // degrees, so an east-west figure would describe the latitude band and not
+    // the dataset.
+    double source_post_spacing = 0.0;
+    for (const DemGrid& g : granules) {
+        if (g.scale_lat > 0) {
+            source_post_spacing = g.scale_lat * (kPi / 180.0) * 6371008.8;
+            break;
+        }
+    }
 
     // ── the water-body granule set, same lane, same window ──────────────────
     std::vector<DemGrid> water_granules;
@@ -1956,6 +2240,11 @@ int tile(void) {
     std::vector<uint8_t> stream;
     std::string tiles_report;
     uint32_t emitted = 0, skipped_ocean_count = 0;
+    // Block-wide totals for the two numbers a run must not be able to hide: a
+    // mask post inferred from an absent granule, and one an elevation granule
+    // covers but no water granule classifies.
+    uint64_t block_mask_from_absence = 0, block_mask_unclassified = 0;
+    double block_worst_accuracy_m = 0;
     TileStats first{};
 
     for (size_t t = 0; t < jobs.size(); t++) {
@@ -1999,12 +2288,61 @@ int tile(void) {
         stats.max_h = max_h;
         stats.coverage = 1.0 - static_cast<double>(stats.nodata + stats.uncovered) / n_verts;
 
+        // ── THE TILE MEASURES ITS OWN VERTICAL ACCURACY ─────────────────────
+        //
+        // $DTT.VERTICAL_ACCURACY_M used to be unset, i.e. 0, on every record —
+        // "unstated" in a record that otherwise describes itself completely,
+        // and the one field a consumer would read to reason about exactly the
+        // quantity the pyramid is judged on. It is now MEASURED, here, against
+        // the same source raster the vertices came from.
+        //
+        // The rendered surface is planar per triangle, so the departure is
+        // largest strictly BETWEEN posts — at the posts themselves the mesh is
+        // exact and measuring there measures nothing. Each cell is probed at
+        // its centre (which lies on the split diagonal) and at both triangle
+        // centroids; the maximum over every probe is the number the record
+        // states, with ACCURACY_CONFIDENCE 1.0 because it is a measured
+        // maximum over the evaluated positions rather than a statistical
+        // claim. Probes over absent or no-data source are EXCLUDED: comparing
+        // against a substituted 0 would report the substitution, not the mesh.
+        if (measure_accuracy && grid >= 2) {
+            static const double kProbeU[3] = {0.5, 1.0 / 3.0, 2.0 / 3.0};
+            static const double kProbeV[3] = {0.5, 1.0 / 3.0, 2.0 / 3.0};
+            for (uint32_t j = 0; j + 1 < grid; j++) {
+                for (uint32_t i = 0; i + 1 < grid; i++) {
+                    const uint32_t bl = j * grid + i;
+                    const double h_bl = heights[bl], h_br = heights[bl + 1];
+                    const double h_tl = heights[bl + grid], h_tr = heights[bl + grid + 1];
+                    for (int p = 0; p < 3; p++) {
+                        const double du = kProbeU[p], dv = kProbeV[p];
+                        // The encoder's own triangulation: (bl,br,tr) below the
+                        // diagonal, (bl,tr,tl) above it.
+                        const double rendered =
+                            dv <= du ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
+                                     : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
+                        const double lon = lons[bl] + du * (lons[bl + 1] - lons[bl]);
+                        const double lat = lats[bl] + dv * (lats[bl + grid] - lats[bl]);
+                        double truth = 0.0;
+                        bool probe_nodata = false, probe_clamped = false;
+                        if (!sample_dem(granules, lon, lat, &truth, &probe_nodata,
+                                        &probe_clamped) ||
+                            probe_nodata) {
+                            continue;
+                        }
+                        const double delta = std::fabs(rendered - truth);
+                        if (delta > stats.vertical_accuracy_m) stats.vertical_accuracy_m = delta;
+                        stats.accuracy_probes++;
+                    }
+                }
+            }
+        }
+
         // ── the water mask ──────────────────────────────────────────────────
         std::string water_kind;
         std::vector<uint8_t> water_raster;
         if (!water_granules.empty()) {
-            classify_water_mask(job, water_granules, all_ocean, &water_raster,
-                                &stats.mask_fallback);
+            classify_water_mask(job, water_granules, granules, &water_raster,
+                                &stats.mask_from_absence, &stats.mask_unclassified);
             bool uniform = true;
             const uint8_t first_byte = water_raster[0];
             for (const uint8_t b : water_raster) {
@@ -2026,9 +2364,13 @@ int tile(void) {
                 return 400;
             }
         } else {
-            // A tile whose every granule is absent is open ocean by the
-            // dataset's own publication pattern.
-            water_kind = all_ocean ? "UNIFORM_WATER" : "UNIFORM_LAND";
+            // No water granule reached this invoke at all, so the tile's OWN
+            // elevation coverage is the only evidence left — and it is read
+            // per tile, not per block: a tile no elevation granule covers
+            // anywhere is open ocean by the dataset's publication pattern,
+            // while a tile that has elevation is land as far as this invoke
+            // can tell.
+            water_kind = stats.uncovered == n_verts ? "UNIFORM_WATER" : "UNIFORM_LAND";
         }
         stats.water_kind = water_kind;
 
@@ -2047,10 +2389,16 @@ int tile(void) {
             stats.skipped_ocean = true;
             skipped_ocean_count++;
             if (t == 0) first = stats;
+            block_mask_from_absence += stats.mask_from_absence;
+            block_mask_unclassified += stats.mask_unclassified;
             if (!tiles_report.empty()) tiles_report += ",";
             tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
                             ",\"x\":" + std::to_string(job.x) + ",\"y\":" +
-                            std::to_string(job.y) + ",\"skippedOcean\":true}";
+                            std::to_string(job.y) + ",\"skippedOcean\":true" +
+                            ",\"maskFromAbsenceSamples\":" +
+                            std::to_string(stats.mask_from_absence) +
+                            ",\"maskUnclassifiedSamples\":" +
+                            std::to_string(stats.mask_unclassified) + "}";
             continue;
         }
 
@@ -2163,11 +2511,24 @@ int tile(void) {
         db.add_PAYLOAD_FORMAT(dttPayloadFormat_QUANTIZED_MESH);
         db.add_PAYLOAD_FORMAT_VERSION(f_version);
         db.add_PAYLOAD(payload);
-        db.add_GRID_WIDTH(grid);
-        db.add_GRID_HEIGHT(grid);
+        // GRID_WIDTH/GRID_HEIGHT are for GRIDDED payloads; the schema says
+        // "Unset for mesh formats, whose vertex count varies", and this
+        // payload is QUANTIZED_MESH. The sampling lattice is not the served
+        // geometry, so stating it here would describe the wrong thing; the
+        // effective resolution is POST_SPACING_M, which IS stated.
         db.add_POST_SPACING_M(post_spacing);
+        // The source raster's own spacing at this latitude, from the granule
+        // set that was actually decoded. Unset (0) only when no granule
+        // covered the block, which is exactly when there is nothing to state.
+        if (source_post_spacing > 0) db.add_SOURCE_POST_SPACING_M(source_post_spacing);
         db.add_VERTICAL_DATUM(dttVerticalDatum_GEOID);
         db.add_VERTICAL_DATUM_NAME(f_datum_name);
+        // Measured, not asserted: the mesh's own worst departure from the
+        // source between posts. Stated only when it was actually measured.
+        if (stats.accuracy_probes > 0) {
+            db.add_VERTICAL_ACCURACY_M(stats.vertical_accuracy_m);
+            db.add_ACCURACY_CONFIDENCE(1.0);
+        }
         db.add_DATA_COVERAGE_FRACTION(stats.coverage);
         db.add_NO_DATA_VALUE(kNoData);
         db.add_WATER_MASK_KIND(water_kind == "UNIFORM_WATER"
@@ -2184,7 +2545,7 @@ int tile(void) {
         if (f_water_provenance.o) db.add_WATER_MASK_PROVENANCE(f_water_provenance);
         db.add_CHILD_AVAILABILITY(static_cast<uint8_t>(job.child_availability & 0x0f));
         db.add_MAX_LEVEL(max_level);
-        db.add_SOURCE_CLASS(dttSourceClass_SPACEBORNE_RADAR_INTERFEROMETRIC);
+        if (source_class != dttSourceClass_UNSPECIFIED) db.add_SOURCE_CLASS(source_class);
         db.add_PROVENANCE(provenance);
         db.add_ETAG(f_etag);
         db.add_REMARKS(f_remarks);
@@ -2196,6 +2557,11 @@ int tile(void) {
         stream.insert(stream.end(), b.GetBufferPointer(), b.GetBufferPointer() + len);
         emitted++;
         if (t == 0) first = stats;
+        block_mask_from_absence += stats.mask_from_absence;
+        block_mask_unclassified += stats.mask_unclassified;
+        if (stats.vertical_accuracy_m > block_worst_accuracy_m) {
+            block_worst_accuracy_m = stats.vertical_accuracy_m;
+        }
 
         if (!tiles_report.empty()) tiles_report += ",";
         tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
@@ -2204,8 +2570,14 @@ int tile(void) {
                         ",\"maxHeightM\":" + fmt_double(max_h) +
                         ",\"coverageFraction\":" + fmt_double(stats.coverage) +
                         ",\"waterMaskKind\":\"" + water_kind + "\"" +
-                        ",\"maskFallbackSamples\":" + std::to_string(stats.mask_fallback) +
+                        ",\"maskFromAbsenceSamples\":" +
+                        std::to_string(stats.mask_from_absence) +
+                        ",\"maskUnclassifiedSamples\":" +
+                        std::to_string(stats.mask_unclassified) +
                         ",\"edgeClampedPosts\":" + std::to_string(stats.edge_clamped) +
+                        ",\"verticalAccuracyM\":" +
+                        fmt_double(stats.vertical_accuracy_m) +
+                        ",\"accuracyProbes\":" + std::to_string(stats.accuracy_probes) +
                         ",\"meshBytes\":" + std::to_string(stats.mesh_bytes) +
                         ",\"payloadBytes\":" + std::to_string(stats.payload_bytes) +
                         ",\"digest\":\"" + digest + "\"}";
@@ -2229,6 +2601,11 @@ int tile(void) {
         ",\"decodeResidentBytes\":" + std::to_string(budget.used) +
         ",\"decodeBudgetBytes\":" + std::to_string(kDecodeByteBudget) +
         ",\"tileGzipCeilingBytes\":" + std::to_string(kTileGzipCeilingBytes) +
+        ",\"sourcePostSpacingM\":" + fmt_double(source_post_spacing) +
+        ",\"maskFromAbsenceSamples\":" + std::to_string(block_mask_from_absence) +
+        ",\"maskUnclassifiedSamples\":" + std::to_string(block_mask_unclassified) +
+        ",\"worstVerticalAccuracyM\":" + fmt_double(block_worst_accuracy_m) +
+        ",\"sourceClass\":\"" + json_escape(source_class_name) + "\"" +
         ",\"noDataSamples\":" + std::to_string(first.nodata) +
         ",\"uncoveredSamples\":" + std::to_string(first.uncovered) +
         ",\"coverageFraction\":" + fmt_double(first.coverage) +
@@ -2380,27 +2757,26 @@ int route(void) {
     const std::string tileset_id =
         json_string(config, "terrain_tileset_id", "spaceaware-terrain");
 
-    // ── THE MOUNT IS A PREFIX, NOT A SEARCH ─────────────────────────────────
+    // ── THE MOUNT IS A PREFIX, AND ONLY A PREFIX ────────────────────────────
     // This used to strip up to the LAST "/terrain/", which made one tile
     // reachable at unboundedly many distinct URLs
     // (/api/v1/terrain/<any junk>/terrain/8/271/192.terrain), each answered 200
     // with `public, max-age=86400`: a cache-filling amplifier no URL-keyed
-    // purge could ever invalidate. The mount is owned by the flow's config
-    // (`terrain_mount_path`, default the flow's own basePath); a path that does
-    // not START with it is not this flow's to answer creatively, and the
-    // fallback (no config key) takes the FIRST occurrence so a junk prefix
-    // cannot alias a real address either.
+    // purge could ever invalidate. The first fix left a SEARCH FALLBACK for the
+    // case where no mount is configured — and that fallback still answered
+    // /junk/terrain/8/271/192.terrain, and still did so when a mount WAS
+    // configured, which is the exact amplifier the fix claimed to have
+    // removed. There is no fallback now: the mount is owned by the flow's
+    // config (`terrain_mount_path`, default the flow's own basePath), a path
+    // that does not START with it is a 404, and one tile is reachable at
+    // exactly one URL.
     std::string mount_prefix = json_string(config, "terrain_mount_path", "/api/v1/terrain/");
     if (mount_prefix.empty() || mount_prefix.back() != '/') mount_prefix += '/';
-    std::string rest;
-    if (path.size() >= mount_prefix.size() &&
-        path.compare(0, mount_prefix.size(), mount_prefix) == 0) {
-        rest = path.substr(mount_prefix.size());
-    } else {
-        const size_t mount = path.find("/terrain/");
-        if (mount == std::string::npos) return push_htr_not_found(path);
-        rest = path.substr(mount + 9);
+    if (path.size() < mount_prefix.size() ||
+        path.compare(0, mount_prefix.size(), mount_prefix) != 0) {
+        return push_htr_not_found(path);
     }
+    const std::string rest = path.substr(mount_prefix.size());
 
     if (rest == "layer.json") {
         const long maxzoom = static_cast<long>(json_number(config, "terrain_maxzoom", 0));
@@ -2428,9 +2804,20 @@ int route(void) {
 
     // The newest stored record for this address wins; the record BLOB is the
     // whole answer ($DTT carries its own payload, encoding and etag).
+    //
+    // `_rowid`, NOT `rowid`. On a node the relation named `DTT` is not a table:
+    // sdn-server registers a source for every ingested record and rebuilds the
+    // unified views, and flatsqlrt.CreateUnifiedViews replaces each base table
+    // with a UNION ALL VIEW over its per-source shadow tables. A SQLite view
+    // has no implicit rowid, so `ORDER BY rowid` is `no such column: rowid` on
+    // every real node — and invisible off-node, where the same query runs
+    // against the base vtab, which does accept it. `_rowid` is the column the
+    // vtab declares and the form the owner's engine-routed law states
+    // (2026-08-25); tests/serve.test.mjs executes this SQL against an engine
+    // with a registered source so the difference cannot go unmeasured again.
     const std::string sql =
         "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? "
-        "ORDER BY rowid DESC LIMIT 1";
+        "ORDER BY _rowid DESC LIMIT 1";
     const std::string query =
         std::string("{\"sql\":\"") + sql + "\",\"params\":[{\"t\":\"str\",\"v\":\"" +
         json_escape(tileset_id) + "\"},{\"t\":\"i64\",\"v\":" + std::to_string(z) +
@@ -2446,11 +2833,28 @@ int route(void) {
     // request. Over-long values are DROPPED, which degrades to a 200.
     constexpr size_t kMaxIfNoneMatchBytes = 256;
     std::string if_none_match;
+    // CONTENT NEGOTIATION, actually negotiated. The stored bytes are gzipped
+    // and respond() used to state `content-encoding: gzip` unconditionally,
+    // without reading Accept-Encoding and without a `vary`. Browsers always
+    // accept gzip so no client lane could see it, but a shared cache or a
+    // non-browser client that asked for identity got a body it had not
+    // accepted, under a cache key that did not record the difference. Absent
+    // Accept-Encoding means anything is acceptable (RFC 9110 12.5.3), so the
+    // default is true and only an explicit refusal changes it.
+    bool accepts_gzip = true;
     if (request->HEADERS()) {
         for (const auto* h : *request->HEADERS()) {
-            if (h->NAME() && h->NAME()->str() == "if-none-match" && h->VALUE()) {
+            if (!h->NAME() || !h->VALUE()) continue;
+            const std::string name = h->NAME()->str();
+            if (name == "if-none-match") {
                 if (h->VALUE()->size() <= kMaxIfNoneMatchBytes) if_none_match = h->VALUE()->str();
                 else if_none_match.clear();
+            } else if (name == "accept-encoding") {
+                // Bounded like every other client-controlled header on this
+                // path: a value past the bound is not a negotiation, and the
+                // conservative reading of an unreadable one is "gzip is fine".
+                if (h->VALUE()->size() <= 512) accepts_gzip = accept_encoding_allows_gzip(
+                    h->VALUE()->str());
             }
         }
     }
@@ -2466,7 +2870,7 @@ int route(void) {
         available_for_miss.empty() || available_for_miss[0] != '[') {
         available_for_miss = "[[{\"startX\":0,\"startY\":0,\"endX\":1,\"endY\":0}]]";
     }
-    const bool inside = address_inside_availability(available_for_miss, z, x, y);
+    const bool inside = address_available_to_client(available_for_miss, z, x, y);
     const uint32_t synth_grid =
         static_cast<uint32_t>(json_number(config, "terrain_synth_grid_size", 65));
 
@@ -2497,7 +2901,8 @@ int route(void) {
         std::string("{\"tilesetId\":\"") + json_escape(tileset_id) + "\"" +
         ",\"level\":" + std::to_string(z) + ",\"x\":" + std::to_string(x) +
         ",\"y\":" + std::to_string(y) + ",\"ifNoneMatch\":\"" + json_escape(if_none_match) +
-        "\",\"insideAvailability\":" + (inside ? "true" : "false") +
+        "\",\"acceptsGzip\":" + (accepts_gzip ? "true" : "false") +
+        ",\"insideAvailability\":" + (inside ? "true" : "false") +
         ",\"synthWater\":" + (synth_water ? "true" : "false") +
         ",\"synthGridSize\":" + std::to_string(synth_grid) + "}";
     return push_json("context", context) < 0 ? 500 : 0;
@@ -2603,17 +3008,24 @@ int respond(void) {
             std::vector<uint8_t> mesh;
             encode_quantized_mesh(job, grid, ext, std::vector<double>(grid * grid, 0.0),
                                   std::vector<uint8_t>(), synth_water, &mesh);
+            // The BODY is decided before the ETag, because a strong ETag names
+            // one representation: the gzipped and the identity forms of this
+            // tile are two, and giving them one tag would let a cache holding
+            // the wrong variant answer a revalidation with 304.
             std::vector<uint8_t> body;
-            const bool gzipped = gzip_compress(mesh, &body);
+            const bool accepts_gzip = json_bool(context, "acceptsGzip", true);
+            const bool gzipped = accepts_gzip && gzip_compress(mesh, &body);
             if (!gzipped) body = mesh;
             const std::string synth_etag = "\"" + sha256_multihash(body) + "\"";
 
             std::vector<HeaderEntry> headers;
             headers.push_back({"cache-control", "public, max-age=86400"});
             headers.push_back({"etag", synth_etag});
+            headers.push_back({"vary", "accept-encoding"});
             const std::string inm = json_string(context, "ifNoneMatch", "");
             if (!inm.empty() && inm == synth_etag) return push_htr(304, headers, nullptr, 0);
             headers.push_back({"content-type", "application/vnd.quantized-mesh"});
+            headers.push_back({"x-content-type-options", "nosniff"});
             if (gzipped) headers.push_back({"content-encoding", "gzip"});
             // Says WHY these bytes exist. A synthesized ocean tile and a
             // measured one are not the same claim, and a cache, a proxy or a
@@ -2657,19 +3069,47 @@ int respond(void) {
                std::to_string(payload->BYTES()->size()) + "\"";
     }
 
+    // ── THE REPRESENTATION IS DECIDED BEFORE THE ETAG ───────────────────────
+    //
+    // The client stated whether it accepts gzip; the stored bytes are gzipped.
+    // Serving them to a client that refused the coding is the defect the
+    // unconditional `content-encoding: gzip` had, and so is serving two
+    // different byte strings under ONE strong ETag, which is what any fix that
+    // kept the record's tag for both variants would do — a shared cache
+    // holding one variant would answer the other's revalidation with 304.
+    const std::string stored_encoding =
+        payload->CONTENT_ENCODING() ? payload->CONTENT_ENCODING()->str() : "";
+    const bool accepts_gzip = json_bool(context, "acceptsGzip", true);
+    const bool serve_identity = stored_encoding == "gzip" && !accepts_gzip;
+    std::vector<uint8_t> identity;
+    if (serve_identity) {
+        if (!gzip_decompress(payload->BYTES()->data(), payload->BYTES()->size(), &identity)) {
+            plugin_set_error("stored-encoding-undecodable",
+                             "the stored tile is gzipped, the request refused gzip, and the "
+                             "stored bytes did not decode; serving them anyway would send a "
+                             "coding the client stated it cannot read.");
+            return 500;
+        }
+        // Its own representation, so its own strong tag.
+        etag = "\"" + sha256_multihash(identity) + "\"";
+    }
+
     const std::string if_none_match = json_string(context, "ifNoneMatch", "");
     std::vector<HeaderEntry> headers;
     headers.push_back({"cache-control", "public, max-age=86400"});
     headers.push_back({"etag", etag});
+    // The body's encoding depends on a REQUEST header, so the cache key has to
+    // say so — on the 304 as well as the 200.
+    headers.push_back({"vary", "accept-encoding"});
     if (!if_none_match.empty() && if_none_match == etag) {
         return push_htr(304, headers, nullptr, 0);
     }
     headers.push_back({"content-type", payload->MEDIA_TYPE() && payload->MEDIA_TYPE()->size()
                                            ? payload->MEDIA_TYPE()->str()
                                            : "application/vnd.quantized-mesh"});
-    if (payload->CONTENT_ENCODING() && payload->CONTENT_ENCODING()->size() > 0) {
-        headers.push_back({"content-encoding", payload->CONTENT_ENCODING()->str()});
-    }
+    headers.push_back({"x-content-type-options", "nosniff"});
+    if (serve_identity) return push_htr(200, headers, identity.data(), identity.size());
+    if (!stored_encoding.empty()) headers.push_back({"content-encoding", stored_encoding});
     return push_htr(200, headers, payload->BYTES()->data(), payload->BYTES()->size());
 }
 

@@ -81,6 +81,7 @@ const PLAN = {
   gridSize: GRID,
   maxLevel: 10,
   childAvailability: 15,
+  sourceClass: "SPACEBORNE_RADAR_INTERFEROMETRIC",
   provenance: PROVENANCE,
 };
 
@@ -391,15 +392,32 @@ test("tile carries the $DTT contract: address, extents, datum, class, provenance
   assert.equal(dtt.northDeg, NORTH);
   assert.equal(dtt.payloadFormat, 1, "QUANTIZED_MESH");
   assert.equal(dtt.payloadFormatVersion, "1.0");
-  assert.equal(dtt.gridWidth, GRID);
-  assert.equal(dtt.gridHeight, GRID);
+  // GRID_WIDTH/GRID_HEIGHT are for GRIDDED payloads. The schema says "Unset
+  // for mesh formats, whose vertex count varies" and this payload is
+  // QUANTIZED_MESH, so the sampling lattice is NOT stated as the served
+  // geometry; POST_SPACING_M carries the effective resolution.
+  assert.equal(dtt.gridWidth, 0, "unset for a mesh payload");
+  assert.equal(dtt.gridHeight, 0, "unset for a mesh payload");
   assert.ok(dtt.postSpacingM > 1100 && dtt.postSpacingM < 1300, "≈1.2 km posts at level 8 / grid 65");
   assert.equal(dtt.verticalDatum, 2, "GEOID — heights redistributed as published, not converted");
   assert.equal(dtt.verticalDatumName, "EGM2008");
   assert.equal(dtt.noDataValue, -32767);
   assert.equal(dtt.childAvailability, 15);
   assert.equal(dtt.maxLevel, 10);
-  assert.equal(dtt.sourceClass, 1, "SPACEBORNE_RADAR_INTERFEROMETRIC");
+  // SOURCE_CLASS comes from the PLAN, like every other provenance field; it
+  // is not a compile-time constant that would keep asserting radar
+  // interferometry after an operator repointed the module at another dataset.
+  assert.equal(dtt.sourceClass, 1, "SPACEBORNE_RADAR_INTERFEROMETRIC, as the plan states");
+  assert.ok(
+    dtt.sourcePostSpacingM > 0,
+    "the source raster's own post spacing is stated, not left at 0",
+  );
+  // The fixture's source surface is a PLANE (100 + px + 2*py), which a
+  // triangulated lattice reproduces exactly, so the measured departure is
+  // legitimately 0 here. What the record must state is that it was MEASURED:
+  // ACCURACY_CONFIDENCE 1.0 is written only when probes actually ran.
+  assert.equal(dtt.accuracyConfidence, 1, "the accuracy figure is measured, not asserted");
+  assert.equal(dtt.verticalAccuracyM, 0, "a planar source is reproduced exactly");
   assert.ok(dtt.remarks.includes("geoid"), "the datum decision is stated on the record");
   // Provenance rides VERBATIM from the plan — never invented, never edited.
   assert.equal(dtt.provenance.datasetId, PROVENANCE.datasetId);

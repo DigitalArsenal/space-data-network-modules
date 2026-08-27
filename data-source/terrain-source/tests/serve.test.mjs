@@ -124,7 +124,7 @@ test("route turns a tile path into the DTT select plus serve context", async (t)
   const query = asJson(outputs.get("query"));
   assert.equal(
     query.sql,
-    "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? ORDER BY rowid DESC LIMIT 1",
+    "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? ORDER BY _rowid DESC LIMIT 1",
   );
   assert.deepEqual(query.params, [
     { t: "str", v: "spaceaware-terrain" },
@@ -139,6 +139,9 @@ test("route turns a tile path into the DTT select plus serve context", async (t)
     x: 271,
     y: 192,
     ifNoneMatch: 'W/"probe"',
+    // Content negotiation is decided where the request headers are, and
+    // travels with the address: respond never sees the raw request.
+    acceptsGzip: true,
     // The miss verdict travels WITH the address: route holds the configured
     // availability index, respond holds the store answer, and only the pair
     // decides whether a miss is normal traffic or a broken promise.
@@ -235,6 +238,90 @@ test("ONE TILE, ONE URL: a junk prefix cannot alias a real address", async (t) =
   assert.deepEqual(new Set(good.outputs.map((o) => o.portId)), new Set(["query", "context"]));
 });
 
+test("ONE TILE, ONE URL: a leading zero is not a second spelling of an index", async (t) => {
+  // parse_tile_path accepted up to nine decimal digits per field with no
+  // canonical form, so "8", "08", "008" ... "000000008" all parsed to 8 and
+  // one address was reachable at 9x7x7 = 441 distinct publicly cacheable URLs
+  // — each a separate cache key costing a full store query and ~9 KB of cache
+  // for the identical bytes. There is one canonical decimal spelling and this
+  // accepts only that one.
+  const aliases = [
+    "/api/v1/terrain/08/271/192.terrain",
+    "/api/v1/terrain/008/271/192.terrain",
+    "/api/v1/terrain/000000008/000000271/000000192.terrain",
+    "/api/v1/terrain/8/0271/192.terrain",
+    "/api/v1/terrain/8/271/0192.terrain",
+  ];
+  for (const path of aliases) {
+    const response = await invoke(t, "route", [requestFrame(path)]);
+    assert.deepEqual(
+      response.outputs.map((o) => o.portId),
+      ["response"],
+      `${path} must never reach the store query`,
+    );
+    assert.equal(decodeHttpResponse(new Uint8Array(response.outputs[0].payload)).status, 404);
+  }
+  // "0" itself IS canonical and still routes.
+  const zero = await invoke(t, "route", [requestFrame("/api/v1/terrain/0/0/0.terrain")]);
+  assert.deepEqual(new Set(zero.outputs.map((o) => o.portId)), new Set(["query", "context"]));
+});
+
+test("the mount has no search fallback, configured or not", async (t) => {
+  // The first alias fix left a fallback that took the FIRST "/terrain/" when
+  // the path did not start with the mount — and it ran whether or not a mount
+  // was configured, so /junk/terrain/8/271/192.terrain and a 50 KB junk prefix
+  // in front of it both still served the tile, which is the exact amplifier
+  // the fix claimed to have removed.
+  const outside = [
+    "/junk/terrain/8/271/192.terrain",
+    `/${"j".repeat(50000)}/terrain/8/271/192.terrain`,
+    "/terrain/8/271/192.terrain",
+    "/API/V1/TERRAIN/8/271/192.terrain",
+  ];
+  for (const config of [CONFIG, { ...CONFIG, terrain_mount_path: "/api/v1/terrain/" }]) {
+    for (const path of outside) {
+      const response = await invoke(t, "route", [requestFrame(path)], config);
+      assert.deepEqual(
+        response.outputs.map((o) => o.portId),
+        ["response"],
+        `${path.slice(0, 32)} must not be answered creatively`,
+      );
+      assert.equal(decodeHttpResponse(new Uint8Array(response.outputs[0].payload)).status, 404);
+    }
+  }
+});
+
+test("availability is the CLIENT's question: max level at the tile centre", async (t) => {
+  // CesiumTerrainProvider does not ask "is (level,x,y) listed at level". Its
+  // TileAvailability.isTileAvailable is computeMaximumLevelAtPosition(centre of
+  // the tile) >= level, so a SHALLOW address whose centre falls inside a DEEP
+  // rectangle is one the client will request. A per-level membership test
+  // answered a different question, and on the regional pyramid — empty at
+  // levels 1-7, populated at 8-13 — that put 14 shallow addresses (2 at z6, 12
+  // at z7) through to the browser as 404s.
+  //
+  // The rectangle below is the level-8 block over the Ligurian region; 6/67/47
+  // and 7/134/95 are ancestors of it whose centres land inside.
+  const config = {
+    ...CONFIG,
+    terrain_maxzoom: 8,
+    terrain_available: [
+      [], [], [], [], [], [], [], [],
+      [{ startX: 266, startY: 188, endX: 273, endY: 195 }],
+    ],
+  };
+  const inside = async (path) => {
+    const response = await invoke(t, "route", [requestFrame(path)], config);
+    const outputs = outputsByPort(response);
+    return asJson(outputs.get("context")).insideAvailability;
+  };
+  assert.equal(await inside("/api/v1/terrain/8/271/192.terrain"), true, "the declared level");
+  assert.equal(await inside("/api/v1/terrain/7/135/96.terrain"), true, "an ancestor at z7");
+  assert.equal(await inside("/api/v1/terrain/6/67/48.terrain"), true, "an ancestor at z6");
+  assert.equal(await inside("/api/v1/terrain/8/100/100.terrain"), false, "outside the region");
+  assert.equal(await inside("/api/v1/terrain/6/10/10.terrain"), false, "outside the region");
+});
+
 test("the 404 body does not track the request: reflection is bounded", async (t) => {
   // The detail carries the request path, which is client-controlled and — with
   // the host's 1 MiB request-line default — can be ~1 MB. A 404 body that
@@ -319,6 +406,52 @@ test("respond serves the stored record verbatim with record-stated headers", asy
     etag,
     "the 304 restates the entity tag",
   );
+});
+
+test("the encoding is NEGOTIATED, and each representation carries its own tag", async (t) => {
+  // respond stated `content-encoding: gzip` from the record unconditionally,
+  // without reading Accept-Encoding and without `vary` — so a shared cache or
+  // a client that asked for identity got a coding it had not accepted, under a
+  // key that did not record the difference.
+  const stream = await storedRecordStream(t);
+  const serve = async (headers) => {
+    const routed = await invoke(t, "route", [
+      requestFrame("/api/v1/terrain/8/271/192.terrain", { headers }),
+    ]);
+    const context = decoder.decode(outputsByPort(routed).get("context"));
+    const response = await invoke(t, "respond", [
+      frame("stream", new Uint8Array(stream)),
+      frame("context", encoder.encode(context)),
+    ]);
+    const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+    return { http, headerOf: (n) => http.headers.find((h) => h.name === n)?.value };
+  };
+
+  const gz = await serve({ "accept-encoding": "gzip, deflate, br" });
+  assert.equal(gz.headerOf("content-encoding"), "gzip");
+  assert.equal(gz.headerOf("vary"), "accept-encoding", "the cache key records the negotiation");
+  assert.equal(gz.headerOf("x-content-type-options"), "nosniff");
+
+  const none = await serve({ "accept-encoding": "identity" });
+  assert.equal(none.headerOf("content-encoding"), undefined, "identity was asked for");
+  assert.equal(none.headerOf("vary"), "accept-encoding");
+  const mesh = decodeQuantizedMesh(Buffer.from(none.http.body));
+  assert.equal(mesh.vertexCount, 33 * 33, "the identity body is the DECODED mesh, not relabelled");
+
+  // Two representations, two strong tags: one tag over both would let a cache
+  // holding the gzip variant answer the identity variant's revalidation 304.
+  assert.notEqual(gz.headerOf("etag"), none.headerOf("etag"));
+  assert.equal(
+    none.headerOf("etag"),
+    `"1220${createHash("sha256").update(Buffer.from(none.http.body)).digest("hex")}"`,
+    "the identity tag is over the identity bytes",
+  );
+
+  // q=0 is a refusal; a bare * accepts.
+  assert.equal((await serve({ "accept-encoding": "gzip;q=0, *" })).headerOf("content-encoding"), undefined);
+  assert.equal((await serve({ "accept-encoding": "*" })).headerOf("content-encoding"), "gzip");
+  // Absent Accept-Encoding means anything is acceptable (RFC 9110 12.5.3).
+  assert.equal((await serve({})).headerOf("content-encoding"), "gzip");
 });
 
 test("respond answers an empty stream with a cheap cacheable 404, never an error", async (t) => {

@@ -346,6 +346,78 @@ test("a MEASURED flat-at-zero water tile is skipped as ocean, coverage notwithst
   assert.equal(report.tilesSkippedOcean, 1, "…and it is COUNTED as skipped, not silently dropped");
 });
 
+test("A POST NO GRANULE COVERS IS OCEAN, per post — never land because a NEIGHBOUR cell has one", async (t) => {
+  // THE DEFECT THIS CLOSES, measured on the real regional pyramid: the mask's
+  // no-classification fallback was `dem_absent ? water : land` where dem_absent
+  // was a flag over the WHOLE granule set. Copernicus publishes no object over
+  // open ocean, so a 1-degree cell out at sea 404s for both DEM and WBM; when
+  // such a cell shared a 2x2 block with a land cell the flag was false and
+  // every unclassifiable post in it was written 0x00 = LAND. That fabricated
+  // 40,527 LAND samples over the open Ligurian Sea — hard-edged rectangles
+  // exactly the shape of the missing granule, on tiles flat at 0 m and
+  // kilometres deep — which the client renders as non-reflective blocks in the
+  // middle of the water. It also defeated the ocean-skip rule, and the pyramid
+  // verifier could not see it because those tiles are RASTER, not
+  // UNIFORM_WATER.
+  //
+  // The fixture is that exact shape: ONE granule covering lon [10,11] only,
+  // and a tile block that reaches WEST of it into a cell the dataset does not
+  // publish.
+  const oneDegree = { originLon: 10, originLat: 46, scaleLon: 1 / 600, scaleLat: 1 / 600, width: 600, height: 600 };
+  const landDem = buildGeoTiff({ ...oneDegree, heightFn: () => 500, layout: "tile", tileWidth: 256, tileHeight: 256 });
+  const landWater = buildWaterTiff({ ...oneDegree, classFn: () => 0, layout: "tile", tileWidth: 256, tileHeight: 256 });
+
+  const harness = await createBrowserModuleHarness({ wasmSource: WASM, manifest: MANIFEST, surface: "direct" });
+  t.after(() => harness.destroy());
+
+  // A tile entirely WEST of the granule (lon < 10): no elevation, no mask.
+  const westX = Math.floor((9.2 + 180) / SPAN);
+  const insideY = Math.floor((45.4 + 90) / SPAN);
+  const insideX = Math.floor((10.4 + 180) / SPAN);
+
+  const response = await harness.invoke({
+    methodId: "tile",
+    inputs: [
+      jsonFrame("plan", {
+        tilesetId: "spaceaware-terrain",
+        level: LEVEL,
+        gridSize: 65,
+        maxLevel: 13,
+        provenance: PROVENANCE,
+        tiles: [{ x: westX, y: insideY }, { x: insideX, y: insideY }],
+      }),
+      frame("dem", rawBodyFrameBytes(landDem)),
+      frame("water", rawBodyFrameBytes(landWater)),
+    ],
+  });
+  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  const records = splitStream(response.outputs.find((o) => o.portId === "records").payload);
+  const byX = new Map(records.map((r) => { const d = decodeDtt(r); return [d.x, d]; }));
+
+  const uncovered = byX.get(westX);
+  assert.ok(uncovered, "the uncovered tile is still emitted");
+  assert.equal(uncovered.waterMaskKind, 2, "UNIFORM_WATER: nothing published there, so it is sea");
+  const uncoveredMask = maskOf(uncovered);
+  assert.equal(
+    uncoveredMask.filter((b) => b === 0x00).length,
+    0,
+    "not one fabricated LAND sample over a cell the dataset does not publish",
+  );
+  assert.equal(uncovered.minHeightM, 0);
+  assert.equal(uncovered.maxHeightM, 0);
+
+  // …and the covered neighbour in the SAME invoke is still land, so the fix is
+  // per post rather than a block-wide flip in the other direction.
+  const covered = byX.get(insideX);
+  assert.equal(covered.waterMaskKind, 1, "UNIFORM_LAND where the granule really covers");
+
+  // The two counts are reported separately: an ocean inference and a genuine
+  // gap in the mask lane are different facts and a run must not hide either.
+  const report = JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload));
+  assert.ok(report.maskFromAbsenceSamples > 0, "the ocean inference is counted");
+  assert.equal(report.maskUnclassifiedSamples, 0, "no post has elevation but no classification");
+});
+
 test("an all-ocean cell still emits a records frame, so the walk cannot stall", async (t) => {
   // Skipping the push on an empty batch leaves the downstream scheduler with
   // no `records` input: its node never runs, the resume mark never advances,
