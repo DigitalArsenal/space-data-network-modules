@@ -15,6 +15,8 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 
+import { readDtt, splitStream } from "./dtt-reader.mjs";
+
 // ── THE BOUNDS THIS PYRAMID HAS TO SATISFY TO BE PUBLISHABLE ───────────────
 //
 // Coordinator reconciliation 2026-08-27, which supersedes the pair these
@@ -78,78 +80,6 @@ function parseArgs(argv) {
   return args;
 }
 
-// ── a hand-written $DTT reader (field ids follow schema/DTT/main.fbs) ───────
-function readDtt(record) {
-  const buf = Buffer.from(record);
-  assert.equal(buf.subarray(4, 8).toString("latin1"), "$DTT", "every record is a $DTT");
-  const pos = buf.readUInt32LE(0);
-  const table = (p) => {
-    const vtable = p - buf.readInt32LE(p);
-    return (id) => {
-      const vo = 4 + 2 * id;
-      if (vo >= buf.readUInt16LE(vtable)) return 0;
-      const off = buf.readUInt16LE(vtable + vo);
-      return off === 0 ? 0 : p + off;
-    };
-  };
-  const at = table(pos);
-  const u32 = (id) => { const p = at(id); return p ? buf.readUInt32LE(p) : 0; };
-  const f64 = (id) => { const p = at(id); return p ? buf.readDoubleLE(p) : 0; };
-  const i8 = (id) => { const p = at(id); return p ? buf.readInt8(p) : 0; };
-  const u8 = (id) => { const p = at(id); return p ? buf.readUInt8(p) : 0; };
-  const str = (id) => {
-    const p = at(id);
-    if (!p) return undefined;
-    const sp = p + buf.readUInt32LE(p);
-    return buf.subarray(sp + 4, sp + 4 + buf.readUInt32LE(sp)).toString("utf8");
-  };
-  const payload = (id) => {
-    const p0 = at(id);
-    if (!p0) return null;
-    const p = p0 + buf.readUInt32LE(p0);
-    const pat = table(p);
-    const bytesAt = pat(1);
-    let bytes = null;
-    if (bytesAt) {
-      const vp = bytesAt + buf.readUInt32LE(bytesAt);
-      bytes = buf.subarray(vp + 4, vp + 4 + buf.readUInt32LE(vp));
-    }
-    const digestAt = pat(3);
-    let digest;
-    if (digestAt) {
-      const sp = digestAt + buf.readUInt32LE(digestAt);
-      digest = buf.subarray(sp + 4, sp + 4 + buf.readUInt32LE(sp)).toString("utf8");
-    }
-    return { bytes, digest };
-  };
-  return {
-    tilesetId: str(0),
-    level: u32(3),
-    x: u32(4),
-    y: u32(5),
-    westDeg: f64(7),
-    southDeg: f64(8),
-    eastDeg: f64(9),
-    northDeg: f64(10),
-    minHeightM: f64(11),
-    maxHeightM: f64(12),
-    payload: payload(15),
-    gridWidth: u32(16),
-    gridHeight: u32(17),
-    sourcePostSpacingM: f64(19),
-    verticalAccuracyM: f64(23),
-    accuracyConfidence: f64(24),
-    dataCoverageFraction: f64(26),
-    waterMask: payload(29),
-    waterMaskKind: i8(28),
-    waterMaskWidth: u32(30),
-    waterMaskHeight: u32(31),
-    childAvailability: u8(35),
-    maxLevel: u32(36),
-    etag: str(40),
-  };
-}
-
 // ── the four EDGE post rows of a quantized mesh, in metres ─────────────────
 //
 // Only the edges are kept: 4,621 tiles x 4,225 vertices x three arrays is half
@@ -199,22 +129,6 @@ function meshEdges(mesh, dtt) {
     if (u[i] === 32767) edges.east[index(v[i])] = metres;
   }
   return edges;
-}
-
-function splitStream(bytes) {
-  const buf = Buffer.from(bytes);
-  const records = [];
-  let offset = 0;
-  while (offset + 4 <= buf.length) {
-    const length = buf.readUInt32LE(offset);
-    offset += 4;
-    if (length === 0) continue;
-    assert.ok(offset + length <= buf.length, "a length prefix must not run past the stream");
-    records.push(buf.subarray(offset, offset + length));
-    offset += length;
-  }
-  assert.equal(offset, buf.length, "the stream ends exactly on a record boundary");
-  return records;
 }
 
 // Collapse a level's addresses into the rectangles layer.json declares. The
@@ -980,6 +894,13 @@ const summary = {
   // 404 — that is the contract; the count is here so nobody has to assume it.
   availableButUnstored: availableButUnstored.length,
   availableButUnstoredByLevel: unstoredByLevel,
+  // THE ADDRESSES, not just the count. Under IPFS delivery these are the tiles
+  // the publisher has to MATERIALIZE into the directory: a static gateway has
+  // no respond() to synthesize a miss with, so an address layer.json promises
+  // and the directory does not hold is a 404 in the browser — the exact bound
+  // Atlas set at zero. The count told a reviewer the promise was kept; the
+  // list is what keeps it.
+  availableButUnstoredAddresses: availableButUnstored,
   childAvailabilityClaims: childBitsClaimed,
   childAvailabilityUnservedClaims: childBitsWrong,
   childAvailabilityExamples: childBitExamples,

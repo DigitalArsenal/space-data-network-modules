@@ -3,6 +3,20 @@
 The builder writes a store directory; it does not talk to the fleet. This is
 how those bytes become tiles host-01 serves, and why the path is the one it is.
 
+> **SUPERSEDED IN PART, owner 2026-08-27: terrain files are requested over
+> IPFS.** The pyramid is DELIVERED as a content-addressed IPFS directory —
+> `layer.json` plus every `{z}/{x}/{y}.terrain` — added and pinned through the
+> node's IPFS API, and clients fetch from `<node>/ipfs/<cid>/`. That path, what
+> the gateway measurably does with it, and the $DTT catalogue record naming the
+> CID are in **[IPFS-DELIVERY.md](IPFS-DELIVERY.md)**; run
+> `tools/terrain-pyramid/ipfs-publish.mjs` after `verify.mjs`.
+>
+> Everything below still holds for the RECORD lane, which has not gone away:
+> the records remain the artifact `verify.mjs` judges and the source the IPFS
+> directory is materialized from, host-01 still ingests them, and the mount
+> still answers `layer.json` and tiles as the same-origin fallback and the
+> local-development path. What changed is which of the two a browser fetches.
+
 ## What the builder produces
 
     <out>/tiles.dttstream     size-prefixed $DTT records: [u32 LE length][record]
@@ -38,7 +52,10 @@ lifetime. It runs four host operations and writes a directory.
 ## The publication path
 
 The $DTT records ride the existing dataset-publication lane, the same one the
-cellular density-tile snapshot uses:
+cellular density-tile snapshot uses. (Under IPFS delivery the tile BYTES reach
+a browser from the gateway instead, and it is the CATALOGUE record — one $DTT
+naming the directory CID — that this lane most needs to carry; see
+IPFS-DELIVERY.md.)
 
 1. **Publish the record stream by CID.** The stream is content-addressed and
    added to the dataset lane; the CID is the artifact's identity, so what

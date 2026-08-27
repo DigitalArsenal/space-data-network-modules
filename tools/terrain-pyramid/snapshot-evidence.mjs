@@ -61,6 +61,12 @@ for (const name of [
   // level up (config.FlowMount.MemoryPages). Two files because the two levels
   // must not be conflated by a copy-paste.
   "mount-entry.json",
+  // The IPFS lane's own outputs (owner 2026-08-27): the CID, the gateway
+  // read-back, the catalogue record and the complete mount config. Absent on a
+  // run that stopped at the record stream, which `continue` below handles.
+  "ipfs-publication.json",
+  "tileset-catalogue.json",
+  "serving-config-ipfs.json",
 ]) {
   const from = path.join(outDir, name);
   if (!fs.existsSync(from)) continue;

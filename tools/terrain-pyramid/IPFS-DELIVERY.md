@@ -1,0 +1,245 @@
+# The pyramid is an IPFS directory
+
+**Owner, 2026-08-27:** *terrain files are requested over IPFS.* One
+content-addressed directory per tileset epoch, added and pinned through the
+node's IPFS API by this off-fleet builder, served at `<node>/ipfs/<cid>/`.
+Clients point a native `CesiumTerrainProvider` at the gateway path of the
+CURRENT CID, which they resolve from the node. The owner refused a static asset
+hostname in the same breath, and nothing here creates one: every path a client
+learns is relative to the node it is already talking to.
+
+This file states what is published, what the gateway does with it (measured,
+not assumed), and the $DTT field mapping the catalogue record uses.
+
+## The directory
+
+    <cid>/layer.json                 the tileset index, rendered by the module
+    <cid>/{z}/{x}/{y}.terrain        one quantized-mesh-1.0 tile, mask inside
+
+`{y}` is TMS — row 0 at the SOUTH edge — which is the row direction the records
+carry and the direction a native client sends, so no flip happens anywhere.
+
+Three properties the mount used to provide at request time are now properties
+of the FILES, because a gateway does none of them:
+
+1. **The bytes are decoded.** The stored `$DTT` payload is gzipped and the
+   mount decompresses per `Accept-Encoding`; a file has ONE representation.
+   Every `.terrain` file is the identity mesh. A file holding the gzipped
+   payload would reach the browser as an unparseable tile — asserted against,
+   in `tests/ipfs-layout.test.mjs`.
+2. **The water mask is in the file, unconditionally.** No negotiation, no
+   `extensions` query, no serve-time append. Every file is walked to its
+   extension region before it is written and refused if extension id 2 is not
+   there.
+3. **Every address `layer.json` promises exists.** `respond()` synthesizes an
+   available-but-unstored address (the encoder never stores an all-ocean tile);
+   a gateway returns 404, and Atlas set the browser-4xx bound at zero. So the
+   publisher asks the MODULE for the same bytes it would have synthesized and
+   writes them as files. On the regional pyramid that is 36 files across levels
+   0–7, including both level-0 roots — without them a native provider's first
+   request is a 404 and the globe never leaves the ellipsoid.
+
+`layer.json` is rendered by the module's own `layer_json` method, driven
+through `route()` so the plan is the mount's plan. The ONLY difference from
+what the mount serves is the tiles template: the mount states
+`{z}/{x}/{y}.terrain?v={version}` because its tiles are not content-addressed
+and that query is what keys them; inside a CID the template is bare
+`{z}/{x}/{y}.terrain`, because the CID is already the cache key. That template
+is now a plan field (`terrain_tiles_template`), not a constant, so there is
+still exactly one renderer.
+
+## What the gateway does — MEASURED 2026-08-27 on host-01
+
+Published: `bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy`
+(the Liguria regional pyramid, 4,652 files, 358.38 MiB), added and pinned
+through host-01's kubo 0.39.0 RPC on loopback `127.0.0.1:5002` over an ssh
+tunnel, read back at `https://sdn.spaceaware.io/ipfs/<cid>/`.
+
+| property | measured |
+| --- | --- |
+| status | `200` on `layer.json` and every tile probed |
+| bytes | byte-identical to the local file (`same=true` on all four probes) |
+| `cache-control` | `public, max-age=29030400, immutable` |
+| `etag` | the file's own CIDv1, strong (`"bafkrei…"`) |
+| `access-control-allow-origin` | `*` |
+| `content-type` | `application/octet-stream` for tiles, `application/json` for layer.json |
+| latency | 99–159 ms per file, cold |
+| **compression** | **none** |
+| `If-None-Match` | **200 through the public path, 304 at kubo** |
+
+Two of those need saying plainly.
+
+**The gateway does not compress.** kubo serves the stored bytes verbatim and
+Cloudflare does not compress `application/octet-stream`. Asked with
+`Accept-Encoding: gzip, br`, a 75,140-byte tile came back 75,140 bytes with no
+`content-encoding`. So the wire size of a tile is its UNCOMPRESSED size, and
+for this pyramid that is:
+
+| | p50 | p99 | max |
+| --- | --- | --- | --- |
+| identity (what IPFS serves) | 66,132 B | 327,267 B | — |
+| gzipped (what the mount served) | 3,555 B | 28,627 B | 30,799 B |
+
+The difference is almost entirely the water mask: a raster mask is 256×256 = 
+65,536 bytes of near-constant data that gzip erases and a static file cannot.
+49% of this pyramid's tiles carry one.
+
+**That breaks two of Atlas's byte bounds** (2026-08-26: median ≤ 25 KB,
+p99 ≤ 120 KB, hard cap 256 KB uncompressed, gzip on the wire). They were set
+for a mount that gzips; under static delivery the uncompressed number IS the
+wire number and p50 66 KB / p99 327 KB miss them. **This is a coordinator
+question, not something this lane decided**, and the fact that decides it is:
+the engine sizes the mask texture as `Math.sqrt(waterMask.length)`
+(`GlobeSurfaceTile.js:1077`), so any square mask renders — a 64×64 mask is
+4,096 bytes and would put the median back around 5 KB. Atlas fixed N=256 across
+levels in the seam ruling, so changing it is Atlas's call. The alternative
+lever is compression at the node's `/ipfs` proxy, which is Hermes/Hephaestus
+territory and outside this lane's components.
+
+**The 304 is lost in the legacy proxy, not in IPFS.** kubo at `127.0.0.1:8091`
+answers `If-None-Match` with `304` on all four probes. The node's
+`admin.ipfs_gateway_url` currently points at `127.0.0.1:8081` — the legacy
+`spaceaware-terrain-cache.service` node script — which drops the conditional
+and answers `200`. The ship plan already moves that key `:8081 → :8091` when
+the terrain cache is retired; this measurement makes the move a CORRECTNESS
+requirement of the IPFS lane rather than cleanup, because until it lands every
+revalidation re-downloads the tile.
+
+    # the measurement, on the box
+    E=$(curl -s -D - -o /dev/null http://127.0.0.1:8091/ipfs/$CID/8/268/190.terrain \
+        | grep -i '^etag:' | sed 's/^[Ee]tag: //')
+    curl -s -o /dev/null -w '%{http_code}\n' -H "If-None-Match: $E" \
+        http://127.0.0.1:8091/ipfs/$CID/8/268/190.terrain   # 304
+    curl -s -o /dev/null -w '%{http_code}\n' -H "If-None-Match: $E" \
+        http://127.0.0.1:8081/ipfs/$CID/8/268/190.terrain   # 200
+
+## The catalogue record: the $DTT field mapping
+
+A client must not hardcode a CID (it is pinned to a dead epoch the day the
+dataset is recut) and must not learn one from a hostname. So the tileset epoch
+is a RECORD, published through the same dataset lane the tiles' provenance
+names, and the node serves the pointer from it.
+
+**Themis: this mints nothing.** Every field below is a $DTT field carrying what
+`schema/DTT/main.fbs` says it carries. `$DTT` is already CID-first — *"a tile
+record addresses its bytes so an epoch can be verified rather than trusted"* —
+and a tileset record is that sentence applied to the directory instead of one
+tile. Rendered as JSON it uses IDL-EXACT KEYS.
+
+| $DTT field | the tileset catalogue record carries |
+| --- | --- |
+| `TILESET_ID` | the pyramid's publisher-stable id, identical to the tiles' |
+| `TILESET_NAME` | its display name |
+| `TILING_SCHEME` | `GEOGRAPHIC_WGS84`, identical to the tiles' |
+| `WEST/SOUTH/EAST/NORTH_DEG` | the whole tileset's extent |
+| `PAYLOAD_FORMAT` | `QUANTIZED_MESH` — what the directory contains |
+| `PAYLOAD_FORMAT_VERSION` | `1.0` |
+| `PAYLOAD.CID` | **the directory CID.** The one field that names the epoch |
+| `PAYLOAD.SIZE_BYTES` | the directory's total bytes, so a consumer can budget |
+| `PAYLOAD.MEDIA_TYPE` | `application/vnd.ipld.dag-pb` |
+| `PAYLOAD.BYTES` | ABSENT. Themis: never a pyramid blob inline |
+| `MAX_LEVEL` | the deepest level the tileset serves |
+| `WATER_MASK_KIND` | `NONE` — a tileset states nothing about water; its tiles do |
+| `PROVENANCE` | the tiles' own lineage and licence, verbatim |
+| `PROVENANCE.DATASET_CID` | the same directory CID: *"the exact dataset artifact"* |
+| `PROVENANCE.GENERATED_AT` | when the directory was cut |
+| `PROVENANCE.PROCESSOR` | `tools/terrain-pyramid/ipfs-publish.mjs` |
+
+**The discriminator between a catalogue record and a tile record is
+`PAYLOAD.MEDIA_TYPE`.** A tile's payload is one mesh
+(`application/vnd.quantized-mesh`); the catalogue's is the DIRECTORY those
+tiles live in (`application/vnd.ipld.dag-pb`). It is a stated field carrying a
+real difference, not a sentinel. `LEVEL/X/Y` are 0 and are not the
+discriminator — the builder stores nothing at level 0 (level-0 tiles are
+synthesized), so the address is free, but a reader must key on the media type.
+
+`PROVENANCE.SOURCE_URL`, `SOURCE_QUERY` and `NATIVE_ID` are deliberately
+DROPPED from the catalogue record. They name the ONE granule a tile was cut
+from; a pyramid is cut from thousands, and a record naming one of them as its
+source is not imprecise, it is false.
+
+The builder writes both forms:
+
+    <out>/tileset-catalogue.json         the mapping above, IDL-exact keys
+    <out>/tileset-catalogue.dttstream    the same record as SDS wire bytes,
+                                         size-prefixed exactly like tiles.dttstream
+
+**Signing.** A tileset-epoch ANNOUNCE is a signed record and is NOT in v1
+(Themis, carried forward). This record is published through the dataset lane
+like the tiles; the tiles themselves are unsigned and verified by the
+CID/DIGEST/ETAG chain, and the catalogue record's authority is the same chain —
+its `PAYLOAD.CID` either resolves to the directory a client fetched or it does
+not.
+
+## The catalogue endpoint: how a client resolves the CID
+
+`GET <node>/api/v1/terrain/` (and `/api/v1/terrain/catalogue.json`) answers:
+
+```json
+{
+  "tilesetId": "spaceaware-terrain",
+  "delivery": "ipfs",
+  "cid": "bafybei…",
+  "datasetEpoch": "2023-04-01T00:00:00.000Z",
+  "version": "1.0.0",
+  "terrainBasePath": "/ipfs/bafybei…/",
+  "layerJsonPath": "/ipfs/bafybei…/layer.json",
+  "format": "quantized-mesh-1.0",
+  "scheme": "tms",
+  "projection": "EPSG:4326",
+  "extensions": ["watermask"],
+  "maxzoom": 13,
+  "attribution": "…"
+}
+```
+
+Keys are lowercase/camelCase: this is an API-synthesized discovery document,
+not a $DTT rendered as JSON. `terrainBasePath` is RELATIVE, so a client joins
+it against the node origin it already knows and learns no hostname;
+`terrainBaseUrl` appears only when the mount configures a gateway origin.
+`cache-control` is `public, max-age=60` with a strong ETag — everything under a
+CID is immutable, and this is the lane's one mutable pointer, so a minute
+bounds how long a client can miss a recut while every revalidation after the
+first is a 304.
+
+**A node with no CID configured is not an error.** It answers
+`"delivery": "mount"`, `"cid": null` and its own mount path, which is what
+makes a development node with no IPFS daemon work unchanged and gives every
+client ONE document to read either way.
+
+The flow-mounted tile and `layer.json` routes still answer. They are no longer
+the delivery path; they are the same-origin fallback and the local-development
+path.
+
+## Running it
+
+    # 1. cut and verify the pyramid (unchanged)
+    node tools/terrain-pyramid/run.mjs --config <region.json> --docker
+    node tools/terrain-pyramid/verify.mjs --out <out>
+
+    # 2. materialize the directory, add + pin, read it back through the gateway
+    ssh -N -L 5002:127.0.0.1:5002 sdn.spaceaware.io &
+    node tools/terrain-pyramid/ipfs-publish.mjs --out <out> \
+         --api http://127.0.0.1:5002 --gateway https://sdn.spaceaware.io
+
+    # variants
+    ... --no-add                 materialize only; no network at all
+    ... --cid <cid>              re-emit the catalogue for an already-published
+                                 directory without pushing the bytes again
+
+It REFUSES a pyramid `verify.mjs` has not passed, and refuses one whose report
+lists unmet bounds. A CID is permanent: an unverified pyramid published under
+one cannot be withdrawn from anyone who has already resolved it.
+
+Outputs, beside the ones `run.mjs` and `verify.mjs` already write:
+
+    <out>/ipfs/                       the directory as published
+    <out>/ipfs-publication.json       CID, file counts, byte distributions,
+                                      the gateway read-back, the mount keys
+    <out>/tileset-catalogue.json      the $DTT catalogue record, IDL-exact keys
+    <out>/tileset-catalogue.dttstream the same record as SDS wire bytes
+    <out>/serving-config-ipfs.json    the complete `config:` block for the mount
+
+A local kubo works identically and is what a development run should use; the
+only thing host-01's API gives you is a pin on the box that serves the public
+gateway.

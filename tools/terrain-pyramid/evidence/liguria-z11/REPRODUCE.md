@@ -5,14 +5,14 @@ re-downloading the region. The store itself is not here (it is tens of MB of
 records plus hundreds of MB of cached granules, and `tools/terrain-pyramid/out`
 is gitignored); these are the reports read off it.
 
-- modules commit: `92f1e03c6fce8db4107c0b770dae7a418ed6c956`
-- WasmEdge: `wasmedge version 0.16.4`
-- run config: `tools/terrain-pyramid/regions/liguria-z11.json`
+- modules commit: `0c04d0f98fde8a2c0eb15568bb0061e64ec53f79`
+- WasmEdge: `not on PATH when this was snapshotted`
+- run config: `tools/terrain-pyramid/regions/<the config this run used>`
 
 ## The commands
 
 ```
-node tools/terrain-pyramid/run.mjs --config tools/terrain-pyramid/regions/liguria-z11.json
+node tools/terrain-pyramid/run.mjs --config tools/terrain-pyramid/regions/<the config this run used>
 node tools/terrain-pyramid/verify.mjs --out <the config's "out" dir>
 node tools/terrain-pyramid/measure-accuracy.mjs --out <the config's "out" dir>
 node tools/terrain-pyramid/cross-check-accuracy.mjs --out <same>
@@ -31,8 +31,8 @@ on a single byte.
 
 | artifact | sha256 |
 | --- | --- |
-| `data-source/terrain-source/dist/isomorphic/module.wasm` | `b213323e42bf0cd661926f811fa639eaffa827650f1e6023b89dd58a644af09d` |
-| `data-source/terrain-source/dist/parity/module.wasm` | `505f322d7673fcaa7fcebc83ce0c1e86ef27a46670c85d76b3324de415d354f9` |
+| `data-source/terrain-source/dist/isomorphic/module.wasm` | `7d35969d15ab718b12cef1d04d0c3250316c8d43813a5a4bbcbe8c770a123ca4` |
+| `data-source/terrain-source/dist/parity/module.wasm` | `3d95520d58cdc89be11227cce90e85b6ebb06830cdb1a153bf376da416f76be6` |
 | `data-source/terrain-ingest/dist/isomorphic/module.wasm` | `bbcf4c1f914a4634ec4f531ade6127e707553c008b75fdda79beee0beeb12165` |
 | `flows/terrain-ingest/dist/runtime.wasm` | `c3f9495827a0023fbb3cf824c98aa5befd0c1ca65618322e150d14cbd4112529` |
 | `flows/terrain-serving/dist/runtime.wasm` | `5c15862b98cf0b96196301695d054216da430a47a684ab15a8c5a2e204280b46` |
