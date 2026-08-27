@@ -17,44 +17,64 @@
 //
 // MEASURED on the shipped artifact (dist/isomorphic/module.wasm), one instance,
 // pages = memory.buffer.byteLength >>> 16, at the HIGH-WATER MARK of the mix
-// the mount actually drives — one route() on a tile address, one on
-// layer.json, one layer.json render, then 1,200 interleaved route() calls over
-// a stored address, a deep address, layer.json, a shallow address and a junk
-// path. The mix is the measurement: each shape ALONE settles lower (a
-// tile-only instance at a 2.8 MB index sits at 343 pages), and a config sized
-// from a single shape would be under the real peak.
+// the mount actually drives.
 //
-//     index bytes    peak pages    MiB
-//         45 B           256        16.0
-//       0.36 MB          256        16.0
-//       1.35 MB          312        19.5
-//       2.81 MB          558        34.9
-//       5.63 MB         1034        64.6     <-- past the 1024 default
-//       8.66 MB         1619       101.2
-//      11.25 MB         1988       124.3
-//      14.63 MB         2779       173.7
+// THE FIRST CUT OF THIS CURVE DROVE HALF THE MOUNT. It ran `route` and one
+// `layer_json` render and nothing else — no `respond`, which is the mount's
+// SECOND invoke (flows/terrain-serving.flow.json wires route -> flatsql-query
+// -> respond inside ONE flow, i.e. one linear memory) and where the record
+// bytes, the synthesized mesh and both content codings are built; and no
+// identity representation, which is what forces the UNCOMPRESSED index body
+// into memory (any Accept-Encoding without gzip — `br`, `deflate`, empty,
+// `gzip;q=0` — returns the whole 7.76 MB index instead of 78 KB).
+//
+// The mix is now the real pair, both codings, interleaved: route -> respond
+// over a STORED record, route -> respond over an empty stream inside
+// availability (the synth path), route -> layer_json, and a junk 404, with one
+// request in three asking for `identity`. Re-measured that way, 1,200 requests
+// deep, on this candidate:
+//
+//     index bytes    peak pages    MiB     pages per index page
+//         45 B           256        16.0     —
+//       0.36 MB          256        16.0     —
+//       1.52 MB          359        22.4     4.4
+//       2.81 MB          601        37.6     8.0
+//       6.33 MB         1232        77.0    10.1     <-- past the 1024 default
+//       8.66 MB         1619       101.2    10.3
+//      12.66 MB         2381       148.8    11.0
+//      16.46 MB         3285       205.3    12.1
+//
+// A SECOND, INDEPENDENT MEASUREMENT SETS THE FIT, NOT THIS ONE. An independent
+// harness driving the same shipped artifact at a 7.76 MB index measured 1,848
+// pages on 3/3 runs, against 1,619 here at a LARGER index — same module, same
+// shapes, a different allocation order, 355 pages apart. Which of the two
+// orders a host reproduces is not something this file can promise, so the fit
+// is set above the HIGHER of them: fourteen pages per index page puts 7.76 MB
+// at 1,920, which covers 1,848 with 72 to spare and every point in the table
+// above with 400 to 550. `memory_pages` is a HARD cap in the host
+// (httpmount.go -> wasmrt.WithMaxMemoryPages), so a fit that is merely close is
+// memory.grow returning -1 inside the guest mid-request.
 //
 // The peak is a mark, not a leak: at a fixed index it is reached inside the
-// first ~1,200 requests and does not move over the next 12,000. Growth is with
-// the INDEX, which a config number can cover; growth with REQUESTS is what no
-// config number could, and there is none.
+// first ~1,200 requests and does not move over the next 3,000 driven through
+// BOTH invokes. Growth is with the INDEX, which a config number can cover;
+// growth with REQUESTS is what no config number could, and there is none.
 //
-// The fit below sits ABOVE every measured point, because the number a
-// deployment writes down has to hold for an index somewhat larger than the one
-// that was measured: twelve pages per index page (the measured ratio runs 2.7
-// to 11.3 and rises with size), plus the 256-page floor the module occupies
-// with no index at all, rounded up to a whole 128-page block so the config
-// carries a round number rather than a fitted one.
+// Plus the 256-page floor the module occupies with no index at all, rounded up
+// to a whole 128-page block so the deployment carries a round number rather
+// than a fitted one.
 //
 // Both readers of this file — tools/terrain-pyramid/verify.mjs, which writes
-// `memory_pages` into the layer-json config a deployment consumes, and
-// data-source/terrain-source/tests/serving-memory.test.mjs, which drives a real
-// instance and asserts it stays under that number — import it from HERE, so the
-// number the config states and the number the test checks cannot drift apart.
+// `memory_pages` onto the MOUNT ENTRY a deployment installs (never into the
+// module config block: it is config.FlowMount.MemoryPages, a sibling of
+// `config:`), and data-source/terrain-source/tests/serving-memory.test.mjs,
+// which drives a real instance through the real pair and asserts it stays under
+// that number — import it from HERE, so the number the deployment states and
+// the number the test checks cannot drift apart.
 
 export const HOST_DEFAULT_PAGES = 1024;
 export const BASE_PAGES = 256;
-export const PAGES_PER_INDEX_PAGE = 12;
+export const PAGES_PER_INDEX_PAGE = 14;
 const BLOCK = 128;
 
 /** Pages a serving instance needs for an availability index of `bytes` bytes. */
@@ -73,8 +93,13 @@ export function memoryPagesAdvice(bytes) {
     hostDefaultPages: HOST_DEFAULT_PAGES,
     // The daemon runs a pool of these; the box pays for all of them.
     poolMiBAtFourInstances: +((pages * 65536 * 4) / 1024 / 1024).toFixed(1),
-    // Above roughly 4.2 MB of index the host default is not enough and the
+    // Above roughly 3.6 MB of index the host default is not enough and the
     // mount MUST state the key.
     mustBeConfigured: pages > HOST_DEFAULT_PAGES,
+    // WHERE THE KEY GOES. It is config.FlowMount.MemoryPages — a sibling of the
+    // mount's `config:` block, read only by internal/flowrt/httpmount.go — and
+    // NOT a module config key delivered through plugin.getConfig. Stated here
+    // because the run writes it into a file an operator pastes from.
+    yamlLocation: "flows.mounts[].memory_pages (sibling of `config:`, never inside it)",
   };
 }

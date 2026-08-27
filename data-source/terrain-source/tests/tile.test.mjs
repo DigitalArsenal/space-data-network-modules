@@ -421,10 +421,18 @@ test("tile carries the $DTT contract: address, extents, datum, class, provenance
   );
   // The fixture's source surface is a PLANE (100 + px + 2*py), which a
   // triangulated lattice reproduces exactly, so the measured departure is
-  // legitimately 0 here. What the record must state is that it was MEASURED:
+  // legitimately ~0 here. What the record must state is that it was MEASURED:
   // ACCURACY_CONFIDENCE 1.0 is written only when probes actually ran.
+  //
+  // ~0 and not exactly 0 since the probe moved to the SOURCE POSTS: the truth
+  // side is the granule's own float32 sample and the mesh side is a double
+  // carried through bilinear, so a plane reproduces to a few ulps of its own
+  // magnitude rather than to a bit pattern. 1e-6 m is a micron.
   assert.equal(dtt.accuracyConfidence, 1, "the accuracy figure is measured, not asserted");
-  assert.equal(dtt.verticalAccuracyM, 0, "a planar source is reproduced exactly");
+  assert.ok(
+    dtt.verticalAccuracyM < 1e-6,
+    `a planar source is reproduced exactly; the record states ${dtt.verticalAccuracyM} m`,
+  );
   assert.ok(dtt.remarks.includes("geoid"), "the datum decision is stated on the record");
   // Provenance rides VERBATIM from the plan — never invented, never edited.
   assert.equal(dtt.provenance.datasetId, PROVENANCE.datasetId);
@@ -1010,6 +1018,11 @@ function diagonalOnlyWorstDeparture() {
   return worst;
 }
 
+// EVERY SOURCE POST THE GRANULE CARRIES INSIDE THE TILE. The granule spans
+// PROBE_SPAN_POSTS intervals across the tile, so it carries that many + 1 posts
+// on each edge, and the probe walks all of them at every density.
+const PROBE_SOURCE_POSTS = (PROBE_SPAN_POSTS + 1) ** 2;
+
 test("the accuracy probe evaluates BOTH TRIANGLES, not just the split diagonal", async (t) => {
   // MEASURED, not asserted: the fixture really is invisible to the old pattern.
   assert.ok(
@@ -1017,13 +1030,13 @@ test("the accuracy probe evaluates BOTH TRIANGLES, not just the split diagonal",
     `every du == dv position on this fixture reads the plane, so the collinear probe ` +
       `reports ${diagonalOnlyWorstDeparture()} m — that is what made it blind`,
   );
-  // stride == 1: the mesh carries every post the plan sampled, so the probe
-  // goes back to the source — at the centre and BOTH REAL CENTROIDS. This is
-  // the exact position set the old comment described and the old code did not
-  // evaluate.
   const { dtt, tile } = await encodeProbeFixture(t, { maxGridSize: 5 });
   assert.equal(tile.gridSize, 5, "the plan pins the lattice, so the mesh is the lattice");
-  assert.equal(tile.accuracyProbes, 3 * (5 - 1) ** 2, "three positions per cell at stride 1");
+  assert.equal(
+    tile.accuracyProbes,
+    PROBE_SOURCE_POSTS,
+    "every source post inside the tile, not a fixed pattern per cell",
+  );
   assert.ok(
     Math.abs(dtt.verticalAccuracyM - PROBE_RELIEF_M) < 1e-3,
     `the centroids carry ${PROBE_RELIEF_M} m of relief the diagonal cannot see; ` +
@@ -1031,22 +1044,92 @@ test("the accuracy probe evaluates BOTH TRIANGLES, not just the split diagonal",
   );
 });
 
-test("the probe count scales with CELL SIZE: every sampled post the mesh dropped", async (t) => {
-  // stride > 1: every post of the finest lattice the plan admits that the
-  // candidate does NOT carry is a source measurement strictly inside one of its
-  // cells. That is the worst-post error the target names, it costs no source
-  // sampling at all, and for stride >= 3 the position set CONTAINS both real
-  // centroids exactly — so the collinear failure cannot recur at any density.
-  const { dtt, tile } = await encodeProbeFixture(t, { maxGridSize: 13 });
-  assert.equal(tile.gridSize, 5, "500 m clears the level-8 target, so the ladder stops at 5");
+test("the probe count is the SOURCE's, not the lattice's: it does not move with maxGridSize", async (t) => {
+  // COORDINATOR RESOLUTION 2026-08-27 (1). The probe used to walk the finest
+  // lattice the plan admitted, so its probe COUNT — and, worse, the relief it
+  // was able to see — moved with `maxGridSize`. It does not any more: the truth
+  // set is the dataset's own posts, and raising the lattice buys the ladder
+  // finer candidates without changing what the measurement is a statement
+  // about. Same fixture, two lattices, identical probe count and identical
+  // departure.
+  const coarse = await encodeProbeFixture(t, { maxGridSize: 5 });
+  const fine = await encodeProbeFixture(t, { maxGridSize: 13 });
+  assert.equal(fine.tile.gridSize, 5, "500 m clears the level-8 target, so the ladder stops at 5");
+  assert.equal(coarse.tile.accuracyProbes, PROBE_SOURCE_POSTS);
   assert.equal(
-    tile.accuracyProbes,
-    13 ** 2 - 5 ** 2,
-    "every lattice post except the mesh's own vertices — 144, not the fixed 48",
+    fine.tile.accuracyProbes,
+    coarse.tile.accuracyProbes,
+    "a denser lattice does not change how many source posts the tile contains",
   );
   assert.ok(
+    Math.abs(fine.dtt.verticalAccuracyM - PROBE_RELIEF_M) < 1e-3,
+    `worst-post departure ${fine.dtt.verticalAccuracyM} m against ${PROBE_RELIEF_M} m of real relief`,
+  );
+  assert.ok(
+    Math.abs(fine.dtt.verticalAccuracyM - coarse.dtt.verticalAccuracyM) < 1e-9,
+    "and the two lattices state the SAME accuracy for the same shipped mesh",
+  );
+});
+
+// ── RELIEF THE LATTICE CANNOT CARRY, WHICH IS THE WHOLE OF RESOLUTION 1 ─────
+//
+// The previous probe walked the sampled lattice and treated `lattice[v]` as
+// truth. That is blind by construction to any relief BETWEEN lattice posts —
+// which at z10 is most of the dataset, since a tile edge there carries 633
+// GLO-30 posts against a lattice capped at 361. Measured over the regional
+// store it understated VERTICAL_ACCURACY_M by more than 5% on 48.9% of z10
+// tiles and 43.4% of z11 tiles, and because the ladder reads the same number it
+// stopped the climb on tiles that had bytes to spare.
+//
+// This fixture puts its relief on source posts the lattice NEVER carries: with
+// maxGridSize 13 the lattice lands on granule posts 0, 6, 12 … 72, and the
+// plateaus sit at granule index ≡ 3 (mod 6). A lattice-walking probe therefore
+// reads the plane everywhere and reports 0.000 m; a source-post probe reports
+// 500. There is no tolerance band between those two answers.
+const offLatticeGranule = () => ({
+  width: PROBE_SPAN_POSTS + 2 * PROBE_MARGIN + 1,
+  height: PROBE_SPAN_POSTS + 2 * PROBE_MARGIN + 1,
+  originLon: WEST - PROBE_MARGIN * PROBE_STEP,
+  originLat: NORTH + PROBE_MARGIN * PROBE_STEP,
+  scaleLon: PROBE_STEP,
+  scaleLat: PROBE_STEP,
+  layout: "strip",
+  predictor: 1,
+  heightFn: (px, py) => {
+    const it = px - PROBE_MARGIN;
+    const jt = PROBE_MARGIN + PROBE_SPAN_POSTS - py;
+    if (it < 0 || it > PROBE_SPAN_POSTS || jt < 0 || jt > PROBE_SPAN_POSTS) return PROBE_BASE_M;
+    return it % 6 === 3 && jt % 6 === 3 ? PROBE_BASE_M + PROBE_RELIEF_M : PROBE_BASE_M;
+  },
+});
+
+test("relief that lives BETWEEN lattice posts is measured, not smoothed away", async (t) => {
+  // The falsifiability half, computed here rather than claimed: every post of
+  // the 13-post lattice reads the plane, so the probe this replaced would have
+  // reported 0.000 m on this fixture at any stride.
+  const g = offLatticeGranule();
+  let worstOnLattice = 0;
+  for (let j = 0; j <= 12; j += 1) {
+    for (let i = 0; i <= 12; i += 1) {
+      const h = g.heightFn(PROBE_MARGIN + i * 6, PROBE_MARGIN + PROBE_SPAN_POSTS - j * 6);
+      worstOnLattice = Math.max(worstOnLattice, Math.abs(h - PROBE_BASE_M));
+    }
+  }
+  assert.equal(worstOnLattice, 0, "the 13-post lattice carries none of this fixture's relief");
+
+  const outputs = outputsByPort(
+    await invoke(t, "tile", [
+      jsonFrame("plan", { ...PLAN, gridSize: 5, minGridSize: 5, maxGridSize: 13 }),
+      responseFrame("dem", buildGeoTiff(offLatticeGranule())),
+    ]),
+  );
+  const tile = asJson(outputs.get("report")).tiles[0];
+  const dtt = decodeDtt(splitStream(outputs.get("records"))[0]);
+  assert.equal(tile.accuracyProbes, PROBE_SOURCE_POSTS, "it walked the source, not the lattice");
+  assert.ok(
     Math.abs(dtt.verticalAccuracyM - PROBE_RELIEF_M) < 1e-3,
-    `worst-post departure ${dtt.verticalAccuracyM} m against ${PROBE_RELIEF_M} m of real relief`,
+    `${PROBE_RELIEF_M} m of relief sits between lattice posts; the record states ` +
+      `${dtt.verticalAccuracyM} m (a lattice-walking probe states 0)`,
   );
 });
 

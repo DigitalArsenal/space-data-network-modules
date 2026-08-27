@@ -1,6 +1,6 @@
 {
-  "//": "THE A/B HALF of regions/liguria-z11.json, kept so the trade in its `// max_grid_size` note is reproducible rather than quoted. Identical in every respect except max_grid_size, which is raised to 361 so the sampled lattice resolves the ~316 GLO-30 posts a z11 tile edge carries. Build it into its own --out and compare the two verify reports.",
-  "out": "tools/terrain-pyramid/out/liguria-lattice361",
+  "//": "THE A/B HALF of regions/liguria-z11.json, kept so the lattice ruling is reproducible rather than quoted. Identical in every respect except max_grid_size, which is held at the OLD 217 \u2014 a lattice that does NOT resolve the ~316 GLO-30 posts a z11 tile edge carries. Build it into its own --out and compare the two verify reports: the accuracy figures are comparable because both are measured at the source posts, so the difference between them is what the LADDER could buy, not what the probe could see.",
+  "out": "tools/terrain-pyramid/out/liguria-lattice217",
   "flow_config": {
     "dataset_id": "copernicus-glo30-quantized-mesh",
     "tileset_id": "spaceaware-terrain",
@@ -9,7 +9,7 @@
     "provider_id": "copernicus",
     "source_name": "copernicus-glo30",
     "grid_size": 65,
-    "max_grid_size": 361,
+    "max_grid_size": 217,
     "min_level": 8,
     "max_level": 13,
     "timeout_ms": 120000,

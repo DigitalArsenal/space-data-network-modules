@@ -401,6 +401,18 @@ async function main() {
     uniformMasks: 0,
     rasterMasks: 0,
     tileBytes: [],
+    // ── WHAT THE SOURCE ACTUALLY CARRIES, PER LEVEL ─────────────────────────
+    //
+    // The encoder reports `sourcePostsPerTileEdge` on every block frame, and
+    // the escalation that asked the coordinator to rule 217 vs 361 turned on
+    // exactly this ratio — yet the runner dropped the field before writing the
+    // summary, so the number the ruling depended on appeared in NO committed
+    // run report, only in a `//` comment in a region file. It is carried now
+    // (coordinator resolution 2026-08-27 (7)), with the lattice the ladder was
+    // allowed to climb to beside it, because "316 source posts" only means
+    // something next to "a 361-post lattice".
+    sourcePostsPerTileEdgeByLevel: {},
+    latticeMaxGridSize: 0,
     // ── THE ENCODER'S OWN COUNTERS, CARRIED OUT OF THE RUN ──────────────────
     //
     // The `tile` node emits these per block and the flow lands them on egress,
@@ -727,6 +739,12 @@ async function main() {
         stats.edgeClampedPosts += value.edgeClampedPosts ?? 0;
         stats.bandBridgedPosts += value.bandBridgedPosts ?? 0;
         stats.tilesAtCeiling += value.tilesAtCeiling ?? 0;
+        if (Number.isFinite(value.sourcePostsPerTileEdge) && value.sourcePostsPerTileEdge > 0) {
+          stats.sourcePostsPerTileEdgeByLevel[value.level] = +value.sourcePostsPerTileEdge.toFixed(1);
+        }
+        if (Number.isFinite(value.maxGridSize)) {
+          stats.latticeMaxGridSize = Math.max(stats.latticeMaxGridSize, value.maxGridSize);
+        }
         for (const tile of value.tiles ?? []) {
           stats.maskFromAbsenceSamples += tile.maskFromAbsenceSamples ?? 0;
           stats.maskUnclassifiedSamples += tile.maskUnclassifiedSamples ?? 0;
@@ -878,6 +896,14 @@ async function main() {
     uniformMasks: stats.uniformMasks,
     rasterMasks: stats.rasterMasks,
     uniformMaskRatio: stats.tiles ? +(stats.uniformMasks / stats.tiles).toFixed(4) : 0,
+    // The two numbers that say what the accuracy figures in this store are a
+    // statement ABOUT: how many source posts a tile edge carries at each level
+    // built, and the densest lattice the density ladder could climb to. The
+    // record's VERTICAL_ACCURACY_M is measured at the SOURCE POSTS whatever
+    // these say (coordinator resolution 1), so they no longer bound what the
+    // measurement can SEE — they bound what the ladder can BUY.
+    sourcePostsPerTileEdgeByLevel: stats.sourcePostsPerTileEdgeByLevel,
+    latticeMaxGridSize: stats.latticeMaxGridSize,
     // What the ENCODER said about its own work, carried out of the run so a
     // gate can read it. verify.mjs re-derives tilesAtCeiling from the records
     // independently and refuses a pyramid with any clamped post at all.

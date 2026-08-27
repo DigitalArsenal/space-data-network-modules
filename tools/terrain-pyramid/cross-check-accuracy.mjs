@@ -11,12 +11,21 @@
 // This joins the two things in the store that were produced by DIFFERENT
 // measurements of the same tile:
 //
-//   * the record's stated VERTICAL_ACCURACY_M — the shipped mesh against the
-//     lattice the plan sampled, taken during encoding;
+//   * the record's stated VERTICAL_ACCURACY_M — the shipped mesh against every
+//     SOURCE POST inside the tile, taken during encoding (coordinator
+//     resolution 2026-08-27 (1));
 //   * measure-accuracy.mjs's maxErrorM — the same shipped mesh against a
-//     level+2 re-sample of the source (257 posts across the parent's edge),
-//     taken afterwards, from the record bytes, through a separate decoder and
-//     a separate triangulation evaluator.
+//     level+2 re-sample of the source, taken afterwards, from the record bytes,
+//     through a separate decoder and a separate triangulation evaluator.
+//
+// WHAT THIS IS NOT, stated here and in the report it writes, because the
+// headline number is what a reviewer reads. It is a SAMPLE — the highest-relief
+// tiles per level plus one flat control, not the store — so its worst ratio is
+// a sample maximum and never a bound on the field. And it is only a second
+// opinion at all on levels where measure-accuracy.mjs's reference actually
+// RESOLVES the 1-arcsecond source; the levels where it is coarser (z9 and
+// shallower, where a child tile spans hundreds of arcseconds) are reported and
+// excluded from the verdict rather than averaged in.
 //
 // They are not independent of the DECODER (both read the source through the
 // same module) and this cannot see a decode, georeference or clamp error — the
@@ -88,45 +97,76 @@ for (const level of report.levels) {
       level: level.level,
       address: tile.address,
       role: tile.role,
-      // The reference over-resolves the source at the deepest levels, which the
-      // harness flags; those rows are reported and excluded from the verdict.
+      // Both directions in which the reference stops being a reference. Rows
+      // carrying either flag are reported and excluded from the verdict.
       referenceOutResolvesSource: level.referenceOutResolvesSource,
+      referenceUnderResolvesSource: level.referenceUnderResolvesSource,
+      referencePostsPerTileEdge: level.referencePostsPerTileEdge,
+      sourcePostsPerTileEdge: level.sourcePostsPerTileEdge,
       recordM: +record.toFixed(3),
       referenceM: tile.maxErrorM,
       ratio: +(tile.maxErrorM / Math.max(record, 1e-9)).toFixed(3),
     });
   }
 }
-const judged = rows.filter((r) => !r.referenceOutResolvesSource);
+const judged = rows.filter(
+  (r) => !r.referenceOutResolvesSource && !r.referenceUnderResolvesSource,
+);
 const worst = judged.reduce((a, b) => (b.ratio > (a?.ratio ?? 0) ? b : a), null);
 const summary = {
   outDir,
-  referencePostsPerTileEdge: report.referencePostsPerTileEdge,
+  recordAccuracyBasis: "source-posts",
+  referencePostsPerTileEdgeByLevel: report.referencePostsPerTileEdgeByLevel ?? null,
+  sourcePostsPerTileEdgeByLevel: report.sourcePostsPerTileEdgeByLevel ?? null,
+  tilesInStore: rows.length,
   tilesCompared: judged.length,
+  levelsExcluded: [...new Set(rows.filter((r) => !judged.includes(r)).map((r) => r.level))].sort(
+    (a, b) => a - b,
+  ),
   tilesWhereReferenceExceedsRecordBy5Percent: judged.filter((r) => r.ratio > 1.05).length,
+  // NAMED so it cannot be read as a bound. It is the largest ratio among the
+  // judged SAMPLE, and the sample is the highest-relief tiles per level plus a
+  // flat control.
+  worstRatioInSample: worst?.ratio ?? 0,
   worstRatio: worst?.ratio ?? 0,
   worstAt: worst?.address ?? null,
+  limits: [
+    "SAMPLE, NOT A BOUND: the tiles compared are measure-accuracy.mjs's highest-relief selection per level plus one flat control, so worstRatioInSample is the largest ratio observed on that sample and says nothing about the tiles outside it",
+    "levels listed in levelsExcluded have a reference that does not resolve the 1-arcsecond source (too coarse) or over-resolves it (too fine); their rows are reported and not judged",
+    "NOT INDEPENDENT OF THE DECODER: both sides read the source through the same module.wasm, so this cannot see a decode, georeference or clamp error — verify.mjs's shared-edge, missing-row, digest and clamp-counter checks are the structural evidence for those",
+    "the record's own figure is measured at every source post inside the tile, so a ratio at or below 1.0 is the expected result and a ratio above 1.0 is the finding",
+  ],
   rows,
 };
 
 if (args.json) {
   console.log(JSON.stringify(summary, null, 2));
 } else {
-  console.log(`reference = level+2 (${report.referencePostsPerTileEdge} posts per tile edge)\n`);
+  console.log(
+    `reference posts per tile edge by level ${JSON.stringify(summary.referencePostsPerTileEdgeByLevel)}\n`,
+  );
   console.log("address           record m   reference m   ratio  role");
   for (const r of rows) {
     console.log(
       `${r.address.padEnd(16)} ${r.recordM.toFixed(3).padStart(9)} ${r.referenceM
         .toFixed(3)
         .padStart(13)} ${r.ratio.toFixed(3).padStart(7)}  ${r.role}` +
-        (r.referenceOutResolvesSource ? "  [reference out-resolves the source; not judged]" : ""),
+        (r.referenceOutResolvesSource
+          ? "  [reference out-resolves the source; not judged]"
+          : r.referenceUnderResolvesSource
+            ? "  [reference under-resolves the source; not judged]"
+            : ""),
     );
   }
   console.log(
     `\n${summary.tilesWhereReferenceExceedsRecordBy5Percent}/${summary.tilesCompared} judged tiles ` +
-      `where the reference exceeds the record's own figure by more than 5%; worst ratio ` +
-      `${summary.worstRatio} at ${summary.worstAt}`,
+      `where the reference exceeds the record's own figure by more than 5%; worst ratio IN THIS ` +
+      `SAMPLE ${summary.worstRatioInSample} at ${summary.worstAt}` +
+      (summary.levelsExcluded.length
+        ? ` (levels ${summary.levelsExcluded.join(", ")} not judged: the reference does not resolve the source there)`
+        : ""),
   );
+  for (const limit of summary.limits) console.log(`  limit: ${limit}`);
 }
 fs.writeFileSync(
   path.join(outDir, "cross-check-report.json"),

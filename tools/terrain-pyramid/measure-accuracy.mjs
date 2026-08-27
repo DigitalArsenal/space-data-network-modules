@@ -59,8 +59,54 @@ const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(REPO, "data-source", "terrain-source", "plugin-manifest.json"), "utf8"),
 );
 const GRANULE_BASE = "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/";
-const REFERENCE_DEPTH = 2; // levels below the tile under test
-const GRID = 65;
+// THE REFERENCE'S DEPTH IS ALSO PER LEVEL. A fixed level+2 forces the whole
+// reference lattice into ONE tile's worth of posts, and at the shallow levels
+// that lattice cannot encode under the 32 KiB ceiling at all. Going one level
+// deeper divides the same ground into 64 tiles instead of 16, so each carries a
+// quarter of the posts along its edge and the same source spacing fits. Capped
+// at 3: z9 would need 4 and z8 would need 5, i.e. 1,024 child encodes per
+// reference tile, which is not worth it for a level the ruling does not gate.
+const MAX_REFERENCE_DEPTH = 3;
+function referenceDepthFor(level) {
+  return Math.min(MAX_REFERENCE_DEPTH, Math.max(2, 13 - level));
+}
+const GRID = 65; // the reference's lattice when nothing else decides it
+
+// ── THE REFERENCE IS SIZED TO THE SOURCE, NOT TO A ROUND NUMBER ────────────
+//
+// A fixed 65 made the reference (GRID-1)*4 + 1 = 257 posts across the parent's
+// edge at EVERY level, which is a different instrument at every level: at z13
+// it out-resolved the dataset three times over and reported its own bilinear
+// ringing as terrain error, and at z11 (316 source posts per tile edge) and z10
+// (633) it UNDER-resolved the source and could not see the relief it was being
+// asked to bound. The headline "worst ratio 1.122" from such a reference is a
+// sample observation about smooth ground, not a bound on anything.
+//
+// So the reference lattice is chosen per level to land as close to the source's
+// own post spacing as the module's gridSize range allows: Copernicus GLO-30
+// publishes 1 arcsecond of latitude everywhere, so a child tile at level+2
+// carries 648000/2^(level+2) source posts along its edge and the reference
+// wants one lattice post each. Where that number is outside [5, 255] — z9 and
+// shallower, where a child tile is hundreds of arcseconds across — the
+// reference cannot be built at all and the level is marked UNDER-RESOLVED
+// rather than judged.
+const SOURCE_POSTS_PER_DEGREE = 3600;
+function referenceGridFor(level) {
+  const postsPerChildEdge =
+    (180 / 2 ** (level + referenceDepthFor(level))) * SOURCE_POSTS_PER_DEGREE;
+  return Math.min(255, Math.max(5, Math.ceil(postsPerChildEdge) + 1));
+}
+
+// …AND THE ENCODER'S 32 KiB CEILING IS HARD, INCLUDING FOR A REFERENCE. At the
+// shallow levels the lattice the source would need is denser than a single tile
+// can encode under the cap (measured: 10/1068/772 at 255 posts is refused with
+// `tile-size-ceiling-exceeded`), and the ceiling is a ship rule with no bypass —
+// correctly, since a bypass is exactly the kind of knob that ends up set in
+// production. So the reference walks DOWN this ladder until a tile encodes, and
+// the grid it actually reached is what the level's resolve/under-resolve flags
+// are computed from. A level that had to fall back is reported and not judged,
+// which is the honest outcome rather than a crash or a silent coarsening.
+const REFERENCE_GRID_LADDER = Object.freeze([193, 161, 129, 97, 65, 49, 33]);
 
 const args = { perLevel: 6, json: false };
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -246,7 +292,18 @@ function granulesFor(tile) {
 const { createBrowserModuleHarness } = await import(path.join(SDK_DIR, "src/testing/index.js"));
 
 async function encodeReference(tile, harness) {
-  const step = 2 ** REFERENCE_DEPTH;
+  const wanted = referenceGridFor(tile.level);
+  const ladder = [wanted, ...REFERENCE_GRID_LADDER.filter((g) => g < wanted)];
+  for (const grid of ladder) {
+    const attempt = await encodeReferenceAt(tile, harness, grid);
+    if (attempt) return { grid, children: attempt };
+  }
+  throw new Error(`no reference lattice encodes under the ceiling for ${tile.level}/${tile.x}/${tile.y}`);
+}
+
+async function encodeReferenceAt(tile, harness, grid) {
+  const depth = referenceDepthFor(tile.level);
+  const step = 2 ** depth;
   const tiles = [];
   for (let dy = 0; dy < step; dy += 1) {
     for (let dx = 0; dx < step; dx += 1) {
@@ -258,8 +315,8 @@ async function encodeReference(tile, harness) {
     inputs: [
       jsonFrame("plan", {
         tilesetId: "measure",
-        level: tile.level + REFERENCE_DEPTH,
-        gridSize: GRID,
+        level: tile.level + depth,
+        gridSize: grid,
         // THE REFERENCE'S LATTICE IS PINNED. Density adapts to relief now
         // (coordinator 2026-08-27 (a)), and a reference that adapts is not a
         // reference: the grandchildren of a gently sloping tile would settle on
@@ -267,12 +324,12 @@ async function encodeReference(tile, harness) {
         // something COARSER than itself. It did, before this line: the first
         // adaptive-density run reported 3,492 m at z11 against a 37 m bound,
         // which is not a terrain error, it is the yardstick bending.
-        minGridSize: GRID,
-        maxGridSize: GRID,
+        minGridSize: grid,
+        maxGridSize: grid,
         // …and the reference does not need to measure ITS own accuracy, which
         // is three extra source probes per cell of a 16-tile block.
         measureAccuracy: false,
-        maxLevel: tile.level + REFERENCE_DEPTH,
+        maxLevel: tile.level + depth,
         scheme: "GEOGRAPHIC_WGS84",
         rowOriginNorth: false,
         skipOceanTiles: false,
@@ -287,7 +344,10 @@ async function encodeReference(tile, harness) {
       ...granulesFor(tile),
     ],
   });
-  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  if (response.statusCode !== 0) {
+    if (response.errorCode === "tile-size-ceiling-exceeded") return null;
+    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  }
   const records = splitStream(response.outputs.find((o) => o.portId === "records").payload);
   return records.map((r) => {
     const child = readDtt(r);
@@ -321,9 +381,11 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
   let levelMax = 0;
   let levelSq = 0;
   let levelN = 0;
+  const referenceGridsUsed = [];
   for (const tile of [...chosen, flat]) {
     const { grid: tileGrid, lattice } = meshLattice(zlib.gunzipSync(tile.payload));
-    const reference = await encodeReference(tile, harness);
+    const { grid: usedGrid, children: reference } = await encodeReference(tile, harness);
+    referenceGridsUsed.push(usedGrid);
     let max = 0;
     let sq = 0;
     let n = 0;
@@ -378,18 +440,43 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
   //
   // Two orders of magnitude apart means one of them is not measuring terrain.
   // It is this one, and the level is marked rather than quietly averaged in.
-  const referenceSpacingDeg = 180 / 2 ** (level + REFERENCE_DEPTH) / (GRID - 1);
+  // The grid the reference ACTUALLY reached on every tile of this level, not
+  // the one it wanted — taken as the minimum so the level's flags describe the
+  // weakest reference any of its rows was measured against.
+  const referenceGrid = referenceGridsUsed.length ? Math.min(...referenceGridsUsed) : referenceGridFor(level);
+  const referenceGridWanted = referenceGridFor(level);
+  const referenceDepth = referenceDepthFor(level);
+  const referenceSpacingDeg = 180 / 2 ** (level + referenceDepth) / (referenceGrid - 1);
   // Copernicus GLO-30 publishes 1 arcsecond of LATITUDE everywhere and widens
   // its longitude spacing by band, so 1/3600 degree is the finest the source
   // ever states and the conservative number to compare against.
   const sourceSpacingDeg = 1 / 3600;
-  const referenceOutResolvesSource = referenceSpacingDeg < sourceSpacingDeg;
+  // MORE THAN TWICE AS FINE as the source is where a reference stops describing
+  // the dataset and starts describing its own interpolation. A reference within
+  // a few percent of the source spacing is exactly what is wanted and must not
+  // be excluded for landing a hair on one side of it — the round-5 tolerance was
+  // 0.1 %, which excluded every level and left the cross-check saying nothing.
+  const referenceOutResolvesSource = referenceSpacingDeg < sourceSpacingDeg / 2;
+  // THE OTHER SIDE OF THE SAME LIMIT, which had no name and no field and was
+  // therefore not stated anywhere. A reference COARSER than the source cannot
+  // see relief between source posts, so its max error is a SAMPLE OBSERVATION
+  // about the ground it happened to look at, never a bound on the record's own
+  // source-post figure. Rows carrying this flag are reported and excluded from
+  // the verdict, exactly like out-resolved ones.
+  const referenceUnderResolvesSource = referenceSpacingDeg > sourceSpacingDeg * 1.02;
   levels.push({
     level,
     // TRUE means the numbers on this row describe the reference's own
     // interpolation, not the shipped mesh. Read the encoder's per-record
     // VERTICAL_ACCURACY_M (and verify.mjs, which gates on it) instead.
     referenceOutResolvesSource,
+    referenceUnderResolvesSource,
+    referenceDepth,
+    referenceGrid,
+    referenceGridWanted,
+    referenceGridFellBackFromCeiling: referenceGrid < referenceGridWanted,
+    referencePostsPerTileEdge: (referenceGrid - 1) * 2 ** referenceDepth + 1,
+    sourcePostsPerTileEdge: +((180 / 2 ** level) * SOURCE_POSTS_PER_DEGREE).toFixed(1),
     referenceSpacingDeg: +referenceSpacingDeg.toExponential(3),
     sourceSpacingDeg: +sourceSpacingDeg.toExponential(3),
     tilesInStore: byLevel.get(level).length,
@@ -409,36 +496,66 @@ harness.destroy();
 
 const summary = {
   outDir,
-  gridSize: GRID,
-  referenceDepth: REFERENCE_DEPTH,
-  referencePostsPerTileEdge: (GRID - 1) * 2 ** REFERENCE_DEPTH + 1,
+  referenceDepthByLevel: Object.fromEntries(levels.map((l) => [l.level, l.referenceDepth])),
+  // Per level now, not one number: see referenceGridFor. Kept as a map so a
+  // reader can see at a glance which levels the reference actually resolves.
+  referenceGridByLevel: Object.fromEntries(levels.map((l) => [l.level, l.referenceGrid])),
+  referencePostsPerTileEdgeByLevel: Object.fromEntries(
+    levels.map((l) => [l.level, l.referencePostsPerTileEdge]),
+  ),
+  sourcePostsPerTileEdgeByLevel: Object.fromEntries(
+    levels.map((l) => [l.level, l.sourcePostsPerTileEdge]),
+  ),
+  // WHAT THIS HARNESS CAN AND CANNOT CONCLUDE, stated in the artefact rather
+  // than in the file's own comments, because the report is what gets read.
+  limits: [
+    "the reference is the ENCODER re-sampling the same granules at level+2, so this cannot see a decode, georeference or clamp error — those are checked structurally in verify.mjs and in the module's granule-seam, band-boundary and water-mask tests",
+    "a level flagged referenceUnderResolvesSource has a reference COARSER than the 1-arcsecond source; its max error is a sample observation, never a bound",
+    "a level flagged referenceOutResolvesSource has a reference FINER than the source, so its 'error' includes the reference's own interpolation",
+    "tiles are the highest-relief ones per level plus one flat control, not a sample of the store: a max over them is deliberately harsher than the per-tile share gate verify.mjs owns, and is not a distribution",
+  ],
   levels,
   // The verdict is against the RULED target. It is a per-level MAX over the
   // worst-relief tiles, so it is deliberately harsher than verify.mjs's
   // per-tile share gate and is reported rather than used as a ship gate:
   // verify.mjs owns the gate (<= 5 % of tiles at the cap per level at z >= 10).
-  verdict: levels.filter((l) => !l.referenceOutResolvesSource).every((l) => l.maxWithinTarget)
+  verdict: levels
+    .filter((l) => !l.referenceOutResolvesSource && !l.referenceUnderResolvesSource)
+    .every((l) => l.maxWithinTarget)
     ? "WITHIN TARGET"
     : "OVER TARGET",
   legacyVerdict: levels
-    .filter((l) => !l.referenceOutResolvesSource)
+    .filter((l) => !l.referenceOutResolvesSource && !l.referenceUnderResolvesSource)
     .every((l) => l.maxWithinLegacyBound && l.rmseWithinLegacyBound)
     ? "WITHIN THE RETIRED BOUND"
     : "OVER THE RETIRED BOUND",
-  levelsNotMeasurable: levels.filter((l) => l.referenceOutResolvesSource).map((l) => l.level),
+  levelsNotMeasurable: levels
+    .filter((l) => l.referenceOutResolvesSource || l.referenceUnderResolvesSource)
+    .map((l) => l.level),
 };
 fs.writeFileSync(path.join(outDir, "accuracy-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
 if (args.json) {
   console.log(JSON.stringify(summary, null, 2));
 } else {
-  console.log(`gridSize ${GRID}, reference = level+${REFERENCE_DEPTH} (${summary.referencePostsPerTileEdge} posts per tile edge)\n`);
+  console.log(
+    `reference depth per level ${JSON.stringify(summary.referenceDepthByLevel)}, ` +
+      `lattice per level ${JSON.stringify(summary.referenceGridByLevel)}\n`,
+  );
   console.log("level  tiles  target m    max m   rmse m  retired m  verdict");
   for (const l of levels) {
     console.log(
       `${String(l.level).padStart(5)}  ${String(l.tilesMeasured).padStart(5)}  ` +
         `${l.errorTargetM.toFixed(2).padStart(8)}  ${l.maxErrorM.toFixed(2).padStart(7)}  ` +
         `${l.rmseM.toFixed(2).padStart(6)}  ${l.legacyBoundM.toFixed(2).padStart(9)}  ` +
-        `${l.referenceOutResolvesSource ? "n/a — reference out-resolves the source" : l.maxWithinTarget ? "within" : "OVER"}`,
+        `${
+          l.referenceOutResolvesSource
+            ? "n/a — reference out-resolves the source"
+            : l.referenceUnderResolvesSource
+              ? "n/a — reference under-resolves the source"
+              : l.maxWithinTarget
+                ? "within"
+                : "OVER"
+        }`,
     );
   }
   console.log(`\n${summary.verdict} (against the retired pair: ${summary.legacyVerdict})`);

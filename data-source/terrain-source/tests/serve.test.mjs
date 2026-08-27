@@ -622,3 +622,141 @@ test("the module's own record stream framing is what respond consumes (boundary-
   const stream = await storedRecordStream(t);
   assert.equal(splitStream(stream).length, 1, "one record, boundary-exact");
 });
+
+// ── THE ADDRESS THAT WAS ASKED FOR IS THE ADDRESS THAT IS SERVED ───────────
+//
+// respond took the FIRST decodable $DTT frame off the stream and never
+// compared the record's own LEVEL/X/Y with the serve context, which already
+// carries them. Measured on the shipped module against the real regional store,
+// GET /api/v1/terrain/11/2155/1530.terrain answered with 13/8632/6112's record
+// returned 200 with that tile's 6,459 bytes and its strong ETag — publicly
+// cacheable for a day, under the wrong address, so the wrong terrain would
+// stick until the epoch changed.
+//
+// Under correct host operation the sibling query node cannot return a foreign
+// address, which is exactly why this was invisible; it also means the whole
+// address-to-bytes binding rested on that one node. Coordinator resolution
+// 2026-08-27 (3) puts the check where the claim is published.
+test("respond REFUSES to serve a record labelled with another address", async (t) => {
+  const stream = await storedRecordStream(t); // 8/271/192
+  const record = decodeDtt(splitStream(stream)[0]);
+  assert.equal(record.level, 8);
+  assert.equal(record.x, 271);
+  assert.equal(record.y, 192);
+
+  // Same stream, a context asking for a DIFFERENT tile — the shape a
+  // cross-batch ingest or a stale-plan re-cut produces.
+  const response = await invoke(t, "respond", [
+    frame("stream", new Uint8Array(stream)),
+    jsonFrame("context", {
+      tilesetId: "spaceaware-terrain",
+      level: 11,
+      x: 2155,
+      y: 1530,
+      ifNoneMatch: "",
+      insideAvailability: false,
+    }),
+  ]);
+  assert.equal(response.statusCode, 0, "a mislabelled record is not a crash; it is a miss");
+  const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+  assert.equal(http.status, 404, "the other tile's bytes are NOT served under this address");
+  assert.equal(http.body.length > 0, true);
+  const body = JSON.parse(Buffer.from(http.body).toString("utf8"));
+  assert.match(
+    body.detail,
+    /labelled with another address/,
+    `the skip is stated, never silent: ${body.detail}`,
+  );
+
+  // And the control: the SAME stream under its OWN address still serves 200,
+  // so the check refuses foreign records rather than everything.
+  const own = await invoke(t, "respond", [
+    frame("stream", new Uint8Array(stream)),
+    jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 8, x: 271, y: 192, ifNoneMatch: "" }),
+  ]);
+  assert.equal(
+    decodeHttpResponse(new Uint8Array(own.outputs[0].payload)).status,
+    200,
+    "the record's own address is served exactly as before",
+  );
+});
+
+test("a foreign TILESET is refused the same way as a foreign address", async (t) => {
+  const stream = await storedRecordStream(t);
+  const response = await invoke(t, "respond", [
+    frame("stream", new Uint8Array(stream)),
+    jsonFrame("context", {
+      tilesetId: "some-other-tileset",
+      level: 8,
+      x: 271,
+      y: 192,
+      ifNoneMatch: "",
+      insideAvailability: false,
+    }),
+  ]);
+  assert.equal(
+    decodeHttpResponse(new Uint8Array(response.outputs[0].payload)).status,
+    404,
+    "one tileset's tile is not another tileset's tile",
+  );
+});
+
+test("a mislabelled record inside availability SYNTHESIZES rather than serving the wrong tile", async (t) => {
+  // The fail-safe half. Inside declared availability a miss must not reach the
+  // browser as a 404 (Atlas), and a record that disagrees about its own address
+  // is a miss — so the address the client asked for gets the synthesized tile
+  // the tileset promised, never another tile's terrain.
+  const stream = await storedRecordStream(t);
+  const response = await invoke(t, "respond", [
+    frame("stream", new Uint8Array(stream)),
+    jsonFrame("context", {
+      tilesetId: "spaceaware-terrain",
+      level: 11,
+      x: 2155,
+      y: 1530,
+      ifNoneMatch: "",
+      insideAvailability: true,
+      synthWater: false,
+      synthGridSize: 65,
+      acceptsGzip: true,
+    }),
+  ]);
+  const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+  assert.equal(http.status, 200);
+  assert.equal(
+    http.headers.find((h) => h.name === "x-terrain-synthesized")?.value,
+    "uniform-land",
+    "synthesized, and it says so — not the stored tile of another address",
+  );
+});
+
+// ── EVERY JSON RESPONSE CARRIES THE SAME MIME AND CACHE POLICY ─────────────
+//
+// The 404 is the one response whose body reflects client-controlled text (the
+// requested path, bounded and escaped), and it was the one response with no
+// x-content-type-options. Coordinator resolution 2026-08-27 (5).
+test("every JSON error carries nosniff and an explicit cache policy", async (t) => {
+  const cases = [
+    // A 404 from respond with an empty stream…
+    async () =>
+      await invoke(t, "respond", [
+        frame("stream", new Uint8Array(4)),
+        jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 12, x: 0, y: 0, ifNoneMatch: "" }),
+      ]),
+    // …and the reflecting 404s route emits for junk paths, in the spellings
+    // that actually put attacker bytes in the body.
+    async () => await invoke(t, "route", [requestFrame("/api/v1/terrain/<script>alert(1)</script>")]),
+    async () => await invoke(t, "route", [requestFrame("/api/v1/terrain/9/1/1.terrain?v=9.9.9")]),
+    async () => await invoke(t, "route", [requestFrame("/somewhere/else")]),
+  ];
+  for (const run of cases) {
+    const response = await run();
+    assert.equal(response.statusCode, 0);
+    const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+    const headerOf = (n) => http.headers.find((h) => h.name === n)?.value;
+    assert.equal(http.status, 404, "these are all misses");
+    assert.equal(headerOf("content-type"), "application/json");
+    assert.equal(headerOf("x-content-type-options"), "nosniff", "sniffing is forbidden on every one");
+    assert.ok(headerOf("cache-control"), "and the cache policy is stated, never inherited");
+  }
+});

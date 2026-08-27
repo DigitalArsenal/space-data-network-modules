@@ -1497,9 +1497,26 @@ int push_htr(uint16_t status, const std::vector<HeaderEntry>& headers, const uin
     return pushed < 0 ? 500 : 0;
 }
 
+// ── EVERY RESPONSE THIS MODULE EMITS CARRIES THE SAME MIME POLICY ──────────
+//
+// A tile and layer.json both carry x-content-type-options: nosniff; the JSON
+// errors did not, and the 404 is the ONE response whose body REFLECTS
+// client-controlled text (the requested path, bounded to 160 bytes and JSON
+// escaped, but still attacker-chosen bytes). A same-origin response that echoes
+// attacker bytes and declines to forbid MIME sniffing is the exact combination
+// nosniff exists for, and this one is publicly cacheable for 300 s on the
+// origin the console shares. Coordinator resolution 2026-08-27 (5): all JSON
+// error responses carry nosniff AND an explicit cache policy, like tiles.
+//
+// `cache_control` is therefore no longer optional. A response with no cache
+// policy is a response whose caching is decided by whatever sits in front of
+// it, which is not a policy, and every caller already had one to state.
 int push_htr_json(uint16_t status, const std::string& body, const char* cache_control) {
-    std::vector<HeaderEntry> headers = {{"content-type", "application/json"}};
-    if (cache_control) headers.push_back({"cache-control", cache_control});
+    std::vector<HeaderEntry> headers = {
+        {"content-type", "application/json"},
+        {"x-content-type-options", "nosniff"},
+        {"cache-control", cache_control && *cache_control ? cache_control : "no-store"},
+    };
     return push_htr(status, headers,
                     reinterpret_cast<const uint8_t*>(body.data()), body.size());
 }
@@ -1990,131 +2007,143 @@ void encode_quantized_mesh(const TileJob& job, uint32_t grid, const TileExtent& 
     }
 }
 
-// ── THE TILE MEASURES ITS OWN VERTICAL ACCURACY ────────────────────────────
+// ── THE TILE MEASURES ITS OWN VERTICAL ACCURACY, AT THE SOURCE POSTS ───────
 //
-// $DTT.VERTICAL_ACCURACY_M used to be unset, i.e. 0, on every record —
-// "unstated" in a record that otherwise describes itself completely, and the
-// one field a consumer would read to reason about exactly the quantity the
-// pyramid is judged on. It is MEASURED, here, against the same source raster
-// the vertices came from.
+// $DTT.VERTICAL_ACCURACY_M is the one field a consumer reads to reason about
+// exactly the quantity the pyramid is judged on, and the SAME number selects
+// the density ladder. So where the probe looks is the whole measurement, and
+// this lane has now got it wrong twice in two different ways:
 //
-// WHERE THE PROBE GOES IS THE WHOLE MEASUREMENT, AND THE FIRST CUT GOT IT
-// WRONG. It evaluated three positions per cell at du == dv == {0.5, 1/3, 2/3}
-// — all three ON THE SPLIT DIAGONAL — while its own comment claimed "the
-// centre and both triangle centroids". The real centroids are (2/3, 1/3) and
-// (1/3, 2/3) and were never evaluated, so the interior of both triangles was
-// never looked at, on either side of the diagonal. That is not a small
-// understatement: re-measured against the source over this lane's whole
-// regional store, the collinear pattern stated 4.496 m on a tile whose true
-// worst departure is 290.5 m. And because the SAME function selects the
-// density ladder AND writes the field, a blind probe stopped the climb early
-// and then stated the resulting error as small — the ladder shipped 5x5
-// meshes over coastal relief and the record said they were fine.
+//   1. THREE COLLINEAR POSITIONS PER CELL (du == dv == {1/2, 1/3, 2/3}) — all
+//      of them on the split diagonal, while the comment claimed "the centre and
+//      both triangle centroids". The interior of both triangles was never
+//      looked at. Re-measured against the source, that pattern stated 4.496 m
+//      on a tile whose true worst departure is 290.5 m.
 //
-// SO THE PROBE IS NO LONGER A FIXED THREE POSITIONS. The density search
-// samples the finest post lattice the plan admits ONCE (`sample_grid`), and
-// every candidate mesh is an exact SUBSET of those posts. Every lattice post
-// the candidate does NOT carry is therefore a source measurement sitting
-// strictly inside one of its cells, already in memory, with its own
-// absent/no-data provenance — and it is exactly the "worst-post vertical
-// error" the coordinator's target names. The probe walks those:
+//   2. THE ENCODER'S OWN RESAMPLED LATTICE AS THE TRUTH. The fix for (1) walked
+//      every post of the finest lattice the plan sampled (`maxGridSize`) —
+//      honest about the mesh against THAT lattice, and silently optimistic
+//      about the dataset, because a lattice coarser than the source cannot see
+//      relief finer than its own spacing. At z10 a tile edge carries 633
+//      GLO-30 posts against a 217-post lattice (2.9x under-resolved) and at z11
+//      316 against 217 (1.5x); measured over the whole regional store, that
+//      understated VERTICAL_ACCURACY_M by more than 5% on 48.9% of z10 tiles
+//      and 43.4% of z11 tiles, worst 1.56x — and, because the ladder reads the
+//      same number, it stopped the climb on tiles with bytes still to spare.
 //
-//   * the probe count scales with CELL SIZE by construction — a 5-post
-//     candidate cut from a 217-post lattice is probed at 46,864 positions per
-//     tile, not 48, and its 54x54 posts per cell cover both triangles;
-//   * for any stride >= 3 the set CONTAINS both real centroids exactly
-//     ((1/3, 2/3) and (2/3, 1/3) are lattice positions), so the failure above
-//     cannot recur;
-//   * it costs no source sampling at all: the truth values were read when the
-//     lattice was sampled, so the honest measurement is CHEAPER than the blind
-//     one it replaces.
+// COORDINATOR RESOLUTION 2026-08-27 (1) SETTLES IT: accuracy is measured at the
+// SOURCE POSTS — every post the granule set carries inside the tile bounds,
+// with the MESH interpolated at the post — never against a resample of the
+// source and never against a reference that does not resolve it. That is what
+// this does. It is not an approximation of the source; the values are the
+// granule's own float32 samples, read straight out of the decoded window at
+// their own indices, so there is no interpolation on the truth side at all.
 //
-// When stride == 1 the mesh carries every post the plan sampled and the
-// lattice can say nothing about the space between them. Only then does the
-// probe go back to the source, at the CENTRE and BOTH REAL CENTROIDS — the
-// positions the original comment described. What that residual measures is the
-// plan's own `maxGridSize` against the dataset's post spacing, not the ladder,
-// and it is the reason a run states both numbers in its report.
+// It is also CHEAPER than it sounds, for two reasons:
+//   * nothing is sampled. The posts are already resident (the decode window is
+//     the tile's own extent), so the walk is a strided read of a float array
+//     plus ~10 flops per post;
+//   * a candidate that has ALREADY missed the target does not need its exact
+//     error, only the fact that it missed. `abort_above` stops the walk at the
+//     first post past the target, which is what the ladder asks 90% of the
+//     time. The tile that SHIPS is always measured by a COMPLETE walk — the
+//     ladder re-runs the chosen candidate with the abort off when it settled at
+//     the cap — so no record ever states a number that stopped early.
 //
-// Probes over absent or no-data source are EXCLUDED: comparing against a
-// substituted 0 would report the substitution, not the mesh.
-//
-// It is a free function because the density search calls it once per candidate
-// — the number that selects the mesh and the number the record states are the
-// same measurement, taken by the same code, and cannot drift apart.
-double measure_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
-                             uint32_t sample_grid, const std::vector<double>& lattice,
-                             const std::vector<uint8_t>& post_absent,
-                             const std::vector<uint8_t>& post_nodata, uint32_t cand,
-                             bool enabled, uint64_t* probes_out) {
-    if (probes_out) *probes_out = 0;
-    if (!enabled || cand < 2 || sample_grid < 2) return 0.0;
-    if ((sample_grid - 1) % (cand - 1) != 0) return 0.0;  // not a subset; nothing to compare
-    const uint32_t stride = (sample_grid - 1) / (cand - 1);
+// Posts the source marks NO-DATA are skipped: comparing against a substituted
+// 0 would report the substitution, not the mesh. Posts no granule covers are
+// never enumerated, so an absent neighbour cannot inflate or deflate the
+// figure; `coverageFraction` is where that shows up. Where two granules of the
+// fetched set both hold a post it is walked twice, which a maximum does not
+// care about and which the probe count reflects honestly.
+struct SourcePostProbe {
     double worst = 0.0;
     uint64_t probes = 0;
+    // False only when `abort_above` stopped the walk. A record's stated
+    // accuracy is never taken from an incomplete walk.
+    bool complete = true;
+};
 
-    // The candidate's own posts, read straight out of the lattice at stride.
-    const auto vert = [&](uint32_t ci, uint32_t cj) -> double {
-        return lattice[static_cast<size_t>(cj) * stride * sample_grid +
-                       static_cast<size_t>(ci) * stride];
-    };
-    // The encoder's own triangulation: (bl, br, tr) below the diagonal,
-    // (bl, tr, tl) above it. Kept in ONE place so the surface this measures is
-    // the surface encode_quantized_mesh renders.
-    const auto rendered_at = [&](uint32_t ci, uint32_t cj, double du, double dv) -> double {
-        const double h_bl = vert(ci, cj), h_br = vert(ci + 1, cj);
-        const double h_tl = vert(ci, cj + 1), h_tr = vert(ci + 1, cj + 1);
-        return dv <= du ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
-                        : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
-    };
+SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
+                                      uint32_t cand, const std::vector<double>& cand_heights,
+                                      bool enabled, double abort_above) {
+    SourcePostProbe out;
+    if (!enabled || cand < 2 || cand_heights.size() < static_cast<size_t>(cand) * cand) return out;
 
-    if (stride > 1) {
-        for (uint32_t J = 0; J < sample_grid; J++) {
-            const uint32_t cj = J / stride == cand - 1 ? cand - 2 : J / stride;
-            const double dv = static_cast<double>(J - cj * stride) / stride;
-            for (uint32_t I = 0; I < sample_grid; I++) {
-                if (J % stride == 0 && I % stride == 0) continue;  // a vertex: exact by construction
-                const size_t v = static_cast<size_t>(J) * sample_grid + I;
-                if (post_absent[v] || post_nodata[v]) continue;
-                const uint32_t ci = I / stride == cand - 1 ? cand - 2 : I / stride;
-                const double du = static_cast<double>(I - ci * stride) / stride;
-                const double delta = std::fabs(rendered_at(ci, cj, du, dv) - lattice[v]);
-                if (delta > worst) worst = delta;
-                probes++;
-            }
-        }
-        if (probes_out) *probes_out = probes;
-        return worst;
-    }
+    // The tile's own bounds, from the SAME global lattice the vertices were cut
+    // from, so a post exactly on a vertex evaluates to that vertex.
+    const double west = lattice_lon(job.level, job.x, 0, cand);
+    const double east = lattice_lon(job.level, job.x, cand - 1, cand);
+    const double south = lattice_lat(job.level, job.y, 0, cand);
+    const double north = lattice_lat(job.level, job.y, cand - 1, cand);
+    if (!(east > west) || !(north > south)) return out;
+    const double span = static_cast<double>(cand - 1);
+    const double u_per_deg = span / (east - west);
+    const double v_per_deg = span / (north - south);
 
-    // stride == 1: the mesh IS the sampled lattice. The only thing left to
-    // measure is the source BETWEEN its posts — centre and both real centroids.
-    static const double kProbeU[3] = {0.5, 2.0 / 3.0, 1.0 / 3.0};
-    static const double kProbeV[3] = {0.5, 1.0 / 3.0, 2.0 / 3.0};
-    std::vector<double> lat_of(cand), lon_of(cand);
-    for (uint32_t j = 0; j < cand; j++) lat_of[j] = lattice_lat(job.level, job.y, j, cand);
-    for (uint32_t i = 0; i < cand; i++) lon_of[i] = lattice_lon(job.level, job.x, i, cand);
-    for (uint32_t j = 0; j + 1 < cand; j++) {
-        for (uint32_t i = 0; i + 1 < cand; i++) {
-            for (int p = 0; p < 3; p++) {
-                const double du = kProbeU[p], dv = kProbeV[p];
-                const double lon = lon_of[i] + du * (lon_of[i + 1] - lon_of[i]);
-                const double lat = lat_of[j] + dv * (lat_of[j + 1] - lat_of[j]);
-                double truth = 0.0;
-                bool probe_nodata = false, probe_clamped = false;
-                if (!sample_dem(granules, lon, lat, &truth, &probe_nodata, &probe_clamped) ||
-                    probe_nodata) {
-                    continue;
+    for (const DemGrid& g : granules) {
+        if (!g.covers || g.samples.empty() || g.is_mask) continue;
+        if (!(g.scale_lon > 0) || !(g.scale_lat > 0)) continue;
+        // Which of THIS window's post indices lie inside the tile. Computed in
+        // full-granule coordinates and then shifted by the window's integer
+        // offset, exactly as full_ix/full_iy do, so the post this resolves to is
+        // the post sample_dem would have resolved.
+        const double ix_lo = full_ix(g, west) - static_cast<double>(g.off_x);
+        const double ix_hi = full_ix(g, east) - static_cast<double>(g.off_x);
+        const double iy_lo = full_iy(g, north) - static_cast<double>(g.off_y);
+        const double iy_hi = full_iy(g, south) - static_cast<double>(g.off_y);
+        long x0 = static_cast<long>(std::ceil(ix_lo - 1e-9));
+        long x1 = static_cast<long>(std::floor(ix_hi + 1e-9));
+        long y0 = static_cast<long>(std::ceil(iy_lo - 1e-9));
+        long y1 = static_cast<long>(std::floor(iy_hi + 1e-9));
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 > static_cast<long>(g.width) - 1) x1 = static_cast<long>(g.width) - 1;
+        if (y1 > static_cast<long>(g.height) - 1) y1 = static_cast<long>(g.height) - 1;
+
+        for (long iy = y0; iy <= y1; iy++) {
+            const double lat = full_lat(g, static_cast<double>(g.off_y + iy));
+            double vv = (lat - south) * v_per_deg;
+            if (vv < 0) vv = 0;
+            if (vv > span) vv = span;
+            uint32_t cj = static_cast<uint32_t>(vv);
+            if (cj > cand - 2) cj = cand - 2;
+            const double dv = vv - static_cast<double>(cj);
+            const double* row_lo = &cand_heights[static_cast<size_t>(cj) * cand];
+            const double* row_hi = row_lo + cand;
+            const float* src = &g.samples[static_cast<size_t>(iy) * g.width];
+            for (long ix = x0; ix <= x1; ix++) {
+                const float truth = src[ix];
+                if (truth == kNoData) continue;
+                const double lon = full_lon(g, static_cast<double>(g.off_x + ix));
+                double uu = (lon - west) * u_per_deg;
+                if (uu < 0) uu = 0;
+                if (uu > span) uu = span;
+                uint32_t ci = static_cast<uint32_t>(uu);
+                if (ci > cand - 2) ci = cand - 2;
+                const double du = uu - static_cast<double>(ci);
+                // The encoder's own triangulation: (bl, br, tr) below the split
+                // diagonal, (bl, tr, tl) above it — the surface
+                // encode_quantized_mesh renders, kept in one place so the
+                // measurement and the mesh cannot drift apart.
+                const double h_bl = row_lo[ci], h_br = row_lo[ci + 1];
+                const double h_tl = row_hi[ci], h_tr = row_hi[ci + 1];
+                const double rendered = dv <= du
+                                            ? h_bl + du * (h_br - h_bl) + dv * (h_tr - h_br)
+                                            : h_bl + dv * (h_tl - h_bl) + du * (h_tr - h_tl);
+                const double delta = std::fabs(rendered - static_cast<double>(truth));
+                out.probes++;
+                if (delta > out.worst) {
+                    out.worst = delta;
+                    if (abort_above > 0 && out.worst > abort_above) {
+                        out.complete = false;
+                        return out;
+                    }
                 }
-                const double delta = std::fabs(rendered_at(i, j, du, dv) - truth);
-                if (delta > worst) worst = delta;
-                probes++;
             }
         }
     }
-    if (probes_out) *probes_out = probes;
-    return worst;
+    return out;
 }
 
 // ── the availability index, read the way the client reads it ───────────────
@@ -2448,7 +2477,9 @@ int tile(void) {
     // by (see the measure_accuracy branch below), resolved to the nearest
     // candidate at or below it.
     // The self-measurement is on by default and can be turned off for a run
-    // that only wants bytes; it costs three extra source probes per grid cell.
+    // that only wants bytes; it costs one strided pass over the tile's own
+    // resident source posts per candidate the ladder tries (and it is what
+    // chooses the density, so a run with it off ships the plan's gridSize).
     // READ AS A BOOLEAN, because that is what callers write. json_number
     // refuses anything that does not start with a digit or '-', so
     // `"measureAccuracy": false` fell through to the fallback and the flag
@@ -2589,13 +2620,13 @@ int tile(void) {
     // the dataset.
     double source_post_spacing = 0.0;
     // HOW MANY SOURCE POSTS LIE ALONG ONE TILE EDGE, which is the number that
-    // says whether `maxGridSize` resolves the dataset or smooths it. The
-    // accuracy probe measures the mesh against the sampled lattice, so a
-    // lattice COARSER than the source cannot see relief finer than its own
-    // spacing — honest about what it measured, and silently optimistic about
-    // the source, unless the ratio is stated. It is stated. (At z11 with
-    // GLO-30's 1" posts a tile edge carries ~316 of them: a maxGridSize of 217
-    // under-resolves by 1.5x, 361 covers it.)
+    // says whether `maxGridSize` resolves the dataset or smooths it. It no
+    // longer decides what the ACCURACY figure means — that is measured at the
+    // source posts themselves (see measure_mesh_accuracy) whatever the lattice
+    // does — but it still decides what the density ladder is ABLE to offer, so
+    // it is reported on every block frame and carried into every run report.
+    // (At z11 with GLO-30's 1" posts a tile edge carries ~316 of them: a
+    // maxGridSize of 217 under-resolves by 1.5x, 361 covers it.)
     double source_posts_per_tile_edge = 0.0;
     for (const DemGrid& g : granules) {
         if (g.scale_lat > 0) {
@@ -2945,15 +2976,17 @@ int tile(void) {
                 at_ceiling = false;
                 break;
             }
-            // Measured against the FINEST lattice the plan sampled, not against
-            // the candidate's own posts: every post this candidate dropped is a
-            // source measurement inside one of its cells, and that is exactly
-            // the worst-post error the target names.
-            const double achieved = measure_mesh_accuracy(
-                granules, job, sample_grid, heights, post_absent, post_nodata, cand,
-                measure_accuracy, &stats.accuracy_probes);
-            stats.vertical_accuracy_m = achieved;
-            if (achieved <= error_target_m) { at_ceiling = false; break; }
+            // MEASURED AT THE SOURCE POSTS (coordinator resolution 1), not
+            // against the encoder's own resample of them. `error_target_m` is
+            // passed as the abort threshold: a candidate that has already
+            // missed does not need its exact error, only the fact that it
+            // missed, and the tile that ships is re-measured with the abort off
+            // below.
+            const SourcePostProbe probe = measure_mesh_accuracy(
+                granules, job, cand, chosen_heights, measure_accuracy, error_target_m);
+            stats.vertical_accuracy_m = probe.worst;
+            stats.accuracy_probes = probe.probes;
+            if (probe.complete && probe.worst <= error_target_m) { at_ceiling = false; break; }
             // Provisional: a denser candidate may still clear the target. If
             // none does, `at_ceiling` is the tile stating that it is as
             // accurate as it was ALLOWED to be — by the byte cap or by the
@@ -2977,6 +3010,18 @@ int tile(void) {
                           static_cast<unsigned long long>(kTileGzipCeilingBytes), ladder[0]);
             plugin_set_error("tile-size-ceiling-exceeded", message);
             return 413;
+        }
+        // THE NUMBER THE RECORD STATES IS ALWAYS A COMPLETE WALK. Every
+        // candidate the ladder rejected was measured with the abort on, so the
+        // last figure in `stats` may be the moment the walk gave up rather than
+        // the tile's worst post. A tile that settled AT THE CAP is exactly that
+        // case — it is the one whose stated accuracy a consumer most needs to
+        // trust — so it is re-measured over every source post, once.
+        if (measure_accuracy && at_ceiling) {
+            const SourcePostProbe settled =
+                measure_mesh_accuracy(granules, job, chosen_grid, chosen_heights, true, 0.0);
+            stats.vertical_accuracy_m = settled.worst;
+            stats.accuracy_probes = settled.probes;
         }
         stats.grid = chosen_grid;
         stats.error_target_m = error_target_m;
@@ -3110,8 +3155,10 @@ int tile(void) {
         if (source_post_spacing > 0) db.add_SOURCE_POST_SPACING_M(source_post_spacing);
         db.add_VERTICAL_DATUM(dttVerticalDatum_GEOID);
         db.add_VERTICAL_DATUM_NAME(f_datum_name);
-        // Measured, not asserted: the mesh's own worst departure from the
-        // source between posts. Stated only when it was actually measured.
+        // Measured, not asserted, and measured AT THE SOURCE POSTS: the
+        // largest |mesh - source| over every post the granule set carries
+        // inside this tile (coordinator resolution 2026-08-27 (1)). Stated
+        // only when the walk actually ran, and only from a COMPLETE walk.
         if (stats.accuracy_probes > 0) {
             db.add_VERTICAL_ACCURACY_M(stats.vertical_accuracy_m);
             db.add_ACCURACY_CONFIDENCE(1.0);
@@ -3622,10 +3669,41 @@ int respond(void) {
     // does: zero-length prefixes are alignment padding; frames verify with
     // the size-prefixed accessors first (the store's wire contract counts the
     // 4-byte prefix in internal alignment), plain-anchored as the fallback.
+    // ── THE RECORD MUST BE THE RECORD THAT WAS ASKED FOR ────────────────────
+    //
+    // respond used to serve the FIRST decodable $DTT frame the stream handed
+    // it, without ever comparing the record's own LEVEL/X/Y to the address in
+    // the serve context. Measured on the shipped module and the real store:
+    // GET /api/v1/terrain/11/2155/1530.terrain answered with 13/8632/6112's
+    // record returned 200 with that tile's bytes and its strong ETag, cached
+    // publicly for a day under the wrong address.
+    //
+    // Under correct host operation route() builds the query with typed params
+    // from a parser that admits nothing but canonical decimals, so the sibling
+    // query node cannot return a foreign address — which is exactly why this
+    // was invisible. But the binding from an address to its bytes then rests
+    // ENTIRELY on that one node, and any record that reaches the store
+    // mislabelled (a cross-batch ingest, a re-cut published under a stale plan,
+    // a partial replay) is served as the canonical tile for an address it is
+    // not. Two integer comparisons close it, so they are made here, on the
+    // response side, where the claim is actually published. Coordinator
+    // resolution 2026-08-27 (3).
+    //
+    // A mismatch is SKIPPED, not fatal: the stream may legitimately carry more
+    // than one frame, and skipping falls through to the same
+    // synthesize-or-404 path an empty stream takes, which is the fail-safe
+    // answer. It is counted so it cannot be silent.
+    const double want_level = json_number(context, "level", -1);
+    const double want_x = json_number(context, "x", -1);
+    const double want_y = json_number(context, "y", -1);
+    const std::string want_tileset = json_string(context, "tilesetId", "");
+    const bool address_known = want_level >= 0 && want_x >= 0 && want_y >= 0;
+
     const uint8_t* data = frame->payload;
     const size_t length = data ? static_cast<size_t>(frame->payload_length) : 0u;
     std::vector<uint8_t> scratch;
     const DTT* record = nullptr;
+    uint32_t address_mismatches = 0;
     size_t offset = 0;
     while (offset < length && !record) {
         if (length - offset < 4) {
@@ -3646,23 +3724,41 @@ int respond(void) {
         }
         scratch.assign(data + offset - 4, data + offset + frame_size);
         offset += frame_size;
+        const DTT* candidate = nullptr;
         if (frame_size >= 8) {
             ::flatbuffers::Verifier prefixed(scratch.data(), scratch.size());
             if (VerifySizePrefixedDTTBuffer(prefixed)) {
-                record = GetSizePrefixedDTT(scratch.data());
+                candidate = GetSizePrefixedDTT(scratch.data());
             } else {
                 scratch.erase(scratch.begin(), scratch.begin() + 4);
                 ::flatbuffers::Verifier plain(scratch.data(), scratch.size());
                 if (DTTBufferHasIdentifier(scratch.data()) && VerifyDTTBuffer(plain)) {
-                    record = GetDTT(scratch.data());
+                    candidate = GetDTT(scratch.data());
                 }
             }
         }
-        if (!record) {
+        if (!candidate) {
             plugin_set_error("invalid-dtt-frame",
                              "stream frame is not a valid $DTT FlatBuffer.");
             return 400;
         }
+        if (address_known) {
+            const bool same_address =
+                static_cast<double>(candidate->LEVEL()) == want_level &&
+                static_cast<double>(candidate->X()) == want_x &&
+                static_cast<double>(candidate->Y()) == want_y;
+            // The tileset is only compared when BOTH sides state one: a store
+            // whose records predate TILESET_ID must not become unservable.
+            const std::string record_tileset =
+                candidate->TILESET_ID() ? candidate->TILESET_ID()->str() : std::string();
+            const bool same_tileset = want_tileset.empty() || record_tileset.empty() ||
+                                      record_tileset == want_tileset;
+            if (!same_address || !same_tileset) {
+                address_mismatches++;
+                continue;  // scratch is reused; `record` is still null
+            }
+        }
+        record = candidate;
     }
 
     if (!record) {
@@ -3757,7 +3853,12 @@ int respond(void) {
                 {"x-terrain-synthesized", synth_water ? "uniform-water" : "uniform-land"});
             return push_htr(200, headers, slot->body.data(), slot->body.size());
         }
-        std::string detail = "no stored tile at this address";
+        std::string detail = address_mismatches
+                                 ? "no stored tile at this address (" +
+                                       std::to_string(address_mismatches) +
+                                       " record(s) in the stream are labelled with another "
+                                       "address and were not served)"
+                                 : std::string("no stored tile at this address");
         if (!context.empty()) {
             detail += " (" + json_string(context, "tilesetId", "?") + " " +
                       fmt_double(json_number(context, "level", -1)) + "/" +

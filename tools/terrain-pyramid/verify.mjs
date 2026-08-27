@@ -27,10 +27,22 @@ import zlib from "node:zlib";
 //       tiles per level — gated at <= 5% for z >= 10, unbounded for z <= 9.
 //   (b) bytes: p50 <= 10 KiB, p99 <= 24 KiB, hard 32 KiB.
 //
+// AND COORDINATOR RESOLUTIONS 2026-08-27 (1) and (2), which move both:
+//
+//   (1) "worst post" means EVERY 1-ARCSEC SOURCE POST the granule carries
+//       inside the tile, with the mesh interpolated at the post — never the
+//       encoder's own resampled lattice and never a level+2 reference that does
+//       not resolve the source. The encoder measures it that way now
+//       (measure_mesh_accuracy), so the VERTICAL_ACCURACY_M this file reads off
+//       each record IS the source-post figure and the gate below is a gate on
+//       the real quantity rather than on the instrument.
+//   (2) bytes revised so the accuracy target can be met on rugged coast:
+//       p99 <= 28 KiB (was 24). p50 and the hard cap are unchanged.
+//
 // The OLD accuracy pair (77067/2^level with RMSE <= 25%) is retired AS A GATE
 // and kept AS A NUMBER: both figures are reported per level below, so the
 // change of gate is visible rather than a quiet loosening.
-const BOUNDS = { p50: 10240, p99: 24576, hard: 32768 };
+const BOUNDS = { p50: 10240, p99: 28672, hard: 32768 };
 // The share of tiles per level that may ship at the cap without meeting the
 // error target, and the level from which that share is gated at all.
 import { memoryPagesAdvice, memoryPagesFor } from "./memory-pages.mjs";
@@ -886,6 +898,12 @@ for (const level of [...accuracyByLevel.keys()].sort((a, b) => a - b)) {
     // record's own stated accuracy against the target, not read from the
     // encoder's flag, so the encoder cannot mark its own homework.
     tiles: total,
+    // The gated quantity, under the name that says what it is: tiles whose own
+    // stated SOURCE-POST accuracy exceeds the level's target. `tilesAtCeiling`
+    // is the same number under its older name and is kept so a reader
+    // comparing this report with an earlier one is not comparing two things.
+    tilesOverTarget: over,
+    overTargetShare: +share.toFixed(4),
     tilesAtCeiling: over,
     atCeilingShare: +share.toFixed(4),
     ceilingShareGated: gated,
@@ -948,6 +966,19 @@ const summary = {
   childAvailabilityClaims: childBitsClaimed,
   childAvailabilityUnservedClaims: childBitsWrong,
   childAvailabilityExamples: childBitExamples,
+  // WHAT THE ACCURACY NUMBERS IN THIS REPORT ARE MEASURED AGAINST. Stated
+  // rather than assumed, because this lane has now shipped two different
+  // answers to that question and both of them read the same field name.
+  accuracyBasis: {
+    measuredAt: "source-posts",
+    definition:
+      "every source post the granule set carries inside the tile bounds, with the mesh " +
+      "interpolated at the post; no-data posts excluded, no resampling on the truth side",
+    // From the run report: how many source posts a tile edge carries at the
+    // deepest level built, and the lattice the ladder was allowed to climb to.
+    sourcePostsPerTileEdge: runReport?.sourcePostsPerTileEdgeByLevel ?? null,
+    latticeMaxGridSize: runReport?.latticeMaxGridSize ?? null,
+  },
   verticalAccuracy: accuracy,
   tilesStatingMeasuredAccuracy: accuracyMeasured,
   // Tiles as accurate as the cap allowed and no more — reported ALWAYS, so the
@@ -1013,19 +1044,39 @@ fs.writeFileSync(
       // somewhere else MUST state it, and a config file that omits the key
       // would silently 404 every tile.
       terrain_mount_path: "/api/v1/terrain/",
-      // WHAT THE MOUNT MUST BE GIVEN, not what it happens to get. route() is
-      // O(1) in the index because the config is read once per instance and the
-      // parsed rectangles are kept — so an instance's resident memory scales
-      // with THIS array and not with the request. Measured on the shipped
-      // artifact, a 7.76 MB index puts one instance at 1138 pages against the
-      // host's 1024-page default (sdn-server/internal/flowrt/httpmount.go), and
-      // the daemon runs a pool of four. The number is written HERE, by the run
-      // that knows how big its own index is, rather than left to a deployment
-      // to guess; tools/terrain-pyramid/memory-pages.mjs carries the measured
-      // curve and data-source/terrain-source/tests/serving-memory.test.mjs
-      // asserts a real instance stays under it.
-      memory_pages: memoryPagesFor(availableBytes),
       terrain_available: available,
+    },
+    null,
+    2,
+  )}\n`,
+);
+
+// ── memory_pages BELONGS ONE LEVEL UP, ON THE MOUNT ENTRY ───────────────────
+//
+// It was written into layer-json-config.json beside terrain_maxzoom /
+// terrain_ocean_synth_min_level / terrain_mount_path / terrain_available. Those
+// four ARE module config keys, delivered to the guest through plugin.getConfig.
+// `memory_pages` is not: it is config.FlowMount.MemoryPages
+// (sdn-server/internal/config/config.go, `yaml:"memory_pages,omitempty"`), a
+// SIBLING of the mount's `config:` block, and its only reader is
+// internal/flowrt/httpmount.go — `if mount.MemoryPages > 0 { deps.MaxMemoryPages
+// = mount.MemoryPages }`. Nothing anywhere reads it from inside a config map.
+//
+// An operator who pastes layer-json-config.json into the mount's `config:` —
+// which is exactly what the other four keys require — would have landed the key
+// where nothing reads it, left MaxMemoryPages at the 1024-page default, and run
+// the pool hundreds of pages under its measured need with no error anywhere. So
+// the two levels are now two FILES and cannot be conflated by a copy.
+// Coordinator resolution 2026-08-27 (4).
+fs.writeFileSync(
+  path.join(outDir, "mount-entry.json"),
+  `${JSON.stringify(
+    {
+      "//": "flows.mounts[] entry keys for config.module-delivery-sidecar.yaml. `memory_pages` is a SIBLING of `config:`, never a member of it; the module config keys live in layer-json-config.json and go INSIDE `config:`.",
+      path: "/api/v1/terrain/",
+      flow: "com.digitalarsenal.flows.terrain-serving",
+      memory_pages: memoryPagesFor(availableBytes),
+      "// pool": memoryPagesAdvice(availableBytes),
     },
     null,
     2,

@@ -51,7 +51,17 @@ const evidenceDir = path.join(HERE, "evidence", args.name);
 fs.mkdirSync(evidenceDir, { recursive: true });
 
 const copied = [];
-for (const name of ["run-report.json", "verify-report.json", "accuracy-report.json", "cross-check-report.json", "layer-json-config.json"]) {
+for (const name of [
+  "run-report.json",
+  "verify-report.json",
+  "accuracy-report.json",
+  "cross-check-report.json",
+  "layer-json-config.json",
+  // The mount-level keys, which are NOT module config keys and live one YAML
+  // level up (config.FlowMount.MemoryPages). Two files because the two levels
+  // must not be conflated by a copy-paste.
+  "mount-entry.json",
+]) {
   const from = path.join(outDir, name);
   if (!fs.existsSync(from)) continue;
   fs.copyFileSync(from, path.join(evidenceDir, name));
@@ -154,9 +164,15 @@ ${Object.entries(artifacts)
   AND on the high-relief tiles is the result to want, and a high-relief ratio
   far above 1 while the controls sit at 1 is the signature of a probe that only
   looks where the terrain is smooth.
-- \`layer-json-config.json\` — the serving config keys this run implies
+- \`layer-json-config.json\` — the MODULE config keys this run implies
   (\`terrain_available\`, \`terrain_maxzoom\`, \`terrain_ocean_synth_min_level\`,
-  \`terrain_mount_path\`), which is what the deploy actually installs.
+  \`terrain_mount_path\`). These go INSIDE the mount's \`config:\` block and are
+  delivered to the guest through \`plugin.getConfig\`.
+- \`mount-entry.json\` — the MOUNT-level keys, one YAML level up:
+  \`memory_pages\` is \`config.FlowMount.MemoryPages\`, a sibling of \`config:\`,
+  read only by \`internal/flowrt/httpmount.go\`. Pasting it inside \`config:\`
+  leaves \`MaxMemoryPages\` at the 1024-page default, which the ship-scale index
+  is measurably over — hence two files rather than one.
 `,
 );
 
