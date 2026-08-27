@@ -1708,6 +1708,10 @@ struct TileStats {
     std::string water_kind;
     std::string digest;
     bool skipped_ocean = false;
+    // Set only when the SOURCE POSTS decided the skip and the interpolated
+    // lattice did not — the coastal all-water case. Counted separately so a
+    // run can show the arm firing rather than asserting that it would.
+    bool ocean_from_source = false;
 };
 
 struct TileExtent {
@@ -2064,6 +2068,43 @@ struct SourcePostProbe {
     bool complete = true;
 };
 
+// WHICH OF A GRANULE WINDOW'S POSTS LIE INSIDE A TILE'S EXTENT.
+//
+// Shared by the accuracy probe and the source-side ocean test below, so the
+// two cannot drift apart on what "inside the tile" means: the accuracy a
+// record STATES and the decision to ship the record AT ALL are then judgements
+// over the same post set. Computed in full-granule coordinates and shifted by
+// the window's integer offset, exactly as full_ix/full_iy do, so a post this
+// resolves is the post sample_dem would have resolved. Returns false when the
+// tile and this window share no post at all.
+struct PostWindow {
+    long x0 = 0, x1 = -1, y0 = 0, y1 = -1;
+};
+
+bool tile_post_window(const DemGrid& g, double west, double east, double south, double north,
+                      PostWindow* out) {
+    if (!g.covers || g.samples.empty() || g.is_mask) return false;
+    if (!(g.scale_lon > 0) || !(g.scale_lat > 0)) return false;
+    const double ix_lo = full_ix(g, west) - static_cast<double>(g.off_x);
+    const double ix_hi = full_ix(g, east) - static_cast<double>(g.off_x);
+    const double iy_lo = full_iy(g, north) - static_cast<double>(g.off_y);
+    const double iy_hi = full_iy(g, south) - static_cast<double>(g.off_y);
+    long x0 = static_cast<long>(std::ceil(ix_lo - 1e-9));
+    long x1 = static_cast<long>(std::floor(ix_hi + 1e-9));
+    long y0 = static_cast<long>(std::ceil(iy_lo - 1e-9));
+    long y1 = static_cast<long>(std::floor(iy_hi + 1e-9));
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > static_cast<long>(g.width) - 1) x1 = static_cast<long>(g.width) - 1;
+    if (y1 > static_cast<long>(g.height) - 1) y1 = static_cast<long>(g.height) - 1;
+    if (x1 < x0 || y1 < y0) return false;
+    out->x0 = x0;
+    out->x1 = x1;
+    out->y0 = y0;
+    out->y1 = y1;
+    return true;
+}
+
 SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
                                       uint32_t cand, const std::vector<double>& cand_heights,
                                       bool enabled, double abort_above) {
@@ -2082,24 +2123,9 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
     const double v_per_deg = span / (north - south);
 
     for (const DemGrid& g : granules) {
-        if (!g.covers || g.samples.empty() || g.is_mask) continue;
-        if (!(g.scale_lon > 0) || !(g.scale_lat > 0)) continue;
-        // Which of THIS window's post indices lie inside the tile. Computed in
-        // full-granule coordinates and then shifted by the window's integer
-        // offset, exactly as full_ix/full_iy do, so the post this resolves to is
-        // the post sample_dem would have resolved.
-        const double ix_lo = full_ix(g, west) - static_cast<double>(g.off_x);
-        const double ix_hi = full_ix(g, east) - static_cast<double>(g.off_x);
-        const double iy_lo = full_iy(g, north) - static_cast<double>(g.off_y);
-        const double iy_hi = full_iy(g, south) - static_cast<double>(g.off_y);
-        long x0 = static_cast<long>(std::ceil(ix_lo - 1e-9));
-        long x1 = static_cast<long>(std::floor(ix_hi + 1e-9));
-        long y0 = static_cast<long>(std::ceil(iy_lo - 1e-9));
-        long y1 = static_cast<long>(std::floor(iy_hi + 1e-9));
-        if (x0 < 0) x0 = 0;
-        if (y0 < 0) y0 = 0;
-        if (x1 > static_cast<long>(g.width) - 1) x1 = static_cast<long>(g.width) - 1;
-        if (y1 > static_cast<long>(g.height) - 1) y1 = static_cast<long>(g.height) - 1;
+        PostWindow w;
+        if (!tile_post_window(g, west, east, south, north, &w)) continue;
+        const long x0 = w.x0, x1 = w.x1, y0 = w.y0, y1 = w.y1;
 
         for (long iy = y0; iy <= y1; iy++) {
             const double lat = full_lat(g, static_cast<double>(g.off_y + iy));
@@ -2140,6 +2166,75 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
                         return out;
                     }
                 }
+            }
+        }
+    }
+    return out;
+}
+
+// ── IS THIS TILE OCEAN ACCORDING TO THE SOURCE, NOT THE MESH? ──────────────
+//
+// The ocean test that decides whether a tile is stored at all used to read the
+// tile's own resampled LATTICE — `min_h == 0 && max_h == 0` over the posts the
+// encoder interpolated — and that is the wrong side of the question for every
+// tile whose extent touches a coast.
+//
+// MEASURED on the regional store, tile 12/4300/3057 in the open Ligurian Sea:
+// the WBM calls it water at all 25,122 of its samples, the GLO-30 source is
+// exactly 0.0 at all 25,122 posts inside its extent with no post marked
+// no-data, and yet its lattice reports max 0.684 m — because the NE corner
+// VERTEX sits 0.04 arcsec south of a post row that climbs to 3-5 m on the far
+// side of the tile boundary, and a corner vertex is shared with the tile that
+// owns that coastline. The mesh is FAITHFUL there (the shipped corner matches
+// the bilinear source to 1e-6 m), so the vertex is not the defect. The defect
+// is that a test reading the interpolated lattice can NEVER call an all-water
+// tile ocean if a coast lies anywhere near its boundary — and at global scale
+// those are precisely the tiles the store budget is spent on, since the open
+// ocean far from any coast is already skipped by the lattice arm.
+//
+// So the classification moves to the SOURCE POSTS INSIDE THE EXTENT — the same
+// posts measure_mesh_accuracy judges the mesh against, through the same
+// tile_post_window. A tile every one of whose covered posts is exactly sea
+// level is a tile the client synthesizes exactly, and storing it buys nothing.
+//
+// NO-DATA DISQUALIFIES rather than being skipped: an unmeasured post is not
+// evidence of sea level, and the accuracy probe's reason for skipping them
+// (comparing against a substituted 0 would report the substitution) is a reason
+// to distrust them here too. A tile no elevation granule covers returns
+// `posts == 0` and is left to the absence path, which classifies it from the
+// mask alone.
+struct SourceExtremes {
+    double min_h = 0.0;
+    double max_h = 0.0;
+    // Posts walked that carry a real measurement, and posts the source marks
+    // no-data. `posts == 0` means no granule of the set covers this tile.
+    uint64_t posts = 0;
+    uint64_t nodata = 0;
+};
+
+SourceExtremes measure_source_extremes(const std::vector<DemGrid>& granules,
+                                       const TileExtent& ext) {
+    SourceExtremes out;
+    for (const DemGrid& g : granules) {
+        PostWindow w;
+        if (!tile_post_window(g, ext.west, ext.east, ext.south, ext.north, &w)) continue;
+        for (long iy = w.y0; iy <= w.y1; iy++) {
+            const float* src = &g.samples[static_cast<size_t>(iy) * g.width];
+            for (long ix = w.x0; ix <= w.x1; ix++) {
+                const float truth = src[ix];
+                if (truth == kNoData) {
+                    out.nodata++;
+                    continue;
+                }
+                const double h = static_cast<double>(truth);
+                if (out.posts == 0) {
+                    out.min_h = h;
+                    out.max_h = h;
+                } else {
+                    out.min_h = std::min(out.min_h, h);
+                    out.max_h = std::max(out.max_h, h);
+                }
+                out.posts++;
             }
         }
     }
@@ -2697,7 +2792,7 @@ int tile(void) {
     // ── encode every tile in the block ──────────────────────────────────────
     std::vector<uint8_t> stream;
     std::string tiles_report;
-    uint32_t emitted = 0, skipped_ocean_count = 0;
+    uint32_t emitted = 0, skipped_ocean_count = 0, skipped_ocean_from_source_count = 0;
     // Block-wide totals for the two numbers a run must not be able to hide: a
     // mask post inferred from an absent granule, and one an elevation granule
     // covers but no water granule classifies.
@@ -2820,8 +2915,10 @@ int tile(void) {
         // the same. What makes a tile ocean is what it SAYS: flat at exactly
         // sea level, and water everywhere.
         // THE TEST IS APPLIED TWICE, and it has to be. Here it is over the
-        // FULL sampled lattice, which is what makes the skip cheap — a tile
-        // that is plainly open ocean never reaches the density search at all.
+        // FULL sampled lattice (plus the SOURCE arm below, which catches the
+        // all-water tile whose boundary grazes a coast), which is what makes
+        // the skip cheap — a tile that is plainly open ocean never reaches the
+        // density search at all.
         // But density adapts, and a tile with a metre of relief across its
         // finest lattice can settle on a candidate whose posts are every one of
         // them exactly 0: what SHIPS is then indistinguishable from a
@@ -2832,6 +2929,7 @@ int tile(void) {
         const auto record_ocean_skip = [&]() {
             stats.skipped_ocean = true;
             skipped_ocean_count++;
+            if (stats.ocean_from_source) skipped_ocean_from_source_count++;
             if (t == 0) first = stats;
             block_mask_from_absence += stats.mask_from_absence;
             block_mask_unclassified += stats.mask_unclassified;
@@ -2839,14 +2937,25 @@ int tile(void) {
             tiles_report += std::string("{\"level\":") + std::to_string(job.level) +
                             ",\"x\":" + std::to_string(job.x) + ",\"y\":" +
                             std::to_string(job.y) + ",\"skippedOcean\":true" +
+                            ",\"oceanFromSource\":" +
+                            (stats.ocean_from_source ? "true" : "false") +
                             ",\"maskFromAbsenceSamples\":" +
                             std::to_string(stats.mask_from_absence) +
                             ",\"maskUnclassifiedSamples\":" +
                             std::to_string(stats.mask_unclassified) + "}";
         };
-        const bool is_ocean_tile =
+        const bool lattice_says_ocean =
             min_h == 0.0 && max_h == 0.0 && water_kind == "UNIFORM_WATER";
-        if (skip_ocean && is_ocean_tile) {
+        // THE SOURCE ARM. Only an all-water tile the lattice did NOT already
+        // call ocean can reach it, so the extra walk costs nothing on the two
+        // common cases (land, and open ocean the lattice settles), and the
+        // walk it does is over posts already resident in the decode window.
+        if (skip_ocean && !lattice_says_ocean && water_kind == "UNIFORM_WATER") {
+            const SourceExtremes src = measure_source_extremes(granules, ext);
+            stats.ocean_from_source =
+                src.posts > 0 && src.nodata == 0 && src.min_h == 0.0 && src.max_h == 0.0;
+        }
+        if (skip_ocean && (lattice_says_ocean || stats.ocean_from_source)) {
             record_ocean_skip();
             continue;
         }
@@ -3239,6 +3348,8 @@ int tile(void) {
         // while storing nothing; the name is its contract, not ours.
         ",\"recordsOut\":" + std::to_string(emitted) +
         ",\"tilesSkippedOcean\":" + std::to_string(skipped_ocean_count) +
+        ",\"tilesSkippedOceanFromSource\":" +
+        std::to_string(skipped_ocean_from_source_count) +
         ",\"granulesDecoded\":" + std::to_string(granules.size()) +
         ",\"granulesAbsent\":" + std::to_string(absent_granules) +
         ",\"waterGranulesDecoded\":" + std::to_string(water_granules.size()) +

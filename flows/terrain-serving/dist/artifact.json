@@ -2,6 +2,11 @@
   "programId": "com.digitalarsenal.flows.terrain-serving",
   "name": "Terrain Tile Serving Flow",
   "version": "0.1.0",
+  "artifact": {
+    "file": "runtime.wasm",
+    "sha256": "5c15862b98cf0b96196301695d054216da430a47a684ab15a8c5a2e204280b46",
+    "bytes": 192051
+  },
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 5,
@@ -54,7 +59,7 @@
       "dependencyId": "com.digitalarsenal.data-source.terrain-source",
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "version": "0.1.0",
-      "sha256": "46e38201362f98dd2b5820011611904d8d6c4144ccaffd100bc8915f03b29d3b",
+      "sha256": "b213323e42bf0cd661926f811fa639eaffa827650f1e6023b89dd58a644af09d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

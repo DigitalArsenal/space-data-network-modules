@@ -49,11 +49,28 @@
 // pages on 3/3 runs, against 1,619 here at a LARGER index — same module, same
 // shapes, a different allocation order, 355 pages apart. Which of the two
 // orders a host reproduces is not something this file can promise, so the fit
-// is set above the HIGHER of them: fourteen pages per index page puts 7.76 MB
-// at 1,920, which covers 1,848 with 72 to spare and every point in the table
-// above with 400 to 550. `memory_pages` is a HARD cap in the host
+// is set above the HIGHER of them. `memory_pages` is a HARD cap in the host
 // (httpmount.go -> wasmrt.WithMaxMemoryPages), so a fit that is merely close is
 // memory.grow returning -1 inside the guest mid-request.
+//
+// FOURTEEN PAGES PER INDEX PAGE WAS NOT ENOUGH, and the counterexample is why
+// this constant now carries a margin it looks like it does not need. An
+// independent measurement of the same shipped artifact, same real pair, same
+// 1-in-3 identity mix, at a 14.24 MB index: the fit STATED 3,328 pages and the
+// instance PEAKED at 3,384 — over by 56, on 4 of 4 runs. The trigger is
+// allocation ORDER, not size: the same 600-request mix with gzip first peaks at
+// 3,167 (under by 161), and putting the identity layer.json render FIRST is
+// what crosses it. Measured pages-per-index-page there is 14.39, i.e. the old
+// constant sat BELOW the measurement and the 128-page block rounding did not
+// rescue it. Every other size sampled — 2.25 MB through 22.50 MB — had margins
+// of 221 to 883 pages, which is the actual finding: the margin is unmodelled
+// and swings by 4x, so "it passed at the sizes we sampled" was never a bound.
+//
+// SIXTEEN puts 14.24 MB at 3,840 (covering the 3,384 peak with 456 to spare),
+// 7.76 MB at 2,176 (covering 1,848 with 328), and leaves every point in the
+// table above with 500 to 1,000. It does not move the number this lane
+// actually deploys: the regional index is 10,219 B, which rounds to the same
+// 384 pages under either constant.
 //
 // The peak is a mark, not a leak: at a fixed index it is reached inside the
 // first ~1,200 requests and does not move over the next 3,000 driven through
@@ -74,7 +91,7 @@
 
 export const HOST_DEFAULT_PAGES = 1024;
 export const BASE_PAGES = 256;
-export const PAGES_PER_INDEX_PAGE = 14;
+export const PAGES_PER_INDEX_PAGE = 16;
 const BLOCK = 128;
 
 /** Pages a serving instance needs for an availability index of `bytes` bytes. */
@@ -93,7 +110,7 @@ export function memoryPagesAdvice(bytes) {
     hostDefaultPages: HOST_DEFAULT_PAGES,
     // The daemon runs a pool of these; the box pays for all of them.
     poolMiBAtFourInstances: +((pages * 65536 * 4) / 1024 / 1024).toFixed(1),
-    // Above roughly 3.6 MB of index the host default is not enough and the
+    // Above roughly 3.1 MB of index the host default is not enough and the
     // mount MUST state the key.
     mustBeConfigured: pages > HOST_DEFAULT_PAGES,
     // WHERE THE KEY GOES. It is config.FlowMount.MemoryPages — a sibling of the

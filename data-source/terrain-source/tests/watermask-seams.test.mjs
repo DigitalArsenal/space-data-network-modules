@@ -458,6 +458,109 @@ test("a MEASURED flat-at-zero water tile is skipped as ocean, coverage notwithst
   assert.equal(report.tilesSkippedOcean, 1, "…and it is COUNTED as skipped, not silently dropped");
 });
 
+test("an all-water tile whose CORNER is lifted by a coast OUTSIDE it is still ocean", async (t) => {
+  // THE DEFECT THIS CLOSES, measured on the regional store: the ocean test read
+  // the tile's own interpolated LATTICE, so `min_h == 0 && max_h == 0` could
+  // never be true for an all-water tile with a coastline anywhere near its
+  // boundary. Tile 12/4300/3057 in the open Ligurian Sea is water at all 25,122
+  // of its WBM samples and exactly 0.0 at all 25,122 GLO-30 posts inside its
+  // extent, and it shipped anyway, stating max 0.684 m — because its NE corner
+  // VERTEX sits 0.04 arcsec south of a post row that climbs to 3-5 m on the far
+  // side of the boundary, and the bilinear stencil at a boundary vertex reaches
+  // across it. The mesh is FAITHFUL there; the test was on the wrong side of
+  // the question. At global scale those coastal all-water tiles are exactly
+  // where the store budget goes, so the arm that cannot fire on them is the arm
+  // that matters.
+  //
+  // THE FIXTURE IS THAT GEOMETRY, built from the tile's own extent rather than
+  // from constants: every post at a latitude ABOVE the tile's north edge is
+  // 5 m, every post at or below it is exactly 0. So every source post INSIDE
+  // the extent is sea level, and only the north-edge vertices — interpolated
+  // between the last 0 row and the first 5 m row — come out above it.
+  const address = { x: X0 + 2, y: Y0 + 2 };
+  const north = -90 + (address.y + 1) * SPAN;
+  const coastGeo = { originLon: 10, originLat: 46, scaleLon: 1 / 600, scaleLat: 1 / 600, width: 600, height: 600 };
+  const postLat = (py) => 46 - py / 600;
+  const coastDem = buildGeoTiff({
+    ...coastGeo,
+    heightFn: (px, py) => (postLat(py) > north ? 5 : 0),
+    layout: "tile",
+    tileWidth: 256,
+    tileHeight: 256,
+  });
+  const allWater = buildWaterTiff({
+    ...coastGeo,
+    classFn: () => 1,
+    layout: "tile",
+    tileWidth: 256,
+    tileHeight: 256,
+  });
+
+  const inputs = (dem, skipOceanTiles) => [
+    jsonFrame("plan", {
+      tilesetId: "spaceaware-terrain",
+      level: LEVEL,
+      gridSize: 65,
+      maxLevel: 13,
+      provenance: PROVENANCE,
+      skipOceanTiles,
+      tiles: [address],
+    }),
+    frame("dem", rawBodyFrameBytes(dem)),
+    frame("water", rawBodyFrameBytes(allWater)),
+  ];
+  const run = async (dem, skipOceanTiles) => {
+    const harness = await createBrowserModuleHarness({ wasmSource: WASM, manifest: MANIFEST, surface: "direct" });
+    t.after(() => harness.destroy());
+    const response = await harness.invoke({ methodId: "tile", inputs: inputs(dem, skipOceanTiles) });
+    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+    return {
+      records: splitStream(response.outputs.find((o) => o.portId === "records").payload),
+      report: JSON.parse(new TextDecoder().decode(response.outputs.find((o) => o.portId === "report").payload)),
+    };
+  };
+
+  // FIRST: the phenomenon is real on this fixture, not asserted into being.
+  // Without the flag the tile ships, and it ships NOT FLAT — which is the
+  // shape the store was measured in.
+  const kept = await run(coastDem, false);
+  assert.equal(kept.records.length, 1, "without the flag the record is produced as asked");
+  const dtt = decodeDtt(kept.records[0]);
+  assert.equal(dtt.waterMaskKind, 2, "UNIFORM_WATER: the mask says water everywhere");
+  assert.equal(dtt.minHeightM, 0, "…and the floor is sea level");
+  assert.ok(
+    dtt.maxHeightM > 0,
+    `the corner really is lifted by the coast outside the tile (max ${dtt.maxHeightM} m) — ` +
+      "if this ever stops being true the fixture no longer reproduces the defect",
+  );
+
+  // THEN: the source arm sees what the lattice could not.
+  const skipped = await run(coastDem, true);
+  assert.equal(skipped.report.tilesEmitted, 0, "nothing stored");
+  assert.equal(skipped.report.tilesSkippedOcean, 1, "…it is COUNTED as skipped, not silently dropped");
+  assert.equal(
+    skipped.report.tilesSkippedOceanFromSource,
+    1,
+    "…and counted as the SOURCE arm's, so a run can show this arm firing rather than assert it would",
+  );
+
+  // AND THE ARM IS NOT A BLANKET SKIP OF ALL-WATER TILES. One post inside the
+  // extent above sea level — a rock, a jetty, a spoil bank the mask still calls
+  // water — and the tile is real data that has to ship.
+  const interiorDem = buildGeoTiff({
+    ...coastGeo,
+    heightFn: (px, py) => (postLat(py) > north ? 5 : px === 140 && py === 470 ? 5 : 0),
+    layout: "tile",
+    tileWidth: 256,
+    tileHeight: 256,
+  });
+  const stored = await run(interiorDem, true);
+  assert.equal(stored.report.tilesSkippedOcean, 0, "a tile with real relief inside it is NOT ocean");
+  assert.equal(stored.report.tilesSkippedOceanFromSource, 0);
+  assert.equal(stored.records.length, 1, "…it ships");
+  assert.ok(decodeDtt(stored.records[0]).maxHeightM > 0, "…with its relief");
+});
+
 test("A POST NO GRANULE COVERS IS OCEAN, per post — never land because a NEIGHBOUR cell has one", async (t) => {
   // THE DEFECT THIS CLOSES, measured on the real regional pyramid: the mask's
   // no-classification fallback was `dem_absent ? water : land` where dem_absent

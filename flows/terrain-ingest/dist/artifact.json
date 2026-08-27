@@ -2,6 +2,11 @@
   "programId": "com.digitalarsenal.flows.terrain-ingest",
   "name": "Terrain Pyramid Ingest Flow",
   "version": "0.1.0",
+  "artifact": {
+    "file": "runtime.wasm",
+    "sha256": "c3f9495827a0023fbb3cf824c98aa5befd0c1ca65618322e150d14cbd4112529",
+    "bytes": 308264
+  },
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 17,
@@ -188,7 +193,7 @@
       "dependencyId": "com.digitalarsenal.data-source.terrain-source",
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "version": "0.1.0",
-      "sha256": "46e38201362f98dd2b5820011611904d8d6c4144ccaffd100bc8915f03b29d3b",
+      "sha256": "b213323e42bf0cd661926f811fa639eaffa827650f1e6023b89dd58a644af09d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

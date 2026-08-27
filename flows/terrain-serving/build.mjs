@@ -20,7 +20,20 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { stampArtifactRecord } from "../../data-source/terrain-source/artifact-stamp.mjs";
 import { publishedStandardsRoot } from "../../data-source/terrain-source/sds-headers.mjs";
+
+// THE LANE THIS FLOW SHIPS ON, DECLARED HERE rather than inferred from a
+// deployment target. scripts/check-artifact-reproducibility.mjs requires every
+// module that owns a build.mjs to state its thread model as a string literal,
+// and scripts/lib/thread-model.mjs says why: SDK inference has already moved
+// under modules that never declared, and the artifact guard then refuses to
+// rebuild them at all. This flow composes guests rather than compiling one, so
+// the declaration is checked against what the compiler actually produced —
+// stampArtifactRecord refuses a dist whose artifact.json disagrees. Measured on
+// both runtimes: non-shared memory with a maximum set, no tag section, no
+// pthread or wasi-thread import.
+const THREAD_MODEL = "single-thread";
 
 const packageRoot = fileURLToPath(new URL("./", import.meta.url));
 const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
@@ -33,4 +46,15 @@ const result = spawnSync(
   [cli, "flow", process.argv[2] ?? "compile", "../terrain-serving.flow.json", "--deps", "./deps.json", "--out", "./dist"],
   { cwd: packageRoot, stdio: "inherit", env: { ...process.env, SPACE_DATA_STANDARDS_ROOT: standardsRoot } },
 );
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+
+// The compiled runtime is gitignored, so the TRACKED composition record beside
+// it is the only thing a commit can pin the deployed bytes with. Stamped only
+// after a compile that actually succeeded: a stamp over a stale runtime would
+// be worse than no stamp at all.
+if ((process.argv[2] ?? "compile") === "compile") {
+  const stamp = stampArtifactRecord(path.join(packageRoot, "dist"), { expectThreadModel: THREAD_MODEL });
+  process.stdout.write(
+    `artifact.json pins ${stamp.sha256} (${stamp.bytes} bytes, ${stamp.threadModel})\n`,
+  );
+}

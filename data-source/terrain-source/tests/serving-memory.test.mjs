@@ -153,7 +153,7 @@ async function storedRecordStream() {
 //   route                      on a junk path (the cheap 404)
 // with one request in three asking for `identity`, which is what actually
 // forces the uncompressed representation into memory.
-async function driveInstance(t, available, soakRequests = 1200) {
+async function driveInstance(t, available, { soakRequests = 1200, identityFirst = false } = {}) {
   const stored = await storedRecordStream();
   const config = {
     terrain_tileset_id: "spaceaware-terrain",
@@ -208,28 +208,46 @@ async function driveInstance(t, available, soakRequests = 1200) {
     });
   }
 
-  for (const shape of shapes) await serve(shape, false);
-  for (let i = 0; i < soakRequests; i++) await serve(shapes[i % shapes.length], i % 3 === 0);
-  return { harness, pages, serve, shapes, invoked };
+  // ALLOCATION ORDER IS PART OF THE MEASUREMENT, not noise around it. The
+  // same mix at the same index size peaks 217 pages apart depending on which
+  // representation the instance builds first: an independent harness measured
+  // 3,384 pages at a 14.24 MB index leading with an `identity` layer.json
+  // render, against 3,167 leading with gzip. A fit taken only on the gentler
+  // order is a fit that fails on the other one, which is the whole reason
+  // this parameter exists.
+  const order = identityFirst ? [shapes[2], ...shapes.filter((_, i) => i !== 2)] : shapes;
+  for (const shape of order) await serve(shape, identityFirst);
+  for (let i = 0; i < soakRequests; i++) await serve(order[i % order.length], i % 3 === 0);
+  return { harness, pages, serve, shapes: order, invoked };
 }
 
 test("the mount config's memory_pages bounds what a real instance actually takes", async (t) => {
   const measured = [];
-  for (const targetBytes of [45, 320_000, 2_500_000, 7_700_000]) {
+  // THE SAMPLED SIZES REACH THE SHIP BAND. Stopping at 7.7 MB was the second
+  // half of last round's defect: Hermes ruled z11 GLOBAL, this file's own curve
+  // runs to 16.46 MB, and the one breach anybody has measured sits at 14.24 MB
+  // — inside the band the lane itself treats as ship-relevant and outside every
+  // size the test used to look at.
+  for (const targetBytes of [45, 320_000, 2_500_000, 7_700_000, 14_240_000]) {
     const available =
       targetBytes < 100 ? [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]] : availabilityOfSize(targetBytes);
     const bytes = Buffer.byteLength(JSON.stringify(available));
-    const { pages, invoked } = await driveInstance(t, available);
-    // The mix really was the mount's, not half of it.
-    assert.ok(invoked.respond > 300, `respond ran ${invoked.respond} times, not a token few`);
-    assert.ok(invoked.layer_json > 200, `layer_json ran ${invoked.layer_json} times`);
-    assert.ok(invoked.identity > 300, `identity was asked for ${invoked.identity} times`);
-    const took = pages();
+    // BOTH ORDERS, and the bound is judged against the WORSE of them.
+    let took = 0;
+    for (const identityFirst of [false, true]) {
+      const { pages, invoked } = await driveInstance(t, available, { identityFirst });
+      // The mix really was the mount's, not half of it.
+      assert.ok(invoked.respond > 300, `respond ran ${invoked.respond} times, not a token few`);
+      assert.ok(invoked.layer_json > 200, `layer_json ran ${invoked.layer_json} times`);
+      assert.ok(invoked.identity > 300, `identity was asked for ${invoked.identity} times`);
+      took = Math.max(took, pages());
+    }
     const stated = memoryPagesFor(bytes);
     measured.push({ bytes, took, stated });
     assert.ok(
       took <= stated,
-      `a ${(bytes / 1e6).toFixed(2)} MB index peaked at ${took} pages; the config states ${stated}`,
+      `a ${(bytes / 1e6).toFixed(2)} MB index peaked at ${took} pages over the worse of two ` +
+        `allocation orders; the config states ${stated}`,
     );
   }
   // …and the recommendation is not simply enormous: it has to be a number a

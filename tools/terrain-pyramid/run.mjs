@@ -433,6 +433,14 @@ async function main() {
     // the error target. The encoder's word for it; verify.mjs re-derives the
     // same figure from the records and the two are compared.
     tilesAtCeiling: 0,
+    // Tiles the ocean test skipped, and how many of those the SOURCE arm
+    // decided rather than the interpolated lattice. The split is the point: an
+    // all-water tile whose boundary grazes a coast has a lifted corner VERTEX
+    // and cannot be recognised from the mesh, so the lattice arm alone silently
+    // stores it. Carried out of the run so the arm's firing is a measured
+    // number rather than a claim about what would happen at global scale.
+    tilesSkippedOcean: 0,
+    tilesSkippedOceanFromSource: 0,
     // Water-mask samples inferred from an ABSENT DEM granule — WATER, and by
     // design: Copernicus publishes no object at all over open ocean, so
     // "nothing covers this" is the dataset's own way of saying sea. Reported,
@@ -739,6 +747,8 @@ async function main() {
         stats.edgeClampedPosts += value.edgeClampedPosts ?? 0;
         stats.bandBridgedPosts += value.bandBridgedPosts ?? 0;
         stats.tilesAtCeiling += value.tilesAtCeiling ?? 0;
+        stats.tilesSkippedOcean += value.tilesSkippedOcean ?? 0;
+        stats.tilesSkippedOceanFromSource += value.tilesSkippedOceanFromSource ?? 0;
         if (Number.isFinite(value.sourcePostsPerTileEdge) && value.sourcePostsPerTileEdge > 0) {
           stats.sourcePostsPerTileEdgeByLevel[value.level] = +value.sourcePostsPerTileEdge.toFixed(1);
         }
@@ -911,6 +921,8 @@ async function main() {
       edgeClampedPosts: stats.edgeClampedPosts,
       bandBridgedPosts: stats.bandBridgedPosts,
       tilesAtCeiling: stats.tilesAtCeiling,
+      tilesSkippedOcean: stats.tilesSkippedOcean,
+      tilesSkippedOceanFromSource: stats.tilesSkippedOceanFromSource,
       maskFromAbsenceSamples: stats.maskFromAbsenceSamples,
       maskUnclassifiedSamples: stats.maskUnclassifiedSamples,
     },

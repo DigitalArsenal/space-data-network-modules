@@ -20,9 +20,18 @@
 # dist/plugin-manifest.json — so what the flow links, and what it is allowed to
 # do, stays auditable in git without an unledgered binary.
 #
-# The exact sha256 of the artifact a given run executed is recorded in
-# tools/terrain-pyramid/evidence/<run>/REPRODUCE.md. Graph follow-up to put
-# these four artifacts back under the ledger once that claim clears:
+# AND THE RECORD NOW PINS THE RUNTIME ITSELF. dist/artifact.json carries an
+# `artifact` block — the compiled runtime's own sha256 and byte length, stamped
+# by build.mjs after the link step — so the bytes an operator installs are
+# identified by a COMMIT even though the bytes are not in one, and
+# `shasum -a 256 dist/runtime.wasm` against that block is a check anyone with
+# the repo can run. Without it the capability_policy.json approval on host-01,
+# which is keyed to the bundle hash, was derivable from nothing in git.
+#
+# The sha256 of the artifact a given pyramid run executed is ALSO recorded in
+# tools/terrain-pyramid/evidence/<run>/REPRODUCE.md — a run record rather than a
+# deploy manifest, which is why it was never enough on its own. Graph follow-up
+# to put these four artifacts back under the ledger once that claim clears:
 # modules-terrain-artifact-provenance-ledger.
 dist/*.wasm
 dist/isomorphic/

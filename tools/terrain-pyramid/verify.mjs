@@ -276,6 +276,15 @@ const sizes = [];
 let uniform = 0;
 let raster = 0;
 let oceanStored = 0;
+// Stored tiles the mask calls water EVERYWHERE whose mesh is nonetheless not
+// flat at sea level. REPORTED, never gated: a genuine one is real data (an
+// all-water tile whose source carries relief), and the encoder's ocean test now
+// reads the SOURCE POSTS rather than the interpolated lattice precisely so the
+// spurious ones — an all-water tile whose corner VERTEX is lifted by a coast on
+// the far side of its boundary — stop being stored. Kept visible so the residue
+// is a number somebody can look at rather than an assumption.
+let uniformWaterNotFlat = 0;
+const uniformWaterNotFlatSample = [];
 let digestMismatch = 0;
 let overCeiling = 0;
 let maxLevel = 0;
@@ -378,6 +387,12 @@ for (const record of records) {
     // those. Storing them inflates the pyramid with identical flat records.
     oceanStored += 1;
     problems.push(`all-ocean tile stored at ${key}`);
+  }
+  if (dtt.waterMaskKind === 2 && !(dtt.minHeightM === 0 && dtt.maxHeightM === 0)) {
+    uniformWaterNotFlat += 1;
+    if (uniformWaterNotFlatSample.length < 20) {
+      uniformWaterNotFlatSample.push({ key, minHeightM: dtt.minHeightM, maxHeightM: dtt.maxHeightM });
+    }
   }
   if (dtt.minHeightM === 0 && dtt.maxHeightM === 0) {
     let landSamples = 0;
@@ -938,6 +953,8 @@ const summary = {
   uniformMaskRatio: records.length ? +(uniform / records.length).toFixed(4) : 0,
   maskBytesStored: maskBytes,
   oceanTilesStored: oceanStored,
+  uniformWaterTilesNotFlat: uniformWaterNotFlat,
+  uniformWaterTilesNotFlatSample: uniformWaterNotFlatSample,
   // Tiles flat at exactly sea level over their whole extent whose mask still
   // claims land somewhere. The old ocean test could not see these because it
   // required a UNIFORM_WATER mask, and the four the encoder shipped were
