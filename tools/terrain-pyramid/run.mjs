@@ -401,6 +401,26 @@ async function main() {
     uniformMasks: 0,
     rasterMasks: 0,
     tileBytes: [],
+    // ── THE ENCODER'S OWN COUNTERS, CARRIED OUT OF THE RUN ──────────────────
+    //
+    // The `tile` node emits these per block and the flow lands them on egress,
+    // and until now the runner read `tilesEmitted` off that frame and threw
+    // the rest away — so `edgeClampedPosts` was emitted by the encoder,
+    // reported by the flow, and read by NOBODY. A clamped post is a displaced
+    // sample, it is invisible to the record's own accuracy probe (that probe
+    // uses the same sampler) and invisible to the adjacent-tile seam check
+    // (a clamped grid-interior row is not a tile edge), so nothing else in
+    // this lane can see it. verify.mjs gates on it.
+    edgeClampedPosts: 0,
+    // Posts whose stencil crossed a Copernicus latitude-band boundary and was
+    // interpolated on the other granule's lattice. NOT a defect — it is what
+    // the band fix does — and counted separately from a clamp precisely so the
+    // two stay distinguishable.
+    bandBridgedPosts: 0,
+    // Tiles that shipped as dense as they were allowed and still did not meet
+    // the error target. The encoder's word for it; verify.mjs re-derives the
+    // same figure from the records and the two are compared.
+    tilesAtCeiling: 0,
     errors: [],
   };
 
@@ -677,7 +697,12 @@ async function main() {
       } catch {
         continue;
       }
-      if (value.tilesEmitted !== undefined) stored += value.tilesEmitted;
+      if (value.tilesEmitted !== undefined) {
+        stored += value.tilesEmitted;
+        stats.edgeClampedPosts += value.edgeClampedPosts ?? 0;
+        stats.bandBridgedPosts += value.bandBridgedPosts ?? 0;
+        stats.tilesAtCeiling += value.tilesAtCeiling ?? 0;
+      }
       // The operator-readable JSON mark, which the flow still lands on egress.
       // It is NOT the durable one and it is not what advances the walk: the
       // durable mark is the $IRM record the flow wrote through storage.write,
@@ -824,6 +849,14 @@ async function main() {
     uniformMasks: stats.uniformMasks,
     rasterMasks: stats.rasterMasks,
     uniformMaskRatio: stats.tiles ? +(stats.uniformMasks / stats.tiles).toFixed(4) : 0,
+    // What the ENCODER said about its own work, carried out of the run so a
+    // gate can read it. verify.mjs re-derives tilesAtCeiling from the records
+    // independently and refuses a pyramid with any clamped post at all.
+    encoderCounters: {
+      edgeClampedPosts: stats.edgeClampedPosts,
+      bandBridgedPosts: stats.bandBridgedPosts,
+      tilesAtCeiling: stats.tilesAtCeiling,
+    },
     errors: stats.errors,
     cellsDetail: report,
   };

@@ -10,15 +10,36 @@
 // median — and evaluates THE TRIANGULATION THE CLIENT RENDERS against a
 // reference read from the same source granules.
 //
-// THE REFERENCE. Not the source posts directly (that would need a second
-// GeoTIFF decoder here, and a second decoder is a second thing to be wrong).
-// Instead the encoder itself re-samples the same extent at level+2: sixteen
-// grandchildren of 65 posts each, so 256 posts across the parent's edge against
-// its own 65 — a 4x denser sampling of the same source raster through the same
-// bilinear. At z11 that is 21 m post spacing against the dataset's native 30 m,
-// so the reference is the source surface to within the source's own resolution.
-// Errors reported here are therefore the TRIANGULATION's departure from the
-// source, which is exactly what Atlas's bound is about.
+// THE REFERENCE, AND EXACTLY WHAT IT IS NOT INDEPENDENT OF.
+//
+// Not the source posts directly — that would need a second GeoTIFF decoder
+// here, and a second decoder is a second thing to be wrong. Instead the encoder
+// itself re-samples the same extent at level+2: sixteen grandchildren of 65
+// posts each, so 256 posts across the parent's edge against its own 65 — a 4x
+// denser sampling of the same source raster through the same bilinear. At z11
+// that is 21 m post spacing against the dataset's native 30 m.
+//
+// So this measures TRIANGULATION DENSITY, and only that. It runs through the
+// same module.wasm, the same decode_geotiff_window, the same sample_dem and the
+// same georeference assumptions as the mesh it is judging, which means it
+// CANNOT see a decode error, a georeference error, or a clamped sample — and
+// that is not hypothetical: the latitude-band clamp fixed in the encoder was
+// worth 6.3 m of vertical error on a whole grid row and was invisible to
+// exactly this comparison, and to the record's own VERTICAL_ACCURACY_M, for
+// the same reason.
+//
+// It is therefore NOT an independent harness and must not be reported as one.
+// The independent evidence for decode, georeference and clamp correctness is
+// elsewhere and is structural rather than statistical: verify.mjs compares
+// SHARED EDGES between adjacent tiles (two independently encoded tiles must
+// agree on ground they both cover), detects whole missing post rows, gates on
+// the encoder's clamp counter, and re-derives every DIGEST from the bytes; the
+// module's own granule-seam, band-boundary and water-mask tests measure the
+// sampler against georeferences computed in the test from the TIFF spec.
+//
+// What this number IS good for is the question Atlas's bound actually asks —
+// how far the rendered triangles depart from the surface the encoder sampled —
+// and that is what it should be quoted as.
 //
 //   node tools/terrain-pyramid/measure-accuracy.mjs --out <store dir> [--per-level 6] [--json]
 

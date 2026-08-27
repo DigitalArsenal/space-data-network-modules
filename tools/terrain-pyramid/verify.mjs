@@ -15,8 +15,27 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 
-// The serving bounds this pyramid has to satisfy to be publishable.
-const BOUNDS = { p50: 4096, p99: 12288, hard: 32768 };
+// ── THE BOUNDS THIS PYRAMID HAS TO SATISFY TO BE PUBLISHABLE ───────────────
+//
+// Coordinator reconciliation 2026-08-27, which supersedes the pair these
+// numbers used to be:
+//
+//   (a) mesh density adapts per tile to relief inside a 32 KiB gzipped HARD
+//       cap, targeting worst-post vertical error <= 2 x 77067/2^level m; where
+//       the cap cannot meet it the tile ships AT the cap STATING its measured
+//       VERTICAL_ACCURACY_M, and this verifier reports the count and % of such
+//       tiles per level — gated at <= 5% for z >= 10, unbounded for z <= 9.
+//   (b) bytes: p50 <= 10 KiB, p99 <= 24 KiB, hard 32 KiB.
+//
+// The OLD accuracy pair (77067/2^level with RMSE <= 25%) is retired AS A GATE
+// and kept AS A NUMBER: both figures are reported per level below, so the
+// change of gate is visible rather than a quiet loosening.
+const BOUNDS = { p50: 10240, p99: 24576, hard: 32768 };
+// The share of tiles per level that may ship at the cap without meeting the
+// error target, and the level from which that share is gated at all.
+const CEILING_SHARE = { max: 0.05, gatedFromLevel: 10 };
+const errorTargetM = (level) => (2 * 77067) / 2 ** level;
+const legacyBoundM = (level) => 77067 / 2 ** level;
 
 function parseArgs(argv) {
   const args = { json: false };
@@ -200,6 +219,25 @@ function availabilityFor(addresses) {
 
 const args = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(args.out);
+
+// ── THE ENCODER'S OWN COUNTERS, IF THE RUN LEFT THEM ───────────────────────
+//
+// Everything else in this file is re-derived from the RECORD BYTES, on purpose:
+// the builder's run report is the builder's word for it. But two facts are not
+// in the records at all and cannot be — how many posts the encoder CLAMPED
+// (a displaced sample, the residual of the cross-granule stencil and the signal
+// that a neighbour granule is missing from the plan) and how many crossed a
+// latitude-band boundary. The encoder emits both per block, the flow lands them
+// on egress, run.mjs carries them into run-report.json, and this reads them.
+//
+// It is OPTIONAL by design: verify.mjs still runs against a bare tile store.
+// When the report is absent the counters are reported as null rather than as
+// zero, because "nobody counted" and "the count was zero" are different claims.
+const runReportPath = path.join(outDir, "run-report.json");
+const runReport = fs.existsSync(runReportPath)
+  ? JSON.parse(fs.readFileSync(runReportPath, "utf8"))
+  : null;
+const encoderCounters = runReport?.encoderCounters ?? null;
 const records = splitStream(fs.readFileSync(path.join(outDir, "tiles.dttstream")));
 
 const byLevel = new Map();
@@ -219,6 +257,12 @@ let wholeRowsMissing = 0;
 let flatWithLandMask = 0;
 let accuracyMeasured = 0;
 const accuracyByLevel = new Map();
+// Per level: how many tiles state a measured accuracy, and how many of those
+// exceed the ruled target — i.e. ship AT the cap. Derived from the records
+// rather than from the encoder's own atCeiling flag, so the number the gate
+// reads is not the number the encoder chose to write.
+const atCeilingByLevel = new Map();
+const atCeilingExamples = [];
 const childBits = new Map();
 const edgesByAddress = new Map();
 const maskEdgesByAddress = new Map();
@@ -297,6 +341,20 @@ for (const record of records) {
   if (dtt.accuracyConfidence > 0) {
     accuracyByLevel.set(dtt.level, Math.max(accuracyByLevel.get(dtt.level) ?? 0, dtt.verticalAccuracyM));
     accuracyMeasured += 1;
+    const seenAtLevel = atCeilingByLevel.get(dtt.level) ?? { total: 0, over: 0 };
+    seenAtLevel.total += 1;
+    if (dtt.verticalAccuracyM > errorTargetM(dtt.level)) {
+      seenAtLevel.over += 1;
+      if (atCeilingExamples.length < 16) {
+        atCeilingExamples.push({
+          address: key,
+          statedAccuracyM: +dtt.verticalAccuracyM.toFixed(3),
+          targetM: +errorTargetM(dtt.level).toFixed(2),
+          payloadBytes: bytes.length,
+        });
+      }
+    }
+    atCeilingByLevel.set(dtt.level, seenAtLevel);
   }
   childBits.set(key, dtt.childAvailability);
 
@@ -492,13 +550,60 @@ const available = [];
   }
 }
 
+// ── THE INDEX IS ANCESTOR-CLOSED, AND THAT IS ASSERTED, NOT ASSUMED ────────
+//
+// Everything downstream of here — the module's availability test, this file's
+// enumeration, and the equivalence between the two — rests on the index being
+// ancestor-closed: if a rectangle covers (level, x, y) then some rectangle at
+// level-1 covers (x>>1, y>>1), all the way to level 0. The closure is BUILT
+// above, so this cannot fail on an index this file produced; it is asserted
+// anyway because the config is a FILE, an operator can edit it, and the
+// serving module reads `terrain_available` from config rather than from
+// anything that re-derives it. This is the one place the property is stated
+// where a hand-edited index would be checked against it.
+const closureBreaks = [];
+for (let level = available.length - 1; level >= 1; level -= 1) {
+  const parents = available[level - 1];
+  for (const r of available[level]) {
+    for (const [x, y] of [
+      [r.startX, r.startY],
+      [r.endX, r.endY],
+    ]) {
+      const px = x >> 1;
+      const py = y >> 1;
+      if (!parents.some((q) => px >= q.startX && px <= q.endX && py >= q.startY && py <= q.endY)) {
+        if (closureBreaks.length < 16) closureBreaks.push(`z${level} ${x}/${y} has no parent at z${level - 1}`);
+      }
+    }
+  }
+}
+if (closureBreaks.length) {
+  problems.push(
+    `the availability index is NOT ancestor-closed (${closureBreaks.length} breaks): ` +
+      `${closureBreaks.slice(0, 4).join("; ")} — a client computes availability by the max ` +
+      "level at a position, so an unclosed index promises tiles at levels nothing covers",
+  );
+}
+
 // ── WHAT THE CLIENT WILL ACTUALLY ASK FOR ──────────────────────────────────
 //
-// Cesium's own rule, re-implemented here, and every address it makes available
-// enumerated: an address that is available but NOT stored is one the serving
-// module must synthesize. Before the module's availability test was changed to
-// this rule, those addresses were 404s — 14 of them on the regional pyramid,
-// 2 at z6 and 12 at z7 — reaching the browser against the zero-4xx bound.
+// The MODULE's rule, re-implemented here — and the difference from Cesium's is
+// worth naming rather than glossed. Cesium's TileAvailability uses
+// rectangleContainsPosition, which is INCLUSIVE on all four edges, and
+// findMaxLevelFromNode recurses into every quadrant a boundary position falls
+// on and takes the max; the floor below is half-open (east/north wins). The two
+// can only differ for a position exactly on a tile boundary — which is where a
+// coarse tile's CENTRE always lands at deeper levels — and for an
+// ancestor-closed index they provably cannot differ at all, because the deeper
+// quadrant Cesium would also visit has an ancestor covering the same position
+// at every level in between. The closure is asserted immediately above, so the
+// re-implementation is exact for every index this file will ever see.
+//
+// Every address the rule makes available is then enumerated: an address that is
+// available but NOT stored is one the serving module must synthesize. Before
+// the module's availability test was changed to this rule, those addresses were
+// 404s — 14 of them on the regional pyramid, 2 at z6 and 12 at z7 — reaching
+// the browser against the zero-4xx bound.
 const tileCentre = (level, x, y) => [
   -180 + ((x + 0.5) * 360) / 2 ** (level + 1),
   -90 + ((y + 0.5) * 180) / 2 ** level,
@@ -585,22 +690,50 @@ if (childBitsWrong) {
   );
 }
 
-// ── ATLAS'S VERTICAL-ERROR BOUND, against the tiles' OWN measurement ───────
+// ── THE VERTICAL-ERROR TARGET, against the tiles' OWN measurement ──────────
 //
 // Each record states the departure its encoder measured between posts against
 // the source it was cut from, so this needs no reference decoder and no second
 // sampling of the granules: it reads what the pyramid says about itself and
-// compares it with the ruled bound. A level the pyramid cannot meet is named
-// in the verdict, so a ship gate cannot read the run as green.
+// compares it with the ruled target.
+//
+// WHAT IS STATED HERE IS THE ENCODER'S OWN NUMBER, and that has a limit worth
+// naming: the accuracy probe compares the mesh against the same sampler that
+// produced its vertices, so it can see triangulation density and CANNOT see a
+// decode, georeference or clamp error. The independent checks for those live
+// elsewhere in this file (edge continuity across adjacent tiles, whole-post-row
+// detection, coverage) and in the module's own granule-seam and band-boundary
+// tests. The gate below is honest about what it measures.
+//
+// A tile that does not meet the target is NOT a failure on its own: the ruling
+// is that the 32 KiB cap is hard and a tile the cap cannot satisfy ships AT it
+// stating what it achieved. What IS gated is the SHARE of such tiles per level
+// at z >= 10, which is where the ruling puts it.
 const accuracy = [];
 for (const level of [...accuracyByLevel.keys()].sort((a, b) => a - b)) {
-  const bound = 77067 / 2 ** level;
   const worst = accuracyByLevel.get(level);
+  const target = errorTargetM(level);
+  const total = atCeilingByLevel.get(level)?.total ?? 0;
+  const over = atCeilingByLevel.get(level)?.over ?? 0;
+  const share = total ? over / total : 0;
+  const gated = level >= CEILING_SHARE.gatedFromLevel;
   accuracy.push({
     level,
-    boundM: +bound.toFixed(2),
+    // The ruled target (coordinator (a)) and the RETIRED pair, side by side.
+    errorTargetM: +target.toFixed(2),
+    legacyBoundM: +legacyBoundM(level).toFixed(2),
     worstMeasuredM: +worst.toFixed(3),
-    withinBound: worst <= bound,
+    withinTarget: worst <= target,
+    withinLegacyBound: worst <= legacyBoundM(level),
+    // Tiles that ship AT the cap: as accurate as the encoder was allowed to
+    // be, and not as accurate as the target asks. Derived HERE from each
+    // record's own stated accuracy against the target, not read from the
+    // encoder's flag, so the encoder cannot mark its own homework.
+    tiles: total,
+    tilesAtCeiling: over,
+    atCeilingShare: +share.toFixed(4),
+    ceilingShareGated: gated,
+    withinCeilingShare: !gated || share <= CEILING_SHARE.max,
   });
 }
 
@@ -637,6 +770,12 @@ const summary = {
   childAvailabilityExamples: childBitExamples,
   verticalAccuracy: accuracy,
   tilesStatingMeasuredAccuracy: accuracyMeasured,
+  // Tiles as accurate as the cap allowed and no more — reported ALWAYS, so the
+  // ruling's "never silently" is a number a reviewer can read rather than an
+  // absence they have to notice.
+  tilesAtCeiling: accuracy.reduce((n, a) => n + a.tilesAtCeiling, 0),
+  atCeilingExamples,
+  ceilingShareBound: CEILING_SHARE,
   edgeAdjacenciesChecked: adjacencies,
   maskAdjacenciesChecked: maskAdjacencies,
   maskSharedByteDisagreements: maskByteDisagreements,
@@ -644,6 +783,9 @@ const summary = {
   worstSharedEdgeDeltaM: +worstSeam.toFixed(6),
   worstSharedEdgeAt: worstSeamAt,
   layerJson: { maxzoom: maxLevel, extensions: ["watermask"], available },
+  // null, not 0, when no run report was left beside the store: "nobody counted"
+  // and "the count was zero" are different claims.
+  encoderCounters,
   problems,
 };
 
@@ -678,7 +820,7 @@ fs.writeFileSync(
   )}\n`,
 );
 
-const overAccuracyBound = accuracy.filter((a) => !a.withinBound);
+const overCeilingShare = accuracy.filter((a) => !a.withinCeilingShare);
 const failures = [
   problems.length ? `${problems.length} problems` : null,
   wholeRowsMissing ? `${wholeRowsMissing} tiles missing a whole post row` : null,
@@ -687,12 +829,25 @@ const failures = [
   pct(0.5) > BOUNDS.p50 ? `p50 ${pct(0.5)} B over ${BOUNDS.p50}` : null,
   pct(0.99) > BOUNDS.p99 ? `p99 ${pct(0.99)} B over ${BOUNDS.p99}` : null,
   accuracyMeasured === 0
-    ? "no tile states a measured vertical accuracy, so the pyramid cannot be judged against the bound"
+    ? "no tile states a measured vertical accuracy, so the pyramid cannot be judged against the target"
     : null,
-  overAccuracyBound.length
-    ? `vertical error over 77067/2^level at ${overAccuracyBound
-        .map((a) => `z${a.level} ${a.worstMeasuredM} m vs ${a.boundM} m`)
+  // The ruled gate: a tile at the cap is allowed, a LEVEL that is mostly at
+  // the cap is not. z <= 9 is unbounded by the same ruling.
+  overCeilingShare.length
+    ? `over ${(CEILING_SHARE.max * 100).toFixed(0)}% of tiles at the cap at ${overCeilingShare
+        .map((a) => `z${a.level} ${(a.atCeilingShare * 100).toFixed(1)}% (${a.tilesAtCeiling}/${a.tiles})`)
         .join(", ")}`
+    : null,
+  // THE ENCODER'S OWN CLAMP COUNTER, which nothing used to read. A clamped
+  // post is a displaced sample — the residual of the cross-granule stencil and
+  // the signal that a neighbour granule is missing from the plan — and it is
+  // invisible to every other gate here: the record's own accuracy probe uses
+  // the same clamped sampler, and a clamped grid-INTERIOR row is not a tile
+  // edge so the seam check cannot see it either. Zero is the only right
+  // answer, and it is only readable from the run report.
+  encoderCounters && encoderCounters.edgeClampedPosts > 0
+    ? `${encoderCounters.edgeClampedPosts} clamped posts reported by the encoder ` +
+      `(a clamp is a displaced sample; the plan is missing a neighbour granule)`
     : null,
 ].filter(Boolean);
 if (failures.length) {
