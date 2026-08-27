@@ -419,3 +419,125 @@ test("a miss OUTSIDE availability is still a cheap cacheable 404 through the flo
   assert.equal(http.status, 404, "nothing promised this address");
   assert.equal(header(http, "cache-control"), "public, max-age=300");
 });
+
+// ---------------------------------------------------------------------------
+// THE CATALOGUE: the one endpoint the IPFS delivery path turns on.
+//
+// Owner 2026-08-27: terrain files are requested over IPFS. A client learns the
+// current tileset CID from THIS document and nowhere else — it hardcodes no CID
+// (it would pin a dead epoch the day the dataset is recut) and no hostname (the
+// owner refused a static asset host in the same breath). So if the catalogue
+// does not answer, the whole delivery path is dark, and it answers through the
+// COMPILED artifact here rather than only the module in isolation.
+// ---------------------------------------------------------------------------
+
+const IPFS_CONFIG = {
+  ...CONFIG,
+  terrain_tileset_cid: "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy",
+  terrain_gateway_path: "/ipfs/",
+  terrain_dataset_epoch: "2023-04-01T00:00:00.000Z",
+};
+
+test("the mount root names the CID through the COMPILED flow", async () => {
+  const stub = createStub({ config: IPFS_CONFIG });
+  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/" });
+  assert.equal(http.status, 200);
+  assert.equal(header(http, "content-type"), "application/json");
+  // The lane's ONE mutable pointer: short max-age, strong ETag, CORS open so a
+  // client on another origin can resolve it before it fetches a single tile.
+  assert.equal(header(http, "cache-control"), "public, max-age=60");
+  assert.equal(header(http, "access-control-allow-origin"), "*");
+  const etag = header(http, "etag");
+  assert.ok(etag && !etag.startsWith("W/"), `a strong ETag, got ${etag}`);
+
+  const body = JSON.parse(decoder.decode(Uint8Array.from(http.body)));
+  assert.equal(body.delivery, "ipfs");
+  assert.equal(body.cid, IPFS_CONFIG.terrain_tileset_cid);
+  assert.equal(body.datasetEpoch, IPFS_CONFIG.terrain_dataset_epoch);
+  // RELATIVE, so the client joins it against the node origin it already knows
+  // and learns no hostname from us.
+  assert.equal(body.terrainBasePath, `/ipfs/${IPFS_CONFIG.terrain_tileset_cid}/`);
+  assert.equal(body.layerJsonPath, `/ipfs/${IPFS_CONFIG.terrain_tileset_cid}/layer.json`);
+  assert.ok(!/^https?:/i.test(body.terrainBasePath), "never an absolute URL");
+  assert.equal(body.format, "quantized-mesh-1.0");
+  assert.equal(body.scheme, "tms");
+  assert.equal(body.projection, "EPSG:4326");
+  assert.deepEqual(body.extensions, ["watermask"]);
+});
+
+test("/catalogue.json is the same document, byte for byte, through the flow", async () => {
+  const root = await pumpRequest(createStub({ config: IPFS_CONFIG }), {
+    method: "GET",
+    path: "/api/v1/terrain/",
+  });
+  const named = await pumpRequest(createStub({ config: IPFS_CONFIG }), {
+    method: "GET",
+    path: "/api/v1/terrain/catalogue.json",
+  });
+  assert.equal(named.status, 200);
+  assert.deepEqual(Array.from(named.body), Array.from(root.body));
+  assert.equal(header(named, "etag"), header(root, "etag"));
+});
+
+test("a node with NO CID configured still answers, naming its own mount", async () => {
+  // A development node with no IPFS daemon must read the SAME document rather
+  // than fail — that is what makes the client have one code path either way.
+  const stub = createStub();
+  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/catalogue.json" });
+  assert.equal(http.status, 200);
+  const body = JSON.parse(decoder.decode(Uint8Array.from(http.body)));
+  assert.equal(body.delivery, "mount");
+  assert.equal(body.cid, null);
+  assert.ok(body.terrainBasePath.endsWith("/"), "a joinable base path");
+  assert.ok(!body.terrainBasePath.includes("/ipfs/"), "no gateway path without a CID");
+});
+
+test("EVERY path the module answers is a DECLARED route, so the host admits it anonymously", async () => {
+  // sdn-server/internal/gateway/anonymous.go: a mounted route is admitted
+  // without a session iff the flow DECLARES it anonymous — the host builds the
+  // allowlist from api.routes and nothing else. An endpoint the module answers
+  // but the manifest omits is reachable only through an operator's
+  // gateway.anonymous.allow entry, so narrowing that entry to the declared set
+  // would 401 the catalogue and take the delivery path down with it. This test
+  // is the coupling: it fails the moment the module grows a surface the
+  // manifest does not declare.
+  const flow = JSON.parse(
+    fs.readFileSync(fileURLToPath(new URL("../../terrain-serving.flow.json", import.meta.url)), "utf8"),
+  );
+  const routes = flow.api.routes;
+  for (const route of routes) {
+    assert.equal(route.anonymous, true, `${route.path} must be declared anonymous`);
+    assert.equal(route.method, "GET", `${route.path} is a read`);
+  }
+
+  // The host's own join + template match (JoinMountPath / templateMatch),
+  // applied to the paths a client actually requests.
+  const join = (mountPath, routePath) => {
+    const mount = mountPath.replace(/\/$/, "");
+    const rest = routePath.trim().replace(/^\//, "");
+    return rest === "" ? mount || "/" : `${mount}/${rest}`;
+  };
+  const matches = (template, path) => {
+    if (template === path) return true;
+    const p = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+    if (template === p) return true;
+    const t = template.replace(/^\/|\/$/g, "").split("/");
+    const s = p.replace(/^\/|\/$/g, "").split("/");
+    if (t.length !== s.length) return false;
+    return t.every((seg, i) =>
+      seg.length >= 2 && seg.startsWith("{") && seg.endsWith("}") ? s[i] !== "" : seg === s[i],
+    );
+  };
+  const declared = routes.map((r) => join("/api/v1/terrain/", r.path));
+  const anonymous = (path) => declared.some((template) => matches(template, path));
+
+  for (const path of [
+    "/api/v1/terrain",
+    "/api/v1/terrain/",
+    "/api/v1/terrain/catalogue.json",
+    "/api/v1/terrain/layer.json",
+    "/api/v1/terrain/8/268/190.terrain",
+  ]) {
+    assert.ok(anonymous(path), `${path} must be anonymous by DECLARATION, not by allowlist`);
+  }
+});

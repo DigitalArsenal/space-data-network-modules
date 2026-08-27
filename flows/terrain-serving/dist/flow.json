@@ -120,6 +120,54 @@
     "tagDescription": "Quantized-mesh terrain tiles served from this node's $DTT record store (wasm; all routing, conditional-request and response shaping run inside the module). Anonymous by design: every response is cacheable and the record store is read-only from this flow.",
     "routes": [
       {
+        "path": "/",
+        "method": "GET",
+        "operationId": "getTerrainCatalogue",
+        "summary": "Which tileset epoch this node serves",
+        "description": "The discovery document a client reads to learn WHERE the terrain is, so no client hardcodes a CID or a hostname (owner 2026-08-27: terrain files are requested over IPFS). Names the current tileset CID, its dataset epoch, and terrainBasePath - a path RELATIVE to this node's origin: /ipfs/<cid>/ when a tileset CID is configured (\"delivery\":\"ipfs\") and this mount's own prefix when one is not (\"delivery\":\"mount\", \"cid\":null), so a development node with no IPFS daemon answers the same document rather than an error. Keys are lowercase/camelCase: an API-synthesized discovery document, not a $DTT rendered as JSON. cache-control public max-age=60 with a strong ETag - everything under a CID is immutable and this is the lane's ONE mutable pointer, so a minute bounds how long a client can miss a recut while every revalidation after the first is a 304.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The tileset discovery document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "Current tileset epoch: tilesetId, delivery, cid, datasetEpoch, terrainBasePath, layerJsonPath, format, scheme, projection, extensions, maxzoom, attribution."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          }
+        }
+      },
+      {
+        "path": "/catalogue.json",
+        "method": "GET",
+        "operationId": "getTerrainCatalogueJson",
+        "summary": "Which tileset epoch this node serves (explicit name)",
+        "description": "Byte-identical to the mount root, under an explicit filename for clients and caches that prefer a named document to a directory path. Declared as its own route because the host admits a mounted route anonymously only if the flow DECLARES it (sdn-server/internal/gateway/anonymous.go): the delivery path of this whole lane is a client resolving the CID from here, so its anonymity must not rest on an operator allowlist entry alone.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The tileset discovery document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "Current tileset epoch: tilesetId, delivery, cid, datasetEpoch, terrainBasePath, layerJsonPath, format, scheme, projection, extensions, maxzoom, attribution."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          }
+        }
+      },
+      {
         "path": "/layer.json",
         "method": "GET",
         "operationId": "getTerrainLayerJson",
