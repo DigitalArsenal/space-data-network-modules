@@ -2409,6 +2409,28 @@ struct ServingConfig {
     AvailabilityIndex availability;
     double ocean_synth_min_level = -1;  // < 0 = no level is authoritative
     uint32_t synth_grid = 65;
+    // ── WHERE THE TILES ACTUALLY ARE (owner 2026-08-27) ─────────────────────
+    //
+    // The pyramid is PUBLISHED as a content-addressed IPFS directory and the
+    // clients fetch from the gateway, so the one thing they cannot know on
+    // their own is WHICH directory is current. That is this mount's job: the
+    // CID of the tileset epoch this node is serving, rendered as a catalogue
+    // document at the mount root. Rendered, never hardcoded in a client — a
+    // client that hardcodes a CID is pinned to a dead epoch the day the
+    // dataset is recut.
+    //
+    // It is CONFIGURED, exactly as `terrain_available` is and for the same
+    // reason: which epoch a node serves is the orchestrator's knowledge, not
+    // something to aggregate out of the store per request. The durable form of
+    // that knowledge is the $DTT catalogue record the builder emits and the
+    // dataset lane publishes (tools/terrain-pyramid/IPFS-DELIVERY.md states
+    // the field mapping); this key is that record's CID field, installed.
+    std::string tileset_cid;
+    std::string gateway_path = "/ipfs/";
+    std::string gateway_origin;
+    std::string dataset_epoch;
+    std::string attribution;
+    long maxzoom = 0;
 };
 
 ServingConfig build_serving_config(const std::string& config) {
@@ -2429,16 +2451,30 @@ ServingConfig build_serving_config(const std::string& config) {
     sc.availability = parse_availability(available);
 
     const long maxzoom = static_cast<long>(json_number(config, "terrain_maxzoom", 0));
+
     sc.layer_plan = std::string("{\"tilesetId\":\"") + json_escape(sc.tileset_id) + "\"" +
                     ",\"maxzoom\":" + std::to_string(maxzoom) + ",\"attribution\":\"" +
                     json_escape(json_string(config, "terrain_attribution", "")) + "\"" +
                     ",\"description\":\"" +
                     json_escape(json_string(config, "terrain_description", "")) + "\"" +
                     ",\"version\":\"" + json_escape(sc.version) + "\"" +
+                    ",\"tiles\":\"" +
+                    json_escape(json_string(config, "terrain_tiles_template",
+                                            "{z}/{x}/{y}.terrain?v={version}")) + "\"" +
                     ",\"available\":" + available + "}";
 
     sc.layer_plan_token = sha256_multihash(
         std::vector<uint8_t>(sc.layer_plan.begin(), sc.layer_plan.end()));
+
+    sc.tileset_cid = json_string(config, "terrain_tileset_cid", "");
+    sc.gateway_path = json_string(config, "terrain_gateway_path", "/ipfs/");
+    if (sc.gateway_path.empty() || sc.gateway_path.back() != '/') sc.gateway_path += '/';
+    sc.gateway_origin = json_string(config, "terrain_gateway_origin", "");
+    while (!sc.gateway_origin.empty() && sc.gateway_origin.back() == '/')
+        sc.gateway_origin.pop_back();
+    sc.dataset_epoch = json_string(config, "terrain_dataset_epoch", "");
+    sc.attribution = json_string(config, "terrain_attribution", "");
+    sc.maxzoom = maxzoom;
 
     sc.ocean_synth_min_level = json_number(config, "terrain_ocean_synth_min_level", -1);
     const double synth = json_number(config, "terrain_synth_grid_size", 65);
@@ -3459,7 +3495,8 @@ int layer_json(void) {
             ",\"version\":\"" + json_escape(json_string(plan, "version", "1.0.0")) + "\"" +
             ",\"format\":\"quantized-mesh-1.0\",\"attribution\":\"" +
             json_escape(json_string(plan, "attribution", "")) + "\"" +
-            ",\"scheme\":\"tms\",\"tiles\":[\"{z}/{x}/{y}.terrain?v={version}\"]" +
+            ",\"scheme\":\"tms\",\"tiles\":[\"" +
+            json_escape(json_string(plan, "tiles", "{z}/{x}/{y}.terrain?v={version}")) + "\"]" +
             ",\"projection\":\"EPSG:4326\",\"bounds\":[-180,-90,180,90]" +
             ",\"minzoom\":0,\"maxzoom\":" + std::to_string(maxzoom) +
             ",\"extensions\":[\"watermask\"]" + ",\"available\":" + available + "}";
@@ -3663,6 +3700,68 @@ int route(void) {
     const std::string accepted_query = "v=" + cfg.version;
     if (!raw_query.empty() && raw_query != accepted_query) {
         return push_htr_not_found(path);
+    }
+
+    // ── THE CATALOGUE: WHICH TILESET EPOCH THIS NODE IS SERVING ────────────
+    //
+    // OWNER 2026-08-27: terrain files are requested over IPFS. The pyramid is
+    // one content-addressed directory per tileset epoch — layer.json and every
+    // {z}/{x}/{y}.terrain inside it — added and pinned through the node's IPFS
+    // API by the off-fleet builder, and the clients point a native terrain
+    // provider at the gateway path of the CURRENT CID.
+    //
+    // So this mount stops being the delivery path and becomes the RESOLVER for
+    // it: one small document, at the mount root, naming the CID. A client
+    // fetches it once, joins `terrainBasePath` against the node origin it
+    // already knows, and never learns a hostname or an epoch from its own
+    // source (the owner refused a static asset hostname on the same day).
+    //
+    // The tile and layer.json routes below still answer, unchanged. They are
+    // not the delivery path any more; they are what a node with no CID
+    // configured falls back to, and what makes a local development node work
+    // with no IPFS daemon at all — which is exactly what `delivery` says on
+    // the wire, so a client can tell the two apart rather than guess.
+    //
+    // Keys are lowercase/camelCase: this is an API-synthesized discovery
+    // document, not a $DTT rendered as JSON (which takes IDL-exact keys).
+    //
+    // max-age is 60, not the tiles' 86400 and not layer.json's 300. Everything
+    // under a CID is immutable forever; THIS is the one mutable pointer in the
+    // lane, and the whole cutover to a new epoch is a client noticing it
+    // changed. A minute bounds that; the strong ETag makes every revalidation
+    // after the first a 304.
+    if (rest.empty() || rest == "catalogue.json") {
+        const bool over_ipfs = !cfg.tileset_cid.empty();
+        const std::string base =
+            over_ipfs ? cfg.gateway_path + cfg.tileset_cid + "/" : cfg.mount_prefix;
+        std::string body =
+            std::string("{\"tilesetId\":\"") + json_escape(cfg.tileset_id) + "\"" +
+            ",\"delivery\":\"" + (over_ipfs ? "ipfs" : "mount") + "\"" +
+            ",\"cid\":" + (over_ipfs ? "\"" + json_escape(cfg.tileset_cid) + "\"" : "null") +
+            ",\"datasetEpoch\":" +
+            (cfg.dataset_epoch.empty() ? "null"
+                                       : "\"" + json_escape(cfg.dataset_epoch) + "\"") +
+            ",\"version\":\"" + json_escape(cfg.version) + "\"" +
+            ",\"terrainBasePath\":\"" + json_escape(base) + "\"" +
+            ",\"layerJsonPath\":\"" + json_escape(base + "layer.json") + "\"";
+        if (!cfg.gateway_origin.empty() && over_ipfs) {
+            body += ",\"terrainBaseUrl\":\"" + json_escape(cfg.gateway_origin + base) + "\"";
+        }
+        body += std::string(",\"format\":\"quantized-mesh-1.0\",\"scheme\":\"tms\"") +
+                ",\"projection\":\"EPSG:4326\",\"extensions\":[\"watermask\"]" +
+                ",\"maxzoom\":" + std::to_string(cfg.maxzoom) +
+                ",\"attribution\":\"" + json_escape(cfg.attribution) + "\"}";
+        const std::string etag =
+            "\"" + sha256_multihash(std::vector<uint8_t>(body.begin(), body.end())) + "\"";
+        std::vector<HeaderEntry> headers = {{"content-type", "application/json"},
+                                            {"cache-control", "public, max-age=60"},
+                                            {"etag", etag},
+                                            {"access-control-allow-origin", "*"}};
+        if (!if_none_match.empty() && if_none_match == etag) {
+            return push_htr(304, headers, nullptr, 0);
+        }
+        return push_htr(200, headers, reinterpret_cast<const uint8_t*>(body.data()),
+                        body.size());
     }
 
     if (rest == "layer.json") {
