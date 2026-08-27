@@ -255,6 +255,7 @@ let partialCoverage = 0;
 const partialCoverageDetail = [];
 let wholeRowsMissing = 0;
 let flatWithLandMask = 0;
+const flatWithLandMaskExamples = [];
 let accuracyMeasured = 0;
 const accuracyByLevel = new Map();
 // Per level: how many tiles state a measured accuracy, and how many of those
@@ -314,24 +315,47 @@ for (const record of records) {
   // then the verdict. Water everywhere: it should have been skipped. Any land
   // at all: the mask is claiming dry ground on a surface that is flat at zero
   // over its whole extent, which is a fabrication until something measured it.
-  if (dtt.minHeightM === 0 && dtt.maxHeightM === 0) {
+  //
+  // "FLAT AT ZERO" MEANS THE SOURCE IS, NOT THAT THE MESH IS. Since density
+  // adapts to relief, a coastal tile whose relief is inside its level's error
+  // target ships as a flat mesh AT ZERO on purpose — that is the ruling
+  // working, not a fabrication, and the record says so in the same breath by
+  // stating a non-zero VERTICAL_ACCURACY_M. A tile whose measurement says the
+  // flat mesh departs from the source by nothing is the one making a claim
+  // about the source, and that is the one this reads. (The first adaptive-
+  // density run reported nine of these; every one was a coastal tile with real
+  // measured relief that the coarse candidate flattened, and calling those
+  // fabrications would have been the gate misreading its own subject.)
+  const flatMeshDescribesFlatSource =
+    dtt.accuracyConfidence === 0 || dtt.verticalAccuracyM === 0;
+  if (dtt.minHeightM === 0 && dtt.maxHeightM === 0 && dtt.waterMaskKind === 2) {
+    // Unconditional: a flat-at-zero tile whose mask is UNIFORM_WATER is open
+    // ocean whatever its accuracy figure says, and the serving flow synthesizes
+    // those. Storing them inflates the pyramid with identical flat records.
+    oceanStored += 1;
+    problems.push(`all-ocean tile stored at ${key}`);
+  }
+  if (dtt.minHeightM === 0 && dtt.maxHeightM === 0 && flatMeshDescribesFlatSource) {
     if (dtt.waterMaskKind === 2) {
-      oceanStored += 1;
-      problems.push(`all-ocean tile stored at ${key}`);
+      // counted above
     } else if (dtt.waterMaskKind === 3) {
       const raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
       let land = 0;
       for (const b of raw) if (b === 0x00) land += 1;
       if (land > 0) {
+        // COUNTED, not refused. A DEM that reads exactly 0 m where the water
+        // mask says land is the SOURCE disagreeing with itself — reclaimed
+        // land, lagoons and salt flats really do sit at 0 m, and the two
+        // Copernicus products are independent. What made this a defect before
+        // was land INVENTED from an absent DEM granule, and that is a different
+        // measurement with its own counter (`maskFromAbsenceSamples`), gated
+        // below. Refusing on this would refuse the source for being the source.
         flatWithLandMask += 1;
-        problems.push(
-          `${key} is flat at exactly 0 m over its whole extent yet its mask marks ${land} ` +
-            "samples as LAND: dry ground claimed on a surface nothing measured above sea level",
-        );
+        flatWithLandMaskExamples.push(`${key}: ${land} land samples`);
       }
     } else if (dtt.waterMaskKind === 1) {
       flatWithLandMask += 1;
-      problems.push(`${key} is flat at exactly 0 m yet states UNIFORM_LAND`);
+      flatWithLandMaskExamples.push(`${key}: UNIFORM_LAND`);
     }
   }
 
@@ -427,13 +451,37 @@ for (const record of records) {
 }
 
 // ── EDGE CONTINUITY, which no per-tile check can see ───────────────────────
-// Two adjacent tiles share a post row. They sample it from the same global
-// lattice, so the only thing that may separate their answers is their own
-// quantisation step. Anything larger is a seam a person will see: the zeroed
-// south row showed up here as a 340-metre disagreement.
+//
+// Two adjacent tiles share a post row, and they sample it from the same global
+// lattice — so at the posts they BOTH carry, the only thing that may separate
+// their answers is their own quantisation step. Anything larger is a seam a
+// person will see: the zeroed south row showed up here as a 340-metre
+// disagreement.
+//
+// WHICH POSTS THEY BOTH CARRY IS NOW A QUESTION. Density adapts per tile
+// (coordinator 2026-08-27 (a)), so a 5-post tile can sit beside a 65-post one.
+// Their posts still come from ONE global lattice — post j of an M-post tile is
+// post j*(N-1)/(M-1) of an N-post tile at the same address, exactly, because
+// the two expressions differ only by a factor that cancels — so the coarser
+// tile's posts are a SUBSET of the finer one's and the comparison is over that
+// subset. Comparing by INDEX, which is what this used to do, compares post 3 of
+// a 5-post edge against post 3 of a 65-post edge: different ground, and on the
+// first adaptive-density run it reported 48,000 "seams" that were nothing but
+// the index mismatch.
+//
+// BETWEEN those shared posts the two edges genuinely differ: the coarser tile
+// interpolates linearly where the finer one follows the terrain. That gap is
+// not a defect to be gated to zero — it is the LOD crack quantized-mesh skirts
+// exist for, and it is bounded by the coarser tile's own stated
+// VERTICAL_ACCURACY_M, which every record carries. It is REPORTED per level
+// (`worstDensityStepCrackM`) rather than asserted away, so the ruling's cost is
+// a number a reviewer can read.
+const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
 let adjacencies = 0;
 let worstSeam = 0;
 let worstSeamAt = null;
+let mixedDensityAdjacencies = 0;
+const crackByLevel = new Map();
 for (const [key, here] of edgesByAddress) {
   const [level, x, y] = key.split("/").map(Number);
   const pairs = [
@@ -445,28 +493,89 @@ for (const [key, here] of edgesByAddress) {
     if (!other) continue;
     adjacencies += 1;
     const tolerance = Math.max(here.step, other.step) + 1e-6;
-    for (let i = 0; i < here.grid; i += 1) {
-      const a = here[mine][i];
-      const b = other[theirs][i];
+    // ── THE POSTS THE TWO TILES GENUINELY SHARE ─────────────────────────
+    //
+    // Tile A carries posts at k/(a-1) along the shared edge and tile B at
+    // m/(b-1); a position belongs to both exactly when k/(a-1) = m/(b-1), so
+    // they share gcd(a-1, b-1) + 1 posts, always at least the two CORNERS.
+    // When one density's intervals divide the other's, that is every post of
+    // the coarser tile — the nested case, and the common one. When they do
+    // not (the ladder offers 25 and 65 at the same level, and 24 does not
+    // divide 64) it is fewer, but it is never zero and it is exactly
+    // computable, which is what makes this a check rather than a hope.
+    const spansA = here.grid - 1;
+    const spansB = other.grid - 1;
+    const g = gcd(spansA, spansB);
+    if (here.grid !== other.grid) mixedDensityAdjacencies += 1;
+    for (let j = 0; j <= g; j += 1) {
+      const a = here[mine][(j * spansA) / g];
+      const b = other[theirs][(j * spansB) / g];
       if (Number.isNaN(a) || Number.isNaN(b)) continue;
       const delta = Math.abs(a - b);
       if (delta > worstSeam) {
         worstSeam = delta;
-        worstSeamAt = `${key} ${mine} vs ${otherKey} ${theirs} post ${i}`;
+        worstSeamAt = `${key} ${mine} vs ${otherKey} ${theirs} shared post ${j}/${g}`;
       }
       if (delta > tolerance) {
         problems.push(
-          `seam at ${key} ${mine} vs ${otherKey} ${theirs} post ${i}: ` +
+          `seam at ${key} ${mine} vs ${otherKey} ${theirs} shared post ${j} of ${g}: ` +
             `${a.toFixed(3)} m vs ${b.toFixed(3)} m (tolerance ${tolerance.toFixed(3)} m)`,
         );
       }
     }
+    // ── THE CRACK THE DENSITY STEP LEAVES BETWEEN THOSE POSTS ────────────
+    //
+    // Between two shared posts the coarser edge is a straight line and the
+    // finer one follows the terrain, so the two edges diverge. That is NOT a
+    // defect to be gated to zero — it is the LOD crack quantized-mesh skirts
+    // exist for, and it is bounded by the coarser tile's own stated
+    // VERTICAL_ACCURACY_M, which every record carries. It is measured and
+    // reported per level so the ruling's cost is a number rather than a
+    // shrug: each tile's edge is evaluated against the OTHER tile's edge,
+    // linearly interpolated at the same position.
+    if (here.grid !== other.grid) {
+      const at = (edge, grid, u) => {
+        const t = u * (grid - 1);
+        const i = Math.min(grid - 2, Math.floor(t));
+        const f = t - i;
+        const v0 = edge[i];
+        const v1 = edge[i + 1];
+        return Number.isNaN(v0) || Number.isNaN(v1) ? NaN : v0 + (v1 - v0) * f;
+      };
+      let worstCrack = crackByLevel.get(level) ?? 0;
+      const fineGrid = Math.max(here.grid, other.grid);
+      for (let i = 0; i < fineGrid; i += 1) {
+        const u = i / (fineGrid - 1);
+        const a = at(here[mine], here.grid, u);
+        const b = at(other[theirs], other.grid, u);
+        if (Number.isNaN(a) || Number.isNaN(b)) continue;
+        worstCrack = Math.max(worstCrack, Math.abs(a - b));
+      }
+      crackByLevel.set(level, worstCrack);
+    }
   }
 }
 
-// The mask's shared bytes, over every adjacency, both axes. Row 0 is the NORTH
-// edge of the mask raster, so the tile to the NORTH shares its south row with
-// this tile's north row.
+// ── THE MASK'S EDGE TEXELS, WHICH ARE NO LONGER THE SAME GROUND ────────────
+//
+// This used to assert that tile x's east column and tile x+1's west column are
+// EQUAL, because the mask was cut on a 256-POST lattice where they were the
+// same global post. The mask is registered as an IMAGE now (area registration,
+// cell i covering [i/N,(i+1)/N] — which is how Cesium samples it), so cell 255
+// of tile x and cell 0 of tile x+1 cover ADJACENT, DIFFERENT ground and are
+// equal only when the coastline says so. On the regional run they differ on
+// 4,815 of 2,274,304 compared bytes, every one of them a coastline crossing.
+//
+// So this is a STATISTIC now, not a gate — and the property it used to stand
+// for did not go away, it moved somewhere that can actually decide it. Byte
+// identity was only ever a PROXY for "both tiles were cut from one global
+// grid", and from records alone that proxy is all this file can compute: it
+// does not have the source granule and cannot say whether a differing pair is
+// a coastline or a lattice bug. The module's own test can, and does —
+// data-source/terrain-source/tests/watermask-seams.test.mjs compares 7,915,776
+// texels across a 121-tile block against a global grid computed independently
+// in the test from the WBM fixture, which is a strictly stronger statement than
+// edge equality ever was and fails under the old registration.
 let maskAdjacencies = 0;
 let maskByteDisagreements = 0;
 const maskSeamExamples = [];
@@ -492,12 +601,8 @@ for (const [key, here] of maskEdgesByAddress) {
     }
   }
 }
-if (maskByteDisagreements) {
-  problems.push(
-    `${maskByteDisagreements} shared water-mask bytes disagree across ${maskAdjacencies} ` +
-      `adjacencies (e.g. ${maskSeamExamples[0]})`,
-  );
-}
+// Reported, not gated; see above.
+const maskEdgeBytesCompared = maskAdjacencies * 256;
 
 sizes.sort((a, b) => a - b);
 const pct = (p) => (sizes.length ? sizes[Math.min(sizes.length - 1, Math.floor((sizes.length - 1) * p))] : 0);
@@ -754,7 +859,12 @@ const summary = {
   // claims land somewhere. The old ocean test could not see these because it
   // required a UNIFORM_WATER mask, and the four the encoder shipped were
   // RASTER precisely BECAUSE of the fabricated land in them.
+  // Tiles whose SHIPPED mesh is flat at exactly 0 m while their mask claims
+  // land somewhere, and whose own accuracy measurement says the flat mesh
+  // describes the source exactly. Reported, not gated: it is the two source
+  // products disagreeing, and the fabrication case has its own counter.
   flatAtZeroWithLandMask: flatWithLandMask,
+  flatAtZeroWithLandMaskExamples: flatWithLandMaskExamples.slice(0, 16),
   digestMismatches: digestMismatch,
   tilesOverCeiling: overCeiling,
   tilesWithPartialCoverage: partialCoverage,
@@ -778,10 +888,24 @@ const summary = {
   ceilingShareBound: CEILING_SHARE,
   edgeAdjacenciesChecked: adjacencies,
   maskAdjacenciesChecked: maskAdjacencies,
-  maskSharedByteDisagreements: maskByteDisagreements,
-  maskSeamExamples,
+  // NOT a defect count. Under area registration two neighbouring edge texels
+  // cover different ground, so a difference is a coastline crossing the seam.
+  // Kept as a statistic because a sudden change in it is worth looking at, and
+  // because the number was previously published as a defect count and the
+  // change should be visible rather than silent.
+  maskEdgeTexelsCompared: maskEdgeBytesCompared,
+  maskEdgeTexelDifferences: maskByteDisagreements,
+  maskEdgeTexelExamples: maskSeamExamples,
   worstSharedEdgeDeltaM: +worstSeam.toFixed(6),
   worstSharedEdgeAt: worstSeamAt,
+  // Adjacencies where the two tiles settled on different densities, and the
+  // worst gap that leaves BETWEEN their shared posts. Not a gate — it is the
+  // LOD crack skirts exist for, bounded by the coarser tile's own stated
+  // accuracy — but the ruling's cost, stated as a number.
+  mixedDensityAdjacencies,
+  worstDensityStepCrackM: Object.fromEntries(
+    [...crackByLevel.entries()].sort((a, b) => a[0] - b[0]).map(([l, v]) => [l, +v.toFixed(3)]),
+  ),
   layerJson: { maxzoom: maxLevel, extensions: ["watermask"], available },
   // null, not 0, when no run report was left beside the store: "nobody counted"
   // and "the count was zero" are different claims.
@@ -845,6 +969,17 @@ const failures = [
   // the same clamped sampler, and a clamped grid-INTERIOR row is not a tile
   // edge so the seam check cannot see it either. Zero is the only right
   // answer, and it is only readable from the run report.
+  // FABRICATED LAND. Samples the DEM covers but no water granule classifies
+  // fall back to LAND, and that is the defect this lane already shipped once —
+  // 40,527 invented LAND samples in the open Ligurian Sea. (Samples NO granule
+  // covers are a different case: Copernicus publishes no object over open
+  // ocean, so absence is the dataset saying sea, and those are counted
+  // separately and never gated.)
+  encoderCounters && encoderCounters.maskUnclassifiedSamples > 0
+    ? `${encoderCounters.maskUnclassifiedSamples} water-mask samples sit on ground the DEM covers ` +
+      "but no water granule classifies, so they were filled in as LAND — the plan fetched " +
+      "elevation for ground it did not fetch a water mask for"
+    : null,
   encoderCounters && encoderCounters.edgeClampedPosts > 0
     ? `${encoderCounters.edgeClampedPosts} clamped posts reported by the encoder ` +
       `(a clamp is a displaced sample; the plan is missing a neighbour granule)`

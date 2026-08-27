@@ -421,6 +421,17 @@ async function main() {
     // the error target. The encoder's word for it; verify.mjs re-derives the
     // same figure from the records and the two are compared.
     tilesAtCeiling: 0,
+    // Water-mask samples inferred from an ABSENT DEM granule — WATER, and by
+    // design: Copernicus publishes no object at all over open ocean, so
+    // "nothing covers this" is the dataset's own way of saying sea. Reported,
+    // never gated.
+    maskFromAbsenceSamples: 0,
+    // Samples the DEM DOES cover but no water granule classifies. These fall
+    // back to LAND, and that is the fabricated-land shape: this lane shipped
+    // 40,527 invented LAND samples in the open Ligurian Sea when the fallback
+    // was block-wide, and a non-zero count now means the plan did not fetch a
+    // WBM auxfile for ground it did fetch elevation for. verify.mjs refuses it.
+    maskUnclassifiedSamples: 0,
     errors: [],
   };
 
@@ -702,6 +713,10 @@ async function main() {
         stats.edgeClampedPosts += value.edgeClampedPosts ?? 0;
         stats.bandBridgedPosts += value.bandBridgedPosts ?? 0;
         stats.tilesAtCeiling += value.tilesAtCeiling ?? 0;
+        for (const tile of value.tiles ?? []) {
+          stats.maskFromAbsenceSamples += tile.maskFromAbsenceSamples ?? 0;
+          stats.maskUnclassifiedSamples += tile.maskUnclassifiedSamples ?? 0;
+        }
       }
       // The operator-readable JSON mark, which the flow still lands on egress.
       // It is NOT the durable one and it is not what advances the walk: the
@@ -856,6 +871,8 @@ async function main() {
       edgeClampedPosts: stats.edgeClampedPosts,
       bandBridgedPosts: stats.bandBridgedPosts,
       tilesAtCeiling: stats.tilesAtCeiling,
+      maskFromAbsenceSamples: stats.maskFromAbsenceSamples,
+      maskUnclassifiedSamples: stats.maskUnclassifiedSamples,
     },
     errors: stats.errors,
     cellsDetail: report,

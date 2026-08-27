@@ -720,9 +720,13 @@ async function encodeRelief(t, heightFn, plan = {}) {
       responseFrame("dem", tiff),
     ]),
   );
+  const report = asJson(outputs.get("report"));
   return {
     dtt: decodeDtt(splitStream(outputs.get("records"))[0]),
-    tile: asJson(outputs.get("report")).tiles[0],
+    tile: report.tiles[0],
+    // maxGridSize is a property of the PLAN and therefore of the block, not of
+    // one tile; it is read where it lives.
+    report,
   };
 }
 
@@ -798,4 +802,101 @@ test("with the accuracy measurement OFF, density is the plan's own gridSize — 
   });
   assert.equal(tile.gridSize, GRID, "no measurement, no coarsening");
   assert.equal(tile.accuracyProbes, 0, "…and no accuracy is claimed either");
+});
+
+test("THE CAP is what stops the climb, not the plan's gridSize", async (t) => {
+  // The ruling is that density adapts "inside a 32 KiB gzipped HARD cap" and
+  // that a tile ships at the cap where the CAP cannot meet the target. The cap
+  // can only be the limit if the search is allowed to climb past the plan's own
+  // number — a ladder topped at gridSize makes gridSize the limit and the cap
+  // decorative, which is what the first cut did: the regional run shipped
+  // 8.4 KB tiles (a quarter of the cap) that still missed the target at z10
+  // and z11.
+  // Relief a 33-post mesh cannot describe to this level's target (z8, so
+  // 2 x 77067/256 = 602 m): the search has to WANT more posts before "let it
+  // climb" is a testable claim at all. The pair is 33 -> 65 rather than
+  // 65 -> 129 because the 32 KiB cap is real: a 129-post mesh of this fixture
+  // is ~297 KB uncompressed and does not fit, which is the cap doing its job
+  // and would test the wrong half of the sentence.
+  const rough = (px, py) =>
+    3200 * Math.sin(px / 1.9) * Math.cos(py / 1.6) + 2600 * Math.sin(px / 0.9 + py / 1.1);
+  const capped = await encodeRelief(t, rough, { gridSize: 33 });     // maxGridSize defaults to gridSize
+  const climbing = await encodeRelief(t, rough, { gridSize: 33, maxGridSize: 65 });
+
+  assert.equal(capped.report.maxGridSize, 33, "the default is the plan's own gridSize: no surprises");
+  assert.equal(climbing.report.maxGridSize, 65);
+  assert.equal(capped.tile.gridSize, 33, "capped at the plan's own number");
+  assert.ok(
+    climbing.tile.gridSize > capped.tile.gridSize,
+    `the climb must actually happen: ${climbing.tile.gridSize} vs ${capped.tile.gridSize}`,
+  );
+  assert.ok(
+    climbing.dtt.verticalAccuracyM < capped.dtt.verticalAccuracyM,
+    `and it must buy accuracy: ${climbing.dtt.verticalAccuracyM} m vs ${capped.dtt.verticalAccuracyM} m`,
+  );
+  // The cap is still hard on the way up.
+  assert.ok(climbing.tile.payloadBytes <= 32 * 1024, `${climbing.tile.payloadBytes} B`);
+
+  // …and the record describes the mesh it SHIPPED, not the one the plan asked
+  // for. POST_SPACING_M is the MESH's own lattice (it used to be derived from
+  // the plan's gridSize, which with adaptive density describes a mesh nobody
+  // has); SOURCE_POST_SPACING_M is the granule's and is unchanged by any of
+  // this, which is the distinction the two fields exist for.
+  assert.ok(
+    climbing.dtt.postSpacingM < capped.dtt.postSpacingM,
+    `a denser mesh states a finer post spacing: ${climbing.dtt.postSpacingM} vs ${capped.dtt.postSpacingM}`,
+  );
+  assert.equal(
+    climbing.dtt.sourcePostSpacingM,
+    capped.dtt.sourcePostSpacingM,
+    "the SOURCE's spacing is a fact about the granule and does not move with the mesh",
+  );
+});
+
+test("every candidate is a SUBSET of one lattice, so neighbours agree on shared posts", async (t) => {
+  // Two adjacent tiles may settle on different densities. Their shared edge
+  // posts still come from the same global lattice — post j of an M-post tile is
+  // post j*(N-1)/(M-1) of an N-post tile at the same address, exactly — and
+  // that is the property the pyramid's seam check rests on. Asserted here on
+  // ONE tile encoded at two densities: the coarse mesh's posts must be present,
+  // to quantisation, in the fine mesh at the strided indices.
+  const rough = (px, py) => 300 * Math.sin(px / 5.5) + 250 * Math.cos(py / 4.5);
+  const coarse = await encodeRelief(t, rough, { minGridSize: 9, maxGridSize: 9, gridSize: 9 });
+  const fine = await encodeRelief(t, rough, { minGridSize: 65, maxGridSize: 65 });
+  assert.equal(coarse.tile.gridSize, 9);
+  assert.equal(fine.tile.gridSize, 65);
+
+  const posts = (result, grid) => {
+    const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(result.dtt.payload.bytes)));
+    const range = mesh.header.maxHeight - mesh.header.minHeight;
+    const out = new Map();
+    for (let n = 0; n < mesh.vertexCount; n += 1) {
+      const i = Math.round((mesh.u[n] * (grid - 1)) / 32767);
+      const j = Math.round((mesh.v[n] * (grid - 1)) / 32767);
+      out.set(`${i}/${j}`, mesh.header.minHeight + (mesh.h[n] / 32767) * range);
+    }
+    return out;
+  };
+  const coarsePosts = posts(coarse, 9);
+  const finePosts = posts(fine, 65);
+  const stride = 64 / 8;
+  const tolerance =
+    Math.max(
+      (coarse.dtt.maxHeightM - coarse.dtt.minHeightM) / 32767,
+      (fine.dtt.maxHeightM - fine.dtt.minHeightM) / 32767,
+    ) + 1e-9;
+  let compared = 0;
+  for (let j = 0; j < 9; j += 1) {
+    for (let i = 0; i < 9; i += 1) {
+      const a = coarsePosts.get(`${i}/${j}`);
+      const b = finePosts.get(`${i * stride}/${j * stride}`);
+      assert.ok(a !== undefined && b !== undefined, `post ${i}/${j} missing`);
+      assert.ok(
+        Math.abs(a - b) <= tolerance,
+        `post ${i}/${j}: coarse ${a} m vs fine ${b} m (tolerance ${tolerance} m)`,
+      );
+      compared += 1;
+    }
+  }
+  assert.equal(compared, 81);
 });

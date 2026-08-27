@@ -1353,6 +1353,13 @@ int granule_plan(void) {
     // granule fetches to build zero tiles.
     const std::string base = config_string(config, "granule_base_url", kDefaultGranuleBase);
     const long grid = static_cast<long>(json_number_or(config, "grid_size", kDefaultGridSize));
+    // The top of the encoder's density ladder. Density adapts per tile to
+    // relief inside the 32 KiB gzipped cap (coordinator 2026-08-27 (a)), and
+    // the cap is what is supposed to stop the climb — so the plan has to let
+    // it climb. Defaults to grid_size, which is exactly the fixed-density
+    // behaviour, so a config that says nothing changes nothing.
+    const long max_grid =
+        static_cast<long>(json_number_or(config, "max_grid_size", static_cast<double>(grid)));
     const long timeout_ms = config_timeout_ms(config);
 
     PlannedCell cell;
@@ -1499,6 +1506,7 @@ int granule_plan(void) {
         std::string("{\"tilesetId\":\"") + json_escape(tileset) + "\"" +
         ",\"scheme\":\"GEOGRAPHIC_WGS84\",\"rowOriginNorth\":false" +
         ",\"level\":" + std::to_string(cell.level) + ",\"gridSize\":" + std::to_string(grid) +
+        ",\"maxGridSize\":" + std::to_string(max_grid) +
         ",\"maxLevel\":" + std::to_string(cell.region->max_level) +
         // Ocean tiles are NOT stored: they are identical, there are millions of
         // them, and the serving lane synthesizes an unstored address inside

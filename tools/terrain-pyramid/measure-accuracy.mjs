@@ -229,6 +229,18 @@ async function encodeReference(tile, harness) {
         tilesetId: "measure",
         level: tile.level + REFERENCE_DEPTH,
         gridSize: GRID,
+        // THE REFERENCE'S LATTICE IS PINNED. Density adapts to relief now
+        // (coordinator 2026-08-27 (a)), and a reference that adapts is not a
+        // reference: the grandchildren of a gently sloping tile would settle on
+        // 5 posts each and this would "measure" the shipped mesh against
+        // something COARSER than itself. It did, before this line: the first
+        // adaptive-density run reported 3,492 m at z11 against a 37 m bound,
+        // which is not a terrain error, it is the yardstick bending.
+        minGridSize: GRID,
+        maxGridSize: GRID,
+        // …and the reference does not need to measure ITS own accuracy, which
+        // is three extra source probes per cell of a 16-tile block.
+        measureAccuracy: false,
         maxLevel: tile.level + REFERENCE_DEPTH,
         scheme: "GEOGRAPHIC_WGS84",
         rowOriginNorth: false,
@@ -315,17 +327,50 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
       levelN += n;
     }
   }
-  const bound = 77067 / 2 ** level;
+  // The RULED target (coordinator 2026-08-27 (a)) and the RETIRED pair, side by
+  // side, exactly as verify.mjs reports them — so the change of gate is visible
+  // rather than a quiet loosening, and so a reader can see what the old bound
+  // would have said about the same pyramid.
+  const target = (2 * 77067) / 2 ** level;
+  const legacyBound = 77067 / 2 ** level;
+  const rmse = Math.sqrt(levelSq / levelN);
+  // ── WHERE THE REFERENCE STOPS BEING A REFERENCE ─────────────────────────
+  //
+  // The reference is the encoder re-sampling the same extent at level+2, which
+  // is only a denser reading of the SOURCE while its posts are still coarser
+  // than the source's own. Past that point it is interpolating between source
+  // posts and its bilinear ringing shows up as "error" that has nothing to do
+  // with the mesh: at z13 the reference lattice is 8.6e-5 degrees against the
+  // dataset's 2.78e-4, three times finer than anything the granule states, and
+  // this harness duly reported 1,836 m where the encoder's own probe — which
+  // compares against the source posts themselves — reported 18.8 m.
+  //
+  // Two orders of magnitude apart means one of them is not measuring terrain.
+  // It is this one, and the level is marked rather than quietly averaged in.
+  const referenceSpacingDeg = 180 / 2 ** (level + REFERENCE_DEPTH) / (GRID - 1);
+  // Copernicus GLO-30 publishes 1 arcsecond of LATITUDE everywhere and widens
+  // its longitude spacing by band, so 1/3600 degree is the finest the source
+  // ever states and the conservative number to compare against.
+  const sourceSpacingDeg = 1 / 3600;
+  const referenceOutResolvesSource = referenceSpacingDeg < sourceSpacingDeg;
   levels.push({
     level,
+    // TRUE means the numbers on this row describe the reference's own
+    // interpolation, not the shipped mesh. Read the encoder's per-record
+    // VERTICAL_ACCURACY_M (and verify.mjs, which gates on it) instead.
+    referenceOutResolvesSource,
+    referenceSpacingDeg: +referenceSpacingDeg.toExponential(3),
+    sourceSpacingDeg: +sourceSpacingDeg.toExponential(3),
     tilesInStore: byLevel.get(level).length,
     tilesMeasured: tiles.length,
-    boundM: +bound.toFixed(2),
-    rmseBoundM: +(bound * 0.25).toFixed(2),
+    errorTargetM: +target.toFixed(2),
+    legacyBoundM: +legacyBound.toFixed(2),
+    legacyRmseBoundM: +(legacyBound * 0.25).toFixed(2),
     maxErrorM: +levelMax.toFixed(3),
-    rmseM: +Math.sqrt(levelSq / levelN).toFixed(3),
-    maxWithinBound: levelMax <= bound,
-    rmseWithinBound: Math.sqrt(levelSq / levelN) <= bound * 0.25,
+    rmseM: +rmse.toFixed(3),
+    maxWithinTarget: levelMax <= target,
+    maxWithinLegacyBound: levelMax <= legacyBound,
+    rmseWithinLegacyBound: rmse <= legacyBound * 0.25,
     tiles,
   });
 }
@@ -337,21 +382,33 @@ const summary = {
   referenceDepth: REFERENCE_DEPTH,
   referencePostsPerTileEdge: (GRID - 1) * 2 ** REFERENCE_DEPTH + 1,
   levels,
-  verdict: levels.every((l) => l.maxWithinBound && l.rmseWithinBound) ? "WITHIN BOUND" : "OVER BOUND",
+  // The verdict is against the RULED target. It is a per-level MAX over the
+  // worst-relief tiles, so it is deliberately harsher than verify.mjs's
+  // per-tile share gate and is reported rather than used as a ship gate:
+  // verify.mjs owns the gate (<= 5 % of tiles at the cap per level at z >= 10).
+  verdict: levels.filter((l) => !l.referenceOutResolvesSource).every((l) => l.maxWithinTarget)
+    ? "WITHIN TARGET"
+    : "OVER TARGET",
+  legacyVerdict: levels
+    .filter((l) => !l.referenceOutResolvesSource)
+    .every((l) => l.maxWithinLegacyBound && l.rmseWithinLegacyBound)
+    ? "WITHIN THE RETIRED BOUND"
+    : "OVER THE RETIRED BOUND",
+  levelsNotMeasurable: levels.filter((l) => l.referenceOutResolvesSource).map((l) => l.level),
 };
 fs.writeFileSync(path.join(outDir, "accuracy-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
 if (args.json) {
   console.log(JSON.stringify(summary, null, 2));
 } else {
   console.log(`gridSize ${GRID}, reference = level+${REFERENCE_DEPTH} (${summary.referencePostsPerTileEdge} posts per tile edge)\n`);
-  console.log("level  tiles  bound m   max m   rmse m  rmse bound  verdict");
+  console.log("level  tiles  target m    max m   rmse m  retired m  verdict");
   for (const l of levels) {
     console.log(
       `${String(l.level).padStart(5)}  ${String(l.tilesMeasured).padStart(5)}  ` +
-        `${l.boundM.toFixed(2).padStart(7)}  ${l.maxErrorM.toFixed(2).padStart(6)}  ` +
-        `${l.rmseM.toFixed(2).padStart(6)}  ${l.rmseBoundM.toFixed(2).padStart(10)}  ` +
-        `${l.maxWithinBound && l.rmseWithinBound ? "within" : "OVER"}`,
+        `${l.errorTargetM.toFixed(2).padStart(8)}  ${l.maxErrorM.toFixed(2).padStart(7)}  ` +
+        `${l.rmseM.toFixed(2).padStart(6)}  ${l.legacyBoundM.toFixed(2).padStart(9)}  ` +
+        `${l.referenceOutResolvesSource ? "n/a — reference out-resolves the source" : l.maxWithinTarget ? "within" : "OVER"}`,
     );
   }
-  console.log(`\n${summary.verdict}`);
+  console.log(`\n${summary.verdict} (against the retired pair: ${summary.legacyVerdict})`);
 }

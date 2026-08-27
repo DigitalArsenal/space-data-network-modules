@@ -1,0 +1,458 @@
+{
+  "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
+  "gridSize": 65,
+  "referenceDepth": 2,
+  "referencePostsPerTileEdge": 257,
+  "levels": [
+    {
+      "level": 8,
+      "referenceOutResolvesSource": false,
+      "referenceSpacingDeg": 0.002747,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 40,
+      "tilesMeasured": 7,
+      "errorTargetM": 602.09,
+      "legacyBoundM": 301.04,
+      "legacyRmseBoundM": 75.26,
+      "maxErrorM": 955.106,
+      "rmseM": 137.542,
+      "maxWithinTarget": false,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": false,
+      "tiles": [
+        {
+          "address": "8/267/193",
+          "reliefM": 4218.8,
+          "maxErrorM": 768.932,
+          "rmseM": 152.416,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/270/193",
+          "reliefM": 3676.7,
+          "maxErrorM": 756.288,
+          "rmseM": 137.224,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/271/193",
+          "reliefM": 3524.3,
+          "maxErrorM": 656.357,
+          "rmseM": 129.54,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/267/194",
+          "reliefM": 3467.1,
+          "maxErrorM": 955.106,
+          "rmseM": 129.887,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/271/194",
+          "reliefM": 3352.4,
+          "maxErrorM": 751.53,
+          "rmseM": 138.685,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/269/193",
+          "reliefM": 3226,
+          "maxErrorM": 732.804,
+          "rmseM": 136.236,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/269/189",
+          "reliefM": 0,
+          "maxErrorM": 808.602,
+          "rmseM": 44.359,
+          "samples": 67600,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 9,
+      "referenceOutResolvesSource": false,
+      "referenceSpacingDeg": 0.001373,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 141,
+      "tilesMeasured": 7,
+      "errorTargetM": 301.04,
+      "legacyBoundM": 150.52,
+      "legacyRmseBoundM": 37.63,
+      "maxErrorM": 614.589,
+      "rmseM": 83.574,
+      "maxWithinTarget": false,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": false,
+      "tiles": [
+        {
+          "address": "9/534/386",
+          "reliefM": 3852.2,
+          "maxErrorM": 614.589,
+          "rmseM": 86.816,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/534/387",
+          "reliefM": 3770.5,
+          "maxErrorM": 500.517,
+          "rmseM": 82.992,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/540/387",
+          "reliefM": 3627.8,
+          "maxErrorM": 533.167,
+          "rmseM": 79.463,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/534/388",
+          "reliefM": 3549.9,
+          "maxErrorM": 517.677,
+          "rmseM": 81.46,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/535/388",
+          "reliefM": 3471.9,
+          "maxErrorM": 504.085,
+          "rmseM": 84.532,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/539/387",
+          "reliefM": 3318.3,
+          "maxErrorM": 574.649,
+          "rmseM": 85.948,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/540/379",
+          "reliefM": 0,
+          "maxErrorM": 233.489,
+          "rmseM": 5.225,
+          "samples": 67600,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 10,
+      "referenceOutResolvesSource": false,
+      "referenceSpacingDeg": 0.0006866,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 491,
+      "tilesMeasured": 7,
+      "errorTargetM": 150.52,
+      "legacyBoundM": 75.26,
+      "legacyRmseBoundM": 18.82,
+      "maxErrorM": 320.011,
+      "rmseM": 45.455,
+      "maxWithinTarget": false,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": false,
+      "tiles": [
+        {
+          "address": "10/1070/777",
+          "reliefM": 3412.5,
+          "maxErrorM": 319.299,
+          "rmseM": 47.292,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1069/776",
+          "reliefM": 3324.5,
+          "maxErrorM": 320.011,
+          "rmseM": 46.316,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1080/775",
+          "reliefM": 3222.3,
+          "maxErrorM": 281.736,
+          "rmseM": 43.81,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1069/773",
+          "reliefM": 3046.1,
+          "maxErrorM": 254.132,
+          "rmseM": 44.634,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1070/776",
+          "reliefM": 3003.6,
+          "maxErrorM": 278.438,
+          "rmseM": 43.606,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1075/776",
+          "reliefM": 2995.9,
+          "maxErrorM": 253.259,
+          "rmseM": 46.926,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1080/759",
+          "reliefM": 0,
+          "maxErrorM": 240.685,
+          "rmseM": 10.452,
+          "samples": 67600,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 11,
+      "referenceOutResolvesSource": false,
+      "referenceSpacingDeg": 0.0003433,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 1776,
+      "tilesMeasured": 7,
+      "errorTargetM": 75.26,
+      "legacyBoundM": 37.63,
+      "legacyRmseBoundM": 9.41,
+      "maxErrorM": 148.561,
+      "rmseM": 22.968,
+      "maxWithinTarget": false,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": false,
+      "tiles": [
+        {
+          "address": "11/2150/1552",
+          "reliefM": 2988.8,
+          "maxErrorM": 148.561,
+          "rmseM": 24.475,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2140/1552",
+          "reliefM": 2831.1,
+          "maxErrorM": 141.443,
+          "rmseM": 20.074,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2139/1548",
+          "reliefM": 2827.8,
+          "maxErrorM": 139.997,
+          "rmseM": 23.217,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2155/1551",
+          "reliefM": 2791.6,
+          "maxErrorM": 137.218,
+          "rmseM": 23.78,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2139/1549",
+          "reliefM": 2785.1,
+          "maxErrorM": 107.141,
+          "rmseM": 22.564,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2173/1555",
+          "reliefM": 2749.3,
+          "maxErrorM": 109.149,
+          "rmseM": 23.444,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2160/1524",
+          "reliefM": 0,
+          "maxErrorM": 96.684,
+          "rmseM": 2.314,
+          "samples": 67600,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 12,
+      "referenceOutResolvesSource": true,
+      "referenceSpacingDeg": 0.0001717,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 447,
+      "tilesMeasured": 7,
+      "errorTargetM": 37.63,
+      "legacyBoundM": 18.82,
+      "legacyRmseBoundM": 4.7,
+      "maxErrorM": 1809.802,
+      "rmseM": 404.379,
+      "maxWithinTarget": false,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": false,
+      "tiles": [
+        {
+          "address": "12/4323/3057",
+          "reliefM": 1371.7,
+          "maxErrorM": 1716.39,
+          "rmseM": 403.225,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4310/3059",
+          "reliefM": 1254.1,
+          "maxErrorM": 1559.711,
+          "rmseM": 413.562,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4307/3063",
+          "reliefM": 1206.9,
+          "maxErrorM": 53.434,
+          "rmseM": 9.515,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4310/3063",
+          "reliefM": 1191.9,
+          "maxErrorM": 1574.246,
+          "rmseM": 448.766,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4323/3058",
+          "reliefM": 1157.8,
+          "maxErrorM": 1809.802,
+          "rmseM": 667.774,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4306/3064",
+          "reliefM": 1145.6,
+          "maxErrorM": 56.51,
+          "rmseM": 10.221,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4300/3057",
+          "reliefM": 0.7,
+          "maxErrorM": 0.513,
+          "rmseM": 0.004,
+          "samples": 67600,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 13,
+      "referenceOutResolvesSource": true,
+      "referenceSpacingDeg": 0.00008583,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 1722,
+      "tilesMeasured": 7,
+      "errorTargetM": 18.82,
+      "legacyBoundM": 9.41,
+      "legacyRmseBoundM": 2.35,
+      "maxErrorM": 1836.404,
+      "rmseM": 603.158,
+      "maxWithinTarget": false,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": false,
+      "tiles": [
+        {
+          "address": "13/8614/6127",
+          "reliefM": 1172.1,
+          "maxErrorM": 1643.927,
+          "rmseM": 845.127,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8646/6116",
+          "reliefM": 1157.8,
+          "maxErrorM": 1836.404,
+          "rmseM": 622.686,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8647/6115",
+          "reliefM": 1088.5,
+          "maxErrorM": 1730.45,
+          "rmseM": 550.026,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8621/6119",
+          "reliefM": 1017.4,
+          "maxErrorM": 1569.438,
+          "rmseM": 491.462,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8621/6126",
+          "reliefM": 990.1,
+          "maxErrorM": 1577.301,
+          "rmseM": 551.377,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8614/6129",
+          "reliefM": 970.2,
+          "maxErrorM": 1450.994,
+          "rmseM": 482.431,
+          "samples": 67600,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8641/6101",
+          "reliefM": 0,
+          "maxErrorM": 0.443,
+          "rmseM": 0.008,
+          "samples": 67600,
+          "role": "lowest-relief control"
+        }
+      ]
+    }
+  ],
+  "verdict": "OVER TARGET",
+  "legacyVerdict": "OVER THE RETIRED BOUND",
+  "levelsNotMeasurable": [
+    12,
+    13
+  ]
+}

@@ -1,0 +1,1251 @@
+{
+  "generatedAt": "2026-08-27T04:50:28.603Z",
+  "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
+  "elapsedMs": 209147,
+  "cells": 122,
+  "fetches": 0,
+  "fetch404": 0,
+  "fetchMiB": 0,
+  "tiles": 4617,
+  "durableMarksWritten": 122,
+  "wasmedgeVerifiedCells": 122,
+  "wasmedgeRuntime": "/Users/tj/.wasmedge/bin/wasmedge version 0.16.4 (AOT)",
+  "storeBytes": 36585228,
+  "storeMiB": 34.89,
+  "tileBytesP50": 3441,
+  "tileBytesP99": 23809,
+  "tileBytesMax": 25337,
+  "uniformMasks": 2262,
+  "rasterMasks": 2355,
+  "uniformMaskRatio": 0.4899,
+  "encoderCounters": {
+    "edgeClampedPosts": 0,
+    "bandBridgedPosts": 0,
+    "tilesAtCeiling": 31,
+    "maskFromAbsenceSamples": 40464,
+    "maskUnclassifiedSamples": 0
+  },
+  "errors": [],
+  "cellsDetail": [
+    {
+      "cell": 2,
+      "level": 8,
+      "lon": 8,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 153
+    },
+    {
+      "cell": 3,
+      "level": 8,
+      "lon": 9,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 152
+    },
+    {
+      "cell": 4,
+      "level": 8,
+      "lon": 8,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 151
+    },
+    {
+      "cell": 5,
+      "level": 8,
+      "lon": 9,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 150
+    },
+    {
+      "cell": 8,
+      "level": 9,
+      "lon": 8,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 147
+    },
+    {
+      "cell": 9,
+      "level": 9,
+      "lon": 9,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 3,
+      "tilesStored": 3,
+      "backlog": 146
+    },
+    {
+      "cell": 10,
+      "level": 9,
+      "lon": 8,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 145
+    },
+    {
+      "cell": 11,
+      "level": 9,
+      "lon": 9,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 144
+    },
+    {
+      "cell": 14,
+      "level": 10,
+      "lon": 8,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 141
+    },
+    {
+      "cell": 15,
+      "level": 10,
+      "lon": 9,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 5,
+      "tilesStored": 2,
+      "backlog": 140
+    },
+    {
+      "cell": 16,
+      "level": 10,
+      "lon": 8,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 5,
+      "tilesStored": 4,
+      "backlog": 139
+    },
+    {
+      "cell": 17,
+      "level": 10,
+      "lon": 9,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 25,
+      "tilesStored": 24,
+      "backlog": 138
+    },
+    {
+      "cell": 20,
+      "level": 11,
+      "lon": 8,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 135
+    },
+    {
+      "cell": 21,
+      "level": 11,
+      "lon": 9,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 11,
+      "tilesStored": 1,
+      "backlog": 134
+    },
+    {
+      "cell": 22,
+      "level": 11,
+      "lon": 8,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 11,
+      "tilesStored": 8,
+      "backlog": 133
+    },
+    {
+      "cell": 23,
+      "level": 11,
+      "lon": 9,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 121,
+      "tilesStored": 106,
+      "backlog": 132
+    },
+    {
+      "cell": 26,
+      "level": 12,
+      "lon": 8,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 129
+    },
+    {
+      "cell": 27,
+      "level": 12,
+      "lon": 9,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 23,
+      "tilesStored": 1,
+      "backlog": 128
+    },
+    {
+      "cell": 28,
+      "level": 12,
+      "lon": 8,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 22,
+      "tilesStored": 15,
+      "backlog": 127
+    },
+    {
+      "cell": 29,
+      "level": 12,
+      "lon": 9,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 506,
+      "tilesStored": 431,
+      "backlog": 126
+    },
+    {
+      "cell": 32,
+      "level": 13,
+      "lon": 8,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 123
+    },
+    {
+      "cell": 33,
+      "level": 13,
+      "lon": 9,
+      "lat": 43,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 46,
+      "tilesStored": 0,
+      "backlog": 122
+    },
+    {
+      "cell": 34,
+      "level": 13,
+      "lon": 8,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 45,
+      "tilesStored": 29,
+      "backlog": 121
+    },
+    {
+      "cell": 35,
+      "level": 13,
+      "lon": 9,
+      "lat": 44,
+      "region": "cinque-terre-z13",
+      "tilesInCell": 2070,
+      "tilesStored": 1693,
+      "backlog": 120
+    },
+    {
+      "cell": 41,
+      "level": 8,
+      "lon": 7,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 114
+    },
+    {
+      "cell": 42,
+      "level": 8,
+      "lon": 8,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 113
+    },
+    {
+      "cell": 43,
+      "level": 8,
+      "lon": 9,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 112
+    },
+    {
+      "cell": 44,
+      "level": 8,
+      "lon": 10,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 111
+    },
+    {
+      "cell": 45,
+      "level": 8,
+      "lon": 11,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 110
+    },
+    {
+      "cell": 46,
+      "level": 8,
+      "lon": 7,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 109
+    },
+    {
+      "cell": 49,
+      "level": 8,
+      "lon": 10,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 106
+    },
+    {
+      "cell": 50,
+      "level": 8,
+      "lon": 11,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 105
+    },
+    {
+      "cell": 51,
+      "level": 8,
+      "lon": 7,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 104
+    },
+    {
+      "cell": 52,
+      "level": 8,
+      "lon": 8,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 103
+    },
+    {
+      "cell": 53,
+      "level": 8,
+      "lon": 9,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 102
+    },
+    {
+      "cell": 54,
+      "level": 8,
+      "lon": 10,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 101
+    },
+    {
+      "cell": 55,
+      "level": 8,
+      "lon": 11,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 4,
+      "tilesStored": 4,
+      "backlog": 100
+    },
+    {
+      "cell": 56,
+      "level": 8,
+      "lon": 7,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 99
+    },
+    {
+      "cell": 57,
+      "level": 8,
+      "lon": 8,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 98
+    },
+    {
+      "cell": 58,
+      "level": 8,
+      "lon": 9,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 97
+    },
+    {
+      "cell": 59,
+      "level": 8,
+      "lon": 10,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 96
+    },
+    {
+      "cell": 60,
+      "level": 8,
+      "lon": 11,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 95
+    },
+    {
+      "cell": 61,
+      "level": 8,
+      "lon": 7,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 94
+    },
+    {
+      "cell": 62,
+      "level": 8,
+      "lon": 8,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 93
+    },
+    {
+      "cell": 63,
+      "level": 8,
+      "lon": 9,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 92
+    },
+    {
+      "cell": 64,
+      "level": 8,
+      "lon": 10,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 1,
+      "backlog": 91
+    },
+    {
+      "cell": 65,
+      "level": 8,
+      "lon": 11,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 90
+    },
+    {
+      "cell": 71,
+      "level": 9,
+      "lon": 7,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 84
+    },
+    {
+      "cell": 72,
+      "level": 9,
+      "lon": 8,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 0,
+      "backlog": 83
+    },
+    {
+      "cell": 73,
+      "level": 9,
+      "lon": 9,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 3,
+      "backlog": 82
+    },
+    {
+      "cell": 74,
+      "level": 9,
+      "lon": 10,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 3,
+      "backlog": 81
+    },
+    {
+      "cell": 75,
+      "level": 9,
+      "lon": 11,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 3,
+      "backlog": 80
+    },
+    {
+      "cell": 76,
+      "level": 9,
+      "lon": 7,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 2,
+      "backlog": 79
+    },
+    {
+      "cell": 77,
+      "level": 9,
+      "lon": 8,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 8,
+      "tilesStored": 3,
+      "backlog": 78
+    },
+    {
+      "cell": 78,
+      "level": 9,
+      "lon": 9,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 2,
+      "backlog": 77
+    },
+    {
+      "cell": 79,
+      "level": 9,
+      "lon": 10,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 76
+    },
+    {
+      "cell": 80,
+      "level": 9,
+      "lon": 11,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 75
+    },
+    {
+      "cell": 81,
+      "level": 9,
+      "lon": 7,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 3,
+      "backlog": 74
+    },
+    {
+      "cell": 82,
+      "level": 9,
+      "lon": 8,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 7,
+      "tilesStored": 7,
+      "backlog": 73
+    },
+    {
+      "cell": 83,
+      "level": 9,
+      "lon": 9,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 3,
+      "backlog": 72
+    },
+    {
+      "cell": 84,
+      "level": 9,
+      "lon": 10,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 71
+    },
+    {
+      "cell": 85,
+      "level": 9,
+      "lon": 11,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 70
+    },
+    {
+      "cell": 86,
+      "level": 9,
+      "lon": 7,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 2,
+      "tilesStored": 2,
+      "backlog": 69
+    },
+    {
+      "cell": 87,
+      "level": 9,
+      "lon": 8,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 68
+    },
+    {
+      "cell": 88,
+      "level": 9,
+      "lon": 9,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 67
+    },
+    {
+      "cell": 89,
+      "level": 9,
+      "lon": 10,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 66
+    },
+    {
+      "cell": 90,
+      "level": 9,
+      "lon": 11,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 65
+    },
+    {
+      "cell": 91,
+      "level": 9,
+      "lon": 7,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 3,
+      "tilesStored": 3,
+      "backlog": 64
+    },
+    {
+      "cell": 92,
+      "level": 9,
+      "lon": 8,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 63
+    },
+    {
+      "cell": 93,
+      "level": 9,
+      "lon": 9,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 62
+    },
+    {
+      "cell": 94,
+      "level": 9,
+      "lon": 10,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 61
+    },
+    {
+      "cell": 95,
+      "level": 9,
+      "lon": 11,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 9,
+      "tilesStored": 9,
+      "backlog": 60
+    },
+    {
+      "cell": 101,
+      "level": 10,
+      "lon": 7,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 54
+    },
+    {
+      "cell": 102,
+      "level": 10,
+      "lon": 8,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 0,
+      "backlog": 53
+    },
+    {
+      "cell": 103,
+      "level": 10,
+      "lon": 9,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 5,
+      "tilesStored": 3,
+      "backlog": 52
+    },
+    {
+      "cell": 104,
+      "level": 10,
+      "lon": 10,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 4,
+      "backlog": 51
+    },
+    {
+      "cell": 105,
+      "level": 10,
+      "lon": 11,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 50
+    },
+    {
+      "cell": 106,
+      "level": 10,
+      "lon": 7,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 2,
+      "backlog": 49
+    },
+    {
+      "cell": 107,
+      "level": 10,
+      "lon": 8,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 35,
+      "tilesStored": 2,
+      "backlog": 48
+    },
+    {
+      "cell": 108,
+      "level": 10,
+      "lon": 9,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 25,
+      "tilesStored": 2,
+      "backlog": 47
+    },
+    {
+      "cell": 109,
+      "level": 10,
+      "lon": 10,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 36,
+      "tilesStored": 30,
+      "backlog": 46
+    },
+    {
+      "cell": 110,
+      "level": 10,
+      "lon": 11,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 36,
+      "tilesStored": 36,
+      "backlog": 45
+    },
+    {
+      "cell": 111,
+      "level": 10,
+      "lon": 7,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 44
+    },
+    {
+      "cell": 112,
+      "level": 10,
+      "lon": 8,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 31,
+      "tilesStored": 29,
+      "backlog": 43
+    },
+    {
+      "cell": 113,
+      "level": 10,
+      "lon": 9,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 5,
+      "tilesStored": 5,
+      "backlog": 42
+    },
+    {
+      "cell": 114,
+      "level": 10,
+      "lon": 10,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 36,
+      "tilesStored": 36,
+      "backlog": 41
+    },
+    {
+      "cell": 115,
+      "level": 10,
+      "lon": 11,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 36,
+      "tilesStored": 36,
+      "backlog": 40
+    },
+    {
+      "cell": 116,
+      "level": 10,
+      "lon": 7,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 5,
+      "tilesStored": 5,
+      "backlog": 39
+    },
+    {
+      "cell": 117,
+      "level": 10,
+      "lon": 8,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 30,
+      "tilesStored": 30,
+      "backlog": 38
+    },
+    {
+      "cell": 118,
+      "level": 10,
+      "lon": 9,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 25,
+      "tilesStored": 25,
+      "backlog": 37
+    },
+    {
+      "cell": 119,
+      "level": 10,
+      "lon": 10,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 30,
+      "tilesStored": 30,
+      "backlog": 36
+    },
+    {
+      "cell": 120,
+      "level": 10,
+      "lon": 11,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 30,
+      "tilesStored": 30,
+      "backlog": 35
+    },
+    {
+      "cell": 121,
+      "level": 10,
+      "lon": 7,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 6,
+      "tilesStored": 6,
+      "backlog": 34
+    },
+    {
+      "cell": 122,
+      "level": 10,
+      "lon": 8,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 36,
+      "tilesStored": 36,
+      "backlog": 33
+    },
+    {
+      "cell": 123,
+      "level": 10,
+      "lon": 9,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 30,
+      "tilesStored": 30,
+      "backlog": 32
+    },
+    {
+      "cell": 124,
+      "level": 10,
+      "lon": 10,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 36,
+      "tilesStored": 36,
+      "backlog": 31
+    },
+    {
+      "cell": 125,
+      "level": 10,
+      "lon": 11,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 36,
+      "tilesStored": 36,
+      "backlog": 30
+    },
+    {
+      "cell": 131,
+      "level": 11,
+      "lon": 7,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 1,
+      "tilesStored": 0,
+      "backlog": 24
+    },
+    {
+      "cell": 132,
+      "level": 11,
+      "lon": 8,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 11,
+      "tilesStored": 0,
+      "backlog": 23
+    },
+    {
+      "cell": 133,
+      "level": 11,
+      "lon": 9,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 11,
+      "tilesStored": 4,
+      "backlog": 22
+    },
+    {
+      "cell": 134,
+      "level": 11,
+      "lon": 10,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 12,
+      "tilesStored": 7,
+      "backlog": 21
+    },
+    {
+      "cell": 135,
+      "level": 11,
+      "lon": 11,
+      "lat": 42,
+      "region": "liguria-z11",
+      "tilesInCell": 11,
+      "tilesStored": 11,
+      "backlog": 20
+    },
+    {
+      "cell": 136,
+      "level": 11,
+      "lon": 7,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 11,
+      "tilesStored": 2,
+      "backlog": 19
+    },
+    {
+      "cell": 137,
+      "level": 11,
+      "lon": 8,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 120,
+      "tilesStored": 3,
+      "backlog": 18
+    },
+    {
+      "cell": 138,
+      "level": 11,
+      "lon": 9,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 110,
+      "tilesStored": 2,
+      "backlog": 17
+    },
+    {
+      "cell": 139,
+      "level": 11,
+      "lon": 10,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 132,
+      "tilesStored": 101,
+      "backlog": 16
+    },
+    {
+      "cell": 140,
+      "level": 11,
+      "lon": 11,
+      "lat": 43,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 121,
+      "backlog": 15
+    },
+    {
+      "cell": 141,
+      "level": 11,
+      "lon": 7,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 12,
+      "tilesStored": 12,
+      "backlog": 14
+    },
+    {
+      "cell": 142,
+      "level": 11,
+      "lon": 8,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 99,
+      "backlog": 13
+    },
+    {
+      "cell": 143,
+      "level": 11,
+      "lon": 9,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 11,
+      "tilesStored": 11,
+      "backlog": 12
+    },
+    {
+      "cell": 144,
+      "level": 11,
+      "lon": 10,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 144,
+      "tilesStored": 144,
+      "backlog": 11
+    },
+    {
+      "cell": 145,
+      "level": 11,
+      "lon": 11,
+      "lat": 44,
+      "region": "liguria-z11",
+      "tilesInCell": 132,
+      "tilesStored": 132,
+      "backlog": 10
+    },
+    {
+      "cell": 146,
+      "level": 11,
+      "lon": 7,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 11,
+      "tilesStored": 11,
+      "backlog": 9
+    },
+    {
+      "cell": 147,
+      "level": 11,
+      "lon": 8,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 121,
+      "backlog": 8
+    },
+    {
+      "cell": 148,
+      "level": 11,
+      "lon": 9,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 121,
+      "backlog": 7
+    },
+    {
+      "cell": 149,
+      "level": 11,
+      "lon": 10,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 132,
+      "tilesStored": 132,
+      "backlog": 6
+    },
+    {
+      "cell": 150,
+      "level": 11,
+      "lon": 11,
+      "lat": 45,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 121,
+      "backlog": 5
+    },
+    {
+      "cell": 151,
+      "level": 11,
+      "lon": 7,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 11,
+      "tilesStored": 11,
+      "backlog": 4
+    },
+    {
+      "cell": 152,
+      "level": 11,
+      "lon": 8,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 121,
+      "backlog": 3
+    },
+    {
+      "cell": 153,
+      "level": 11,
+      "lon": 9,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 121,
+      "backlog": 2
+    },
+    {
+      "cell": 154,
+      "level": 11,
+      "lon": 10,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 132,
+      "tilesStored": 132,
+      "backlog": 1
+    },
+    {
+      "cell": 155,
+      "level": 11,
+      "lon": 11,
+      "lat": 46,
+      "region": "liguria-z11",
+      "tilesInCell": 121,
+      "tilesStored": 121,
+      "backlog": 0
+    }
+  ]
+}

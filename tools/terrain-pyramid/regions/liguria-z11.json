@@ -9,6 +9,7 @@
     "provider_id": "copernicus",
     "source_name": "copernicus-glo30",
     "grid_size": 65,
+    "max_grid_size": 217,
     "min_level": 8,
     "max_level": 13,
     "timeout_ms": 120000,

@@ -2342,6 +2342,46 @@ int tile(void) {
         plugin_set_error("bad-grid-size", "gridSize must lie in [2, 255].");
         return 400;
     }
+    // ── THE DENSEST LATTICE THE PLAN ADMITS ────────────────────────────────
+    //
+    // The coordinator's ruling is that density adapts to relief INSIDE the
+    // 32 KiB cap and that "where the cap cannot meet [the target] the tile
+    // ships AT the cap". The cap is therefore what is supposed to stop the
+    // climb — so the search has to be able to climb. A ladder whose top was
+    // `gridSize` could only ever go COARSER than the plan, which makes the
+    // plan's own number the limit and the cap decorative: on the regional run
+    // that shipped 8.4 KB tiles (a quarter of the cap) that still missed the
+    // target at z10 and z11.
+    //
+    // `maxGridSize` is the top of the ladder. It DEFAULTS TO gridSize, so a
+    // caller that says nothing gets exactly the previous behaviour and no
+    // build changes shape by surprise; a pyramid config that wants the cap to
+    // be the limit says so. Bounded at 255 like gridSize, because the mask is
+    // 256 cells and a mesh denser than its own mask buys nothing a client can
+    // see.
+    // Bounded at 511 rather than gridSize's 255: what actually limits the
+    // climb is the 32 KiB cap, which is hard and is checked per candidate, and
+    // a lattice this side of 511 costs a few MB of doubles against the 64 MiB
+    // peak Janus bounds the decode at. A number is still needed so a config
+    // typo cannot ask for an unbounded allocation.
+    const double max_grid_raw = json_number(plan, "maxGridSize", grid);
+    uint32_t sample_grid = max_grid_raw < grid ? grid : static_cast<uint32_t>(max_grid_raw);
+    if (sample_grid > 511) sample_grid = 511;
+    // Every candidate must be a subset of the sampled lattice, which means the
+    // sampled lattice's INTERVAL count has to be a power-of-two multiple of
+    // each candidate's. Round the top DOWN to the nearest such multiple of the
+    // plan's grid rather than refusing an awkward number.
+    // NOTE: gridSize is NOT required to be one of the candidates when
+    // maxGridSize raises the ladder. Requiring it would force the sampled
+    // lattice's interval count to be a multiple of (gridSize-1), and that is
+    // what starves the ladder: from 64 the only reachable interval counts are
+    // 64, 128, 192, 384 …, whose divisor sets are nearly all powers of two, so
+    // a tile that needs a little more than 193 posts has nowhere to go but 385
+    // and stays at the cap. 240 intervals — which does not admit 65 — offers
+    // 41, 49, 61, 81, 121, 241, and a tile buys what it needs. gridSize keeps
+    // its meaning as the density used when there is no error signal to choose
+    // by (see the measure_accuracy branch below), resolved to the nearest
+    // candidate at or below it.
     // The self-measurement is on by default and can be turned off for a run
     // that only wants bytes; it costs three extra source probes per grid cell.
     // READ AS A BOOLEAN, because that is what callers write. json_number
@@ -2576,7 +2616,7 @@ int tile(void) {
         // per candidate) and what keeps every candidate on the SAME global
         // lattice, so two adjacent tiles that settle on different densities
         // still agree on the posts they share.
-        const uint32_t n_verts = grid * grid;
+        const uint32_t n_verts = sample_grid * sample_grid;
         std::vector<double> heights(n_verts, 0.0);
         std::vector<double> lats(n_verts), lons(n_verts);
         // Per-post provenance, kept so the CHOSEN candidate can report the
@@ -2586,11 +2626,11 @@ int tile(void) {
         // has.
         std::vector<uint8_t> post_absent(n_verts, 0), post_nodata(n_verts, 0),
             post_clamped(n_verts, 0), post_bridged(n_verts, 0);
-        for (uint32_t j = 0; j < grid; j++) {  // j = 0 at the SOUTH edge
-            const double lat = lattice_lat(job.level, job.y, j, grid);
-            for (uint32_t i = 0; i < grid; i++) {
-                const double lon = lattice_lon(job.level, job.x, i, grid);
-                const uint32_t v = j * grid + i;
+        for (uint32_t j = 0; j < sample_grid; j++) {  // j = 0 at the SOUTH edge
+            const double lat = lattice_lat(job.level, job.y, j, sample_grid);
+            for (uint32_t i = 0; i < sample_grid; i++) {
+                const double lon = lattice_lon(job.level, job.x, i, sample_grid);
+                const uint32_t v = j * sample_grid + i;
                 lats[v] = lat;
                 lons[v] = lon;
                 double h = 0.0;
@@ -2672,9 +2712,17 @@ int tile(void) {
         // so a tile in the middle of a bay has coverage 1.0 and is ocean all
         // the same. What makes a tile ocean is what it SAYS: flat at exactly
         // sea level, and water everywhere.
-        const bool is_ocean_tile =
-            min_h == 0.0 && max_h == 0.0 && water_kind == "UNIFORM_WATER";
-        if (skip_ocean && is_ocean_tile) {
+        // THE TEST IS APPLIED TWICE, and it has to be. Here it is over the
+        // FULL sampled lattice, which is what makes the skip cheap — a tile
+        // that is plainly open ocean never reaches the density search at all.
+        // But density adapts, and a tile with a metre of relief across its
+        // finest lattice can settle on a candidate whose posts are every one of
+        // them exactly 0: what SHIPS is then indistinguishable from a
+        // synthesized ocean tile while the full-lattice test said it was not
+        // ocean. So the same test runs again against the CHOSEN heights, after
+        // the search, and skips there too. (The regional run stored exactly one
+        // such tile before this: 11/2164/1519, in the open Ligurian Sea.)
+        const auto record_ocean_skip = [&]() {
             stats.skipped_ocean = true;
             skipped_ocean_count++;
             if (t == 0) first = stats;
@@ -2688,6 +2736,11 @@ int tile(void) {
                             std::to_string(stats.mask_from_absence) +
                             ",\"maskUnclassifiedSamples\":" +
                             std::to_string(stats.mask_unclassified) + "}";
+        };
+        const bool is_ocean_tile =
+            min_h == 0.0 && max_h == 0.0 && water_kind == "UNIFORM_WATER";
+        if (skip_ocean && is_ocean_tile) {
+            record_ocean_skip();
             continue;
         }
 
@@ -2734,15 +2787,32 @@ int tile(void) {
         // and a floor that could breach it would not be a floor, it would be a
         // second ceiling arguing with the first.
         const double floor_raw = json_number(plan, "minGridSize", 5);
-        const uint32_t grid_floor =
-            floor_raw < 5 ? 5u : (floor_raw > grid ? grid : static_cast<uint32_t>(floor_raw));
+        const uint32_t grid_floor = floor_raw < 5
+                                        ? 5u
+                                        : (floor_raw > sample_grid ? sample_grid
+                                                                   : static_cast<uint32_t>(floor_raw));
+        // THE LADDER IS EVERY DIVISOR OF THE SAMPLED LATTICE'S INTERVAL COUNT,
+        // ascending — not just its halvings.
+        //
+        // The subset property is what the whole scheme rests on: candidate M is
+        // a subset of the sampled lattice exactly when (M-1) divides
+        // (sample_grid-1), and every divisor gives one. Halving only gives the
+        // powers of two, and that granularity is not free — measured on the
+        // regional run, a tile that needs a little more than 65 posts jumps
+        // straight to 129, which is FOUR times the vertices and lands at
+        // ~32 KB against ~8 KB. The p99 byte bound and the at-ceiling share
+        // bound then pull against each other for no reason but the step size.
+        // With 192 intervals the ladder offers 65, 97, 129, 193 and a tile can
+        // buy the accuracy it needs rather than the next power of two.
         std::vector<uint32_t> ladder;
-        for (uint32_t g = grid; g >= grid_floor; g = (g + 1) / 2) {
-            ladder.push_back(g);
-            if ((g - 1) % 2 != 0 || (g + 1) / 2 < grid_floor) break;
+        const uint32_t spans = sample_grid - 1;
+        for (uint32_t d = 1; d <= spans; d++) {
+            if (spans % d != 0) continue;
+            const uint32_t cand = d + 1;
+            if (cand < grid_floor) continue;
+            ladder.push_back(cand);
         }
-        if (ladder.empty()) ladder.push_back(grid);
-        std::reverse(ladder.begin(), ladder.end());
+        if (ladder.empty()) ladder.push_back(sample_grid);
 
         uint32_t chosen_grid = 0;
         std::vector<double> chosen_heights;
@@ -2752,12 +2822,12 @@ int tile(void) {
         bool at_ceiling = false;  // shipped at the cap without meeting the target
         for (size_t c = 0; c < ladder.size(); c++) {
             const uint32_t cand = ladder[c];
-            const uint32_t stride = (grid - 1) / (cand - 1);
+            const uint32_t stride = (sample_grid - 1) / (cand - 1);
             std::vector<double> cand_heights(static_cast<size_t>(cand) * cand, 0.0);
             for (uint32_t j = 0; j < cand; j++) {
                 for (uint32_t i = 0; i < cand; i++) {
                     cand_heights[static_cast<size_t>(j) * cand + i] =
-                        heights[static_cast<size_t>(j * stride) * grid + i * stride];
+                        heights[static_cast<size_t>(j * stride) * sample_grid + i * stride];
                 }
             }
             std::vector<uint8_t> cand_mesh;
@@ -2773,7 +2843,6 @@ int tile(void) {
                 at_ceiling = chosen_grid != 0;
                 break;
             }
-            const bool densest = c + 1 == ladder.size();
             chosen_grid = cand;
             chosen_heights.swap(cand_heights);
             mesh.swap(cand_mesh);
@@ -2790,7 +2859,13 @@ int tile(void) {
                 // COARSEST one: it shipped 5x5 meshes for every tile whenever
                 // the caller turned accuracy measurement off, while the
                 // comment claimed the opposite.)
-                if (!densest) continue;
+                // The plan's OWN gridSize, not the top of the ladder: with no
+                // error signal the honest density is the one that was asked
+                // for — resolved to the densest candidate at or below it, since
+                // the ladder is not obliged to contain that exact number.
+                const bool last_at_or_below_grid =
+                    cand <= grid && (c + 1 == ladder.size() || ladder[c + 1] > grid);
+                if (!last_at_or_below_grid) continue;
                 at_ceiling = false;
                 break;
             }
@@ -2832,10 +2907,10 @@ int tile(void) {
         // Coverage, clamps and band bridges are reported over the posts that
         // ACTUALLY SHIPPED, on the candidate's own stride.
         {
-            const uint32_t stride = (grid - 1) / (chosen_grid - 1);
+            const uint32_t stride = (sample_grid - 1) / (chosen_grid - 1);
             for (uint32_t j = 0; j < chosen_grid; j++) {
                 for (uint32_t i = 0; i < chosen_grid; i++) {
-                    const size_t v = static_cast<size_t>(j * stride) * grid + i * stride;
+                    const size_t v = static_cast<size_t>(j * stride) * sample_grid + i * stride;
                     stats.uncovered += post_absent[v];
                     stats.nodata += post_nodata[v];
                     stats.edge_clamped += post_clamped[v];
@@ -2855,6 +2930,12 @@ int tile(void) {
             stats.max_h = cmax;
             min_h = cmin;
             max_h = cmax;
+        }
+
+        // The second application of the ocean test; see record_ocean_skip.
+        if (skip_ocean && min_h == 0.0 && max_h == 0.0 && water_kind == "UNIFORM_WATER") {
+            record_ocean_skip();
+            continue;
         }
 
         // Themis: DIGEST and SIZE_BYTES are stated over the GZIPPED bytes —
@@ -2916,8 +2997,11 @@ int tile(void) {
             b.CreateString(json_string(plan, "verticalDatumName", "EGM2008"));
         const auto f_etag = b.CreateString(etag);
         const auto f_remarks = b.CreateString(kGeoidRemark);
+        // The SHIPPED lattice's spacing, not the plan's. With density adapting
+        // per tile these differ, and a record that states the plan's number
+        // describes a mesh nobody has.
         const double post_spacing =
-            (ext.north - ext.south) / (grid - 1) * (kPi / 180.0) * 6371008.8;
+            (ext.north - ext.south) / (chosen_grid - 1) * (kPi / 180.0) * 6371008.8;
 
         DTTBuilder db(b);
         db.add_TILESET_ID(f_tileset);
@@ -3018,7 +3102,7 @@ int tile(void) {
         ",\"level\":" + std::to_string(jobs[0].level) +
         ",\"x\":" + std::to_string(jobs[0].x) + ",\"y\":" + std::to_string(jobs[0].y) +
         ",\"gridSize\":" + std::to_string(grid) +
-        ",\"maxGridSize\":" + std::to_string(grid) +
+        ",\"maxGridSize\":" + std::to_string(sample_grid) +
         ",\"tilesAtCeiling\":" + std::to_string(block_at_ceiling) +
         ",\"bandBridgedPosts\":" + std::to_string(block_band_bridged) +
         ",\"edgeClampedPosts\":" + std::to_string(block_edge_clamped) +
