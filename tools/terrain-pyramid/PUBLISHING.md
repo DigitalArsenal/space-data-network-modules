@@ -9,7 +9,11 @@ how those bytes become tiles host-01 serves, and why the path is the one it is.
     <out>/tiles.index.jsonl   one line per record (address, height range, mask
                               kind, payload bytes) — a manifest for review, NOT
                               the authority
-    <out>/resume-mark.json    the durable mark: the next CELL index of the walk
+    <out>/irm.records         THE DURABLE RESUME MARK: $IRM records, size-prefixed,
+                              written by the flow through hostcap/storage-write and
+                              read back by mark_query through the code-named view
+    <out>/resume-mark.json    the same mark as JSON, for an operator to read. It is
+                              NOT the durable one and nothing resumes from it
     <out>/granules/           the source granule cache (never published)
     <out>/run-report.json     the run's own numbers
 
@@ -57,5 +61,38 @@ the host-side recipe and its ledger.
 
 It re-reads the record stream independently of the encoder and states: tile
 count, store bytes, the gzipped-size distribution against the serving bounds,
-the uniform-mask ratio, that no ocean tile was stored, that every address is
-unique, and the availability index the tileset should declare.
+the uniform-mask ratio, that no ocean tile was stored, that no tile flat at sea
+level claims land, that every address is unique, that adjacent tiles agree on
+their shared height posts AND on their shared water-mask bytes, that every
+CHILD_AVAILABILITY bit a record sets names a child the tileset really serves,
+the per-level worst MEASURED vertical accuracy against Atlas's bound, and the
+availability index the tileset should declare — with its ancestor closure,
+because a client asks `computeMaximumLevelAtPosition(tile centre) >= level` and
+not per-level membership.
+
+It exits non-zero, naming every bound that does not hold, and a ship gate must
+not read a run as green without it.
+
+## Both engines cut every tile
+
+The compiled flow runs in this Node process, so its wasm executes in V8 whatever
+`runtimeTarget: "wasmedge"` declares — that is a declaration gate, not a
+dispatch. So every cell is cut TWICE: once by the flow, and once under the
+PINNED NATIVE WasmEdge (AOT where the toolchain has the compiler) on the parity
+artifact, with the two record streams compared byte for byte. A divergence stops
+the run. `--docker` builds and uses an image carrying BOTH Node and that pinned
+WasmEdge, so a containerized run is authoritative for the engine as well as the
+CPU target; `node:22-bookworm` alone was only ever the latter.
+
+`run-report.json` states `wasmedgeVerifiedCells` and `wasmedgeRuntime`; anything
+less than one per cell means the engine the fleet serves under has not seen
+these bytes.
+
+## The capability the ingest flow needs
+
+`flows/terrain-ingest` declares `storage_write` for ONE node (`mark_write`),
+which persists the $IRM resume mark. Without the grant the flow stores tiles and
+then restarts at cell 0 on the next tick, which is exactly what happened while
+the mark went to egress only. A deployment of this flow needs that approval
+alongside `storage_query` and `storage_ingest`; the SERVING flow needs neither —
+it declares `storage_query` and nothing else.

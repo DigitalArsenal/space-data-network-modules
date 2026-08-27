@@ -665,6 +665,12 @@ fs.writeFileSync(
       // LAND there instead of painting the continents as specular ocean. The
       // key is written here rather than hand-set because only the run knows it.
       terrain_ocean_synth_min_level: Number.isFinite(minLevel) ? minLevel : 0,
+      // The mount the serving flow answers on. Written here because route()
+      // has no fallback any more: a path that does not start with it is a 404,
+      // which is the point — but it means a deployment that mounts the flow
+      // somewhere else MUST state it, and a config file that omits the key
+      // would silently 404 every tile.
+      terrain_mount_path: "/api/v1/terrain/",
       terrain_available: available,
     },
     null,
