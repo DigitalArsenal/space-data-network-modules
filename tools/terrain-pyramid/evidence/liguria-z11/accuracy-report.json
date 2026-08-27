@@ -375,7 +375,7 @@
       "sourcePostsPerTileEdge": 158.2,
       "referenceSpacingDeg": 0.0002747,
       "sourceSpacingDeg": 0.0002778,
-      "tilesInStore": 447,
+      "tilesInStore": 446,
       "tilesMeasured": 7,
       "errorTargetM": 37.63,
       "legacyBoundM": 18.82,
@@ -435,10 +435,10 @@
           "role": "high-relief"
         },
         {
-          "address": "12/4300/3057",
-          "reliefM": 0.7,
-          "maxErrorM": 0.667,
-          "rmseM": 0.07,
+          "address": "12/4323/3071",
+          "reliefM": 8.8,
+          "maxErrorM": 7.827,
+          "rmseM": 0.782,
           "samples": 26896,
           "role": "lowest-relief control"
         }
@@ -456,7 +456,7 @@
       "sourcePostsPerTileEdge": 79.1,
       "referenceSpacingDeg": 0.0002747,
       "sourceSpacingDeg": 0.0002778,
-      "tilesInStore": 1722,
+      "tilesInStore": 1721,
       "tilesMeasured": 7,
       "errorTargetM": 18.82,
       "legacyBoundM": 9.41,

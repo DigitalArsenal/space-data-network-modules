@@ -444,15 +444,15 @@
     },
     {
       "level": 12,
-      "address": "12/4300/3057",
+      "address": "12/4323/3071",
       "role": "lowest-relief control",
       "referenceOutResolvesSource": false,
       "referenceUnderResolvesSource": false,
       "referencePostsPerTileEdge": 161,
       "sourcePostsPerTileEdge": 158.2,
-      "recordM": 0.673,
-      "referenceM": 0.667,
-      "ratio": 0.991
+      "recordM": 9.104,
+      "referenceM": 7.827,
+      "ratio": 0.86
     },
     {
       "level": 13,

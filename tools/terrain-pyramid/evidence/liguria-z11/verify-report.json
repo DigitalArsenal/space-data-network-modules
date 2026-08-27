@@ -1,8 +1,8 @@
 {
   "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
-  "tiles": 4617,
-  "distinctAddresses": 4617,
-  "storeBytes": 35153284,
+  "tiles": 4615,
+  "distinctAddresses": 4615,
+  "storeBytes": 35149748,
   "levels": [
     8,
     9,
@@ -16,11 +16,11 @@
     "9": 141,
     "10": 491,
     "11": 1776,
-    "12": 447,
-    "13": 1722
+    "12": 446,
+    "13": 1721
   },
   "payloadBytes": {
-    "p50": 3548,
+    "p50": 3555,
     "p99": 28627,
     "max": 30799,
     "bounds": {
@@ -29,11 +29,13 @@
       "hard": 32768
     }
   },
-  "uniformMasks": 2262,
+  "uniformMasks": 2260,
   "rasterMasks": 2355,
-  "uniformMaskRatio": 0.4899,
+  "uniformMaskRatio": 0.4897,
   "maskBytesStored": 848481,
   "oceanTilesStored": 0,
+  "uniformWaterTilesNotFlat": 0,
+  "uniformWaterTilesNotFlatSample": [],
   "flatAtZeroWithLandMask": 4,
   "flatAtZeroOverMeasuredRelief": 4,
   "flatAtZeroWithLandMaskExamples": [
@@ -142,7 +144,7 @@
       "worstMeasuredM": 37.621,
       "withinTarget": true,
       "withinLegacyBound": false,
-      "tiles": 447,
+      "tiles": 446,
       "tilesOverTarget": 0,
       "overTargetShare": 0,
       "tilesAtCeiling": 0,
@@ -157,7 +159,7 @@
       "worstMeasuredM": 18.813,
       "withinTarget": true,
       "withinLegacyBound": false,
-      "tiles": 1722,
+      "tiles": 1721,
       "tilesOverTarget": 0,
       "overTargetShare": 0,
       "tilesAtCeiling": 0,
@@ -166,7 +168,7 @@
       "withinCeilingShare": true
     }
   ],
-  "tilesStatingMeasuredAccuracy": 4617,
+  "tilesStatingMeasuredAccuracy": 4615,
   "tilesAtCeiling": 24,
   "atCeilingExamples": [
     {
@@ -270,9 +272,9 @@
     "max": 0.05,
     "gatedFromLevel": 10
   },
-  "edgeAdjacenciesChecked": 8884,
-  "maskAdjacenciesChecked": 8884,
-  "maskEdgeTexelsCompared": 2274304,
+  "edgeAdjacenciesChecked": 8880,
+  "maskAdjacenciesChecked": 8880,
+  "maskEdgeTexelsCompared": 2273280,
   "maskEdgeTexelDifferences": 4815,
   "maskEdgeTexelExamples": [
     "8/268/190 north[9] = 0xff but 8/268/191 south[9] = 0x00",
@@ -286,7 +288,7 @@
   ],
   "worstSharedEdgeDeltaM": 0.109853,
   "worstSharedEdgeAt": "8/267/193 north vs 8/267/194 south shared post 5/90",
-  "mixedDensityAdjacencies": 5687,
+  "mixedDensityAdjacencies": 5683,
   "worstDensityStepCrackM": {
     "8": 472.286,
     "9": 252.268,
@@ -1172,7 +1174,7 @@
           "endY": 3056
         },
         {
-          "startX": 4300,
+          "startX": 4301,
           "startY": 3057,
           "endX": 4323,
           "endY": 3057
@@ -1372,7 +1374,7 @@
           "endY": 6114
         },
         {
-          "startX": 8601,
+          "startX": 8602,
           "startY": 6115,
           "endX": 8647,
           "endY": 6115
@@ -1552,6 +1554,8 @@
     "edgeClampedPosts": 0,
     "bandBridgedPosts": 0,
     "tilesAtCeiling": 24,
+    "tilesSkippedOcean": 989,
+    "tilesSkippedOceanFromSource": 2,
     "maskFromAbsenceSamples": 40464,
     "maskUnclassifiedSamples": 0
   },

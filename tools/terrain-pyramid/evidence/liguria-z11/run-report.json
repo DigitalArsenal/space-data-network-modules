@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-08-27T09:53:43.839Z",
+  "generatedAt": "2026-08-27T11:45:23.574Z",
   "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
-  "elapsedMs": 269013,
+  "elapsedMs": 267886,
   "cells": 122,
   "fetches": 0,
   "fetch404": 0,
   "fetchMiB": 0,
-  "tiles": 4617,
+  "tiles": 4615,
   "durableMarksWritten": 122,
   "wasmedgeVerifiedCells": 122,
   "wasmedgeRuntime": "/Users/tj/.wasmedge/bin/wasmedge version 0.16.4 (AOT)",
-  "storeBytes": 35153284,
+  "storeBytes": 35149748,
   "storeMiB": 33.52,
-  "tileBytesP50": 3548,
+  "tileBytesP50": 3555,
   "tileBytesP99": 28627,
   "tileBytesMax": 30799,
-  "uniformMasks": 2262,
+  "uniformMasks": 2260,
   "rasterMasks": 2355,
-  "uniformMaskRatio": 0.4899,
+  "uniformMaskRatio": 0.4897,
   "sourcePostsPerTileEdgeByLevel": {
     "8": 2531.3,
     "9": 1265.6,
@@ -31,6 +31,8 @@
     "edgeClampedPosts": 0,
     "bandBridgedPosts": 0,
     "tilesAtCeiling": 24,
+    "tilesSkippedOcean": 989,
+    "tilesSkippedOceanFromSource": 2,
     "maskFromAbsenceSamples": 40464,
     "maskUnclassifiedSamples": 0
   },
@@ -223,7 +225,7 @@
       "lat": 44,
       "region": "cinque-terre-z13",
       "tilesInCell": 22,
-      "tilesStored": 15,
+      "tilesStored": 14,
       "backlog": 127
     },
     {
@@ -263,7 +265,7 @@
       "lat": 44,
       "region": "cinque-terre-z13",
       "tilesInCell": 45,
-      "tilesStored": 29,
+      "tilesStored": 28,
       "backlog": 121
     },
     {
