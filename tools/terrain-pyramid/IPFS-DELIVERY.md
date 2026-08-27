@@ -60,16 +60,25 @@ tunnel, read back at `https://sdn.spaceaware.io/ipfs/<cid>/`.
 | status | `200` on `layer.json` and every tile probed |
 | bytes | byte-identical to the local file (`same=true` on all four probes) |
 | `cache-control` | `public, max-age=29030400, immutable` |
-| `etag` | the file's own CIDv1, strong (`"bafkrei…"`) |
+| `etag` | the file's own CIDv1 — strong (`"bafkrei…"`) on tiles; WEAK (`W/"bafkrei…"`) on `layer.json`, because the edge recompressed it |
 | `access-control-allow-origin` | `*` |
 | `content-type` | `application/octet-stream` for tiles, `application/json` for layer.json |
 | latency | 99–159 ms per file, cold |
-| **compression** | **none** |
+| **compression** | **none on tiles**; `br` on `layer.json` |
 | `If-None-Match` | **200 through the public path, 304 at kubo** |
 
 Two of those need saying plainly.
 
-**The gateway does not compress.** kubo serves the stored bytes verbatim and
+**The gateway does not compress the tiles** — which is the number that
+matters, because tiles are 4,651 of the 4,652 files. It does compress
+`layer.json`: `application/json` is on Cloudflare's compressible list and the
+index came back `content-encoding: br`, which also WEAKENS its ETag (an edge
+that transforms a body may no longer claim byte equality). That costs nothing —
+`layer.json` is fetched once per client and its 304 is not on the hot path —
+but it is why the table has two rows instead of one, and why a reader comparing
+the evidence file against this page finds `br` there and should not read it as
+a contradiction. For everything under `application/octet-stream`:
+kubo serves the stored bytes verbatim and
 Cloudflare does not compress `application/octet-stream`. Asked with
 `Accept-Encoding: gzip, br`, a 75,140-byte tile came back 75,140 bytes with no
 `content-encoding`. So the wire size of a tile is its UNCOMPRESSED size, and
@@ -213,6 +222,22 @@ it against the node origin it already knows and learns no hostname;
 CID is immutable, and this is the lane's one mutable pointer, so a minute
 bounds how long a client can miss a recut while every revalidation after the
 first is a 304.
+
+**Both spellings are DECLARED routes, and that is load-bearing.** The host
+builds its anonymous allowlist from the flow manifest and nothing else
+(`sdn-server/internal/gateway/anonymous.go`: a mounted route is served without
+a session iff `api.routes[].anonymous` is true and config does not veto it).
+The module answered the catalogue before the manifest declared it, which left
+the endpoint reachable ONLY through an operator's `gateway.anonymous.allow`
+prefix entry — so narrowing that entry to the declared set, the obvious tidy-up
+for anyone reading a config with two documented routes and a broad allow, would
+have 401'd the catalogue and taken the whole delivery path down with it while
+every tile under `/ipfs/` kept answering. A silent, prod-only break of the one
+document clients cannot proceed without. `/` and `/catalogue.json` are now
+declared `anonymous: true` alongside `layer.json` and the tile route, so the
+allowlist entry is defence in depth rather than the mechanism, and
+`flows/terrain-serving/tests/flow.test.mjs` asserts every path the module
+answers is a declared route.
 
 **A node with no CID configured is not an error.** It answers
 `"delivery": "mount"`, `"cid": null` and its own mount path, which is what
