@@ -791,7 +791,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The bounded {sql,params} frame reading stored $TBS rows for ONE tile (cell_tile_sql / cell_tile_max_rows).",
+              "description": "The TILE-SCOPED {sql,params} frame reading stored $TBS rows for ONE tile. The statement is built here from cell_tile_relation (default TBS) and carries the tile\u0027s own rectangle as four f64 bounds plus the row budget cell_tile_max_rows (default 25000): SELECT _data FROM TBS WHERE LATITUDE >= ?1 AND LATITUDE <= ?2 AND LONGITUDE >= ?3 AND LONGITUDE <= ?4 ORDER BY _rowid DESC LIMIT ?5. The bbox is a PREFILTER - membership is still re-derived per point by the client\u0027s index math - so the read is O(tile) instead of O(store). An explicit cell_tile_sql is still honoured verbatim with the budget as its one parameter, and the envelope then reports scoped:false because an empty tile from an unscoped slice does not mean the tile is empty. The budget is a MEMORY budget: at ~800 bytes per stored site the old default of 100000 rows exceeded a 2048-page mount on the first request and the whole lane served 502.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
@@ -802,7 +802,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": false,
-          "description": "The bounded {sql,params} frame reading stored $TBS rows for ONE tile (cell_tile_sql / cell_tile_max_rows)."
+          "description": "The TILE-SCOPED {sql,params} frame reading stored $TBS rows for ONE tile. The statement is built here from cell_tile_relation (default TBS) and carries the tile\u0027s own rectangle as four f64 bounds plus the row budget cell_tile_max_rows (default 25000): SELECT _data FROM TBS WHERE LATITUDE >= ?1 AND LATITUDE <= ?2 AND LONGITUDE >= ?3 AND LONGITUDE <= ?4 ORDER BY _rowid DESC LIMIT ?5. The bbox is a PREFILTER - membership is still re-derived per point by the client\u0027s index math - so the read is O(tile) instead of O(store). An explicit cell_tile_sql is still honoured verbatim with the budget as its one parameter, and the envelope then reports scoped:false because an empty tile from an unscoped slice does not mean the tile is empty. The budget is a MEMORY budget: at ~800 bytes per stored site the old default of 100000 rows exceeded a 2048-page mount on the first request and the whole lane served 502."
         },
         {
           "portId": "tile_mark_query",

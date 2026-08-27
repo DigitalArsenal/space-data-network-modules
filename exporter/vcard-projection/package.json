@@ -1,0 +1,14 @@
+{
+  "name": "vcard-projection",
+  "version": "0.1.0",
+  "description": "vCard 3.0 projection of $EPM — pure WASM exporter module",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "npm run build && space-data-module parity --wasm dist/isomorphic/module.wasm --fixture tests/parity/vcard.json --lanes browser,wasmedge,docker-wasmedge"
+  },
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}

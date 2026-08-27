@@ -1,0 +1,41 @@
+{
+  "name": "vcard-projection-parity",
+  "threadEnvVar": "SDM_PARITY_THREADS",
+  "threadCounts": [1],
+  "cases": [
+    {
+      "id": "card_full",
+      "expect": "ok",
+      "request": {
+        "methodId": "card_full",
+        "inputs": [
+          {
+            "portId": "epm",
+            "payloadFile": "../fixtures/epm-literal-key.bin",
+            "typeRef": {
+              "schemaName": "EPM.fbs",
+              "fileIdentifier": "$EPM"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "card_compact",
+      "expect": "ok",
+      "request": {
+        "methodId": "card_compact",
+        "inputs": [
+          {
+            "portId": "epm",
+            "payloadFile": "../fixtures/epm-literal-key.bin",
+            "typeRef": {
+              "schemaName": "EPM.fbs",
+              "fileIdentifier": "$EPM"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

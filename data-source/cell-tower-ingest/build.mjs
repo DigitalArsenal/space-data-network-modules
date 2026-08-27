@@ -9,9 +9,20 @@ const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "cell_tower_ingest_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+// THE STANDARDS ROOT IS ONE DECISION, NOT TWO.
+//
+// The compiler already honours SPACE_DATA_STANDARDS_ROOT; the $IRM header read
+// below did not, and resolved a fixed sibling path instead. In a per-task
+// worktree that sibling is ANOTHER LANE'S checkout — this build silently
+// inlined $IRM from a tree at an unrelated revision, mid-regeneration, and
+// then failed outright when that lane deleted its generated headers. A build
+// that compiles against whatever happens to be next door on disk is not
+// reproducible, and its artifact cannot be attributed to any pin.
+const standardsRoot =
+  process.env.SPACE_DATA_STANDARDS_ROOT ??
+  fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 
 // $IRM (Ingest Resume Mark) is INLINED INTO THE TRANSLATION UNIT.
 //
