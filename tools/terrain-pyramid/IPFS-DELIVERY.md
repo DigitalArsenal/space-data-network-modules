@@ -70,11 +70,42 @@ A skipped address is a MEASUREMENT, not a gap. So:
                  states, and refuses to publish if an address the encoder
                  measured as water comes out as land
 
-The ancestor placeholders below the floor stay `UNIFORM_LAND` and that is
-correct: they overhang the built region by whole tiles at the shallow levels,
-and outside the built footprint the tileset has no measurement of anything.
-What changed is that a client now refines PAST them everywhere the pyramid was
-actually built.
+### DECLARED RESIDUE: the shallow band outside the built extent
+
+The fix is real INSIDE THE BUILT FOOTPRINT and only there. Every position
+inside the tileset's own extent now answers from a level at or below the
+authoritative floor, so the 989 addresses the encoder measured as all-water
+come back `UNIFORM_WATER` and nothing inside the footprint is served as
+fabricated land.
+
+Outside the built extent the 37 structural ancestors at z0–z7 are still flat
+`h=0` with a `UNIFORM_LAND` mask, and z0 is both roots — so a camera whose
+screen-space error is satisfied at a shallow level, which includes every global
+view and the first frames of every load, is served flat land with a positive
+land mask over the whole planet. That is a **DECLARED RESIDUE of a REGIONAL
+pyramid, not a correct answer.** The earlier text here called it correct on the
+grounds that the tileset "has no measurement of anything" outside its footprint;
+that argument does not hold, because `UNIFORM_LAND` is a positive claim about
+water cover and "no measurement" is what `dttWaterMask.NONE` ("the tile states
+nothing about water cover") is for. It is also false for the in-footprint part
+of an overhanging ancestor: 6/66/47 spans 5.625–8.4375 E / 42.1875–45.0 N, and
+its overlap with this tileset's extent is open Ligurian Sea that the encoder
+MEASURED as water at z11.
+
+It is bounded and it is owned:
+
+- **Bounded** because a regional pyramid only ever states the region it built;
+  the residue is entirely at levels the run did not build.
+- **Resolved by** `terrain-pyramid-global-build-tooling` — the global z0–z10
+  land pyramid. With a global build there is no ancestor band below the
+  authoritative floor, so the residue disappears rather than being patched.
+- **Not patched here** because the two local options both make the record less
+  honest than the gap: emitting no watermask chunk on the ancestors makes those
+  tiles disagree with `layer.json`'s `extensions:["watermask"]`, and
+  rasterising a WBM into them would state a measurement this run did not make.
+
+What changed this round is that a client now refines PAST the ancestors
+everywhere the pyramid was actually built.
 
 `layer.json` is rendered by the module's own `layer_json` method, driven
 through `route()` so the plan is the mount's plan. The ONLY difference from
@@ -86,6 +117,17 @@ is now a plan field (`terrain_tiles_template`), not a constant, so there is
 still exactly one renderer.
 
 ## What the gateway does — MEASURED 2026-08-27 on host-01
+
+> **SUPERSEDED, NOT YET REPUBLISHED.** The CID below is the PRE-FIX directory
+> (4,652 files: 4,615 stored + 36 synthesized, every synthesized tile
+> `UNIFORM_LAND`, no ocean address declared). The candidate directory this
+> round produces is 5,641 files (4,615 stored + 989 `UNIFORM_WATER` ocean +
+> 37 ancestors). The stored tile BYTES did not move — only the declared and
+> synthesized set differs — but the pinned epoch still serves the sea as land
+> and must not be the CID a catalogue names. `ipfs-publish.mjs --add` has to
+> run before the anonymous allowlist lands, or both clients will discover and
+> mount exactly the directory this round's blocker was filed against. Owned by
+> the ship lane; the gateway measurements below are unaffected and stand.
 
 Published: `bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy`
 (the Liguria regional pyramid, 4,652 files, 358.38 MiB), added and pinned
@@ -200,14 +242,58 @@ tile. Rendered as JSON it uses IDL-EXACT KEYS.
 | `PAYLOAD.BYTES` | ABSENT. Themis: never a pyramid blob inline |
 | `MAX_LEVEL` | the deepest level the tileset serves |
 | `WATER_MASK_KIND` | `NONE` — a tileset states nothing about water; its tiles do |
+| `VERTICAL_DATUM` | `GEOID` — the same datum every tile record states, never dropped |
+| `VERTICAL_DATUM_NAME` | the source's own datum name, verbatim (`EGM2008`) |
+| `REMARKS` | the encoder's bounded-offset warning, so a reader of the catalogue ALONE learns the cost of rendering these heights as above-ellipsoid |
 | `PROVENANCE` | **required.** The tiles' own lineage and licence, verbatim |
 | `PROVENANCE.DATASET_ID` | **required** |
 | `PROVENANCE.DATASET_EPOCH` | **required** |
 | `PROVENANCE.RETRIEVED_AT` | **required** |
 | `PROVENANCE.LICENSE` | **required** |
-| `PROVENANCE.DATASET_CID` | the same directory CID: *"the exact dataset artifact"* |
+| `PROVENANCE.DATASET_CID` | the SOURCE dataset artifact, when the publisher distributes one. **NEVER the tileset directory** — see below. Absent here: this lane distributes no source artifact |
 | `PROVENANCE.GENERATED_AT` | when the directory was cut (builder only; the mount states none) |
 | `PROVENANCE.PROCESSOR` | `tools/terrain-pyramid/ipfs-publish.mjs` (builder only) |
+
+### ONE FIELD NAMES THE TILESET DIRECTORY, AND IT IS `PAYLOAD.CID`
+
+Both clients read `PAYLOAD.CID` and only that field. Nothing else may be read
+as the tileset epoch.
+
+`PROVENANCE.DATASET_CID` used to be a COPY of the same value, and that copy is
+the whole reason two clients reading two different fields appeared to work: the
+agreement was a coincidence of one implementation, pinned by no test and stated
+as a contract nowhere. The IDL defines `DATASET_CID` as *"content identifier of
+the exact dataset artifact, when the publisher distributes one"* — the SOURCE
+DEM. The day a provenance-complete record puts the real Copernicus artifact
+there, which is the literal reading and the natural cleanup, a reader of that
+field points a terrain provider at a DEM archive and 404s every tile from a
+record that is still perfectly valid.
+
+So the module and the builder both stopped writing it. `DATASET_CID` is now its
+own config key (`terrain_source_dataset_cid`) and is emitted only when an
+operator names an actual source artifact — a different CID from the tileset's.
+A record that states `DATASET_CID` and no `PAYLOAD.CID` names NO TILESET and is
+refused by both clients rather than mounted.
+
+### THE DATUM IS CARRIED, NOT DROPPED
+
+Every per-tile `$DTT` states `VERTICAL_DATUM` `GEOID` and `VERTICAL_DATUM_NAME`
+`EGM2008`. The published directory is `layer.json` plus the `.terrain` bytes —
+**the per-tile records are not in it** — so the catalogue record and
+`layer.json` are the only two documents a client on this delivery path ever
+reads, and both used to drop the datum. That left it wire-defaulted to
+`UNSPECIFIED`, which the IDL defines as *"the datum is not stated. Heights are
+not comparable across tiles"*, on the exact path the owner directive made
+primary.
+
+The cost is not theoretical: quantized-mesh heights are interpreted as WGS84
+ELLIPSOIDAL by every consumer that does not know better, so EGM2008 orthometric
+heights sit low by the local undulation (~48 m in Liguria; the encoder bounds it
+at `<~100 m`), and this stack feeds those heights to sensor viewshed and RF
+terrain analysis. Both documents now carry it: the record as `VERTICAL_DATUM` /
+`VERTICAL_DATUM_NAME` / `REMARKS`, and `layer.json` as `verticalDatum` /
+`verticalDatumName`, rendered from the same plan by the same `layer_json`
+method, so the tileset and its own index cannot disagree.
 
 **IDL-exact keys is only half of it: the document has to BE a record.** Both
 projections of this mapping — the builder's `tileset-catalogue.json` and the
@@ -381,6 +467,43 @@ Outputs, beside the ones `run.mjs` and `verify.mjs` already write:
 A local kubo works identically and is what a development run should use; the
 only thing host-01's API gives you is a pin on the box that serves the public
 gateway.
+
+### THE DEPLOY CONFIG IS COMPLETE BEFORE THE PUBLISH RUNS
+
+`verify.mjs` writes `<out>/layer-json-config.json`, and `mount-entry.json`
+names it as THE source of the module config keys that go INSIDE `config:`. It
+used to carry eight keys — maxzoom, the ocean floor, the mount path,
+availability and the four extent degrees — and NONE of the four
+`DTTProvenance` fields the module requires. So an operator who followed the
+ship step exactly installed a mount that answered
+`GET /api/v1/terrain/tileset.json` with **503 `terrain catalogue not
+configured`** — measured, not inferred — while `/api/v1/terrain/` answered 200
+with `"cid": null`. Discovery failed for both clients and the 401 the ship step
+was closing became a 503.
+
+It now carries every key the module requires, read OFF A TILE (the tileset must
+redistribute under the same terms its own contents carry) and refused rather
+than defaulted when the store cannot state one:
+
+    terrain_tileset_id  terrain_dataset_id  terrain_dataset_name
+    terrain_dataset_epoch  terrain_dataset_retrieved_at
+    terrain_license  terrain_license_url  terrain_attribution
+    terrain_vertical_datum_name
+    terrain_maxzoom  terrain_ocean_synth_min_level  terrain_mount_path
+    terrain_available  terrain_{west,south,east,north}_deg
+
+The publish step adds exactly TWO keys, and only two, because they name a
+directory that does not exist until the add has run:
+`terrain_tileset_cid` and `terrain_tileset_size_bytes` (plus
+`terrain_gateway_path`, which defaults to `/ipfs/`). That is
+`ipfs-publication.json`'s `mountConfig`, and `serving-config-ipfs.json` is the
+merge of the two.
+
+The proof is a test, not a claim:
+`data-source/terrain-source/tests/catalogue.test.mjs` boots a mount from the
+COMMITTED `evidence/liguria-z11/layer-json-config.json` verbatim, adds only
+those two keys, and asserts `/api/v1/terrain/tileset.json` answers **200** with
+a body that `writeFB` accepts as a `$DTT`.
 
 ## Why this talks to kubo directly, and not through the node's ipfs hook
 

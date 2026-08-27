@@ -151,6 +151,15 @@ const servingConfig = {
   terrain_attribution: provenance.attribution ?? "",
   terrain_description: layerConfig.terrain_description ?? "",
   terrain_tiles_template: IPFS_TILES_TEMPLATE,
+  // The datum, into the layer.json that goes INSIDE the directory. The
+  // published directory is layer.json plus .terrain bytes and nothing else —
+  // the per-tile $DTT records, which state VERTICAL_DATUM/VERTICAL_DATUM_NAME,
+  // are not in it — so without this key the delivery path the owner made
+  // primary carried no machine-readable statement of the datum at all, and a
+  // consumer renders EGM2008 orthometric heights as WGS84 ellipsoidal ones,
+  // systematically low by the local undulation (~48 m here).
+  terrain_vertical_datum_name:
+    layerConfig.terrain_vertical_datum_name ?? first.verticalDatumName ?? "EGM2008",
 };
 // Whatever lattice the MOUNT would synthesize a miss on, this uses too. Left
 // unset the module defaults it, and the directory would then hold different
@@ -540,13 +549,28 @@ function buildCatalogue(cid) {
       : {},
     MAX_LEVEL: maxzoom,
     WATER_MASK_KIND: "NONE",
+    // Carried from the tiles, not asserted here: the tileset record and its
+    // tiles must state the SAME datum, and the catalogue is one of only two
+    // documents a client on the IPFS path reads.
+    VERTICAL_DATUM: "GEOID",
+    VERTICAL_DATUM_NAME: first.verticalDatumName,
+    REMARKS: first.remarks,
     PROVENANCE: {
       ...provenance.raw,
       // A tileset is cut from thousands of granules; the tile's granule-level
       // source fields would name exactly one of them.
       SOURCE_URL: undefined,
       SOURCE_QUERY: undefined,
-      ...(cid ? { DATASET_CID: cid } : {}),
+      // DATASET_CID IS NOT THE TILESET. It used to be set to `cid` — the
+      // directory this file publishes — so the two clients, which read two
+      // different fields, agreed only because one implementation duplicated
+      // the value. The IDL is explicit that DATASET_CID is "the exact dataset
+      // artifact" the publisher distributes, i.e. the SOURCE DEM; a
+      // provenance-complete record that put the real Copernicus artifact
+      // there would have pointed a reader of that field at a non-tileset CID
+      // and 404-ed every tile from a valid record. The tileset directory is
+      // PAYLOAD.CID above, and it is the ONLY field either client reads for
+      // it. Nothing here knows a source-artifact CID, so nothing is stated.
       GENERATED_AT: new Date().toISOString(),
       PROCESSOR: "tools/terrain-pyramid/ipfs-publish.mjs",
     },
@@ -675,18 +699,17 @@ const report = {
   // answered could not be built into a $DTT at all — and a mount that is
   // given less than this now refuses to publish a catalogue rather than
   // answering 200 with something that is not a record.
+  // ONLY the keys that name THIS PUBLICATION. The lineage keys moved to
+  // layer-json-config.json, which verify.mjs writes and which mount-entry.json
+  // already names as the source of the module `config:` block — they describe
+  // the STORE, they exist before any CID does, and duplicating them into a
+  // second file is how the ship step ended up installing a mount that had the
+  // epoch and none of the other three required fields.
   mountConfig: publication?.cid
     ? {
         terrain_tileset_cid: publication.cid,
         terrain_tileset_size_bytes: totalBytes,
         terrain_gateway_path: "/ipfs/",
-        terrain_dataset_id: provenance.raw.DATASET_ID,
-        terrain_dataset_name: provenance.raw.DATASET_NAME,
-        terrain_dataset_epoch: provenance.raw.DATASET_EPOCH,
-        terrain_dataset_retrieved_at: provenance.raw.RETRIEVED_AT,
-        terrain_license: provenance.raw.LICENSE,
-        terrain_license_url: provenance.raw.LICENSE_URL,
-        terrain_attribution: provenance.raw.ATTRIBUTION,
       }
     : null,
 };

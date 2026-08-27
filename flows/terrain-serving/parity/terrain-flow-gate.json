@@ -1,0 +1,20 @@
+{
+  "//": "THIS LANE'S OWN ARTIFACT SET for `space-data-module parity-gate` - the SDK's own isomorphism acceptance gate (certified artifact set x real lanes). The SDK's stock manifest names example artifacts that ship with the SDK's repo and a flatsql pin this package does not carry, so running the stock gate here reports artifact-missing for things that are not ours and its exit code says nothing about this flow. Manifest `path` entries resolve inside the SDK PACKAGE directory, which is why these are spelled from there. Run it with:  npx space-data-module parity-gate --gate-manifest ./parity/terrain-flow-gate.json --json",
+  "name": "terrain-serving-tri-runtime",
+  "artifacts": [
+    {
+      "id": "terrain-serving-flow-runtime",
+      "path": "../../dist/runtime.wasm",
+      "surface": "module",
+      "profile": "library",
+      "note": "The compiled flow runtime: the scheduler with every node module linked into it. Its declared runtimeTargets come from its parts, so a bare WasmEdge CLI - which registers no host functions - cannot supply space_data_module_host, and the gate answers the NAMED verdict `runner-cannot-supply-declared-capability` rather than a divergence (parityGate.js models this case explicitly: \"Composed flows derive their runtimeTargets from their parts, so a WasmEdge-only flow is legitimate\"). What is genuinely unavailable here is the BEHAVIORAL byte-diff half: the gate byte-diffs command-profile artifacts and a flow runtime is library-profile."
+    },
+    {
+      "id": "terrain-source-encoder",
+      "path": "../../../../data-source/terrain-source/dist/isomorphic/module.wasm",
+      "surface": "module",
+      "profile": "library",
+      "note": "The shipped encoder the flow links. Its behavioral tri-runtime parity is measured separately and byte-for-byte by `space-data-module parity` over data-source/terrain-source/tests/fixtures/terrain-parity.json against the bridge-free twin, which tests/parity-artifact.test.mjs proves is the same bytes minus the three host imports."
+    }
+  ]
+}

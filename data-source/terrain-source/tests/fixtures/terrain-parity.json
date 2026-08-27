@@ -378,6 +378,87 @@
       }
     },
     {
+      "id": "route-catalogue-record",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tileset.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-catalogue.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 1076
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-catalogue-no-cid",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tileset.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-catalogue-no-cid.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 946
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-catalogue-lineage-refused",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tileset.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-catalogue-no-lineage.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 1014
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": "malformed-stdin",
       "stdinUtf8": "this is not a PIV invoke frame — the trap/error class must match across every lane"
     }

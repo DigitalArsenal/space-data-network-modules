@@ -164,6 +164,10 @@ test("route turns a tile path into the DTT select plus serve context", async (t)
     // Absent terrain_ocean_synth_min_level no level is authoritative, so the
     // answer is always false and no fabricated ocean can reach a client.
     synthWater: false,
+    // The tileset's own DEPTH, so respond() can bound the cacheable-404 key
+    // family by the pyramid instead of by a constant. See "a 404 is publicly
+    // cacheable only INSIDE the tileset's own depth".
+    maxLevel: 8,
     synthGridSize: 65,
   });
 });
@@ -344,8 +348,9 @@ test("a 404 is publicly cacheable only when the request named a real address", a
   assert.equal(bodies.size, 1, "a refusal reflects no part of the request");
 
   // The honest cacheable miss is unchanged: a canonical address that exists at
-  // its level, outside availability, that the store does not hold.
-  const routed = await invoke(t, "route", [requestFrame("/api/v1/terrain/11/3000/1540.terrain")]);
+  // its level, INSIDE the tileset's depth (CONFIG is maxzoom 8), outside
+  // availability, that the store does not hold.
+  const routed = await invoke(t, "route", [requestFrame("/api/v1/terrain/8/500/200.terrain")]);
   const context = routed.outputs.find((o) => o.portId === "context");
   assert.ok(context, "a real address is planned, not refused at the parser");
   const responded = await invoke(t, "respond", [
@@ -667,7 +672,16 @@ test("respond answers an empty stream with a cheap cacheable 404, never an error
   // The flatsql stream for zero rows: nothing but alignment padding.
   const response = await invoke(t, "respond", [
     frame("stream", new Uint8Array(4)),
-    jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 12, x: 0, y: 0, ifNoneMatch: "" }),
+    // maxLevel is what makes the miss PUBLICLY CACHEABLE: the level has to be
+    // inside the tileset's own depth. route() always states it.
+    jsonFrame("context", {
+      tilesetId: "spaceaware-terrain",
+      level: 12,
+      x: 0,
+      y: 0,
+      ifNoneMatch: "",
+      maxLevel: 13,
+    }),
   ]);
   assert.equal(response.statusCode, 0, "an unpublished tile is normal traffic");
   const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
@@ -675,6 +689,20 @@ test("respond answers an empty stream with a cheap cacheable 404, never an error
   assert.equal(
     http.headers.find((h) => h.name === "cache-control")?.value,
     "public, max-age=300",
+  );
+
+  // And the SAME address in a context that does not state the depth fails
+  // CLOSED: a context that cannot say how deep the pyramid is cannot show the
+  // address is inside it, so the miss is not parked in a public cache.
+  const undeclared = await invoke(t, "respond", [
+    frame("stream", new Uint8Array(4)),
+    jsonFrame("context", { tilesetId: "spaceaware-terrain", level: 12, x: 0, y: 0, ifNoneMatch: "" }),
+  ]);
+  assert.equal(
+    decodeHttpResponse(new Uint8Array(undeclared.outputs[0].payload)).headers.find(
+      (h) => h.name === "cache-control",
+    )?.value,
+    "no-store",
   );
 });
 
@@ -724,6 +752,10 @@ test("respond REFUSES to serve a record labelled with another address", async (t
       y: 1530,
       ifNoneMatch: "",
       insideAvailability: false,
+      // route() always states the tileset depth; a context standing in for its
+      // output states it too, or the miss fails CLOSED (no-store, fixed body)
+      // and the diagnostic detail is deliberately withheld.
+      maxLevel: 13,
     }),
   ]);
   assert.equal(response.statusCode, 0, "a mislabelled record is not a crash; it is a miss");
@@ -828,4 +860,74 @@ test("every JSON error carries nosniff and an explicit cache policy", async (t) 
     assert.equal(headerOf("x-content-type-options"), "nosniff", "sniffing is forbidden on every one");
     assert.ok(headerOf("cache-control"), "and the cache policy is stated, never inherited");
   }
+});
+
+// ── THE CACHEABLE-404 KEY FAMILY IS THE TILESET'S, NOT A CONSTANT ───────────
+//
+// The rule the code states is "the address exists at that level, and the level
+// is inside the tileset's own depth". The code tested `miss_level <= 30` and
+// never consulted terrain_maxzoom, so at the ruled ship configuration
+// (maxzoom 13) every level from 14 to 30 was OUTSIDE the tileset and still
+// answered `public, max-age=300` with the address echoed into a distinct body.
+// Level 30 alone is ~2.3e18 addresses, each costing a store query and a
+// five-minute edge-cache entry — a key family a caller can type, which is
+// exactly what the rule forbids.
+//
+// route() carries the tileset's maxzoom on the serve context, and respond()
+// FAILS CLOSED when the context does not state it: a context that cannot say
+// how deep the pyramid is cannot show an address is inside it.
+test("a 404 is publicly cacheable only INSIDE the tileset's own depth", async (t) => {
+  const config = { ...CONFIG, terrain_maxzoom: 13 };
+  const cacheControlFor = async (path) => {
+    const routed = await invoke(t, "route", [requestFrame(path)], config);
+    const context = routed.outputs.find((o) => o.portId === "context");
+    if (!context) {
+      const http = decodeHttpResponse(new Uint8Array(routed.outputs[0].payload));
+      return { status: http.status, cc: http.headers.find((h) => h.name === "cache-control")?.value };
+    }
+    const responded = await invoke(t, "respond", [
+      frame("stream", new Uint8Array(4)),
+      frame("context", context.payload),
+    ], config);
+    const http = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
+    return { status: http.status, cc: http.headers.find((h) => h.name === "cache-control")?.value };
+  };
+
+  // Inside the depth: the honest cacheable miss.
+  for (const path of ["/api/v1/terrain/11/3000/1540.terrain", "/api/v1/terrain/13/9000/5000.terrain"]) {
+    const { status, cc } = await cacheControlFor(path);
+    assert.equal(status, 404, path);
+    assert.equal(cc, "public, max-age=300", `${path} is inside the tileset and is a real miss`);
+  }
+
+  // Past maxzoom: outside the tileset. These used to be publicly cacheable
+  // with the address echoed back; 14..30 is 17 levels of address space that
+  // has nothing to do with this pyramid.
+  for (const path of [
+    "/api/v1/terrain/14/1/1.terrain",
+    "/api/v1/terrain/20/1048575/524287.terrain",
+    "/api/v1/terrain/25/1/1.terrain",
+    "/api/v1/terrain/30/1/1.terrain",
+  ]) {
+    const { status, cc } = await cacheControlFor(path);
+    assert.equal(status, 404, path);
+    assert.equal(cc, "no-store", `${path} is past maxzoom 13 and must not occupy a public cache key`);
+  }
+
+  // And a SHALLOWER tileset moves the boundary with it: the bound is the
+  // tileset's, not a second constant.
+  const shallow = { ...CONFIG, terrain_maxzoom: 8 };
+  const routed = await invoke(t, "route", [requestFrame("/api/v1/terrain/11/3000/1540.terrain")], shallow);
+  const context = routed.outputs.find((o) => o.portId === "context");
+  const responded = await invoke(t, "respond", [
+    frame("stream", new Uint8Array(4)),
+    frame("context", context.payload),
+  ], shallow);
+  const http = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
+  assert.equal(http.status, 404);
+  assert.equal(
+    http.headers.find((h) => h.name === "cache-control")?.value,
+    "no-store",
+    "z11 is inside a z13 tileset and outside a z8 one, and the cache policy has to follow",
+  );
 });

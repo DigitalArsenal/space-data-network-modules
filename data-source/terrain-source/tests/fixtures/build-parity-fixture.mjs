@@ -263,6 +263,69 @@ const reqVersioned = httpRequestBytes("request-versioned.htq", {
   query: "v=1.0.0",
 });
 
+// ── THE $DTT CATALOGUE SURFACE, IN ALL THREE RUNTIMES ──────────────────────
+//
+// It had NO tri-runtime coverage at all. The parity artifact has no host
+// bridge, so plugin.getConfig answers nothing there and /tileset.json answered
+// 503 "terrain catalogue not configured" in every configuration — the record
+// builder, the PAYLOAD-always-present shape and the lineage refusal were
+// structurally unreachable in the artifact the three lanes measure. The whole
+// surface that this round was convened to fix was measured in exactly ONE
+// runtime, by one harness, against an artifact parity never touches.
+//
+// route() now accepts the mount config ON A FRAME (optional input port
+// "config"), compiled into BOTH artifacts, so the three lanes execute the same
+// record path over the same bytes.
+//
+// The config is the COMMITTED DEPLOY CONFIG, trimmed to the keys that decide
+// this route (a 9 KB availability index would be committed twice for nothing),
+// plus the two keys the publish step adds. Its lineage values are the real
+// ones from evidence/liguria-z11/layer-json-config.json.
+const catalogueConfig = {
+  terrain_tileset_id: "spaceaware-terrain",
+  terrain_mount_path: "/api/v1/terrain/",
+  terrain_maxzoom: 13,
+  terrain_dataset_id: "copernicus-glo30-quantized-mesh",
+  terrain_dataset_name: "copernicus-glo30",
+  terrain_dataset_epoch: "2023-04-01T00:00:00.000Z",
+  terrain_dataset_retrieved_at: "2026-08-26T00:00:00.000Z",
+  terrain_license: "Copernicus DEM: ESA / Airbus Defence and Space (free licence)",
+  terrain_license_url:
+    "https://spacedata.copernicus.eu/documents/20123/121286/CSCDA_ESA_Mission-specific+Annex_31_Oct_22.pdf",
+  terrain_attribution:
+    "Produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+  terrain_vertical_datum_name: "EGM2008",
+  terrain_west_deg: 7.734375,
+  terrain_south_deg: 42.890625,
+  terrain_east_deg: 12.65625,
+  terrain_north_deg: 47.109375,
+  terrain_tileset_cid: "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy",
+  terrain_tileset_size_bytes: 12345678,
+};
+const jsonFrame = (name, value) =>
+  write(name, Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8"));
+// The shipped shape: a node serving a published directory.
+const cfgCatalogue = jsonFrame("config-catalogue.json", catalogueConfig);
+// A node serving no IPFS tileset. PAYLOAD is `required`, so the record is
+// still built — present and EMPTY — rather than omitted, which is the case
+// that used to make the document unserializable ("field 34 must be set").
+const cfgCatalogueNoCid = jsonFrame("config-catalogue-no-cid.json", {
+  ...catalogueConfig,
+  terrain_tileset_cid: undefined,
+  terrain_tileset_size_bytes: undefined,
+});
+// One required lineage field short: 503, no-store, naming the key. The
+// refusal is a behaviour of the record contract and has to be identical in
+// every runtime, not just in the one harness that could reach it.
+const cfgCatalogueNoLineage = jsonFrame("config-catalogue-no-lineage.json", {
+  ...catalogueConfig,
+  terrain_dataset_retrieved_at: undefined,
+});
+// The catalogue route both clients fetch.
+const reqTileset = httpRequestBytes("request-tileset.htq", {
+  path: "/api/v1/terrain/tileset.json",
+});
+
 const htqInput = (file) => ({
   portId: "request",
   payloadFile: `parity/${file.name}`,
@@ -397,6 +460,30 @@ const fixture = {
       id: "route-declared-version-token",
       expect: "ok",
       request: { methodId: "route", inputs: [htqInput(reqVersioned)] },
+    },
+    {
+      id: "route-catalogue-record",
+      expect: "ok",
+      request: {
+        methodId: "route",
+        inputs: [htqInput(reqTileset), alignedInput("config", cfgCatalogue)],
+      },
+    },
+    {
+      id: "route-catalogue-no-cid",
+      expect: "ok",
+      request: {
+        methodId: "route",
+        inputs: [htqInput(reqTileset), alignedInput("config", cfgCatalogueNoCid)],
+      },
+    },
+    {
+      id: "route-catalogue-lineage-refused",
+      expect: "ok",
+      request: {
+        methodId: "route",
+        inputs: [htqInput(reqTileset), alignedInput("config", cfgCatalogueNoLineage)],
+      },
     },
     {
       id: "malformed-stdin",

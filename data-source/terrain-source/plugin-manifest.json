@@ -221,6 +221,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "The HTTP request to route."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-serving-config-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The mount's serving config, the same JSON object plugin.getConfig returns. Optional: absent, route reads it over the host bridge exactly as before.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "OPTIONAL serving config, handed in instead of read over plugin.getConfig. Nothing in the shipped flow wires it; it exists so the tri-runtime parity lane can execute the catalogue surface in an artifact that has no host bridge."
         }
       ],
       "outputPorts": [
@@ -315,7 +338,7 @@
           "description": "Direct $HTR for requests no other node should see: cacheable 404 for unknown paths, 405 for non-GET/HEAD."
         }
       ],
-      "description": "One $HTQ in, exactly ONE downstream path out. THE MOUNT IS A PREFIX AND ONLY A PREFIX: it is owned by the flow's config (terrain_mount_path, default the flow's own basePath /api/v1/terrain/), and a path that does not START with it is a 404. There is no search fallback - the router used to strip up to the LAST \"/terrain/\" segment, which made one tile reachable at unboundedly many distinct publicly cacheable URLs, and the first fix left a fallback that still answered /junk/terrain/8/271/192.terrain whether or not a mount was configured. A tile index is also accepted in exactly ONE decimal spelling: a LEADING ZERO is refused, because \"8\", \"08\" and \"000000008\" all parsing to 8 made one address 441 separate cache keys, each costing a full store query for identical bytes. \"layer.json\" => a layer_plan frame for the sibling layer_json node, composed from plugin.getConfig keys terrain_tileset_id / terrain_maxzoom / terrain_available (VERBATIM availability array; defaults to the two level-0 roots, honest exactly when maxzoom is 0 - a deeper pyramid MUST configure terrain_available) / terrain_attribution / terrain_description / terrain_version. \"{z}/{x}/{y}.terrain\" => a {sql,params} frame for hostcap/flatsql-query:query (SELECT _data FROM DTT WHERE TILESET_ID/LEVEL/X/Y ORDER BY _rowid DESC LIMIT 1) plus a context frame carrying the address, the client's If-None-Match and whether it accepts gzip. _rowid, NOT rowid: on a node the relation named DTT is a unified VIEW over per-source shadow tables and a view has no implicit rowid, so the old spelling was \"no such column\" on every real node and parsed fine everywhere else. AVAILABILITY IS THE CLIENT'S QUESTION: a native provider asks computeMaximumLevelAtPosition(centre of the tile) >= level, not per-level membership, so route evaluates that same rule - an address the client will request is inside availability here and is synthesized by respond rather than 404-ed. The parsed index is CACHED against the exact bytes it came from; parsing it per request cost 5.4 ms at a 318 KB index, before the store was touched. Anything else => a direct, CACHEABLE $HTR 404 (public, max-age=300) because a miss is normal traffic, and 405 for non-GET/HEAD. plugin.getConfig is the module's only hostcall - reading who it was deployed as, the geonames-ingest precedent, not a capability. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
+      "description": "One $HTQ in, exactly ONE downstream path out. THE MOUNT IS A PREFIX AND ONLY A PREFIX: it is owned by the flow's config (terrain_mount_path, default the flow's own basePath /api/v1/terrain/), and a path that does not START with it is a 404. There is no search fallback - the router used to strip up to the LAST \"/terrain/\" segment, which made one tile reachable at unboundedly many distinct publicly cacheable URLs, and the first fix left a fallback that still answered /junk/terrain/8/271/192.terrain whether or not a mount was configured. A tile index is also accepted in exactly ONE decimal spelling: a LEADING ZERO is refused, because \"8\", \"08\" and \"000000008\" all parsing to 8 made one address 441 separate cache keys, each costing a full store query for identical bytes. \"layer.json\" => a layer_plan frame for the sibling layer_json node, composed from plugin.getConfig keys terrain_tileset_id / terrain_maxzoom / terrain_available (VERBATIM availability array; defaults to the two level-0 roots, honest exactly when maxzoom is 0 - a deeper pyramid MUST configure terrain_available) / terrain_attribution / terrain_description / terrain_version. \"{z}/{x}/{y}.terrain\" => a {sql,params} frame for hostcap/flatsql-query:query (SELECT _data FROM DTT WHERE TILESET_ID/LEVEL/X/Y ORDER BY _rowid DESC LIMIT 1) plus a context frame carrying the address, the client's If-None-Match and whether it accepts gzip. _rowid, NOT rowid: on a node the relation named DTT is a unified VIEW over per-source shadow tables and a view has no implicit rowid, so the old spelling was \"no such column\" on every real node and parsed fine everywhere else. AVAILABILITY IS THE CLIENT'S QUESTION: a native provider asks computeMaximumLevelAtPosition(centre of the tile) >= level, not per-level membership, so route evaluates that same rule - an address the client will request is inside availability here and is synthesized by respond rather than 404-ed. The parsed index is CACHED against the exact bytes it came from; parsing it per request cost 5.4 ms at a 318 KB index, before the store was touched. Anything else => a direct, CACHEABLE $HTR 404 (public, max-age=300) because a miss is normal traffic, and 405 for non-GET/HEAD. plugin.getConfig is the module's only hostcall - reading who it was deployed as, the geonames-ingest precedent, not a capability. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\". OPTIONAL INPUT \"config\": the same JSON plugin.getConfig returns, handed in on a frame. Absent (the shipped flow) nothing changes. Present, it is the config for that invoke - which is what lets the tri-runtime parity lane execute the $DTT catalogue surface in the bridge-free parity artifact, where plugin.getConfig answers nothing and /tileset.json could only ever be a 503. THE TILESET DIRECTORY IS PAYLOAD.CID: terrain_tileset_cid renders DTT.PAYLOAD.CID, and PROVENANCE.DATASET_CID is a separate key (terrain_source_dataset_cid) naming the SOURCE dataset artifact, never the tileset. VERTICAL_DATUM/VERTICAL_DATUM_NAME are stated on the catalogue record and in layer.json, not only on the tile records.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },

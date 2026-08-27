@@ -1,0 +1,18 @@
+{
+  "terrain_tileset_id": "spaceaware-terrain",
+  "terrain_mount_path": "/api/v1/terrain/",
+  "terrain_maxzoom": 13,
+  "terrain_dataset_id": "copernicus-glo30-quantized-mesh",
+  "terrain_dataset_name": "copernicus-glo30",
+  "terrain_dataset_epoch": "2023-04-01T00:00:00.000Z",
+  "terrain_license": "Copernicus DEM: ESA / Airbus Defence and Space (free licence)",
+  "terrain_license_url": "https://spacedata.copernicus.eu/documents/20123/121286/CSCDA_ESA_Mission-specific+Annex_31_Oct_22.pdf",
+  "terrain_attribution": "Produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+  "terrain_vertical_datum_name": "EGM2008",
+  "terrain_west_deg": 7.734375,
+  "terrain_south_deg": 42.890625,
+  "terrain_east_deg": 12.65625,
+  "terrain_north_deg": 47.109375,
+  "terrain_tileset_cid": "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy",
+  "terrain_tileset_size_bytes": 12345678
+}

@@ -105,3 +105,80 @@ test("the over-budget case really refuses; an 'ok' exit class is not a silent pa
     }
   }
 });
+
+// ── THE $DTT CATALOGUE SURFACE IS REACHED IN THE PARITY ARTIFACT ────────────
+//
+// It was not, and that was not disclosed. dist/parity/module.wasm is compiled
+// with TERRAIN_SOURCE_NO_HOST_BRIDGE, so plugin.getConfig answered nothing and
+// /api/v1/terrain/tileset.json was a 503 in EVERY configuration — the record
+// builder, the PAYLOAD-always-present shape and the lineage refusal were
+// structurally unreachable in the artifact the browser / WasmEdge /
+// docker-WasmEdge lanes measure. The whole surface this round was convened to
+// fix answered 100 tests in ONE runtime, through ONE harness, against an
+// artifact tri-runtime parity never touches.
+//
+// route() now takes the mount config on an optional frame — compiled into BOTH
+// artifacts, so the substitution above still holds byte for byte — and the
+// fixture carries three catalogue cases. This test is the other half the
+// parity CLI cannot do: the CLI compares outputs across lanes, and what has to
+// be true of THIS output is that it is a RECORD. So the body the bridge-free
+// artifact produced goes through the SAME projector the builder writes
+// tileset-catalogue.dttstream with, and writeFB is what enforces `required`.
+test("the parity artifact's catalogue answer is a $DTT, PAYLOAD always present", async (t) => {
+  const { createBrowserModuleHarness: makeHarness } = await import("space-data-module-sdk/testing");
+  const { decodeHttpResponse } = await import("space-data-module-sdk/http");
+  const sds = await import("spacedatastandards.org");
+  const { writeDttRecord } = await import("../../../tools/terrain-pyramid/dtt-projection.mjs");
+
+  const harness = await makeHarness({
+    wasmSource: fs.readFileSync(PARITY),
+    manifest: MANIFEST,
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  const answerOf = async (caseId) => {
+    const spec = FIXTURE.cases.find((c) => c.id === caseId);
+    assert.ok(spec, `${caseId} is in the committed parity fixture`);
+    const response = await harness.invoke({
+      methodId: spec.request.methodId,
+      inputs: inputsOf(spec),
+    });
+    const out = response.outputs.find((o) => o.portId === "response");
+    assert.ok(out, `${caseId} answers directly`);
+    const http = decodeHttpResponse(new Uint8Array(out.payload));
+    return {
+      status: http.status,
+      cacheControl: http.headers.find((h) => h.name === "cache-control")?.value,
+      body: JSON.parse(Buffer.from(http.body).toString("utf8")),
+    };
+  };
+
+  // 1. A node serving a published directory.
+  const withCid = await answerOf("route-catalogue-record");
+  assert.equal(withCid.status, 200);
+  assert.ok(withCid.body.PAYLOAD, "PAYLOAD is `required` and is always present");
+  assert.match(withCid.body.PAYLOAD.CID, /^b[a-z2-7]{58,}$/, "the tileset directory is PAYLOAD.CID");
+  assert.equal(
+    withCid.body.PROVENANCE.DATASET_CID,
+    undefined,
+    "and the tileset CID is NOT copied into the source dataset's provenance field",
+  );
+  assert.equal(withCid.body.VERTICAL_DATUM, "GEOID");
+  assert.equal(withCid.body.VERTICAL_DATUM_NAME, "EGM2008");
+  assert.ok(writeDttRecord(sds, withCid.body).length > 0, "it serializes as a $DTT");
+
+  // 2. A node serving no IPFS tileset: PAYLOAD present and EMPTY, which is the
+  //    shape that used to be omitted entirely ("field 34 must be set").
+  const noCid = await answerOf("route-catalogue-no-cid");
+  assert.equal(noCid.status, 200);
+  assert.deepEqual(noCid.body.PAYLOAD, {}, "present and empty, never omitted");
+  assert.ok(writeDttRecord(sds, noCid.body).length > 0, "and that shape is a $DTT too");
+
+  // 3. One required lineage field short: a refusal, not a 200 with a document
+  //    that is not a record.
+  const refused = await answerOf("route-catalogue-lineage-refused");
+  assert.equal(refused.status, 503);
+  assert.equal(refused.cacheControl, "no-store");
+  assert.deepEqual(refused.body.missingConfigKeys, ["terrain_dataset_retrieved_at"]);
+});

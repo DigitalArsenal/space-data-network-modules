@@ -15,7 +15,7 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 
-import { readDtt, splitStream } from "./dtt-reader.mjs";
+import { readDtt, readDttProvenance, splitStream } from "./dtt-reader.mjs";
 
 // ── THE BOUNDS THIS PYRAMID HAS TO SATISFY TO BE PUBLISHABLE ───────────────
 //
@@ -1066,10 +1066,65 @@ if (args.json) {
 }
 
 fs.writeFileSync(path.join(outDir, "verify-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
+// ── THE DEPLOY CONFIG IS COMPLETE, OR THE SHIP STEP TURNS 401 INTO 503 ─────
+//
+// This file used to carry eight keys — maxzoom, the ocean floor, the mount
+// path, availability and the four extent degrees — and mount-entry.json names
+// it as THE source of "the module config keys ... INSIDE `config:`". Meanwhile
+// the module started REFUSING to publish a catalogue without the four
+// DTTProvenance fields the IDL marks required. An operator who did exactly
+// what the ship step said therefore installed a mount that answered
+// /api/v1/terrain/tileset.json with 503 "terrain catalogue not configured" —
+// measured, not inferred — so discovery failed for both clients and no client
+// ever got a CID. The 503 is correct behaviour for an unbuildable record; the
+// defect was that the committed config could not build one.
+//
+// The lineage is READ OFF A TILE, never invented here: the tileset record has
+// to redistribute under the same terms its own contents carry, and a config
+// file may have moved since the run that produced the store. Same rule
+// ipfs-publish.mjs already follows.
+//
+// The two keys NOT written here are terrain_tileset_cid and
+// terrain_tileset_size_bytes: they name the published directory, which does
+// not exist until ipfs-publish.mjs has added it. Everything else the mount
+// needs to answer a $DTT catalogue is here, so the publish step adds exactly
+// those two and nothing has to be invented at deploy time.
+const datum = readDtt(records[0]);
+const lineage = readDttProvenance(records[0]).raw;
+const deployLineage = {
+  terrain_tileset_id: datum.tilesetId,
+  terrain_dataset_id: lineage.DATASET_ID,
+  terrain_dataset_name: lineage.DATASET_NAME,
+  terrain_dataset_epoch: lineage.DATASET_EPOCH,
+  terrain_dataset_retrieved_at: lineage.RETRIEVED_AT,
+  terrain_license: lineage.LICENSE,
+  terrain_license_url: lineage.LICENSE_URL,
+  terrain_attribution: lineage.ATTRIBUTION,
+  // The datum the tiles state, carried onto the tileset record and into
+  // layer.json. Dropping it left both documents a delivery-path client reads
+  // at VERTICAL_DATUM UNSPECIFIED while every tile said GEOID/EGM2008.
+  terrain_vertical_datum_name: datum.verticalDatumName,
+};
+// A required key the store cannot answer is a REFUSAL, not a default: a mount
+// configured with an empty string satisfies FlatBuffers and tells a consumer
+// nothing, which is the exact failure the module's own 503 exists to prevent.
+for (const key of [
+  "terrain_dataset_id",
+  "terrain_dataset_epoch",
+  "terrain_dataset_retrieved_at",
+  "terrain_license",
+]) {
+  assert.ok(
+    typeof deployLineage[key] === "string" && deployLineage[key].length > 0,
+    `${key} is required by the serving module's $DTT catalogue and the store's own records do not state it`,
+  );
+}
+
 fs.writeFileSync(
   path.join(outDir, "layer-json-config.json"),
   `${JSON.stringify(
     {
+      ...deployLineage,
       terrain_maxzoom: maxLevel,
       // The shallowest level this run actually BUILT. Below it the store is not
       // authoritative, so the serving module must not read a miss inside

@@ -13,15 +13,35 @@
 // is recompiled — which is the correct order, and the only way "the flow ships
 // the encoder in this checkout" is a fact rather than an assumption.
 //
-// It is NOT the tri-runtime parity lane Janus set as acceptance. That lane
-// does not exist for a flow runtime: the SDK's parity lanes invoke a methodId
-// on a module artifact, a flow runtime exports a scheduler instead, and every
-// lane runs `wasmedge module.wasm` with no host module to link — which a
-// runtime importing space_data_module_host cannot survive. terrain-source
-// clears that by compiling a bridge-free twin from the same source
-// (build-parity.mjs); a flow runtime is SDK-generated and has no such knob, so
-// no flow in this repo has ever had a parity fixture. That gap is Janus's and
-// is stated in the task's GAPS list rather than papered over here.
+// It is not, by itself, the tri-runtime acceptance Janus set — and the earlier
+// claim here that NO SUCH LANE EXISTS FOR A FLOW RUNTIME WAS WRONG. It does:
+// `space-data-module parity-gate`, the SDK's own "isomorphism acceptance gate:
+// certified artifact set x real lanes". Run against this flow with the lane's
+// own manifest it exits 0:
+//
+//   npx space-data-module parity-gate --gate-manifest ./parity/terrain-flow-gate.json --json
+//
+// It reads declaredRuntimeTargets ["browser","wasmedge"] out of the embedded
+// $PLG, classifies the import set as `in-surface (WASI + declared
+// capabilities: 3)` with forbidden [] and outsideSurface [], INSTANTIATES the
+// runtime in real headless Chrome behind COOP/COEP (contractVerdict
+// "satisfied", crossOriginIsolated true), and under the real native and
+// containerised WasmEdge at the 0.16.4 pin answers the NAMED verdict
+// `runner-cannot-supply-declared-capability` — a class parityGate.js models
+// explicitly for this case ("Composed flows derive their runtimeTargets from
+// their parts, so a WasmEdge-only flow is legitimate") and which its own doc
+// comment says is "never silently counted as a pass, never conflated with a
+// divergence". The stock gate manifest reports artifact-missing here because
+// it names the SDK's own example artifacts, which is why this lane commits its
+// own manifest rather than concluding the instrument does not exist.
+//
+// What is genuinely unavailable for a flow runtime is only the BEHAVIORAL
+// byte-diff half: the gate byte-diffs command-profile artifacts and a flow
+// runtime is library-profile. The encoder inside it HAS that half —
+// `space-data-module parity --lanes browser,wasmedge,docker-wasmedge` over
+// tests/fixtures/terrain-parity.json, 19 cases including the $DTT catalogue
+// surface — so the escalation asking Janus to build a lane or amend the
+// acceptance is WITHDRAWN.
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -91,4 +111,34 @@ test("the flow declares the capability set it is approved for, and no more", () 
   // host by hash before the flow will start.
   assert.deepEqual(artifact.capabilities, ["storage_query"]);
   assert.equal(artifact.threadModel, "single-thread");
+});
+
+// The gate manifest is committed, so "the acceptance gate runs on this flow"
+// is reproducible rather than a claim in a report. This does not RUN the gate
+// (it needs Docker, a native WasmEdge at the pin and headless Chrome); it
+// holds the manifest to naming THIS flow's runtime and the encoder it links,
+// so the two cannot drift apart silently.
+test("the committed parity-gate manifest names this flow's own artifacts", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(HERE, "..", "parity", "terrain-flow-gate.json"), "utf8"),
+  );
+  assert.equal(manifest.name, "terrain-serving-tri-runtime");
+  const byId = new Map(manifest.artifacts.map((a) => [a.id, a]));
+  const runtime = byId.get("terrain-serving-flow-runtime");
+  const encoder = byId.get("terrain-source-encoder");
+  assert.ok(runtime && encoder, "both artifacts are declared");
+  // Manifest paths resolve inside the SDK package directory, so they are
+  // spelled from there. Resolve them the way the gate does and assert they
+  // land on the bytes this checkout ships.
+  const sdkRoot = path.join(HERE, "..", "node_modules", "space-data-module-sdk");
+  assert.equal(
+    path.resolve(sdkRoot, runtime.path),
+    path.join(DIST, "runtime.wasm"),
+    "the gate measures the runtime this package builds",
+  );
+  assert.equal(
+    path.resolve(sdkRoot, encoder.path),
+    path.resolve(MODULES_ROOT, "data-source/terrain-source/dist/isomorphic/module.wasm"),
+    "and the encoder it links",
+  );
 });

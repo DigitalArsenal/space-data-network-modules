@@ -1545,7 +1545,9 @@ constexpr size_t kNotFoundDetailBytes = 160;
 // A 404 is PUBLICLY CACHEABLE ONLY WHEN THE REQUEST NAMED A REAL ADDRESS: it
 // parsed as a canonical z/x/y (parse_tile_path already refuses every
 // non-canonical spelling), the address exists at that level, and the level is
-// inside the tileset's own depth. That is the honest cacheable miss — a tile
+// inside the tileset's own depth — `maxLevel`, carried on the serve context
+// from the same config layer.json declares maxzoom from, and fail-closed when
+// the context does not state it. That is the honest cacheable miss — a tile
 // outside availability that nobody was promised — and its key family is
 // bounded by the pyramid's address space rather than by what a caller can
 // type. Everything else is a REFUSAL, not a miss: `no-store`, and a fixed
@@ -2472,6 +2474,35 @@ struct ServingConfig {
     // and tests/catalogue.test.mjs round-trips the body through the published
     // builder so the same omission cannot recur silently.
     std::string dataset_retrieved_at;
+    // ── ONE FIELD NAMES THE TILESET DIRECTORY, AND IT IS PAYLOAD.CID ────────
+    //
+    // PAYLOAD.CID is the tileset epoch: the content-addressed DIRECTORY that
+    // holds layer.json and every {z}/{x}/{y}.terrain. Both clients read that
+    // field and only that field (console globeSurfaces.tilesetCid, root app
+    // terrainTileset.readTilesetRecord).
+    //
+    // PROVENANCE.DATASET_CID is a DIFFERENT thing and the IDL says so:
+    // "content identifier of the exact dataset artifact, when the publisher
+    // distributes one" — the SOURCE DEM this pyramid was cut from, not the
+    // pyramid. This module used to copy the tileset CID into it as well, so
+    // the two readers agreed only by accident; the day a provenance-complete
+    // record put the real Copernicus artifact there, a client reading
+    // DATASET_CID would have pointed a terrain provider at a DEM archive and
+    // 404-ed every tile from a perfectly valid record. It is now its OWN
+    // config key and is emitted only when an operator states one.
+    std::string source_dataset_cid;
+    // ── THE DATUM TRAVELS WITH THE TILESET, NOT ONLY WITH THE TILES ────────
+    //
+    // Every per-tile $DTT states VERTICAL_DATUM = GEOID and VERTICAL_DATUM_NAME
+    // (see the file header). The IPFS delivery path publishes layer.json and
+    // the .terrain bytes and NOT the per-tile records, so the catalogue record
+    // and layer.json are the only two documents a client on that path ever
+    // reads — and both used to drop the datum, leaving it wire-defaulted to
+    // UNSPECIFIED ("heights are not comparable across tiles"). A consumer then
+    // renders EGM2008 orthometric heights as WGS84 ellipsoidal ones and sits
+    // low by the local undulation (~48 m in Liguria; the encoder's own remark
+    // bounds it at <~100 m). Both documents carry it now.
+    std::string vertical_datum_name;
     // The tileset's own bounding extent, when the orchestrator states one.
     // NOT derived from LEVEL/X/Y: the catalogue record is not a tile (see the
     // TILING_SCHEME note on the route), so its address says nothing and the
@@ -2508,6 +2539,13 @@ ServingConfig build_serving_config(const std::string& config) {
                     ",\"tiles\":\"" +
                     json_escape(json_string(config, "terrain_tiles_template",
                                             "{z}/{x}/{y}.terrain?v={version}")) + "\"" +
+                    // The datum rides into layer.json, which is the ONLY
+                    // metadata document a client on the IPFS path reads
+                    // besides the catalogue record. See
+                    // ServingConfig::vertical_datum_name.
+                    ",\"verticalDatum\":\"GEOID\",\"verticalDatumName\":\"" +
+                    json_escape(json_string(config, "terrain_vertical_datum_name",
+                                            "EGM2008")) + "\"" +
                     ",\"available\":" + available + "}";
 
     sc.layer_plan_token = sha256_multihash(
@@ -2528,6 +2566,10 @@ ServingConfig build_serving_config(const std::string& config) {
     sc.license = json_string(config, "terrain_license", "");
     sc.license_url = json_string(config, "terrain_license_url", "");
     sc.dataset_retrieved_at = json_string(config, "terrain_dataset_retrieved_at", "");
+    // NOT terrain_tileset_cid. See ServingConfig::source_dataset_cid: the
+    // tileset directory is PAYLOAD.CID and nothing else may be read as it.
+    sc.source_dataset_cid = json_string(config, "terrain_source_dataset_cid", "");
+    sc.vertical_datum_name = json_string(config, "terrain_vertical_datum_name", "EGM2008");
     {
         std::string w, so, e, n;
         sc.has_extent = json_raw_value(config, "terrain_west_deg", &w) &&
@@ -3565,7 +3607,23 @@ int layer_json(void) {
             json_escape(json_string(plan, "tiles", "{z}/{x}/{y}.terrain?v={version}")) + "\"]" +
             ",\"projection\":\"EPSG:4326\",\"bounds\":[-180,-90,180,90]" +
             ",\"minzoom\":0,\"maxzoom\":" + std::to_string(maxzoom) +
-            ",\"extensions\":[\"watermask\"]" + ",\"available\":" + available + "}";
+            ",\"extensions\":[\"watermask\"]" +
+            // ── THE DATUM IS STATED WHERE THE CLIENT CAN READ IT ────────────
+            //
+            // The published IPFS directory is layer.json plus the .terrain
+            // bytes; the per-tile $DTT records, which DO state the datum, are
+            // not in it. So a client on the delivery path the owner made
+            // primary had no machine-readable statement of the datum at all,
+            // and quantized-mesh heights are interpreted as WGS84 ELLIPSOIDAL
+            // by every consumer that does not know better. These two keys are
+            // that statement, and they carry the same values the tile records
+            // carry (GEOID / the plan's verticalDatumName), so the tileset and
+            // its tiles cannot disagree.
+            ",\"verticalDatum\":\"" +
+            json_escape(json_string(plan, "verticalDatum", "GEOID")) + "\"" +
+            ",\"verticalDatumName\":\"" +
+            json_escape(json_string(plan, "verticalDatumName", "EGM2008")) + "\"" +
+            ",\"available\":" + available + "}";
         cache->gzipped.clear();
         std::vector<uint8_t> compressed;
         if (gzip_compress(std::vector<uint8_t>(cache->body.begin(), cache->body.end()),
@@ -3681,7 +3739,36 @@ int route(void) {
 
     // O(1) in the size of the availability index: read once per instance, and
     // everything derived from it derived once with it. See ServingConfig.
-    const ServingConfig& cfg = serving_config();
+    //
+    // ── THE CONFIG MAY ARRIVE ON A FRAME ────────────────────────────────────
+    //
+    // Optional input port "config": the same JSON object plugin.getConfig
+    // returns, handed in by the caller instead of read over the host bridge.
+    // A flow that already knows the mount's config can wire it; nothing in the
+    // shipped flow does, so the production path is unchanged and still one
+    // branch per request.
+    //
+    // It exists because the CATALOGUE SURFACE HAD NO TRI-RUNTIME COVERAGE AT
+    // ALL. The parity twin is compiled with TERRAIN_SOURCE_NO_HOST_BRIDGE, so
+    // plugin.getConfig answers nothing there and /tileset.json answered 503 in
+    // every configuration — the whole $DTT record path, the PAYLOAD-always-
+    // present shape and the lineage refusal were structurally unreachable in
+    // the artifact the browser/WasmEdge/docker-WasmEdge lanes measure. With
+    // the config on a frame the same three lanes execute the same record
+    // builder over the same bytes, and the twin substitution stays exact:
+    // this branch is compiled into BOTH artifacts.
+    //
+    // Cached against its own bytes, for the same reason the host-bridge config
+    // is cached: a 4.4 MB availability index must not be re-parsed per invoke.
+    static std::string* frame_config_key = new std::string();
+    static ServingConfig* frame_config_value = new ServingConfig();
+    const std::string frame_config = input_text("config");
+    if (!frame_config.empty() && *frame_config_key != frame_config) {
+        *frame_config_value = build_serving_config(frame_config);
+        *frame_config_key = frame_config;
+    }
+    const ServingConfig& cfg =
+        frame_config.empty() ? serving_config() : *frame_config_value;
 
     // ── CONDITIONAL AND NEGOTIATION STATE, READ ONCE FOR BOTH PATHS ─────────
     //
@@ -3932,6 +4019,19 @@ int route(void) {
 
         body += ",\"MAX_LEVEL\":" + std::to_string(cfg.maxzoom) +
                 ",\"WATER_MASK_KIND\":\"NONE\"";
+        // ── THE DATUM, CARRIED NOT DROPPED ──────────────────────────────────
+        //
+        // Every tile record states GEOID / EGM2008. This record used to state
+        // neither, so it wire-defaulted to VERTICAL_DATUM UNSPECIFIED — which
+        // the IDL defines as "the datum is not stated; heights are not
+        // comparable across tiles" — on the one document both clients read.
+        // The tileset and its tiles now say the same thing, and REMARKS
+        // carries the encoder's own bounded-offset warning verbatim so a
+        // consumer reading only the catalogue still learns the cost of
+        // rendering these heights as above-ellipsoid.
+        body += ",\"VERTICAL_DATUM\":\"GEOID\",\"VERTICAL_DATUM_NAME\":\"" +
+                json_escape(cfg.vertical_datum_name) + "\"" + ",\"REMARKS\":\"" +
+                json_escape(kGeoidRemark) + "\"";
         // PROVENANCE carries only what the mount was actually told. A lineage
         // field invented here would be a claim about a dataset this module
         // never read. The four required fields are guaranteed present by the
@@ -3949,7 +4049,13 @@ int route(void) {
         add_prov("LICENSE", cfg.license);
         add_prov("LICENSE_URL", cfg.license_url);
         add_prov("ATTRIBUTION", cfg.attribution);
-        if (over_ipfs) add_prov("DATASET_CID", cfg.tileset_cid);
+        // NOT cfg.tileset_cid. DATASET_CID names the SOURCE artifact this
+        // pyramid was cut from — a different thing from the tileset directory,
+        // which is PAYLOAD.CID above and is the only field either client
+        // reads for it. This used to be the tileset CID as well, which made
+        // two readers of two different fields agree by coincidence; see
+        // ServingConfig::source_dataset_cid.
+        add_prov("DATASET_CID", cfg.source_dataset_cid);
         body += ",\"PROVENANCE\":{" + prov + "}";
         body += "}";
         const std::string etag =
@@ -4083,6 +4189,12 @@ int route(void) {
         "\",\"acceptsGzip\":" + (accepts_gzip ? "true" : "false") +
         ",\"insideAvailability\":" + (inside ? "true" : "false") +
         ",\"synthWater\":" + (synth_water ? "true" : "false") +
+        // THE TILESET'S OWN DEPTH, so respond() can bound the cacheable-404
+        // key family by the pyramid instead of by a constant. maxzoom is the
+        // deepest level layer.json declares, and route() is the only node that
+        // holds it, so it is carried rather than re-derived. See
+        // push_htr_not_found.
+        ",\"maxLevel\":" + std::to_string(cfg.maxzoom) +
         ",\"synthGridSize\":" + std::to_string(synth_grid) + "}";
     return push_json("context", context) < 0 ? 500 : 0;
 }
@@ -4318,11 +4430,26 @@ int respond(void) {
         // availability never promised. Nobody was promised it, the key family
         // is the pyramid's own address space, and a client that asks twice
         // should not cost two store queries.
+        //
+        // THE DEPTH IS THE TILESET'S, NOT A CONSTANT. This read `miss_level <=
+        // 30`, which is not "inside the tileset's own depth" — it is 31 levels
+        // of address space regardless of how deep the pyramid goes, and level
+        // 30 alone is ~2.3e18 addresses. At the ruled ship configuration
+        // (maxzoom 13) levels 14..30 were outside the tileset and still
+        // answered `public, max-age=300` with the address echoed into a
+        // distinct body: a cacheable key family a caller could type, which is
+        // exactly what the rule above forbids. route() carries the tileset's
+        // maxzoom in the context; ABSENT IT FAILS CLOSED (no-store), because a
+        // context that cannot state the depth cannot show the address is
+        // inside it.
+        const double max_level = json_number(context, "maxLevel", -1);
         const uint32_t miss_level = static_cast<uint32_t>(json_number(context, "level", 0));
         const double miss_x = json_number(context, "x", -1);
         const double miss_y = json_number(context, "y", -1);
         const bool real_address =
-            !context.empty() && miss_level <= 30 && miss_x >= 0 && miss_y >= 0 &&
+            !context.empty() && max_level >= 0 &&
+            static_cast<double>(miss_level) <= max_level && miss_level <= 30 &&
+            miss_x >= 0 && miss_y >= 0 &&
             miss_x < static_cast<double>(1ull << (miss_level + 1)) &&
             miss_y < static_cast<double>(1ull << miss_level);
         return push_htr_not_found(detail, real_address);

@@ -343,15 +343,27 @@ test("GET {z}/{x}/{y}.terrain serves the stored record bytes verbatim", async ()
 });
 
 test("a tile MISS is cacheable and a REFUSAL is not, through the COMPILED flow", async () => {
-  // The miss named a real address at a real level that the tileset simply does
-  // not hold: normal traffic, and a client asking twice should not cost two
-  // store queries.
+  // The miss named a real address at a real level INSIDE THE TILESET'S OWN
+  // DEPTH (CONFIG is maxzoom 8) that the tileset simply does not hold: normal
+  // traffic, and a client asking twice should not cost two store queries.
   const miss = await pumpRequest(createStub({ stream: null }), {
     method: "GET",
-    path: "/api/v1/terrain/12/100/200.terrain",
+    path: "/api/v1/terrain/8/100/200.terrain",
   });
   assert.equal(miss.status, 404);
   assert.equal(header(miss, "cache-control"), "public, max-age=300");
+
+  // Past the tileset's maxzoom the address is not this pyramid's at all, so it
+  // is a REFUSAL and not a cacheable miss. It used to answer
+  // `public, max-age=300` with the address echoed back for every level up to
+  // 30 — 17 levels of key family, ~2.3e18 addresses at level 30 alone, none of
+  // which this tileset has ever declared.
+  const tooDeep = await pumpRequest(createStub({ stream: null }), {
+    method: "GET",
+    path: "/api/v1/terrain/12/100/200.terrain",
+  });
+  assert.equal(tooDeep.status, 404);
+  assert.equal(header(tooDeep, "cache-control"), "no-store");
 
   // The unknown path named no address at all. It used to answer the same
   // `public, max-age=300` with its own path echoed into its own body — so

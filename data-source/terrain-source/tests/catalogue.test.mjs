@@ -444,10 +444,36 @@ test("PROVENANCE carries only what the mount was TOLD", async (t) => {
   assert.equal(prov.RETRIEVED_AT, "2026-08-26T00:00:00.000Z");
   assert.equal(prov.LICENSE, "Copernicus DEM: free, full and open licence");
   assert.equal(prov.LICENSE_URL, "https://spacedata.copernicus.eu/");
-  assert.equal(prov.DATASET_CID, CID);
+  // ── DATASET_CID IS NOT THE TILESET DIRECTORY ────────────────────────────
+  //
+  // It used to be a copy of terrain_tileset_cid, and that copy is what made
+  // two clients reading two different fields agree by coincidence. The IDL
+  // defines DATASET_CID as "the exact dataset artifact" the publisher
+  // distributes — the SOURCE DEM — and the tileset directory is PAYLOAD.CID.
+  // Nothing may be read as the tileset except PAYLOAD.CID.
+  assert.equal(
+    prov.DATASET_CID,
+    undefined,
+    "the tileset CID must NOT be copied into the source dataset's provenance field",
+  );
 
   // The OPTIONAL fields are still never invented — only the four the IDL
   // requires are demanded, and nothing beyond them is filled in.
+  // …and DATASET_CID is stated only when an operator names a SOURCE artifact,
+  // under its own key, which is a different value from the tileset CID.
+  const sourced = (
+    await get(t, "/api/v1/terrain/tileset.json", {
+      ...OVER_IPFS,
+      terrain_source_dataset_cid: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    })
+  ).body();
+  assert.equal(sourced.PAYLOAD.CID, CID, "the tileset directory is still PAYLOAD.CID");
+  assert.equal(
+    sourced.PROVENANCE.DATASET_CID,
+    "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+    "and DATASET_CID names the source artifact, which is a different CID",
+  );
+
   const bare = (await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS)).body().PROVENANCE;
   assert.equal(bare.DATASET_NAME, undefined);
   assert.equal(bare.LICENSE_URL, undefined, "no licence URL is invented when none is configured");
@@ -465,4 +491,145 @@ test("tileset.json does not shadow layer.json or the camelCase catalogue", async
   assert.equal(cat.http.status, 200);
   assert.equal(cat.body().cid, CID, "the camelCase document is unchanged");
   assert.equal(cat.body().delivery, "ipfs");
+});
+
+// ── THE DATUM TRAVELS WITH THE TILESET ──────────────────────────────────────
+//
+// Every per-tile $DTT states VERTICAL_DATUM GEOID and VERTICAL_DATUM_NAME
+// EGM2008. The IPFS delivery path publishes layer.json and the .terrain bytes
+// and NOT the per-tile records, so the catalogue record and layer.json are the
+// only two documents a client on that path reads — and both used to drop the
+// datum, leaving it wire-defaulted to UNSPECIFIED, which the IDL defines as
+// "the datum is not stated; heights are not comparable across tiles". A
+// consumer then renders these orthometric heights as WGS84 ellipsoidal ones
+// and sits low by the local undulation (~48 m in Liguria). This stack feeds
+// those heights to sensor viewshed and RF terrain analysis.
+test("the catalogue record STATES the vertical datum, and its name", async (t) => {
+  const record = (await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS)).body();
+  assert.equal(record.VERTICAL_DATUM, "GEOID");
+  assert.equal(record.VERTICAL_DATUM_NAME, "EGM2008");
+  assert.match(
+    record.REMARKS,
+    /no geoid-to-ellipsoid conversion is applied/,
+    "the encoder's own bounded-offset warning reaches a reader of the catalogue alone",
+  );
+  // And it is a record with those fields on it, not a JSON object that merely
+  // spells them: the enum name has to map to an ordinal the IDL defines.
+  const bytes = writeDttRecord(sds, record);
+  const [read] = sds.readFB(bytes);
+  assert.equal(read.VERTICAL_DATUM, sds.standards.DTT.dttVerticalDatum.GEOID);
+  assert.equal(read.VERTICAL_DATUM_NAME, "EGM2008");
+});
+
+test("the datum name an operator configures is the one the record states", async (t) => {
+  const record = (
+    await get(t, "/api/v1/terrain/tileset.json", {
+      ...OVER_IPFS,
+      terrain_vertical_datum_name: "EGM96",
+    })
+  ).body();
+  assert.equal(record.VERTICAL_DATUM_NAME, "EGM96");
+});
+
+// ── layer.json CARRIES IT TOO ───────────────────────────────────────────────
+//
+// layer.json is what a native terrain provider reads out of the published
+// directory. It is rendered by the module's own layer_json method from the
+// plan route() composes, so this is the same document that ends up inside the
+// CID (ipfs-publish.mjs renders it through the shipped module, deliberately,
+// so there is only ever ONE authority for it).
+test("layer.json states the datum the tiles were encoded against", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(WASM_PATH)),
+    manifest: JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8")),
+    surface: "direct",
+    hostcallDispatch: (operation) => {
+      if (operation === "plugin.getConfig") return OVER_IPFS;
+      throw new Error(`unexpected hostcall operation: ${operation}`);
+    },
+  });
+  t.after(() => harness.destroy());
+  const routed = await harness.invoke({
+    methodId: "route",
+    inputs: [
+      {
+        portId: "request",
+        typeRef: HTTP_REQUEST_TYPE_REF,
+        payload: encodeHttpRequest({
+          method: "GET",
+          path: "/api/v1/terrain/layer.json",
+          headers: { "accept-encoding": "identity" },
+        }),
+      },
+    ],
+  });
+  const plan = routed.outputs.find((o) => o.portId === "layer_plan");
+  assert.ok(plan, "layer.json is planned, not answered directly");
+  const rendered = await harness.invoke({
+    methodId: "layer_json",
+    inputs: [
+      {
+        portId: "plan",
+        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: plan.payload.byteLength },
+        payload: plan.payload,
+      },
+    ],
+  });
+  const http = decodeHttpResponse(new Uint8Array(rendered.outputs[0].payload));
+  const layer = JSON.parse(decoder.decode(http.body));
+  assert.equal(layer.verticalDatum, "GEOID");
+  assert.equal(layer.verticalDatumName, "EGM2008");
+  // The record and the directory's own index must not disagree about it.
+  const record = (await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS)).body();
+  assert.equal(layer.verticalDatumName, record.VERTICAL_DATUM_NAME);
+});
+
+// ── THE COMMITTED DEPLOY CONFIG BOOTS A MOUNT THAT ANSWERS THE CATALOGUE ────
+//
+// tools/terrain-pyramid/evidence/liguria-z11/mount-entry.json names
+// layer-json-config.json as THE source of "the module config keys ... INSIDE
+// `config:`". That file used to carry eight keys and NONE of the four
+// DTTProvenance fields the module requires, so an operator who did exactly
+// what the ship step said installed a mount that answered
+// /api/v1/terrain/tileset.json with 503 — measured, not inferred — and no
+// client ever got a CID. The ship step turned a 401 into a 503.
+//
+// This boots the mount from that EXACT committed file (plus only the two keys
+// the publish step adds, which name a directory that does not exist until the
+// add has run) and fetches the route both clients fetch.
+test("the COMMITTED deploy config boots a mount that answers /tileset.json 200", async (t) => {
+  const committed = JSON.parse(
+    fs.readFileSync(
+      fileURLToPath(new URL("../../../tools/terrain-pyramid/evidence/liguria-z11/layer-json-config.json", import.meta.url)),
+      "utf8",
+    ),
+  );
+  const config = {
+    ...committed,
+    terrain_tileset_cid: CID,
+    terrain_tileset_size_bytes: 41_000_000,
+  };
+  const { http, body, headerOf } = await get(t, "/api/v1/terrain/tileset.json", config);
+  assert.equal(http.status, 200, "the committed config must not produce a 503");
+  assert.equal(headerOf("content-type"), "application/json");
+  const record = body();
+  assert.equal(record.PAYLOAD.CID, CID, "and the record names the directory in PAYLOAD.CID");
+  assert.equal(record.PROVENANCE.DATASET_CID, undefined);
+  assert.equal(record.VERTICAL_DATUM_NAME, committed.terrain_vertical_datum_name);
+  // Not just 200: a $DTT. writeFB is what enforces `required`.
+  assert.ok(writeDttRecord(sds, record).length > 0, "and the answer is a record");
+
+  // The four keys, named, so a future edit that drops one fails HERE rather
+  // than on a host at deploy time.
+  for (const key of [
+    "terrain_dataset_id",
+    "terrain_dataset_epoch",
+    "terrain_dataset_retrieved_at",
+    "terrain_license",
+  ]) {
+    assert.ok(
+      typeof committed[key] === "string" && committed[key].length > 0,
+      `the committed deploy config must carry ${key}; the module refuses the catalogue without it`,
+    );
+  }
 });

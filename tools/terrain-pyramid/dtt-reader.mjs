@@ -111,6 +111,15 @@ export function readDtt(record) {
     childAvailability: u8(35),
     maxLevel: u32(36),
     etag: str(40),
+    // THE DATUM, so the publisher can carry it onto the TILESET record and
+    // into layer.json rather than dropping it. The tiles have always stated
+    // it; the two documents a client on the IPFS path actually reads did not,
+    // which left the heights wire-defaulted to VERTICAL_DATUM UNSPECIFIED —
+    // "not comparable across tiles" — for every consumer of the delivered
+    // directory. Read off a tile, never re-derived from a config file.
+    verticalDatum: i8(20),
+    verticalDatumName: str(21),
+    remarks: str(42),
   };
 }
 
