@@ -35,9 +35,46 @@ of the FILES, because a gateway does none of them:
    available-but-unstored address (the encoder never stores an all-ocean tile);
    a gateway returns 404, and Atlas set the browser-4xx bound at zero. So the
    publisher asks the MODULE for the same bytes it would have synthesized and
-   writes them as files. On the regional pyramid that is 36 files across levels
-   0–7, including both level-0 roots — without them a native provider's first
-   request is a 404 and the globe never leaves the ellipsoid.
+   writes them as files. That includes both level-0 roots — without them a
+   native provider's first request is a 404 and the globe never leaves the
+   ellipsoid.
+
+## The ocean has to be DECLARED, or it is served as land
+
+The encoder does not store an all-ocean tile: at a built level it measures the
+address as all water and skips it, and `terrain_ocean_synth_min_level` tells
+the mount that a miss at or above that level means *"measured all-ocean"* and
+must be synthesized as `UNIFORM_WATER` — while a miss below it is a structural
+ancestor and fails safe to flat `UNIFORM_LAND`, because fabricated water paints
+every continent as specular ocean and that was this lane's worst prior defect.
+
+**That lever could never fire.** The skipped addresses were dropped: the
+encoder reported them per tile, `run.mjs` kept only the COUNT, and `verify.mjs`
+derived `available` from STORED tiles — so a skipped address was not in the
+published index at all. A client over open water refined until availability ran
+out and then rendered the shallowest ANCESTOR, which is below the authoritative
+floor and therefore flat land with a `UNIFORM_LAND` mask. Measured on the
+regional pyramid: **24.3% of the ocean inside the tileset's own extent came
+back as land** (1,711 of 7,051 sampled ocean points, 660 at z6 and 1,050 at
+z7), on the one lane that chose a coastal region precisely to exercise the
+water mask. Every synthesized file in the published directory was
+`UNIFORM_LAND`; not one was water.
+
+A skipped address is a MEASUREMENT, not a gap. So:
+
+    run.mjs      writes <out>/ocean-skipped.json — every address, not the count
+    verify.mjs   declares them alongside the stored ones, and REFUSES any that
+                 sits below the authoritative floor (there the module would
+                 answer land, which is the defect)
+    ipfs-publish materializes them through the module, counts what each one
+                 states, and refuses to publish if an address the encoder
+                 measured as water comes out as land
+
+The ancestor placeholders below the floor stay `UNIFORM_LAND` and that is
+correct: they overhang the built region by whole tiles at the shallow levels,
+and outside the built footprint the tileset has no measurement of anything.
+What changed is that a client now refines PAST them everywhere the pyramid was
+actually built.
 
 `layer.json` is rendered by the module's own `layer_json` method, driven
 through `route()` so the plan is the mount's plan. The ONLY difference from
@@ -149,30 +186,67 @@ tile. Rendered as JSON it uses IDL-EXACT KEYS.
 
 | $DTT field | the tileset catalogue record carries |
 | --- | --- |
-| `TILESET_ID` | the pyramid's publisher-stable id, identical to the tiles' |
+| `TILESET_ID` | the pyramid's publisher-stable id, identical to the tiles' — **required** |
 | `TILESET_NAME` | its display name |
-| `TILING_SCHEME` | `GEOGRAPHIC_WGS84`, identical to the tiles' |
-| `WEST/SOUTH/EAST/NORTH_DEG` | the whole tileset's extent |
+| `TILING_SCHEME` | `UNSPECIFIED`. The catalogue is the DIRECTORY, not a tile: it has no address in any scheme |
+| `LEVEL/X/Y` | NOT STATED. Without a scheme they are not an address |
+| `WEST/SOUTH/EAST/NORTH_DEG` | the tileset's own bounding extent, as `verify.mjs` measured it from the addresses actually built |
 | `PAYLOAD_FORMAT` | `QUANTIZED_MESH` — what the directory contains |
 | `PAYLOAD_FORMAT_VERSION` | `1.0` |
+| `PAYLOAD` | **required.** Present and EMPTY when there is no directory to name |
 | `PAYLOAD.CID` | **the directory CID.** The one field that names the epoch |
 | `PAYLOAD.SIZE_BYTES` | the directory's total bytes, so a consumer can budget |
 | `PAYLOAD.MEDIA_TYPE` | `application/vnd.ipld.dag-pb` |
 | `PAYLOAD.BYTES` | ABSENT. Themis: never a pyramid blob inline |
 | `MAX_LEVEL` | the deepest level the tileset serves |
 | `WATER_MASK_KIND` | `NONE` — a tileset states nothing about water; its tiles do |
-| `PROVENANCE` | the tiles' own lineage and licence, verbatim |
+| `PROVENANCE` | **required.** The tiles' own lineage and licence, verbatim |
+| `PROVENANCE.DATASET_ID` | **required** |
+| `PROVENANCE.DATASET_EPOCH` | **required** |
+| `PROVENANCE.RETRIEVED_AT` | **required** |
+| `PROVENANCE.LICENSE` | **required** |
 | `PROVENANCE.DATASET_CID` | the same directory CID: *"the exact dataset artifact"* |
-| `PROVENANCE.GENERATED_AT` | when the directory was cut |
-| `PROVENANCE.PROCESSOR` | `tools/terrain-pyramid/ipfs-publish.mjs` |
+| `PROVENANCE.GENERATED_AT` | when the directory was cut (builder only; the mount states none) |
+| `PROVENANCE.PROCESSOR` | `tools/terrain-pyramid/ipfs-publish.mjs` (builder only) |
+
+**IDL-exact keys is only half of it: the document has to BE a record.** Both
+projections of this mapping — the builder's `tileset-catalogue.json` and the
+serving mount's `/tileset.json` — spelled every key the way the IDL spells it
+and NEITHER could be serialized. The mount's omitted `RETRIEVED_AT`, which
+`DTTProvenance` marks `required` (`FlatBuffers: field 18 must be set`), and
+dropped `PAYLOAD` entirely when no CID was configured, which `DTT` marks
+`required` (`field 34 must be set`). Nothing in either suite had ever built a
+projection through the published builder, so an unbuildable document answered
+200 and passed 100 tests. A canonical-JSON form that cannot become the
+FlatBuffer form is not a record in two forms, which is the premise the
+dual-format signing law rests on.
+
+`tools/terrain-pyramid/dtt-projection.mjs` is now the ONE place a projection
+becomes a record: it refuses any key the IDL does not define, maps enum names
+to their wire ordinals, and hands the result to `writeFB`, which is what
+enforces `required`. The builder writes `tileset-catalogue.dttstream` through
+it on every run and reads it back; `data-source/terrain-source/tests/
+catalogue.test.mjs` puts the MOUNT's `/tileset.json` body through the same
+projector. A mount that is not configured with the four required provenance
+fields answers **503** naming the missing config keys rather than 200 with
+something that is not a record.
+
+**The address and the extent used to contradict each other.** The record stated
+`GEOGRAPHIC_WGS84` with `LEVEL/X/Y` 0/0/0 and `WEST/EAST` -180/180 — and the
+IDL defines that scheme's level 0 as TWO root tiles covering [-180,0] and
+[0,180], so the stated address named HALF the stated extent. A consumer doing
+the ordinary thing with a $DTT (derive the extent from the address and the
+scheme) got a different answer from the record's own fields. `TILING_SCHEME` is
+`UNSPECIFIED` — ordinal 0, which the IDL reserves so *"an unset field can never
+be read as a real scheme"* — the address is not stated, and the extent stands
+on its own. **The scheme of the tiles INSIDE is declared by the `layer.json` in
+the directory**, which is where a terrain provider reads it from anyway.
 
 **The discriminator between a catalogue record and a tile record is
 `PAYLOAD.MEDIA_TYPE`.** A tile's payload is one mesh
 (`application/vnd.quantized-mesh`); the catalogue's is the DIRECTORY those
 tiles live in (`application/vnd.ipld.dag-pb`). It is a stated field carrying a
-real difference, not a sentinel. `LEVEL/X/Y` are 0 and are not the
-discriminator — the builder stores nothing at level 0 (level-0 tiles are
-synthesized), so the address is free, but a reader must key on the media type.
+real difference, not a sentinel.
 
 `PROVENANCE.SOURCE_URL`, `SOURCE_QUERY` and `NATIVE_ID` are deliberately
 DROPPED from the catalogue record. They name the ONE granule a tile was cut

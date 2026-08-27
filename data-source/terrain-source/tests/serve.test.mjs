@@ -273,8 +273,12 @@ test("ONE TILE, ONE URL: only the version token layer.json declares is admitted"
     assert.ok(ports.has("query"), `${JSON.stringify(query)} is the one addressed resource`);
   }
 
-  // Everything else is the same cheap cacheable 404 an unknown path gets —
-  // and crucially it is not a SECOND spelling of a tile that already has one.
+  // Everything else is a REFUSAL, not a miss — and the difference is now in
+  // the cache-control. It used to answer `public, max-age=300` with the
+  // request path echoed in the body, which closed the amplifier on the 200s
+  // and left it wide open one status code over: every distinct junk query was
+  // a distinct, publicly cacheable key holding a distinct body for five
+  // minutes. A refusal caches nothing and echoes nothing.
   for (const query of [
     "v=0.0.0",
     "v=1.0.0&v=1.0.0",
@@ -290,9 +294,71 @@ test("ONE TILE, ONE URL: only the version token layer.json declares is admitted"
     assert.equal(http.status, 404, `?${query} must not be a second key for one tile`);
     assert.equal(
       http.headers.find((h) => h.name === "cache-control")?.value,
-      "public, max-age=300",
+      "no-store",
+      `?${query} must not be parkable in a public cache`,
+    );
+    assert.equal(
+      JSON.parse(Buffer.from(http.body).toString("utf8")).detail,
+      "not a tile address in this tileset",
+      "and the refusal echoes nothing back",
     );
   }
+});
+
+// ── ONE TILE, ONE URL — THE 404 HALF ───────────────────────────────────────
+//
+// The same amplifier class, on the status code the discipline had never been
+// applied to. `/{z}/{x}/{tile}` is the host's route template, so the tile
+// segment is whatever a caller sends: an unbounded family of distinct paths,
+// each answered `public, max-age=300` with its own path echoed into its own
+// body. Bodies are small and the parser refuses before any store query, so the
+// cost per key was small — but "small times unbounded" is the shape of every
+// cache-poisoning amplifier this module has already closed twice.
+//
+// A 404 is publicly cacheable ONLY when the request named a real address.
+test("a 404 is publicly cacheable only when the request named a real address", async (t) => {
+  const refusals = [
+    "/api/v1/terrain/1/1/whatever.terrain",
+    "/api/v1/terrain/1/1/../../../etc/passwd",
+    "/api/v1/terrain/8/271/192.png",
+    "/api/v1/terrain/8/0271/192.terrain",   // non-canonical spelling
+    "/api/v1/terrain/8/271/192/193.terrain",
+    "/api/v1/terrain/not/a/tile.terrain",
+    `/api/v1/terrain/1/1/${"z".repeat(2048)}.terrain`,
+  ];
+  const bodies = new Set();
+  for (const path of refusals) {
+    const response = await invoke(t, "route", [requestFrame(path)]);
+    assert.equal(response.outputs.length, 1, path);
+    const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+    assert.equal(http.status, 404, path);
+    assert.equal(
+      http.headers.find((h) => h.name === "cache-control")?.value,
+      "no-store",
+      `${path} must not occupy a public cache key`,
+    );
+    bodies.add(Buffer.from(http.body).toString("utf8"));
+  }
+  // ONE body for every refusal: nothing a caller sends comes back, so there is
+  // nothing to vary and nothing to store.
+  assert.equal(bodies.size, 1, "a refusal reflects no part of the request");
+
+  // The honest cacheable miss is unchanged: a canonical address that exists at
+  // its level, outside availability, that the store does not hold.
+  const routed = await invoke(t, "route", [requestFrame("/api/v1/terrain/11/3000/1540.terrain")]);
+  const context = routed.outputs.find((o) => o.portId === "context");
+  assert.ok(context, "a real address is planned, not refused at the parser");
+  const responded = await invoke(t, "respond", [
+    frame("stream", new Uint8Array(4)),
+    frame("context", context.payload),
+  ]);
+  const miss = decodeHttpResponse(new Uint8Array(responded.outputs[0].payload));
+  assert.equal(miss.status, 404);
+  assert.equal(
+    miss.headers.find((h) => h.name === "cache-control")?.value,
+    "public, max-age=300",
+    "nobody was promised it, and a client asking twice should not cost two store queries",
+  );
 });
 
 test("route without configured availability defaults to the two level-0 roots only", async (t) => {
@@ -303,7 +369,10 @@ test("route without configured availability defaults to the two level-0 roots on
   assert.deepEqual(plan.available, [[{ startX: 0, startY: 0, endX: 1, endY: 0 }]]);
 });
 
-test("route answers unknown paths with a cacheable 404 and bad verbs with 405", async (t) => {
+test("route answers unknown paths with a no-store 404 and bad verbs with 405", async (t) => {
+  // None of these NAMES A TILE, so none of them is a miss: they are refusals,
+  // and a refusal is not parkable in a public cache (see "a 404 is publicly
+  // cacheable only when the request named a real address").
   for (const path of [
     "/api/v1/terrain/nope",
     "/api/v1/terrain/8/271/192.png",
@@ -318,8 +387,8 @@ test("route answers unknown paths with a cacheable 404 and bad verbs with 405", 
     assert.equal(http.status, 404, path);
     assert.equal(
       http.headers.find((h) => h.name === "cache-control")?.value,
-      "public, max-age=300",
-      "a miss is normal traffic and must be cacheable",
+      "no-store",
+      "an unparseable path is a refusal, not normal traffic",
     );
   }
   const post = await invoke(t, "route", [

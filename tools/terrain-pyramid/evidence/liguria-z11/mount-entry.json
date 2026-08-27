@@ -4,7 +4,7 @@
   "flow": "com.digitalarsenal.flows.terrain-serving",
   "memory_pages": 384,
   "// pool": {
-    "availabilityIndexBytes": 10219,
+    "availabilityIndexBytes": 9107,
     "memoryPages": 384,
     "memoryMiB": 24,
     "hostDefaultPages": 1024,

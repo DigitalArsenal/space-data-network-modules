@@ -1,22 +1,14 @@
 {
   "TILESET_ID": "spaceaware-terrain",
   "TILESET_NAME": "spaceaware-terrain",
-  "TILING_SCHEME": "GEOGRAPHIC_WGS84",
-  "LEVEL": 0,
-  "X": 0,
-  "Y": 0,
-  "ROW_ORIGIN_NORTH": false,
-  "WEST_DEG": -180,
-  "SOUTH_DEG": -90,
-  "EAST_DEG": 180,
-  "NORTH_DEG": 90,
+  "TILING_SCHEME": "UNSPECIFIED",
+  "WEST_DEG": 7.734375,
+  "SOUTH_DEG": 42.890625,
+  "EAST_DEG": 12.65625,
+  "NORTH_DEG": 47.109375,
   "PAYLOAD_FORMAT": "QUANTIZED_MESH",
   "PAYLOAD_FORMAT_VERSION": "1.0",
-  "PAYLOAD": {
-    "CID": "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy",
-    "SIZE_BYTES": 375792855,
-    "MEDIA_TYPE": "application/vnd.ipld.dag-pb"
-  },
+  "PAYLOAD": {},
   "MAX_LEVEL": 13,
   "WATER_MASK_KIND": "NONE",
   "PROVENANCE": {
@@ -27,8 +19,7 @@
     "LICENSE": "Copernicus DEM: ESA / Airbus Defence and Space (free licence)",
     "LICENSE_URL": "https://spacedata.copernicus.eu/documents/20123/121286/CSCDA_ESA_Mission-specific+Annex_31_Oct_22.pdf",
     "ATTRIBUTION": "Produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
-    "DATASET_CID": "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy",
-    "GENERATED_AT": "2026-08-27T17:38:36.822Z",
+    "GENERATED_AT": "2026-08-27T20:24:25.545Z",
     "PROCESSOR": "tools/terrain-pyramid/ipfs-publish.mjs"
   }
 }

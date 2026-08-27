@@ -91,7 +91,7 @@
     ],
     [
       {
-        "startX": 134,
+        "startX": 133,
         "startY": 94,
         "endX": 136,
         "endY": 94
@@ -117,7 +117,7 @@
     ],
     [
       {
-        "startX": 269,
+        "startX": 267,
         "startY": 189,
         "endX": 273,
         "endY": 189
@@ -155,13 +155,13 @@
     ],
     [
       {
-        "startX": 538,
+        "startX": 534,
         "startY": 378,
         "endX": 546,
         "endY": 378
       },
       {
-        "startX": 540,
+        "startX": 534,
         "startY": 379,
         "endX": 546,
         "endY": 379
@@ -169,23 +169,11 @@
       {
         "startX": 534,
         "startY": 380,
-        "endX": 535,
-        "endY": 380
-      },
-      {
-        "startX": 540,
-        "startY": 380,
         "endX": 546,
         "endY": 380
       },
       {
         "startX": 534,
-        "startY": 381,
-        "endX": 536,
-        "endY": 381
-      },
-      {
-        "startX": 538,
         "startY": 381,
         "endX": 546,
         "endY": 381
@@ -241,55 +229,31 @@
     ],
     [
       {
-        "startX": 1077,
-        "startY": 756,
-        "endX": 1077,
-        "endY": 756
-      },
-      {
-        "startX": 1079,
-        "startY": 756,
-        "endX": 1080,
-        "endY": 756
-      },
-      {
-        "startX": 1083,
+        "startX": 1069,
         "startY": 756,
         "endX": 1092,
         "endY": 756
       },
       {
-        "startX": 1079,
-        "startY": 757,
-        "endX": 1079,
-        "endY": 757
-      },
-      {
-        "startX": 1083,
+        "startX": 1069,
         "startY": 757,
         "endX": 1092,
         "endY": 757
       },
       {
-        "startX": 1083,
+        "startX": 1069,
         "startY": 758,
         "endX": 1092,
         "endY": 758
       },
       {
-        "startX": 1080,
-        "startY": 759,
-        "endX": 1080,
-        "endY": 759
-      },
-      {
-        "startX": 1082,
+        "startX": 1069,
         "startY": 759,
         "endX": 1092,
         "endY": 759
       },
       {
-        "startX": 1082,
+        "startX": 1069,
         "startY": 760,
         "endX": 1092,
         "endY": 760
@@ -297,35 +261,17 @@
       {
         "startX": 1069,
         "startY": 761,
-        "endX": 1070,
-        "endY": 761
-      },
-      {
-        "startX": 1081,
-        "startY": 761,
         "endX": 1092,
         "endY": 761
       },
       {
         "startX": 1069,
         "startY": 762,
-        "endX": 1070,
-        "endY": 762
-      },
-      {
-        "startX": 1079,
-        "startY": 762,
         "endX": 1092,
         "endY": 762
       },
       {
         "startX": 1069,
-        "startY": 763,
-        "endX": 1072,
-        "endY": 763
-      },
-      {
-        "startX": 1077,
         "startY": 763,
         "endX": 1092,
         "endY": 763
@@ -429,85 +375,61 @@
     ],
     [
       {
-        "startX": 2154,
-        "startY": 1513,
-        "endX": 2155,
-        "endY": 1513
-      },
-      {
-        "startX": 2159,
-        "startY": 1513,
-        "endX": 2160,
-        "endY": 1513
-      },
-      {
-        "startX": 2167,
+        "startX": 2139,
         "startY": 1513,
         "endX": 2184,
         "endY": 1513
       },
       {
-        "startX": 2159,
-        "startY": 1514,
-        "endX": 2159,
-        "endY": 1514
-      },
-      {
-        "startX": 2167,
+        "startX": 2139,
         "startY": 1514,
         "endX": 2184,
         "endY": 1514
       },
       {
-        "startX": 2167,
+        "startX": 2139,
         "startY": 1515,
         "endX": 2184,
         "endY": 1515
       },
       {
-        "startX": 2166,
+        "startX": 2139,
         "startY": 1516,
         "endX": 2184,
         "endY": 1516
       },
       {
-        "startX": 2166,
+        "startX": 2139,
         "startY": 1517,
         "endX": 2184,
         "endY": 1517
       },
       {
-        "startX": 2160,
-        "startY": 1518,
-        "endX": 2160,
-        "endY": 1518
-      },
-      {
-        "startX": 2165,
+        "startX": 2139,
         "startY": 1518,
         "endX": 2184,
         "endY": 1518
       },
       {
-        "startX": 2165,
+        "startX": 2139,
         "startY": 1519,
         "endX": 2184,
         "endY": 1519
       },
       {
-        "startX": 2164,
+        "startX": 2139,
         "startY": 1520,
         "endX": 2184,
         "endY": 1520
       },
       {
-        "startX": 2164,
+        "startX": 2139,
         "startY": 1521,
         "endX": 2184,
         "endY": 1521
       },
       {
-        "startX": 2164,
+        "startX": 2139,
         "startY": 1522,
         "endX": 2184,
         "endY": 1522
@@ -515,29 +437,11 @@
       {
         "startX": 2139,
         "startY": 1523,
-        "endX": 2140,
-        "endY": 1523
-      },
-      {
-        "startX": 2163,
-        "startY": 1523,
         "endX": 2184,
         "endY": 1523
       },
       {
         "startX": 2139,
-        "startY": 1524,
-        "endX": 2141,
-        "endY": 1524
-      },
-      {
-        "startX": 2160,
-        "startY": 1524,
-        "endX": 2160,
-        "endY": 1524
-      },
-      {
-        "startX": 2162,
         "startY": 1524,
         "endX": 2184,
         "endY": 1524
@@ -545,23 +449,11 @@
       {
         "startX": 2139,
         "startY": 1525,
-        "endX": 2141,
-        "endY": 1525
-      },
-      {
-        "startX": 2158,
-        "startY": 1525,
         "endX": 2184,
         "endY": 1525
       },
       {
         "startX": 2139,
-        "startY": 1526,
-        "endX": 2143,
-        "endY": 1526
-      },
-      {
-        "startX": 2156,
         "startY": 1526,
         "endX": 2184,
         "endY": 1526
@@ -569,23 +461,11 @@
       {
         "startX": 2139,
         "startY": 1527,
-        "endX": 2144,
-        "endY": 1527
-      },
-      {
-        "startX": 2154,
-        "startY": 1527,
         "endX": 2184,
         "endY": 1527
       },
       {
         "startX": 2139,
-        "startY": 1528,
-        "endX": 2146,
-        "endY": 1528
-      },
-      {
-        "startX": 2150,
         "startY": 1528,
         "endX": 2184,
         "endY": 1528
@@ -773,55 +653,55 @@
     ],
     [
       {
-        "startX": 4320,
+        "startX": 4300,
         "startY": 3049,
-        "endX": 4320,
+        "endX": 4323,
         "endY": 3049
       },
       {
-        "startX": 4318,
+        "startX": 4300,
         "startY": 3050,
         "endX": 4323,
         "endY": 3050
       },
       {
-        "startX": 4316,
+        "startX": 4300,
         "startY": 3051,
         "endX": 4323,
         "endY": 3051
       },
       {
-        "startX": 4314,
+        "startX": 4300,
         "startY": 3052,
         "endX": 4323,
         "endY": 3052
       },
       {
-        "startX": 4312,
+        "startX": 4300,
         "startY": 3053,
         "endX": 4323,
         "endY": 3053
       },
       {
-        "startX": 4309,
+        "startX": 4300,
         "startY": 3054,
         "endX": 4323,
         "endY": 3054
       },
       {
-        "startX": 4309,
+        "startX": 4300,
         "startY": 3055,
         "endX": 4323,
         "endY": 3055
       },
       {
-        "startX": 4304,
+        "startX": 4300,
         "startY": 3056,
         "endX": 4323,
         "endY": 3056
       },
       {
-        "startX": 4301,
+        "startX": 4300,
         "startY": 3057,
         "endX": 4323,
         "endY": 3057
@@ -913,115 +793,109 @@
     ],
     [
       {
-        "startX": 8640,
+        "startX": 8601,
+        "startY": 6098,
+        "endX": 8647,
+        "endY": 6098
+      },
+      {
+        "startX": 8601,
         "startY": 6099,
-        "endX": 8640,
+        "endX": 8647,
         "endY": 6099
       },
       {
-        "startX": 8639,
-        "startY": 6100,
-        "endX": 8640,
-        "endY": 6100
-      },
-      {
-        "startX": 8644,
+        "startX": 8601,
         "startY": 6100,
         "endX": 8647,
         "endY": 6100
       },
       {
-        "startX": 8636,
+        "startX": 8601,
         "startY": 6101,
         "endX": 8647,
         "endY": 6101
       },
       {
-        "startX": 8635,
+        "startX": 8601,
         "startY": 6102,
         "endX": 8647,
         "endY": 6102
       },
       {
-        "startX": 8633,
+        "startX": 8601,
         "startY": 6103,
         "endX": 8647,
         "endY": 6103
       },
       {
-        "startX": 8629,
+        "startX": 8601,
         "startY": 6104,
         "endX": 8647,
         "endY": 6104
       },
       {
-        "startX": 8629,
+        "startX": 8601,
         "startY": 6105,
         "endX": 8647,
         "endY": 6105
       },
       {
-        "startX": 8627,
+        "startX": 8601,
         "startY": 6106,
         "endX": 8647,
         "endY": 6106
       },
       {
-        "startX": 8625,
+        "startX": 8601,
         "startY": 6107,
         "endX": 8647,
         "endY": 6107
       },
       {
-        "startX": 8624,
+        "startX": 8601,
         "startY": 6108,
         "endX": 8647,
         "endY": 6108
       },
       {
-        "startX": 8619,
+        "startX": 8601,
         "startY": 6109,
         "endX": 8647,
         "endY": 6109
       },
       {
-        "startX": 8619,
+        "startX": 8601,
         "startY": 6110,
         "endX": 8647,
         "endY": 6110
       },
       {
-        "startX": 8618,
+        "startX": 8601,
         "startY": 6111,
         "endX": 8647,
         "endY": 6111
       },
       {
-        "startX": 8608,
-        "startY": 6112,
-        "endX": 8611,
-        "endY": 6112
-      },
-      {
-        "startX": 8615,
+        "startX": 8601,
         "startY": 6112,
         "endX": 8647,
         "endY": 6112
       },
       {
-        "startX": 8608,
+        "startX": 8601,
         "startY": 6113,
         "endX": 8647,
         "endY": 6113
       },
       {
-        "startX": 8607,
+        "startX": 8601,
         "startY": 6114,
         "endX": 8647,
         "endY": 6114
       },
       {
-        "startX": 8602,
+        "startX": 8601,
         "startY": 6115,
         "endX": 8647,
         "endY": 6115
@@ -1195,5 +1069,9 @@
         "endY": 6143
       }
     ]
-  ]
+  ],
+  "terrain_west_deg": 7.734375,
+  "terrain_south_deg": 42.890625,
+  "terrain_east_deg": 12.65625,
+  "terrain_north_deg": 47.109375
 }

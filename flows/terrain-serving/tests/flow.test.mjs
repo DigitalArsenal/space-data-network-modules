@@ -342,7 +342,10 @@ test("GET {z}/{x}/{y}.terrain serves the stored record bytes verbatim", async ()
   assert.equal(conditional.body.length, 0);
 });
 
-test("a tile miss and an unknown path both answer cheap cacheable 404s", async () => {
+test("a tile MISS is cacheable and a REFUSAL is not, through the COMPILED flow", async () => {
+  // The miss named a real address at a real level that the tileset simply does
+  // not hold: normal traffic, and a client asking twice should not cost two
+  // store queries.
   const miss = await pumpRequest(createStub({ stream: null }), {
     method: "GET",
     path: "/api/v1/terrain/12/100/200.terrain",
@@ -350,12 +353,29 @@ test("a tile miss and an unknown path both answer cheap cacheable 404s", async (
   assert.equal(miss.status, 404);
   assert.equal(header(miss, "cache-control"), "public, max-age=300");
 
+  // The unknown path named no address at all. It used to answer the same
+  // `public, max-age=300` with its own path echoed into its own body — so
+  // /{z}/{x}/<anything> was an unbounded family of distinct, publicly
+  // cacheable keys, the same amplifier class this module closed twice on the
+  // 200s. A refusal caches nothing and echoes nothing.
   const unknown = await pumpRequest(createStub(), {
     method: "GET",
     path: "/api/v1/terrain/definitely/not/a/tile",
   });
   assert.equal(unknown.status, 404);
-  assert.equal(header(unknown, "cache-control"), "public, max-age=300");
+  assert.equal(header(unknown, "cache-control"), "no-store");
+
+  const junk = await pumpRequest(createStub(), {
+    method: "GET",
+    path: "/api/v1/terrain/12/100/whatever-i-like.terrain",
+  });
+  assert.equal(junk.status, 404);
+  assert.equal(header(junk, "cache-control"), "no-store");
+  assert.deepEqual(
+    JSON.parse(decoder.decode(Uint8Array.from(junk.body))),
+    JSON.parse(decoder.decode(Uint8Array.from(unknown.body))),
+    "every refusal is the same bytes, so there is nothing for a cache to key on",
+  );
 });
 
 test("a miss inside availability is synthesized by the COMPILED flow, never a 404", async () => {
@@ -435,7 +455,15 @@ const IPFS_CONFIG = {
   ...CONFIG,
   terrain_tileset_cid: "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy",
   terrain_gateway_path: "/ipfs/",
+  // The four DTTProvenance fields schema/DTT/main.fbs marks `required`. A
+  // mount given less than this cannot BUILD a $DTT, and now refuses to publish
+  // a catalogue (503, naming the missing keys) instead of answering 200 with a
+  // document that is not a record — which is what it did, and what the whole
+  // suite asserted as correct.
+  terrain_dataset_id: "copernicus-glo30-quantized-mesh",
   terrain_dataset_epoch: "2023-04-01T00:00:00.000Z",
+  terrain_dataset_retrieved_at: "2026-08-26T00:00:00.000Z",
+  terrain_license: "Copernicus DEM: free, full and open licence",
 };
 
 test("the mount root names the CID through the COMPILED flow", async () => {
@@ -560,4 +588,18 @@ test("THE CLIENT'S PATH: /tileset.json names the CID through the COMPILED flow",
   assert.equal(record.PAYLOAD.MEDIA_TYPE, "application/vnd.ipld.dag-pb");
   assert.equal(record.TILESET_ID, "spaceaware-terrain");
   assert.equal(record.MAX_LEVEL, IPFS_CONFIG.terrain_maxzoom);
+  assert.equal(record.PROVENANCE.RETRIEVED_AT, IPFS_CONFIG.terrain_dataset_retrieved_at);
+});
+
+test("a mount with no lineage REFUSES the catalogue, through the COMPILED flow", async () => {
+  // Fail-closed, in the artifact the Go host mounts: no dataset, epoch,
+  // retrieval time or licence means no publishable record, and a 503 naming
+  // the missing config keys is what an operator reads off the wire.
+  const { terrain_dataset_id, terrain_license, ...withoutLineage } = IPFS_CONFIG;
+  const stub = createStub({ config: withoutLineage });
+  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/tileset.json" });
+  assert.equal(http.status, 503);
+  assert.equal(header(http, "cache-control"), "no-store");
+  const fault = JSON.parse(decoder.decode(Uint8Array.from(http.body)));
+  assert.deepEqual(fault.missingConfigKeys, ["terrain_dataset_id", "terrain_license"]);
 });

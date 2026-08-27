@@ -1532,7 +1532,32 @@ int push_htr_json(uint16_t status, const std::string& body, const char* cache_co
 // address a person needs and nothing more.
 constexpr size_t kNotFoundDetailBytes = 160;
 
-int push_htr_not_found(const std::string& detail) {
+// ── ONE TILE, ONE URL — ON THE 404s TOO ────────────────────────────────────
+//
+// The cache-key discipline this module closed twice on 200s (leading-zero
+// addresses, the mount search fallback) was left open on 404s: every miss
+// answered `public, max-age=300` with the request path echoed in the body, so
+// /api/v1/terrain/1/1/<anything>.terrain was an unbounded family of distinct,
+// publicly cacheable keys — junk an anonymous client could park in edge cache
+// 200 bytes at a time, for five minutes each, and the echo made every one a
+// different body.
+//
+// A 404 is PUBLICLY CACHEABLE ONLY WHEN THE REQUEST NAMED A REAL ADDRESS: it
+// parsed as a canonical z/x/y (parse_tile_path already refuses every
+// non-canonical spelling), the address exists at that level, and the level is
+// inside the tileset's own depth. That is the honest cacheable miss — a tile
+// outside availability that nobody was promised — and its key family is
+// bounded by the pyramid's address space rather than by what a caller can
+// type. Everything else is a REFUSAL, not a miss: `no-store`, and a fixed
+// body that echoes nothing back, so a malformed request costs one small
+// response and leaves nothing behind it.
+int push_htr_not_found(const std::string& detail, bool cacheable) {
+    if (!cacheable) {
+        return push_htr_json(404,
+                             "{\"error\":\"not found\",\"detail\":\"not a tile address in "
+                             "this tileset\"}",
+                             "no-store");
+    }
     std::string bounded = detail;
     if (bounded.size() > kNotFoundDetailBytes) {
         bounded.resize(kNotFoundDetailBytes);
@@ -2439,6 +2464,20 @@ struct ServingConfig {
     std::string dataset_name;
     std::string license;
     std::string license_url;
+    // DTTProvenance.RETRIEVED_AT is `required` in schema/DTT/main.fbs, so a
+    // projection that omits it is not a $DTT at all — the builder cannot
+    // serialize it (`FlatBuffers: field 18 must be set`). It was omitted, and
+    // nothing in the suite ever built the projection through the SDS builder,
+    // so an unbuildable record answered 200 for the whole lane. Carried now,
+    // and tests/catalogue.test.mjs round-trips the body through the published
+    // builder so the same omission cannot recur silently.
+    std::string dataset_retrieved_at;
+    // The tileset's own bounding extent, when the orchestrator states one.
+    // NOT derived from LEVEL/X/Y: the catalogue record is not a tile (see the
+    // TILING_SCHEME note on the route), so its address says nothing and the
+    // extent has to stand on its own or be absent.
+    bool has_extent = false;
+    double west_deg = 0, south_deg = 0, east_deg = 0, north_deg = 0;
 };
 
 ServingConfig build_serving_config(const std::string& config) {
@@ -2488,6 +2527,20 @@ ServingConfig build_serving_config(const std::string& config) {
     sc.dataset_name = json_string(config, "terrain_dataset_name", "");
     sc.license = json_string(config, "terrain_license", "");
     sc.license_url = json_string(config, "terrain_license_url", "");
+    sc.dataset_retrieved_at = json_string(config, "terrain_dataset_retrieved_at", "");
+    {
+        std::string w, so, e, n;
+        sc.has_extent = json_raw_value(config, "terrain_west_deg", &w) &&
+                        json_raw_value(config, "terrain_south_deg", &so) &&
+                        json_raw_value(config, "terrain_east_deg", &e) &&
+                        json_raw_value(config, "terrain_north_deg", &n);
+        if (sc.has_extent) {
+            sc.west_deg = json_number(config, "terrain_west_deg", 0);
+            sc.south_deg = json_number(config, "terrain_south_deg", 0);
+            sc.east_deg = json_number(config, "terrain_east_deg", 0);
+            sc.north_deg = json_number(config, "terrain_north_deg", 0);
+        }
+    }
 
     sc.ocean_synth_min_level = json_number(config, "terrain_ocean_synth_min_level", -1);
     const double synth = json_number(config, "terrain_synth_grid_size", 65);
@@ -3686,7 +3739,7 @@ int route(void) {
     const std::string& mount_prefix = cfg.mount_prefix;
     if (path.size() < mount_prefix.size() ||
         path.compare(0, mount_prefix.size(), mount_prefix) != 0) {
-        return push_htr_not_found(path);
+        return push_htr_not_found(path, /*cacheable=*/false);
     }
     const std::string rest = path.substr(mount_prefix.size());
 
@@ -3712,7 +3765,7 @@ int route(void) {
     // filled with junk keys because there is only one key that answers.
     const std::string accepted_query = "v=" + cfg.version;
     if (!raw_query.empty() && raw_query != accepted_query) {
-        return push_htr_not_found(path);
+        return push_htr_not_found(path, /*cacheable=*/false);
     }
 
     // ── THE CATALOGUE: WHICH TILESET EPOCH THIS NODE IS SERVING ────────────
@@ -3779,26 +3832,110 @@ int route(void) {
     // tileset, and is exactly what a development node without a daemon is.
     if (rest == "tileset.json") {
         const bool over_ipfs = !cfg.tileset_cid.empty();
+
+        // ── THE RECORD HAS TO BE BUILDABLE, AND THAT IS NOW CHECKED ─────────
+        //
+        // This route claimed "IDL-EXACT KEYS" and it kept that claim: every
+        // key here is a $DTT field spelled as schema/DTT/main.fbs spells it.
+        // What it did NOT keep is the harder half — the document has to be a
+        // record, not just a JSON object with the right key names — and it
+        // was not one. DTTProvenance marks RETRIEVED_AT `required` and this
+        // never emitted it; DTT marks PAYLOAD `required` and this omitted the
+        // whole table whenever no CID was configured. Fed to the published
+        // builder both projections THROW ("field 18 must be set", "field 34
+        // must be set"), so the durable form the dual-format signing law
+        // depends on could not exist for either shape. Nothing in the suite
+        // had ever built the projection through the builder, which is exactly
+        // why an unbuildable record passed 100 tests.
+        //
+        // So: the four `required` provenance fields are stated or the mount
+        // does not publish a catalogue at all. A node that cannot state which
+        // dataset edition it redistributes, when it was retrieved, and under
+        // what licence has no business publishing redistributed elevation —
+        // and an empty string in a required field would satisfy FlatBuffers
+        // while telling a consumer nothing, which is worse than refusing.
+        // The refusal names the exact config keys, so an operator reads the
+        // fix off the wire instead of diffing against this file.
+        std::string missing;
+        const auto require_configured = [&missing](const char* key, const std::string& value) {
+            if (!value.empty()) return;
+            if (!missing.empty()) missing += ",";
+            missing += std::string("\"") + key + "\"";
+        };
+        require_configured("terrain_dataset_id", cfg.dataset_id);
+        require_configured("terrain_dataset_epoch", cfg.dataset_epoch);
+        require_configured("terrain_dataset_retrieved_at", cfg.dataset_retrieved_at);
+        require_configured("terrain_license", cfg.license);
+        if (!missing.empty()) {
+            return push_htr_json(
+                503,
+                std::string("{\"error\":\"terrain catalogue not configured\",\"detail\":\"the "
+                            "$DTT catalogue record cannot be built: schema/DTT/main.fbs marks "
+                            "these DTTProvenance fields required and this mount was configured "
+                            "with none of them\",\"missingConfigKeys\":[") +
+                    missing + "]}",
+                "no-store");
+        }
+
+        // ── THE ADDRESS AND THE EXTENT NO LONGER CONTRADICT EACH OTHER ──────
+        //
+        // This used to state TILING_SCHEME GEOGRAPHIC_WGS84 with LEVEL/X/Y
+        // 0/0/0 and WEST/EAST -180/180. Under that scheme the IDL defines
+        // level 0 as TWO root tiles covering [-180,0] and [0,180], so address
+        // (0,0,0) is the WESTERN half and the stated extent was twice what
+        // the stated address covers. A consumer doing the ordinary thing with
+        // a $DTT — derive the extent from LEVEL/X/Y and TILING_SCHEME — got a
+        // different answer from the one the record spelled out.
+        //
+        // The catalogue is NOT A TILE: it is the DIRECTORY the tiles live in,
+        // and it has no address in any tiling scheme. TILING_SCHEME is
+        // therefore UNSPECIFIED — the ordinal the IDL reserves at 0 precisely
+        // so "an unset field can never be read as a real scheme" — and
+        // LEVEL/X/Y are simply not stated. Without a scheme they are not
+        // interpretable as an address, which is the truth about this record.
+        // The extent stands on its own, from the orchestrator, and is omitted
+        // when the mount was told none. The SCHEME OF THE TILES INSIDE is
+        // declared by the layer.json in the CID, which is where a terrain
+        // provider reads it from anyway.
         std::string body =
             std::string("{\"TILESET_ID\":\"") + json_escape(cfg.tileset_id) + "\"" +
             ",\"TILESET_NAME\":\"" + json_escape(cfg.tileset_id) + "\"" +
-            ",\"TILING_SCHEME\":\"GEOGRAPHIC_WGS84\"" +
-            ",\"LEVEL\":0,\"X\":0,\"Y\":0,\"ROW_ORIGIN_NORTH\":false" +
-            ",\"WEST_DEG\":-180,\"SOUTH_DEG\":-90,\"EAST_DEG\":180,\"NORTH_DEG\":90" +
-            ",\"PAYLOAD_FORMAT\":\"QUANTIZED_MESH\",\"PAYLOAD_FORMAT_VERSION\":\"1.0\"";
+            ",\"TILING_SCHEME\":\"UNSPECIFIED\"";
+        if (cfg.has_extent) {
+            body += ",\"WEST_DEG\":" + fmt_double(cfg.west_deg) +
+                    ",\"SOUTH_DEG\":" + fmt_double(cfg.south_deg) +
+                    ",\"EAST_DEG\":" + fmt_double(cfg.east_deg) +
+                    ",\"NORTH_DEG\":" + fmt_double(cfg.north_deg);
+        }
+        body += ",\"PAYLOAD_FORMAT\":\"QUANTIZED_MESH\",\"PAYLOAD_FORMAT_VERSION\":\"1.0\"";
+
+        // PAYLOAD is `required`. With a CID it names the content-addressed
+        // directory the tiles are served from; without one it is PRESENT AND
+        // EMPTY — a payload ref that states nothing, which is the truthful
+        // shape for a node serving no IPFS tileset and, unlike omitting the
+        // table, is a record the builder can serialize. A client still finds
+        // no PAYLOAD.CID, says so, and keeps its ellipsoid: unchanged
+        // behaviour, now over a document that is a $DTT.
+        body += ",\"PAYLOAD\":{";
         if (over_ipfs) {
-            body += ",\"PAYLOAD\":{\"CID\":\"" + json_escape(cfg.tileset_cid) + "\"";
+            body += "\"CID\":\"" + json_escape(cfg.tileset_cid) + "\"";
             if (cfg.tileset_size_bytes > 0) {
                 body += ",\"SIZE_BYTES\":" +
                         std::to_string(static_cast<long long>(cfg.tileset_size_bytes));
             }
-            body += ",\"MEDIA_TYPE\":\"application/vnd.ipld.dag-pb\"}";
+            // The discriminator against a TILE record: a tile carries one mesh
+            // (application/vnd.quantized-mesh), the catalogue carries the
+            // DIRECTORY those tiles live in.
+            body += ",\"MEDIA_TYPE\":\"application/vnd.ipld.dag-pb\"";
         }
+        body += "}";
+
         body += ",\"MAX_LEVEL\":" + std::to_string(cfg.maxzoom) +
                 ",\"WATER_MASK_KIND\":\"NONE\"";
         // PROVENANCE carries only what the mount was actually told. A lineage
         // field invented here would be a claim about a dataset this module
-        // never read.
+        // never read. The four required fields are guaranteed present by the
+        // refusal above.
         std::string prov;
         const auto add_prov = [&prov](const char* key, const std::string& value) {
             if (value.empty()) return;
@@ -3808,11 +3945,12 @@ int route(void) {
         add_prov("DATASET_ID", cfg.dataset_id);
         add_prov("DATASET_NAME", cfg.dataset_name);
         add_prov("DATASET_EPOCH", cfg.dataset_epoch);
+        add_prov("RETRIEVED_AT", cfg.dataset_retrieved_at);
         add_prov("LICENSE", cfg.license);
         add_prov("LICENSE_URL", cfg.license_url);
         add_prov("ATTRIBUTION", cfg.attribution);
         if (over_ipfs) add_prov("DATASET_CID", cfg.tileset_cid);
-        if (!prov.empty()) body += ",\"PROVENANCE\":{" + prov + "}";
+        body += ",\"PROVENANCE\":{" + prov + "}";
         body += "}";
         const std::string etag =
             "\"" + sha256_multihash(std::vector<uint8_t>(body.begin(), body.end())) + "\"";
@@ -3875,7 +4013,9 @@ int route(void) {
     }
 
     uint32_t z = 0, x = 0, y = 0;
-    if (!parse_tile_path(rest, &z, &x, &y)) return push_htr_not_found(path);
+    if (!parse_tile_path(rest, &z, &x, &y)) {
+        return push_htr_not_found(path, /*cacheable=*/false);
+    }
 
     // The newest stored record for this address wins; the record BLOB is the
     // whole answer ($DTT carries its own payload, encoding and etag).
@@ -4087,7 +4227,8 @@ int respond(void) {
             job.y = static_cast<uint32_t>(json_number(context, "y", 0));
             TileExtent ext;
             if (!tile_extent(job, &ext)) {
-                return push_htr_not_found("address does not exist at this level");
+                return push_htr_not_found("address does not exist at this level",
+                                          /*cacheable=*/false);
             }
             uint32_t grid = static_cast<uint32_t>(json_number(context, "synthGridSize", 65));
             if (grid < 2 || grid > 255) grid = 65;
@@ -4172,7 +4313,19 @@ int respond(void) {
                       fmt_double(json_number(context, "x", -1)) + "/" +
                       fmt_double(json_number(context, "y", -1)) + ")";
         }
-        return push_htr_not_found(detail);
+        // THE ONE CACHEABLE MISS: a canonical address that exists at its
+        // level, inside the tileset's depth, that the store does not hold and
+        // availability never promised. Nobody was promised it, the key family
+        // is the pyramid's own address space, and a client that asks twice
+        // should not cost two store queries.
+        const uint32_t miss_level = static_cast<uint32_t>(json_number(context, "level", 0));
+        const double miss_x = json_number(context, "x", -1);
+        const double miss_y = json_number(context, "y", -1);
+        const bool real_address =
+            !context.empty() && miss_level <= 30 && miss_x >= 0 && miss_y >= 0 &&
+            miss_x < static_cast<double>(1ull << (miss_level + 1)) &&
+            miss_y < static_cast<double>(1ull << miss_level);
+        return push_htr_not_found(detail, real_address);
     }
 
     const DTTPayloadRef* payload = record->PAYLOAD();

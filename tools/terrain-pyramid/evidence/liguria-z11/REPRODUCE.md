@@ -5,7 +5,7 @@ re-downloading the region. The store itself is not here (it is tens of MB of
 records plus hundreds of MB of cached granules, and `tools/terrain-pyramid/out`
 is gitignored); these are the reports read off it.
 
-- modules commit: `0c04d0f98fde8a2c0eb15568bb0061e64ec53f79`
+- modules commit: `066e05e19f079f5988fdfa83ae296ed20db12347`
 - WasmEdge: `not on PATH when this was snapshotted`
 - run config: `tools/terrain-pyramid/regions/<the config this run used>`
 
@@ -31,11 +31,11 @@ on a single byte.
 
 | artifact | sha256 |
 | --- | --- |
-| `data-source/terrain-source/dist/isomorphic/module.wasm` | `7d35969d15ab718b12cef1d04d0c3250316c8d43813a5a4bbcbe8c770a123ca4` |
-| `data-source/terrain-source/dist/parity/module.wasm` | `3d95520d58cdc89be11227cce90e85b6ebb06830cdb1a153bf376da416f76be6` |
+| `data-source/terrain-source/dist/isomorphic/module.wasm` | `005c4ad5077fcd77cb6c46b774dbffb901d6363938de3f3c9215b5902fb0b6ef` |
+| `data-source/terrain-source/dist/parity/module.wasm` | `a0f8bd5fe1bfbd48aa110c10fe9a0eac1d60c21f2f956012612492f4c49c67b6` |
 | `data-source/terrain-ingest/dist/isomorphic/module.wasm` | `bbcf4c1f914a4634ec4f531ade6127e707553c008b75fdda79beee0beeb12165` |
 | `flows/terrain-ingest/dist/runtime.wasm` | `c3f9495827a0023fbb3cf824c98aa5befd0c1ca65618322e150d14cbd4112529` |
-| `flows/terrain-serving/dist/runtime.wasm` | `5c15862b98cf0b96196301695d054216da430a47a684ab15a8c5a2e204280b46` |
+| `flows/terrain-serving/dist/runtime.wasm` | `06a0e2a0351599cf41b73f0b6d9ead6f0342f6879bd73b3431789e9b43ab194d` |
 
 ## What is in each file
 

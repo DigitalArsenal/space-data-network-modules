@@ -182,6 +182,30 @@ const runReport = fs.existsSync(runReportPath)
   ? JSON.parse(fs.readFileSync(runReportPath, "utf8"))
   : null;
 const encoderCounters = runReport?.encoderCounters ?? null;
+
+// ── THE ADDRESSES THE OCEAN TEST SKIPPED ───────────────────────────────────
+//
+// A tile the encoder dropped because it measured the address as all water is
+// NOT an absence of knowledge, and this file used to treat it as one:
+// `available` was derived from STORED tiles, so a skipped address vanished
+// from the published index, a client over open water refined until
+// availability ran out, and it then rendered the shallowest ANCESTOR — a
+// height-0 tile with a UNIFORM LAND mask, because an ancestor sits below the
+// level where the store is authoritative and correctly fails safe to land.
+// Measured on the regional pyramid: 24.3% of the ocean inside the tileset's
+// own extent came back as land, and `terrain_ocean_synth_min_level` — the
+// lever built to prevent exactly that — could never fire, because the only
+// addresses it could have applied to were not in the index.
+//
+// A skipped address is DECLARED here and answered by the module's synthesized
+// UNIFORM_WATER path, which is what that path exists for. Optional, like the
+// run report: an older store has no such file and behaves as it always did.
+const oceanSkippedPath = path.join(outDir, "ocean-skipped.json");
+const oceanSkippedFile = fs.existsSync(oceanSkippedPath)
+  ? JSON.parse(fs.readFileSync(oceanSkippedPath, "utf8"))
+  : null;
+const oceanSkipped = new Set(oceanSkippedFile?.addresses ?? []);
+
 const records = splitStream(fs.readFileSync(path.join(outDir, "tiles.dttstream")));
 
 const byLevel = new Map();
@@ -622,6 +646,22 @@ const available = [];
   for (const [level, addresses] of byLevel) {
     byLevelClosed.set(level, new Set(addresses.map(({ x, y }) => `${x}/${y}`)));
   }
+  // The skipped-ocean addresses join the STORED ones as declared: they are
+  // measurements, not gaps. Each one becomes an availableButUnstored address
+  // below, which the serving module answers by synthesizing — and because
+  // every one of them is at or above the shallowest BUILT level, the module's
+  // authority test reads it as water rather than as flat land.
+  for (const address of oceanSkipped) {
+    const [level, x, y] = address.split("/").map(Number);
+    if (!byLevelClosed.has(level)) byLevelClosed.set(level, new Set());
+    byLevelClosed.get(level).add(`${x}/${y}`);
+    if (seen.has(address)) {
+      problems.push(
+        `${address} is both stored and reported as an ocean skip — the encoder cannot have ` +
+          "done both, and a client would be served bytes the index says are synthesized",
+      );
+    }
+  }
   for (let level = maxLevel; level >= 1; level -= 1) {
     const here = byLevelClosed.get(level);
     if (!here) continue;
@@ -681,6 +721,59 @@ if (closureBreaks.length) {
       "level at a position, so an unclosed index promises tiles at levels nothing covers",
   );
 }
+
+// ── A SKIPPED ADDRESS MUST LAND WHERE THE MODULE CALLS IT WATER ────────────
+//
+// Declaring an ocean skip only helps if the serving module synthesizes WATER
+// there, and it does that at and above `terrain_ocean_synth_min_level` — the
+// shallowest level this run BUILT — and flat LAND below it. A skip reported
+// below that floor would be declared and then answered as land, which is the
+// defect this whole path exists to close, so it is a gate rather than a note.
+const oceanSkipsBelowFloor = [...oceanSkipped].filter(
+  (address) => Number(address.split("/")[0]) < minLevel,
+);
+if (oceanSkipsBelowFloor.length) {
+  problems.push(
+    `${oceanSkipsBelowFloor.length} ocean skips sit below the authoritative floor z${minLevel} ` +
+      `(${oceanSkipsBelowFloor.slice(0, 4).join(", ")}) — the serving module synthesizes flat ` +
+      "LAND there, so declaring them would publish ocean as land",
+  );
+}
+
+// ── THE TILESET'S OWN EXTENT ───────────────────────────────────────────────
+//
+// The union of the extents of every address this pyramid actually built —
+// stored or measured-and-skipped — and NOT the ancestor closure's, which
+// overhangs the built region by whole tiles at the shallow levels. It is
+// stated by the $DTT catalogue record, which is not a tile and therefore has
+// no address to derive an extent from: the record used to claim the whole
+// globe under an address that covers half of it, and now it states this
+// instead, or states nothing when nobody computed it.
+const tilesetExtent = (() => {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  const fold = (level, x, y) => {
+    const cols = 2 ** (level + 1);
+    const rows = 2 ** level;
+    west = Math.min(west, -180 + (x * 360) / cols);
+    east = Math.max(east, -180 + ((x + 1) * 360) / cols);
+    south = Math.min(south, -90 + (y * 180) / rows);
+    north = Math.max(north, -90 + ((y + 1) * 180) / rows);
+  };
+  for (const key of seen) {
+    const [level, x, y] = key.split("/").map(Number);
+    if (level >= minLevel) fold(level, x, y);
+  }
+  for (const key of oceanSkipped) {
+    const [level, x, y] = key.split("/").map(Number);
+    if (level >= minLevel) fold(level, x, y);
+  }
+  return Number.isFinite(west)
+    ? { west, south, east, north }
+    : null;
+})();
 
 // ── WHAT THE CLIENT WILL ACTUALLY ASK FOR ──────────────────────────────────
 //
@@ -901,6 +994,14 @@ const summary = {
   // Atlas set at zero. The count told a reviewer the promise was kept; the
   // list is what keeps it.
   availableButUnstoredAddresses: availableButUnstored,
+  // How many of those are addresses the ENCODER measured as all water and
+  // skipped, as against the ancestor placeholders the closure adds. The two
+  // are answered differently by the serving module — water and flat land —
+  // and conflating them is what published an ocean as a continent.
+  oceanSkipsDeclared: oceanSkipped.size,
+  oceanSkipsBelowAuthoritativeFloor: oceanSkipsBelowFloor.length,
+  ancestorPlaceholders: availableButUnstored.filter((a) => !oceanSkipped.has(a)).length,
+  tilesetExtent,
   childAvailabilityClaims: childBitsClaimed,
   childAvailabilityUnservedClaims: childBitsWrong,
   childAvailabilityExamples: childBitExamples,
@@ -983,6 +1084,17 @@ fs.writeFileSync(
       // would silently 404 every tile.
       terrain_mount_path: "/api/v1/terrain/",
       terrain_available: available,
+      // The tileset's own bounding extent, for the $DTT catalogue record. The
+      // record is the DIRECTORY, not a tile: it has no address in any tiling
+      // scheme, so its extent cannot be derived and has to be carried.
+      ...(tilesetExtent
+        ? {
+            terrain_west_deg: tilesetExtent.west,
+            terrain_south_deg: tilesetExtent.south,
+            terrain_east_deg: tilesetExtent.east,
+            terrain_north_deg: tilesetExtent.north,
+          }
+        : {}),
     },
     null,
     2,

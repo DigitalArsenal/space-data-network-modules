@@ -285,12 +285,21 @@ test("the peak is a HIGH-WATER MARK, not a leak: it stops moving and stays stopp
   // INDEX is bounded, proportional growth that a config number can cover.
   // Memory scaling with REQUESTS would be a leak, and no config number could.
   // Measured here rather than assumed: the mixed shape reaches its mark inside
-  // the first ~1,200 requests and does not move over the next 6,000.
+  // the first 1,200 requests and does not move over the next 8,800 — 10,000
+  // mount requests on ONE instance, which is the count the unbounded-memory
+  // bound is stated at. The comment used to say 6,000 over a loop of 3,000, so
+  // neither the stated nor the executed figure reached the bound being
+  // claimed; both are now the same number and it is the right one.
+  const SOAK = 8_800;
   const available = availabilityOfSize(2_500_000);
   const { pages, serve, shapes } = await driveInstance(t, available);
   const mark = pages();
-  for (let i = 0; i < 3_000; i++) await serve(shapes[i % shapes.length], i % 3 === 0);
-  assert.equal(pages(), mark, `3,000 further mixed pair requests moved the instance off ${mark} pages`);
+  for (let i = 0; i < SOAK; i++) await serve(shapes[i % shapes.length], i % 3 === 0);
+  assert.equal(
+    pages(),
+    mark,
+    `${SOAK.toLocaleString("en-US")} further mixed pair requests moved the instance off ${mark} pages`,
+  );
   assert.ok(
     mark <= memoryPagesFor(Buffer.byteLength(JSON.stringify(available))),
     "and the mark is still inside what the config states",

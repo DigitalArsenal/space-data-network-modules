@@ -18,8 +18,13 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import * as sds from "spacedatastandards.org";
+
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { decodeHttpResponse, encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
+
+// The SAME projector the builder writes tileset-catalogue.dttstream through.
+import { buildDttRecord, writeDttRecord } from "../../../tools/terrain-pyramid/dtt-projection.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -34,10 +39,19 @@ const BASE = {
   terrain_attribution: "Copernicus DEM",
   terrain_version: "1.0.0",
 };
+// The four fields schema/DTT/main.fbs marks `required` on DTTProvenance. A
+// mount configured with less than this cannot build a $DTT and now says so
+// (503) instead of answering an unbuildable document with 200.
+const REQUIRED_PROVENANCE = {
+  terrain_dataset_id: "copernicus-glo30-quantized-mesh",
+  terrain_dataset_epoch: "2023-04-01T00:00:00.000Z",
+  terrain_dataset_retrieved_at: "2026-08-26T00:00:00.000Z",
+  terrain_license: "Copernicus DEM: free, full and open licence",
+};
 const OVER_IPFS = {
   ...BASE,
+  ...REQUIRED_PROVENANCE,
   terrain_tileset_cid: CID,
-  terrain_dataset_epoch: "2023-04-01T00:00:00.000Z",
   terrain_gateway_origin: "https://sdn.spaceaware.io",
 };
 
@@ -265,11 +279,19 @@ test("/tileset.json answers the $DTT catalogue record, with IDL-exact keys", asy
   const record = body();
   // IDL-exact keys (Themis): a $DTT rendered as JSON never takes camelCase.
   assert.equal(record.TILESET_ID, "spaceaware-terrain");
-  assert.equal(record.TILING_SCHEME, "GEOGRAPHIC_WGS84");
   assert.equal(record.PAYLOAD_FORMAT, "QUANTIZED_MESH");
   assert.equal(record.PAYLOAD_FORMAT_VERSION, "1.0");
   assert.equal(record.MAX_LEVEL, 13);
-  assert.equal(record.ROW_ORIGIN_NORTH, false);
+  // THE ADDRESS AND THE EXTENT DO NOT CONTRADICT EACH OTHER. This used to
+  // state GEOGRAPHIC_WGS84 with LEVEL/X/Y 0/0/0 and WEST/EAST -180/180 — and
+  // under that scheme the IDL defines level 0 as two roots covering [-180,0]
+  // and [0,180], so the address named HALF the extent the record spelled out.
+  // The catalogue is the DIRECTORY, not a tile: no scheme, so no address.
+  assert.equal(record.TILING_SCHEME, "UNSPECIFIED");
+  assert.equal(record.LEVEL, undefined);
+  assert.equal(record.X, undefined);
+  assert.equal(record.Y, undefined);
+  assert.equal(record.WEST_DEG, undefined, "no extent is stated unless the mount is told one");
   // The discriminator against a TILE record is the payload's media type: a
   // tile is one mesh, the catalogue is the DIRECTORY the tiles live in.
   assert.equal(record.PAYLOAD.MEDIA_TYPE, "application/vnd.ipld.dag-pb");
@@ -316,15 +338,96 @@ test("the record moves when the epoch does", async (t) => {
   assert.notEqual(a.headerOf("etag"), b.headerOf("etag"));
 });
 
-test("a node with NO CID answers a truthful record carrying no PAYLOAD", async (t) => {
+test("a node with NO CID answers a record whose PAYLOAD is present and empty", async (t) => {
   // Not an error: this node is not serving an IPFS tileset. The client finds
   // no PAYLOAD.CID, says so, and keeps its ellipsoid — the correct outcome,
   // and never a CID invented to make a fetch succeed.
-  const { http, body } = await get(t, "/api/v1/terrain/tileset.json", BASE);
+  //
+  // But DTT marks PAYLOAD `required`, so OMITTING the table made this shape
+  // unbuildable — and this very test asserted the omission as correct. The
+  // ref is present and states nothing, which is the truthful shape for a node
+  // with no content-addressed directory to name AND a record the builder can
+  // serialize. The client's reader is unaffected: no CID either way.
+  const { http, body } = await get(t, "/api/v1/terrain/tileset.json", {
+    ...BASE,
+    ...REQUIRED_PROVENANCE,
+  });
   assert.equal(http.status, 200);
   const record = body();
-  assert.equal(record.PAYLOAD, undefined);
+  assert.deepEqual(record.PAYLOAD, {}, "present, and naming nothing");
   assert.equal(record.TILESET_ID, "spaceaware-terrain");
+  assert.ok(writeDttRecord(sds, record).length > 0, "and it is a $DTT");
+});
+
+test("a mount that cannot state its lineage REFUSES to publish a catalogue", async (t) => {
+  // The four required DTTProvenance fields are not decoration: a node that
+  // cannot say which dataset edition it redistributes, when it was retrieved
+  // and under what licence has no business publishing redistributed
+  // elevation. An empty string would satisfy FlatBuffers and tell a consumer
+  // nothing, which is worse than refusing.
+  const { http, headerOf, body } = await get(t, "/api/v1/terrain/tileset.json", BASE);
+  assert.equal(http.status, 503);
+  assert.equal(headerOf("cache-control"), "no-store");
+  assert.deepEqual(body().missingConfigKeys, [
+    "terrain_dataset_id",
+    "terrain_dataset_epoch",
+    "terrain_dataset_retrieved_at",
+    "terrain_license",
+  ]);
+
+  // One missing field is enough, and the refusal names exactly that one.
+  const partial = await get(t, "/api/v1/terrain/tileset.json", {
+    ...OVER_IPFS,
+    terrain_dataset_retrieved_at: "",
+  });
+  assert.equal(partial.http.status, 503);
+  assert.deepEqual(partial.body().missingConfigKeys, ["terrain_dataset_retrieved_at"]);
+});
+
+test("THE DOCUMENT IS A RECORD: it round-trips through the published SDS builder", async (t) => {
+  // The gap that let an invalid record pass 100 tests: every assertion above
+  // reads KEYS, and none of them ever built the thing. schema/DTT/main.fbs
+  // marks TILESET_ID, PAYLOAD and PROVENANCE required on DTT and DATASET_ID,
+  // DATASET_EPOCH, RETRIEVED_AT and LICENSE required on DTTProvenance, and
+  // writeFB is the only thing that enforces them.
+  const { body } = await get(t, "/api/v1/terrain/tileset.json", {
+    ...OVER_IPFS,
+    terrain_dataset_name: "copernicus-glo30",
+    terrain_license_url: "https://spacedata.copernicus.eu/",
+    terrain_tileset_size_bytes: 375_000_000,
+    terrain_west_deg: 7.734375,
+    terrain_south_deg: 42.890625,
+    terrain_east_deg: 12.65625,
+    terrain_north_deg: 47.109375,
+  });
+  const projection = body();
+
+  // buildDttRecord refuses any key the IDL does not define, so this is also
+  // the assertion that "IDL-exact keys" holds for EVERY key, not the six the
+  // tests above happen to name.
+  const bytes = writeDttRecord(sds, projection);
+  assert.ok(bytes.length > 0);
+
+  // And it reads back as the same record.
+  const [read] = sds.readFB(bytes);
+  assert.equal(read.TILESET_ID, "spaceaware-terrain");
+  assert.equal(read.PAYLOAD.CID, CID);
+  assert.equal(read.PAYLOAD.MEDIA_TYPE, "application/vnd.ipld.dag-pb");
+  assert.equal(read.PAYLOAD.SIZE_BYTES, 375_000_000n);
+  assert.equal(read.PROVENANCE.RETRIEVED_AT, "2026-08-26T00:00:00.000Z");
+  assert.equal(read.PROVENANCE.LICENSE, "Copernicus DEM: free, full and open licence");
+  assert.equal(read.MAX_LEVEL, 13);
+  assert.equal(read.WEST_DEG, 7.734375);
+  assert.equal(read.EAST_DEG, 12.65625);
+  // UNSPECIFIED is ordinal 0 — "an unset field can never be read as a real
+  // scheme" — which is what a record with no address is entitled to say.
+  assert.equal(read.TILING_SCHEME, sds.standards.DTT.dttTilingScheme.UNSPECIFIED);
+
+  // A key the IDL does not define is a defect, not a passthrough.
+  assert.throws(
+    () => buildDttRecord(sds, { ...projection, TILESET_CID: CID }),
+    /TILESET_CID is not a field of the standard/,
+  );
 });
 
 test("PROVENANCE carries only what the mount was TOLD", async (t) => {
@@ -332,21 +435,24 @@ test("PROVENANCE carries only what the mount was TOLD", async (t) => {
   // this module never read.
   const { body } = await get(t, "/api/v1/terrain/tileset.json", {
     ...OVER_IPFS,
-    terrain_dataset_id: "copernicus-glo30-quantized-mesh",
     terrain_dataset_name: "copernicus-glo30",
-    terrain_license: "Copernicus DEM: ESA / Airbus Defence and Space (free licence)",
     terrain_license_url: "https://spacedata.copernicus.eu/",
   });
   const prov = body().PROVENANCE;
   assert.equal(prov.DATASET_ID, "copernicus-glo30-quantized-mesh");
   assert.equal(prov.DATASET_NAME, "copernicus-glo30");
-  assert.equal(prov.LICENSE, "Copernicus DEM: ESA / Airbus Defence and Space (free licence)");
+  assert.equal(prov.RETRIEVED_AT, "2026-08-26T00:00:00.000Z");
+  assert.equal(prov.LICENSE, "Copernicus DEM: free, full and open licence");
   assert.equal(prov.LICENSE_URL, "https://spacedata.copernicus.eu/");
   assert.equal(prov.DATASET_CID, CID);
 
+  // The OPTIONAL fields are still never invented — only the four the IDL
+  // requires are demanded, and nothing beyond them is filled in.
   const bare = (await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS)).body().PROVENANCE;
-  assert.equal(bare.DATASET_ID, undefined);
-  assert.equal(bare.LICENSE, undefined, "no licence is invented when none is configured");
+  assert.equal(bare.DATASET_NAME, undefined);
+  assert.equal(bare.LICENSE_URL, undefined, "no licence URL is invented when none is configured");
+  assert.equal(bare.SOURCE_URL, undefined);
+  assert.equal(bare.GENERATED_AT, undefined, "the mount states no production timestamp of its own");
 });
 
 test("tileset.json does not shadow layer.json or the camelCase catalogue", async (t) => {

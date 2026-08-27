@@ -413,6 +413,10 @@ async function main() {
     // something next to "a 361-post lattice".
     sourcePostsPerTileEdgeByLevel: {},
     latticeMaxGridSize: 0,
+    // Every address the ocean test skipped, not just how many. See the note at
+    // the collection site: the count alone cannot be declared, and an address
+    // that is not declared is one a client falls off the bottom of.
+    oceanSkippedAddresses: [],
     // ── THE ENCODER'S OWN COUNTERS, CARRIED OUT OF THE RUN ──────────────────
     //
     // The `tile` node emits these per block and the flow lands them on egress,
@@ -758,6 +762,29 @@ async function main() {
         for (const tile of value.tiles ?? []) {
           stats.maskFromAbsenceSamples += tile.maskFromAbsenceSamples ?? 0;
           stats.maskUnclassifiedSamples += tile.maskUnclassifiedSamples ?? 0;
+          // ── THE ADDRESSES THE OCEAN TEST DROPPED ────────────────────────
+          //
+          // The encoder has always reported them, and this runner has always
+          // thrown them away and kept the COUNT. That loss is what made
+          // `terrain_ocean_synth_min_level` a dead lever: verify.mjs derives
+          // `available` from STORED tiles, so a tile the ocean test skipped
+          // vanished from the published availability entirely, and a client
+          // over open water refined until availability ran out and then
+          // rendered the shallowest ANCESTOR — a flat height-0 tile with a
+          // UNIFORM LAND mask, because an ancestor sits below the level where
+          // the store is authoritative and fails safe to land. Measured on the
+          // regional pyramid: 24.3% of the ocean inside the tileset's own
+          // extent came back as land, on the one lane whose whole reason for
+          // choosing a coastal region was to exercise the water mask.
+          //
+          // A skipped tile is not an absence of knowledge — it is the
+          // encoder's MEASUREMENT that the address is all water. Carried out
+          // of the run so it can be DECLARED, and answered by the module's
+          // synthesized UNIFORM_WATER path, which is exactly what that path
+          // was built for.
+          if (tile.skippedOcean) {
+            stats.oceanSkippedAddresses.push(`${tile.level}/${tile.x}/${tile.y}`);
+          }
         }
       }
       // The operator-readable JSON mark, which the flow still lands on egress.
@@ -930,6 +957,33 @@ async function main() {
     cellsDetail: report,
   };
   if (wasmedge) wasmedge.dispose();
+  // The skipped-ocean addresses ride in their own file rather than in the run
+  // report: there are hundreds to thousands of them on a real region (989 on
+  // the regional proof), they are consumed by exactly one reader, and burying
+  // a machine-read list inside an operator-read summary is how the count came
+  // to be kept while the addresses were dropped.
+  const oceanSkipped = {
+    generatedAt: summary.generatedAt,
+    // The level at and below which "declared but not stored" means "the
+    // encoder measured it all-ocean and skipped it". Below it no level is
+    // authoritative and a synthesized tile must fail safe to LAND.
+    minLevel: Math.min(...stats.oceanSkippedAddresses.map((a) => Number(a.split("/")[0])), Infinity),
+    count: stats.oceanSkippedAddresses.length,
+    addresses: [...stats.oceanSkippedAddresses].sort(),
+  };
+  if (!Number.isFinite(oceanSkipped.minLevel)) oceanSkipped.minLevel = null;
+  fs.writeFileSync(
+    path.join(outDir, "ocean-skipped.json"),
+    `${JSON.stringify(oceanSkipped, null, 2)}\n`,
+  );
+  if (oceanSkipped.count !== stats.tilesSkippedOcean) {
+    stats.errors.push(
+      `the encoder counted ${stats.tilesSkippedOcean} ocean skips and named ` +
+        `${oceanSkipped.count} addresses; a skip that is not named cannot be declared, and an ` +
+        "address that is not declared is one a client falls off the bottom of into a land tile",
+    );
+    summary.errors = stats.errors;
+  }
   fs.writeFileSync(path.join(outDir, "run-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
   console.log(JSON.stringify(summary, null, 2));
 }

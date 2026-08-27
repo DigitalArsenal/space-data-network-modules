@@ -51,6 +51,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
+import { buildDttRecord, writeDttRecord } from "./dtt-projection.mjs";
 import { readDtt, readDttProvenance, splitStream } from "./dtt-reader.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -333,15 +334,50 @@ for (const record of records) {
 }
 
 // The promise layer.json makes, kept by files rather than by respond().
+//
+// AND WHAT EACH ONE SAYS ABOUT WATER IS COUNTED. Every synthesized tile used
+// to come out UNIFORM LAND — all 36 of them — because the only addresses in
+// this list were the ancestor placeholders at z0..z7, every one below the
+// level where the store is authoritative, so `terrain_ocean_synth_min_level`
+// could not fire on a single file this script writes. The addresses the ocean
+// test skipped are now declared too (verify.mjs), they sit at built levels,
+// and they come out UNIFORM WATER. The split is recorded because "the lever is
+// configured" and "the lever fired" are different claims and only the second
+// one is worth anything.
 const synthesized = [];
+let synthesizedWater = 0;
+let synthesizedLand = 0;
+const oceanSkipsDeclared = new Set(
+  JSON.parse(
+    fs.existsSync(path.join(outDir, "ocean-skipped.json"))
+      ? fs.readFileSync(path.join(outDir, "ocean-skipped.json"), "utf8")
+      : '{"addresses":[]}',
+  ).addresses ?? [],
+);
+const oceanSkipsServedAsLand = [];
 for (const address of verifyReport.availableButUnstoredAddresses) {
   const [level, x, y] = address.split("/").map(Number);
   const body = await synthesizeTile(level, x, y);
-  assertWaterMaskExtension(body, `${address} (synthesized)`);
+  const mask = assertWaterMaskExtension(body, `${address} (synthesized)`);
+  if (mask.kind === "UNIFORM_WATER") synthesizedWater += 1;
+  else synthesizedLand += 1;
+  // The gate this lane did not have: an address the ENCODER MEASURED as all
+  // water that comes out of the module as land is the exact defect — open
+  // ocean rendered as flat ground with no mask — and it must stop the
+  // publication rather than be counted.
+  if (oceanSkipsDeclared.has(address) && mask.kind !== "UNIFORM_WATER") {
+    oceanSkipsServedAsLand.push(`${address} -> ${mask.kind}`);
+  }
   write(`${level}/${x}/${y}.terrain`, body);
   synthesized.push(address);
   tileSizes.push(body.length);
 }
+assert.deepEqual(
+  oceanSkipsServedAsLand.slice(0, 8),
+  [],
+  `${oceanSkipsServedAsLand.length} addresses the encoder measured as all water are being ` +
+    "published as land — check terrain_ocean_synth_min_level against the levels this run built",
+);
 await harness.destroy();
 
 // Every address layer.json promises now exists as a file: assert it, rather
@@ -406,6 +442,13 @@ async function addAndPin(apiURL) {
 }
 
 let publication = args.cid ? { cid: args.cid, layerJsonCid: undefined, entries: 0 } : null;
+// The pin assertion's OWN EVIDENCE. `--cid` re-emits the catalogue for a
+// directory that is already published and never touches the API, so the
+// committed publication record said `"api": null` while the run report claimed
+// "added+pinned through host-01's kubo RPC" — the pin was real, and nothing in
+// the repo established it. The proof now rides with the claim, and its absence
+// is stated rather than implied.
+let pinProof = null;
 if (args.add) {
   process.stdout.write(`adding ${files.length} files (${(totalBytes / 1e6).toFixed(1)} MB) to ${args.api}\n`);
   publication = await addAndPin(args.api);
@@ -413,13 +456,32 @@ if (args.add) {
   // assume it, because an unpinned root is garbage-collected out from under
   // every client that ever resolved it.
   const pinned = await fetch(
-    `${args.api.replace(/\/$/, "")}/api/v0/pin/ls?arg=${publication.cid}`,
+    `${args.api.replace(/\/$/, "")}/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
     { method: "POST", headers: { "user-agent": "" } },
   );
   const pinText = await pinned.text();
   assert.equal(pinned.status, 200, `pin/ls: HTTP ${pinned.status}: ${pinText.slice(0, 200)}`);
   assert.ok(pinText.includes(publication.cid), `the root ${publication.cid} is not pinned`);
-  process.stdout.write(`CID ${publication.cid}\n`);
+  let pinType = null;
+  try {
+    pinType = JSON.parse(pinText)?.Keys?.[publication.cid]?.Type ?? null;
+  } catch {
+    pinType = null;
+  }
+  assert.equal(
+    pinType,
+    "recursive",
+    `the root ${publication.cid} is pinned as ${pinType ?? "an unreadable type"}, not recursive — ` +
+      "only a recursive pin holds the tiles under it",
+  );
+  pinProof = {
+    api: args.api,
+    checkedAt: new Date().toISOString(),
+    endpoint: `/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
+    type: pinType,
+    response: pinText.trim().slice(0, 400),
+  };
+  process.stdout.write(`CID ${publication.cid} pinned ${pinType}\n`);
 }
 
 // ── THE $DTT CATALOGUE RECORD ──────────────────────────────────────────────
@@ -435,26 +497,47 @@ if (args.add) {
 // (application/vnd.quantized-mesh), the catalogue's is the DIRECTORY those
 // tiles live in (application/vnd.ipld.dag-pb). It is a stated field carrying a
 // real difference, not a sentinel.
+//
+// THE ADDRESS AND THE EXTENT USED TO CONTRADICT EACH OTHER. This stated
+// GEOGRAPHIC_WGS84 with LEVEL/X/Y 0/0/0 and WEST/EAST -180/180 — and under
+// that scheme the IDL defines level 0 as TWO root tiles covering [-180,0] and
+// [0,180], so the address named HALF of the extent the record spelled out. A
+// consumer doing the ordinary thing with a $DTT (derive the extent from the
+// address and the scheme) got a different answer from the record's own fields.
+//
+// The catalogue is not a tile: it has no address in any scheme. TILING_SCHEME
+// is UNSPECIFIED — ordinal 0, which the IDL reserves so "an unset field can
+// never be read as a real scheme" — LEVEL/X/Y are not stated, and the extent
+// is the pyramid's OWN bounding box as verify.mjs measured it from the
+// addresses actually built. The scheme of the tiles INSIDE is declared by the
+// layer.json in the directory, which is where a terrain provider reads it.
 function buildCatalogue(cid) {
+  const extent =
+    layerConfig.terrain_west_deg !== undefined
+      ? {
+          WEST_DEG: layerConfig.terrain_west_deg,
+          SOUTH_DEG: layerConfig.terrain_south_deg,
+          EAST_DEG: layerConfig.terrain_east_deg,
+          NORTH_DEG: layerConfig.terrain_north_deg,
+        }
+      : {};
   return {
     TILESET_ID: tilesetId,
     TILESET_NAME: layerConfig.terrain_description || tilesetId,
-    TILING_SCHEME: "GEOGRAPHIC_WGS84",
-    LEVEL: 0,
-    X: 0,
-    Y: 0,
-    ROW_ORIGIN_NORTH: false,
-    WEST_DEG: -180,
-    SOUTH_DEG: -90,
-    EAST_DEG: 180,
-    NORTH_DEG: 90,
+    TILING_SCHEME: "UNSPECIFIED",
+    ...extent,
     PAYLOAD_FORMAT: "QUANTIZED_MESH",
     PAYLOAD_FORMAT_VERSION: "1.0",
-    PAYLOAD: {
-      CID: cid,
-      SIZE_BYTES: totalBytes,
-      MEDIA_TYPE: "application/vnd.ipld.dag-pb",
-    },
+    // PAYLOAD is `required`: present and empty when there is no directory to
+    // name, which is a record the builder can serialize and a document a
+    // client reads as "this publisher is serving no IPFS tileset".
+    PAYLOAD: cid
+      ? {
+          CID: cid,
+          SIZE_BYTES: totalBytes,
+          MEDIA_TYPE: "application/vnd.ipld.dag-pb",
+        }
+      : {},
     MAX_LEVEL: maxzoom,
     WATER_MASK_KIND: "NONE",
     PROVENANCE: {
@@ -463,7 +546,7 @@ function buildCatalogue(cid) {
       // source fields would name exactly one of them.
       SOURCE_URL: undefined,
       SOURCE_QUERY: undefined,
-      DATASET_CID: cid,
+      ...(cid ? { DATASET_CID: cid } : {}),
       GENERATED_AT: new Date().toISOString(),
       PROCESSOR: "tools/terrain-pyramid/ipfs-publish.mjs",
     },
@@ -479,29 +562,28 @@ fs.writeFileSync(
 // The same record as SDS wire bytes, size-prefixed exactly like tiles.dttstream,
 // so the dataset-publication lane ingests it with the tiles and nothing has to
 // re-encode a JSON rendering into a record.
-if (publication?.cid) {
+//
+// WRITTEN UNCONDITIONALLY, AND THROUGH THE SHARED PROJECTOR. It used to be
+// hand-transcribed field by field and only when a CID existed, which is how
+// the two "identical" projections drifted: this one carried RETRIEVED_AT and
+// the serving module's did not, and neither side had ever built the other's.
+// dtt-projection.mjs is now the only place a $DTT JSON projection becomes a
+// record, it REFUSES any key the IDL does not define, and writeFB is what
+// enforces `required` — so the JSON beside these bytes cannot be a document
+// that is not also a record.
+{
   const sds = await import(path.join(SOURCE_DIR, "node_modules", "spacedatastandards.org", "index.js"));
-  const S = sds.standards.DTT;
-  const record = new S.DTTT();
-  record.TILESET_ID = catalogue.TILESET_ID;
-  record.TILESET_NAME = catalogue.TILESET_NAME;
-  record.TILING_SCHEME = S.dttTilingScheme.GEOGRAPHIC_WGS84;
-  record.WEST_DEG = catalogue.WEST_DEG;
-  record.SOUTH_DEG = catalogue.SOUTH_DEG;
-  record.EAST_DEG = catalogue.EAST_DEG;
-  record.NORTH_DEG = catalogue.NORTH_DEG;
-  record.PAYLOAD_FORMAT = S.dttPayloadFormat.QUANTIZED_MESH;
-  record.PAYLOAD_FORMAT_VERSION = catalogue.PAYLOAD_FORMAT_VERSION;
-  record.PAYLOAD = new S.DTTPayloadRefT();
-  record.PAYLOAD.CID = catalogue.PAYLOAD.CID;
-  record.PAYLOAD.SIZE_BYTES = BigInt(catalogue.PAYLOAD.SIZE_BYTES);
-  record.PAYLOAD.MEDIA_TYPE = catalogue.PAYLOAD.MEDIA_TYPE;
-  record.MAX_LEVEL = catalogue.MAX_LEVEL;
-  record.PROVENANCE = new S.DTTProvenanceT();
-  for (const [key, value] of Object.entries(catalogue.PROVENANCE)) {
-    if (value !== undefined && value !== null) record.PROVENANCE[key] = value;
-  }
-  fs.writeFileSync(path.join(outDir, "tileset-catalogue.dttstream"), sds.writeFB(record));
+  const bytes = writeDttRecord(sds, catalogue);
+  fs.writeFileSync(path.join(outDir, "tileset-catalogue.dttstream"), bytes);
+  // And it reads back as the record the JSON says it is.
+  const [read] = sds.readFB(bytes);
+  assert.equal(read.TILESET_ID, catalogue.TILESET_ID);
+  assert.equal(read.PROVENANCE.RETRIEVED_AT, catalogue.PROVENANCE.RETRIEVED_AT);
+  assert.equal(read.PAYLOAD.CID ?? null, catalogue.PAYLOAD.CID ?? null);
+  // Not just "buildDttRecord accepted it": the projection is what the SERVING
+  // MODULE has to be able to answer too, so the shape is exercised here rather
+  // than only where a wasm is loaded.
+  assert.ok(buildDttRecord(sds, catalogue));
 }
 
 // ── READ THE PUBLICATION BACK THROUGH THE GATEWAY ──────────────────────────
@@ -556,11 +638,20 @@ const report = {
   datasetEpoch: provenance.raw.DATASET_EPOCH,
   maxzoom,
   api: args.add ? args.api : null,
+  // The pin's own evidence, or an explicit null saying nothing checked it on
+  // this run. `--cid` never touches the API, and a report that reads `"api":
+  // null` beside a claim of "added and pinned" is a claim with no proof in it.
+  pinProof,
   cid: publication?.cid ?? null,
   layerJsonCid: publication?.layerJsonCid ?? null,
   files: files.length,
   storedTiles: seen.size,
   synthesizedTiles: synthesized.length,
+  // What the synthesized half STATES about water. Before the ocean skips were
+  // declared this read 0 water / 36 land on a coastal region.
+  synthesizedUniformWater: synthesizedWater,
+  synthesizedUniformLand: synthesizedLand,
+  oceanSkipsDeclared: oceanSkipsDeclared.size,
   synthesizedAddresses: synthesized,
   layerJsonBytes: layerJson.length,
   directoryBytes: totalBytes,
@@ -577,11 +668,25 @@ const report = {
   gatewayProof,
   catalogue,
   // What an operator installs on the serving mount so clients resolve this CID.
+  //
+  // These are the keys the mount needs to answer /tileset.json AS A RECORD.
+  // DTTProvenance marks DATASET_ID, DATASET_EPOCH, RETRIEVED_AT and LICENSE
+  // required; the mount used to be given only the epoch, so the document it
+  // answered could not be built into a $DTT at all — and a mount that is
+  // given less than this now refuses to publish a catalogue rather than
+  // answering 200 with something that is not a record.
   mountConfig: publication?.cid
     ? {
         terrain_tileset_cid: publication.cid,
+        terrain_tileset_size_bytes: totalBytes,
         terrain_gateway_path: "/ipfs/",
+        terrain_dataset_id: provenance.raw.DATASET_ID,
+        terrain_dataset_name: provenance.raw.DATASET_NAME,
         terrain_dataset_epoch: provenance.raw.DATASET_EPOCH,
+        terrain_dataset_retrieved_at: provenance.raw.RETRIEVED_AT,
+        terrain_license: provenance.raw.LICENSE,
+        terrain_license_url: provenance.raw.LICENSE_URL,
+        terrain_attribution: provenance.raw.ATTRIBUTION,
       }
     : null,
 };

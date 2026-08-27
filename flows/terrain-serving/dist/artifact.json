@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "artifact": {
     "file": "runtime.wasm",
-    "sha256": "da11e89c743d8124e72c7a10caf8b2b0cb2610ffe9d0cb6f66894ab316dee346",
-    "bytes": 205458
+    "sha256": "06a0e2a0351599cf41b73f0b6d9ead6f0342f6879bd73b3431789e9b43ab194d",
+    "bytes": 208450
   },
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
@@ -59,7 +59,7 @@
       "dependencyId": "com.digitalarsenal.data-source.terrain-source",
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "version": "0.1.0",
-      "sha256": "38f6a5ac1808a80cc23dcb4639e91ff731a76e3abc23964c02cbf56e6543ebe1",
+      "sha256": "005c4ad5077fcd77cb6c46b774dbffb901d6363938de3f3c9215b5902fb0b6ef",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

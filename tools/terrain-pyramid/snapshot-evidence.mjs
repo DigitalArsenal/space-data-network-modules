@@ -67,6 +67,12 @@ for (const name of [
   "ipfs-publication.json",
   "tileset-catalogue.json",
   "serving-config-ipfs.json",
+  // Every address the encoder measured as all water and skipped. It is the
+  // input to the published availability, so a reviewer checking why a position
+  // over the sea answers a water tile has to be able to read it — and the
+  // COUNT alone, which is all the run report used to carry, is what made the
+  // ocean render as land for a whole round.
+  "ocean-skipped.json",
 ]) {
   const from = path.join(outDir, name);
   if (!fs.existsSync(from)) continue;
