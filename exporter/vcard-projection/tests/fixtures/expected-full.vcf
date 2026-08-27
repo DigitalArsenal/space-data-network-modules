@@ -1,0 +1,14 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Literal Key Node
+PRODID;VALUE=TEXT:-//Apple Inc.//iPhone OS 15.1.1//EN
+EMAIL;type=INTERNET;type=sign:obLD1OX2obLD1OX2obLD1OX2obLD1OX2obLD1OX2obI@
+ sign.spacedatanetwork.org
+EMAIL;type=INTERNET;type=encrypt:ssPU5fahssPU5fahssPU5fahssPU5fahssPU5fahs
+ sM@encrypt.spacedatanetwork.org
+EMAIL;type=INTERNET;type=epmsig:ABEiM0RVZneImaq7zN3u_wARIjNEVWZ3iJmqu8zd7v
+ 8@epmsig.spacedatanetwork.org
+EMAIL;type=INTERNET;type=epmts:1700000000@epmts.spacedatanetwork.org
+EMAIL;type=INTERNET;type=epmcid:bafkreih2cdjxaye57igrnhn3xvafpl2yexmvzlz5d
+ 2xknnwm4nbwzpkmay@epmcid.spacedatanetwork.org
+END:VCARD
