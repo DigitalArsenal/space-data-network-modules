@@ -139,6 +139,98 @@ const budgetPlan = write(
   Buffer.from(JSON.stringify({ ...base, level: 8, x: 271, y: 193, gridSize: 255 })),
 );
 
+// ── THE SERVING METHOD, WHICH THE PARITY GATE DID NOT COVER ────────────────
+//
+// The fixture's cases were all ENCODER cases (tile, layer_json) plus two
+// refusals. `respond` was absent — and it is the method that faces the
+// browser: it walks the store's record stream, decides 200/304/404, and on a
+// miss inside published availability RUNS THE ENCODER ITSELF
+// (encode_quantized_mesh + gzip_compress + sha256_multihash) to synthesize the
+// tile. That is precisely the code cross-runtime identity exists to police,
+// and it touches no host bridge at all — load_config() has exactly one call
+// site, inside `route` — so it can be a parity case exactly as it stands.
+//
+// The stored record is produced HERE, by the same encoder, so the fixture is
+// self-consistent: regenerate it whenever the encoder changes.
+const parityWasm = fileURLToPath(new URL("../../dist/parity/module.wasm", import.meta.url));
+const manifest = JSON.parse(
+  fs.readFileSync(fileURLToPath(new URL("../../plugin-manifest.json", import.meta.url)), "utf8"),
+);
+const { createBrowserModuleHarness } = await import("space-data-module-sdk/testing");
+const harness = await createBrowserModuleHarness({
+  wasmSource: fs.readFileSync(parityWasm),
+  manifest,
+  surface: "direct",
+});
+const encodedStream = await (async () => {
+  const response = await harness.invoke({
+    methodId: "tile",
+    inputs: [
+      {
+        portId: "plan",
+        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: single.byteLength },
+        payload: new Uint8Array(fs.readFileSync(path.join(outDir, single.name))),
+      },
+      {
+        portId: "dem",
+        typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: dem.byteLength },
+        payload: new Uint8Array(fs.readFileSync(path.join(outDir, dem.name))),
+      },
+    ],
+  });
+  if (response.statusCode !== 0) {
+    throw new Error(`tile refused while building the respond fixture: ${response.errorCode}: ${response.errorMessage}`);
+  }
+  return Buffer.from(response.outputs.find((o) => o.portId === "records").payload);
+})();
+harness.destroy();
+
+const storedStream = write("stored-record.dttstream", encodedStream);
+// The ETag the stored record states, so the 304 case matches a real one rather
+// than a literal that drifts the moment the encoder changes a byte.
+const storedEtag = (() => {
+  const record = encodedStream.subarray(4, 4 + encodedStream.readUInt32LE(0));
+  const pos = record.readUInt32LE(0);
+  const vtable = pos - record.readInt32LE(pos);
+  const fieldAt = (id) => {
+    const vo = 4 + 2 * id;
+    if (vo >= record.readUInt16LE(vtable)) return 0;
+    const off = record.readUInt16LE(vtable + vo);
+    return off === 0 ? 0 : pos + off;
+  };
+  const p = fieldAt(40);
+  const sp = p + record.readUInt32LE(p);
+  return record.subarray(sp + 4, sp + 4 + record.readUInt32LE(sp)).toString("utf8");
+})();
+
+const respondContext = (name, context) =>
+  write(name, Buffer.from(JSON.stringify({ tilesetId: "spaceaware-terrain", level: 11, x: 2166, y: 1546, ...context })));
+
+const ctxStored = respondContext("context-stored.json", { ifNoneMatch: "", acceptsGzip: true });
+const ctxIdentity = respondContext("context-identity.json", { ifNoneMatch: "", acceptsGzip: false });
+const ctxConditional = respondContext("context-conditional.json", { ifNoneMatch: storedEtag, acceptsGzip: true });
+const ctxSynth = respondContext("context-synth.json", {
+  x: 2170,
+  y: 1550,
+  ifNoneMatch: "",
+  acceptsGzip: true,
+  insideAvailability: true,
+  synthWater: true,
+  synthGridSize: 65,
+});
+const ctxMiss = respondContext("context-miss.json", {
+  x: 3000,
+  y: 1,
+  ifNoneMatch: "",
+  acceptsGzip: true,
+  insideAvailability: false,
+});
+// A stream that is not a record stream at all: the refusal must be the same
+// named error, byte for byte, in every lane.
+const badStream = write("stream-malformed.bin", Buffer.from("not a size-prefixed $DTT stream", "utf8"));
+// The flatsql stream for zero rows: nothing but alignment padding.
+const emptyStream = write("stream-empty.bin", Buffer.alloc(4));
+
 const alignedInput = (portId, file) => ({
   portId,
   payloadFile: `parity/${file.name}`,
@@ -185,6 +277,61 @@ const fixture = {
       request: {
         methodId: "tile",
         inputs: [alignedInput("plan", budgetPlan), alignedInput("dem", oversized)],
+      },
+    },
+    {
+      id: "respond-stored-gzip",
+      expect: "ok",
+      request: {
+        methodId: "respond",
+        inputs: [alignedInput("stream", storedStream), alignedInput("context", ctxStored)],
+      },
+    },
+    {
+      // The client refused gzip, so the guest DECODES the stored bytes and
+      // serves identity under its own strong ETag. In-guest inflate, in three
+      // runtimes, byte for byte.
+      id: "respond-stored-identity",
+      expect: "ok",
+      request: {
+        methodId: "respond",
+        inputs: [alignedInput("stream", storedStream), alignedInput("context", ctxIdentity)],
+      },
+    },
+    {
+      id: "respond-not-modified",
+      expect: "ok",
+      request: {
+        methodId: "respond",
+        inputs: [alignedInput("stream", storedStream), alignedInput("context", ctxConditional)],
+      },
+    },
+    {
+      // THE SYNTHESIZED MISS: the encoder runs inside `respond` here —
+      // encode_quantized_mesh, gzip_compress, sha256_multihash — so every byte
+      // the client renders on this path is covered by the same gate as the
+      // stored path.
+      id: "respond-synthesized-miss",
+      expect: "ok",
+      request: {
+        methodId: "respond",
+        inputs: [alignedInput("stream", emptyStream), alignedInput("context", ctxSynth)],
+      },
+    },
+    {
+      id: "respond-miss-outside-availability",
+      expect: "ok",
+      request: {
+        methodId: "respond",
+        inputs: [alignedInput("stream", emptyStream), alignedInput("context", ctxMiss)],
+      },
+    },
+    {
+      id: "respond-malformed-stream",
+      expect: "ok",
+      request: {
+        methodId: "respond",
+        inputs: [alignedInput("stream", badStream), alignedInput("context", ctxStored)],
       },
     },
     {

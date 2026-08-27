@@ -3,7 +3,7 @@
   "name": "Terrain Pyramid Ingest Flow",
   "version": "0.1.0",
   "engineLinkage": "bridge",
-  "description": "OFF-FLEET pyramid builder for the quantized-mesh terrain tileset. One timer tick is ONE GRANULE CELL of work. mark_query reads the durable resume mark through hostcap/flatsql-query; granule_plan resolves the next cell of a REGION-PRIORITY enumeration that is a pure function of the config, and emits EIGHT hostcap/http-request descriptors - the 2x2 granule neighbourhood in elevation and water-body form, all over responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third - plus ONE plan frame carrying every tile of that level whose SOUTH-WEST CORNER lies in the cell. terrain-source:tile decodes that granule set ONCE, windowed to the union extent under a 256 MiB in-guest budget, and emits one $DTT record per tile with the water mask classified on the level's global post lattice; all-ocean tiles are NOT stored (they are identical, there are millions, and the serving flow synthesizes an unstored address inside published availability as exactly that). ingest_meta authors the storage attribution the storage lane cannot invent - dataset, batch, epoch - reading the tile report's recordsOut to catch a batch that reports success and stores nothing, and the primary granule response's ETag; hostcap/storage-ingest appends the batch; publish_request advances the resume mark FROM THE VERIFIED STORE RESULT, never at dispatch, so a crash between fetch and store re-runs the cell instead of leaving an invisible hole. NO PUBSUB ANNOUNCE IN V1 (Themis: a tileset-epoch announcement would be a SIGNED record and that contract is not cut). publish_request's optional announce request output is deliberately left UNWIRED rather than pointed at a placeholder; the $DTT records reach the fleet through the existing dataset-publication lane. Levels shallower than 8 are not built here: a tile wider than a granule breaks the containment the 2x2 neighbourhood rests on, and those levels are built by DOWNSAMPLING deeper tiles over the record store. granule_plan refuses them by name. PLACEMENT: this flow runs OFF-FLEET on the build machine under Docker linux/amd64 WasmEdge, the same law binaries are built under - never on host-01 or host-02, whose workload placement is the owner's.",
+  "description": "OFF-FLEET pyramid builder for the quantized-mesh terrain tileset. One timer tick is ONE GRANULE CELL of work. mark_query reads the durable resume mark - an $IRM record, through the code-named FlatSQL view (SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?) - via hostcap/flatsql-query; granule_plan resolves the next cell of a REGION-PRIORITY enumeration that is a pure function of the config, and emits EIGHT hostcap/http-request descriptors - the 2x2 granule neighbourhood in elevation and water-body form, all over responseWire raw-body-v1 because a granule is megabytes of binary the connector's JSON dialect would base64-expand by a third - plus ONE plan frame carrying every tile of that level whose SOUTH-WEST CORNER lies in the cell. terrain-source:tile decodes that granule set ONCE, windowed to the union extent under a 256 MiB in-guest budget, and emits one $DTT record per tile with the water mask classified on the level's global post lattice; all-ocean tiles are NOT stored (they are identical, there are millions, and the serving flow synthesizes an unstored address inside published availability as exactly that). ingest_meta authors the storage attribution the storage lane cannot invent - dataset, batch, epoch - reading the tile report's recordsOut to catch a batch that reports success and stores nothing, and the primary granule response's ETag; hostcap/storage-ingest appends the batch; publish_request advances the resume mark FROM THE VERIFIED STORE RESULT, never at dispatch, so a crash between fetch and store re-runs the cell instead of leaving an invisible hole; the mark is an $IRM record persisted through hostcap/storage-write under the storage_write grant (the JSON mark still lands on egress, for an operator to read, and is NOT the durable one). Before that, nothing wrote the mark at all: it went only to egress, the flow declared no storage-write capability, and the read query named a table no node has - so every tick restarted at cell 0, silently. NO PUBSUB ANNOUNCE IN V1 (Themis: a tileset-epoch announcement would be a SIGNED record and that contract is not cut). publish_request's optional announce request output is deliberately left UNWIRED rather than pointed at a placeholder; the $DTT records reach the fleet through the existing dataset-publication lane. Levels shallower than 8 are not built here: a tile wider than a granule breaks the containment the 2x2 neighbourhood rests on, and those levels are built by DOWNSAMPLING deeper tiles over the record store. granule_plan refuses them by name. PLACEMENT: this flow runs OFF-FLEET on the build machine under Docker linux/amd64 WasmEdge, the same law binaries are built under - never on host-01 or host-02, whose workload placement is the owner's.",
   "nodes": [
     {
       "nodeId": "mark_q",
@@ -108,6 +108,16 @@
       "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
       "methodId": "publish_request",
       "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "mark_write",
+      "pluginId": "com.digitalarsenal.hostcap.storage-write",
+      "methodId": "write_record",
+      "kind": "transform",
+      "capabilities": [
+        "storage_write"
+      ],
       "drainPolicy": "single-shot"
     },
     {
@@ -372,6 +382,33 @@
       "queueDepth": 16
     },
     {
+      "edgeId": "publish-mark_record-mark_write",
+      "fromNodeId": "publish",
+      "fromPortId": "mark_record",
+      "toNodeId": "mark_write",
+      "toPortId": "record",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "publish-mark_meta-mark_write",
+      "fromNodeId": "publish",
+      "fromPortId": "mark_meta",
+      "toNodeId": "mark_write",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "mark_write-result-egress",
+      "fromNodeId": "mark_write",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
       "edgeId": "ingest-result-egress",
       "fromNodeId": "ingest",
       "fromPortId": "result",
@@ -420,6 +457,7 @@
     "com.digitalarsenal.data-source.terrain-source",
     "com.digitalarsenal.hostcap.http-request",
     "com.digitalarsenal.hostcap.flatsql-query",
-    "com.digitalarsenal.hostcap.storage-ingest"
+    "com.digitalarsenal.hostcap.storage-ingest",
+    "com.digitalarsenal.hostcap.storage-write"
   ]
 }

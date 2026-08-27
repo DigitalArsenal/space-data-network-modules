@@ -144,6 +144,168 @@
       }
     },
     {
+      "id": "respond-stored-gzip",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stored-record.dttstream",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 3172
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-stored.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 99
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-stored-identity",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stored-record.dttstream",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 3172
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-identity.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 100
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-not-modified",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stored-record.dttstream",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 3172
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-conditional.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 171
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-synthesized-miss",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stream-empty.bin",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 4
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-synth.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 162
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-miss-outside-availability",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stream-empty.bin",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 4
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-miss.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 123
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-malformed-stream",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stream-malformed.bin",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 31
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-stored.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 99
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": "malformed-stdin",
       "stdinUtf8": "this is not a PIV invoke frame — the trap/error class must match across every lane"
     }

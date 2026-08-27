@@ -102,8 +102,38 @@ constexpr long kDefaultTimeoutMs = 90000;
 constexpr long kDefaultBatchTiles = 64;
 constexpr long kMaxBatchTiles = 256;
 constexpr long kDefaultGlobalMaxLevel = 10;
-constexpr const char* kMarkTable = "terrain_ingest_mark";
 constexpr const char* kSchema = "DTT";
+constexpr const char* kIrmType = "IRM";
+constexpr const char* kIngestorId = "terrain-ingest-wasm/v1";
+// ── THE DURABLE RESUME MARK IS $IRM ────────────────────────────────────────
+//
+// It used to be ad-hoc JSON read back with
+// `SELECT * FROM terrain_ingest_mark WHERE dataset_id = ? LIMIT 1`, and that
+// query could never return a row on any real node. Every embedded standard is
+// served through a generated FlatSQL unified view named by its SDS CODE over
+// `_data`/`_rowid` (owner law 2026-08-25; sdn storage/engine_records.go builds
+// the view graph), and `terrain_ingest_mark` is not an SDS code, so no relation
+// by that name exists. Worse, nothing WROTE it: the flow routed publish.mark to
+// egress and declared no storage-write capability, so granule_plan restarted at
+// cell 0 on every tick — silently, because an absent mark is a valid first run
+// and never an error. It only appeared to resume because the off-fleet runner
+// substituted a local resume-mark.json for the storage op.
+//
+// $IRM was minted and ratified in SDS 1.196.0 — the version this lane pins —
+// for exactly this record. The mark is authored here, hostcap/storage-write
+// persists it under the storage_write grant, and hostcap/flatsql-query reads it
+// back through the code-named view. Same lane, same shape, same reasoning as
+// data-source/cell-tower-ingest.
+constexpr const char* kDefaultMarkSql = "SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?";
+constexpr long kDefaultMarkScanRows = 32;
+// The resume state a terrain run needs is not a byte offset, so it rides in
+// DECODE_CONTEXT.DECODER_STATE as the SAME JSON shape the legacy egress mark
+// uses — one parser for both, never two implementations of one format — under
+// a VERSION STAMP. A mark whose stamp this build does not recognise is IGNORED
+// and the walk restarts, exactly as $IRM's own description requires.
+constexpr const char* kIrmResumeStateFormat = "terrain-ingest/resume-v1";
+constexpr const char* kIrmResumeStateVersion = "1";
+constexpr const char* kIrmResumeStateMediaType = "application/json";
 constexpr const char* kLane = "terrain";
 constexpr const char* kDefaultDatasetId = "copernicus-glo30-quantized-mesh";
 constexpr const char* kDefaultProviderId = "copernicus";
@@ -284,6 +314,18 @@ int push_json(const char* port, const std::string& json) {
                                  PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
                                  reinterpret_cast<const uint8_t*>(json.data()),
                                  static_cast<uint32_t>(json.size()));
+}
+
+// A record frame is DESCRIBED, not just pushed: the manifest declares
+// mark_record as $IRM/IRM.fbs and the SDK's output-type check resolves the
+// frame against that declaration, so schema name, file identifier and root type
+// travel with the bytes. A bare aligned-binary push carries none of them and is
+// correctly refused as "unsupported-output-type".
+int push_record(const char* port, const char* schema_name, const char* file_identifier,
+                const char* root_type, const uint8_t* data, uint32_t length) {
+    return plugin_push_output_ex(port, schema_name, file_identifier,
+                                 PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root_type, 0, 0,
+                                 data, length);
 }
 
 // SURPLUS-FRAME REFUSAL — see the long note in cell_tower_ingest_module.cpp.
@@ -512,14 +554,183 @@ bool tile_at_index(const std::vector<Region>& regions, long long index, PlannedT
 std::string mark_json(const std::string& dataset_id, const std::string& tileset_id,
                       const std::string& dataset_epoch, long long next_tile_index,
                       const std::string& etag, const std::string& last_modified,
-                      const std::string& batch_id, long tiles) {
+                      const std::string& batch_id, long tiles,
+                      long long stored_tiles_total = 0) {
     return std::string("{\"dataset_id\":\"") + json_escape(dataset_id) + "\"" +
            ",\"lane\":\"" + kLane + "\"" + ",\"tileset_id\":\"" + json_escape(tileset_id) +
            "\"" + ",\"dataset_epoch\":\"" + json_escape(dataset_epoch) + "\"" +
            ",\"next_tile_index\":" + std::to_string(next_tile_index) + ",\"etag\":\"" +
            json_escape(etag) + "\"" + ",\"last_modified\":\"" + json_escape(last_modified) +
            "\"" + ",\"batch_id\":\"" + json_escape(batch_id) + "\"" +
-           ",\"tiles\":" + std::to_string(tiles) + "}";
+           ",\"tiles\":" + std::to_string(tiles) +
+           // CUMULATIVE, and only what storage confirmed. It rides in the mark
+           // because the durable $IRM record states RECORDS_COMMITTED and the
+           // next tick has no other way to know what came before it.
+           ",\"stored_tiles_total\":" + std::to_string(stored_tiles_total) + "}";
+}
+
+// ── $IRM: the durable mark, read and written ───────────────────────────────
+
+// Locate an $IRM root inside a frame that may be the bare buffer or one element
+// of a size-prefixed stream. Returns nullptr when the bytes are not an $IRM
+// buffer at all — absent, never assumed.
+const uint8_t* find_irm_root(const uint8_t* data, size_t length, size_t* out_length) {
+    if (!data) return nullptr;
+    if (length >= 8 && std::memcmp(data + 4, "$IRM", 4) == 0) {
+        *out_length = length;
+        return data;
+    }
+    if (length >= 12 && std::memcmp(data + 8, "$IRM", 4) == 0) {
+        const uint32_t size = static_cast<uint32_t>(data[0]) |
+                              (static_cast<uint32_t>(data[1]) << 8) |
+                              (static_cast<uint32_t>(data[2]) << 16) |
+                              (static_cast<uint32_t>(data[3]) << 24);
+        if (size > 0 && 4u + size <= length) {
+            *out_length = size;
+            return data + 4;
+        }
+    }
+    return nullptr;
+}
+
+// The resume state, from EITHER a durable $IRM record or the legacy JSON frame
+// the flow still lands on egress for an operator to read. The two are told
+// apart by the FlatBuffer file identifier versus a leading '{' — an unambiguous
+// discrimination, not a heuristic — and both carry the SAME JSON payload, so
+// there is one parser and not two.
+std::string extract_mark_state(const std::string& frame, const std::string& want_job) {
+    if (frame.empty()) return std::string();
+
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(frame.data());
+    const size_t total = frame.size();
+    size_t at = 0;
+    while (at < total) {
+        size_t buffer_length = 0;
+        const uint8_t* root = find_irm_root(bytes + at, total - at, &buffer_length);
+        if (!root) break;
+        if (const IRM* irm = GetIRM(root)) {
+            const std::string job = irm->JOB_ID() ? irm->JOB_ID()->str() : std::string();
+            // A mark for ANOTHER job says nothing about this walk. The query
+            // returns the newest few rows precisely so several lanes can share
+            // one relation, so a non-match is skipped, never half-applied.
+            if (want_job.empty() || want_job == job) {
+                if (const IRMDecodeContext* decode = irm->DECODE_CONTEXT()) {
+                    const std::string format =
+                        decode->DECODER_STATE_FORMAT() ? decode->DECODER_STATE_FORMAT()->str()
+                                                       : std::string();
+                    // THE VERSION STAMP IS WHAT MAKES VERBATIM CARRIAGE SAFE.
+                    // A state this build does not recognise is discarded and the
+                    // walk RESTARTS; reading a differently shaped state is not a
+                    // degraded resume, it is a resume into plausible nonsense
+                    // that stores cleanly.
+                    if (format == kIrmResumeStateFormat && decode->DECODER_STATE()) {
+                        return std::string(
+                            reinterpret_cast<const char*>(decode->DECODER_STATE()->Data()),
+                            decode->DECODER_STATE()->size());
+                    }
+                }
+                return std::string();
+            }
+        }
+        at += (root == bytes + at) ? buffer_length : buffer_length + 4;
+        if (buffer_length == 0) break;
+    }
+
+    // LEGACY JSON, still emitted on egress and still exercised by the
+    // pre-$IRM tests. A FlatBuffer does not begin with '{', so the two can
+    // never be confused.
+    size_t first = 0;
+    while (first < frame.size() && is_ws(frame[first])) first++;
+    if (first < frame.size() && frame[first] == '{') return frame;
+    return std::string();
+}
+
+// One job, one lane: the dataset, the tileset and the EDITION. A new epoch is a
+// new job rather than a mark that has to be sanity-checked, which is what makes
+// "resuming tileset A from tileset B's index" unrepresentable instead of
+// merely refused.
+std::string mark_job_id(const std::string& dataset, const std::string& tileset,
+                        const std::string& epoch) {
+    return dataset + "@" + tileset + "@" + epoch;
+}
+
+// Author the durable $IRM record. Every field is something the run
+// ESTABLISHED; nothing is invented to fill a slot.
+std::vector<uint8_t> build_terrain_irm(const std::string& job_id, const std::string& provider,
+                                       const std::string& source_url,
+                                       const std::string& state_json, long long next_cell_index,
+                                       long long total_cells, long long stored_tiles,
+                                       const std::string& batch_id, long tiles_in_batch,
+                                       const std::string& etag, const std::string& last_modified,
+                                       const std::string& updated_at) {
+    ::flatbuffers::FlatBufferBuilder b(2048 + state_json.size());
+
+    const auto job_off = b.CreateString(job_id);
+    const auto provider_off = b.CreateString(provider);
+    const auto ingestor_off = b.CreateString(kIngestorId);
+    const auto updated_off = b.CreateString(updated_at);
+    const auto target_off = b.CreateString(kSchema);
+    // The mode the storage lane was actually asked for; see ingest_meta.
+    const auto reconcile_off = b.CreateString("none");
+
+    const auto source_url_off = b.CreateString(source_url);
+    const auto etag_off = etag.empty() ? 0 : b.CreateString(etag);
+    const auto modified_off = last_modified.empty() ? 0 : b.CreateString(last_modified);
+    IRMSourceBuilder sb(b);
+    sb.add_SOURCE_URL(source_url_off);
+    if (etag_off.o) sb.add_ENTITY_TAG(etag_off);
+    if (modified_off.o) sb.add_LAST_MODIFIED(modified_off);
+    const auto source_off = sb.Finish();
+
+    const auto format_off = b.CreateString(kIrmResumeStateMediaType);
+    const auto state_off = b.CreateVector(
+        reinterpret_cast<const uint8_t*>(state_json.data()), state_json.size());
+    const auto state_format_off = b.CreateString(kIrmResumeStateFormat);
+    const auto state_version_off = b.CreateString(kIrmResumeStateVersion);
+    const auto state_media_off = b.CreateString(kIrmResumeStateMediaType);
+    IRMDecodeContextBuilder dcb(b);
+    dcb.add_FORMAT(format_off);
+    dcb.add_DECODER_STATE(state_off);
+    dcb.add_DECODER_STATE_FORMAT(state_format_off);
+    dcb.add_DECODER_STATE_VERSION(state_version_off);
+    dcb.add_DECODER_STATE_MEDIA_TYPE(state_media_off);
+    dcb.add_DECODER_STATE_BYTE_LENGTH(static_cast<uint64_t>(state_json.size()));
+    const auto decode_off = dcb.Finish();
+
+    const auto batch_off = b.CreateString(batch_id);
+    const auto committed_off = b.CreateString(updated_at);
+    IRMChunkBuilder cb(b);
+    // The chunk that was just committed is the cell BEFORE the next one.
+    cb.add_CHUNK_INDEX(static_cast<uint32_t>(next_cell_index > 0 ? next_cell_index - 1 : 0));
+    cb.add_BATCH_ID(batch_off);
+    if (tiles_in_batch >= 0) cb.add_RECORDS_STORED(static_cast<uint32_t>(tiles_in_batch));
+    cb.add_COMMITTED_AT(committed_off);
+    const auto chunk_off = cb.Finish();
+
+    const bool complete = total_cells > 0 && next_cell_index >= total_cells;
+
+    IRMBuilder ib(b);
+    ib.add_JOB_ID(job_off);
+    ib.add_SEQUENCE(static_cast<uint64_t>(next_cell_index));
+    ib.add_PROVIDER_ID(provider_off);
+    ib.add_INGESTOR_ID(ingestor_off);
+    ib.add_SOURCE(source_off);
+    ib.add_STATE(complete ? irmJobState_COMPLETE : irmJobState_IN_PROGRESS);
+    // The position IS a numbered part: this lane walks granule CELLS and no
+    // byte offset addresses them, which is exactly what PART_INDEX states.
+    ib.add_RANGE_MODE(irmRangeMode_PART_INDEX);
+    ib.add_NEXT_CHUNK_INDEX(static_cast<uint32_t>(next_cell_index));
+    ib.add_DECODE_CONTEXT(decode_off);
+    ib.add_LAST_CHUNK(chunk_off);
+    ib.add_CHUNKS_COMMITTED(static_cast<uint32_t>(next_cell_index));
+    ib.add_RECORDS_COMMITTED(static_cast<uint64_t>(stored_tiles < 0 ? 0 : stored_tiles));
+    ib.add_TARGET_STANDARD(target_off);
+    ib.add_RECONCILE_MODE(reconcile_off);
+    ib.add_UPDATED_AT(updated_off);
+    if (complete) ib.add_COMPLETED_AT(updated_off);
+    FinishIRMBuffer(b, ib.Finish());
+
+    return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 // The response frame's "headers" object, extracted by brace matching so a
@@ -653,11 +864,19 @@ extern "C" {
 int mark_query(void) {
     if (refuse_batched()) return 500;
     const std::string config = load_config();
-    const std::string dataset = config_string(config, "dataset_id", kDefaultDatasetId);
-    const std::string query = std::string("{\"sql\":\"SELECT * FROM ") + kMarkTable +
-                              " WHERE dataset_id = ? LIMIT 1\"" +
-                              ",\"params\":[{\"t\":\"str\",\"v\":\"" + json_escape(dataset) +
-                              "\"}]}";
+    // The ENGINE-ROUTED read form, and the only one a current node answers.
+    // Operators may override the SQL, but a default that only works when it is
+    // overridden is not a default. The newest few rows are returned so one
+    // shared $IRM relation can hold several ingest lanes at once; read_mark
+    // picks this lane's by JOB_ID.
+    const std::string sql = config_string(config, "mark_sql", kDefaultMarkSql);
+    long scan_rows =
+        static_cast<long>(json_number_or(config, "mark_scan_rows",
+                                         static_cast<double>(kDefaultMarkScanRows)));
+    if (scan_rows <= 0) scan_rows = kDefaultMarkScanRows;
+    const std::string query = std::string("{\"sql\":\"") + json_escape(sql) + "\"" +
+                              ",\"params\":[{\"t\":\"i64\",\"v\":" +
+                              std::to_string(scan_rows) + "}]}";
     return push_json("query", query) < 0 ? 500 : 0;
 }
 
@@ -711,7 +930,8 @@ int ingest_plan(void) {
     // skip A's shallow levels forever, and a new epoch replans from tile 0.
     long long start = 0;
     std::string mark_etag;
-    const std::string mark = input_text("mark");
+    const std::string mark = extract_mark_state(input_text("mark"),
+                                                mark_job_id(dataset, tileset, epoch));
     if (!mark.empty()) {
         std::string mark_dataset, mark_tileset, mark_epoch;
         json_string_field(mark, "dataset_id", &mark_dataset);
@@ -948,20 +1168,28 @@ int granule_plan(void) {
     }
 
     long long start = 0;
+    long long stored_tiles_total = 0;
     {
-        const std::string mark = input_text("mark");
-        if (!mark.empty()) {
+        // The mark arrives as the flatsql-query stream: durable $IRM records
+        // for this JOB_ID, or (still) the legacy JSON frame. Both carry the
+        // same resume-state JSON, so one parse serves both.
+        const std::string state = extract_mark_state(
+            input_text("mark"), mark_job_id(dataset, tileset, epoch));
+        if (!state.empty()) {
             std::string mark_tileset, mark_epoch, mark_dataset;
-            json_string_field(mark, "tileset_id", &mark_tileset);
-            json_string_field(mark, "dataset_epoch", &mark_epoch);
-            json_string_field(mark, "dataset_id", &mark_dataset);
+            json_string_field(state, "tileset_id", &mark_tileset);
+            json_string_field(state, "dataset_epoch", &mark_epoch);
+            json_string_field(state, "dataset_id", &mark_dataset);
             // A mark for another dataset, tileset or edition says nothing
             // about this walk and is IGNORED rather than half-applied.
             if ((mark_tileset.empty() || mark_tileset == tileset) &&
                 (mark_epoch.empty() || mark_epoch == epoch) &&
                 (mark_dataset.empty() || mark_dataset == dataset)) {
-                start = static_cast<long long>(json_number_or(mark, "next_tile_index", 0));
+                start = static_cast<long long>(json_number_or(state, "next_tile_index", 0));
                 if (start < 0) start = 0;
+                stored_tiles_total =
+                    static_cast<long long>(json_number_or(state, "stored_tiles_total", 0));
+                if (stored_tiles_total < 0) stored_tiles_total = 0;
             }
         }
     }
@@ -1034,21 +1262,36 @@ int granule_plan(void) {
                     }
                 }
                 if (claimed) continue;
-                // CHILD_AVAILABILITY is a STATEMENT ABOUT THIS TILESET, so it
-                // is computed against the region's own block at level+1 rather
-                // than assumed to be "all four".
-                unsigned children = 0;
-                if (cell.level < r.max_level) {
-                    const TileBlock cb = region_block(r, cell.level + 1);
-                    const long cx = x * 2, cy = y * 2;
-                    const auto has = [&](long ax, long ay) {
-                        return ax >= cb.x0 && ax <= cb.x1 && ay >= cb.y0 && ay <= cb.y1;
-                    };
-                    if (has(cx, cy)) children |= 1u;          // south-west
-                    if (has(cx + 1, cy)) children |= 2u;      // south-east
-                    if (has(cx, cy + 1)) children |= 4u;      // north-west
-                    if (has(cx + 1, cy + 1)) children |= 8u;  // north-east
-                }
+                // ── CHILD_AVAILABILITY IS NOT CLAIMED, BECAUSE IT CANNOT BE
+                //    ESTABLISHED HERE ──────────────────────────────────────
+                //
+                // The schema is precise: "A set bit states the child exists in
+                // this tileset." A planner walking shallow-to-deep does not
+                // know whether a child will exist — the encoder SKIPS every
+                // all-ocean tile, so a child inside the region block may end up
+                // stored or may not, and neither this node nor the encoder
+                // learns which until levels that have not been built yet.
+                //
+                // It used to claim membership of THIS region's block at
+                // level+1, which is a different statement, and cross-checking a
+                // real regional store showed both directions of the error: 114
+                // bits claiming a child the tileset does not hold (all-ocean
+                // subtrees the walk skipped) and 18 omitting one it does (a
+                // child a HIGHER-PRIORITY region built). Widening the test to
+                // the union of every region's block fixes the second and makes
+                // the first worse.
+                //
+                // So no bit is set. A clear bit is an ABSENCE OF CLAIM, not a
+                // claim of absence, and $DTT's never-invent-data posture says
+                // absent means unpublished — which is exactly the state of this
+                // knowledge. The tileset's real availability statement is
+                // layer.json, which IS exact (tools/terrain-pyramid/verify.mjs
+                // derives it from the addresses that exist, plus their ancestor
+                // closure), and that is what a client reads. Establishing the
+                // bits truthfully needs a deepest-first walk or a post-pass
+                // over the finished store; the task md records that as the
+                // follow-up rather than shipping a guess in a published record.
+                const unsigned children = 0;
                 if (!tiles_json.empty()) tiles_json += ",";
                 tiles_json += "{\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
                               ",\"childAvailability\":" + std::to_string(children) + "}";
@@ -1112,6 +1355,13 @@ int granule_plan(void) {
         // them, and the serving lane synthesizes an unstored address inside
         // published availability as exactly that.
         ",\"skipOceanTiles\":true" +
+        // SOURCE_CLASS is DATA, like every other provenance field: the encoder
+        // no longer hard-codes it, so an operator who repoints this lane at an
+        // optical-stereo or lidar dataset stops publishing records that assert
+        // radar interferometry.
+        ",\"sourceClass\":\"" +
+        json_escape(config_string(config, "source_class",
+                                  "SPACEBORNE_RADAR_INTERFEROMETRIC")) + "\"" +
         ",\"verticalDatumName\":\"" +
         json_escape(config_string(config, "vertical_datum_name", "EGM2008")) + "\"" +
         ",\"provenance\":" + provenance + ",\"tiles\":[" + tiles_json + "]}";
@@ -1131,6 +1381,12 @@ int granule_plan(void) {
         ",\"tiles_planned\":1" +
         ",\"cell_tiles\":" + std::to_string(tile_count) + ",\"total_tiles\":" +
         std::to_string(total) + ",\"cell_index\":" + std::to_string(index) +
+        // Carried so publish_request can author a COMPLETE $IRM record without
+        // re-deriving the enumeration: the walk's length, the tiles already
+        // committed before this cell, and the run's clock.
+        ",\"total_cells\":" + std::to_string(total) +
+        ",\"stored_tiles_total\":" + std::to_string(stored_tiles_total) +
+        ",\"retrieved_at\":\"" + json_escape(retrieved_at) + "\"" +
         ",\"cell_lon\":" + std::to_string(cell.lon) + ",\"cell_lat\":" +
         std::to_string(cell.lat) + ",\"level\":" + std::to_string(cell.level) +
         ",\"region\":\"" + json_escape(cell.region->name) + "\"" + ",\"provider_id\":\"" +
@@ -1183,6 +1439,15 @@ int ingest_meta(void) {
     const long long first_index =
         static_cast<long long>(json_number_or(job, "first_tile_index", 0));
     const long tiles_planned = static_cast<long>(json_number_or(job, "tiles_planned", 0));
+    // Forwarded verbatim so the durable mark states the walk's length, the
+    // running committed count and the run's clock — none of which storage or
+    // publish_request can re-derive.
+    const long long total_cells_in_walk =
+        static_cast<long long>(json_number_or(job, "total_cells", 0));
+    const long long stored_tiles_before =
+        static_cast<long long>(json_number_or(job, "stored_tiles_total", 0));
+    std::string job_retrieved_at;
+    json_string_field(job, "retrieved_at", &job_retrieved_at);
 
     const std::string response = input_text("response");
     const std::string headers = headers_object(response);
@@ -1222,6 +1487,9 @@ int ingest_meta(void) {
         ",\"tiles_planned\":" + std::to_string(tiles_planned) + ",\"etag\":\"" +
         json_escape(etag) + "\"" + ",\"last_modified\":\"" + json_escape(last_modified) + "\"" +
         ",\"records_in\":" + std::to_string(records_in) +
+        ",\"total_cells\":" + std::to_string(total_cells_in_walk) +
+        ",\"stored_tiles_total\":" + std::to_string(stored_tiles_before) +
+        ",\"retrieved_at\":\"" + json_escape(job_retrieved_at) + "\"" +
         ",\"provenance\":{\"source\":\"terrain-ingest-wasm/v1\"" + ",\"json\":\"" +
         base64_encode(reinterpret_cast<const uint8_t*>(provenance.data()), provenance.size()) +
         "\"}}";
@@ -1289,12 +1557,53 @@ int publish_request(void) {
         return 502;
     }
 
+    // The CUMULATIVE tile count, carried forward from the mark this run
+    // resumed and advanced only by what STORAGE confirmed. `inserted` is
+    // storage's own answer, never the count the builder hoped for.
+    const long long stored_tiles =
+        static_cast<long long>(json_number_or(meta, "stored_tiles_total", 0)) +
+        (inserted > 0 ? inserted : 0);
+
     const std::string next_mark =
         mark_json(dataset, tileset, epoch, first_index + tiles_planned, etag, last_modified,
-                  batch_id, tiles_planned);
+                  batch_id, tiles_planned, stored_tiles);
+    // The JSON mark stays: it is what an operator reads off egress, and it is
+    // the frame the pre-$IRM tests exercise. It is NOT the durable one.
     if (push_json("mark", next_mark) < 0) return 500;
 
     const std::string config = load_config();
+
+    // ── THE DURABLE MARK ────────────────────────────────────────────────────
+    //
+    // Emitted on the SAME condition as the JSON mark — after a VERIFIED store,
+    // never at dispatch, because a mark advanced when a cell is REQUESTED turns
+    // a crash between fetch and store into permanently skipped tiles that no
+    // later run can detect. hostcap/storage-write persists it under the
+    // storage_write grant; hostcap/flatsql-query reads it back next tick.
+    {
+        const std::string job_id = mark_job_id(dataset, tileset, epoch);
+        const std::string provider =
+            config_string(config, "provider_id", kDefaultProviderId);
+        const std::string source_url =
+            config_string(config, "granule_base_url", kDefaultGranuleBase);
+        const long long walk_cells =
+            static_cast<long long>(json_number_or(meta, "total_cells", 0));
+        std::string stamped_at = config_string(config, "retrieved_at", "");
+        if (stamped_at.empty()) json_string_field(meta, "retrieved_at", &stamped_at);
+        const std::vector<uint8_t> record = build_terrain_irm(
+            job_id, provider, source_url, next_mark, first_index + tiles_planned, walk_cells,
+            stored_tiles, batch_id, tiles_planned, etag, last_modified, stamped_at);
+        if (push_record("mark_record", "IRM.fbs", "$IRM", "IRM", record.data(),
+                        static_cast<uint32_t>(record.size())) < 0) {
+            return 500;
+        }
+        // `source` is the record's attribution string; `type` is asserted here
+        // AND re-derived by storage-write from the buffer's own file
+        // identifier, which refuses the pair if they ever disagree.
+        const std::string mark_meta = std::string("{\"source\":\"") + json_escape(provider) +
+                                      "\",\"type\":\"" + kIrmType + "\"}";
+        if (push_json("mark_meta", mark_meta) < 0) return 500;
+    }
     std::string publish_url;
     if (!json_string_field(config, "publish_url", &publish_url) || publish_url.empty()) {
         // Fail-closed. Absence of configuration is not permission to publish.

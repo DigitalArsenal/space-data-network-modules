@@ -13,8 +13,32 @@ const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", 
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
+// THE DURABLE RESUME MARK IS AN $IRM RECORD, so the $IRM generated header is
+// inlined here — the same pattern data-source/cell-tower-ingest uses, and for
+// the same reason: the mark travels through the schema-typed storage lane, not
+// as ad-hoc JSON on egress, so the module has to author the record.
+//
+// flatc emits every SDS header with the same include guard
+// (FLATBUFFERS_GENERATED_MAIN_H_) and a self-named `#include
+// "main_generated.h"`; inlining a standard requires stripping both. $IRM is
+// self-contained — its nested tables and enums all live in the one schema — so
+// there is no include graph to order.
+function inlineGeneratedHeader(source) {
+  return source
+    .replace(
+      /#ifndef FLATBUFFERS_GENERATED_MAIN_H_\s*\n#define FLATBUFFERS_GENERATED_MAIN_H_\s*\n/,
+      "",
+    )
+    .replace(/#include "main_generated\.h"\s*\n/g, "")
+    .replace(/#endif\s*\/\/ FLATBUFFERS_GENERATED_MAIN_H_\s*$/, "");
+}
+
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const sourceCode = await fs.readFile(sourcePath, "utf8");
+const irmHeader = inlineGeneratedHeader(
+  await fs.readFile(path.join(standardsRoot, "lib", "cpp", "IRM", "main_generated.h"), "utf8"),
+);
+const implementationSource = await fs.readFile(sourcePath, "utf8");
+const sourceCode = `${irmHeader}\n${implementationSource}`;
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });

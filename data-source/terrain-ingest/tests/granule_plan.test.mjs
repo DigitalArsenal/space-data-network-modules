@@ -204,17 +204,27 @@ test("EVERY POST of every planned tile is inside the cell's 2x2 granule neighbou
   assert.ok(onParallel > 0, "the fixture must actually contain tiles sitting on a whole degree");
 });
 
-test("CHILD_AVAILABILITY states this tileset's children, not four by assumption", async (t) => {
+test("CHILD_AVAILABILITY CLAIMS NOTHING, because a shallow-to-deep walk cannot know it", async (t) => {
+  // "A set bit states the child exists in this tileset." This planner walks
+  // shallow to deep and the encoder SKIPS every all-ocean tile, so whether a
+  // child inside the region block ends up stored is decided at a level that has
+  // not been built yet. The old rule claimed region-block membership instead,
+  // and a cross-check against a real regional store found the error in BOTH
+  // directions: 114 bits claiming a child the tileset does not hold, and 18
+  // clearing one it does.
+  //
+  // A clear bit is an absence of claim, not a claim of absence, so declining to
+  // assert is the honest state of this knowledge. The tileset's real
+  // availability statement is layer.json, which IS exact.
   const cells = await walkAll(t);
-  for (const { job, plan } of cells) {
+  let tiles = 0;
+  for (const { plan } of cells) {
     for (const tile of plan.tiles) {
-      if (job.level === REGION.max_level) {
-        assert.equal(tile.childAvailability, 0, "the deepest level has no children in this tileset");
-      } else {
-        assert.ok(tile.childAvailability > 0 && tile.childAvailability <= 15);
-      }
+      tiles += 1;
+      assert.equal(tile.childAvailability, 0, "no bit is set, at any level");
     }
   }
+  assert.ok(tiles > 0, "the fixture must actually plan tiles");
 });
 
 test("the mark resumes the walk exactly, and a drained walk is a clean no-op", async (t) => {

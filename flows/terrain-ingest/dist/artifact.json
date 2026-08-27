@@ -4,13 +4,14 @@
   "version": "0.1.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 16,
-  "edges": 30,
+  "nodes": 17,
+  "edges": 33,
   "triggers": 1,
   "capabilities": [
     "http",
     "storage_ingest",
-    "storage_query"
+    "storage_query",
+    "storage_write"
   ],
   "engineLinkage": "bridge",
   "dispatch": [
@@ -120,6 +121,13 @@
       "resolvedFromPluginFamily": null
     },
     {
+      "nodeId": "mark_write",
+      "pluginId": "com.digitalarsenal.hostcap.storage-write",
+      "methodId": "write_record",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
@@ -133,7 +141,7 @@
       "dependencyId": "com.digitalarsenal.data-source.terrain-ingest",
       "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
       "version": "0.1.0",
-      "sha256": "631dceddbf4f680895cd6268722511b9ab6d1d558aae3931525f890cd868f745",
+      "sha256": "dc1db41da21becdfe84a67c3c530e3a3933f6ef6febb2d23ed20d5e8ecdf98e9",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -180,7 +188,7 @@
       "dependencyId": "com.digitalarsenal.data-source.terrain-source",
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "version": "0.1.0",
-      "sha256": "f76c16dfee747b20015ba4de3328795fb9571f5db8a8a8695f2ae11a0e1f5f1f",
+      "sha256": "ef07e43f5920287dabcda39b3d95981f8bc6e134c8f51ee0d472a4e70c5466cd",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -204,6 +212,20 @@
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
       "methodSymbols": {
         "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-write",
+      "pluginId": "com.digitalarsenal.hostcap.storage-write",
+      "version": "0.1.0",
+      "sha256": "26c5237996008839d1cc77c1a587e165c99343f5c99097384c7671473d894bcd",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d7772697465_",
+      "methodSymbols": {
+        "write_record": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d7772697465_write_record"
       }
     }
   ]

@@ -145,19 +145,29 @@ test("the guest-link metadata declares single-thread", () => {
 // mark_query
 // ---------------------------------------------------------------------------
 
-test("mark_query emits {sql,params}, which is the only shape flatsql-query executes", async (t) => {
+test("mark_query reads $IRM through the CODE-NAMED view, which is the only relation a node has", async (t) => {
+  // The old default was `SELECT * FROM terrain_ingest_mark WHERE dataset_id = ?`,
+  // and it could never return a row: every embedded standard is served through
+  // a generated FlatSQL unified view named by its SDS CODE over _data/_rowid
+  // (owner law 2026-08-25), and `terrain_ingest_mark` is not an SDS code. So the
+  // mark read back NOTHING on any real node and every run restarted at cell 0 —
+  // silently, because an absent mark is a valid first run.
   const stub = createConfigStub();
   const harness = await createHarness(t, stub);
   const query = outputsByPort(await harness.invoke({ methodId: "mark_query", inputs: [tickInput()] })).get("query");
-  assert.match(query.sql, /^SELECT \* FROM terrain_ingest_mark WHERE dataset_id = \? LIMIT 1$/);
-  assert.deepEqual(query.params, [{ t: "str", v: "copernicus-glo30-quantized-mesh" }]);
+  assert.equal(query.sql, "SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?");
+  assert.deepEqual(query.params, [{ t: "i64", v: 32 }], "the newest few rows, so one relation can hold several lanes");
   assert.deepEqual(stub.calls, ["plugin.getConfig"]);
 });
 
-test("mark_query keys the mark on the CONFIGURED dataset", async (t) => {
-  const harness = await createHarness(t, createConfigStub({ dataset_id: "glo30-custom" }));
+test("mark_query's SQL and scan depth are configurable, and neither defaults to nothing", async (t) => {
+  const harness = await createHarness(
+    t,
+    createConfigStub({ mark_sql: "SELECT _data FROM IRM WHERE 1 ORDER BY _rowid DESC LIMIT ?", mark_scan_rows: 8 }),
+  );
   const query = outputsByPort(await harness.invoke({ methodId: "mark_query", inputs: [tickInput()] })).get("query");
-  assert.deepEqual(query.params, [{ t: "str", v: "glo30-custom" }]);
+  assert.equal(query.sql, "SELECT _data FROM IRM WHERE 1 ORDER BY _rowid DESC LIMIT ?");
+  assert.deepEqual(query.params, [{ t: "i64", v: 8 }]);
 });
 
 // ---------------------------------------------------------------------------

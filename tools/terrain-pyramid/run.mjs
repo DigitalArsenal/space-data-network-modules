@@ -20,8 +20,16 @@
 // a store directory of $DTT records, which is what the dataset-publication lane
 // takes (see PUBLISHING.md next to this file).
 //
+// EVERY CELL IS CUT TWICE. The flow runs in this Node process, so its wasm
+// executes in V8 whatever `runtimeTarget: "wasmedge"` declares; the same cell
+// is then re-cut under the PINNED NATIVE WasmEdge (AOT when the toolchain has
+// the compiler) and the two record streams compared byte for byte. A pyramid
+// whose bytes depend on the engine that cut them is not publishable, so a
+// divergence stops the run rather than warning.
+//
 //   node tools/terrain-pyramid/run.mjs --config <run.json> [--out <dir>] [--max-cells N]
 //   node tools/terrain-pyramid/run.mjs --config <run.json> --docker
+//   ... --no-wasmedge-verify   (states in the report that nothing checked the engine)
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -41,17 +49,126 @@ const decoder = new TextDecoder();
 
 // ── argv ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { maxCells: Infinity, docker: false };
+  const args = { maxCells: Infinity, docker: false, wasmedgeVerify: true };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === "--config") args.config = argv[++i];
     else if (flag === "--out") args.out = argv[++i];
     else if (flag === "--max-cells") args.maxCells = Number(argv[++i]);
     else if (flag === "--docker") args.docker = true;
+    else if (flag === "--no-wasmedge-verify") args.wasmedgeVerify = false;
     else throw new Error(`unknown argument ${flag}`);
   }
   if (!args.config) throw new Error("--config <run.json> is required");
   return args;
+}
+
+// ── THE ENGINE THE TILES ARE SERVED UNDER, EXECUTING THE TILES ─────────────
+//
+// The flow runs in this process, and this process is Node — so the compiled
+// runtime executes in V8 no matter what `runtimeTarget: "wasmedge"` declares
+// (that is a declaration gate, src/host/runtimeTargetGate.js; there is no
+// spawn in flowRuntimeHost.js). `--docker` changed the CPU target and not the
+// engine: node:22-bookworm is the same V8 on linux/amd64. So every $DTT byte a
+// pyramid published had been cut on ONE engine, and the engine host-01 serves
+// them under had never touched them.
+//
+// This closes that: every cell's `tile` invocation is re-executed under the
+// PINNED NATIVE WasmEdge on the parity artifact — the same module minus the
+// three host imports, proven equivalent by tests/parity-artifact.test.mjs —
+// and the emitted record stream is compared with the flow's, byte for byte. A
+// divergence stops the run; it is not a warning, because a pyramid whose bytes
+// depend on the engine that cut them is not publishable at all.
+async function createWasmEdgeVerifier(repo) {
+  const { spawn } = await import("node:child_process");
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const os = await import("node:os");
+  const sdk = path.join(REPO, "data-source", "terrain-source", "node_modules", "space-data-module-sdk");
+  const { encodePluginInvokeRequest, decodePluginInvokeResponse } = await import(
+    path.join(sdk, "src/invoke/index.js")
+  );
+  const { loadWasmEdgePin, assertWasmEdgeVersionMatchesPin } = await import(
+    path.join(sdk, "src/testing/parityHarness.js")
+  );
+  const { resolveWasmEdgeBinary } = await import(path.join(sdk, "src/testing/parityLanes.js"));
+  const { normalizeWasmEdgeOutcome } = await import(path.join(sdk, "src/testing/wasmedgeOutput.js"));
+
+  const pin = loadWasmEdgePin();
+  const binary = await resolveWasmEdgeBinary({});
+  const version = (await promisify(execFile)(binary, ["--version"])).stdout;
+  // Pin drift is a failure, never a warning: a pyramid verified against a
+  // different runtime than the fleet runs has been verified against nothing.
+  assertWasmEdgeVersionMatchesPin(version, pin, `native binary ${binary}`);
+
+  const parityWasm = path.join(repo, "data-source", "terrain-source", "dist", "parity", "module.wasm");
+  assert.ok(fs.existsSync(parityWasm), `build the parity artifact first: ${parityWasm}`);
+  const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-wasmedge-"));
+  fs.copyFileSync(parityWasm, path.join(workdir, "module.wasm"));
+
+  // AOT, when the pinned toolchain ships the compiler. Interpreted, a real
+  // granule decode costs ~60 s per cell and a regional pyramid would take
+  // hours, which is the sort of cost that gets a gate switched off. AOT is also
+  // CLOSER to the fleet, not further from it: host-01 prewarms its flows AOT.
+  // The compiled module is the same module — same wasm in, same semantics —
+  // and if the compiler is absent the interpreter is used and said so.
+  let moduleFile = "module.wasm";
+  let mode = "interpreted";
+  const compiler = path.join(path.dirname(binary), "wasmedgec");
+  if (fs.existsSync(compiler)) {
+    try {
+      await promisify(execFile)(compiler, ["module.wasm", "module-aot.wasm"], { cwd: workdir });
+      moduleFile = "module-aot.wasm";
+      mode = "AOT";
+    } catch {
+      // Fall through to the interpreter rather than skipping the check.
+    }
+  }
+
+  const run = (stdinBytes) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(binary, ["--enable-threads", moduleFile], {
+        cwd: workdir,
+        env: { PATH: process.env.PATH ?? "" },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      const out = [];
+      const err = [];
+      child.stdout.on("data", (c) => out.push(Buffer.from(c)));
+      child.stderr.on("data", (c) => err.push(Buffer.from(c)));
+      child.on("error", reject);
+      child.on("close", (code) =>
+        resolve({ code, stdout: new Uint8Array(Buffer.concat(out)), stderr: new Uint8Array(Buffer.concat(err)) }),
+      );
+      child.stdin.on("error", () => {});
+      child.stdin.end(Buffer.from(stdinBytes));
+    });
+
+  return {
+    version: `${version.trim().split("\n")[0]} (${mode})`,
+    binary,
+    async records(inputs) {
+      const request = encodePluginInvokeRequest({ methodId: "tile", inputs });
+      const outcome = await run(request);
+      // WasmEdge writes its own diagnostics to STDOUT; strip them before any
+      // guest byte is read.
+      const normalized = normalizeWasmEdgeOutcome(outcome);
+      if (outcome.code !== 0) {
+        throw new Error(
+          `wasmedge exited ${outcome.code} verifying a cell: ${Buffer.from(normalized.stderr).toString("utf8").slice(0, 400)}`,
+        );
+      }
+      const response = decodePluginInvokeResponse(normalized.stdout);
+      if (response.statusCode !== 0) {
+        throw new Error(`wasmedge tile refused: ${response.errorCode}: ${response.errorMessage}`);
+      }
+      const frame = response.outputs.find((o) => o.portId === "records");
+      return Buffer.from(frame ? frame.payload : new Uint8Array(0));
+    },
+    dispose() {
+      fs.rmSync(workdir, { recursive: true, force: true });
+    },
+  };
 }
 
 // ── the hostcall envelope (Go-host dialect; the compiled flow speaks it) ─────
@@ -109,12 +226,38 @@ class TileStore {
     this.bytes = fs.statSync(this.recordsPath).size;
     this.count = fs.readFileSync(this.indexPath, "utf8").split("\n").filter(Boolean).length;
   }
-  readMark() {
-    if (!fs.existsSync(this.markPath)) return null;
-    return JSON.parse(fs.readFileSync(this.markPath, "utf8"));
+  // ── THE RESUME MARK IS THE $IRM RECORD, NOT A SIDECAR ───────────────────
+  //
+  // This used to keep a resume-mark.json of its own and hand it back on the
+  // query op, which meant the runner SUBSTITUTED for the storage lane: the
+  // flow's durable-mark path — author an $IRM record, write it through
+  // storage.write, read it back through the code-named FlatSQL view — was
+  // never executed here, and the fact that the flow wrote no mark at all was
+  // invisible. The mark store is now the record store: `storage.write` files
+  // the record bytes and `storage.flatsql_query_stream` hands them back in the
+  // stream framing the connector delivers, newest first.
+  writeRecord(type, bytes) {
+    const file = path.join(this.dir, `${String(type).toLowerCase()}.records`);
+    const framed = Buffer.alloc(4 + bytes.length);
+    framed.writeUInt32LE(bytes.length, 0);
+    Buffer.from(bytes).copy(framed, 4);
+    fs.appendFileSync(file, framed);
   }
-  writeMark(mark) {
-    fs.writeFileSync(this.markPath, `${JSON.stringify(mark)}\n`);
+  // Newest first, size-prefixed — `ORDER BY _rowid DESC LIMIT n` over the
+  // code-named view, in the shape hostcap/flatsql-query's stream port emits.
+  readRecords(type, limit) {
+    const file = path.join(this.dir, `${String(type).toLowerCase()}.records`);
+    if (!fs.existsSync(file)) return Buffer.alloc(0);
+    const buf = fs.readFileSync(file);
+    const frames = [];
+    let offset = 0;
+    while (offset + 4 <= buf.length) {
+      const length = buf.readUInt32LE(offset);
+      if (length === 0 || offset + 4 + length > buf.length) break;
+      frames.push(buf.subarray(offset, offset + 4 + length));
+      offset += 4 + length;
+    }
+    return Buffer.concat(frames.reverse().slice(0, limit));
   }
   // The record stream arrives in the store's own framing: [u32 len][record].
   append(streamBytes) {
@@ -196,9 +339,32 @@ async function main() {
 
   if (args.docker) {
     const { spawnSync } = await import("node:child_process");
-    // The SAME law binaries are built under: linux/amd64, in the container,
-    // so the artifact and the run are reproducible off this laptop.
-    const image = runConfig.docker_image ?? "node:22-bookworm";
+    // The SAME law binaries are built under: linux/amd64, in the container, so
+    // the artifact and the run are reproducible off this laptop — AND with the
+    // pinned WasmEdge inside it, so the containerized run is authoritative for
+    // the ENGINE as well as the CPU target. `node:22-bookworm` alone was not:
+    // it is the same V8, and the engine host-01 serves these tiles under had
+    // never executed them.
+    const sdk = path.join(REPO, "data-source", "terrain-source", "node_modules", "space-data-module-sdk");
+    const { loadWasmEdgePin } = await import(path.join(sdk, "src/testing/parityHarness.js"));
+    const pin = loadWasmEdgePin();
+    const image = runConfig.docker_image ?? `spacedatanetwork/terrain-pyramid-builder:${pin.wasmedgeVersion}`;
+    const exists = spawnSync("docker", ["image", "inspect", image], { stdio: "ignore" });
+    if (exists.status !== 0) {
+      process.stdout.write(`building ${image} (WasmEdge ${pin.wasmedgeVersion})\n`);
+      const built = spawnSync(
+        "docker",
+        [
+          "build", "--platform", "linux/amd64",
+          "--build-arg", `WASMEDGE_VERSION=${pin.wasmedgeVersion}`,
+          "-t", image,
+          "-f", path.join(HERE, "Dockerfile"),
+          HERE,
+        ],
+        { stdio: "inherit" },
+      );
+      if (built.status !== 0) process.exit(built.status ?? 1);
+    }
     const result = spawnSync(
       "docker",
       [
@@ -210,6 +376,7 @@ async function main() {
         "node", "tools/terrain-pyramid/run.mjs",
         "--config", path.relative(REPO, path.resolve(args.config)),
         "--out", "/out",
+        ...(args.wasmedgeVerify ? [] : ["--no-wasmedge-verify"]),
         ...(Number.isFinite(args.maxCells) ? ["--max-cells", String(args.maxCells)] : []),
       ],
       { stdio: "inherit" },
@@ -228,6 +395,8 @@ async function main() {
     fetch404: 0,
     fetchBytes: 0,
     tiles: 0,
+    marksWritten: 0,
+    wasmedgeVerifiedCells: 0,
     oceanSkipped: 0,
     uniformMasks: 0,
     rasterMasks: 0,
@@ -238,6 +407,7 @@ async function main() {
   // ── the four host operations, and only those ─────────────────────────────
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
+  let lastCellRecords = Buffer.alloc(0);
   const pending = [];
 
   const imports = {
@@ -306,9 +476,30 @@ async function main() {
   pending.push({
     operation: "storage.flatsql_query_stream",
     matches: () => true,
-    respond: () => {
-      const mark = store.readMark();
-      return encodeEnvelope({ ok: true }, mark ? [encoder.encode(JSON.stringify(mark))] : []);
+    respond: (meta) => {
+      // The flow asks for `SELECT _data FROM IRM ORDER BY _rowid DESC LIMIT ?`.
+      // This host is not an engine, but it answers the SAME question over the
+      // same relation, in the same framing, newest first — so the read side
+      // under test here is the read side that runs on a node.
+      const limit = Number(meta?.params?.[0]?.v ?? meta?.params?.[0] ?? 32) || 32;
+      const stream = store.readRecords("IRM", limit);
+      return encodeEnvelope({ ok: true }, stream.length ? [new Uint8Array(stream)] : []);
+    },
+  });
+  pending.push({
+    operation: "storage.write",
+    matches: () => true,
+    respond: (meta) => {
+      // The hostcall contract is {schema, source?, data:base64} — `schema`, not
+      // `type`; a host that reads the wrong key refuses every write and the
+      // durable mark is never persisted even once.
+      const schema = String(meta?.schema ?? "");
+      if (!schema) return encodeEnvelope({ ok: false, message: "missing schema" });
+      const bytes = Buffer.from(String(meta?.data ?? ""), "base64");
+      if (bytes.length === 0) return encodeEnvelope({ ok: false, message: "empty record" });
+      store.writeRecord(schema, bytes);
+      stats.marksWritten += 1;
+      return encodeEnvelope({ ok: true, result: { ok: true, schema, bytes: bytes.length } });
     },
   });
   pending.push({
@@ -330,6 +521,9 @@ async function main() {
     operation: "storage.ingest_with_source",
     matches: () => true,
     respond: (meta, segments) => {
+      // Kept verbatim so the WasmEdge cross-check compares the bytes the flow
+      // ACTUALLY stored, not a re-encode of them.
+      lastCellRecords = Buffer.from(segments[0] ?? new Uint8Array(0));
       const added = store.append(segments[0] ?? new Uint8Array(0));
       const rows = [];
       for (const record of added) {
@@ -424,8 +618,18 @@ async function main() {
     });
     try {
       const inputs = [alignedFrame("tick", { firedAt: new Date().toISOString() })];
-      const mark = store.readMark();
-      if (mark) inputs.push(alignedFrame("mark", mark));
+      // The SAME durable mark the flow will read on its own pass — the $IRM
+      // record out of the store, in the stream framing the query connector
+      // delivers. Pass 1 and pass 2 must see one mark or the enumeration stops
+      // being the pure function of config-and-mark this runner rests on.
+      const mark = store.readRecords("IRM", 32);
+      if (mark.length) {
+        inputs.push({
+          portId: "mark",
+          typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: mark.length },
+          payload: new Uint8Array(mark),
+        });
+      }
       const result = await harness.invoke({ methodId: "granule_plan", inputs });
       if (result.statusCode !== 0) {
         throw new Error(`granule_plan refused: ${result.errorCode}: ${result.errorMessage}`);
@@ -465,7 +669,7 @@ async function main() {
       { maxIterations: 400 },
     );
     let stored = 0;
-    let markAdvanced = false;
+    let markJson = null;
     for (const text of observed) {
       let value;
       try {
@@ -474,14 +678,60 @@ async function main() {
         continue;
       }
       if (value.tilesEmitted !== undefined) stored += value.tilesEmitted;
-      if (value.next_tile_index !== undefined) {
-        // The mark is written FROM THE VERIFIED STORE RESULT, by the flow, and
-        // this host only persists what the flow decided.
-        store.writeMark(value);
-        markAdvanced = true;
+      // The operator-readable JSON mark, which the flow still lands on egress.
+      // It is NOT the durable one and it is not what advances the walk: the
+      // durable mark is the $IRM record the flow wrote through storage.write,
+      // and `marksWritten` below is the only evidence that happened.
+      if (value.next_tile_index !== undefined) markJson = value;
+    }
+    if (markJson) fs.writeFileSync(store.markPath, `${JSON.stringify(markJson)}\n`);
+    return { stored, markJson };
+  }
+
+  // The same `tile` invocation the flow performs, reassembled from the plan
+  // and the granule cache — the flow's own inputs, not a paraphrase of them.
+  function tileInputsFor(planned) {
+    const inputs = [
+      {
+        portId: "plan",
+        typeRef: {
+          wireFormat: "aligned-binary",
+          requiredAlignment: 1,
+          byteLength: encoder.encode(JSON.stringify(planned.plan)).length,
+        },
+        payload: encoder.encode(JSON.stringify(planned.plan)),
+      },
+    ];
+    for (let slot = 0; slot < 4; slot += 1) {
+      for (const [port, url] of [["dem", planned.urls[slot * 2]], ["water", planned.urls[slot * 2 + 1]]]) {
+        if (!fs.existsSync(statusPath(url))) continue;
+        const status = Number(fs.readFileSync(statusPath(url), "utf8"));
+        const body = fs.readFileSync(cachePath(url));
+        // hostcap/http-request responseWire "raw-body-v1": "$HRB", LE status,
+        // body verbatim — the frame the flow's http node hands the encoder.
+        const hrb = Buffer.alloc(8 + body.length);
+        hrb.write("$HRB", 0, "latin1");
+        hrb.writeUInt32LE(status, 4);
+        body.copy(hrb, 8);
+        inputs.push({
+          portId: port,
+          typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: hrb.length },
+          payload: new Uint8Array(hrb),
+        });
       }
     }
-    return { stored, markAdvanced };
+    return inputs;
+  }
+
+  let wasmedge = null;
+  if (args.wasmedgeVerify) {
+    wasmedge = await createWasmEdgeVerifier(REPO);
+    process.stdout.write(`wasmedge cross-check: ${wasmedge.version} (${wasmedge.binary})\n`);
+  } else {
+    process.stdout.write(
+      "wasmedge cross-check DISABLED: these tiles were cut on one engine and nothing has " +
+        "checked them against the one that serves them\n",
+    );
   }
 
   const started = Date.now();
@@ -492,15 +742,39 @@ async function main() {
     const planned = await planCell();
     if (!planned) break;
     await prefetch(planned.urls);
+    const marksBefore = stats.marksWritten;
     const built = await buildCell();
-    if (!built.markAdvanced) {
-      // Without a mark the next tick re-plans the SAME cell forever. Stopping
-      // loudly beats spinning: a build that cannot record where it got to has
-      // not built anything anyone can resume.
+    // THE DURABLE MARK IS THE TEST, not the egress frame. Without a mark IN THE
+    // STORE the next tick re-plans the SAME cell forever, and that is exactly
+    // the failure this runner used to hide by keeping its own resume-mark.json:
+    // the flow wrote no mark at all, and nothing said so.
+    if (stats.marksWritten === marksBefore) {
       stats.errors.push(
-        `cell ${planned.job.cell_index} stored ${built.stored} tiles but the resume mark did not advance`,
+        `cell ${planned.job.cell_index} stored ${built.stored} tiles but wrote NO durable $IRM ` +
+          "mark; the next tick would replan the same cell forever",
       );
       break;
+    }
+    if (!built.markJson) {
+      stats.errors.push(
+        `cell ${planned.job.cell_index} wrote a durable mark but no operator-readable mark on egress`,
+      );
+      break;
+    }
+    if (wasmedge) {
+      const underWasmEdge = await wasmedge.records(tileInputsFor(planned));
+      if (!underWasmEdge.equals(lastCellRecords)) {
+        stats.errors.push(
+          `cell ${planned.job.cell_index}: the record stream differs between engines — ` +
+            `V8 produced ${lastCellRecords.length} B (sha256 ` +
+            `${createHash("sha256").update(lastCellRecords).digest("hex").slice(0, 16)}), ` +
+            `WasmEdge produced ${underWasmEdge.length} B (sha256 ` +
+            `${createHash("sha256").update(underWasmEdge).digest("hex").slice(0, 16)}). ` +
+            "A pyramid whose bytes depend on the engine that cut them is not publishable.",
+        );
+        break;
+      }
+      stats.wasmedgeVerifiedCells += 1;
     }
     backlog = planned.backlog;
     stats.cells += 1;
@@ -533,6 +807,15 @@ async function main() {
     fetch404: stats.fetch404,
     fetchMiB: +(stats.fetchBytes / 1048576).toFixed(2),
     tiles: stats.tiles,
+    // Durable $IRM marks actually written through storage.write. One per cell
+    // is the contract; anything else means the resume lane is not closing.
+    durableMarksWritten: stats.marksWritten,
+    // Cells whose $DTT record stream was re-cut under the PINNED NATIVE
+    // WasmEdge and compared byte for byte with the V8 run. Equal to `cells`
+    // means every published byte is engine-independent; 0 means nothing checked
+    // the engine the fleet actually serves under.
+    wasmedgeVerifiedCells: stats.wasmedgeVerifiedCells,
+    wasmedgeRuntime: wasmedge ? wasmedge.version : null,
     storeBytes: store.bytes,
     storeMiB: +(store.bytes / 1048576).toFixed(2),
     tileBytesP50: pct(0.5),
@@ -544,6 +827,7 @@ async function main() {
     errors: stats.errors,
     cellsDetail: report,
   };
+  if (wasmedge) wasmedge.dispose();
   fs.writeFileSync(path.join(outDir, "run-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
   console.log(JSON.stringify(summary, null, 2));
 }

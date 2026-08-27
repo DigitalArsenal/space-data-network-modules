@@ -309,7 +309,7 @@ test("GET {z}/{x}/{y}.terrain serves the stored record bytes verbatim", async ()
   assert.ok(queryCall, "the tile path queries the record store");
   assert.equal(
     queryCall.meta.sql,
-    "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? ORDER BY rowid DESC LIMIT 1",
+    "SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = ? AND X = ? AND Y = ? ORDER BY _rowid DESC LIMIT 1",
   );
   assert.deepEqual(queryCall.meta.params, [
     { t: "str", v: "spaceaware-terrain" },

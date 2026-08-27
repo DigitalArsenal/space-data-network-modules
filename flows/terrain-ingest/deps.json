@@ -3,5 +3,6 @@
   "com.digitalarsenal.data-source.terrain-source": "../../data-source/terrain-source",
   "com.digitalarsenal.hostcap.http-request": "../../hostcap/http-request",
   "com.digitalarsenal.hostcap.flatsql-query": "../../hostcap/flatsql-query",
-  "com.digitalarsenal.hostcap.storage-ingest": "../../hostcap/storage-ingest"
+  "com.digitalarsenal.hostcap.storage-ingest": "../../hostcap/storage-ingest",
+  "com.digitalarsenal.hostcap.storage-write": "../../hostcap/storage-write"
 }
