@@ -1,0 +1,388 @@
+{
+  "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
+  "referencePostsPerTileEdge": 257,
+  "tilesCompared": 28,
+  "tilesWhereReferenceExceedsRecordBy5Percent": 7,
+  "worstRatio": 1.122,
+  "worstAt": "11/2139/1548",
+  "rows": [
+    {
+      "level": 8,
+      "address": "8/267/193",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 527.567,
+      "referenceM": 539.051,
+      "ratio": 1.022
+    },
+    {
+      "level": 8,
+      "address": "8/270/193",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 501.676,
+      "referenceM": 507.705,
+      "ratio": 1.012
+    },
+    {
+      "level": 8,
+      "address": "8/271/193",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 536.532,
+      "referenceM": 528.71,
+      "ratio": 0.985
+    },
+    {
+      "level": 8,
+      "address": "8/267/194",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 597.9,
+      "referenceM": 532.284,
+      "ratio": 0.89
+    },
+    {
+      "level": 8,
+      "address": "8/271/194",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 539.795,
+      "referenceM": 591.896,
+      "ratio": 1.097
+    },
+    {
+      "level": 8,
+      "address": "8/269/193",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 519.919,
+      "referenceM": 488.874,
+      "ratio": 0.94
+    },
+    {
+      "level": 8,
+      "address": "8/273/191",
+      "role": "lowest-relief control",
+      "referenceOutResolvesSource": false,
+      "recordM": 22.82,
+      "referenceM": 21.118,
+      "ratio": 0.925
+    },
+    {
+      "level": 9,
+      "address": "9/534/386",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 220.58,
+      "referenceM": 209.687,
+      "ratio": 0.951
+    },
+    {
+      "level": 9,
+      "address": "9/534/387",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 241.389,
+      "referenceM": 208.385,
+      "ratio": 0.863
+    },
+    {
+      "level": 9,
+      "address": "9/540/387",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 238.468,
+      "referenceM": 199.871,
+      "ratio": 0.838
+    },
+    {
+      "level": 9,
+      "address": "9/534/388",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 247.701,
+      "referenceM": 257.799,
+      "ratio": 1.041
+    },
+    {
+      "level": 9,
+      "address": "9/535/388",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 291.621,
+      "referenceM": 320.67,
+      "ratio": 1.1
+    },
+    {
+      "level": 9,
+      "address": "9/539/387",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 209.857,
+      "referenceM": 220.6,
+      "ratio": 1.051
+    },
+    {
+      "level": 9,
+      "address": "9/540/379",
+      "role": "lowest-relief control",
+      "referenceOutResolvesSource": false,
+      "recordM": 246.382,
+      "referenceM": 233.489,
+      "ratio": 0.948
+    },
+    {
+      "level": 10,
+      "address": "10/1070/777",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 192.027,
+      "referenceM": 189.278,
+      "ratio": 0.986
+    },
+    {
+      "level": 10,
+      "address": "10/1069/776",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 160.8,
+      "referenceM": 165.285,
+      "ratio": 1.028
+    },
+    {
+      "level": 10,
+      "address": "10/1080/775",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 111.786,
+      "referenceM": 109.888,
+      "ratio": 0.983
+    },
+    {
+      "level": 10,
+      "address": "10/1069/773",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 121.88,
+      "referenceM": 114.159,
+      "ratio": 0.937
+    },
+    {
+      "level": 10,
+      "address": "10/1070/776",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 117.517,
+      "referenceM": 123.594,
+      "ratio": 1.052
+    },
+    {
+      "level": 10,
+      "address": "10/1075/776",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 118.692,
+      "referenceM": 117.206,
+      "ratio": 0.987
+    },
+    {
+      "level": 10,
+      "address": "10/1080/756",
+      "role": "lowest-relief control",
+      "referenceOutResolvesSource": false,
+      "recordM": 84.373,
+      "referenceM": 84.218,
+      "ratio": 0.998
+    },
+    {
+      "level": 11,
+      "address": "11/2150/1552",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 61.165,
+      "referenceM": 62.971,
+      "ratio": 1.03
+    },
+    {
+      "level": 11,
+      "address": "11/2140/1552",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 73.194,
+      "referenceM": 82.021,
+      "ratio": 1.121
+    },
+    {
+      "level": 11,
+      "address": "11/2139/1548",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 75.001,
+      "referenceM": 84.151,
+      "ratio": 1.122
+    },
+    {
+      "level": 11,
+      "address": "11/2139/1549",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 72.945,
+      "referenceM": 74.267,
+      "ratio": 1.018
+    },
+    {
+      "level": 11,
+      "address": "11/2155/1551",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 48.479,
+      "referenceM": 45.907,
+      "ratio": 0.947
+    },
+    {
+      "level": 11,
+      "address": "11/2173/1555",
+      "role": "high-relief",
+      "referenceOutResolvesSource": false,
+      "recordM": 72.222,
+      "referenceM": 78.114,
+      "ratio": 1.082
+    },
+    {
+      "level": 11,
+      "address": "11/2166/1516",
+      "role": "lowest-relief control",
+      "referenceOutResolvesSource": false,
+      "recordM": 13.424,
+      "referenceM": 13.744,
+      "ratio": 1.024
+    },
+    {
+      "level": 12,
+      "address": "12/4323/3057",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 31.661,
+      "referenceM": 29.218,
+      "ratio": 0.923
+    },
+    {
+      "level": 12,
+      "address": "12/4310/3059",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 28.93,
+      "referenceM": 26.339,
+      "ratio": 0.91
+    },
+    {
+      "level": 12,
+      "address": "12/4307/3063",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 26.783,
+      "referenceM": 26.742,
+      "ratio": 0.998
+    },
+    {
+      "level": 12,
+      "address": "12/4310/3063",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 34.563,
+      "referenceM": 35.681,
+      "ratio": 1.032
+    },
+    {
+      "level": 12,
+      "address": "12/4323/3058",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 35.073,
+      "referenceM": 33.783,
+      "ratio": 0.963
+    },
+    {
+      "level": 12,
+      "address": "12/4306/3064",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 28.721,
+      "referenceM": 27.45,
+      "ratio": 0.956
+    },
+    {
+      "level": 12,
+      "address": "12/4300/3057",
+      "role": "lowest-relief control",
+      "referenceOutResolvesSource": true,
+      "recordM": 0.672,
+      "referenceM": 0.674,
+      "ratio": 1.004
+    },
+    {
+      "level": 13,
+      "address": "13/8614/6127",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 18.493,
+      "referenceM": 18.915,
+      "ratio": 1.023
+    },
+    {
+      "level": 13,
+      "address": "13/8646/6116",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 13.447,
+      "referenceM": 12.114,
+      "ratio": 0.901
+    },
+    {
+      "level": 13,
+      "address": "13/8647/6115",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 13.418,
+      "referenceM": 11.62,
+      "ratio": 0.866
+    },
+    {
+      "level": 13,
+      "address": "13/8621/6119",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 13.985,
+      "referenceM": 13.393,
+      "ratio": 0.958
+    },
+    {
+      "level": 13,
+      "address": "13/8621/6126",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 13.155,
+      "referenceM": 14.459,
+      "ratio": 1.099
+    },
+    {
+      "level": 13,
+      "address": "13/8614/6129",
+      "role": "high-relief",
+      "referenceOutResolvesSource": true,
+      "recordM": 13.998,
+      "referenceM": 14.356,
+      "ratio": 1.026
+    },
+    {
+      "level": 13,
+      "address": "13/8641/6101",
+      "role": "lowest-relief control",
+      "referenceOutResolvesSource": true,
+      "recordM": 0.418,
+      "referenceM": 0.443,
+      "ratio": 1.061
+    }
+  ]
+}

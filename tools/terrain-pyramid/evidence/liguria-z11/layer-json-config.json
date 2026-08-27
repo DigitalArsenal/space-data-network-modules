@@ -2,6 +2,7 @@
   "terrain_maxzoom": 13,
   "terrain_ocean_synth_min_level": 8,
   "terrain_mount_path": "/api/v1/terrain/",
+  "memory_pages": 384,
   "terrain_available": [
     [
       {

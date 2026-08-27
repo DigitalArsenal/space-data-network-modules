@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-27T04:50:28.603Z",
+  "generatedAt": "2026-08-27T06:17:15.960Z",
   "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
-  "elapsedMs": 209147,
+  "elapsedMs": 224468,
   "cells": 122,
   "fetches": 0,
   "fetch404": 0,
@@ -10,10 +10,10 @@
   "durableMarksWritten": 122,
   "wasmedgeVerifiedCells": 122,
   "wasmedgeRuntime": "/Users/tj/.wasmedge/bin/wasmedge version 0.16.4 (AOT)",
-  "storeBytes": 36585228,
-  "storeMiB": 34.89,
-  "tileBytesP50": 3441,
-  "tileBytesP99": 23809,
+  "storeBytes": 35795684,
+  "storeMiB": 34.14,
+  "tileBytesP50": 3636,
+  "tileBytesP99": 23655,
   "tileBytesMax": 25337,
   "uniformMasks": 2262,
   "rasterMasks": 2355,
@@ -21,7 +21,7 @@
   "encoderCounters": {
     "edgeClampedPosts": 0,
     "bandBridgedPosts": 0,
-    "tilesAtCeiling": 31,
+    "tilesAtCeiling": 34,
     "maskFromAbsenceSamples": 40464,
     "maskUnclassifiedSamples": 0
   },

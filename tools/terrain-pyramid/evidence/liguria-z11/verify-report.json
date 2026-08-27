@@ -2,7 +2,7 @@
   "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
   "tiles": 4617,
   "distinctAddresses": 4617,
-  "storeBytes": 36585228,
+  "storeBytes": 35795684,
   "levels": [
     8,
     9,
@@ -20,8 +20,8 @@
     "13": 1722
   },
   "payloadBytes": {
-    "p50": 3441,
-    "p99": 23809,
+    "p50": 3636,
+    "p99": 23655,
     "max": 25337,
     "bounds": {
       "p50": 10240,
@@ -34,14 +34,13 @@
   "uniformMaskRatio": 0.4899,
   "maskBytesStored": 848481,
   "oceanTilesStored": 0,
-  "flatAtZeroWithLandMask": 6,
+  "flatAtZeroWithLandMask": 4,
+  "flatAtZeroOverMeasuredRelief": 4,
   "flatAtZeroWithLandMaskExamples": [
-    "11/2160/1524: 180 land samples",
-    "13/8641/6101: 109 land samples",
-    "9/540/378: 14 land samples",
-    "9/540/379: 129 land samples",
-    "10/1080/756: 58 land samples",
-    "10/1079/757: 114 land samples"
+    "13/8641/6101: 109 land samples, states 0.418 m",
+    "9/540/378: 14 land samples, states 84.373 m",
+    "9/540/379: 129 land samples, states 246.382 m",
+    "10/1080/756: 58 land samples, states 84.373 m"
   ],
   "digestMismatches": 0,
   "tilesOverCeiling": 0,
@@ -67,7 +66,7 @@
       "level": 8,
       "errorTargetM": 602.09,
       "legacyBoundM": 301.04,
-      "worstMeasuredM": 601.876,
+      "worstMeasuredM": 600.427,
       "withinTarget": true,
       "withinLegacyBound": false,
       "tiles": 40,
@@ -80,12 +79,12 @@
       "level": 9,
       "errorTargetM": 301.04,
       "legacyBoundM": 150.52,
-      "worstMeasuredM": 384.343,
+      "worstMeasuredM": 394.708,
       "withinTarget": false,
       "withinLegacyBound": false,
       "tiles": 141,
-      "tilesAtCeiling": 3,
-      "atCeilingShare": 0.0213,
+      "tilesAtCeiling": 4,
+      "atCeilingShare": 0.0284,
       "ceilingShareGated": false,
       "withinCeilingShare": true
     },
@@ -93,12 +92,12 @@
       "level": 10,
       "errorTargetM": 150.52,
       "legacyBoundM": 75.26,
-      "worstMeasuredM": 225.212,
+      "worstMeasuredM": 240.536,
       "withinTarget": false,
       "withinLegacyBound": false,
       "tiles": 491,
-      "tilesAtCeiling": 8,
-      "atCeilingShare": 0.0163,
+      "tilesAtCeiling": 11,
+      "atCeilingShare": 0.0224,
       "ceilingShareGated": true,
       "withinCeilingShare": true
     },
@@ -110,8 +109,8 @@
       "withinTarget": false,
       "withinLegacyBound": false,
       "tiles": 1776,
-      "tilesAtCeiling": 20,
-      "atCeilingShare": 0.0113,
+      "tilesAtCeiling": 19,
+      "atCeilingShare": 0.0107,
       "ceilingShareGated": true,
       "withinCeilingShare": true
     },
@@ -119,7 +118,7 @@
       "level": 12,
       "errorTargetM": 37.63,
       "legacyBoundM": 18.82,
-      "worstMeasuredM": 37.567,
+      "worstMeasuredM": 37.598,
       "withinTarget": true,
       "withinLegacyBound": false,
       "tiles": 447,
@@ -143,11 +142,17 @@
     }
   ],
   "tilesStatingMeasuredAccuracy": 4617,
-  "tilesAtCeiling": 31,
+  "tilesAtCeiling": 34,
   "atCeilingExamples": [
     {
+      "address": "9/535/387",
+      "statedAccuracyM": 304.258,
+      "targetM": 301.04,
+      "payloadBytes": 24198
+    },
+    {
       "address": "9/536/389",
-      "statedAccuracyM": 320.179,
+      "statedAccuracyM": 394.708,
       "targetM": 301.04,
       "payloadBytes": 23704
     },
@@ -159,39 +164,57 @@
     },
     {
       "address": "9/545/388",
-      "statedAccuracyM": 318.733,
+      "statedAccuracyM": 314.765,
       "targetM": 301.04,
       "payloadBytes": 24023
     },
     {
-      "address": "10/1084/773",
-      "statedAccuracyM": 153.884,
-      "targetM": 150.52,
-      "payloadBytes": 23426
-    },
-    {
       "address": "10/1069/776",
-      "statedAccuracyM": 166.317,
+      "statedAccuracyM": 160.8,
       "targetM": 150.52,
       "payloadBytes": 22800
     },
     {
+      "address": "10/1070/777",
+      "statedAccuracyM": 192.027,
+      "targetM": 150.52,
+      "payloadBytes": 23056
+    },
+    {
       "address": "10/1072/778",
-      "statedAccuracyM": 169.663,
+      "statedAccuracyM": 240.536,
       "targetM": 150.52,
       "payloadBytes": 23177
     },
     {
+      "address": "10/1074/778",
+      "statedAccuracyM": 194.204,
+      "targetM": 150.52,
+      "payloadBytes": 23532
+    },
+    {
+      "address": "10/1075/778",
+      "statedAccuracyM": 194.204,
+      "targetM": 150.52,
+      "payloadBytes": 23577
+    },
+    {
       "address": "10/1073/779",
-      "statedAccuracyM": 172.273,
+      "statedAccuracyM": 170.544,
       "targetM": 150.52,
       "payloadBytes": 23495
     },
     {
-      "address": "10/1074/779",
-      "statedAccuracyM": 154.202,
+      "address": "10/1075/779",
+      "statedAccuracyM": 153.05,
       "targetM": 150.52,
-      "payloadBytes": 23553
+      "payloadBytes": 23591
+    },
+    {
+      "address": "10/1076/776",
+      "statedAccuracyM": 157.356,
+      "targetM": 150.52,
+      "payloadBytes": 23557
     },
     {
       "address": "10/1092/775",
@@ -200,10 +223,10 @@
       "payloadBytes": 23613
     },
     {
-      "address": "10/1091/776",
-      "statedAccuracyM": 168.936,
+      "address": "10/1090/777",
+      "statedAccuracyM": 160.096,
       "targetM": 150.52,
-      "payloadBytes": 23655
+      "payloadBytes": 23270
     },
     {
       "address": "10/1091/777",
@@ -213,33 +236,9 @@
     },
     {
       "address": "11/2170/1544",
-      "statedAccuracyM": 79.786,
+      "statedAccuracyM": 85.707,
       "targetM": 75.26,
       "payloadBytes": 13949
-    },
-    {
-      "address": "11/2169/1546",
-      "statedAccuracyM": 76.985,
-      "targetM": 75.26,
-      "payloadBytes": 22591
-    },
-    {
-      "address": "11/2145/1550",
-      "statedAccuracyM": 79.274,
-      "targetM": 75.26,
-      "payloadBytes": 22482
-    },
-    {
-      "address": "11/2146/1550",
-      "statedAccuracyM": 91.215,
-      "targetM": 75.26,
-      "payloadBytes": 22615
-    },
-    {
-      "address": "11/2148/1556",
-      "statedAccuracyM": 75.595,
-      "targetM": 75.26,
-      "payloadBytes": 22654
     }
   ],
   "ceilingShareBound": {
@@ -262,14 +261,66 @@
   ],
   "worstSharedEdgeDeltaM": 0.111445,
   "worstSharedEdgeAt": "9/534/386 north vs 9/534/387 south shared post 67/108",
-  "mixedDensityAdjacencies": 4423,
+  "mixedDensityAdjacencies": 4408,
   "worstDensityStepCrackM": {
-    "8": 1452.583,
-    "9": 540.577,
-    "10": 282.187,
-    "11": 207.466,
-    "12": 70.819,
-    "13": 41.005
+    "8": 550.189,
+    "9": 290.329,
+    "10": 138.918,
+    "11": 75.158,
+    "12": 35.864,
+    "13": 17.816
+  },
+  "densityStepCrackVsSkirt": [
+    {
+      "level": 8,
+      "worstCrackM": 550.189,
+      "skirtHeightM": 1505.221,
+      "hiddenBySkirt": true,
+      "worstAt": "8/272/193 east (grid 73) vs 8/273/193 west (grid 109)"
+    },
+    {
+      "level": 9,
+      "worstCrackM": 290.329,
+      "skirtHeightM": 752.611,
+      "hiddenBySkirt": true,
+      "worstAt": "9/536/382 east (grid 28) vs 9/537/382 west (grid 55)"
+    },
+    {
+      "level": 10,
+      "worstCrackM": 138.918,
+      "skirtHeightM": 376.305,
+      "hiddenBySkirt": true,
+      "worstAt": "10/1090/763 north (grid 55) vs 10/1090/764 south (grid 5)"
+    },
+    {
+      "level": 11,
+      "worstCrackM": 75.158,
+      "skirtHeightM": 188.153,
+      "hiddenBySkirt": true,
+      "worstAt": "11/2172/1529 north (grid 55) vs 11/2172/1530 south (grid 13)"
+    },
+    {
+      "level": 12,
+      "worstCrackM": 35.864,
+      "skirtHeightM": 94.076,
+      "hiddenBySkirt": true,
+      "worstAt": "12/4314/3069 north (grid 25) vs 12/4314/3070 south (grid 7)"
+    },
+    {
+      "level": 13,
+      "worstCrackM": 17.816,
+      "skirtHeightM": 47.038,
+      "hiddenBySkirt": true,
+      "worstAt": "13/8623/6143 east (grid 25) vs 13/8624/6143 west (grid 5)"
+    }
+  ],
+  "servingMemory": {
+    "availabilityIndexBytes": 10219,
+    "memoryPages": 384,
+    "memoryMiB": 24,
+    "hostDefaultPages": 1024,
+    "poolMiBAtFourInstances": 96,
+    "mustBeConfigured": false
   },
   "layerJson": {
     "maxzoom": 13,
@@ -1474,7 +1525,7 @@
   "encoderCounters": {
     "edgeClampedPosts": 0,
     "bandBridgedPosts": 0,
-    "tilesAtCeiling": 31,
+    "tilesAtCeiling": 34,
     "maskFromAbsenceSamples": 40464,
     "maskUnclassifiedSamples": 0
   },
