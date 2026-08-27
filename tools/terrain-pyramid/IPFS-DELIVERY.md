@@ -194,6 +194,33 @@ not.
 
 ## The catalogue endpoint: how a client resolves the CID
 
+The mount answers the epoch question at three paths, in two shapes:
+
+| path | shape | who reads it |
+| --- | --- | --- |
+| `/api/v1/terrain/tileset.json` | the **$DTT catalogue record**, IDL-exact keys | **the clients** — they pull `PAYLOAD.CID` |
+| `/api/v1/terrain/` | the camelCase discovery document | anything wanting the serving hints in one fetch |
+| `/api/v1/terrain/catalogue.json` | identical to the root, under a filename | caches and clients preferring a named document |
+
+`tileset.json` is the one that matters, and it is the record form — the SAME
+projection this builder writes to `tileset-catalogue.json` and publishes
+through the dataset lane, so the document a client reads off the mount and the
+record the dataset lane carries are the same fields under the same names.
+
+**This nearly shipped broken.** The module served the epoch only at the root
+and `catalogue.json`, in camelCase; the console fetches `tileset.json` and
+reads `PAYLOAD.CID`. Against the real node that fetch fell through to the tile
+parser and 404'd, so the console would have reported "terrain catalogue
+answered HTTP 404", kept the ellipsoid by its never-halt rule and rendered no
+terrain at all — while every tile under `/ipfs/` answered perfectly and every
+test on both sides stayed green, because the console was verified against its
+own `terrain-node.mjs` stand-in and the module against its own fixtures. The
+two lanes met nowhere until a live node. `tests/catalogue.test.mjs` now
+transcribes the console's actual CID reader and asserts it resolves the epoch
+from this endpoint, and the flow suite asserts the same through the compiled
+artifact the host mounts.
+
+
 `GET <node>/api/v1/terrain/` (and `/api/v1/terrain/catalogue.json`) answers:
 
 ```json

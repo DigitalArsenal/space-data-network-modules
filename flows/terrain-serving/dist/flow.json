@@ -144,6 +144,30 @@
         }
       },
       {
+        "path": "/tileset.json",
+        "method": "GET",
+        "operationId": "getTerrainTilesetRecord",
+        "summary": "The current tileset epoch as a $DTT record",
+        "description": "The durable form of the same answer the mount root gives, as a $DTT catalogue record with IDL-EXACT keys - the identical projection the off-fleet builder writes to tileset-catalogue.json and publishes through the dataset lane. PAYLOAD.CID names the content-addressed directory the tiles live in; PAYLOAD.MEDIA_TYPE (application/vnd.ipld.dag-pb) is the discriminator against a TILE record, whose payload is one mesh. THIS is the path the clients read: they pull PAYLOAD.CID and refuse anything that is not a syntactically valid CID. A node serving no IPFS tileset answers a truthful record with no PAYLOAD, and a client keeps its ellipsoid rather than fetching an invented address.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The $DTT tileset catalogue record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "$DTT rendered as JSON, IDL-exact keys: TILESET_ID, TILING_SCHEME, PAYLOAD{CID,SIZE_BYTES,MEDIA_TYPE}, MAX_LEVEL, PROVENANCE."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          }
+        }
+      },
+      {
         "path": "/catalogue.json",
         "method": "GET",
         "operationId": "getTerrainCatalogueJson",

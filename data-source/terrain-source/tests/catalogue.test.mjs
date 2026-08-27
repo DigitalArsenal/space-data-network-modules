@@ -233,3 +233,130 @@ test("the default tiles template is unchanged for a mount-served tileset", async
   const doc = JSON.parse(decoder.decode(http.body));
   assert.deepEqual(doc.tiles, ["{z}/{x}/{y}.terrain?v={version}"]);
 });
+
+// ---------------------------------------------------------------------------
+// /tileset.json — THE PATH AND SHAPE THE CLIENTS ACTUALLY READ.
+//
+// The console resolves the epoch by fetching <node>/api/v1/terrain/tileset.json
+// and pulling PAYLOAD.CID from it: a $DTT field, IDL-exact, not a camelCase
+// alias. Serving the discovery document only at the mount root and
+// catalogue.json left that fetch falling through to the tile parser as a 404 —
+// the console reports "terrain catalogue answered HTTP 404", keeps the
+// ellipsoid by its never-halt rule, and renders no terrain, while every tile
+// under /ipfs/ answers perfectly. Both sides were green against their own
+// fixtures and incompatible only where they meet.
+//
+// These tests are that meeting point, written from the CLIENT's reader:
+// globeSurfaces.ts pulls PAYLOAD.CID (or TILESET.PAYLOAD.CID) and refuses any
+// value that is not a syntactically valid CID.
+// ---------------------------------------------------------------------------
+
+// The client's own CID grammar (globeSurfaces.ts): CIDv0 base58btc or CIDv1
+// base32. A value that is not one is refused rather than pasted into a URL.
+const CLIENT_CID_PATTERN = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,})$/;
+
+test("/tileset.json answers the $DTT catalogue record, with IDL-exact keys", async (t) => {
+  const { http, headerOf, body } = await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS);
+  assert.equal(http.status, 200);
+  assert.equal(headerOf("content-type"), "application/json");
+  assert.equal(headerOf("cache-control"), "public, max-age=60");
+  assert.equal(headerOf("access-control-allow-origin"), "*");
+
+  const record = body();
+  // IDL-exact keys (Themis): a $DTT rendered as JSON never takes camelCase.
+  assert.equal(record.TILESET_ID, "spaceaware-terrain");
+  assert.equal(record.TILING_SCHEME, "GEOGRAPHIC_WGS84");
+  assert.equal(record.PAYLOAD_FORMAT, "QUANTIZED_MESH");
+  assert.equal(record.PAYLOAD_FORMAT_VERSION, "1.0");
+  assert.equal(record.MAX_LEVEL, 13);
+  assert.equal(record.ROW_ORIGIN_NORTH, false);
+  // The discriminator against a TILE record is the payload's media type: a
+  // tile is one mesh, the catalogue is the DIRECTORY the tiles live in.
+  assert.equal(record.PAYLOAD.MEDIA_TYPE, "application/vnd.ipld.dag-pb");
+  assert.equal(record.PROVENANCE.DATASET_EPOCH, "2023-04-01T00:00:00.000Z");
+  assert.equal(record.PROVENANCE.ATTRIBUTION, "Copernicus DEM");
+  // No camelCase alias leaks into the record form.
+  assert.equal(record.cid, undefined);
+  assert.equal(record.terrainBasePath, undefined);
+});
+
+test("THE CLIENT'S READER finds the CID in it", async (t) => {
+  const { body } = await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS);
+  const record = body();
+  // Exactly what globeSurfaces.ts does, transcribed.
+  const readTilesetCid = (node) => {
+    const payload = node?.PAYLOAD;
+    if (typeof payload?.CID === "string" && CLIENT_CID_PATTERN.test(payload.CID)) return payload.CID;
+    const wrapped = node?.TILESET?.PAYLOAD;
+    if (typeof wrapped?.CID === "string" && CLIENT_CID_PATTERN.test(wrapped.CID)) return wrapped.CID;
+    return null;
+  };
+  assert.equal(readTilesetCid(record), CID, "the console must resolve the epoch from this document");
+});
+
+test("a revalidation of the record is a 304", async (t) => {
+  const first = await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS);
+  const etag = first.headerOf("etag");
+  assert.ok(etag && !etag.startsWith("W/"), `a strong ETag, got ${etag}`);
+  const second = await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS, {
+    "if-none-match": etag,
+  });
+  assert.equal(second.http.status, 304);
+});
+
+test("the record moves when the epoch does", async (t) => {
+  const other = "bafybeidr3l5zoi6gxui3vuuvfc5sadl3zlkotonukuxysw7fws54s2npmy";
+  const a = await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS);
+  const b = await get(t, "/api/v1/terrain/tileset.json", {
+    ...OVER_IPFS,
+    terrain_tileset_cid: other,
+  });
+  assert.equal(a.body().PAYLOAD.CID, CID);
+  assert.equal(b.body().PAYLOAD.CID, other);
+  assert.notEqual(a.headerOf("etag"), b.headerOf("etag"));
+});
+
+test("a node with NO CID answers a truthful record carrying no PAYLOAD", async (t) => {
+  // Not an error: this node is not serving an IPFS tileset. The client finds
+  // no PAYLOAD.CID, says so, and keeps its ellipsoid — the correct outcome,
+  // and never a CID invented to make a fetch succeed.
+  const { http, body } = await get(t, "/api/v1/terrain/tileset.json", BASE);
+  assert.equal(http.status, 200);
+  const record = body();
+  assert.equal(record.PAYLOAD, undefined);
+  assert.equal(record.TILESET_ID, "spaceaware-terrain");
+});
+
+test("PROVENANCE carries only what the mount was TOLD", async (t) => {
+  // A lineage field invented by the mount would be a claim about a dataset
+  // this module never read.
+  const { body } = await get(t, "/api/v1/terrain/tileset.json", {
+    ...OVER_IPFS,
+    terrain_dataset_id: "copernicus-glo30-quantized-mesh",
+    terrain_dataset_name: "copernicus-glo30",
+    terrain_license: "Copernicus DEM: ESA / Airbus Defence and Space (free licence)",
+    terrain_license_url: "https://spacedata.copernicus.eu/",
+  });
+  const prov = body().PROVENANCE;
+  assert.equal(prov.DATASET_ID, "copernicus-glo30-quantized-mesh");
+  assert.equal(prov.DATASET_NAME, "copernicus-glo30");
+  assert.equal(prov.LICENSE, "Copernicus DEM: ESA / Airbus Defence and Space (free licence)");
+  assert.equal(prov.LICENSE_URL, "https://spacedata.copernicus.eu/");
+  assert.equal(prov.DATASET_CID, CID);
+
+  const bare = (await get(t, "/api/v1/terrain/tileset.json", OVER_IPFS)).body().PROVENANCE;
+  assert.equal(bare.DATASET_ID, undefined);
+  assert.equal(bare.LICENSE, undefined, "no licence is invented when none is configured");
+});
+
+test("tileset.json does not shadow layer.json or the camelCase catalogue", async (t) => {
+  // layer.json leaves through the layer_plan port, not `response`, so the
+  // helper failing to find a direct response IS the evidence the route still
+  // belongs to it and tileset.json did not swallow it.
+  const layer = await get(t, "/api/v1/terrain/layer.json", OVER_IPFS).catch(() => null);
+  assert.equal(layer, null, "layer.json must still be planned, not answered here");
+  const cat = await get(t, "/api/v1/terrain/catalogue.json", OVER_IPFS);
+  assert.equal(cat.http.status, 200);
+  assert.equal(cat.body().cid, CID, "the camelCase document is unchanged");
+  assert.equal(cat.body().delivery, "ipfs");
+});

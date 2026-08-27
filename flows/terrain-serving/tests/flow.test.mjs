@@ -541,3 +541,23 @@ test("EVERY path the module answers is a DECLARED route, so the host admits it a
     assert.ok(anonymous(path), `${path} must be anonymous by DECLARATION, not by allowlist`);
   }
 });
+
+test("THE CLIENT'S PATH: /tileset.json names the CID through the COMPILED flow", async () => {
+  // The console fetches exactly this path off the live node and reads
+  // PAYLOAD.CID. It is asserted here against the SAME artifact the Go host
+  // mounts, because both lanes were green against their own fixtures and the
+  // only place they disagreed was where they meet.
+  const stub = createStub({ config: IPFS_CONFIG });
+  const http = await pumpRequest(stub, { method: "GET", path: "/api/v1/terrain/tileset.json" });
+  assert.equal(http.status, 200);
+  assert.equal(header(http, "content-type"), "application/json");
+  assert.equal(header(http, "access-control-allow-origin"), "*");
+
+  const record = JSON.parse(decoder.decode(Uint8Array.from(http.body)));
+  const cidPattern = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,})$/;
+  assert.ok(cidPattern.test(record.PAYLOAD.CID), "a CID the client's grammar accepts");
+  assert.equal(record.PAYLOAD.CID, IPFS_CONFIG.terrain_tileset_cid);
+  assert.equal(record.PAYLOAD.MEDIA_TYPE, "application/vnd.ipld.dag-pb");
+  assert.equal(record.TILESET_ID, "spaceaware-terrain");
+  assert.equal(record.MAX_LEVEL, IPFS_CONFIG.terrain_maxzoom);
+});

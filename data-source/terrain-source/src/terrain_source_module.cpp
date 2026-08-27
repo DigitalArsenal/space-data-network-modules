@@ -2431,6 +2431,14 @@ struct ServingConfig {
     std::string dataset_epoch;
     std::string attribution;
     long maxzoom = 0;
+    // The $DTT catalogue projection's provenance fields. Optional: a mount
+    // that configures none still answers a truthful record, it just carries
+    // less lineage than the builder's own tileset-catalogue.json.
+    double tileset_size_bytes = 0;  // 0 = not configured, PAYLOAD.SIZE_BYTES omitted
+    std::string dataset_id;
+    std::string dataset_name;
+    std::string license;
+    std::string license_url;
 };
 
 ServingConfig build_serving_config(const std::string& config) {
@@ -2475,6 +2483,11 @@ ServingConfig build_serving_config(const std::string& config) {
     sc.dataset_epoch = json_string(config, "terrain_dataset_epoch", "");
     sc.attribution = json_string(config, "terrain_attribution", "");
     sc.maxzoom = maxzoom;
+    sc.tileset_size_bytes = json_number(config, "terrain_tileset_size_bytes", 0);
+    sc.dataset_id = json_string(config, "terrain_dataset_id", "");
+    sc.dataset_name = json_string(config, "terrain_dataset_name", "");
+    sc.license = json_string(config, "terrain_license", "");
+    sc.license_url = json_string(config, "terrain_license_url", "");
 
     sc.ocean_synth_min_level = json_number(config, "terrain_ocean_synth_min_level", -1);
     const double synth = json_number(config, "terrain_synth_grid_size", 65);
@@ -3730,6 +3743,90 @@ int route(void) {
     // lane, and the whole cutover to a new epoch is a client noticing it
     // changed. A minute bounds that; the strong ETag makes every revalidation
     // after the first a 304.
+    // ── THE SAME EPOCH AS A $DTT RECORD: /tileset.json ─────────────────────
+    //
+    // The camelCase document below is an API convenience. THIS is the durable
+    // form: the tileset epoch as a $DTT catalogue record, IDL-EXACT KEYS, the
+    // same projection the builder writes to `tileset-catalogue.json` and the
+    // dataset lane publishes (tools/terrain-pyramid/IPFS-DELIVERY.md holds the
+    // field mapping, ratified by Themis — it mints nothing, every field is a
+    // $DTT field carrying what schema/DTT/main.fbs says it carries).
+    //
+    // It exists as its own path because the CLIENTS READ THIS ONE. The console
+    // resolves the epoch by fetching `<node>/api/v1/terrain/tileset.json` and
+    // pulling `PAYLOAD.CID` out of it — a $DTT field, not a camelCase alias —
+    // and refuses anything that is not a syntactically valid CID. Serving the
+    // discovery document only under `catalogue.json`, as this module did
+    // first, left that fetch answering 404 through the tile parser: the
+    // console would report "terrain catalogue answered HTTP 404", keep the
+    // ellipsoid by its never-halt rule, and render no terrain at all — while
+    // every tile under `/ipfs/` kept answering perfectly. Both sides were
+    // green against their own fixtures (the console against its local
+    // `terrain-node.mjs` stand-in, this module against its own tests) and
+    // incompatible only where they meet, which is the one place neither
+    // lane's tests looked.
+    //
+    // The discriminator against a TILE record is `PAYLOAD.MEDIA_TYPE`: a tile
+    // carries one mesh (`application/vnd.quantized-mesh`), the catalogue
+    // carries the DIRECTORY those tiles live in (`application/vnd.ipld.dag-pb`).
+    // `LEVEL`/`X`/`Y` are 0 and are NOT the discriminator — the builder stores
+    // nothing at level 0, so the address is free, but a reader must key on the
+    // media type.
+    //
+    // A node with no CID configured answers a truthful record with no PAYLOAD.
+    // A client then finds no `PAYLOAD.CID`, says so, and keeps its ellipsoid —
+    // which is the correct outcome for a node that is not serving an IPFS
+    // tileset, and is exactly what a development node without a daemon is.
+    if (rest == "tileset.json") {
+        const bool over_ipfs = !cfg.tileset_cid.empty();
+        std::string body =
+            std::string("{\"TILESET_ID\":\"") + json_escape(cfg.tileset_id) + "\"" +
+            ",\"TILESET_NAME\":\"" + json_escape(cfg.tileset_id) + "\"" +
+            ",\"TILING_SCHEME\":\"GEOGRAPHIC_WGS84\"" +
+            ",\"LEVEL\":0,\"X\":0,\"Y\":0,\"ROW_ORIGIN_NORTH\":false" +
+            ",\"WEST_DEG\":-180,\"SOUTH_DEG\":-90,\"EAST_DEG\":180,\"NORTH_DEG\":90" +
+            ",\"PAYLOAD_FORMAT\":\"QUANTIZED_MESH\",\"PAYLOAD_FORMAT_VERSION\":\"1.0\"";
+        if (over_ipfs) {
+            body += ",\"PAYLOAD\":{\"CID\":\"" + json_escape(cfg.tileset_cid) + "\"";
+            if (cfg.tileset_size_bytes > 0) {
+                body += ",\"SIZE_BYTES\":" +
+                        std::to_string(static_cast<long long>(cfg.tileset_size_bytes));
+            }
+            body += ",\"MEDIA_TYPE\":\"application/vnd.ipld.dag-pb\"}";
+        }
+        body += ",\"MAX_LEVEL\":" + std::to_string(cfg.maxzoom) +
+                ",\"WATER_MASK_KIND\":\"NONE\"";
+        // PROVENANCE carries only what the mount was actually told. A lineage
+        // field invented here would be a claim about a dataset this module
+        // never read.
+        std::string prov;
+        const auto add_prov = [&prov](const char* key, const std::string& value) {
+            if (value.empty()) return;
+            if (!prov.empty()) prov += ",";
+            prov += std::string("\"") + key + "\":\"" + json_escape(value) + "\"";
+        };
+        add_prov("DATASET_ID", cfg.dataset_id);
+        add_prov("DATASET_NAME", cfg.dataset_name);
+        add_prov("DATASET_EPOCH", cfg.dataset_epoch);
+        add_prov("LICENSE", cfg.license);
+        add_prov("LICENSE_URL", cfg.license_url);
+        add_prov("ATTRIBUTION", cfg.attribution);
+        if (over_ipfs) add_prov("DATASET_CID", cfg.tileset_cid);
+        if (!prov.empty()) body += ",\"PROVENANCE\":{" + prov + "}";
+        body += "}";
+        const std::string etag =
+            "\"" + sha256_multihash(std::vector<uint8_t>(body.begin(), body.end())) + "\"";
+        std::vector<HeaderEntry> headers = {{"content-type", "application/json"},
+                                            {"cache-control", "public, max-age=60"},
+                                            {"etag", etag},
+                                            {"access-control-allow-origin", "*"}};
+        if (!if_none_match.empty() && if_none_match == etag) {
+            return push_htr(304, headers, nullptr, 0);
+        }
+        return push_htr(200, headers, reinterpret_cast<const uint8_t*>(body.data()),
+                        body.size());
+    }
+
     if (rest.empty() || rest == "catalogue.json") {
         const bool over_ipfs = !cfg.tileset_cid.empty();
         const std::string base =
