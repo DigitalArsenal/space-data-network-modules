@@ -881,12 +881,60 @@ constexpr double kTileLatClamp = 85.05112878;
 // This is the client's TILE_INDEX_EPSILON verbatim (cellularTileStream.js).
 constexpr double kTileIndexEpsilon = 1e-9;
 
-// The tile lane's own default query. Same posture as `cell_cache_sql`: node
-// CONFIG, not a compiled-in constant, so an operator with a spatial index can
-// push the bbox into SQL without a rebuild. The default reads the rows the
-// cellular ingest lane's storage writes land in and bounds the scan.
+// THE TILE READ IS SCOPED TO THE TILE, AND BOUNDED BY WHAT THE GUEST CAN HOLD.
+//
+// It used to be neither, and that is why the whole lane served 502.
+// `cell_tile_sql` defaulted to an UNSCOPED `SELECT _data FROM TBS ORDER BY
+// _rowid DESC LIMIT ?` at cell_tile_max_rows = 100000, so EVERY tile request —
+// a z=10 tile with three sites in it included — asked the engine to
+// materialize up to 100,000 whole $TBS records inside the mount's linear
+// memory. MEASURED on host-01 2026-08-27 (flows.mounts[].memory_pages 2048 =
+// 128 MiB, TBS hot window 400,000 records): WasmEdge refused the grow
+//   [error] Memory Instance: Memory grow page failed, exceeded limited 2048
+//   page size in configuration
+// one millisecond before the mount reported
+//   GET /api/v1/cellular/tiles/0/0/0 produced no HTTP response — nodes ran:
+//   cache_plan x1 last_status=0; tile_plan x1 last_status=0; never reached:
+//   ... tile_rows, tile_mark, tile, ... respond, egress
+// `tile_rows` reads as NEVER REACHED because the compiled runtime increments a
+// node's invocation count AFTER its entry returns, so a node that dies inside
+// its own hostcall is never counted — the read did run, it just could not land.
+// Reproduced on the Go host at 13,000 rows / 128 pages with a byte-identical
+// digest (graph sdn-cellular-tile-lane-stalls-after-tile-plan).
+//
+// THE BBOX IS A PREFILTER, NEVER THE MEMBERSHIP TEST. Tile membership is still
+// re-derived per point in `tile` with the client's own index math and the same
+// 1e-9 epsilon (property 2 of the tile contract), so the SQL only has to be a
+// SUPERSET of the tile — which a latitude/longitude rectangle over the tile's
+// own bounds always is. Nothing about seam ownership moves into SQL.
+//
+// LATITUDE and LONGITUDE are engine COLUMNS: the store projects each routed
+// standard's declared IDL fields as columns of its relation (TBS.fbs declares
+// LATITUDE:double, LONGITUDE:double), so the predicate binds against the
+// standard, not against a bespoke index some operator may or may not have.
+constexpr const char* kDefaultTileRelation = "TBS";
+
+// The tile lane's own default query, kept as an operator ESCAPE HATCH. When
+// `cell_tile_sql` is set the statement is used verbatim with the row budget as
+// its single bound parameter — the pre-scoping contract, unchanged — for a
+// store whose tile rows the module's generated predicate cannot name. An
+// operator who sets it is choosing an UNSCOPED read and owes it a
+// `cell_tile_max_rows` its mount's memory_pages can hold.
 constexpr const char* kDefaultTileSql = "SELECT _data FROM TBS ORDER BY _rowid DESC LIMIT ?";
-constexpr long kDefaultTileMaxRows = 100000;
+
+// THE ROW BUDGET IS THE GUEST'S MEMORY BUDGET, NOT A TUNING KNOB.
+//
+// The read materializes whole $TBS records — id, native id, network addressing,
+// position, observation counts, SITE_NAME, and a required SOURCES vector with a
+// required per-provider licence and attribution on every entry — so a stored
+// site is hundreds of bytes to low kilobytes, not tens. 25,000 of them is tens
+// of MB against the 128 MiB a documented cellular mount is given, which leaves
+// the response body, the point vector and the guest's own arena room to exist.
+// 100,000 did not: it exceeded the whole instance on the first tile request.
+//
+// It stays configurable (`cell_tile_max_rows`) because memory_pages is, and the
+// two are one budget; but the DEFAULT now fits the mount this lane ships on.
+constexpr long kDefaultTileMaxRows = 25000;
 
 // The dataset identity the envelope names. The client only requires a non-empty
 // string; naming the dataset rather than the table keeps the store's physical
@@ -1482,20 +1530,51 @@ int tile_plan(void) {
                                          std::to_string(n) + ") at this zoom");
     }
 
-    const std::string sql = config_string(config, "cell_tile_sql", kDefaultTileSql);
     long max_rows = static_cast<long>(
         json_number_or(config, "cell_tile_max_rows", static_cast<double>(kDefaultTileMaxRows)));
     if (max_rows <= 0) max_rows = kDefaultTileMaxRows;
 
-    const std::string rows_query = std::string("{\"sql\":\"") + json_escape(sql) +
-                                   "\",\"params\":[{\"t\":\"i64\",\"v\":" +
-                                   std::to_string(max_rows) + "}]}";
+    // The tile's own rectangle, from the SAME bounds function `tile` uses to
+    // place density cells — one definition of where this tile is, on both
+    // sides of the query.
+    const TileBounds bounds = tile_bounds(z, x, y);
+
+    const std::string configured_sql = config_string(config, "cell_tile_sql", "");
+    const bool scoped = configured_sql.empty();
+    std::string sql;
+    std::string params;
+    if (!scoped) {
+        // AN OPT-OUT THE ANSWER ADMITS TO. An operator statement cannot carry
+        // the tile's rectangle, so this read is the newest `max_rows` rows of
+        // whatever it names, filtered to the tile afterwards. An empty tile
+        // then means "not in the slice that was read", which is NOT "no sites
+        // here" — so the envelope carries scoped:false and the client can tell
+        // the two apart instead of drawing a hole over a populated city.
+        sql = configured_sql;
+        params = std::string("[{\"t\":\"i64\",\"v\":") + std::to_string(max_rows) + "}]";
+    } else {
+        const std::string relation =
+            config_string(config, "cell_tile_relation", kDefaultTileRelation);
+        sql = "SELECT _data FROM " + relation +
+              " WHERE LATITUDE >= ?1 AND LATITUDE <= ?2"
+              " AND LONGITUDE >= ?3 AND LONGITUDE <= ?4"
+              " ORDER BY _rowid DESC LIMIT ?5";
+        params = std::string("[{\"t\":\"f64\",\"v\":") + exact_double(bounds.south) +
+                 "},{\"t\":\"f64\",\"v\":" + exact_double(bounds.north) +
+                 "},{\"t\":\"f64\",\"v\":" + exact_double(bounds.west) +
+                 "},{\"t\":\"f64\",\"v\":" + exact_double(bounds.east) +
+                 "},{\"t\":\"i64\",\"v\":" + std::to_string(max_rows) + "}]";
+    }
+
+    const std::string rows_query =
+        std::string("{\"sql\":\"") + json_escape(sql) + "\",\"params\":" + params + "}";
     if (push_json("rows_query", rows_query) < 0) return 500;
     if (push_json("tile_mark_query", mark_sql) < 0) return 500;
 
     const std::string job = std::string("{\"route\":\"cellular-tile\",\"z\":") + std::to_string(z) +
                             ",\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y) +
-                            ",\"maxRows\":" + std::to_string(max_rows) + ",\"provider_id\":\"" +
+                            ",\"maxRows\":" + std::to_string(max_rows) +
+                            ",\"scoped\":" + (scoped ? "true" : "false") + ",\"provider_id\":\"" +
                             json_escape(provider) + "\"}";
     return push_json("tile_job", job) < 0 ? 500 : 0;
 }
@@ -1610,6 +1689,29 @@ int tile(void) {
     }
 
     const long count = static_cast<long>(points.size());
+
+    // A CAPPED READ SAYS SO. The row budget bounds what the guest can hold, so
+    // a tile whose population exceeds it is answered from a PREFIX of its rows
+    // and `count` is then a floor, not the tile's true population. Reporting
+    // that as a complete answer is the failure mode the tile contract's
+    // property 4 exists to prevent, one step further out: a client cannot tell
+    // a sparse tile from a truncated one unless the envelope tells it.
+    // Truncation is a 200 with the fact attached — never the 502 an
+    // out-of-memory read used to produce.
+    const long job_max_rows = static_cast<long>(json_number_or(job, "maxRows", 0));
+    const bool truncated = job_max_rows > 0 && scanned >= job_max_rows;
+    // Did the read ask the store for THIS TILE, or for a slice of the whole
+    // store? tile_plan decides; the envelope reports what was actually done.
+    bool scoped = true;
+    {
+        std::string scoped_text;
+        if (json_string_field(job, "scoped", &scoped_text)) {
+            scoped = scoped_text != "false";
+        } else {
+            scoped = job.find("\"scoped\":false") == std::string::npos;
+        }
+    }
+
     std::string body;
     body.reserve(count > 0 ? static_cast<size_t>(count) * 48 + 512 : 512);
     body += std::string("{\"scheme\":\"") + kTileScheme + "\",\"z\":" + std::to_string(z) +
@@ -1618,7 +1720,9 @@ int tile(void) {
             ",\"threshold\":" + std::to_string(kTileThreshold) +
             ",\"budget\":" + std::to_string(kTileBudget) + ",\"deconflicted\":true" +
             ",\"scanned\":" + std::to_string(scanned) +
-            ",\"malformed\":" + std::to_string(malformed) + ",\"dataset\":" + dataset;
+            ",\"malformed\":" + std::to_string(malformed) +
+            ",\"truncated\":" + (truncated ? "true" : "false") +
+            ",\"scoped\":" + (scoped ? "true" : "false") + ",\"dataset\":" + dataset;
 
     if (count > kTileBudget) {
         // DENSITY. The grid is linear in degrees inside the tile's own bounds,

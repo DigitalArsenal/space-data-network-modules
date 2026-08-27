@@ -703,3 +703,132 @@ test("a tile request never reaches the aggregate cache lane, and vice versa", as
   const aggQueries = aggStub.calls.filter((c) => c.operation === "storage.flatsql_query_stream");
   assert.equal(aggQueries.length, 2, "the aggregate lane still runs its two reads");
 });
+
+// ── 5. THE READ IS SCOPED AND BOUNDED ──────────────────────────────────────
+//
+// graph sdn-cellular-tile-lane-stalls-after-tile-plan. The tile lane used to
+// ask the engine for up to cell_tile_max_rows = 100,000 WHOLE $TBS records on
+// EVERY tile request, with no spatial predicate. Two failures, one fatal:
+//
+//  * O(store), not O(tile): a z=10 tile holding three sites still dragged the
+//    whole recent store through the guest.
+//  * unbounded in the instance's linear memory: the budget was a ROW COUNT, so
+//    it could not respect memory_pages. MEASURED on host-01 (2048 pages =
+//    128 MiB, TBS hot window 400,000, ~818 bytes per stored site): WasmEdge
+//    refused the grow and the mount answered 502 "flow produced no HTTP
+//    response" for every tile, with the query node reported as NEVER REACHED
+//    because the runtime counts an invocation only after its entry returns.
+//
+// The predicate is a PREFILTER over the tile's own rectangle; membership is
+// still decided per point by the client's index math, so seam ownership does
+// not move into SQL.
+
+const tileRowQuery = (stub) =>
+  stub.calls
+    .filter((c) => c.operation === "storage.flatsql_query_stream")
+    .find((c) => !isMarkQuery(c.meta.sql));
+
+test("the tile row read is scoped to the tile's own rectangle and bounded by the row budget", async () => {
+  const stub = createHostStub({ mark: WARM_MARK, rows: storeOf([[HOME_LAT, HOME_LON]]) });
+  await runFlowOnce(stub, htqRequest({ requestPath: tilePath(Z, X, Y) }));
+
+  const rowQuery = tileRowQuery(stub);
+  assert.ok(rowQuery, "the tile lane must issue a row read");
+  assert.match(
+    rowQuery.meta.sql,
+    /SELECT _data FROM TBS WHERE LATITUDE >= \?1 AND LATITUDE <= \?2 AND LONGITUDE >= \?3 AND LONGITUDE <= \?4 ORDER BY _rowid DESC LIMIT \?5/,
+  );
+
+  // The bound values ARE this tile's rectangle, from the client's own bounds
+  // function — the server cannot read a neighbouring tile's rows by accident.
+  const bounds = tileBounds(Z, X, Y);
+  const params = rowQuery.meta.params;
+  assert.equal(params.length, 5);
+  assert.deepEqual(
+    params.slice(0, 4).map((p) => p.t),
+    ["f64", "f64", "f64", "f64"],
+  );
+  assert.equal(params[0].v, bounds.south);
+  assert.equal(params[1].v, bounds.north);
+  assert.equal(params[2].v, bounds.west);
+  assert.equal(params[3].v, bounds.east);
+
+  // The budget the guest can hold, not the 100,000 that could not fit.
+  assert.equal(params[4].t, "i64");
+  assert.equal(params[4].v, 25000);
+});
+
+test("a deeper tile reads a strictly smaller rectangle than its ancestor", async () => {
+  const deep = { z: 12, x: lonToTileX(HOME_LON, 12), y: latToTileY(HOME_LAT, 12) };
+  const shallow = { z: 2, x: lonToTileX(HOME_LON, 2), y: latToTileY(HOME_LAT, 2) };
+
+  const read = async (t) => {
+    const stub = createHostStub({ mark: WARM_MARK, rows: storeOf([[HOME_LAT, HOME_LON]]) });
+    await runFlowOnce(stub, htqRequest({ requestPath: tilePath(t.z, t.x, t.y) }));
+    const p = tileRowQuery(stub).meta.params;
+    return { south: p[0].v, north: p[1].v, west: p[2].v, east: p[3].v };
+  };
+
+  const a = await read(deep);
+  const b = await read(shallow);
+  assert.ok(a.north - a.south < b.north - b.south, "z=12 must read a narrower latitude band");
+  assert.ok(a.east - a.west < b.east - b.west, "z=12 must read a narrower longitude band");
+  assert.ok(a.south >= b.south && a.north <= b.north, "the deep tile is inside its ancestor");
+  assert.ok(a.west >= b.west && a.east <= b.east, "the deep tile is inside its ancestor");
+});
+
+test("an explicit cell_tile_sql override is still taken verbatim, with the budget as its one param", async () => {
+  const override = "SELECT _data FROM my_tbs_view ORDER BY rowid DESC LIMIT ?";
+  const stub = createHostStub({
+    config: { cell_tile_sql: override, cell_tile_max_rows: 1234 },
+    mark: WARM_MARK,
+    rows: storeOf([[HOME_LAT, HOME_LON]]),
+  });
+  await runFlowOnce(stub, htqRequest({ requestPath: tilePath(Z, X, Y) }));
+
+  const rowQuery = tileRowQuery(stub);
+  assert.equal(rowQuery.meta.sql, override);
+  assert.deepEqual(rowQuery.meta.params, [{ t: "i64", v: 1234 }]);
+
+  // ...and the answer ADMITS the read was not scoped to the tile, so an empty
+  // tile cannot be misread as "no sites here".
+  const { emitted } = await runFlowOnce(
+    createHostStub({
+      config: { cell_tile_sql: override, cell_tile_max_rows: 1234 },
+      mark: WARM_MARK,
+      rows: storeOf([[HOME_LAT, HOME_LON]]),
+    }),
+    htqRequest({ requestPath: tilePath(Z, X, Y) }),
+  );
+  assert.equal(parseTileEnvelope(decodeResponse(emitted).body).scoped, false);
+});
+
+test("a read that hits the row budget answers 200 and SAYS it was truncated", async () => {
+  // Four positioned sites in the tile, budget 4: the read came back full, so
+  // the tile's population is a floor, not a count. The client is told.
+  const rows = storeOf([
+    [HOME_LAT, HOME_LON],
+    [HOME_LAT + 0.001, HOME_LON + 0.001],
+    [HOME_LAT + 0.002, HOME_LON + 0.002],
+    [HOME_LAT + 0.003, HOME_LON + 0.003],
+  ]);
+  const stub = createHostStub({ config: { cell_tile_max_rows: 4 }, mark: WARM_MARK, rows });
+  const { emitted } = await runFlowOnce(stub, htqRequest({ requestPath: tilePath(Z, X, Y) }));
+  const { status, body } = decodeResponse(emitted);
+  assert.equal(status, 200);
+
+  const envelope = parseTileEnvelope(body);
+  assert.equal(envelope.scanned, 4);
+  assert.equal(envelope.truncated, true, "a full read must be reported as truncated");
+  assert.equal(envelope.count, 4);
+});
+
+test("a read inside the row budget is NOT reported as truncated", async () => {
+  const rows = storeOf([[HOME_LAT, HOME_LON]]);
+  const stub = createHostStub({ mark: WARM_MARK, rows });
+  const { emitted } = await runFlowOnce(stub, htqRequest({ requestPath: tilePath(Z, X, Y) }));
+  const envelope = parseTileEnvelope(decodeResponse(emitted).body);
+  assert.equal(envelope.truncated, false);
+  assert.equal(envelope.scanned, 1);
+  assert.equal(envelope.scoped, true, "the default read is scoped to the tile");
+});

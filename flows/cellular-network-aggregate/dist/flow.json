@@ -104,7 +104,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "f7dd3a527cb94606fbca279c3b1f143b5be1505a7ae7cac00037f259c2ab2cb7"
+        "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff"
       }
     },
     {
@@ -132,7 +132,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "f7dd3a527cb94606fbca279c3b1f143b5be1505a7ae7cac00037f259c2ab2cb7"
+        "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff"
       }
     },
     {
@@ -145,7 +145,7 @@
       "artifact": {
         "path": "../data-source/cell-tower-source/dist/isomorphic/module.wasm",
         "publisher": "../data-source/cell-tower-source/publisher.json",
-        "sha256": "f7dd3a527cb94606fbca279c3b1f143b5be1505a7ae7cac00037f259c2ab2cb7"
+        "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff"
       }
     },
     {
@@ -566,14 +566,14 @@
         "method": "PUT",
         "operationId": "storeCellularProviderCredential",
         "summary": "Store a browser-sealed provider credential in the node's credential store",
-        "description": "Takes the node's own keyslot envelope ({slotId, ephemeralPublicKey, nonce, ciphertext}), asks the host to open it, and writes the result to the machine-bound credential store under the lane cell_<providerId>. The value is never echoed, logged or readable back through any route. NOT ANONYMOUS, and deliberately so: an anonymous visitor overwriting this node's provider credentials would change what every other viewer's run does. There is no plaintext branch \u2014 a caller who cannot seal cannot store.",
+        "description": "Takes the node's own keyslot envelope ({slotId, ephemeralPublicKey, nonce, ciphertext}), asks the host to open it, and writes the result to the machine-bound credential store under the lane cell_<providerId>. The value is never echoed, logged or readable back through any route. NOT ANONYMOUS, and deliberately so: an anonymous visitor overwriting this node's provider credentials would change what every other viewer's run does. There is no plaintext branch — a caller who cannot seal cannot store.",
         "anonymous": false,
         "params": [
           {
             "name": "providerId",
             "in": "path",
             "required": true,
-            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry \u2014 never a lane name the caller supplies.",
+            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry — never a lane name the caller supplies.",
             "schema": {
               "type": "string"
             }
@@ -592,7 +592,7 @@
             "name": "providerId",
             "in": "path",
             "required": true,
-            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry \u2014 never a lane name the caller supplies.",
+            "description": "A provider id from GET /providers. The lane written is cell_<providerId>, derived by the module from its own compiled registry — never a lane name the caller supplies.",
             "schema": {
               "type": "string"
             }

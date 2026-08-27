@@ -155,6 +155,17 @@ export function irmStream(records) {
 }
 
 /** True when the SQL is the durable-mark read rather than the record read. */
+// THE MARK READ, UNDER EITHER SPELLING.
+//
+// This used to match only the PRE-MIGRATION `sds_irm` blob table. The module's
+// default mark statement became the engine-routed `SELECT _data FROM IRM ORDER
+// BY _rowid DESC LIMIT ?` (the "a default that works only when overridden is
+// not one" fix), and from that moment a REBUILT bundle's mark read stopped
+// being recognised here: the stub answered it with the record stream instead of
+// an $IRM stream, so every cacheState in these tests read "empty". The bundle
+// on disk had not been rebuilt, so the tests stayed green against a stale
+// artifact and the drift was invisible until the next rebuild.
 export function isMarkQuery(sql) {
-  return String(sql ?? "").includes("sds_irm");
+  const text = String(sql ?? "");
+  return /\bsds_irm\b/i.test(text) || /\bFROM\s+"?IRM"?\b/i.test(text);
 }
