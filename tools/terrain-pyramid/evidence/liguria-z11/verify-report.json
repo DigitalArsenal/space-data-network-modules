@@ -2,7 +2,7 @@
   "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
   "tiles": 4617,
   "distinctAddresses": 4617,
-  "storeBytes": 35795684,
+  "storeBytes": 35153284,
   "levels": [
     8,
     9,
@@ -20,12 +20,12 @@
     "13": 1722
   },
   "payloadBytes": {
-    "p50": 3636,
-    "p99": 23655,
-    "max": 25337,
+    "p50": 3548,
+    "p99": 28627,
+    "max": 30799,
     "bounds": {
       "p50": 10240,
-      "p99": 24576,
+      "p99": 28672,
       "hard": 32768
     }
   },
@@ -37,10 +37,10 @@
   "flatAtZeroWithLandMask": 4,
   "flatAtZeroOverMeasuredRelief": 4,
   "flatAtZeroWithLandMaskExamples": [
-    "13/8641/6101: 109 land samples, states 0.418 m",
-    "9/540/378: 14 land samples, states 84.373 m",
-    "9/540/379: 129 land samples, states 246.382 m",
-    "10/1080/756: 58 land samples, states 84.373 m"
+    "13/8641/6101: 109 land samples, states 0.533 m",
+    "9/540/378: 14 land samples, states 82.700 m",
+    "9/540/379: 129 land samples, states 248.899 m",
+    "10/1080/756: 58 land samples, states 82.700 m"
   ],
   "digestMismatches": 0,
   "tilesOverCeiling": 0,
@@ -61,15 +61,30 @@
   "childAvailabilityClaims": 0,
   "childAvailabilityUnservedClaims": 0,
   "childAvailabilityExamples": [],
+  "accuracyBasis": {
+    "measuredAt": "source-posts",
+    "definition": "every source post the granule set carries inside the tile bounds, with the mesh interpolated at the post; no-data posts excluded, no resampling on the truth side",
+    "sourcePostsPerTileEdge": {
+      "8": 2531.3,
+      "9": 1265.6,
+      "10": 632.8,
+      "11": 316.4,
+      "12": 158.2,
+      "13": 79.1
+    },
+    "latticeMaxGridSize": 361
+  },
   "verticalAccuracy": [
     {
       "level": 8,
       "errorTargetM": 602.09,
       "legacyBoundM": 301.04,
-      "worstMeasuredM": 600.427,
+      "worstMeasuredM": 601.871,
       "withinTarget": true,
       "withinLegacyBound": false,
       "tiles": 40,
+      "tilesOverTarget": 0,
+      "overTargetShare": 0,
       "tilesAtCeiling": 0,
       "atCeilingShare": 0,
       "ceilingShareGated": false,
@@ -79,12 +94,14 @@
       "level": 9,
       "errorTargetM": 301.04,
       "legacyBoundM": 150.52,
-      "worstMeasuredM": 394.708,
+      "worstMeasuredM": 359.165,
       "withinTarget": false,
       "withinLegacyBound": false,
       "tiles": 141,
-      "tilesAtCeiling": 4,
-      "atCeilingShare": 0.0284,
+      "tilesOverTarget": 3,
+      "overTargetShare": 0.0213,
+      "tilesAtCeiling": 3,
+      "atCeilingShare": 0.0213,
       "ceilingShareGated": false,
       "withinCeilingShare": true
     },
@@ -92,12 +109,14 @@
       "level": 10,
       "errorTargetM": 150.52,
       "legacyBoundM": 75.26,
-      "worstMeasuredM": 240.536,
+      "worstMeasuredM": 232.31,
       "withinTarget": false,
       "withinLegacyBound": false,
       "tiles": 491,
-      "tilesAtCeiling": 11,
-      "atCeilingShare": 0.0224,
+      "tilesOverTarget": 10,
+      "overTargetShare": 0.0204,
+      "tilesAtCeiling": 10,
+      "atCeilingShare": 0.0204,
       "ceilingShareGated": true,
       "withinCeilingShare": true
     },
@@ -105,12 +124,14 @@
       "level": 11,
       "errorTargetM": 75.26,
       "legacyBoundM": 37.63,
-      "worstMeasuredM": 179.303,
+      "worstMeasuredM": 147.648,
       "withinTarget": false,
       "withinLegacyBound": false,
       "tiles": 1776,
-      "tilesAtCeiling": 19,
-      "atCeilingShare": 0.0107,
+      "tilesOverTarget": 11,
+      "overTargetShare": 0.0062,
+      "tilesAtCeiling": 11,
+      "atCeilingShare": 0.0062,
       "ceilingShareGated": true,
       "withinCeilingShare": true
     },
@@ -118,10 +139,12 @@
       "level": 12,
       "errorTargetM": 37.63,
       "legacyBoundM": 18.82,
-      "worstMeasuredM": 37.598,
+      "worstMeasuredM": 37.621,
       "withinTarget": true,
       "withinLegacyBound": false,
       "tiles": 447,
+      "tilesOverTarget": 0,
+      "overTargetShare": 0,
       "tilesAtCeiling": 0,
       "atCeilingShare": 0,
       "ceilingShareGated": true,
@@ -131,10 +154,12 @@
       "level": 13,
       "errorTargetM": 18.82,
       "legacyBoundM": 9.41,
-      "worstMeasuredM": 18.814,
+      "worstMeasuredM": 18.813,
       "withinTarget": true,
       "withinLegacyBound": false,
       "tiles": 1722,
+      "tilesOverTarget": 0,
+      "overTargetShare": 0,
       "tilesAtCeiling": 0,
       "atCeilingShare": 0,
       "ceilingShareGated": true,
@@ -142,103 +167,103 @@
     }
   ],
   "tilesStatingMeasuredAccuracy": 4617,
-  "tilesAtCeiling": 34,
+  "tilesAtCeiling": 24,
   "atCeilingExamples": [
     {
-      "address": "9/535/387",
-      "statedAccuracyM": 304.258,
+      "address": "9/536/389",
+      "statedAccuracyM": 359.165,
       "targetM": 301.04,
-      "payloadBytes": 24198
+      "payloadBytes": 28796
     },
     {
-      "address": "9/536/389",
-      "statedAccuracyM": 394.708,
+      "address": "9/537/389",
+      "statedAccuracyM": 301.507,
       "targetM": 301.04,
-      "payloadBytes": 23704
+      "payloadBytes": 29640
     },
     {
       "address": "9/546/387",
-      "statedAccuracyM": 384.343,
+      "statedAccuracyM": 340.635,
       "targetM": 301.04,
-      "payloadBytes": 24405
+      "payloadBytes": 29702
     },
     {
-      "address": "9/545/388",
-      "statedAccuracyM": 314.765,
-      "targetM": 301.04,
-      "payloadBytes": 24023
-    },
-    {
-      "address": "10/1069/776",
-      "statedAccuracyM": 160.8,
+      "address": "10/1070/774",
+      "statedAccuracyM": 157.446,
       "targetM": 150.52,
-      "payloadBytes": 22800
+      "payloadBytes": 28644
+    },
+    {
+      "address": "10/1072/775",
+      "statedAccuracyM": 156.795,
+      "targetM": 150.52,
+      "payloadBytes": 28434
+    },
+    {
+      "address": "10/1073/775",
+      "statedAccuracyM": 156.296,
+      "targetM": 150.52,
+      "payloadBytes": 28876
     },
     {
       "address": "10/1070/777",
-      "statedAccuracyM": 192.027,
+      "statedAccuracyM": 170.393,
       "targetM": 150.52,
-      "payloadBytes": 23056
+      "payloadBytes": 28085
     },
     {
       "address": "10/1072/778",
-      "statedAccuracyM": 240.536,
+      "statedAccuracyM": 232.31,
       "targetM": 150.52,
-      "payloadBytes": 23177
+      "payloadBytes": 28288
     },
     {
       "address": "10/1074/778",
-      "statedAccuracyM": 194.204,
+      "statedAccuracyM": 204.991,
       "targetM": 150.52,
-      "payloadBytes": 23532
+      "payloadBytes": 28726
     },
     {
       "address": "10/1075/778",
-      "statedAccuracyM": 194.204,
+      "statedAccuracyM": 211.211,
       "targetM": 150.52,
-      "payloadBytes": 23577
+      "payloadBytes": 28756
     },
     {
       "address": "10/1073/779",
-      "statedAccuracyM": 170.544,
+      "statedAccuracyM": 157.857,
       "targetM": 150.52,
-      "payloadBytes": 23495
-    },
-    {
-      "address": "10/1075/779",
-      "statedAccuracyM": 153.05,
-      "targetM": 150.52,
-      "payloadBytes": 23591
-    },
-    {
-      "address": "10/1076/776",
-      "statedAccuracyM": 157.356,
-      "targetM": 150.52,
-      "payloadBytes": 23557
+      "payloadBytes": 28583
     },
     {
       "address": "10/1092/775",
-      "statedAccuracyM": 225.212,
+      "statedAccuracyM": 164.212,
       "targetM": 150.52,
-      "payloadBytes": 23613
+      "payloadBytes": 28834
     },
     {
       "address": "10/1090/777",
-      "statedAccuracyM": 160.096,
+      "statedAccuracyM": 207.855,
       "targetM": 150.52,
-      "payloadBytes": 23270
+      "payloadBytes": 28338
     },
     {
-      "address": "10/1091/777",
-      "statedAccuracyM": 206.754,
-      "targetM": 150.52,
-      "payloadBytes": 23234
-    },
-    {
-      "address": "11/2170/1544",
-      "statedAccuracyM": 85.707,
+      "address": "11/2169/1544",
+      "statedAccuracyM": 89.865,
       "targetM": 75.26,
-      "payloadBytes": 13949
+      "payloadBytes": 27018
+    },
+    {
+      "address": "11/2149/1556",
+      "statedAccuracyM": 91.816,
+      "targetM": 75.26,
+      "payloadBytes": 27445
+    },
+    {
+      "address": "11/2150/1556",
+      "statedAccuracyM": 114.736,
+      "targetM": 75.26,
+      "payloadBytes": 27058
     }
   ],
   "ceilingShareBound": {
@@ -259,59 +284,59 @@
     "8/269/190 east[94] = 0xff but 8/270/190 west[94] = 0x00",
     "8/269/190 east[95] = 0xff but 8/270/190 west[95] = 0x00"
   ],
-  "worstSharedEdgeDeltaM": 0.111445,
-  "worstSharedEdgeAt": "9/534/386 north vs 9/534/387 south shared post 67/108",
-  "mixedDensityAdjacencies": 4408,
+  "worstSharedEdgeDeltaM": 0.109853,
+  "worstSharedEdgeAt": "8/267/193 north vs 8/267/194 south shared post 5/90",
+  "mixedDensityAdjacencies": 5687,
   "worstDensityStepCrackM": {
-    "8": 550.189,
-    "9": 290.329,
-    "10": 138.918,
-    "11": 75.158,
-    "12": 35.864,
-    "13": 17.816
+    "8": 472.286,
+    "9": 252.268,
+    "10": 142.94,
+    "11": 80.275,
+    "12": 32.508,
+    "13": 19.832
   },
   "densityStepCrackVsSkirt": [
     {
       "level": 8,
-      "worstCrackM": 550.189,
+      "worstCrackM": 472.286,
       "skirtHeightM": 1505.221,
       "hiddenBySkirt": true,
-      "worstAt": "8/272/193 east (grid 73) vs 8/273/193 west (grid 109)"
+      "worstAt": "8/271/190 north (grid 41) vs 8/271/191 south (grid 5)"
     },
     {
       "level": 9,
-      "worstCrackM": 290.329,
+      "worstCrackM": 252.268,
       "skirtHeightM": 752.611,
       "hiddenBySkirt": true,
-      "worstAt": "9/536/382 east (grid 28) vs 9/537/382 west (grid 55)"
+      "worstAt": "9/543/378 east (grid 19) vs 9/544/378 west (grid 7)"
     },
     {
       "level": 10,
-      "worstCrackM": 138.918,
+      "worstCrackM": 142.94,
       "skirtHeightM": 376.305,
       "hiddenBySkirt": true,
-      "worstAt": "10/1090/763 north (grid 55) vs 10/1090/764 south (grid 5)"
+      "worstAt": "10/1088/763 east (grid 37) vs 10/1089/763 west (grid 46)"
     },
     {
       "level": 11,
-      "worstCrackM": 75.158,
+      "worstCrackM": 80.275,
       "skirtHeightM": 188.153,
       "hiddenBySkirt": true,
-      "worstAt": "11/2172/1529 north (grid 55) vs 11/2172/1530 south (grid 13)"
+      "worstAt": "11/2182/1544 north (grid 5) vs 11/2182/1545 south (grid 61)"
     },
     {
       "level": 12,
-      "worstCrackM": 35.864,
+      "worstCrackM": 32.508,
       "skirtHeightM": 94.076,
       "hiddenBySkirt": true,
-      "worstAt": "12/4314/3069 north (grid 25) vs 12/4314/3070 south (grid 7)"
+      "worstAt": "12/4311/3070 north (grid 25) vs 12/4311/3071 south (grid 7)"
     },
     {
       "level": 13,
-      "worstCrackM": 17.816,
+      "worstCrackM": 19.832,
       "skirtHeightM": 47.038,
       "hiddenBySkirt": true,
-      "worstAt": "13/8623/6143 east (grid 25) vs 13/8624/6143 west (grid 5)"
+      "worstAt": "13/8612/6135 east (grid 21) vs 13/8613/6135 west (grid 25)"
     }
   ],
   "servingMemory": {
@@ -320,7 +345,8 @@
     "memoryMiB": 24,
     "hostDefaultPages": 1024,
     "poolMiBAtFourInstances": 96,
-    "mustBeConfigured": false
+    "mustBeConfigured": false,
+    "yamlLocation": "flows.mounts[].memory_pages (sibling of `config:`, never inside it)"
   },
   "layerJson": {
     "maxzoom": 13,
@@ -1525,7 +1551,7 @@
   "encoderCounters": {
     "edgeClampedPosts": 0,
     "bandBridgedPosts": 0,
-    "tilesAtCeiling": 34,
+    "tilesAtCeiling": 24,
     "maskFromAbsenceSamples": 40464,
     "maskUnclassifiedSamples": 0
   },
