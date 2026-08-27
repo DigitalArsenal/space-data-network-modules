@@ -900,3 +900,165 @@ test("every candidate is a SUBSET of one lattice, so neighbours agree on shared 
   }
   assert.equal(compared, 81);
 });
+
+// ── THE PROBE LOOKS INSIDE BOTH TRIANGLES, NOT ALONG THE DIAGONAL ──────────
+//
+// The first cut of measure_mesh_accuracy evaluated three positions per cell at
+// du == dv == {0.5, 1/3, 2/3}. All three lie ON THE SPLIT DIAGONAL, so the
+// interior of both triangles was never looked at — while the comment above it
+// claimed "the centre and both triangle centroids". The real centroids are
+// (2/3, 1/3) and (1/3, 2/3).
+//
+// That is not a cosmetic slip. The SAME function selects the density ladder
+// and writes $DTT.VERTICAL_ACCURACY_M, so a blind probe stopped the climb
+// early and then stated the resulting error as small: re-measured against the
+// source over this lane's whole regional store, it reported 4.496 m on a tile
+// whose true worst departure is 290.5 m, and 8.8% of z11 tiles missed the
+// ruled target while their records said they met it.
+//
+// THE FIXTURE IS BLIND TO A DIAGONAL PROBE BY CONSTRUCTION. The granule is a
+// flat 100 m plane carrying two 3x3-post plateaus per mesh cell, centred
+// exactly on the two real centroids and nowhere near the diagonal. Every mesh
+// VERTEX sits on the plane, so the rendered surface is flat at 100 m; every
+// position with du == dv reads exactly 100 m, so the old probe reports 0.000;
+// and the true worst-post departure is exactly 500 m. A run that reports 0 on
+// this fixture is the defect, and it cannot report 500 without evaluating a
+// position off the diagonal.
+const PROBE_CELLS = 4; // gridSize 5 -> 4 cells across
+const PROBE_SUB = 18; // granule posts per mesh cell (1/3 of a cell = 6 posts)
+const PROBE_MARGIN = 2;
+const PROBE_SPAN_POSTS = PROBE_CELLS * PROBE_SUB; // 72 granule intervals across the tile
+const PROBE_STEP = SPAN / PROBE_SPAN_POSTS;
+const PROBE_BASE_M = 100;
+const PROBE_RELIEF_M = 500;
+
+// A plateau rather than a single post so that a sub-pixel difference between
+// the encoder's lattice arithmetic and this granule's georeference still lands
+// on it — the assertion is about WHERE the probe looks, not about float
+// reproducibility between two different orders of operations.
+const onCentroidPlateau = (ic, jc) => {
+  const near = (v, c) => v >= c - 1 && v <= c + 1;
+  return (
+    (near(ic, PROBE_SUB / 3) && near(jc, (2 * PROBE_SUB) / 3)) ||
+    (near(ic, (2 * PROBE_SUB) / 3) && near(jc, PROBE_SUB / 3))
+  );
+};
+
+const probeGranule = (withRelief) => ({
+  width: PROBE_SPAN_POSTS + 2 * PROBE_MARGIN + 1,
+  height: PROBE_SPAN_POSTS + 2 * PROBE_MARGIN + 1,
+  originLon: WEST - PROBE_MARGIN * PROBE_STEP,
+  originLat: NORTH + PROBE_MARGIN * PROBE_STEP,
+  scaleLon: PROBE_STEP,
+  scaleLat: PROBE_STEP,
+  layout: "strip",
+  predictor: 1,
+  heightFn: (px, py) => {
+    if (!withRelief) return PROBE_BASE_M;
+    const it = px - PROBE_MARGIN; // west -> east across the tile
+    const jt = PROBE_MARGIN + PROBE_SPAN_POSTS - py; // south -> north, the lattice's own direction
+    if (it < 0 || it > PROBE_SPAN_POSTS || jt < 0 || jt > PROBE_SPAN_POSTS) return PROBE_BASE_M;
+    return onCentroidPlateau(it % PROBE_SUB, jt % PROBE_SUB)
+      ? PROBE_BASE_M + PROBE_RELIEF_M
+      : PROBE_BASE_M;
+  },
+});
+
+async function encodeProbeFixture(t, { maxGridSize, withRelief = true }) {
+  const outputs = outputsByPort(
+    await invoke(t, "tile", [
+      jsonFrame("plan", { ...PLAN, gridSize: 5, minGridSize: 5, maxGridSize }),
+      responseFrame("dem", buildGeoTiff(probeGranule(withRelief))),
+    ]),
+  );
+  const report = asJson(outputs.get("report"));
+  return { dtt: decodeDtt(splitStream(outputs.get("records"))[0]), tile: report.tiles[0] };
+}
+
+// What the OLD probe would have found on this fixture, computed here rather
+// than asserted in prose: bilinear over the same granule at du == dv ==
+// {0.5, 1/3, 2/3} of every cell. The mesh is flat at PROBE_BASE_M, so this IS
+// the departure a diagonal-only probe reports.
+function diagonalOnlyWorstDeparture() {
+  const g = probeGranule(true);
+  const sample = (lon, lat) => {
+    const px = (lon - g.originLon) / g.scaleLon;
+    const py = (g.originLat - lat) / g.scaleLat;
+    const i0 = Math.floor(px);
+    const j0 = Math.floor(py);
+    const fx = px - i0;
+    const fy = py - j0;
+    const at = (i, j) =>
+      Math.fround(
+        g.heightFn(Math.min(Math.max(i, 0), g.width - 1), Math.min(Math.max(j, 0), g.height - 1)),
+      );
+    return (
+      (1 - fy) * ((1 - fx) * at(i0, j0) + fx * at(i0 + 1, j0)) +
+      fy * ((1 - fx) * at(i0, j0 + 1) + fx * at(i0 + 1, j0 + 1))
+    );
+  };
+  let worst = 0;
+  for (let j = 0; j < PROBE_CELLS; j++) {
+    for (let i = 0; i < PROBE_CELLS; i++) {
+      for (const d of [0.5, 1 / 3, 2 / 3]) {
+        const lon = WEST + ((i + d) * SPAN) / PROBE_CELLS;
+        const lat = SOUTH + ((j + d) * SPAN) / PROBE_CELLS;
+        worst = Math.max(worst, Math.abs(sample(lon, lat) - PROBE_BASE_M));
+      }
+    }
+  }
+  return worst;
+}
+
+test("the accuracy probe evaluates BOTH TRIANGLES, not just the split diagonal", async (t) => {
+  // MEASURED, not asserted: the fixture really is invisible to the old pattern.
+  assert.ok(
+    diagonalOnlyWorstDeparture() < 1e-3,
+    `every du == dv position on this fixture reads the plane, so the collinear probe ` +
+      `reports ${diagonalOnlyWorstDeparture()} m — that is what made it blind`,
+  );
+  // stride == 1: the mesh carries every post the plan sampled, so the probe
+  // goes back to the source — at the centre and BOTH REAL CENTROIDS. This is
+  // the exact position set the old comment described and the old code did not
+  // evaluate.
+  const { dtt, tile } = await encodeProbeFixture(t, { maxGridSize: 5 });
+  assert.equal(tile.gridSize, 5, "the plan pins the lattice, so the mesh is the lattice");
+  assert.equal(tile.accuracyProbes, 3 * (5 - 1) ** 2, "three positions per cell at stride 1");
+  assert.ok(
+    Math.abs(dtt.verticalAccuracyM - PROBE_RELIEF_M) < 1e-3,
+    `the centroids carry ${PROBE_RELIEF_M} m of relief the diagonal cannot see; ` +
+      `the record states ${dtt.verticalAccuracyM} m (a diagonal-only probe reports 0)`,
+  );
+});
+
+test("the probe count scales with CELL SIZE: every sampled post the mesh dropped", async (t) => {
+  // stride > 1: every post of the finest lattice the plan admits that the
+  // candidate does NOT carry is a source measurement strictly inside one of its
+  // cells. That is the worst-post error the target names, it costs no source
+  // sampling at all, and for stride >= 3 the position set CONTAINS both real
+  // centroids exactly — so the collinear failure cannot recur at any density.
+  const { dtt, tile } = await encodeProbeFixture(t, { maxGridSize: 13 });
+  assert.equal(tile.gridSize, 5, "500 m clears the level-8 target, so the ladder stops at 5");
+  assert.equal(
+    tile.accuracyProbes,
+    13 ** 2 - 5 ** 2,
+    "every lattice post except the mesh's own vertices — 144, not the fixed 48",
+  );
+  assert.ok(
+    Math.abs(dtt.verticalAccuracyM - PROBE_RELIEF_M) < 1e-3,
+    `worst-post departure ${dtt.verticalAccuracyM} m against ${PROBE_RELIEF_M} m of real relief`,
+  );
+});
+
+test("…and the same probe reports ZERO on the same fixture with the relief removed", async (t) => {
+  // The control. Without it, both assertions above would also pass on a probe
+  // that returned 500 for every input.
+  for (const maxGridSize of [5, 13]) {
+    const { dtt, tile } = await encodeProbeFixture(t, { maxGridSize, withRelief: false });
+    assert.ok(tile.accuracyProbes > 0, `stride ${maxGridSize === 5 ? 1 : 3}: it still measured`);
+    assert.ok(
+      dtt.verticalAccuracyM < 1e-3,
+      `a plane departs from itself by nothing: ${dtt.verticalAccuracyM} m`,
+    );
+  }
+});

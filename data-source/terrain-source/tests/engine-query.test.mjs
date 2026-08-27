@@ -25,13 +25,22 @@ import { fileURLToPath } from "node:url";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { encodeHttpRequest, HTTP_REQUEST_TYPE_REF } from "space-data-module-sdk/http";
 
+import { publishedStandardsRoot } from "../sds-headers.mjs";
+
 import { buildGeoTiff, decodeDtt, splitStream } from "./helpers.mjs";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+// THE PINNED PUBLISHED PACKAGE, not a sibling checkout. This used to resolve
+// $DTT out of ../../../../spacedatastandards.org/ — a git worktree beside BOTH
+// repositories, on this machine, at whatever commit it happened to be sitting
+// on. A third party who installs the published pins could not run this suite at
+// all (it hard-fails at ENOENT rather than skipping), and the drift was live
+// rather than hypothetical: that checkout moved commit mid-review, unpinned and
+// undetected. The pinned tarball SHIPS schema/DTT/main.fbs, and it is the same
+// file the BUILD already resolves through publishedStandardsRoot().
 const STANDARDS_ROOT =
-  process.env.SPACE_DATA_STANDARDS_ROOT ??
-  fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+  process.env.SPACE_DATA_STANDARDS_ROOT ?? publishedStandardsRoot(import.meta.url);
 const DTT_SCHEMA = path.join(STANDARDS_ROOT, "schema", "DTT", "main.fbs");
 
 const encoder = new TextEncoder();

@@ -33,7 +33,25 @@ import zlib from "node:zlib";
 const BOUNDS = { p50: 10240, p99: 24576, hard: 32768 };
 // The share of tiles per level that may ship at the cap without meeting the
 // error target, and the level from which that share is gated at all.
+import { memoryPagesAdvice, memoryPagesFor } from "./memory-pages.mjs";
+
 const CEILING_SHARE = { max: 0.05, gatedFromLevel: 10 };
+
+// ── THE SKIRT THE CLIENT WILL DRAW, COMPUTED THE CLIENT'S OWN WAY ──────────
+//
+// Cesium hides the crack between two neighbouring tiles of different density
+// behind a skirt: CesiumTerrainProvider.js builds it as
+// `provider.getLevelMaximumGeometricError(level) * 5.0`, and that error is
+// `levelZeroMaximumGeometricError / 2^level` where level zero is
+// `ellipsoid.maximumRadius * 2 * PI * heightmapTerrainQuality /
+// (tileImageWidth * numberOfTilesAtLevelZero)` = 6378137 * 2pi * 0.25 /
+// (65 * 2) = 77067.34 m (TerrainProvider.js, heightmapTerrainQuality 0.25).
+//
+// The density-step crack used to be reported here with the words "the LOD crack
+// quantized-mesh skirts exist for" and never compared to the skirt. At z11 it
+// EXCEEDED it — 207.46 m of gap against a 188.15 m skirt, ~19 m of open sky
+// between two same-level neighbours — so the sentence that dismissed it was
+// the one thing that could have caught it. It is a gate now.
 const errorTargetM = (level) => (2 * 77067) / 2 ** level;
 const legacyBoundM = (level) => 77067 / 2 ** level;
 
@@ -255,6 +273,7 @@ let partialCoverage = 0;
 const partialCoverageDetail = [];
 let wholeRowsMissing = 0;
 let flatWithLandMask = 0;
+let flatOverMeasuredRelief = 0;
 const flatWithLandMaskExamples = [];
 let accuracyMeasured = 0;
 const accuracyByLevel = new Map();
@@ -316,18 +335,31 @@ for (const record of records) {
   // at all: the mask is claiming dry ground on a surface that is flat at zero
   // over its whole extent, which is a fabrication until something measured it.
   //
-  // "FLAT AT ZERO" MEANS THE SOURCE IS, NOT THAT THE MESH IS. Since density
-  // adapts to relief, a coastal tile whose relief is inside its level's error
-  // target ships as a flat mesh AT ZERO on purpose — that is the ruling
-  // working, not a fabrication, and the record says so in the same breath by
-  // stating a non-zero VERTICAL_ACCURACY_M. A tile whose measurement says the
-  // flat mesh departs from the source by nothing is the one making a claim
-  // about the source, and that is the one this reads. (The first adaptive-
-  // density run reported nine of these; every one was a coastal tile with real
-  // measured relief that the coarse candidate flattened, and calling those
-  // fabrications would have been the gate misreading its own subject.)
-  const flatMeshDescribesFlatSource =
-    dtt.accuracyConfidence === 0 || dtt.verticalAccuracyM === 0;
+  // A FLAT-AT-ZERO MESH OVER A MASK THAT SAYS LAND IS COUNTED, ALWAYS — AND
+  // THE NARROWING THAT HID EIGHT OF THEM IS GONE.
+  //
+  // This used to skip every tile whose record stated a non-zero
+  // VERTICAL_ACCURACY_M, on the reasoning that such a tile is "the ruling
+  // working": density adapted, the flat mesh is deliberate, and the record
+  // says so. The reasoning was sound and the premise was false. The number it
+  // trusted came from an accuracy probe whose three samples per cell were
+  // COLLINEAR on the split diagonal, so "non-zero accuracy" meant nothing
+  // about whether the source was flat — and independent measurement against
+  // the real posts found eight of these tiles sitting over real terrain, up to
+  // 812.9 m of it (the tip of Cap Corse, rendered as flat ocean at z8). Three
+  // were excluded from the published count purely by the narrowing.
+  //
+  // So the count is unconditional now, and it is SPLIT rather than skipped:
+  //
+  //   flatAtZeroWithLandMask          every one of them
+  //   flatAtZeroOverMeasuredRelief    the subset the encoder itself says it
+  //                                   flattened (VERTICAL_ACCURACY_M > 0)
+  //
+  // and the subset whose flattening also breaks the level's error target is a
+  // GATE. With an honest probe that case cannot arise from the ladder choosing
+  // badly — the ladder climbs on exactly that signal — so if it appears, either
+  // the byte cap stopped the climb over real land or something upstream is
+  // wrong, and both are worth stopping a publish for.
   if (dtt.minHeightM === 0 && dtt.maxHeightM === 0 && dtt.waterMaskKind === 2) {
     // Unconditional: a flat-at-zero tile whose mask is UNIFORM_WATER is open
     // ocean whatever its accuracy figure says, and the serving flow synthesizes
@@ -335,27 +367,38 @@ for (const record of records) {
     oceanStored += 1;
     problems.push(`all-ocean tile stored at ${key}`);
   }
-  if (dtt.minHeightM === 0 && dtt.maxHeightM === 0 && flatMeshDescribesFlatSource) {
-    if (dtt.waterMaskKind === 2) {
-      // counted above
-    } else if (dtt.waterMaskKind === 3) {
+  if (dtt.minHeightM === 0 && dtt.maxHeightM === 0) {
+    let landSamples = 0;
+    if (dtt.waterMaskKind === 3) {
       const raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
-      let land = 0;
-      for (const b of raw) if (b === 0x00) land += 1;
-      if (land > 0) {
-        // COUNTED, not refused. A DEM that reads exactly 0 m where the water
-        // mask says land is the SOURCE disagreeing with itself — reclaimed
-        // land, lagoons and salt flats really do sit at 0 m, and the two
-        // Copernicus products are independent. What made this a defect before
-        // was land INVENTED from an absent DEM granule, and that is a different
-        // measurement with its own counter (`maskFromAbsenceSamples`), gated
-        // below. Refusing on this would refuse the source for being the source.
-        flatWithLandMask += 1;
-        flatWithLandMaskExamples.push(`${key}: ${land} land samples`);
-      }
+      for (const b of raw) if (b === 0x00) landSamples += 1;
     } else if (dtt.waterMaskKind === 1) {
+      landSamples = 256 * 256; // UNIFORM_LAND: the whole tile
+    }
+    if (landSamples > 0 && dtt.waterMaskKind !== 2) {
+      // COUNTED. A DEM that reads exactly 0 m where the water mask says land
+      // can be the SOURCE disagreeing with itself — reclaimed land, lagoons and
+      // salt flats really do sit at 0 m, and the two Copernicus products are
+      // independent. Land INVENTED from an absent DEM granule is a different
+      // measurement with its own counter (`maskFromAbsenceSamples`), gated
+      // below.
       flatWithLandMask += 1;
-      flatWithLandMaskExamples.push(`${key}: UNIFORM_LAND`);
+      const detail = dtt.waterMaskKind === 1 ? "UNIFORM_LAND" : `${landSamples} land samples`;
+      flatWithLandMaskExamples.push(`${key}: ${detail}, states ${dtt.verticalAccuracyM.toFixed(3)} m`);
+      if (dtt.verticalAccuracyM > 0) {
+        // The MESH flattened relief the encoder measured. Not the source
+        // disagreeing with itself: the tile saying, in its own record, that it
+        // renders real ground as sea level.
+        flatOverMeasuredRelief += 1;
+        if (dtt.verticalAccuracyM > errorTargetM(dtt.level)) {
+          problems.push(
+            `${key} renders land as flat sea level: mesh min == max == 0 m over a mask with ` +
+              `${detail}, while the record states ${dtt.verticalAccuracyM.toFixed(3)} m of ` +
+              `departure against a ${errorTargetM(dtt.level).toFixed(2)} m target ` +
+              `(${bytes.length} B of a ${BOUNDS.hard} B cap)`,
+          );
+        }
+      }
     }
   }
 
@@ -476,6 +519,9 @@ for (const record of records) {
 // VERTICAL_ACCURACY_M, which every record carries. It is REPORTED per level
 // (`worstDensityStepCrackM`) rather than asserted away, so the ruling's cost is
 // a number a reviewer can read.
+const LEVEL_ZERO_GEOMETRIC_ERROR_M = (6378137 * 2 * Math.PI * 0.25) / (65 * 2);
+const skirtHeightM = (level) => (LEVEL_ZERO_GEOMETRIC_ERROR_M / 2 ** level) * 5;
+
 const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
 let adjacencies = 0;
 let worstSeam = 0;
@@ -542,16 +588,21 @@ for (const [key, here] of edgesByAddress) {
         const v1 = edge[i + 1];
         return Number.isNaN(v0) || Number.isNaN(v1) ? NaN : v0 + (v1 - v0) * f;
       };
-      let worstCrack = crackByLevel.get(level) ?? 0;
+      const prev = crackByLevel.get(level) ?? { m: 0, at: null };
+      let worstCrack = prev.m;
+      let worstAt = prev.at;
       const fineGrid = Math.max(here.grid, other.grid);
       for (let i = 0; i < fineGrid; i += 1) {
         const u = i / (fineGrid - 1);
         const a = at(here[mine], here.grid, u);
         const b = at(other[theirs], other.grid, u);
         if (Number.isNaN(a) || Number.isNaN(b)) continue;
-        worstCrack = Math.max(worstCrack, Math.abs(a - b));
+        if (Math.abs(a - b) > worstCrack) {
+          worstCrack = Math.abs(a - b);
+          worstAt = `${key} ${mine} (grid ${here.grid}) vs ${otherKey} ${theirs} (grid ${other.grid})`;
+        }
       }
-      crackByLevel.set(level, worstCrack);
+      crackByLevel.set(level, { m: worstCrack, at: worstAt });
     }
   }
 }
@@ -842,6 +893,20 @@ for (const level of [...accuracyByLevel.keys()].sort((a, b) => a - b)) {
   });
 }
 
+// ── THE CRACK AGAINST THE SKIRT ────────────────────────────────────────────
+const densityStepCrack = [...crackByLevel.entries()]
+  .sort((a, b) => a[0] - b[0])
+  .map(([level, v]) => ({
+    level,
+    worstCrackM: +v.m.toFixed(3),
+    skirtHeightM: +skirtHeightM(level).toFixed(3),
+    hiddenBySkirt: v.m <= skirtHeightM(level),
+    worstAt: v.at,
+  }));
+const crackOverSkirt = densityStepCrack.filter((c) => !c.hiddenBySkirt);
+
+const availableBytes = Buffer.byteLength(JSON.stringify(available));
+
 const summary = {
   outDir,
   tiles: records.length,
@@ -860,10 +925,15 @@ const summary = {
   // required a UNIFORM_WATER mask, and the four the encoder shipped were
   // RASTER precisely BECAUSE of the fabricated land in them.
   // Tiles whose SHIPPED mesh is flat at exactly 0 m while their mask claims
-  // land somewhere, and whose own accuracy measurement says the flat mesh
-  // describes the source exactly. Reported, not gated: it is the two source
-  // products disagreeing, and the fabrication case has its own counter.
+  // land somewhere. UNCONDITIONAL: the previous cut skipped every tile stating
+  // a non-zero VERTICAL_ACCURACY_M, and that number came from a probe whose
+  // samples were collinear on the split diagonal, so the exclusion was resting
+  // on a measurement that could not see the thing it was excluding for.
   flatAtZeroWithLandMask: flatWithLandMask,
+  // Of those, the ones the encoder itself says it flattened — the mesh renders
+  // real measured ground as sea level. Gated above when the departure also
+  // breaks the level's error target.
+  flatAtZeroOverMeasuredRelief: flatOverMeasuredRelief,
   flatAtZeroWithLandMaskExamples: flatWithLandMaskExamples.slice(0, 16),
   digestMismatches: digestMismatch,
   tilesOverCeiling: overCeiling,
@@ -899,13 +969,19 @@ const summary = {
   worstSharedEdgeDeltaM: +worstSeam.toFixed(6),
   worstSharedEdgeAt: worstSeamAt,
   // Adjacencies where the two tiles settled on different densities, and the
-  // worst gap that leaves BETWEEN their shared posts. Not a gate — it is the
-  // LOD crack skirts exist for, bounded by the coarser tile's own stated
-  // accuracy — but the ruling's cost, stated as a number.
+  // worst gap that leaves BETWEEN their shared posts — now COMPARED TO THE
+  // SKIRT the client draws over it, which is the only thing that decides
+  // whether the gap is visible. A crack under the skirt is the ruling's cost;
+  // a crack over it is open sky between two same-level neighbours.
   mixedDensityAdjacencies,
   worstDensityStepCrackM: Object.fromEntries(
-    [...crackByLevel.entries()].sort((a, b) => a[0] - b[0]).map(([l, v]) => [l, +v.toFixed(3)]),
+    [...crackByLevel.entries()].sort((a, b) => a[0] - b[0]).map(([l, v]) => [l, +v.m.toFixed(3)]),
   ),
+  densityStepCrackVsSkirt: densityStepCrack,
+  // What the deployment must set for the mount serving THIS index, and whether
+  // the host's 1024-page default is enough. See tools/terrain-pyramid/
+  // memory-pages.mjs for the measured curve this comes from.
+  servingMemory: memoryPagesAdvice(availableBytes),
   layerJson: { maxzoom: maxLevel, extensions: ["watermask"], available },
   // null, not 0, when no run report was left beside the store: "nobody counted"
   // and "the count was zero" are different claims.
@@ -937,6 +1013,18 @@ fs.writeFileSync(
       // somewhere else MUST state it, and a config file that omits the key
       // would silently 404 every tile.
       terrain_mount_path: "/api/v1/terrain/",
+      // WHAT THE MOUNT MUST BE GIVEN, not what it happens to get. route() is
+      // O(1) in the index because the config is read once per instance and the
+      // parsed rectangles are kept — so an instance's resident memory scales
+      // with THIS array and not with the request. Measured on the shipped
+      // artifact, a 7.76 MB index puts one instance at 1138 pages against the
+      // host's 1024-page default (sdn-server/internal/flowrt/httpmount.go), and
+      // the daemon runs a pool of four. The number is written HERE, by the run
+      // that knows how big its own index is, rather than left to a deployment
+      // to guess; tools/terrain-pyramid/memory-pages.mjs carries the measured
+      // curve and data-source/terrain-source/tests/serving-memory.test.mjs
+      // asserts a real instance stays under it.
+      memory_pages: memoryPagesFor(availableBytes),
       terrain_available: available,
     },
     null,
@@ -979,6 +1067,14 @@ const failures = [
     ? `${encoderCounters.maskUnclassifiedSamples} water-mask samples sit on ground the DEM covers ` +
       "but no water granule classifies, so they were filled in as LAND — the plan fetched " +
       "elevation for ground it did not fetch a water mask for"
+    : null,
+  // THE CRACK MUST FIT UNDER THE SKIRT. Reporting it was right; concluding
+  // "skirts exist for this" without ever computing the skirt was not.
+  crackOverSkirt.length
+    ? `the density-step crack exceeds the skirt the client draws over it at ` +
+      crackOverSkirt
+          .map((c) => `z${c.level} ${c.worstCrackM} m vs ${c.skirtHeightM} m (${c.worstAt})`)
+          .join(", ")
     : null,
   encoderCounters && encoderCounters.edgeClampedPosts > 0
     ? `${encoderCounters.edgeClampedPosts} clamped posts reported by the encoder ` +

@@ -33,5 +33,6 @@
         "priority": 20
       }
     ]
-  }
+  },
+  "// max_grid_size": "217, and the number is a MEASURED trade rather than a default. The accuracy probe compares the mesh against the sampled lattice, so the lattice's own density is the finest relief the probe can see; at z11 a tile edge carries ~316 GLO-30 posts (the run reports it as sourcePostsPerTileEdge), so 217 under-resolves the source by 1.46x. Building the SAME region at 361 - a lattice that resolves z11 exactly - was measured against this one, joined per address over all 4,617 tiles: the 217 lattice understates VERTICAL_ACCURACY_M on 3,009 of them, mean ratio 1.071, worst +139.9 m (z8 8/267/190) and +34.2 m at z11. It buys that with bytes: at 361 the p99 is 28,338 B against the ruled 24,576 B bound (p50 3,627, max 30,799, store 32.7 MiB, 17 tiles at the cap), while at 217 every ruled bound is met (p99 23,655, p50 3,636, max 25,337, store 34.1 MiB, 34 tiles at the cap). Both probes see both triangles - that is the encoder fix, not this knob. See regions/liguria-z11-lattice361.json to reproduce the other half, and the round-5 lane ledger for the escalation: on rugged coast the ruling's error target and its p99 byte bound cannot both hold at a lattice that resolves the source, and which one gives is the coordinator's to rule."
 }

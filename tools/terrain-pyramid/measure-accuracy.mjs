@@ -110,7 +110,20 @@ function readDtt(record) {
     level: u32(3), x: u32(4), y: u32(5),
     west: f64(7), south: f64(8), east: f64(9), north: f64(10),
     minHeightM: f64(11), maxHeightM: f64(12),
-    gridWidth: u32(16) || GRID,
+    // NOT the record's GRID_WIDTH. $DTT scopes that field to RASTER payloads —
+    // "Unset for mesh formats" — so it is 0 on every record this pyramid holds,
+    // and the fallback here used to be the harness's own GRID constant (65).
+    // That is the defect this harness has been reporting as terrain error ever
+    // since density became adaptive: the shipped mesh's vertices were scattered
+    // into a 65x65 array whatever their real density, so a mesh COARSER than 65
+    // left 65*65 - grid*grid cells holding a default 0.0, and triangleHeight
+    // read those holes as sea level. It is worth exactly the terrain's own
+    // height, which is why the numbers looked like terrain: 3,875.9 m on a z8
+    // tile at grid 61 against 756.3 m for the SAME tile at grid 73 (denser than
+    // 65, so no holes), and 1,836 m at z13 where every tile ships far below 65.
+    // The harness blamed its own bilinear ringing for that in a comment. The
+    // mesh states its density exactly — it is a regular lattice, so the vertex
+    // count is its square — and meshLattice derives it there.
     payload: payloadBytes(),
   };
 }
@@ -130,7 +143,10 @@ function splitStream(bytes) {
 }
 
 // ── quantized-mesh -> a height lattice in metres ────────────────────────────
-function meshLattice(mesh, grid) {
+// Returns { grid, lattice }: the mesh's OWN density, derived from its vertex
+// count, and its posts. Never a caller-supplied grid — see readDtt above for
+// what that cost.
+function meshLattice(mesh) {
   let at = 0;
   const f64 = () => { const v = mesh.readDoubleLE(at); at += 8; return v; };
   const f32 = () => { const v = mesh.readFloatLE(at); at += 4; return v; };
@@ -139,6 +155,13 @@ function meshLattice(mesh, grid) {
   const maxHeight = f32();
   for (let i = 0; i < 7; i += 1) f64();
   const count = mesh.readUInt32LE(at); at += 4;
+  const grid = Math.round(Math.sqrt(count));
+  assert.equal(
+    grid * grid,
+    count,
+    `a mesh from this encoder is a regular ${grid}x${grid} lattice, so its vertex count must be a ` +
+      `perfect square; got ${count}. A mesh that is not this shape cannot be read as one.`,
+  );
   const unzig = () => {
     const out = new Int32Array(count);
     let value = 0;
@@ -154,12 +177,20 @@ function meshLattice(mesh, grid) {
   const h = unzig();
   const range = maxHeight - minHeight;
   const lattice = new Float64Array(grid * grid);
+  const filled = new Uint8Array(grid * grid);
   for (let n = 0; n < count; n += 1) {
     const i = Math.round((u[n] * (grid - 1)) / 32767);
     const j = Math.round((v[n] * (grid - 1)) / 32767);
     lattice[j * grid + i] = minHeight + (h[n] / 32767) * range;
+    filled[j * grid + i] = 1;
   }
-  return lattice;
+  // Every cell of the lattice must have been written. A hole reads 0.0 and
+  // triangleHeight cannot tell that from sea level, which is precisely how the
+  // grid mismatch above stayed invisible for a whole round.
+  for (let n = 0; n < filled.length; n += 1) {
+    assert.equal(filled[n], 1, `mesh vertex ${n} of ${grid}x${grid} is missing; the lattice has holes`);
+  }
+  return { grid, lattice };
 }
 
 // The surface the CLIENT renders: the encoder's regular triangulation, each
@@ -260,7 +291,7 @@ async function encodeReference(tile, harness) {
   const records = splitStream(response.outputs.find((o) => o.portId === "records").payload);
   return records.map((r) => {
     const child = readDtt(r);
-    return { child, lattice: meshLattice(zlib.gunzipSync(child.payload), GRID) };
+    return { child, ...meshLattice(zlib.gunzipSync(child.payload)) };
   });
 }
 
@@ -291,20 +322,20 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
   let levelSq = 0;
   let levelN = 0;
   for (const tile of [...chosen, flat]) {
-    const lattice = meshLattice(zlib.gunzipSync(tile.payload), tile.gridWidth);
+    const { grid: tileGrid, lattice } = meshLattice(zlib.gunzipSync(tile.payload));
     const reference = await encodeReference(tile, harness);
     let max = 0;
     let sq = 0;
     let n = 0;
-    for (const { child, lattice: refLattice } of reference) {
-      for (let j = 0; j < GRID; j += 1) {
-        const lat = child.south + ((child.north - child.south) * j) / (GRID - 1);
+    for (const { child, grid: refGrid, lattice: refLattice } of reference) {
+      for (let j = 0; j < refGrid; j += 1) {
+        const lat = child.south + ((child.north - child.south) * j) / (refGrid - 1);
         const fv = (lat - tile.south) / (tile.north - tile.south);
-        for (let i = 0; i < GRID; i += 1) {
-          const lon = child.west + ((child.east - child.west) * i) / (GRID - 1);
+        for (let i = 0; i < refGrid; i += 1) {
+          const lon = child.west + ((child.east - child.west) * i) / (refGrid - 1);
           const fu = (lon - tile.west) / (tile.east - tile.west);
-          const truth = refLattice[j * GRID + i];
-          const got = triangleHeight(lattice, tile.gridWidth, fu, fv);
+          const truth = refLattice[j * refGrid + i];
+          const got = triangleHeight(lattice, tileGrid, fu, fv);
           const delta = Math.abs(got - truth);
           if (delta > max) max = delta;
           sq += delta * delta;
@@ -411,4 +442,18 @@ if (args.json) {
     );
   }
   console.log(`\n${summary.verdict} (against the retired pair: ${summary.legacyVerdict})`);
+  // AND WHAT THAT VERDICT IS NOT. It compares the max over the HIGHEST-RELIEF
+  // tiles of each level against the target, so "OVER" says the roughest tiles
+  // in the store miss it — which is the population coordinator (a) explicitly
+  // permits ("where the cap cannot meet it the tile ships AT the cap with its
+  // measured VERTICAL_ACCURACY_M stated") and gates by SHARE, at <= 5% per
+  // level for z >= 10. This harness does not implement that escape and is not
+  // meant to: verify.mjs is the gate. Read this as a second opinion on the
+  // FIGURE each record states, not as a verdict on the pyramid.
+  console.log(
+    "  (the sample is each level's highest-relief tiles, so OVER means the roughest tiles miss\n" +
+      "   the target — the at-the-cap population coordinator (a) permits and verify.mjs gates by\n" +
+      "   share. verify.mjs is the gate; cross-check-accuracy.mjs joins these to what the records\n" +
+      "   themselves state.)",
+  );
 }

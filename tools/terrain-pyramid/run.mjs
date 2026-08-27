@@ -567,7 +567,21 @@ async function main() {
         rows.push(dtt);
       }
       store.appendIndex(rows);
-      return encodeEnvelope({ ok: true, result: { ok: true, records: added.length } });
+      // `inserted`, NOT `records` — the connector's own key. hostcap/storage-
+      // ingest documents its host result as {"schema","inserted","batch_id",…}
+      // and publish_request reads `inserted` for two things: the silent-nop
+      // guard (ok:true with inserted=0 for a batch that carried tiles must NOT
+      // advance the mark) and the mark's cumulative RECORDS_COMMITTED. Under
+      // the wrong key both were dead: `inserted` parsed as absent (-1), so the
+      // guard could never fire in the only host that drives this flow, and
+      // every $IRM mark this runner wrote claimed 0 records committed no
+      // matter how many tiles it stored. Found by
+      // flows/terrain-ingest/tests/flow.test.mjs, which is why that package
+      // now has tests.
+      return encodeEnvelope({
+        ok: true,
+        result: { ok: true, schema: meta?.schema, batch_id: meta?.batch_id, inserted: added.length },
+      });
     },
   });
 

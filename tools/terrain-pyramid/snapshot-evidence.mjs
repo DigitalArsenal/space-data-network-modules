@@ -51,7 +51,7 @@ const evidenceDir = path.join(HERE, "evidence", args.name);
 fs.mkdirSync(evidenceDir, { recursive: true });
 
 const copied = [];
-for (const name of ["run-report.json", "verify-report.json", "accuracy-report.json", "layer-json-config.json"]) {
+for (const name of ["run-report.json", "verify-report.json", "accuracy-report.json", "cross-check-report.json", "layer-json-config.json"]) {
   const from = path.join(outDir, name);
   if (!fs.existsSync(from)) continue;
   fs.copyFileSync(from, path.join(evidenceDir, name));
@@ -113,6 +113,7 @@ is gitignored); these are the reports read off it.
 node tools/terrain-pyramid/run.mjs --config ${config}
 node tools/terrain-pyramid/verify.mjs --out <the config's "out" dir>
 node tools/terrain-pyramid/measure-accuracy.mjs --out <the config's "out" dir>
+node tools/terrain-pyramid/cross-check-accuracy.mjs --out <same>
 node tools/terrain-pyramid/snapshot-evidence.mjs --out <same> --name ${args.name}
 \`\`\`
 
@@ -146,6 +147,13 @@ ${Object.entries(artifacts)
 - \`accuracy-report.json\` — triangulation density against a denser re-sample
   through the same module. Read its header comment for what it is NOT
   independent of.
+- \`cross-check-report.json\` — the record's OWN stated VERTICAL_ACCURACY_M
+  joined per address against that re-sample's max error. The encoder writes the
+  field and selects the mesh density by it, so this is the one number in the
+  store with a second opinion attached: a ratio near 1.0 on the flat controls
+  AND on the high-relief tiles is the result to want, and a high-relief ratio
+  far above 1 while the controls sit at 1 is the signature of a probe that only
+  looks where the terrain is smooth.
 - \`layer-json-config.json\` — the serving config keys this run implies
   (\`terrain_available\`, \`terrain_maxzoom\`, \`terrain_ocean_synth_min_level\`,
   \`terrain_mount_path\`), which is what the deploy actually installs.
