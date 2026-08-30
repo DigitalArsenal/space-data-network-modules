@@ -1,0 +1,10 @@
+{
+  "spacedatastandards": "1.201.0",
+  "rosterParameters": 335,
+  "rosterReference": 311,
+  "rosterLocalAdditions": 24,
+  "referenceRosterCommit": "08c2a2aae0b5fed077b2e7b4fda992ff54386c60",
+  "referenceRosterSha256": "05fe18f4cbb50a38228fdc48a1bcc38f3812067bd7b49e48272a0ca58acd1898",
+  "erfaSourceFiles": 248,
+  "threadModel": "single-thread"
+}

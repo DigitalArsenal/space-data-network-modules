@@ -1,0 +1,6 @@
+{
+  "spacedatastandards": "1.201.0",
+  "parameterRosterSize": 335,
+  "erfaSourceFiles": 248,
+  "threadModel": "wasi-sequential"
+}

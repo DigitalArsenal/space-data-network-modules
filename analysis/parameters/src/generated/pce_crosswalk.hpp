@@ -1,0 +1,278 @@
+// GENERATED FILE — DO NOT EDIT.
+//
+// Generator : generate-pce-crosswalk.mjs
+// Vocabulary: pceParameter from spacedatastandards.org@1.201.0
+//
+// Every published member is either mapped to a roster parameter or listed
+// here as deliberately unmapped with its reason. A member that is neither
+// fails the generator by name, so a later release cannot add a parameter
+// this module silently ignores.
+
+#ifndef SDN_ANALYSIS_PARAMETERS_PCE_CROSSWALK_HPP
+#define SDN_ANALYSIS_PARAMETERS_PCE_CROSSWALK_HPP
+
+#include <cstdint>
+
+namespace sdn {
+namespace parameters {
+
+struct PceCrosswalkEntry {
+  uint16_t pceParameterValue;
+  const char* pceParameterName;
+  /// UNSPECIFIED when this module does not answer the parameter.
+  ParameterId id;
+  /// Why not, in capability language. Null when it is answered.
+  const char* unavailableReason;
+};
+
+constexpr int kPceCrosswalkSize = 224;
+inline const PceCrosswalkEntry kPceCrosswalk[kPceCrosswalkSize] = {
+    {0, "UNSPECIFIED", ParameterId::UNSPECIFIED, "not a parameter"},
+    {1, "POSITION_X", ParameterId::X, nullptr},
+    {2, "POSITION_Y", ParameterId::Y, nullptr},
+    {3, "POSITION_Z", ParameterId::Z, nullptr},
+    {4, "VELOCITY_X", ParameterId::VX, nullptr},
+    {5, "VELOCITY_Y", ParameterId::VY, nullptr},
+    {6, "VELOCITY_Z", ParameterId::VZ, nullptr},
+    {7, "POSITION_MAGNITUDE", ParameterId::RMAG, nullptr},
+    {8, "VELOCITY_MAGNITUDE", ParameterId::VMAG, nullptr},
+    {9, "RIGHT_ASCENSION", ParameterId::RA, nullptr},
+    {10, "DECLINATION", ParameterId::DEC, nullptr},
+    {11, "VELOCITY_RIGHT_ASCENSION", ParameterId::RAV, nullptr},
+    {12, "VELOCITY_DECLINATION", ParameterId::DECV, nullptr},
+    {13, "FLIGHT_PATH_ANGLE", ParameterId::FPA, nullptr},
+    {14, "AZIMUTH_ANGLE", ParameterId::AZI, nullptr},
+    {15, "HORIZONTAL_FLIGHT_PATH_ANGLE", ParameterId::HorizontalFlightPathAngle, nullptr},
+    {16, "RADIAL_VELOCITY", ParameterId::RadialVelocity, nullptr},
+    {17, "ANGULAR_MOMENTUM_MAGNITUDE", ParameterId::HMAG, nullptr},
+    {18, "ANGULAR_MOMENTUM_X", ParameterId::HX, nullptr},
+    {19, "ANGULAR_MOMENTUM_Y", ParameterId::HY, nullptr},
+    {20, "ANGULAR_MOMENTUM_Z", ParameterId::HZ, nullptr},
+    {30, "SEMI_MAJOR_AXIS", ParameterId::SMA, nullptr},
+    {31, "ECCENTRICITY", ParameterId::ECC, nullptr},
+    {32, "INCLINATION", ParameterId::INC, nullptr},
+    {33, "RIGHT_ASCENSION_OF_ASCENDING_NODE", ParameterId::RAAN, nullptr},
+    {34, "ARGUMENT_OF_PERIAPSIS", ParameterId::AOP, nullptr},
+    {35, "TRUE_ANOMALY", ParameterId::TA, nullptr},
+    {36, "MEAN_ANOMALY", ParameterId::MA, nullptr},
+    {37, "ECCENTRIC_ANOMALY", ParameterId::EA, nullptr},
+    {38, "HYPERBOLIC_ANOMALY", ParameterId::HA, nullptr},
+    {39, "RADIUS_OF_PERIAPSIS", ParameterId::RadPer, nullptr},
+    {40, "RADIUS_OF_APOAPSIS", ParameterId::RadApo, nullptr},
+    {41, "ALTITUDE_OF_PERIAPSIS", ParameterId::AltitudeOfPeriapsis, nullptr},
+    {42, "ALTITUDE_OF_APOAPSIS", ParameterId::AltitudeOfApoapsis, nullptr},
+    {43, "SEMILATUS_RECTUM", ParameterId::SemilatusRectum, nullptr},
+    {44, "ORBIT_PERIOD", ParameterId::OrbitPeriod, nullptr},
+    {45, "MEAN_MOTION", ParameterId::MM, nullptr},
+    {46, "SPECIFIC_ORBITAL_ENERGY", ParameterId::Energy, nullptr},
+    {47, "CHARACTERISTIC_ENERGY", ParameterId::C3Energy, nullptr},
+    {48, "VELOCITY_AT_PERIAPSIS", ParameterId::VelPeriapsis, nullptr},
+    {49, "VELOCITY_AT_APOAPSIS", ParameterId::VelApoapsis, nullptr},
+    {50, "ARGUMENT_OF_LATITUDE", ParameterId::ArgumentOfLatitude, nullptr},
+    {51, "TRUE_LONGITUDE", ParameterId::TLONG, nullptr},
+    {52, "MEAN_LONGITUDE", ParameterId::MLONG, nullptr},
+    {53, "BETA_ANGLE", ParameterId::BetaAngle, nullptr},
+    {54, "ECCENTRICITY_VECTOR_X", ParameterId::EccentricityVectorX, nullptr},
+    {55, "ECCENTRICITY_VECTOR_Y", ParameterId::EccentricityVectorY, nullptr},
+    {56, "ECCENTRICITY_VECTOR_Z", ParameterId::EccentricityVectorZ, nullptr},
+    {57, "SEMI_MINOR_AXIS", ParameterId::SemiMinorAxis, nullptr},
+    {70, "EQUINOCTIAL_H", ParameterId::EquinoctialH, nullptr},
+    {71, "EQUINOCTIAL_K", ParameterId::EquinoctialK, nullptr},
+    {72, "EQUINOCTIAL_P", ParameterId::EquinoctialP, nullptr},
+    {73, "EQUINOCTIAL_Q", ParameterId::EquinoctialQ, nullptr},
+    {74, "EQUINOCTIAL_MEAN_LONGITUDE", ParameterId::MLONG, nullptr},
+    {75, "MODIFIED_EQUINOCTIAL_F", ParameterId::ModEquinoctialF, nullptr},
+    {76, "MODIFIED_EQUINOCTIAL_G", ParameterId::ModEquinoctialG, nullptr},
+    {77, "MODIFIED_EQUINOCTIAL_H", ParameterId::ModEquinoctialH, nullptr},
+    {78, "MODIFIED_EQUINOCTIAL_K", ParameterId::ModEquinoctialK, nullptr},
+    {79, "MODIFIED_EQUINOCTIAL_TRUE_LONGITUDE", ParameterId::TLONG, nullptr},
+    {80, "MODIFIED_EQUINOCTIAL_SEMILATUS_RECTUM", ParameterId::SemilatusRectum, nullptr},
+    {81, "ALTERNATE_EQUINOCTIAL_P", ParameterId::AltEquinoctialP, nullptr},
+    {82, "ALTERNATE_EQUINOCTIAL_Q", ParameterId::AltEquinoctialQ, nullptr},
+    {83, "ALTERNATE_EQUINOCTIAL_MEAN_MOTION", ParameterId::MM, nullptr},
+    {90, "DELAUNAY_MEAN_ANOMALY", ParameterId::Delaunayl, nullptr},
+    {91, "DELAUNAY_ARGUMENT_OF_PERIAPSIS", ParameterId::Delaunayg, nullptr},
+    {92, "DELAUNAY_ASCENDING_NODE", ParameterId::Delaunayh, nullptr},
+    {93, "DELAUNAY_ACTION_TOTAL", ParameterId::DelaunayL, nullptr},
+    {94, "DELAUNAY_ACTION_ANGULAR_MOMENTUM", ParameterId::DelaunayG, nullptr},
+    {95, "DELAUNAY_ACTION_POLAR_ANGULAR_MOMENTUM", ParameterId::DelaunayH, nullptr},
+    {100, "GEODETIC_LATITUDE", ParameterId::Latitude, nullptr},
+    {101, "GEODETIC_LONGITUDE", ParameterId::Longitude, nullptr},
+    {102, "GEODETIC_ALTITUDE", ParameterId::Altitude, nullptr},
+    {103, "GEOCENTRIC_LATITUDE", ParameterId::GeocentricLatitude, nullptr},
+    {104, "PLANETODETIC_RADIUS_MAGNITUDE", ParameterId::PlanetodeticRMAG, nullptr},
+    {105, "PLANETODETIC_VELOCITY_MAGNITUDE", ParameterId::PlanetodeticVMAG, nullptr},
+    {106, "PLANETODETIC_AZIMUTH", ParameterId::PlanetodeticAZI, nullptr},
+    {107, "PLANETODETIC_HORIZONTAL_FLIGHT_PATH_ANGLE", ParameterId::PlanetodeticHFPA, nullptr},
+    {108, "LOCAL_SIDEREAL_TIME", ParameterId::LST, nullptr},
+    {109, "PRIME_MERIDIAN_HOUR_ANGLE", ParameterId::MHA, nullptr},
+    {120, "B_DOT_T", ParameterId::BdotT, nullptr},
+    {121, "B_DOT_R", ParameterId::BdotR, nullptr},
+    {122, "B_VECTOR_MAGNITUDE", ParameterId::BVectorMag, nullptr},
+    {123, "B_VECTOR_ANGLE", ParameterId::BVectorAngle, nullptr},
+    {124, "DECLINATION_OF_DEPARTURE_ASYMPTOTE", ParameterId::DLA, nullptr},
+    {125, "RIGHT_ASCENSION_OF_DEPARTURE_ASYMPTOTE", ParameterId::RLA, nullptr},
+    {126, "INCOMING_RADIUS_OF_PERIAPSIS", ParameterId::IncomingRadPer, nullptr},
+    {127, "INCOMING_CHARACTERISTIC_ENERGY", ParameterId::IncomingC3Energy, nullptr},
+    {128, "INCOMING_ASYMPTOTE_RIGHT_ASCENSION", ParameterId::IncomingRHA, nullptr},
+    {129, "INCOMING_ASYMPTOTE_DECLINATION", ParameterId::IncomingDHA, nullptr},
+    {130, "INCOMING_B_VECTOR_AZIMUTH", ParameterId::IncomingBVAZI, nullptr},
+    {131, "OUTGOING_RADIUS_OF_PERIAPSIS", ParameterId::OutgoingRadPer, nullptr},
+    {132, "OUTGOING_CHARACTERISTIC_ENERGY", ParameterId::OutgoingC3Energy, nullptr},
+    {133, "OUTGOING_ASYMPTOTE_RIGHT_ASCENSION", ParameterId::OutgoingRHA, nullptr},
+    {134, "OUTGOING_ASYMPTOTE_DECLINATION", ParameterId::OutgoingDHA, nullptr},
+    {135, "OUTGOING_B_VECTOR_AZIMUTH", ParameterId::OutgoingBVAZI, nullptr},
+    {136, "HYPERBOLIC_EXCESS_VELOCITY", ParameterId::HyperbolicExcessVelocity, nullptr},
+    {140, "BROUWER_SHORT_SEMI_MAJOR_AXIS", ParameterId::BrouwerShortSMA, nullptr},
+    {141, "BROUWER_SHORT_ECCENTRICITY", ParameterId::BrouwerShortECC, nullptr},
+    {142, "BROUWER_SHORT_INCLINATION", ParameterId::BrouwerShortINC, nullptr},
+    {143, "BROUWER_SHORT_RIGHT_ASCENSION_OF_ASCENDING_NODE", ParameterId::BrouwerShortRAAN, nullptr},
+    {144, "BROUWER_SHORT_ARGUMENT_OF_PERIAPSIS", ParameterId::BrouwerShortAOP, nullptr},
+    {145, "BROUWER_SHORT_MEAN_ANOMALY", ParameterId::BrouwerShortMA, nullptr},
+    {146, "BROUWER_LONG_SEMI_MAJOR_AXIS", ParameterId::BrouwerLongSMA, nullptr},
+    {147, "BROUWER_LONG_ECCENTRICITY", ParameterId::BrouwerLongECC, nullptr},
+    {148, "BROUWER_LONG_INCLINATION", ParameterId::BrouwerLongINC, nullptr},
+    {149, "BROUWER_LONG_RIGHT_ASCENSION_OF_ASCENDING_NODE", ParameterId::BrouwerLongRAAN, nullptr},
+    {150, "BROUWER_LONG_ARGUMENT_OF_PERIAPSIS", ParameterId::BrouwerLongAOP, nullptr},
+    {151, "BROUWER_LONG_MEAN_ANOMALY", ParameterId::BrouwerLongMA, nullptr},
+    {160, "ORBIT_STATE_TRANSITION_MATRIX", ParameterId::OrbitSTM, nullptr},
+    {161, "ORBIT_STATE_TRANSITION_MATRIX_A", ParameterId::OrbitSTMA, nullptr},
+    {162, "ORBIT_STATE_TRANSITION_MATRIX_B", ParameterId::OrbitSTMB, nullptr},
+    {163, "ORBIT_STATE_TRANSITION_MATRIX_C", ParameterId::OrbitSTMC, nullptr},
+    {164, "ORBIT_STATE_TRANSITION_MATRIX_D", ParameterId::OrbitSTMD, nullptr},
+    {165, "ORBIT_ERROR_COVARIANCE_MATRIX", ParameterId::OrbitErrorCovariance, nullptr},
+    {180, "EPOCH_A1_GREGORIAN", ParameterId::A1Gregorian, nullptr},
+    {181, "EPOCH_A1_MODIFIED_JULIAN", ParameterId::A1ModJulian, nullptr},
+    {182, "EPOCH_TAI_GREGORIAN", ParameterId::TAIGregorian, nullptr},
+    {183, "EPOCH_TAI_MODIFIED_JULIAN", ParameterId::TAIModJulian, nullptr},
+    {184, "EPOCH_TT_GREGORIAN", ParameterId::TTGregorian, nullptr},
+    {185, "EPOCH_TT_MODIFIED_JULIAN", ParameterId::TTModJulian, nullptr},
+    {186, "EPOCH_TDB_GREGORIAN", ParameterId::TDBGregorian, nullptr},
+    {187, "EPOCH_TDB_MODIFIED_JULIAN", ParameterId::TDBModJulian, nullptr},
+    {188, "EPOCH_UTC_GREGORIAN", ParameterId::UTCGregorian, nullptr},
+    {189, "EPOCH_UTC_MODIFIED_JULIAN", ParameterId::UTCModJulian, nullptr},
+    {190, "EPOCH_UT1_GREGORIAN", ParameterId::UT1Gregorian, nullptr},
+    {191, "EPOCH_UT1_MODIFIED_JULIAN", ParameterId::UT1ModJulian, nullptr},
+    {192, "EPOCH_GPS_GREGORIAN", ParameterId::UNSPECIFIED, "time-scale provider: the GPS scale is the time module's, not this one's"},
+    {193, "EPOCH_GPS_MODIFIED_JULIAN", ParameterId::UNSPECIFIED, "time-scale provider: the GPS scale is the time module's, not this one's"},
+    {194, "ELAPSED_DAYS", ParameterId::ElapsedDays, nullptr},
+    {195, "ELAPSED_SECONDS", ParameterId::ElapsedSecs, nullptr},
+    {220, "DRY_MASS", ParameterId::DryMass, nullptr},
+    {221, "TOTAL_MASS", ParameterId::TotalMass, nullptr},
+    {222, "DRAG_COEFFICIENT", ParameterId::Cd, nullptr},
+    {223, "DRAG_AREA", ParameterId::DragArea, nullptr},
+    {224, "REFLECTIVITY_COEFFICIENT", ParameterId::Cr, nullptr},
+    {225, "SOLAR_RADIATION_PRESSURE_AREA", ParameterId::SRPArea, nullptr},
+    {226, "ATMOSPHERIC_DENSITY_SCALE_FACTOR", ParameterId::AtmosDensityScaleFactor, nullptr},
+    {227, "DRAG_SCALE_FACTOR", ParameterId::SPADDragScaleFactor, nullptr},
+    {228, "SOLAR_RADIATION_PRESSURE_SCALE_FACTOR", ParameterId::SPADSRPScaleFactor, nullptr},
+    {229, "BALLISTIC_COEFFICIENT", ParameterId::BallisticCoefficient, nullptr},
+    {230, "AREA_TO_MASS_RATIO", ParameterId::AreaToMassRatio, nullptr},
+    {231, "CENTER_OF_MASS_X", ParameterId::SystemCenterOfMassX, nullptr},
+    {232, "CENTER_OF_MASS_Y", ParameterId::SystemCenterOfMassY, nullptr},
+    {233, "CENTER_OF_MASS_Z", ParameterId::SystemCenterOfMassZ, nullptr},
+    {234, "MOMENT_OF_INERTIA_MATRIX", ParameterId::UNSPECIFIED, "mass-property provider"},
+    {250, "ATTITUDE_QUATERNION_1", ParameterId::Q1, nullptr},
+    {251, "ATTITUDE_QUATERNION_2", ParameterId::Q2, nullptr},
+    {252, "ATTITUDE_QUATERNION_3", ParameterId::Q3, nullptr},
+    {253, "ATTITUDE_QUATERNION_4", ParameterId::Q4, nullptr},
+    {254, "ATTITUDE_DIRECTION_COSINE_MATRIX", ParameterId::DirectionCosineMatrix, nullptr},
+    {255, "EULER_ANGLE_1", ParameterId::EulerAngle1, nullptr},
+    {256, "EULER_ANGLE_2", ParameterId::EulerAngle2, nullptr},
+    {257, "EULER_ANGLE_3", ParameterId::EulerAngle3, nullptr},
+    {258, "EULER_ANGLE_RATE_1", ParameterId::EulerAngleRate1, nullptr},
+    {259, "EULER_ANGLE_RATE_2", ParameterId::EulerAngleRate2, nullptr},
+    {260, "EULER_ANGLE_RATE_3", ParameterId::EulerAngleRate3, nullptr},
+    {261, "MODIFIED_RODRIGUES_PARAMETER_1", ParameterId::MRP1, nullptr},
+    {262, "MODIFIED_RODRIGUES_PARAMETER_2", ParameterId::MRP2, nullptr},
+    {263, "MODIFIED_RODRIGUES_PARAMETER_3", ParameterId::MRP3, nullptr},
+    {264, "ANGULAR_VELOCITY_X", ParameterId::AngularVelocityX, nullptr},
+    {265, "ANGULAR_VELOCITY_Y", ParameterId::AngularVelocityY, nullptr},
+    {266, "ANGULAR_VELOCITY_Z", ParameterId::AngularVelocityZ, nullptr},
+    {267, "EULER_AXIS_X", ParameterId::UNSPECIFIED, "attitude provider"},
+    {268, "EULER_AXIS_Y", ParameterId::UNSPECIFIED, "attitude provider"},
+    {269, "EULER_AXIS_Z", ParameterId::UNSPECIFIED, "attitude provider"},
+    {270, "PRINCIPAL_ROTATION_ANGLE", ParameterId::UNSPECIFIED, "attitude provider"},
+    {300, "TANK_FUEL_MASS", ParameterId::FuelMass, nullptr},
+    {301, "TANK_PRESSURE", ParameterId::Pressure, nullptr},
+    {302, "TANK_TEMPERATURE", ParameterId::Temperature, nullptr},
+    {303, "TANK_REFERENCE_TEMPERATURE", ParameterId::RefTemperature, nullptr},
+    {304, "TANK_VOLUME", ParameterId::Volume, nullptr},
+    {305, "TANK_FUEL_DENSITY", ParameterId::FuelDensity, nullptr},
+    {320, "THRUSTER_DUTY_CYCLE", ParameterId::DutyCycle, nullptr},
+    {321, "THRUSTER_THRUST_SCALE_FACTOR", ParameterId::ThrustScaleFactor, nullptr},
+    {322, "THRUSTER_GRAVITATIONAL_ACCELERATION", ParameterId::GravitationalAccel, nullptr},
+    {323, "THRUSTER_MIXTURE_RATIO", ParameterId::UNSPECIFIED, "hardware provider"},
+    {324, "THRUSTER_SPECIFIC_IMPULSE", ParameterId::Isp, nullptr},
+    {325, "THRUSTER_THRUST_MAGNITUDE", ParameterId::ThrustMagnitude, nullptr},
+    {326, "THRUSTER_MASS_FLOW_RATE", ParameterId::MassFlowRate, nullptr},
+    {327, "THRUSTER_DIRECTION_X", ParameterId::ThrustDirection1, nullptr},
+    {328, "THRUSTER_DIRECTION_Y", ParameterId::ThrustDirection2, nullptr},
+    {329, "THRUSTER_DIRECTION_Z", ParameterId::ThrustDirection3, nullptr},
+    {330, "THRUSTER_THRUST_COEFFICIENTS", ParameterId::UNSPECIFIED, "hardware provider"},
+    {331, "THRUSTER_IMPULSE_COEFFICIENTS", ParameterId::UNSPECIFIED, "hardware provider"},
+    {370, "IMPULSIVE_BURN_ELEMENT_1", ParameterId::Element1, nullptr},
+    {371, "IMPULSIVE_BURN_ELEMENT_2", ParameterId::Element2, nullptr},
+    {372, "IMPULSIVE_BURN_ELEMENT_3", ParameterId::Element3, nullptr},
+    {373, "IMPULSIVE_BURN_DELTA_V_MAGNITUDE", ParameterId::UNSPECIFIED, "maneuver provider"},
+    {374, "IMPULSIVE_BURN_MASS_CONSUMED", ParameterId::UNSPECIFIED, "maneuver provider"},
+    {390, "FINITE_BURN_THRUST_MAGNITUDE", ParameterId::UNSPECIFIED, "maneuver provider"},
+    {391, "FINITE_BURN_MASS_FLOW_RATE", ParameterId::TotalMassFlowRate, nullptr},
+    {392, "FINITE_BURN_THRUST_X", ParameterId::TotalThrust1, nullptr},
+    {393, "FINITE_BURN_THRUST_Y", ParameterId::TotalThrust2, nullptr},
+    {394, "FINITE_BURN_THRUST_Z", ParameterId::TotalThrust3, nullptr},
+    {395, "FINITE_BURN_ACCELERATION_MAGNITUDE", ParameterId::UNSPECIFIED, "maneuver provider"},
+    {396, "FINITE_BURN_MASS_CONSUMED", ParameterId::UNSPECIFIED, "maneuver provider"},
+    {410, "TOTAL_POWER_AVAILABLE", ParameterId::TotalPowerAvailable, nullptr},
+    {411, "REQUIRED_BUS_POWER", ParameterId::RequiredBusPower, nullptr},
+    {412, "THRUST_POWER_AVAILABLE", ParameterId::ThrustPowerAvailable, nullptr},
+    {413, "GENERATED_POWER", ParameterId::UNSPECIFIED, "power provider"},
+    {430, "TOTAL_TORQUE_X", ParameterId::UNSPECIFIED, "torque provider"},
+    {431, "TOTAL_TORQUE_Y", ParameterId::UNSPECIFIED, "torque provider"},
+    {432, "TOTAL_TORQUE_Z", ParameterId::UNSPECIFIED, "torque provider"},
+    {433, "TOTAL_TORQUE_MAGNITUDE", ParameterId::UNSPECIFIED, "torque provider"},
+    {450, "SOLVER_STATUS", ParameterId::UNSPECIFIED, "solver provider"},
+    {451, "SOLVER_ITERATION_COUNT", ParameterId::UNSPECIFIED, "solver provider"},
+    {452, "SOLVER_OBJECTIVE_VALUE", ParameterId::UNSPECIFIED, "solver provider"},
+    {453, "SOLVER_MAXIMUM_CONSTRAINT_VIOLATION", ParameterId::UNSPECIFIED, "solver provider"},
+    {470, "RELATIVE_RANGE", ParameterId::UNSPECIFIED, "second-object state"},
+    {471, "RELATIVE_RANGE_RATE", ParameterId::UNSPECIFIED, "second-object state"},
+    {472, "RELATIVE_POSITION_X", ParameterId::UNSPECIFIED, "second-object state"},
+    {473, "RELATIVE_POSITION_Y", ParameterId::UNSPECIFIED, "second-object state"},
+    {474, "RELATIVE_POSITION_Z", ParameterId::UNSPECIFIED, "second-object state"},
+    {475, "RELATIVE_VELOCITY_X", ParameterId::UNSPECIFIED, "second-object state"},
+    {476, "RELATIVE_VELOCITY_Y", ParameterId::UNSPECIFIED, "second-object state"},
+    {477, "RELATIVE_VELOCITY_Z", ParameterId::UNSPECIFIED, "second-object state"},
+    {478, "TOPOCENTRIC_AZIMUTH", ParameterId::UNSPECIFIED, "surface-site position"},
+    {479, "TOPOCENTRIC_ELEVATION", ParameterId::UNSPECIFIED, "surface-site position"},
+    {480, "ANGULAR_SEPARATION", ParameterId::UNSPECIFIED, "second-object state"},
+    {481, "SOLAR_PHASE_ANGLE", ParameterId::UNSPECIFIED, "second-object state"},
+    {482, "LOCAL_SOLAR_ELEVATION_ANGLE", ParameterId::UNSPECIFIED, "surface-site position"},
+    {483, "ILLUMINATION_FRACTION", ParameterId::UNSPECIFIED, "the event-locator module answers illumination, not this one"},
+    {484, "LIGHT_TIME_DELAY", ParameterId::UNSPECIFIED, "second-object state"},
+    {65535, "PROVIDER_DEFINED", ParameterId::UNSPECIFIED, "resolved by name against the publisher's own catalog, not the roster"},
+};
+
+/// Roster parameter for a published parameter code, or nullptr when the
+/// code is outside the vocabulary this build was generated against.
+inline const PceCrosswalkEntry* crosswalkFromPce(uint16_t value) {
+  for (int i = 0; i < kPceCrosswalkSize; ++i) {
+    if (kPceCrosswalk[i].pceParameterValue == value) return &kPceCrosswalk[i];
+  }
+  return nullptr;
+}
+
+/// Published parameter code for a roster parameter, or 0 when the roster
+/// entry has no published name (it is one of the reference tool's own
+/// shorthands, reachable by name but not by code).
+inline uint16_t crosswalkToPce(ParameterId id) {
+  for (int i = 0; i < kPceCrosswalkSize; ++i) {
+    if (kPceCrosswalk[i].id == id) return kPceCrosswalk[i].pceParameterValue;
+  }
+  return 0;
+}
+
+}  // namespace parameters
+}  // namespace sdn
+
+#endif  // SDN_ANALYSIS_PARAMETERS_PCE_CROSSWALK_HPP

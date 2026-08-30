@@ -1,0 +1,200 @@
+{
+  "source": {
+    "description": "Numeric vectors transcribed from the external orbital-mechanics library's own unit tests, which are the acceptance's named authority for the element sets and the geodetic conversion.",
+    "repository": "https://github.com/CS-SI/Orekit",
+    "ref": "main",
+    "retrieved": "2026-08-30",
+    "license": "Apache-2.0",
+    "files": [
+      "src/test/java/org/orekit/orbits/KeplerianOrbitTest.java",
+      "src/test/java/org/orekit/orbits/EquinoctialOrbitTest.java",
+      "src/test/java/org/orekit/bodies/OneAxisEllipsoidTest.java"
+    ],
+    "note": "Every number below appears verbatim in the cited test as an asserted expectation. Nothing here is re-derived, rounded or re-fitted; where the test computes an expectation from other literals (the equinoctial inclination) the literals are carried and the same expression is evaluated."
+  },
+  "keplerianToCartesian": {
+    "from": "KeplerianOrbitTest.testKeplerianToCartesian",
+    "gravitationalParameter": 398600470000000.0,
+    "elements": {
+      "semiMajorAxis": 24464560.0,
+      "eccentricity": 0.7311,
+      "inclination": 0.122138,
+      "raan": 1.00681,
+      "argumentOfPeriapsis": 3.10686,
+      "meanAnomaly": 0.048363
+    },
+    "position": [
+      -1076225.32467967,
+      -6765896.36432773,
+      -332308.783350379
+    ],
+    "velocity": [
+      9356.85775154103,
+      -3312.34775037644,
+      -1188.01577532701
+    ],
+    "constructorOrder": "KeplerianOrbit(a, e, i, pa, raan, anomaly, PositionAngleType, frame, date, mu) \u2014 the PERIGEE ARGUMENT precedes the right ascension of the ascending node in the source constructor's signature (KeplerianOrbit.java javadoc, @param pa then @param raan). The literals 3.10686 and 1.00681 are therefore pa and raan in that order, not the reverse."
+  },
+  "keplerianToEquinoctial": {
+    "from": "KeplerianOrbitTest.testKeplerianToEquinoctial",
+    "comment": "The library's equinoctial convention is ex = e cos(argPer + raan), ey = e sin(argPer + raan), hx = tan(i/2) cos(raan), hy = tan(i/2) sin(raan), LM = M + argPer + raan. Our Equinoctial set names the same quantities k, h, q, p and meanLongitude.",
+    "semiMajorAxis": 24464560.0,
+    "equinoctialEx": -0.412036802887626,
+    "equinoctialEy": -0.603931190671706,
+    "inclinationFrom": {
+      "ix": 0.0652494417368829,
+      "iy": 0.103158450084864,
+      "expression": "2 * asin(sqrt((ix^2 + iy^2) / 4))"
+    },
+    "meanLongitude": 4.162033
+  },
+  "equinoctialToCartesian": {
+    "from": "EquinoctialOrbitTest.testEquinoctialToCartesian",
+    "gravitationalParameter": 398600470000000.0,
+    "semiMajorAxis": 42166712.0,
+    "equinoctialEx": -7.9e-06,
+    "equinoctialEy": 0.00011,
+    "inclinationVectorFrom": {
+      "ix": 0.00012,
+      "iy": -0.000116
+    },
+    "meanLongitude": 5.3,
+    "position": [
+      23374566.8678733,
+      -35099891.4352669,
+      -1500.53723123334
+    ],
+    "velocity": [
+      2558.7096558809967,
+      1704.1586039092576,
+      0.5013093577879
+    ]
+  },
+  "geodetic": {
+    "from": "OneAxisEllipsoidTest",
+    "comment": "checkCartesianToEllipsoidic(equatorialRadius, flattening, x, y, z, longitude, latitude, altitude); positions are body-fixed metres, angles radians, altitude metres. flattening is carried as its denominator so the value is reproduced by division exactly as the source test writes it.",
+    "cases": [
+      {
+        "name": "testStandard",
+        "equatorialRadius": 6378137.0,
+        "flattening": 0.003352810681182319,
+        "position": [
+          4637885.347,
+          121344.608,
+          4362452.869
+        ],
+        "longitude": 0.026157811533131,
+        "latitude": 0.757987116290729,
+        "altitude": 260.455572965555,
+        "flatteningDenominator": 298.257222101,
+        "printedDecimals": {
+          "longitude": 15,
+          "latitude": 15,
+          "altitude": 12
+        }
+      },
+      {
+        "name": "testLongitudeZero",
+        "equatorialRadius": 6378137.0,
+        "flattening": 0.003352810681182319,
+        "position": [
+          6378400.0,
+          0.0,
+          6379000.0
+        ],
+        "longitude": 0.0,
+        "latitude": 0.787815771252351,
+        "altitude": 2653416.77864152,
+        "flatteningDenominator": 298.257222101,
+        "printedDecimals": {
+          "longitude": 1,
+          "latitude": 15,
+          "altitude": 8
+        }
+      },
+      {
+        "name": "testLongitudePi",
+        "equatorialRadius": 6378137.0,
+        "flattening": 0.003352810681182319,
+        "position": [
+          -6379999.0,
+          0.0,
+          6379000.0
+        ],
+        "longitude": 3.14159265358979,
+        "latitude": 0.787690146758403,
+        "altitude": 2654544.7767725,
+        "flatteningDenominator": 298.257222101,
+        "printedDecimals": {
+          "longitude": 14,
+          "latitude": 15,
+          "altitude": 7
+        }
+      },
+      {
+        "name": "testNorthPole",
+        "equatorialRadius": 6378137.0,
+        "flattening": 0.003352810681182319,
+        "position": [
+          0.0,
+          0.0,
+          7000000.0
+        ],
+        "longitude": 0.0,
+        "latitude": 1.5707963267949,
+        "altitude": 643247.685859644,
+        "flatteningDenominator": 298.257222101,
+        "printedDecimals": {
+          "longitude": 1,
+          "latitude": 14,
+          "altitude": 9
+        }
+      },
+      {
+        "name": "testEquator",
+        "equatorialRadius": 6378137.0,
+        "flattening": 0.003352810681182319,
+        "position": [
+          6379888.0,
+          6377000.0,
+          0.0
+        ],
+        "longitude": 0.785171775899913,
+        "latitude": 0.0,
+        "altitude": 2642345.24279301,
+        "flatteningDenominator": 298.257222101,
+        "printedDecimals": {
+          "longitude": 15,
+          "latitude": 1,
+          "altitude": 8
+        }
+      },
+      {
+        "name": "testOutside",
+        "equatorialRadius": 6378137.0,
+        "flattening": 0.0033528131778969143,
+        "position": [
+          5722966.0,
+          -3304156.0,
+          -24621187.0
+        ],
+        "longitude": 5.75958652642615,
+        "latitude": -1.3089969725151,
+        "altitude": 19134410.3342696,
+        "flatteningDenominator": 298.257,
+        "printedDecimals": {
+          "longitude": 14,
+          "latitude": 13,
+          "altitude": 7
+        }
+      }
+    ],
+    "precisionNote": "printedDecimals records how many digits each expectation carries after the decimal point IN THE SOURCE TEST. Agreement cannot be asserted finer than the authority prints: the altitude 19134410.3342696 states its last digit at 1e-7 m, so a 1e-9 m bar on it would be measuring the transcription, not the conversion. The harness therefore uses max(acceptance bar, one unit in the last printed place) and reports the measured value either way."
+  },
+  "siderealTime": {
+    "from": "Vallado, Fundamentals of Astrodynamics and Applications, 4th ed., Example 3-5 (Finding GMST)",
+    "comment": "The published worked example of the IAU-1982 Greenwich mean sidereal time series. It is the acceptance's named authority for LST and MHA, and it is the reason the legacy series is retained under its own parameter name.",
+    "julianDateUT1": 2448855.009722222,
+    "greenwichMeanSiderealTimeDegrees": 152.57878781
+  }
+}

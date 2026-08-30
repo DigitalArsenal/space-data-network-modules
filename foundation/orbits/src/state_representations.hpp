@@ -75,6 +75,10 @@ constexpr double kCircularTolerance = 1e-11;
 constexpr double kEquatorialTolerance = 1e-11;
 constexpr double kParabolicTolerance = 1e-11;
 
+// 1/sqrt(2). The latitude at which the geodetic height's two equivalent forms
+// swap which one is numerically stable — see planetodeticFromCartesian.
+constexpr double kOneOverSqrtTwo = 0.70710678118654752440084436210484904;
+
 // ---------------------------------------------------------------------------
 // Small vector algebra. Deliberately local: this header must not depend on
 // higherpop/vec3.hpp (which is native-only) nor on the HPOP coords types.
@@ -1236,10 +1240,27 @@ inline bool planetodeticFromCartesian(const Cartesian& state, const Ellipsoid& e
     const double cosTheta = std::cos(theta);
     latitude = std::atan2(z + ePrimeSquared * b * sinTheta * sinTheta * sinTheta,
                           p - eSquared * a * cosTheta * cosTheta * cosTheta);
+    // Height from the STABLE branch for the latitude in hand. `p / cos(lat) - N`
+    // is the textbook form and it is unconditionally unstable near the poles:
+    // at a position a nanometre off the polar axis, cos(lat) is 1e-16 and the
+    // quotient is meaningless, so the height comes back wrong by megametres
+    // while every other quantity is right. `z / sin(lat) - N(1 - e^2)` is the
+    // same height written on the other axis and is stable there; away from the
+    // poles the roles reverse. Switching at 45 degrees keeps both divisors above
+    // 1/sqrt(2). (Found by gmat-06 measuring the reference polar case through a
+    // rotation round trip, which moves it off the exactly-zero axis that the
+    // `p < 1e-12` guard above catches.)
+    const auto heightAt = [&](double lat) {
+      const double sinLat = std::sin(lat);
+      const double cosLat = std::cos(lat);
+      const double N = a / std::sqrt(1.0 - eSquared * sinLat * sinLat);
+      return std::fabs(sinLat) > kOneOverSqrtTwo ? z / sinLat - N * (1.0 - eSquared)
+                                                 : p / cosLat - N;
+    };
     for (int iteration = 0; iteration < 8; ++iteration) {
       const double sinLat = std::sin(latitude);
       const double N = a / std::sqrt(1.0 - eSquared * sinLat * sinLat);
-      height = p / std::cos(latitude) - N;
+      height = heightAt(latitude);
       const double next = std::atan2(z, p * (1.0 - eSquared * N / (N + height)));
       if (std::fabs(next - latitude) < 1e-16) {
         latitude = next;
@@ -1247,9 +1268,7 @@ inline bool planetodeticFromCartesian(const Cartesian& state, const Ellipsoid& e
       }
       latitude = next;
     }
-    const double sinLat = std::sin(latitude);
-    const double N = a / std::sqrt(1.0 - eSquared * sinLat * sinLat);
-    height = p / std::cos(latitude) - N;
+    height = heightAt(latitude);
   }
 
   // Geodetic local horizontal basis.

@@ -1,0 +1,1168 @@
+{
+  "sdsVersion": "1.201.0",
+  "total": 224,
+  "mapped": 183,
+  "rows": [
+    {
+      "name": "UNSPECIFIED",
+      "value": 0,
+      "target": null,
+      "reason": "not a parameter"
+    },
+    {
+      "name": "POSITION_X",
+      "value": 1,
+      "target": "X"
+    },
+    {
+      "name": "POSITION_Y",
+      "value": 2,
+      "target": "Y"
+    },
+    {
+      "name": "POSITION_Z",
+      "value": 3,
+      "target": "Z"
+    },
+    {
+      "name": "VELOCITY_X",
+      "value": 4,
+      "target": "VX"
+    },
+    {
+      "name": "VELOCITY_Y",
+      "value": 5,
+      "target": "VY"
+    },
+    {
+      "name": "VELOCITY_Z",
+      "value": 6,
+      "target": "VZ"
+    },
+    {
+      "name": "POSITION_MAGNITUDE",
+      "value": 7,
+      "target": "RMAG"
+    },
+    {
+      "name": "VELOCITY_MAGNITUDE",
+      "value": 8,
+      "target": "VMAG"
+    },
+    {
+      "name": "RIGHT_ASCENSION",
+      "value": 9,
+      "target": "RA"
+    },
+    {
+      "name": "DECLINATION",
+      "value": 10,
+      "target": "DEC"
+    },
+    {
+      "name": "VELOCITY_RIGHT_ASCENSION",
+      "value": 11,
+      "target": "RAV"
+    },
+    {
+      "name": "VELOCITY_DECLINATION",
+      "value": 12,
+      "target": "DECV"
+    },
+    {
+      "name": "FLIGHT_PATH_ANGLE",
+      "value": 13,
+      "target": "FPA"
+    },
+    {
+      "name": "AZIMUTH_ANGLE",
+      "value": 14,
+      "target": "AZI"
+    },
+    {
+      "name": "HORIZONTAL_FLIGHT_PATH_ANGLE",
+      "value": 15,
+      "target": "HorizontalFlightPathAngle"
+    },
+    {
+      "name": "RADIAL_VELOCITY",
+      "value": 16,
+      "target": "RadialVelocity"
+    },
+    {
+      "name": "ANGULAR_MOMENTUM_MAGNITUDE",
+      "value": 17,
+      "target": "HMAG"
+    },
+    {
+      "name": "ANGULAR_MOMENTUM_X",
+      "value": 18,
+      "target": "HX"
+    },
+    {
+      "name": "ANGULAR_MOMENTUM_Y",
+      "value": 19,
+      "target": "HY"
+    },
+    {
+      "name": "ANGULAR_MOMENTUM_Z",
+      "value": 20,
+      "target": "HZ"
+    },
+    {
+      "name": "SEMI_MAJOR_AXIS",
+      "value": 30,
+      "target": "SMA"
+    },
+    {
+      "name": "ECCENTRICITY",
+      "value": 31,
+      "target": "ECC"
+    },
+    {
+      "name": "INCLINATION",
+      "value": 32,
+      "target": "INC"
+    },
+    {
+      "name": "RIGHT_ASCENSION_OF_ASCENDING_NODE",
+      "value": 33,
+      "target": "RAAN"
+    },
+    {
+      "name": "ARGUMENT_OF_PERIAPSIS",
+      "value": 34,
+      "target": "AOP"
+    },
+    {
+      "name": "TRUE_ANOMALY",
+      "value": 35,
+      "target": "TA"
+    },
+    {
+      "name": "MEAN_ANOMALY",
+      "value": 36,
+      "target": "MA"
+    },
+    {
+      "name": "ECCENTRIC_ANOMALY",
+      "value": 37,
+      "target": "EA"
+    },
+    {
+      "name": "HYPERBOLIC_ANOMALY",
+      "value": 38,
+      "target": "HA"
+    },
+    {
+      "name": "RADIUS_OF_PERIAPSIS",
+      "value": 39,
+      "target": "RadPer"
+    },
+    {
+      "name": "RADIUS_OF_APOAPSIS",
+      "value": 40,
+      "target": "RadApo"
+    },
+    {
+      "name": "ALTITUDE_OF_PERIAPSIS",
+      "value": 41,
+      "target": "AltitudeOfPeriapsis"
+    },
+    {
+      "name": "ALTITUDE_OF_APOAPSIS",
+      "value": 42,
+      "target": "AltitudeOfApoapsis"
+    },
+    {
+      "name": "SEMILATUS_RECTUM",
+      "value": 43,
+      "target": "SemilatusRectum"
+    },
+    {
+      "name": "ORBIT_PERIOD",
+      "value": 44,
+      "target": "OrbitPeriod"
+    },
+    {
+      "name": "MEAN_MOTION",
+      "value": 45,
+      "target": "MM"
+    },
+    {
+      "name": "SPECIFIC_ORBITAL_ENERGY",
+      "value": 46,
+      "target": "Energy"
+    },
+    {
+      "name": "CHARACTERISTIC_ENERGY",
+      "value": 47,
+      "target": "C3Energy"
+    },
+    {
+      "name": "VELOCITY_AT_PERIAPSIS",
+      "value": 48,
+      "target": "VelPeriapsis"
+    },
+    {
+      "name": "VELOCITY_AT_APOAPSIS",
+      "value": 49,
+      "target": "VelApoapsis"
+    },
+    {
+      "name": "ARGUMENT_OF_LATITUDE",
+      "value": 50,
+      "target": "ArgumentOfLatitude"
+    },
+    {
+      "name": "TRUE_LONGITUDE",
+      "value": 51,
+      "target": "TLONG"
+    },
+    {
+      "name": "MEAN_LONGITUDE",
+      "value": 52,
+      "target": "MLONG"
+    },
+    {
+      "name": "BETA_ANGLE",
+      "value": 53,
+      "target": "BetaAngle"
+    },
+    {
+      "name": "ECCENTRICITY_VECTOR_X",
+      "value": 54,
+      "target": "EccentricityVectorX"
+    },
+    {
+      "name": "ECCENTRICITY_VECTOR_Y",
+      "value": 55,
+      "target": "EccentricityVectorY"
+    },
+    {
+      "name": "ECCENTRICITY_VECTOR_Z",
+      "value": 56,
+      "target": "EccentricityVectorZ"
+    },
+    {
+      "name": "SEMI_MINOR_AXIS",
+      "value": 57,
+      "target": "SemiMinorAxis"
+    },
+    {
+      "name": "EQUINOCTIAL_H",
+      "value": 70,
+      "target": "EquinoctialH"
+    },
+    {
+      "name": "EQUINOCTIAL_K",
+      "value": 71,
+      "target": "EquinoctialK"
+    },
+    {
+      "name": "EQUINOCTIAL_P",
+      "value": 72,
+      "target": "EquinoctialP"
+    },
+    {
+      "name": "EQUINOCTIAL_Q",
+      "value": 73,
+      "target": "EquinoctialQ"
+    },
+    {
+      "name": "EQUINOCTIAL_MEAN_LONGITUDE",
+      "value": 74,
+      "target": "MLONG"
+    },
+    {
+      "name": "MODIFIED_EQUINOCTIAL_F",
+      "value": 75,
+      "target": "ModEquinoctialF"
+    },
+    {
+      "name": "MODIFIED_EQUINOCTIAL_G",
+      "value": 76,
+      "target": "ModEquinoctialG"
+    },
+    {
+      "name": "MODIFIED_EQUINOCTIAL_H",
+      "value": 77,
+      "target": "ModEquinoctialH"
+    },
+    {
+      "name": "MODIFIED_EQUINOCTIAL_K",
+      "value": 78,
+      "target": "ModEquinoctialK"
+    },
+    {
+      "name": "MODIFIED_EQUINOCTIAL_TRUE_LONGITUDE",
+      "value": 79,
+      "target": "TLONG"
+    },
+    {
+      "name": "MODIFIED_EQUINOCTIAL_SEMILATUS_RECTUM",
+      "value": 80,
+      "target": "SemilatusRectum"
+    },
+    {
+      "name": "ALTERNATE_EQUINOCTIAL_P",
+      "value": 81,
+      "target": "AltEquinoctialP"
+    },
+    {
+      "name": "ALTERNATE_EQUINOCTIAL_Q",
+      "value": 82,
+      "target": "AltEquinoctialQ"
+    },
+    {
+      "name": "ALTERNATE_EQUINOCTIAL_MEAN_MOTION",
+      "value": 83,
+      "target": "MM"
+    },
+    {
+      "name": "DELAUNAY_MEAN_ANOMALY",
+      "value": 90,
+      "target": "Delaunayl"
+    },
+    {
+      "name": "DELAUNAY_ARGUMENT_OF_PERIAPSIS",
+      "value": 91,
+      "target": "Delaunayg"
+    },
+    {
+      "name": "DELAUNAY_ASCENDING_NODE",
+      "value": 92,
+      "target": "Delaunayh"
+    },
+    {
+      "name": "DELAUNAY_ACTION_TOTAL",
+      "value": 93,
+      "target": "DelaunayL"
+    },
+    {
+      "name": "DELAUNAY_ACTION_ANGULAR_MOMENTUM",
+      "value": 94,
+      "target": "DelaunayG"
+    },
+    {
+      "name": "DELAUNAY_ACTION_POLAR_ANGULAR_MOMENTUM",
+      "value": 95,
+      "target": "DelaunayH"
+    },
+    {
+      "name": "GEODETIC_LATITUDE",
+      "value": 100,
+      "target": "Latitude"
+    },
+    {
+      "name": "GEODETIC_LONGITUDE",
+      "value": 101,
+      "target": "Longitude"
+    },
+    {
+      "name": "GEODETIC_ALTITUDE",
+      "value": 102,
+      "target": "Altitude"
+    },
+    {
+      "name": "GEOCENTRIC_LATITUDE",
+      "value": 103,
+      "target": "GeocentricLatitude"
+    },
+    {
+      "name": "PLANETODETIC_RADIUS_MAGNITUDE",
+      "value": 104,
+      "target": "PlanetodeticRMAG"
+    },
+    {
+      "name": "PLANETODETIC_VELOCITY_MAGNITUDE",
+      "value": 105,
+      "target": "PlanetodeticVMAG"
+    },
+    {
+      "name": "PLANETODETIC_AZIMUTH",
+      "value": 106,
+      "target": "PlanetodeticAZI"
+    },
+    {
+      "name": "PLANETODETIC_HORIZONTAL_FLIGHT_PATH_ANGLE",
+      "value": 107,
+      "target": "PlanetodeticHFPA"
+    },
+    {
+      "name": "LOCAL_SIDEREAL_TIME",
+      "value": 108,
+      "target": "LST"
+    },
+    {
+      "name": "PRIME_MERIDIAN_HOUR_ANGLE",
+      "value": 109,
+      "target": "MHA"
+    },
+    {
+      "name": "B_DOT_T",
+      "value": 120,
+      "target": "BdotT"
+    },
+    {
+      "name": "B_DOT_R",
+      "value": 121,
+      "target": "BdotR"
+    },
+    {
+      "name": "B_VECTOR_MAGNITUDE",
+      "value": 122,
+      "target": "BVectorMag"
+    },
+    {
+      "name": "B_VECTOR_ANGLE",
+      "value": 123,
+      "target": "BVectorAngle"
+    },
+    {
+      "name": "DECLINATION_OF_DEPARTURE_ASYMPTOTE",
+      "value": 124,
+      "target": "DLA"
+    },
+    {
+      "name": "RIGHT_ASCENSION_OF_DEPARTURE_ASYMPTOTE",
+      "value": 125,
+      "target": "RLA"
+    },
+    {
+      "name": "INCOMING_RADIUS_OF_PERIAPSIS",
+      "value": 126,
+      "target": "IncomingRadPer"
+    },
+    {
+      "name": "INCOMING_CHARACTERISTIC_ENERGY",
+      "value": 127,
+      "target": "IncomingC3Energy"
+    },
+    {
+      "name": "INCOMING_ASYMPTOTE_RIGHT_ASCENSION",
+      "value": 128,
+      "target": "IncomingRHA"
+    },
+    {
+      "name": "INCOMING_ASYMPTOTE_DECLINATION",
+      "value": 129,
+      "target": "IncomingDHA"
+    },
+    {
+      "name": "INCOMING_B_VECTOR_AZIMUTH",
+      "value": 130,
+      "target": "IncomingBVAZI"
+    },
+    {
+      "name": "OUTGOING_RADIUS_OF_PERIAPSIS",
+      "value": 131,
+      "target": "OutgoingRadPer"
+    },
+    {
+      "name": "OUTGOING_CHARACTERISTIC_ENERGY",
+      "value": 132,
+      "target": "OutgoingC3Energy"
+    },
+    {
+      "name": "OUTGOING_ASYMPTOTE_RIGHT_ASCENSION",
+      "value": 133,
+      "target": "OutgoingRHA"
+    },
+    {
+      "name": "OUTGOING_ASYMPTOTE_DECLINATION",
+      "value": 134,
+      "target": "OutgoingDHA"
+    },
+    {
+      "name": "OUTGOING_B_VECTOR_AZIMUTH",
+      "value": 135,
+      "target": "OutgoingBVAZI"
+    },
+    {
+      "name": "HYPERBOLIC_EXCESS_VELOCITY",
+      "value": 136,
+      "target": "HyperbolicExcessVelocity"
+    },
+    {
+      "name": "BROUWER_SHORT_SEMI_MAJOR_AXIS",
+      "value": 140,
+      "target": "BrouwerShortSMA"
+    },
+    {
+      "name": "BROUWER_SHORT_ECCENTRICITY",
+      "value": 141,
+      "target": "BrouwerShortECC"
+    },
+    {
+      "name": "BROUWER_SHORT_INCLINATION",
+      "value": 142,
+      "target": "BrouwerShortINC"
+    },
+    {
+      "name": "BROUWER_SHORT_RIGHT_ASCENSION_OF_ASCENDING_NODE",
+      "value": 143,
+      "target": "BrouwerShortRAAN"
+    },
+    {
+      "name": "BROUWER_SHORT_ARGUMENT_OF_PERIAPSIS",
+      "value": 144,
+      "target": "BrouwerShortAOP"
+    },
+    {
+      "name": "BROUWER_SHORT_MEAN_ANOMALY",
+      "value": 145,
+      "target": "BrouwerShortMA"
+    },
+    {
+      "name": "BROUWER_LONG_SEMI_MAJOR_AXIS",
+      "value": 146,
+      "target": "BrouwerLongSMA"
+    },
+    {
+      "name": "BROUWER_LONG_ECCENTRICITY",
+      "value": 147,
+      "target": "BrouwerLongECC"
+    },
+    {
+      "name": "BROUWER_LONG_INCLINATION",
+      "value": 148,
+      "target": "BrouwerLongINC"
+    },
+    {
+      "name": "BROUWER_LONG_RIGHT_ASCENSION_OF_ASCENDING_NODE",
+      "value": 149,
+      "target": "BrouwerLongRAAN"
+    },
+    {
+      "name": "BROUWER_LONG_ARGUMENT_OF_PERIAPSIS",
+      "value": 150,
+      "target": "BrouwerLongAOP"
+    },
+    {
+      "name": "BROUWER_LONG_MEAN_ANOMALY",
+      "value": 151,
+      "target": "BrouwerLongMA"
+    },
+    {
+      "name": "ORBIT_STATE_TRANSITION_MATRIX",
+      "value": 160,
+      "target": "OrbitSTM"
+    },
+    {
+      "name": "ORBIT_STATE_TRANSITION_MATRIX_A",
+      "value": 161,
+      "target": "OrbitSTMA"
+    },
+    {
+      "name": "ORBIT_STATE_TRANSITION_MATRIX_B",
+      "value": 162,
+      "target": "OrbitSTMB"
+    },
+    {
+      "name": "ORBIT_STATE_TRANSITION_MATRIX_C",
+      "value": 163,
+      "target": "OrbitSTMC"
+    },
+    {
+      "name": "ORBIT_STATE_TRANSITION_MATRIX_D",
+      "value": 164,
+      "target": "OrbitSTMD"
+    },
+    {
+      "name": "ORBIT_ERROR_COVARIANCE_MATRIX",
+      "value": 165,
+      "target": "OrbitErrorCovariance"
+    },
+    {
+      "name": "EPOCH_A1_GREGORIAN",
+      "value": 180,
+      "target": "A1Gregorian"
+    },
+    {
+      "name": "EPOCH_A1_MODIFIED_JULIAN",
+      "value": 181,
+      "target": "A1ModJulian"
+    },
+    {
+      "name": "EPOCH_TAI_GREGORIAN",
+      "value": 182,
+      "target": "TAIGregorian"
+    },
+    {
+      "name": "EPOCH_TAI_MODIFIED_JULIAN",
+      "value": 183,
+      "target": "TAIModJulian"
+    },
+    {
+      "name": "EPOCH_TT_GREGORIAN",
+      "value": 184,
+      "target": "TTGregorian"
+    },
+    {
+      "name": "EPOCH_TT_MODIFIED_JULIAN",
+      "value": 185,
+      "target": "TTModJulian"
+    },
+    {
+      "name": "EPOCH_TDB_GREGORIAN",
+      "value": 186,
+      "target": "TDBGregorian"
+    },
+    {
+      "name": "EPOCH_TDB_MODIFIED_JULIAN",
+      "value": 187,
+      "target": "TDBModJulian"
+    },
+    {
+      "name": "EPOCH_UTC_GREGORIAN",
+      "value": 188,
+      "target": "UTCGregorian"
+    },
+    {
+      "name": "EPOCH_UTC_MODIFIED_JULIAN",
+      "value": 189,
+      "target": "UTCModJulian"
+    },
+    {
+      "name": "EPOCH_UT1_GREGORIAN",
+      "value": 190,
+      "target": "UT1Gregorian"
+    },
+    {
+      "name": "EPOCH_UT1_MODIFIED_JULIAN",
+      "value": 191,
+      "target": "UT1ModJulian"
+    },
+    {
+      "name": "EPOCH_GPS_GREGORIAN",
+      "value": 192,
+      "target": null,
+      "reason": "time-scale provider: the GPS scale is the time module's, not this one's"
+    },
+    {
+      "name": "EPOCH_GPS_MODIFIED_JULIAN",
+      "value": 193,
+      "target": null,
+      "reason": "time-scale provider: the GPS scale is the time module's, not this one's"
+    },
+    {
+      "name": "ELAPSED_DAYS",
+      "value": 194,
+      "target": "ElapsedDays"
+    },
+    {
+      "name": "ELAPSED_SECONDS",
+      "value": 195,
+      "target": "ElapsedSecs"
+    },
+    {
+      "name": "DRY_MASS",
+      "value": 220,
+      "target": "DryMass"
+    },
+    {
+      "name": "TOTAL_MASS",
+      "value": 221,
+      "target": "TotalMass"
+    },
+    {
+      "name": "DRAG_COEFFICIENT",
+      "value": 222,
+      "target": "Cd"
+    },
+    {
+      "name": "DRAG_AREA",
+      "value": 223,
+      "target": "DragArea"
+    },
+    {
+      "name": "REFLECTIVITY_COEFFICIENT",
+      "value": 224,
+      "target": "Cr"
+    },
+    {
+      "name": "SOLAR_RADIATION_PRESSURE_AREA",
+      "value": 225,
+      "target": "SRPArea"
+    },
+    {
+      "name": "ATMOSPHERIC_DENSITY_SCALE_FACTOR",
+      "value": 226,
+      "target": "AtmosDensityScaleFactor"
+    },
+    {
+      "name": "DRAG_SCALE_FACTOR",
+      "value": 227,
+      "target": "SPADDragScaleFactor"
+    },
+    {
+      "name": "SOLAR_RADIATION_PRESSURE_SCALE_FACTOR",
+      "value": 228,
+      "target": "SPADSRPScaleFactor"
+    },
+    {
+      "name": "BALLISTIC_COEFFICIENT",
+      "value": 229,
+      "target": "BallisticCoefficient"
+    },
+    {
+      "name": "AREA_TO_MASS_RATIO",
+      "value": 230,
+      "target": "AreaToMassRatio"
+    },
+    {
+      "name": "CENTER_OF_MASS_X",
+      "value": 231,
+      "target": "SystemCenterOfMassX"
+    },
+    {
+      "name": "CENTER_OF_MASS_Y",
+      "value": 232,
+      "target": "SystemCenterOfMassY"
+    },
+    {
+      "name": "CENTER_OF_MASS_Z",
+      "value": 233,
+      "target": "SystemCenterOfMassZ"
+    },
+    {
+      "name": "MOMENT_OF_INERTIA_MATRIX",
+      "value": 234,
+      "target": null,
+      "reason": "mass-property provider"
+    },
+    {
+      "name": "ATTITUDE_QUATERNION_1",
+      "value": 250,
+      "target": "Q1"
+    },
+    {
+      "name": "ATTITUDE_QUATERNION_2",
+      "value": 251,
+      "target": "Q2"
+    },
+    {
+      "name": "ATTITUDE_QUATERNION_3",
+      "value": 252,
+      "target": "Q3"
+    },
+    {
+      "name": "ATTITUDE_QUATERNION_4",
+      "value": 253,
+      "target": "Q4"
+    },
+    {
+      "name": "ATTITUDE_DIRECTION_COSINE_MATRIX",
+      "value": 254,
+      "target": "DirectionCosineMatrix"
+    },
+    {
+      "name": "EULER_ANGLE_1",
+      "value": 255,
+      "target": "EulerAngle1"
+    },
+    {
+      "name": "EULER_ANGLE_2",
+      "value": 256,
+      "target": "EulerAngle2"
+    },
+    {
+      "name": "EULER_ANGLE_3",
+      "value": 257,
+      "target": "EulerAngle3"
+    },
+    {
+      "name": "EULER_ANGLE_RATE_1",
+      "value": 258,
+      "target": "EulerAngleRate1"
+    },
+    {
+      "name": "EULER_ANGLE_RATE_2",
+      "value": 259,
+      "target": "EulerAngleRate2"
+    },
+    {
+      "name": "EULER_ANGLE_RATE_3",
+      "value": 260,
+      "target": "EulerAngleRate3"
+    },
+    {
+      "name": "MODIFIED_RODRIGUES_PARAMETER_1",
+      "value": 261,
+      "target": "MRP1"
+    },
+    {
+      "name": "MODIFIED_RODRIGUES_PARAMETER_2",
+      "value": 262,
+      "target": "MRP2"
+    },
+    {
+      "name": "MODIFIED_RODRIGUES_PARAMETER_3",
+      "value": 263,
+      "target": "MRP3"
+    },
+    {
+      "name": "ANGULAR_VELOCITY_X",
+      "value": 264,
+      "target": "AngularVelocityX"
+    },
+    {
+      "name": "ANGULAR_VELOCITY_Y",
+      "value": 265,
+      "target": "AngularVelocityY"
+    },
+    {
+      "name": "ANGULAR_VELOCITY_Z",
+      "value": 266,
+      "target": "AngularVelocityZ"
+    },
+    {
+      "name": "EULER_AXIS_X",
+      "value": 267,
+      "target": null,
+      "reason": "attitude provider"
+    },
+    {
+      "name": "EULER_AXIS_Y",
+      "value": 268,
+      "target": null,
+      "reason": "attitude provider"
+    },
+    {
+      "name": "EULER_AXIS_Z",
+      "value": 269,
+      "target": null,
+      "reason": "attitude provider"
+    },
+    {
+      "name": "PRINCIPAL_ROTATION_ANGLE",
+      "value": 270,
+      "target": null,
+      "reason": "attitude provider"
+    },
+    {
+      "name": "TANK_FUEL_MASS",
+      "value": 300,
+      "target": "FuelMass"
+    },
+    {
+      "name": "TANK_PRESSURE",
+      "value": 301,
+      "target": "Pressure"
+    },
+    {
+      "name": "TANK_TEMPERATURE",
+      "value": 302,
+      "target": "Temperature"
+    },
+    {
+      "name": "TANK_REFERENCE_TEMPERATURE",
+      "value": 303,
+      "target": "RefTemperature"
+    },
+    {
+      "name": "TANK_VOLUME",
+      "value": 304,
+      "target": "Volume"
+    },
+    {
+      "name": "TANK_FUEL_DENSITY",
+      "value": 305,
+      "target": "FuelDensity"
+    },
+    {
+      "name": "THRUSTER_DUTY_CYCLE",
+      "value": 320,
+      "target": "DutyCycle"
+    },
+    {
+      "name": "THRUSTER_THRUST_SCALE_FACTOR",
+      "value": 321,
+      "target": "ThrustScaleFactor"
+    },
+    {
+      "name": "THRUSTER_GRAVITATIONAL_ACCELERATION",
+      "value": 322,
+      "target": "GravitationalAccel"
+    },
+    {
+      "name": "THRUSTER_MIXTURE_RATIO",
+      "value": 323,
+      "target": null,
+      "reason": "hardware provider"
+    },
+    {
+      "name": "THRUSTER_SPECIFIC_IMPULSE",
+      "value": 324,
+      "target": "Isp"
+    },
+    {
+      "name": "THRUSTER_THRUST_MAGNITUDE",
+      "value": 325,
+      "target": "ThrustMagnitude"
+    },
+    {
+      "name": "THRUSTER_MASS_FLOW_RATE",
+      "value": 326,
+      "target": "MassFlowRate"
+    },
+    {
+      "name": "THRUSTER_DIRECTION_X",
+      "value": 327,
+      "target": "ThrustDirection1"
+    },
+    {
+      "name": "THRUSTER_DIRECTION_Y",
+      "value": 328,
+      "target": "ThrustDirection2"
+    },
+    {
+      "name": "THRUSTER_DIRECTION_Z",
+      "value": 329,
+      "target": "ThrustDirection3"
+    },
+    {
+      "name": "THRUSTER_THRUST_COEFFICIENTS",
+      "value": 330,
+      "target": null,
+      "reason": "hardware provider"
+    },
+    {
+      "name": "THRUSTER_IMPULSE_COEFFICIENTS",
+      "value": 331,
+      "target": null,
+      "reason": "hardware provider"
+    },
+    {
+      "name": "IMPULSIVE_BURN_ELEMENT_1",
+      "value": 370,
+      "target": "Element1"
+    },
+    {
+      "name": "IMPULSIVE_BURN_ELEMENT_2",
+      "value": 371,
+      "target": "Element2"
+    },
+    {
+      "name": "IMPULSIVE_BURN_ELEMENT_3",
+      "value": 372,
+      "target": "Element3"
+    },
+    {
+      "name": "IMPULSIVE_BURN_DELTA_V_MAGNITUDE",
+      "value": 373,
+      "target": null,
+      "reason": "maneuver provider"
+    },
+    {
+      "name": "IMPULSIVE_BURN_MASS_CONSUMED",
+      "value": 374,
+      "target": null,
+      "reason": "maneuver provider"
+    },
+    {
+      "name": "FINITE_BURN_THRUST_MAGNITUDE",
+      "value": 390,
+      "target": null,
+      "reason": "maneuver provider"
+    },
+    {
+      "name": "FINITE_BURN_MASS_FLOW_RATE",
+      "value": 391,
+      "target": "TotalMassFlowRate"
+    },
+    {
+      "name": "FINITE_BURN_THRUST_X",
+      "value": 392,
+      "target": "TotalThrust1"
+    },
+    {
+      "name": "FINITE_BURN_THRUST_Y",
+      "value": 393,
+      "target": "TotalThrust2"
+    },
+    {
+      "name": "FINITE_BURN_THRUST_Z",
+      "value": 394,
+      "target": "TotalThrust3"
+    },
+    {
+      "name": "FINITE_BURN_ACCELERATION_MAGNITUDE",
+      "value": 395,
+      "target": null,
+      "reason": "maneuver provider"
+    },
+    {
+      "name": "FINITE_BURN_MASS_CONSUMED",
+      "value": 396,
+      "target": null,
+      "reason": "maneuver provider"
+    },
+    {
+      "name": "TOTAL_POWER_AVAILABLE",
+      "value": 410,
+      "target": "TotalPowerAvailable"
+    },
+    {
+      "name": "REQUIRED_BUS_POWER",
+      "value": 411,
+      "target": "RequiredBusPower"
+    },
+    {
+      "name": "THRUST_POWER_AVAILABLE",
+      "value": 412,
+      "target": "ThrustPowerAvailable"
+    },
+    {
+      "name": "GENERATED_POWER",
+      "value": 413,
+      "target": null,
+      "reason": "power provider"
+    },
+    {
+      "name": "TOTAL_TORQUE_X",
+      "value": 430,
+      "target": null,
+      "reason": "torque provider"
+    },
+    {
+      "name": "TOTAL_TORQUE_Y",
+      "value": 431,
+      "target": null,
+      "reason": "torque provider"
+    },
+    {
+      "name": "TOTAL_TORQUE_Z",
+      "value": 432,
+      "target": null,
+      "reason": "torque provider"
+    },
+    {
+      "name": "TOTAL_TORQUE_MAGNITUDE",
+      "value": 433,
+      "target": null,
+      "reason": "torque provider"
+    },
+    {
+      "name": "SOLVER_STATUS",
+      "value": 450,
+      "target": null,
+      "reason": "solver provider"
+    },
+    {
+      "name": "SOLVER_ITERATION_COUNT",
+      "value": 451,
+      "target": null,
+      "reason": "solver provider"
+    },
+    {
+      "name": "SOLVER_OBJECTIVE_VALUE",
+      "value": 452,
+      "target": null,
+      "reason": "solver provider"
+    },
+    {
+      "name": "SOLVER_MAXIMUM_CONSTRAINT_VIOLATION",
+      "value": 453,
+      "target": null,
+      "reason": "solver provider"
+    },
+    {
+      "name": "RELATIVE_RANGE",
+      "value": 470,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "RELATIVE_RANGE_RATE",
+      "value": 471,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "RELATIVE_POSITION_X",
+      "value": 472,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "RELATIVE_POSITION_Y",
+      "value": 473,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "RELATIVE_POSITION_Z",
+      "value": 474,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "RELATIVE_VELOCITY_X",
+      "value": 475,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "RELATIVE_VELOCITY_Y",
+      "value": 476,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "RELATIVE_VELOCITY_Z",
+      "value": 477,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "TOPOCENTRIC_AZIMUTH",
+      "value": 478,
+      "target": null,
+      "reason": "surface-site position"
+    },
+    {
+      "name": "TOPOCENTRIC_ELEVATION",
+      "value": 479,
+      "target": null,
+      "reason": "surface-site position"
+    },
+    {
+      "name": "ANGULAR_SEPARATION",
+      "value": 480,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "SOLAR_PHASE_ANGLE",
+      "value": 481,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "LOCAL_SOLAR_ELEVATION_ANGLE",
+      "value": 482,
+      "target": null,
+      "reason": "surface-site position"
+    },
+    {
+      "name": "ILLUMINATION_FRACTION",
+      "value": 483,
+      "target": null,
+      "reason": "the event-locator module answers illumination, not this one"
+    },
+    {
+      "name": "LIGHT_TIME_DELAY",
+      "value": 484,
+      "target": null,
+      "reason": "second-object state"
+    },
+    {
+      "name": "PROVIDER_DEFINED",
+      "value": 65535,
+      "target": null,
+      "reason": "resolved by name against the publisher's own catalog, not the roster"
+    }
+  ]
+}

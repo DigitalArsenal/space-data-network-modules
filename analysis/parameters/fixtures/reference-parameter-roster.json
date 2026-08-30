@@ -1,0 +1,1266 @@
+{
+  "source": {
+    "description": "Named calculation-parameter roster of the reference mission-analysis tool, R2026a, read from its Apache-2.0 source rather than from documentation prose.",
+    "file": "src/base/factory/ParameterFactory.cpp",
+    "url": "https://raw.githubusercontent.com/nasa/GMAT/08c2a2aae0b5fed077b2e7b4fda992ff54386c60/src/base/factory/ParameterFactory.cpp",
+    "commit": "08c2a2aae0b5fed077b2e7b4fda992ff54386c60",
+    "tag": "R2026a",
+    "license": "Apache-2.0",
+    "sha256": "05fe18f4cbb50a38228fdc48a1bcc38f3812067bd7b49e48272a0ca58acd1898",
+    "retrieved": "2026-08-30",
+    "extraction": "every uncommented creatables.push_back(\"<name>\") literal, in source order, de-duplicated; the section is the nearest preceding comment line. Commented-out entries are recorded separately and are NOT part of the roster.",
+    "commentedOut": [
+      "HyperbolicRadPer",
+      "SemilatusRectum",
+      "Type"
+    ],
+    "note": "311 unique creatable names. 3 are container types (Variable, String, Array), so 308 are named calculation parameters. The program plan's figure of 259 is the Reference-Guide-DOCUMENTED subset; this source list is wider and is the authority used here."
+  },
+  "count": 311,
+  "parameters": [
+    {
+      "name": "Variable",
+      "section": "User defined"
+    },
+    {
+      "name": "String",
+      "section": "User defined"
+    },
+    {
+      "name": "Array",
+      "section": "User defined"
+    },
+    {
+      "name": "ElapsedDays",
+      "section": "Time"
+    },
+    {
+      "name": "ElapsedSecs",
+      "section": "Time"
+    },
+    {
+      "name": "CurrA1MJD",
+      "section": "Time"
+    },
+    {
+      "name": "A1ModJulian",
+      "section": "Time"
+    },
+    {
+      "name": "A1Gregorian",
+      "section": "Time"
+    },
+    {
+      "name": "TAIModJulian",
+      "section": "Time"
+    },
+    {
+      "name": "TAIGregorian",
+      "section": "Time"
+    },
+    {
+      "name": "TTModJulian",
+      "section": "Time"
+    },
+    {
+      "name": "TTGregorian",
+      "section": "Time"
+    },
+    {
+      "name": "TDBModJulian",
+      "section": "Time"
+    },
+    {
+      "name": "TDBGregorian",
+      "section": "Time"
+    },
+    {
+      "name": "UTCModJulian",
+      "section": "Time"
+    },
+    {
+      "name": "UTCGregorian",
+      "section": "Time"
+    },
+    {
+      "name": "X",
+      "section": "Cartesian"
+    },
+    {
+      "name": "Y",
+      "section": "Cartesian"
+    },
+    {
+      "name": "Z",
+      "section": "Cartesian"
+    },
+    {
+      "name": "VX",
+      "section": "Cartesian"
+    },
+    {
+      "name": "VY",
+      "section": "Cartesian"
+    },
+    {
+      "name": "VZ",
+      "section": "Cartesian"
+    },
+    {
+      "name": "Cartesian",
+      "section": "Cartesian"
+    },
+    {
+      "name": "SMA",
+      "section": "Keplerian"
+    },
+    {
+      "name": "ECC",
+      "section": "Keplerian"
+    },
+    {
+      "name": "INC",
+      "section": "Keplerian"
+    },
+    {
+      "name": "RAAN",
+      "section": "Keplerian"
+    },
+    {
+      "name": "RADN",
+      "section": "Keplerian"
+    },
+    {
+      "name": "AOP",
+      "section": "Keplerian"
+    },
+    {
+      "name": "TA",
+      "section": "Keplerian"
+    },
+    {
+      "name": "MA",
+      "section": "Keplerian"
+    },
+    {
+      "name": "EA",
+      "section": "Keplerian"
+    },
+    {
+      "name": "HA",
+      "section": "Keplerian"
+    },
+    {
+      "name": "MM",
+      "section": "Keplerian"
+    },
+    {
+      "name": "Keplerian",
+      "section": "Keplerian"
+    },
+    {
+      "name": "RadApo",
+      "section": "Keplerian"
+    },
+    {
+      "name": "RadPer",
+      "section": "Keplerian"
+    },
+    {
+      "name": "ModKeplerian",
+      "section": "Keplerian"
+    },
+    {
+      "name": "RMAG",
+      "section": "Spherical"
+    },
+    {
+      "name": "RA",
+      "section": "Spherical"
+    },
+    {
+      "name": "DEC",
+      "section": "Spherical"
+    },
+    {
+      "name": "VMAG",
+      "section": "Spherical"
+    },
+    {
+      "name": "RAV",
+      "section": "Spherical"
+    },
+    {
+      "name": "DECV",
+      "section": "Spherical"
+    },
+    {
+      "name": "AZI",
+      "section": "Spherical"
+    },
+    {
+      "name": "FPA",
+      "section": "Spherical"
+    },
+    {
+      "name": "SphericalRADEC",
+      "section": "Spherical"
+    },
+    {
+      "name": "SphericalAZFPA",
+      "section": "Spherical"
+    },
+    {
+      "name": "Altitude",
+      "section": "Spherical"
+    },
+    {
+      "name": "EquinoctialH",
+      "section": "Equinoctial"
+    },
+    {
+      "name": "EquinoctialK",
+      "section": "Equinoctial"
+    },
+    {
+      "name": "EquinoctialP",
+      "section": "Equinoctial"
+    },
+    {
+      "name": "EquinoctialQ",
+      "section": "Equinoctial"
+    },
+    {
+      "name": "MLONG",
+      "section": "Equinoctial"
+    },
+    {
+      "name": "Equinoctial",
+      "section": "Equinoctial"
+    },
+    {
+      "name": "SMADot",
+      "section": "Equinoctial rate"
+    },
+    {
+      "name": "EquinoctialHDot",
+      "section": "Equinoctial rate"
+    },
+    {
+      "name": "EquinoctialKDot",
+      "section": "Equinoctial rate"
+    },
+    {
+      "name": "EquinoctialPDot",
+      "section": "Equinoctial rate"
+    },
+    {
+      "name": "EquinoctialQDot",
+      "section": "Equinoctial rate"
+    },
+    {
+      "name": "TLONGDot",
+      "section": "Equinoctial rate"
+    },
+    {
+      "name": "SemilatusRectum",
+      "section": "ModifedEquinoctial"
+    },
+    {
+      "name": "ModEquinoctialF",
+      "section": "ModifedEquinoctial"
+    },
+    {
+      "name": "ModEquinoctialG",
+      "section": "ModifedEquinoctial"
+    },
+    {
+      "name": "ModEquinoctialH",
+      "section": "ModifedEquinoctial"
+    },
+    {
+      "name": "ModEquinoctialK",
+      "section": "ModifedEquinoctial"
+    },
+    {
+      "name": "TLONG",
+      "section": "ModifedEquinoctial"
+    },
+    {
+      "name": "ModEquinoctial",
+      "section": "ModifedEquinoctial"
+    },
+    {
+      "name": "AltEquinoctialP",
+      "section": "Alternate Equinoctial"
+    },
+    {
+      "name": "AltEquinoctialQ",
+      "section": "Alternate Equinoctial"
+    },
+    {
+      "name": "Delaunayl",
+      "section": "Delaunay"
+    },
+    {
+      "name": "Delaunayg",
+      "section": "Delaunay"
+    },
+    {
+      "name": "Delaunayh",
+      "section": "Delaunay"
+    },
+    {
+      "name": "DelaunayL",
+      "section": "Delaunay"
+    },
+    {
+      "name": "DelaunayG",
+      "section": "Delaunay"
+    },
+    {
+      "name": "DelaunayH",
+      "section": "Delaunay"
+    },
+    {
+      "name": "Delaunay",
+      "section": "Delaunay"
+    },
+    {
+      "name": "PlanetodeticRMAG",
+      "section": "Planetodetic"
+    },
+    {
+      "name": "PlanetodeticLON",
+      "section": "Planetodetic"
+    },
+    {
+      "name": "PlanetodeticLAT",
+      "section": "Planetodetic"
+    },
+    {
+      "name": "PlanetodeticVMAG",
+      "section": "Planetodetic"
+    },
+    {
+      "name": "PlanetodeticAZI",
+      "section": "Planetodetic"
+    },
+    {
+      "name": "PlanetodeticHFPA",
+      "section": "Planetodetic"
+    },
+    {
+      "name": "Planetodetic",
+      "section": "Planetodetic"
+    },
+    {
+      "name": "IncomingRadPer",
+      "section": "IncomingAsymptote"
+    },
+    {
+      "name": "IncomingC3Energy",
+      "section": "IncomingAsymptote"
+    },
+    {
+      "name": "IncomingRHA",
+      "section": "IncomingAsymptote"
+    },
+    {
+      "name": "IncomingDHA",
+      "section": "IncomingAsymptote"
+    },
+    {
+      "name": "IncomingBVAZI",
+      "section": "IncomingAsymptote"
+    },
+    {
+      "name": "IncomingAsymptote",
+      "section": "IncomingAsymptote"
+    },
+    {
+      "name": "OutgoingRadPer",
+      "section": "OutgoingAsymptote"
+    },
+    {
+      "name": "OutgoingC3Energy",
+      "section": "OutgoingAsymptote"
+    },
+    {
+      "name": "OutgoingRHA",
+      "section": "OutgoingAsymptote"
+    },
+    {
+      "name": "OutgoingDHA",
+      "section": "OutgoingAsymptote"
+    },
+    {
+      "name": "OutgoingBVAZI",
+      "section": "OutgoingAsymptote"
+    },
+    {
+      "name": "OutgoingAsymptote",
+      "section": "OutgoingAsymptote"
+    },
+    {
+      "name": "BrouwerShortSMA",
+      "section": "BrourMeanShort"
+    },
+    {
+      "name": "BrouwerShortECC",
+      "section": "BrourMeanShort"
+    },
+    {
+      "name": "BrouwerShortINC",
+      "section": "BrourMeanShort"
+    },
+    {
+      "name": "BrouwerShortRAAN",
+      "section": "BrourMeanShort"
+    },
+    {
+      "name": "BrouwerShortAOP",
+      "section": "BrourMeanShort"
+    },
+    {
+      "name": "BrouwerShortMA",
+      "section": "BrourMeanShort"
+    },
+    {
+      "name": "BrouwerMeanShort",
+      "section": "BrourMeanShort"
+    },
+    {
+      "name": "BrouwerLongSMA",
+      "section": "BrouwerMeanLong"
+    },
+    {
+      "name": "BrouwerLongECC",
+      "section": "BrouwerMeanLong"
+    },
+    {
+      "name": "BrouwerLongINC",
+      "section": "BrouwerMeanLong"
+    },
+    {
+      "name": "BrouwerLongRAAN",
+      "section": "BrouwerMeanLong"
+    },
+    {
+      "name": "BrouwerLongAOP",
+      "section": "BrouwerMeanLong"
+    },
+    {
+      "name": "BrouwerLongMA",
+      "section": "BrouwerMeanLong"
+    },
+    {
+      "name": "BrouwerMeanLong",
+      "section": "BrouwerMeanLong"
+    },
+    {
+      "name": "VelApoapsis",
+      "section": "Orbital"
+    },
+    {
+      "name": "VelPeriapsis",
+      "section": "Orbital"
+    },
+    {
+      "name": "Apoapsis",
+      "section": "Orbital"
+    },
+    {
+      "name": "Periapsis",
+      "section": "Orbital"
+    },
+    {
+      "name": "OrbitPeriod",
+      "section": "Orbital"
+    },
+    {
+      "name": "C3Energy",
+      "section": "Orbital"
+    },
+    {
+      "name": "Energy",
+      "section": "Orbital"
+    },
+    {
+      "name": "HMAG",
+      "section": "Changed SemiLatusRectum to SemilatusRectum above"
+    },
+    {
+      "name": "HX",
+      "section": "Changed SemiLatusRectum to SemilatusRectum above"
+    },
+    {
+      "name": "HY",
+      "section": "Changed SemiLatusRectum to SemilatusRectum above"
+    },
+    {
+      "name": "HZ",
+      "section": "Changed SemiLatusRectum to SemilatusRectum above"
+    },
+    {
+      "name": "DLA",
+      "section": "Changed SemiLatusRectum to SemilatusRectum above"
+    },
+    {
+      "name": "RLA",
+      "section": "Changed SemiLatusRectum to SemilatusRectum above"
+    },
+    {
+      "name": "AtmosDensity",
+      "section": "Environmental"
+    },
+    {
+      "name": "MHA",
+      "section": "Planet"
+    },
+    {
+      "name": "Longitude",
+      "section": "Planet"
+    },
+    {
+      "name": "Latitude",
+      "section": "Planet"
+    },
+    {
+      "name": "LST",
+      "section": "Planet"
+    },
+    {
+      "name": "BetaAngle",
+      "section": "Planet"
+    },
+    {
+      "name": "BdotT",
+      "section": "B-Plane"
+    },
+    {
+      "name": "BdotR",
+      "section": "B-Plane"
+    },
+    {
+      "name": "BVectorMag",
+      "section": "B-Plane"
+    },
+    {
+      "name": "BVectorAngle",
+      "section": "B-Plane"
+    },
+    {
+      "name": "Element1",
+      "section": "Burn"
+    },
+    {
+      "name": "Element2",
+      "section": "Burn"
+    },
+    {
+      "name": "Element3",
+      "section": "Burn"
+    },
+    {
+      "name": "V",
+      "section": "Burn"
+    },
+    {
+      "name": "N",
+      "section": "Burn"
+    },
+    {
+      "name": "B",
+      "section": "Burn"
+    },
+    {
+      "name": "TotalMassFlowRate",
+      "section": "Burn"
+    },
+    {
+      "name": "TotalAcceleration1",
+      "section": "Burn"
+    },
+    {
+      "name": "TotalAcceleration2",
+      "section": "Burn"
+    },
+    {
+      "name": "TotalAcceleration3",
+      "section": "Burn"
+    },
+    {
+      "name": "TotalThrust1",
+      "section": "Burn"
+    },
+    {
+      "name": "TotalThrust2",
+      "section": "Burn"
+    },
+    {
+      "name": "TotalThrust3",
+      "section": "Burn"
+    },
+    {
+      "name": "DCM11",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM12",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM13",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM21",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM22",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM23",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM31",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM32",
+      "section": "Attitude"
+    },
+    {
+      "name": "DCM33",
+      "section": "Attitude"
+    },
+    {
+      "name": "DirectionCosineMatrix",
+      "section": "Attitude"
+    },
+    {
+      "name": "EulerAngle1",
+      "section": "Attitude"
+    },
+    {
+      "name": "EulerAngle2",
+      "section": "Attitude"
+    },
+    {
+      "name": "EulerAngle3",
+      "section": "Attitude"
+    },
+    {
+      "name": "MRP1",
+      "section": "Attitude"
+    },
+    {
+      "name": "MRP2",
+      "section": "Attitude"
+    },
+    {
+      "name": "MRP3",
+      "section": "Attitude"
+    },
+    {
+      "name": "Q1",
+      "section": "Attitude"
+    },
+    {
+      "name": "Q2",
+      "section": "Attitude"
+    },
+    {
+      "name": "Q3",
+      "section": "Attitude"
+    },
+    {
+      "name": "Q4",
+      "section": "Attitude"
+    },
+    {
+      "name": "Quaternion",
+      "section": "Attitude"
+    },
+    {
+      "name": "AngularVelocityX",
+      "section": "Attitude"
+    },
+    {
+      "name": "AngularVelocityY",
+      "section": "Attitude"
+    },
+    {
+      "name": "AngularVelocityZ",
+      "section": "Attitude"
+    },
+    {
+      "name": "EulerAngleRate1",
+      "section": "Attitude"
+    },
+    {
+      "name": "EulerAngleRate2",
+      "section": "Attitude"
+    },
+    {
+      "name": "EulerAngleRate3",
+      "section": "Attitude"
+    },
+    {
+      "name": "BodyAlignmentVectorX",
+      "section": "Attitude"
+    },
+    {
+      "name": "BodyAlignmentVectorY",
+      "section": "Attitude"
+    },
+    {
+      "name": "BodyAlignmentVectorZ",
+      "section": "Attitude"
+    },
+    {
+      "name": "BodyConstraintVectorX",
+      "section": "Attitude"
+    },
+    {
+      "name": "BodyConstraintVectorY",
+      "section": "Attitude"
+    },
+    {
+      "name": "BodyConstraintVectorZ",
+      "section": "Attitude"
+    },
+    {
+      "name": "Attitude",
+      "section": "Attitude"
+    },
+    {
+      "name": "AttitudeReferenceBody",
+      "section": "Attitude"
+    },
+    {
+      "name": "AttitudeConstraintType",
+      "section": "Attitude"
+    },
+    {
+      "name": "DryMass",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryCenterOfMassX",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryCenterOfMassY",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryCenterOfMassZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryMomentOfInertiaXX",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryMomentOfInertiaXY",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryMomentOfInertiaXZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryMomentOfInertiaYY",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryMomentOfInertiaYZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DryMomentOfInertiaZZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "Cd",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "Cr",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "DragArea",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SRPArea",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "TotalMass",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemCenterOfMassX",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemCenterOfMassY",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemCenterOfMassZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemMomentOfInertiaXX",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemMomentOfInertiaXY",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemMomentOfInertiaXZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemMomentOfInertiaYY",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemMomentOfInertiaYZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SystemMomentOfInertiaZZ",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SPADDragScaleFactor",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SPADSRPScaleFactor",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "AtmosDensityScaleFactor",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "CdSigma",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "CrSigma",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SPADDragScaleFactorSigma",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "SPADSRPScaleFactorSigma",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "AtmosDensityScaleFactorSigma",
+      "section": "Ballistic/Mass"
+    },
+    {
+      "name": "OrbitSTM",
+      "section": "Orbit STM"
+    },
+    {
+      "name": "OrbitSTMA",
+      "section": "Orbit STM"
+    },
+    {
+      "name": "OrbitSTMB",
+      "section": "Orbit STM"
+    },
+    {
+      "name": "OrbitSTMC",
+      "section": "Orbit STM"
+    },
+    {
+      "name": "OrbitSTMD",
+      "section": "Orbit STM"
+    },
+    {
+      "name": "OrbitErrorCovariance",
+      "section": "Orbit covariance"
+    },
+    {
+      "name": "FuelMass",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelCenterOfMassX",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelCenterOfMassY",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelCenterOfMassZ",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaXX",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaXY",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaXZ",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaYY",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaYZ",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaZZ",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelCenterOfMassX_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelCenterOfMassY_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelCenterOfMassZ_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaXX_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaXY_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaXZ_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaYY_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaYZ_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelMomentOfInertiaZZ_BCS",
+      "section": "FuelTank"
+    },
+    {
+      "name": "Pressure",
+      "section": "FuelTank"
+    },
+    {
+      "name": "Temperature",
+      "section": "FuelTank"
+    },
+    {
+      "name": "RefTemperature",
+      "section": "FuelTank"
+    },
+    {
+      "name": "Volume",
+      "section": "FuelTank"
+    },
+    {
+      "name": "FuelDensity",
+      "section": "FuelTank"
+    },
+    {
+      "name": "R_SB11",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB12",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB13",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB21",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB22",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB23",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB31",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB32",
+      "section": "Hardware"
+    },
+    {
+      "name": "R_SB33",
+      "section": "Hardware"
+    },
+    {
+      "name": "DutyCycle",
+      "section": "Thruster"
+    },
+    {
+      "name": "ThrustScaleFactor",
+      "section": "Thruster"
+    },
+    {
+      "name": "GravitationalAccel",
+      "section": "Thruster"
+    },
+    {
+      "name": "ThrustMagnitude",
+      "section": "Thruster"
+    },
+    {
+      "name": "Isp",
+      "section": "Thruster"
+    },
+    {
+      "name": "MassFlowRate",
+      "section": "Thruster"
+    },
+    {
+      "name": "C1",
+      "section": "Thruster"
+    },
+    {
+      "name": "C2",
+      "section": "Thruster"
+    },
+    {
+      "name": "C3",
+      "section": "Thruster"
+    },
+    {
+      "name": "C4",
+      "section": "Thruster"
+    },
+    {
+      "name": "C5",
+      "section": "Thruster"
+    },
+    {
+      "name": "C6",
+      "section": "Thruster"
+    },
+    {
+      "name": "C7",
+      "section": "Thruster"
+    },
+    {
+      "name": "C8",
+      "section": "Thruster"
+    },
+    {
+      "name": "C9",
+      "section": "Thruster"
+    },
+    {
+      "name": "C10",
+      "section": "Thruster"
+    },
+    {
+      "name": "C11",
+      "section": "Thruster"
+    },
+    {
+      "name": "C12",
+      "section": "Thruster"
+    },
+    {
+      "name": "C13",
+      "section": "Thruster"
+    },
+    {
+      "name": "C14",
+      "section": "Thruster"
+    },
+    {
+      "name": "C15",
+      "section": "Thruster"
+    },
+    {
+      "name": "C16",
+      "section": "Thruster"
+    },
+    {
+      "name": "K1",
+      "section": "Thruster"
+    },
+    {
+      "name": "K2",
+      "section": "Thruster"
+    },
+    {
+      "name": "K3",
+      "section": "Thruster"
+    },
+    {
+      "name": "K4",
+      "section": "Thruster"
+    },
+    {
+      "name": "K5",
+      "section": "Thruster"
+    },
+    {
+      "name": "K6",
+      "section": "Thruster"
+    },
+    {
+      "name": "K7",
+      "section": "Thruster"
+    },
+    {
+      "name": "K8",
+      "section": "Thruster"
+    },
+    {
+      "name": "K9",
+      "section": "Thruster"
+    },
+    {
+      "name": "K10",
+      "section": "Thruster"
+    },
+    {
+      "name": "K11",
+      "section": "Thruster"
+    },
+    {
+      "name": "K12",
+      "section": "Thruster"
+    },
+    {
+      "name": "K13",
+      "section": "Thruster"
+    },
+    {
+      "name": "K14",
+      "section": "Thruster"
+    },
+    {
+      "name": "K15",
+      "section": "Thruster"
+    },
+    {
+      "name": "K16",
+      "section": "Thruster"
+    },
+    {
+      "name": "ThrustDirection1",
+      "section": "Thruster"
+    },
+    {
+      "name": "ThrustDirection2",
+      "section": "Thruster"
+    },
+    {
+      "name": "ThrustDirection3",
+      "section": "Thruster"
+    },
+    {
+      "name": "TotalPowerAvailable",
+      "section": "Thruster"
+    },
+    {
+      "name": "RequiredBusPower",
+      "section": "Thruster"
+    },
+    {
+      "name": "ThrustPowerAvailable",
+      "section": "Thruster"
+    },
+    {
+      "name": "OrbitTime",
+      "section": "Thruster"
+    },
+    {
+      "name": "AreaCoefficient",
+      "section": "Plate createables"
+    },
+    {
+      "name": "SpecularFraction",
+      "section": "Plate createables"
+    },
+    {
+      "name": "DiffuseFraction",
+      "section": "Plate createables"
+    },
+    {
+      "name": "Area",
+      "section": "Plate createables"
+    },
+    {
+      "name": "LitFraction",
+      "section": "Plate createables"
+    },
+    {
+      "name": "PlateNormal",
+      "section": "Plate createables"
+    },
+    {
+      "name": "PlateNormalHistoryFile",
+      "section": "Plate createables"
+    },
+    {
+      "name": "AreaCoefficientSigma",
+      "section": "Plate createables"
+    },
+    {
+      "name": "SpecularFractionSigma",
+      "section": "Plate createables"
+    },
+    {
+      "name": "DiffuseFractionSigma",
+      "section": "Plate createables"
+    },
+    {
+      "name": "PlateX",
+      "section": "Plate createables"
+    },
+    {
+      "name": "PlateY",
+      "section": "Plate createables"
+    },
+    {
+      "name": "PlateZ",
+      "section": "Plate createables"
+    }
+  ]
+}

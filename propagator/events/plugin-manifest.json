@@ -1,0 +1,302 @@
+{
+  "pluginId": "com.digitalarsenal.propagator.events",
+  "name": "Event Locator",
+  "version": "0.1.0",
+  "description": "Locates events on a supplied trajectory as roots of a continuous event function: eclipse umbra, penumbra and antumbra, station contact with light-time correction, body intrusion into a conic field of view, apsides, node crossings and a stopping condition on any named catalog parameter. One bracketing scan and one Brent refinement serve every class, so the located epoch does not depend on the scan step. The trajectory arrives as a port; this module carries no propagator.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "locate_events",
+      "displayName": "Locate Events",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-evl-location-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "EVL.fbs",
+                  "fileIdentifier": "$EVL",
+                  "rootTypeName": "EVL"
+                },
+                {
+                  "schemaName": "EVL.fbs",
+                  "fileIdentifier": "$EVL",
+                  "rootTypeName": "EVL",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $EVL envelope."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Locator class, scan interval, scan step, refinement tolerance and the class's own configuration."
+        },
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-ephemeris",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM envelope."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The trajectory, sampled by whichever propagator the caller chose. THIS IS THE PROPAGATOR PORT: the module holds no propagator of its own and refuses an epoch outside the table rather than extrapolating. Positions and velocities are kilometres per the standard and are converted once at the wire."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop-row",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP"
+                },
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $EOP envelope."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Earth-orientation row for the scan interval. A ground site on the Earth, or any body-fixed parameter, is refused without one rather than placed against assumed zeros."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-evl-event-report",
+              "allowedTypes": [
+                {
+                  "schemaName": "EVL.fbs",
+                  "fileIdentifier": "$EVL",
+                  "rootTypeName": "EVL"
+                },
+                {
+                  "schemaName": "EVL.fbs",
+                  "fileIdentifier": "$EVL",
+                  "rootTypeName": "EVL",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $EVL envelope."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Every located event, with its entry and exit epochs and its duration."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Finds every sign change of the locator class's event function over the interval and refines each to a root. Eclipse, contact, intrusion, apsides, node crossings and parameter conditions are six event functions on one runner."
+    },
+    {
+      "methodId": "propagate_to_condition",
+      "displayName": "Propagate To Condition",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pce-stop-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                },
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $PCE envelope."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The stopping condition: a named parameter, a goal value, a crossing direction and which attainment to stop on."
+        },
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-ephemeris",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $OEM envelope."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The trajectory, sampled by whichever propagator the caller chose. THIS IS THE PROPAGATOR PORT: the module holds no propagator of its own and refuses an epoch outside the table rather than extrapolating. Positions and velocities are kilometres per the standard and are converted once at the wire."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop-row",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP"
+                },
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $EOP envelope."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Earth-orientation row for the scan interval. A ground site on the Earth, or any body-fixed parameter, is refused without one rather than placed against assumed zeros."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pce-stop-report",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                },
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS $PCE envelope."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Where the run stopped, the state there, the value the condition parameter actually had, and the residual against the goal."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Propagates along the supplied trajectory until a named parameter attains its goal, refining the stop epoch on the continuous condition function so the answer does not depend on the scan step. A goal that is never attained is reported as GOAL_NOT_ATTAINED, never as a silent stop at the end of the interval."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "EVL.fbs",
+      "fileIdentifier": "$EVL",
+      "rootTypeName": "EVL"
+    },
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "FRM.fbs",
+      "fileIdentifier": "$FRM",
+      "rootTypeName": "FRM"
+    },
+    {
+      "schemaName": "RFM.fbs",
+      "fileIdentifier": "$RFM",
+      "rootTypeName": "RFM"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "propagator-events-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "The runner is a bracketing scan and a root refinement over one continuous function of time. It spawns nothing, shares nothing and holds no state between invocations; the trajectory arrives whole on an input port and every root is found and returned inside the same call, so there is no work to fan out."
+  }
+}

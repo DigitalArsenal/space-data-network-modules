@@ -1,0 +1,183 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.parameters",
+  "name": "Named Parameter Catalog",
+  "version": "0.1.0",
+  "description": "Evaluates named calculation parameters on orbital states: the classical and equinoctial element sets, the derived orbit scalars, the angular-momentum triple, the B-plane and asymptote sets, the planet-relative angles, the atomic and dynamical time scales and the state-transition sub-matrices, over the shared IAU-2006/2000A chain. Publishes its own roster as an SDS PCE catalog, including the parameters it declares and refuses.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "publish_catalog",
+      "displayName": "Publish Parameter Catalog",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pce-catalog",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                },
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS PCE envelope carrying PCEParameterCatalog."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Every named parameter this build knows, with its owner class, unit, data type, frame dependency and availability."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Emits this provider's parameter roster so a consumer can discover what it answers and where it refuses, without asking."
+    },
+    {
+      "methodId": "evaluate_parameters",
+      "displayName": "Evaluate Named Parameters",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pce-evaluation-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                },
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS PCE envelope carrying PCEEvaluationRequest."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Parameters to evaluate, the states to evaluate them on, and the context they are evaluated in."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop-row",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP"
+                },
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS EOP row covering the request epoch. The high-precision double fields are authoritative when present."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Earth-orientation row for the request epoch. A body-fixed parameter evaluated without one is refused with MISSING_DEPENDENCY rather than computed against assumed zeros."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pce-evaluation-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                },
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS PCE envelope carrying PCEEvaluationResult."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One sample per requested state, each carrying one value per requested parameter with its own status."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Evaluates the named parameters on each state in turn. A parameter that cannot be answered carries its own status and reason; the request never fails as a whole because one name is unavailable."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE"
+    },
+    {
+      "schemaName": "FRM.fbs",
+      "fileIdentifier": "$FRM",
+      "rootTypeName": "FRM"
+    },
+    {
+      "schemaName": "RFM.fbs",
+      "fileIdentifier": "$RFM",
+      "rootTypeName": "RFM"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "analysis-parameters-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "The evaluator is a closed-form function of one state at one epoch. It spawns nothing, shares nothing and holds no state between invocations; every parameter is computed from the request's own bytes and returned in the same call, so there is no work to fan out and no concurrency to declare."
+  }
+}
