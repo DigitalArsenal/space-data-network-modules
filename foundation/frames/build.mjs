@@ -1,26 +1,65 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
+import { generateSdsHeaders } from "./generate-sds-headers.mjs";
+import { composeErfaTranslationUnit } from "./erfa-amalgamation.mjs";
+
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "frames_module.cpp");
+const axisEnginePath = path.join(packageRoot, "src", "axis_engine.hpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
-  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT) + path.sep
-  : fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
-
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const [frmHeader, implementationSource] = await Promise.all([
-  fs.readFile(path.join(standardsRoot, "lib", "cpp", "FRM", "main_generated.h"), "utf8"),
-  fs.readFile(sourcePath, "utf8"),
-]);
-const sourceCode = [frmHeader, implementationSource].join("\n\n");
+
+// SDS comes from the PUBLISHED package this repo pins, never a sibling
+// checkout — see generate-sds-headers.mjs for why.
+const { version: sdsVersion, headers } = await generateSdsHeaders();
+
+// $FRM includes ../RFM/main.fbs. In a single translation unit the generated
+// FRM header's `#include "RFM_generated.h"` cannot resolve, so RFM is placed
+// ahead of it and the include line removed.
+const rfmHeader = headers.RFM;
+const frmHeader = headers.FRM.replace(/^#include "RFM_generated\.h"\n/m, "");
+const eopHeader = headers.EOP;
+
+// ONE state-representation implementation, not two. `foundation/orbits` owns
+// the 14 element sets and measures them; $FRM operation 7
+// (STATE_REPRESENTATION_CONVERT) and the element-set legs of operation 5 use
+// that same header rather than a second copy inside this package.
+const stateRepresentations = await fs.readFile(
+  path.join(packageRoot, "..", "orbits", "src", "state_representations.hpp"),
+  "utf8",
+);
+
+// ONE chain, not two. The axis engine delegates every precession/nutation
+// series to the vendored ERFA that higherpop/frames.hpp already uses, which is
+// what makes the "agrees with higherpop to 1e-14" acceptance true by
+// construction rather than by a second implementation racing the first. The
+// SDK compiles a single translation unit, so ERFA is amalgamated into it here
+// from those same vendored sources; nothing is re-derived or re-tabulated.
+const erfa = await composeErfaTranslationUnit();
+
+const axisEngine = (await fs.readFile(axisEnginePath, "utf8")).replace(
+  /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
+  "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
+);
+const implementationSource = await fs.readFile(sourcePath, "utf8");
+
+const sourceCode = [
+  rfmHeader,
+  frmHeader,
+  eopHeader,
+  erfa.source,
+  axisEngine,
+  stateRepresentations,
+  implementationSource,
+].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -33,22 +72,34 @@ const compilation = await compileModuleFromSource({
   // THREAD MODEL — declared, never inferred (scripts/lib/thread-model.mjs
   // holds the full rationale; graph task modules-undeclared-threadmodel-artifacts).
   //
-  // Truth of the SHIPPED artifact a014091d1837… (107138 B, landed 2026-06-17 at
-  // SDK pin b06faf5c): unshared linear memory, no `wasi.thread-spawn` import, no
-  // `wasi_thread_start` export. It carries no wasi-threads contract and never did.
-  // Those bytes were produced by INFERENCE: at that era pin the resolver matched
-  // `browser` FIRST and returned single-thread. Today `wasmedge` wins and returns
-  // emscripten-pthreads, so this build stopped producing bytes at all — the SDK's
-  // artifact guard correctly refuses a guest with no thread-spawn import. Declaring
-  // the truth makes the lane a property of THIS SOURCE instead of the SDK version.
+  // Unchanged by the gmat-08 extension. This module is a pure closed-form
+  // evaluator: it spawns nothing, shares nothing, and has no concurrency to
+  // declare. Adding the $FRM state/rotation operations and the ERFA series does
+  // not change that, and flipping the declared model would change the artifact's
+  // runtime contract for reasons unrelated to the change being made.
   threadModel: "single-thread",
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
+fsSync.writeFileSync(
+  path.join(distRoot, "build-provenance.json"),
+  `${JSON.stringify(
+    {
+      spacedatastandards: sdsVersion,
+      erfaSourceFiles: erfa.fileCount,
+      erfaRoot: erfa.relativeRoot,
+      threadModel: "single-thread",
+    },
+    null,
+    2,
+  )}\n`,
+);
 
 if (!compilation.report?.ok) {
   const issues = JSON.stringify(compilation.report?.issues ?? [], null, 2);
   throw new Error(`Compiled artifact failed SDK validation:\n${issues}`);
 }
 
-console.log(`Built ${path.relative(packageRoot, outputPath)}`);
+console.log(
+  `Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion} with ${erfa.fileCount} vendored ERFA sources`,
+);

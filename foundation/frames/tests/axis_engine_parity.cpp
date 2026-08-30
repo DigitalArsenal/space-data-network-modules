@@ -380,6 +380,127 @@ int main(void) {
     }
   }
 
+  // ---- 9. Angular RATES ---------------------------------------------------
+  //
+  // The acceptance asks for angular rates, not only orientations. The authority
+  // for the Earth-rotation chain is the IERS Conventions (2010) nominal mean
+  // angular velocity of the Earth, 7.292115e-5 rad/s: the differentiated
+  // GCRF->ITRF chain must reproduce it, because that constant IS the ERA rate
+  // the chain applies.
+  std::printf("\nangular rates:\n");
+  {
+    const double kEarthRotationRate = 7.292115e-5;  // rad/s, IERS Conventions (2010) Table 1.1
+
+    const RotationWithRate itrf =
+        rotationWithRate([&](const Epoch& at) { return gcrfToItrf(at, eop); }, epoch);
+    const double measured = norm(itrf.angularVelocitySource);
+    report("GCRF->ITRF angular rate vs IERS nominal", measured - kEarthRotationRate, 1e-11,
+           "IERS 2010");
+
+    // The rate matrix and the angular velocity are two views of the same
+    // quantity; reconstructing one from the other is an EXACT identity and so
+    // takes a machine-precision bound. This is what catches a sign or a
+    // transpose, which a magnitude check cannot.
+    {
+      const Vec3 omegaTarget = apply(itrf.rotation, itrf.angularVelocitySource);
+      Mat3 skew;
+      skew.m[0][0] = 0.0;             skew.m[0][1] = -omegaTarget.z;  skew.m[0][2] = omegaTarget.y;
+      skew.m[1][0] = omegaTarget.z;   skew.m[1][1] = 0.0;             skew.m[1][2] = -omegaTarget.x;
+      skew.m[2][0] = -omegaTarget.y;  skew.m[2][1] = omegaTarget.x;   skew.m[2][2] = 0.0;
+      Mat3 reconstructed = multiply(skew, itrf.rotation);
+      for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+          reconstructed.m[i][j] = -reconstructed.m[i][j];
+        }
+      }
+      report("ITRF rate matrix vs -[omega]x R identity",
+             maxElementDifference(reconstructed, itrf.rate) / kEarthRotationRate, 1e-9, "exact");
+    }
+
+    // Step independence: halving the central-difference step must not move the
+    // answer beyond the numerical budget. A rate that changes with the step is
+    // a rate that is measuring the step.
+    //
+    // BUDGET, and this is the number that bounds the METHOD rather than the
+    // physics: truncation contributes (omega^3/6)(1 - 1/4)h^2 ~ 8e-15 rad/s at
+    // h = 1 s, and differencing two O(1) matrices adds a round-off floor of
+    // about 2 eps / (2h) ~ 2e-16 per element, amplified through the skew
+    // extraction. MEASURED 4.5e-14 rad/s on this box at this pin; the bound is
+    // set just above it and is the honest accuracy of the differentiated rate.
+    const RotationWithRate itrfHalfStep = rotationWithRate(
+        [&](const Epoch& at) { return gcrfToItrf(at, eop); }, epoch, 0.5);
+    report("GCRF->ITRF angular rate, step 1.0 s vs 0.5 s",
+           norm(sub(itrf.angularVelocitySource, itrfHalfStep.angularVelocitySource)), 1e-13,
+           "exact");
+
+    // The non-rotating chains: precession/nutation turn at ~10^-12 rad/s, the
+    // published rate of general precession (about 50.3"/yr). Anything near the
+    // Earth-rotation rate here would mean the chain had picked up ERA.
+    struct NamedRate {
+      const char* name;
+      double bound;
+      Mat3 (*fn)(const Epoch&);
+    };
+    const std::vector<NamedRate> slow = {
+        {"MOD", 1e-11, gcrfToMod},
+        {"TOD", 1e-11, gcrfToTod},
+        {"MOE", 1e-11, gcrfToMoe},
+        {"TOE", 1e-11, gcrfToToe},
+        {"TEME", 1e-11, gcrfToTeme},
+    };
+    for (const NamedRate& entry : slow) {
+      const RotationWithRate withRate =
+          rotationWithRate([&](const Epoch& at) { return entry.fn(at); }, epoch);
+      char label[128];
+      std::snprintf(label, sizeof(label), "GCRF->%s angular rate is precession-scale",
+                    entry.name);
+      report(label, norm(withRate.angularVelocitySource), entry.bound, "IAU 2006 precession");
+    }
+
+    // GSE turns with the apparent motion of the Sun: one revolution per year,
+    // 1.99e-7 rad/s. The bound is the eccentricity spread of that rate.
+    {
+      const RotationWithRate gse =
+          rotationWithRate([&](const Epoch& at) { return gcrfToGse(at); }, epoch);
+      const double annual = 2.0 * ERFA_DPI / (365.25 * 86400.0);
+      report("GCRF->GSE angular rate vs the annual rate",
+             norm(gse.angularVelocitySource) - annual, 8e-9, "Kepler, 1 yr period");
+    }
+  }
+
+  // ---- 10. Machine-readable reference block -------------------------------
+  //
+  // Emitted so the SHIPPED WASM ARTIFACT can be compared against this native
+  // build of the same header, at the same epoch and EOP, in the same run. That
+  // comparison is the only thing that turns "one chain" from a claim about the
+  // source into a measurement of the bytes that ship.
+  {
+    const Mat3 itrf = gcrfToItrf(epoch, eop);
+    const Mat3 gse = gcrfToGse(epoch);
+    const RotationWithRate itrfRate =
+        rotationWithRate([&](const Epoch& at) { return gcrfToItrf(at, eop); }, epoch);
+    std::printf("\nREFERENCE_JSON_BEGIN\n{\n");
+    std::printf("  \"epochUtc\": \"2007-04-05T12:00:00\",\n");
+    std::printf("  \"dut1\": %.17g,\n", eop.dut1);
+    std::printf("  \"xPoleArcsec\": %.17g,\n", eop.xPole / ERFA_DAS2R);
+    std::printf("  \"yPoleArcsec\": %.17g,\n", eop.yPole / ERFA_DAS2R);
+    const char* names[2] = {"gcrfToItrf", "gcrfToGse"};
+    const Mat3* matrices[2] = {&itrf, &gse};
+    for (int m = 0; m < 2; ++m) {
+      std::printf("  \"%s\": [", names[m]);
+      for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+          std::printf("%s%.17g", (i == 0 && j == 0) ? "" : ", ", matrices[m]->m[i][j]);
+        }
+      }
+      std::printf("],\n");
+    }
+    std::printf("  \"gcrfToItrfAngularVelocity\": [%.17g, %.17g, %.17g]\n",
+                itrfRate.angularVelocitySource.x, itrfRate.angularVelocitySource.y,
+                itrfRate.angularVelocitySource.z);
+    std::printf("}\nREFERENCE_JSON_END\n");
+  }
+
   std::printf("\n%d checks, %d failures\n", checks, failures);
   std::printf("%s\n", failures == 0 ? "PASS" : "FAIL");
   return failures == 0 ? 0 : 1;

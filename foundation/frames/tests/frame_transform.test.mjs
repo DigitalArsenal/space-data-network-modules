@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
+import * as flatbuffers from "flatbuffers";
 import {
   FRM,
   FRMFrameTransformRequestT,
@@ -12,14 +12,18 @@ import {
   FRMVector3T,
   frmOperationCode,
   frmResultStatus,
-} from "../../../../spacedatastandards.org/lib/js/FRM/main.js";
+} from "spacedatastandards.org/lib/js/FRM/main.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+// SDS comes from the PUBLISHED package this package pins, never a sibling
+// checkout (published-deps law, owner 2026-08-21).
+const STANDARDS_ROOT = fileURLToPath(
+  new URL("../node_modules/spacedatastandards.org/", import.meta.url),
+);
 
 const BASILISK_DCM_J2000_TO_PFIX = [
   1, 0, 0,

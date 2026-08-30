@@ -22,6 +22,12 @@ constexpr double kModifiedJulianDateUnixEpoch = kJulianDateUnixEpoch - kModified
 constexpr double kTtMinusTaiSeconds = 32.184;
 constexpr double kGpsFamilyMinusTaiSeconds = -19.0;
 constexpr double kBdtMinusTaiSeconds = -33.0;
+// A1 - TAI = 0.0343817 s EXACTLY. The A1 atomic time scale (US Naval
+// Observatory) was set equal to UT2 at 1958 January 1.0, and its offset from
+// TAI has been that fixed constant ever since -- it is a DEFINITION, not a
+// measurement, which is why it carries no epoch dependence and no uncertainty.
+// GMAT exposes A1 as a first-class scale; this is the whole of the difference.
+constexpr double kA1MinusTaiSeconds = 0.0343817;
 constexpr double kGlonassMinusUtcSeconds = 3.0 * 3600.0;
 constexpr double kTcgLgRate = 6.969290134e-10;
 constexpr double kTcbLbRate = 1.550519768e-8;
@@ -797,7 +803,8 @@ bool supported_without_eop(timingStandard scale) {
          scale == timingStandard_TCG ||
          scale == timingStandard_TDB ||
          scale == timingStandard_TCB ||
-         scale == timingStandard_GMST;
+         scale == timingStandard_GMST ||
+         scale == timingStandard_A1;
 }
 
 bool scale_uses_utc_leap_labels(timingStandard scale) {
@@ -818,6 +825,8 @@ double constant_offset_from_tai(timingStandard scale) {
       return kGpsFamilyMinusTaiSeconds;
     case timingStandard_BDT:
       return kBdtMinusTaiSeconds;
+    case timingStandard_A1:
+      return kA1MinusTaiSeconds;
     default:
       return 0.0;
   }

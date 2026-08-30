@@ -21,6 +21,9 @@
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+    "flatbuffers": "^25.9.23",
+    "flatc-wasm": "^26.1.32",
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk",
+    "spacedatastandards.org": "^1.199.0"
   }
 }

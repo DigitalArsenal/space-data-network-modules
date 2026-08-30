@@ -1,17 +1,23 @@
 {
   "pluginId": "com.digitalarsenal.foundation.frames",
   "name": "Foundation Frames",
-  "version": "0.1.0",
-  "description": "Shared SDS FRM frame/geodetic transform module for Basilisk-compatible PCI, PCPF, and ellipsoid LLA coordinate conversions.",
+  "version": "0.2.0",
+  "description": "Shared SDS FRM frame/geodetic transform module: the Basilisk-compatible PCI, PCPF and ellipsoid LLA conversions, plus fully specified $RFM coordinate-system state transforms, frame rotations with their rates, and element-set conversion over the IAU-2006/2000A chain.",
   "pluginFamily": "foundation",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "transform_frame_position",
-      "displayName": "Transform Frame Position",
+      "displayName": "Transform Frame State",
       "inputPorts": [
         {
           "portId": "request",
@@ -38,7 +44,61 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Frame/geodetic transform request."
+          "description": "Frame, state or element-set transform request."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop-row",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP"
+                },
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS EOP row covering the request EPOCH. The _HP double fields are authoritative when present."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Earth-orientation row for the request epoch, from the signed EOP data module. Axis chains that read Earth orientation return MISSING_EOP_DATA when it is absent rather than extrapolating."
+        },
+        {
+          "portId": "object_state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-frm-object-state",
+              "allowedTypes": [
+                {
+                  "schemaName": "FRM.fbs",
+                  "fileIdentifier": "$FRM",
+                  "rootTypeName": "FRM"
+                },
+                {
+                  "schemaName": "FRM.fbs",
+                  "fileIdentifier": "$FRM",
+                  "rootTypeName": "FRM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "SDS FRM envelope whose FRAME_TRANSFORM_REQUEST.SOURCE_STATE carries the referenced object's state in the root ICRF axes."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "State of the object a SPACE_OBJECT origin or OBJECT_REFERENCED axis set names, expressed in the root ICRF axes about the Earth."
         }
       ],
       "outputPorts": [
@@ -67,12 +127,12 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Frame/geodetic transform result."
+          "description": "Frame, state or element-set transform result."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Evaluates one Basilisk-compatible PCI/PCPF DCM transform or ellipsoid LLA/PCPF conversion."
+      "description": "Evaluates one FRM operation: a Basilisk-compatible PCI/PCPF DCM transform, an ellipsoid LLA/PCPF conversion, a full state transform between two $RFM coordinate systems, the rotation between them with its rate and angular velocity, or an element-set conversion within one system."
     }
   ],
   "schemasUsed": [
@@ -80,6 +140,16 @@
       "schemaName": "FRM.fbs",
       "fileIdentifier": "$FRM",
       "rootTypeName": "FRM"
+    },
+    {
+      "schemaName": "RFM.fbs",
+      "fileIdentifier": "$RFM",
+      "rootTypeName": "RFM"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
     }
   ],
   "buildArtifacts": [

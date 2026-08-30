@@ -128,6 +128,7 @@ inline Vec3 cross(const Vec3& a, const Vec3& b) {
 }
 inline double dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 inline double norm(const Vec3& a) { return std::sqrt(dot(a, a)); }
+inline Vec3 add(const Vec3& a, const Vec3& b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
 inline Vec3 sub(const Vec3& a, const Vec3& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 inline Vec3 scale(const Vec3& a, double s) { return {a.x * s, a.y * s, a.z * s}; }
 inline Vec3 unit(const Vec3& a) {
@@ -682,6 +683,209 @@ inline StateVector rotateState(const Mat3& rotation, const Vec3& omega, const St
 /// Translate a state to a new origin, both expressed in the same axes.
 inline StateVector translateState(const StateVector& state, const StateVector& newOrigin) {
   return {sub(state.position, newOrigin.position), sub(state.velocity, newOrigin.velocity)};
+}
+
+
+/// Libration point of a primary/secondary pair, expressed relative to the
+/// PRIMARY in the same axes the separation is given in.
+///
+/// `librationPoint` above solves the collinear quintic and reports the point
+/// relative to the pair's BARYCENTRE, which is the CR3BP convention and not the
+/// frame a consumer centres a coordinate system on. This wrapper shifts to the
+/// primary and adds the equilateral points, which need the orbit plane and so
+/// need the separation's rate.
+///
+/// `separationRate` is d(separation)/dt in the same axes; it is used only to
+/// fix the orbit plane for L4/L5 and is ignored for L1/L2/L3.
+inline bool librationPointFromPrimary(const Vec3& separation, const Vec3& separationRate,
+                                      double massRatio, int index, Vec3* out) {
+  if (out == nullptr || !(massRatio > 0.0) || massRatio >= 1.0) {
+    return false;
+  }
+  const double distance = norm(separation);
+  if (!(distance > 0.0)) {
+    return false;
+  }
+  if (index == 4 || index == 5) {
+    // The equilateral points are exact: an equilateral triangle on the
+    // primary-secondary line, in the instantaneous orbit plane. L4 leads the
+    // secondary, L5 trails it.
+    const Vec3 xHat = scale(separation, 1.0 / distance);
+    const Vec3 normal = cross(separation, separationRate);
+    if (norm(normal) <= 0.0) {
+      return false;  // no orbit plane: the equilateral points are undefined
+    }
+    const Vec3 zHat = unit(normal);
+    const Vec3 yHat = cross(zHat, xHat);
+    const double sign = index == 4 ? 1.0 : -1.0;
+    *out = add(scale(xHat, 0.5 * distance),
+               scale(yHat, sign * distance * std::sqrt(3.0) / 2.0));
+    return true;
+  }
+  Vec3 fromBarycentre;
+  if (!librationPoint(separation, massRatio, index, &fromBarycentre)) {
+    return false;
+  }
+  // The barycentre sits at massRatio * separation from the primary.
+  *out = add(fromBarycentre, scale(separation, massRatio));
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Published IAU/WGCCRE rotation elements, as DATA.
+//
+// `icrfToBodyFixed` deliberately takes the coefficients as a parameter so a
+// WGCCRE report revision is a data change. A shipped module still has to know
+// the published numbers for the bodies it serves, so they live here, in one
+// table, cited — never re-typed at each call site.
+//
+// Source: Archinal et al., "Report of the IAU Working Group on Cartographic
+// Coordinates and Rotational Elements: 2015", Celest. Mech. Dyn. Astr. 130:22
+// (2018), Tables 1 and 2. Angles converted from degrees to radians here.
+//
+// The Moon's entry is the report's MEAN elements (the E1..E13 libration series
+// is a further additive correction and is NOT applied); Mars and Earth are the
+// report's linear terms. Every consumer that needs the libration terms passes
+// its own RotationElements rather than editing this table.
+// ---------------------------------------------------------------------------
+
+/// Ephemeris body codes used by the origin/axis resolution.
+enum class BodyId : int {
+  SUN = 10,
+  EARTH = 399,
+  MOON = 301,
+  MARS = 499,
+  EARTH_MOON_BARYCENTRE = 3,
+};
+
+inline constexpr double degreesToRadians(double degrees) {
+  return degrees * (ERFA_DPI / 180.0);
+}
+
+/// WGCCRE-2015 elements for a body, by ephemeris body code. Returns false for
+/// a body the table does not carry — a refusal, never a silent identity.
+inline bool rotationElementsForBody(int bodyId, RotationElements* out) {
+  if (out == nullptr) {
+    return false;
+  }
+  switch (bodyId) {
+    case static_cast<int>(BodyId::EARTH):
+      // alpha0 = 0.00 - 0.641 T, delta0 = 90.00 - 0.557 T, W = 190.147 + 360.9856235 d
+      *out = RotationElements{degreesToRadians(0.0),      degreesToRadians(-0.641),
+                              degreesToRadians(90.0),     degreesToRadians(-0.557),
+                              degreesToRadians(190.147),  degreesToRadians(360.9856235)};
+      return true;
+    case static_cast<int>(BodyId::MOON):
+      // alpha0 = 269.9949 + 0.0031 T, delta0 = 66.5392 + 0.0130 T,
+      // W = 38.3213 + 13.17635815 d  (mean terms; libration series excluded)
+      *out = RotationElements{degreesToRadians(269.9949), degreesToRadians(0.0031),
+                              degreesToRadians(66.5392),  degreesToRadians(0.0130),
+                              degreesToRadians(38.3213),  degreesToRadians(13.17635815)};
+      return true;
+    case static_cast<int>(BodyId::MARS):
+      // alpha0 = 317.269202 - 0.10927547 T, delta0 = 54.432516 - 0.05827105 T,
+      // W = 176.049863 + 350.891982443297 d (periodic terms excluded)
+      *out = RotationElements{degreesToRadians(317.269202), degreesToRadians(-0.10927547),
+                              degreesToRadians(54.432516),  degreesToRadians(-0.05827105),
+                              degreesToRadians(176.049863), degreesToRadians(350.891982443297)};
+      return true;
+    case static_cast<int>(BodyId::SUN):
+      // alpha0 = 286.13, delta0 = 63.87, W = 84.176 + 14.1844000 d
+      *out = RotationElements{degreesToRadians(286.13), 0.0,
+                              degreesToRadians(63.87),  0.0,
+                              degreesToRadians(84.176), degreesToRadians(14.1844000)};
+      return true;
+    default:
+      return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Angular RATES.
+//
+// The acceptance asks for the angular rate of every axis set, not only its
+// orientation. Two of the twenty-two chains have a closed-form rate (Earth
+// rotation, body rotation); the rest are compositions of ERFA series, solar and
+// lunar ephemerides and orbit-derived triads whose analytic derivative would be
+// a second, separately-wrong implementation of the same thing.
+//
+// So the rate is taken the one way that is uniform, exact to the arithmetic and
+// impossible to get out of step with the orientation it differentiates: a
+// central difference of the SAME orientation function.
+//
+// ERROR BUDGET, stated rather than assumed. For a rotation whose fastest term
+// is Earth rotation (omega = 7.292e-5 rad/s) the central difference truncation
+// error is (omega^3 h^2)/6. At h = 1 s that is 6.5e-14 * 1/6 ~ 1e-14 rad/s, and
+// round-off in the differenced matrix is ~2 eps / h ~ 4e-16. h = 1 s therefore
+// sits near the minimum of the combined error and meets the 1e-14 rad/s bar;
+// `angularRateStepSeconds` exposes it so a caller measuring a faster frame can
+// shorten it.
+// ---------------------------------------------------------------------------
+
+constexpr double kDefaultAngularRateStepSeconds = 1.0;
+
+/// Shift an epoch by `seconds`, keeping the two-part Julian split intact.
+inline Epoch shiftEpoch(const Epoch& epoch, double seconds) {
+  Epoch shifted = epoch;
+  const double days = seconds / 86400.0;
+  shifted.tt2 += days;
+  shifted.ut12 += days;
+  return shifted;
+}
+
+inline Mat3 subtractScaled(const Mat3& a, const Mat3& b, double scaleFactor) {
+  Mat3 result;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      result.m[i][j] = (a.m[i][j] - b.m[i][j]) * scaleFactor;
+    }
+  }
+  return result;
+}
+
+/// Angular velocity of the TARGET axes with respect to the source axes,
+/// expressed in the SOURCE axes, from a rotation R (source -> target) and its
+/// time derivative.
+///
+/// With R_dot = W R and W skew, a vector fixed in the source appears in the
+/// target to turn at -omega, so W = -[omega_target]x. Reading the skew back out
+/// gives omega in TARGET components; rotating by R^T expresses it in the source
+/// axes, which is what $FRM's ANGULAR_VELOCITY_RAD_S is defined to carry.
+inline Vec3 angularVelocityInSourceAxes(const Mat3& rotation, const Mat3& rotationRate) {
+  const Mat3 w = multiply(rotationRate, transpose(rotation));
+  const Vec3 omegaTarget{w.m[1][2], -w.m[0][2], w.m[0][1]};
+  return apply(transpose(rotation), omegaTarget);
+}
+
+struct RotationWithRate {
+  Mat3 rotation;                 ///< source -> target
+  Mat3 rate;                     ///< d(rotation)/dt, per second
+  Vec3 angularVelocitySource;    ///< rad/s, target axes wrt source, in source axes
+};
+
+/// Differentiate any orientation function of epoch by central difference.
+/// `rotationAt` must be a callable taking an Epoch and returning a Mat3.
+template <typename RotationFn>
+inline RotationWithRate rotationWithRate(RotationFn rotationAt, const Epoch& epoch,
+                                         double stepSeconds = kDefaultAngularRateStepSeconds) {
+  RotationWithRate result;
+  result.rotation = rotationAt(epoch);
+  const Mat3 ahead = rotationAt(shiftEpoch(epoch, stepSeconds));
+  const Mat3 behind = rotationAt(shiftEpoch(epoch, -stepSeconds));
+  result.rate = subtractScaled(ahead, behind, 1.0 / (2.0 * stepSeconds));
+  result.angularVelocitySource = angularVelocityInSourceAxes(result.rotation, result.rate);
+  return result;
+}
+
+/// Differentiate any position function of epoch the same way. Used for the
+/// non-inertial ORIGINS (the Moon, the Earth-Moon barycentre, a libration
+/// point) whose velocity is otherwise unavailable in closed form.
+template <typename PositionFn>
+inline Vec3 positionRate(PositionFn positionAt, const Epoch& epoch,
+                         double stepSeconds = kDefaultAngularRateStepSeconds) {
+  const Vec3 ahead = positionAt(shiftEpoch(epoch, stepSeconds));
+  const Vec3 behind = positionAt(shiftEpoch(epoch, -stepSeconds));
+  return scale(sub(ahead, behind), 1.0 / (2.0 * stepSeconds));
 }
 
 }  // namespace frames

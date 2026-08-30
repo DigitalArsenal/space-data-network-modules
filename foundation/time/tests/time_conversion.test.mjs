@@ -3,8 +3,8 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
-import * as TIMStandards from "../../../../spacedatastandards.org/lib/js/TIM/main.js";
+import * as flatbuffers from "flatbuffers";
+import * as TIMStandards from "spacedatastandards.org/lib/js/TIM/main.js";
 import {
   TIM,
   TIMConversionRequestT,
@@ -13,14 +13,18 @@ import {
   timConversionStatus,
   timEpochRepresentation,
   timingStandard,
-} from "../../../../spacedatastandards.org/lib/js/TIM/main.js";
+} from "spacedatastandards.org/lib/js/TIM/main.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+// SDS comes from the PUBLISHED package this package pins, never a sibling
+// checkout (published-deps law, owner 2026-08-21).
+const STANDARDS_ROOT = fileURLToPath(
+  new URL("../node_modules/spacedatastandards.org/", import.meta.url),
+);
 const OREKIT_GNSSDATE_REFERENCE_UTC = "2006-08-09T16:31:03Z";
 const OREKIT_GNSSDATE_REFERENCE_RESULT_UTC = "2006-08-09T16:31:03.000000Z";
 const OREKIT_GPS_QZSS_SBAS_GNSS_SECONDS = 1387 * 604800 + 318677.0;
@@ -88,6 +92,7 @@ async function invokeConversion(harness, payload) {
         typeRef: {
           schemaName: "TIM.fbs",
           fileIdentifier: "$TIM",
+          rootTypeName: "TIM",
         },
         payload,
       },
@@ -2498,6 +2503,87 @@ test("fails closed for UT1 conversion without DUT1 data", async (t) => {
   const result = decodeResult(response);
   assert.equal(result.STATUS(), timConversionStatus.EOP_DATA_REQUIRED);
   assert.match(result.ERROR_MESSAGE(), /DUT1/i);
+});
+
+// ---------------------------------------------------------------------------
+// A1 — the one scale GMAT has that this module did not (gmat-08).
+//
+// A1 (US Naval Observatory atomic time) was set equal to UT2 at 1958 January
+// 1.0. Its offset from TAI is a DEFINITION and has been the same constant ever
+// since: A1 - TAI = 0.0343817 s exactly. That exactness is what the assertions
+// below measure -- the round trip must be bit-clean and the delta must be the
+// published constant, not a value near it.
+// ---------------------------------------------------------------------------
+
+const A1_MINUS_TAI_SECONDS = 0.0343817;
+
+test("A1 - TAI is the published 0.0343817 s exactly", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  const forward = decodeResult(
+    await invokeConversion(
+      harness,
+      encodeConversionRequest({
+        sourceSystem: timingStandard.TAI,
+        sourceIso8601: "2004-04-06T07:52:00.386009Z",
+        targetSystem: timingStandard.A1,
+      }),
+    ),
+  );
+  assert.equal(forward.STATUS(), timConversionStatus.OK);
+  assert.equal(forward.TARGET().TIME_SYSTEM(), timingStandard.A1);
+  assert.equal(
+    forward.DELTA_SECONDS(),
+    A1_MINUS_TAI_SECONDS,
+    "A1 - TAI must be the published constant exactly, not merely close to it",
+  );
+
+  const back = decodeResult(
+    await invokeConversion(
+      harness,
+      encodeConversionRequest({
+        sourceSystem: timingStandard.A1,
+        sourceIso8601: forward.TARGET().ISO8601(),
+        targetSystem: timingStandard.TAI,
+      }),
+    ),
+  );
+  assert.equal(back.STATUS(), timConversionStatus.OK);
+  assert.equal(back.DELTA_SECONDS(), -A1_MINUS_TAI_SECONDS);
+});
+
+test("A1 composes with the existing scales rather than standing apart", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  // UTC -> A1 must equal (UTC -> TAI) + (TAI -> A1). The Orekit-validated
+  // UTC->TAI offset at this instant is 32 s exactly (TAIScaleTest.testAAS06134,
+  // asserted elsewhere in this file), so the composed answer is a number, not a
+  // self-consistency check.
+  const result = decodeResult(
+    await invokeConversion(
+      harness,
+      encodeConversionRequest({
+        sourceSystem: timingStandard.UTC,
+        sourceIso8601: "2004-04-06T07:51:28.386009Z",
+        targetSystem: timingStandard.A1,
+      }),
+    ),
+  );
+  assert.equal(result.STATUS(), timConversionStatus.OK);
+  assertNear(
+    result.DELTA_SECONDS(),
+    32.0 + A1_MINUS_TAI_SECONDS,
+    1e-12,
+    "UTC to A1 offset",
+  );
 });
 
 test("built artifact loads through WasmEdge server path when available", async (t) => {

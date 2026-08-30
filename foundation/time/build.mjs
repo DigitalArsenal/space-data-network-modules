@@ -4,21 +4,21 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
+import { generateSdsHeaders } from "./generate-sds-headers.mjs";
+
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "time_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
-
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
-
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const [timHeader, implementationSource] = await Promise.all([
-  fs.readFile(path.join(standardsRoot, "lib", "cpp", "TIM", "main_generated.h"), "utf8"),
-  fs.readFile(sourcePath, "utf8"),
-]);
-const sourceCode = [timHeader, implementationSource].join("\n\n");
+
+// SDS comes from the PUBLISHED package this package pins, never a sibling
+// checkout (published-deps law, owner 2026-08-21). generate-sds-headers.mjs
+// carries the full reasoning.
+const { version: sdsVersion, headers } = await generateSdsHeaders();
+const implementationSource = await fs.readFile(sourcePath, "utf8");
+const sourceCode = [headers.TIM, implementationSource].join("\n\n");
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -49,4 +49,6 @@ if (!compilation.report?.ok) {
   throw new Error(`Compiled artifact failed SDK validation:\n${issues}`);
 }
 
-console.log(`Built ${path.relative(packageRoot, outputPath)}`);
+console.log(
+  `Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion}`,
+);
