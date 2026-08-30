@@ -235,45 +235,6 @@ inline std::string digits17(double v) {
 }
 
 /*
- * Seconds past J2000 as a CCSDS ISO-8601 instant, on the container's own scale.
- *
- * NOT `ephem::oem::iso_from_seconds`, which is where this belongs and where it
- * will go once the defect below is fixed. That function shifts to the
- * 0000-03-01 era with the constant 730120 where the day count it is handed needs
- * 730425 (Hinnant's 719468 plus the 10957 days from 1970-01-01 to 2000-01-01),
- * so it renders EVERY epoch exactly 305 days early: it prints this arc's start,
- * 820497600 s past J2000, as 2025-03-02T00:00:00 instead of 2026-01-01T00:00:00.
- * The fix is one constant in files/orbit-products/src/oem_projection.hpp, which
- * this package does not own. Until it lands, a fixture built on that function
- * would carry an epoch axis 305 days away from the three containers that compute
- * their own dates — which the `sources.agree.epochs` assertion now measures.
- *
- * The calendar arithmetic below is `code500::civil_from_days`, an implementation
- * that is already in the tree and already measured, rather than a third copy.
- */
-inline std::string iso_from_j2000_seconds(double seconds_past_j2000) {
-    /* J2000 is noon, not midnight, so the day count is taken from the shifted
-     * instant and the remainder is the time of day. */
-    const double shifted = seconds_past_j2000 + 43200.0;
-    double day = shifted / 86400.0;
-    int64_t whole = static_cast<int64_t>(day);
-    if (static_cast<double>(whole) > day) --whole;
-    double rem = shifted - static_cast<double>(whole) * 86400.0;
-
-    int y = 0, m = 0, d = 0;
-    code500::civil_from_days(whole + code500::kDaysToJ2000, &y, &m, &d);
-
-    const int hh = static_cast<int>(rem / 3600.0);
-    rem -= hh * 3600.0;
-    const int mi = static_cast<int>(rem / 60.0);
-    const double ss = rem - mi * 60.0;
-
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%09.6f", y, m, d, hh, mi, ss);
-    return std::string(buf);
-}
-
-/*
  * CCSDS OEM in keyword-value notation, built through the kvn document model
  * rather than by string concatenation, so the file this writes is a file that
  * model can read back — the round trip is over the model, not over our idea of
@@ -305,15 +266,15 @@ inline std::string emit_oem(const ephem::Series& s) {
     meta("CENTER_NAME", s.center_name);
     meta("REF_FRAME", s.frame_name);
     meta("TIME_SYSTEM", s.time_system);
-    meta("START_TIME", iso_from_j2000_seconds(s.rows.front().epoch));
-    meta("STOP_TIME", iso_from_j2000_seconds(s.rows.back().epoch));
+    meta("START_TIME", ephem::oem::iso_from_seconds(s.rows.front().epoch));
+    meta("STOP_TIME", ephem::oem::iso_from_seconds(s.rows.back().epoch));
     meta("INTERPOLATION", ephem::interp_name(s.interp));
     meta("INTERPOLATION_DEGREE", std::to_string(s.interp_degree));
 
     seg.has_data_block = true;
     for (const ephem::StateRow& r : s.rows) {
         kvn::DataLine d;
-        d.epoch = iso_from_j2000_seconds(r.epoch);
+        d.epoch = ephem::oem::iso_from_seconds(r.epoch);
         for (int c = 0; c < 3; ++c) d.tokens.push_back(digits17(r.pos[c]));
         for (int c = 0; c < 3; ++c) d.tokens.push_back(digits17(r.vel[c]));
         seg.data.push_back(d);

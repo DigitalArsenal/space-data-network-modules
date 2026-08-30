@@ -159,14 +159,25 @@ generator and the acceptance share. One Kepler solve, one set of writers: a
 second copy would let the files and the truth they are graded against drift apart
 while every printed line still said PASS.
 
-### One thing the generator does NOT reuse
+### Epoch text
 
-Epoch text is formatted by `arc::iso_from_j2000_seconds` in `fixture_arc.hpp`
-rather than by `ephem::oem::iso_from_seconds`, which is where it belongs.
-`files/orbit-products/src/oem_projection.hpp` shifts its day count to the
-0000-03-01 era with the constant **730120** where the count it is handed needs
-**730425** (Hinnant's 719468 plus the 10957 days from 1970-01-01 to 2000-01-01),
-so it renders every epoch exactly **305 days early**: it prints this arc's start,
-820497600 s past J2000, as `2025-03-02T00:00:00`. That is one constant in a
-package this one does not own. Once it is fixed, `iso_from_j2000_seconds` should
-be deleted and the call sites pointed back at the spine.
+Epoch text comes from `ephem::oem::iso_from_seconds` in
+`files/orbit-products/src/oem_projection.hpp` — the spine's own formatter, not a
+second copy living here.
+
+It briefly was a second copy. That function shifted its day count to the
+0000-03-01 era with **730120** where the count it is handed needs **730425**
+(Hinnant's 719468 plus the 10957 days from 1970-01-01 to 2000-01-01), so it
+rendered every epoch exactly **305 days early** — it printed this arc's start,
+820497600 s past J2000, as `2025-03-02T00:00:00`. These fixtures were generated
+against a local formatter while that was outstanding. The constant is now fixed
+upstream, the local formatter is deleted, and regenerating all four containers
+through the spine reproduces the committed bytes **exactly**, which is the
+evidence that the two agreed and that nothing in this set was ever built on the
+wrong dates.
+
+Worth recording how the defect hid: the states were right and only the epochs
+were wrong, which is the shape that survives every state comparison.
+`sources.agree.nodes` passed at 1.3e-12 km with the OEM's epoch axis 305 days
+displaced, because it compares positions row by row. `sources.agree.epochs.sec`
+and `sources.agree.epochs.absolute.sec` exist for that reason and stay.

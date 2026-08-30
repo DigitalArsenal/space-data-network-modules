@@ -21,6 +21,8 @@ own header facts go into the native-container descriptor that
 | `src/code500.hpp` | Code-500 fixed-record binary ephemeris, read and write. |
 | `src/stk_ephemeris.hpp` | STK `.e` ephemeris and `.a` attitude, read and write. |
 | `src/sp3.hpp` | SP3-d, read and **write** — the writer is the gap this task closes. |
+| `src/oem_projection.hpp` | The `Series` → `$OEM` projection: which of the record's two state forms a history takes, and the epoch text. |
+| `src/orbit_products_module.cpp` | The module surface: `read_container` and `describe_container`, the `$NCD` framing and its SHA-256 check, and the vocabulary mapping onto `timingStandard` and `CelestialFrame`. |
 
 Headers, not compiled units, because the SDK compiles ONE translation unit per
 module and three consumers assemble different subsets of these: this package's
@@ -62,18 +64,52 @@ Nothing here is checked against itself.
 Fixture provenance, including source URLs and hashes, is in
 `fixtures/PROVENANCE.md`.
 
-## The module surface is gated on a schema
+## The module surface
 
-The reader **headers** are complete and measured. The module's *method* surface
-is not shipped yet, and the reason is structural rather than unfinished work:
-the SDK requires every port to declare one concrete SDS identity, and raw
-container bytes have no SDS record at pin 1.201.0. That is the native-container
-descriptor Themis ruled a mint for, tracked as
-`upstream-spacedatastandards-10`. The port lands with the record.
+`upstream-spacedatastandards-10` landed in `spacedatastandards.org` **1.202.0**,
+so the surface that had no record to type its ports on now has one. Two methods
+ship, both pure compute, no capabilities:
 
-Propagation is unaffected and ships today: `data-source/spk-source` reaches
-these same headers through `plugin_init_ephemeris`, an ABI export that carries
-bytes directly and therefore needs no port type at all.
+| Method | In | Out |
+| --- | --- | --- |
+| `read_container` | `$NCD` + the container's bytes | `ephemeris` (`$OEM`), `descriptor` (`$NCD`) |
+| `describe_container` | `$NCD` + the container's bytes | `descriptor` (`$NCD`) |
+
+**How the bytes arrive.** `$NCD` describes a container, it does not carry one —
+it has `SOURCE_SHA256`, `SOURCE_BYTE_LENGTH` and `SOURCE_CID` and no payload
+field. The SDK refuses a port typed `acceptsAnyFlatbuffer`, so "typed
+descriptor plus raw bytes" cannot be two ports; the byte port would have no
+concrete SDS identity to declare. So one port carries both, in this order:
+
+```
+[u32le n][ $NCD flatbuffer, n bytes ][ the container's exact bytes ]
+```
+
+which is a size-prefixed `$NCD` with the described file appended. The size
+prefix is self-describing, so the boundary comes out of the frame rather than
+out of an agreement, and when the caller declares `SOURCE_SHA256` or
+`SOURCE_BYTE_LENGTH` they are CHECKED against the trailing bytes — a mismatch
+is `descriptor-hash-mismatch` / `descriptor-length-mismatch`, not a read. That
+check is what the schema carries the hash for, and it is why this module needs
+no fetch capability to do its job.
+
+**What the schema bump bought.** `$OEM` 1.1.4 added per-state clock bias and
+rate, the per-coordinate sigma exponents, and `OBJECT_NAIF_ID` /
+`CENTER_NAIF_ID`. Those are exactly the columns an SP3 read and an SPK read had
+been dropping: SP3's clock column is mandatory in every position record, and an
+SPK segment stores integer body codes with no ratified text mapping back. Both
+are populated now, so a state history no longer loses its clocks on the way
+into the record or its body identity on the way out.
+
+`FORMAT` selects the reader; `UNSPECIFIED` asks the module to identify the
+container from its own leading bytes and say what it found. A member of the
+`$NCD` roster this reader does not project onto `$OEM` — the attitude and
+tracking-data containers, OEM in XML — is refused by name rather than folded
+into a neighbouring reader.
+
+Propagation is a separate lane and is unchanged: `data-source/spk-source`
+reaches these same headers through `plugin_init_ephemeris`, an ABI export that
+carries bytes directly and therefore needs no port type at all.
 
 ## Build
 

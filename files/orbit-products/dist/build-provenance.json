@@ -1,0 +1,21 @@
+{
+  "spacedatastandards": "1.202.0",
+  "threadModel": "wasi-sequential",
+  "records": {
+    "in": [
+      "$NCD"
+    ],
+    "out": [
+      "$OEM",
+      "$NCD"
+    ]
+  },
+  "formats": [
+    "SPK_DAF",
+    "SP3_C",
+    "SP3_D",
+    "CODE_500",
+    "SCENARIO_EPOCH_EPHEMERIS_TEXT",
+    "CCSDS_OEM_KVN"
+  ]
+}

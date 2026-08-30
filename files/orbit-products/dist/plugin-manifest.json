@@ -1,0 +1,188 @@
+{
+  "pluginId": "com.digitalarsenal.files.orbit-products",
+  "name": "Orbit Products Reader",
+  "version": "0.1.0",
+  "description": "Reads the four ephemeris CONTAINERS this stack round-trips — SPK (NAIF DAF, segment types 8, 9 and 13), SP3-c/d, Code-500 and scenario-epoch STK ephemeris — plus CCSDS-OEM keyword-value notation, and projects them onto SDS $OEM with the container's own facts carried out separately as $NCD. A container is a wire format, not a standard: the state history becomes $OEM and the file-level header, comment area, segment address ranges and accuracy block become the native-container descriptor, so a read-then-write cycle reproduces the source instead of inventing header values. Each container is evaluated by the interpolation rule it declares, never by a rule this module picked, and no time-scale conversion happens here: epochs stay on the scale the container named and that name is carried out with them. A malformed container is a named status, never a trap and never a NaN.",
+  "tagline": "SPK, SP3, Code-500, STK and CCSDS-OEM containers in; $OEM states and an $NCD descriptor out.",
+  "pluginFamily": "parser",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Reading a container is one forward pass over one resident buffer into one state series, and the projection onto $OEM and $NCD is a second pass over that series. The module spawns nothing, opens nothing, shares nothing between invocations and holds no state after one: everything it can answer is already in the frame it was handed, so there is no work to fan out and never will be."
+  },
+  "tags": [
+    "parser",
+    "ephemeris",
+    "spk",
+    "daf",
+    "sp3",
+    "code500",
+    "stk",
+    "oem",
+    "ncd",
+    "sds",
+    "space-data"
+  ],
+  "methods": [
+    {
+      "methodId": "read_container",
+      "displayName": "Read Native Container",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The container to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the container's exact bytes in the same frame. $NCD carries the file's facts and its SOURCE_SHA256, not its payload, so the payload rides with the descriptor that describes it: the size prefix gives the descriptor's exact length and therefore the offset the container starts at, and SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against those trailing bytes when the caller declared them, which is what makes the pairing provable rather than assumed. FORMAT selects the reader; UNSPECIFIED asks this module to identify the container from its own leading bytes and report what it found.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described container's bytes appended to the frame.",
+              "allowedTypes": [
+                { "schemaName": "NCD.fbs", "fileIdentifier": "$NCD", "rootTypeName": "NCD" },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM envelope carrying every state history the container described, one data block per object: an SPK segment per body, an SP3 satellite per block, an OEM block per block. Positions are kilometres and velocities kilometres per second, as the IDL fixes. SP3's per-state clock bias and rate ride on EPHEMERIS_DATA_LINES and the NAIF integer target and centre codes on the block, so nothing the container stated about identity or clocks is dropped on the way into the record.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-ephemeris",
+              "description": "SDS $OEM envelope.",
+              "allowedTypes": [
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope carrying the half of the container that $OEM cannot hold: the resolved FORMAT, the internal file name, the comment area, the segment descriptors with their address ranges, the SP3 header accuracy block, the scenario-epoch parameters or the Code-500 header, and the SHA-256 of the bytes this run actually read. A writer that is handed the $OEM and this descriptor can reproduce the source container; a writer handed only the $OEM has to invent its header.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                { "schemaName": "NCD.fbs", "fileIdentifier": "$NCD", "rootTypeName": "NCD" },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "describe_container",
+      "displayName": "Describe Native Container",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The same frame read_container takes: a size-prefixed SDS $NCD descriptor followed immediately by the container's exact bytes. A caller that only wants to know what a file IS sends the descriptor with FORMAT unset and gets back what this module identified.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described container's bytes appended to the frame.",
+              "allowedTypes": [
+                { "schemaName": "NCD.fbs", "fileIdentifier": "$NCD", "rootTypeName": "NCD" },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope with everything this module resolved from the container filled in, including the format it identified when the caller did not name one. This is the surface that answers \"what is this file\" without materialising its states, and the honest place to see a disagreement: a descriptor that came in claiming one format and goes out resolved as another says so here.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                { "schemaName": "NCD.fbs", "fileIdentifier": "$NCD", "rootTypeName": "NCD" },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "schemasUsed": [
+    { "schemaName": "NCD.fbs", "fileIdentifier": "$NCD", "rootTypeName": "NCD" },
+    { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+    { "schemaName": "RFM.fbs", "fileIdentifier": "$RFM", "rootTypeName": "RFM" },
+    { "schemaName": "TIM.fbs", "fileIdentifier": "$TIM", "rootTypeName": "TIM" },
+    { "schemaName": "CAT.fbs", "fileIdentifier": "$CAT", "rootTypeName": "CAT" },
+    { "schemaName": "PPE.fbs", "fileIdentifier": "$PPE", "rootTypeName": "PPE" }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "files-orbit-products-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
