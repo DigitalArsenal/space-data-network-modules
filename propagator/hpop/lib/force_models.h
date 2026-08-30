@@ -8,8 +8,13 @@
 
 #include "astrodynamics_types.h"
 #include <functional>
+#include <memory>
 
 namespace astro {
+
+/// A generic spherical-harmonic field of arbitrary degree, defined in
+/// environment_models.h. Force models only ever hold one by handle.
+struct ExtendedGravityField;
 
 // =============================================================================
 // Force Model Namespace - Clean API for All 18 Force Models
@@ -32,18 +37,46 @@ Vec3 PointMass(const Vec3& position, double mu = MU_EARTH);
 // -----------------------------------------------------------------------------
 
 /// Spherical harmonics gravity configuration
+///
+/// Every field here is HONORED. Until gmat-07 three of them were not:
+/// `includeJ2/J3/J4` were never read (asking for "J2 only" silently returned a
+/// J2-J6 field with degree-2/3/4 tesserals on top), and a non-null `Cnm`
+/// only suppressed the built-in defaults without ever being copied, so a
+/// caller-supplied field evaluated as all zeros. A selector that silently
+/// answers with a different model is the defect this build item exists to
+/// abolish; it is not confined to atmospheres.
 struct SphericalHarmonicsConfig {
     double mu{MU_EARTH};            ///< Gravitational parameter (km^3/s^2)
     double referenceRadius{RE_EARTH}; ///< Reference radius (km)
     uint16_t maxDegree{20};         ///< Maximum degree (2-2190)
     uint16_t maxOrder{20};          ///< Maximum order (0 = zonal only)
-    bool includeJ2{true};
-    bool includeJ3{false};
-    bool includeJ4{false};
 
-    // Custom coefficients (if not using built-in)
+    /// Zonal gates, OPT-OUT. A gated-off zonal is ABSENT from the evaluated
+    /// field, not merely unrequested; this mirrors EGM2008ForceConfig's gates
+    /// below so the two gravity paths cannot answer a UI toggle differently.
+    ///
+    /// They default ON because the natural content of a spherical-harmonic
+    /// field of degree N is every zonal up to N — gating is the exception, and
+    /// a caller that constructs this struct and sets only `maxDegree` means
+    /// "the field to that degree". (The header previously declared J3 and J4
+    /// OFF by default and then ignored all three, so the declared default was
+    /// never the behavior anyone observed.)
+    bool includeJ2{true};
+    bool includeJ3{true};
+    bool includeJ4{true};
+
+    /// Zonals above degree 4 (J5, J6). Gated off when the caller asked for a
+    /// closed zonal set; on for a general field.
+    bool includeHigherZonals{true};
+
+    /// Custom coefficients. Fully normalized, ROW-MAJOR, stride
+    /// `GravityFieldCoefficients::MAX_INLINE_DEGREE + 1` (21), i.e.
+    /// `Cnm[n * 21 + m]`. When non-null these REPLACE the built-in set
+    /// entirely and the zonal gates above do not apply — the caller's field is
+    /// the field. Both pointers must be supplied together.
     const double* Cnm{nullptr};     ///< Cosine coefficients array
     const double* Snm{nullptr};     ///< Sine coefficients array
+    static constexpr int CUSTOM_STRIDE = 21;
 };
 
 /// Spherical harmonics gravity acceleration (J2-Jn zonal/tesseral)
@@ -206,6 +239,21 @@ struct DragForceConfig {
     bool includeWinds{false};       ///< Include horizontal winds
     bool coRotatingAtmosphere{true}; ///< Atmosphere co-rotates with Earth
 };
+
+/// The atmosphere model a drag setting names.
+/// `DragModelType` and `AtmosphereModelType` do NOT share an ordering; casting
+/// between them silently selected a different model for every value from 2 up.
+AtmosphereModelType AtmosphereModelForDrag(DragModelType model);
+
+/// Harris-Priester drag acceleration.
+/// @param position Body-fixed position (km)
+/// @param velocity Body-fixed velocity (km/s)
+/// @param jd Julian date (TDB), for the Sun direction that sets the bulge
+/// @param dragConfig Ballistic properties and atmosphere-relative velocity flags
+/// @param bulgeExponent Cosine exponent (2 low inclination, 6 polar)
+/// @return Drag acceleration (km/s^2)
+Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
+                    const DragForceConfig& dragConfig, double bulgeExponent = 4.0);
 
 /// Atmospheric drag acceleration
 /// @param position Satellite position in ECEF or ECI (km)
@@ -568,21 +616,111 @@ struct EmpiricalAccelConfig {
 Vec3 EmpiricalAcceleration(const Vec3& position, const Vec3& velocity,
                             const EmpiricalAccelConfig& config);
 
+// -----------------------------------------------------------------------------
+// Force-model contribution port
+// -----------------------------------------------------------------------------
+//
+// A caller registers additional accelerations into the same integration and
+// the same breakdown the built-in models use. Contributions are PARAMETERIZED,
+// not code: the caller names a kind and supplies its parameters. Hosting
+// foreign code inside the propagator would be a new host capability and is not
+// this build item's to grant; a parameter table needs no new capability and
+// covers what a force list is actually asked for.
+//
+// The port is exact. A zonal registered here is evaluated by an independent
+// Legendre-gradient recursion, so "registered J2 reproduces built-in J2" is a
+// cross-validation of two derivations, not a function calling itself.
+
+enum class ContributionKind : uint8_t {
+    None = 0,
+    /// A fixed vector in the working (body-fixed) frame, km/s^2.
+    ConstantInertial = 1,
+    /// A fixed vector in the RTN triad of the current state, km/s^2.
+    ConstantRTN = 2,
+    /// Zonal harmonic of degree n: params are mu, Re, n, Jn.
+    ZonalHarmonic = 3,
+    /// A point mass at a fixed position: params are mu, x, y, z.
+    PointMassAt = 4,
+};
+
+struct ForceContribution {
+    ContributionKind kind{ContributionKind::None};
+    bool enabled{true};
+    /// Kind-specific parameters; see ContributionKind.
+    double p[6]{};
+};
+
+/// Slot table. Bounded and inline so registration allocates nothing and the
+/// derivative stays allocation-free in the integrator's inner loop.
+struct ContributionSet {
+    static constexpr int MAX_SLOTS = 8;
+    ForceContribution slots[MAX_SLOTS];
+    int count{0};
+};
+
+/// Zonal harmonic acceleration of a single degree, from the gradient of
+///     U_n = -(mu/r) (Re/r)^n J_n P_n(z/r)
+/// with P_n and P_n' from the standard recursions. Deliberately shares no
+/// algebra with J2Only()/J2J4() so agreement between them is evidence.
+/// @param position Body-fixed position (km)
+/// @param mu Gravitational parameter (km^3/s^2)
+/// @param Re Reference radius (km)
+/// @param n Degree (>= 2)
+/// @param Jn Unnormalized zonal coefficient
+/// @return Perturbing acceleration, central term excluded (km/s^2)
+Vec3 ZonalHarmonic(const Vec3& position, double mu, double Re, int n, double Jn);
+
+/// Evaluate one registered contribution.
+Vec3 EvaluateContribution(const ForceContribution& c,
+                          const Vec3& position, const Vec3& velocity);
+
+/// Sum of every enabled registered contribution.
+Vec3 EvaluateContributions(const ContributionSet& set,
+                           const Vec3& position, const Vec3& velocity);
+
 // =============================================================================
 // Combined Force Model Evaluation
 // =============================================================================
 
 /// Complete force model configuration (all 18 models)
+/// Which central-body gravity model answers, stated rather than inferred.
+///
+/// Inference from a degree/order plus three booleans is how "J2 only" came to
+/// mean "a J2-J6 tesseral field": there was no way for a caller to say what it
+/// wanted, so every setting reached the same code. A selector says it.
+enum class GravityMode : uint8_t {
+    /// Legacy: infer from `usePointMass` / `useSphericalHarmonics` /
+    /// `useEGM2008` / `useLoadedField`. Retained so existing callers are
+    /// unchanged.
+    Infer = 0,
+    PointMass = 1,          ///< mu/r^2 only
+    J2Only = 2,             ///< point mass + the J2 closed form
+    J2J4 = 3,               ///< point mass + the J2/J3/J4 closed forms
+    SphericalHarmonics = 4, ///< the built-in low-degree field
+    EGM2008 = 5,            ///< the vendored EGM2008 coefficient set
+    LoadedField = 6,        ///< a field read from a potential file
+};
+
 struct ForceModelSet {
     // Gravity
     bool usePointMass{true};
     double mu{MU_EARTH};
+
+    /// When not `Infer`, this alone decides the central-body gravity model and
+    /// the `use*` booleans below are ignored for gravity.
+    GravityMode gravityMode{GravityMode::Infer};
 
     bool useSphericalHarmonics{false};
     SphericalHarmonicsConfig sphericalHarmonics;
 
     bool useEGM2008{false};
     EGM2008ForceConfig egm2008;
+
+    /// A field loaded from a potential file (ICGEM / .cof), of any degree the
+    /// file supplies. Evaluated by the same Pines recursion the vendored
+    /// EGM2008 path uses.
+    bool useLoadedField{false};
+    std::shared_ptr<const ExtendedGravityField> loadedField;
 
     bool useGRGM1200A{false};
     GRGM1200AForceConfig grgm1200a;
@@ -599,6 +737,9 @@ struct ForceModelSet {
     bool useDrag{false};
     DragForceConfig drag;
     DragModelType dragModel{DragModelType::NRLMSISE00};
+    /// Harris-Priester diurnal-bulge cosine exponent (2 low inclination,
+    /// 6 polar; 4 is the usual mid-inclination choice).
+    double harrisPriesterExponent{4.0};
     NRLMSISE00Config nrlmsise00;
     JB2008Config jb2008;
     DTM2020Config dtm2020;
@@ -629,6 +770,10 @@ struct ForceModelSet {
     bool useEmpiricalAccel{false};
     EmpiricalAccelConfig empiricalAccel;
 
+    // Registered third-party contributions
+    bool useContributions{false};
+    ContributionSet contributions;
+
     // Maneuvers
     bool hasFiniteManeuver{false};
     FiniteManeuverConfig finiteManeuver;
@@ -640,6 +785,22 @@ struct ForceModelSet {
     Vec3 sunPosition;
     bool sunPositionProvided{false};
 };
+
+/// Central-body gravity for a force set — exactly one model, chosen by
+/// `forceSet.gravityMode`, or by the legacy precedence when that is `Infer`.
+/// Callers that need only the gravity term (an acceleration breakdown, a
+/// parity harness) go through this rather than re-deriving the precedence.
+/// @param position Satellite position (km)
+/// @param forceSet Force model configuration
+/// @return Gravity acceleration including the central term (km/s^2)
+Vec3 CentralBodyGravity(const Vec3& position, const ForceModelSet& forceSet);
+
+/// Evaluate a field loaded from a potential file. Declared here and defined in
+/// environment_models.cpp, which owns ExtendedGravityField.
+/// @param position Body-fixed position (km)
+/// @param field Loaded spherical-harmonic field
+/// @return Acceleration including the central term (km/s^2)
+Vec3 LoadedFieldGravity(const Vec3& position, const ExtendedGravityField& field);
 
 /// Compute total acceleration from all enabled force models
 /// @param position Satellite position (km)

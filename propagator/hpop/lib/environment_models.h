@@ -13,6 +13,7 @@
 #include <array>
 #include <cmath>
 #include <memory>
+#include <string>
 
 namespace astro {
 
@@ -126,6 +127,102 @@ void computePinesLegendre(
 Mat3 computeGravityGradient(
     const Vec3& position,
     const ExtendedGravityField& field);
+
+// =============================================================================
+// 8.6.1b Generic potential-file loader
+// =============================================================================
+//
+// Until gmat-07 the only fields that existed were two vendored coefficient
+// blobs: EGM2008 to degree 70 and GRGM1200A. There was no reader, so no other
+// Earth field, no Mars field and no user-supplied field could be flown at all.
+// A loader is what makes the gravity row a capability rather than two frozen
+// answers.
+
+/// Recognized potential-file encodings.
+enum class GravityFileFormat {
+    Auto,   ///< Sniff from the content
+    ICGEM,  ///< `gfc` / `gfct` records with an `end_of_head` marker
+    COF,    ///< Fixed-column `RECOEF`-style records
+};
+
+/// Outcome of a load. A refusal is TYPED and carries the reason; a loader that
+/// answers a malformed file with an empty field is the same silent-substitution
+/// defect as an atmosphere label that falls through.
+enum class GravityFileStatus {
+    Ok = 0,
+    Empty,             ///< No coefficient records found
+    MissingHeader,     ///< No GM / reference radius / max degree
+    MalformedRecord,   ///< A coefficient record could not be parsed
+    UnknownFormat,     ///< Content matched no supported encoding
+};
+
+struct GravityFileLoadResult {
+    GravityFileStatus status{GravityFileStatus::UnknownFormat};
+    GravityFileFormat format{GravityFileFormat::Auto};
+    ExtendedGravityField field;
+    std::string modelName;      ///< As declared by the file, if it declares one
+    std::string tideSystem;     ///< e.g. "tide_free" / "zero_tide", if declared
+    uint16_t fileMaxDegree{0};  ///< Max degree present in the file
+    size_t recordsRead{0};
+    std::string detail;         ///< Human-readable reason on a refusal
+
+    bool ok() const { return status == GravityFileStatus::Ok; }
+};
+
+/// Load a spherical-harmonic potential field from file CONTENT.
+///
+/// The module has no filesystem: the caller supplies bytes, whatever their
+/// provenance (an embedded blob, an SDS record payload, a host fetch).
+/// @param content Whole file text
+/// @param maxDegree Truncation degree (0 = whatever the file holds)
+/// @param maxOrder Truncation order (0 = same as maxDegree)
+/// @param format Encoding, or Auto to sniff
+/// @return Loaded field, or a typed refusal
+GravityFileLoadResult loadGravityField(const std::string& content,
+                                       uint16_t maxDegree = 0,
+                                       uint16_t maxOrder = 0,
+                                       GravityFileFormat format = GravityFileFormat::Auto);
+
+// =============================================================================
+// 8.6.1c Polyhedron gravity (Werner & Scheeres 1997)
+// =============================================================================
+//
+// The exact potential of a constant-density polyhedron. Unlike a harmonic
+// expansion it is valid ON and INSIDE the Brillouin sphere, which is the whole
+// point for a body that is not close to spherical.
+
+/// A closed triangular mesh with outward-facing winding.
+struct PolyhedronShape {
+    std::vector<Vec3> vertices;                  ///< Body-fixed vertices (km)
+    std::vector<std::array<int, 3>> faces;       ///< CCW seen from outside
+    double density{1.0};                         ///< Uniform density (kg/km^3)
+
+    /// Signed volume from the divergence theorem (km^3). Negative means the
+    /// winding is inverted.
+    double volume() const;
+    /// Total mass (kg) = density * volume.
+    double mass() const { return density * volume(); }
+};
+
+struct PolyhedronGravityResult {
+    double potential{0.0};   ///< U (km^2/s^2), positive convention
+    Vec3 acceleration;       ///< grad U (km/s^2)
+    double laplacian{0.0};   ///< -4*pi*G*rho inside, 0 outside — the winding
+                             ///< and inside/outside test in one number
+    bool valid{false};
+};
+
+/// Potential and acceleration of a uniform-density polyhedron.
+/// @param fieldPoint Body-fixed evaluation point (km)
+/// @param shape Closed triangular mesh
+/// @return Potential, acceleration and the Laplacian check
+PolyhedronGravityResult computePolyhedronGravity(const Vec3& fieldPoint,
+                                                 const PolyhedronShape& shape);
+
+/// A unit cube centred on the origin, scaled and given a density — the shape
+/// the far-field point-mass reduction is asserted on.
+PolyhedronShape makeBoxPolyhedron(double halfX, double halfY, double halfZ,
+                                  double density);
 
 // =============================================================================
 // 8.6.2 JPL Development Ephemeris (DE) Interface
@@ -359,8 +456,190 @@ AtmosphericDensity computeBestAtmosphere(
     AtmosphereModelType preferredModel = AtmosphereModelType::NRLMSISE00);
 
 // =============================================================================
+// 8.6.4b Atmosphere label honesty
+// =============================================================================
+//
+// `AtmosphereModelType` names seven models. Four of them were not those
+// models: `JB2008` and `DTM2020` are documented simplified stand-ins, and
+// `GOST2004` and `HarrisPriester` were handled by NO dispatch anywhere and
+// fell through `default:` to NRLMSISE-00 — a caller asking for one model and
+// silently receiving another.
+//
+// gmat-07 closes that two ways. Harris-Priester becomes REAL (its published
+// table is short and exact, so there is no excuse for a stand-in). The rest
+// are declared unimplemented and REFUSE at the plugin boundary rather than
+// substituting. The registry below is the single source of that truth, so a
+// label cannot be honest in one dispatch and dishonest in another.
+
+/// What stands behind a label.
+enum class AtmosphereImplementation : uint8_t {
+    /// The named model, reproducing its published reference values.
+    Published = 0,
+    /// The label is declared but nothing implements it. Selecting it is
+    /// REFUSED; it never falls through to another model.
+    NotImplemented = 1,
+};
+
+/// Is this label backed by the model it names?
+AtmosphereImplementation atmosphereImplementationOf(AtmosphereModelType model);
+
+/// Stable identifier for a label, for refusal messages and ABI status queries.
+const char* atmosphereModelName(AtmosphereModelType model);
+
+/// The authority a `Published` label reproduces, or why a label refuses.
+const char* atmosphereModelProvenance(AtmosphereModelType model);
+
+/// Harris-Priester modified-exponential density.
+///
+/// The published model: a 50-row table of minimum ("antapex") and maximum
+/// ("apex") density against altitude from 100 to 1000 km, log-interpolated in
+/// altitude, then blended by cos^(n/2) of the angle between the field point and
+/// the diurnal bulge — the bulge lagging the sub-solar point by 30 degrees.
+/// n = 2 for low-inclination orbits, 6 for polar. Values are the standard
+/// F10.7 = 150 tabulation.
+///
+/// @param position Body-fixed position (km)
+/// @param sunPositionBodyFixed Sun position in the same frame (km)
+/// @param n Cosine exponent parameter (2 = low inclination, 6 = polar)
+/// @return Density and the altitude it was evaluated at; density is 0 outside
+///         the table's 100-1000 km support, which is a REFUSAL to extrapolate,
+///         not an estimate of vacuum.
+AtmosphericDensity computeHarrisPriester(const Vec3& position,
+                                         const Vec3& sunPositionBodyFixed,
+                                         double n = 4.0);
+
+/// Number of rows in the Harris-Priester table (for conformance tests).
+int harrisPriesterTableSize();
+/// Row i of the table: altitude (km), min density and max density (kg/m^3).
+void harrisPriesterTableRow(int i, double& altitudeKm, double& rhoMin, double& rhoMax);
+
+// =============================================================================
+// 8.6.4c SPAD area tables (drag and SRP)
+// =============================================================================
+//
+// A SPAD file tabulates an effective area (or an area-times-coefficient) over
+// the direction of the incident flow or sunlight in the body frame, sampled on
+// a regular azimuth/elevation grid. It is how a non-convex spacecraft's real
+// projected area reaches a force model without a ray tracer in the loop.
+
+enum class SpadQuantity : uint8_t {
+    Unknown = 0,
+    DragArea = 1,  ///< Effective drag area, or Cd*A
+    SrpArea = 2,   ///< Effective SRP area, or Cr*A
+};
+
+struct SpadTable {
+    SpadQuantity quantity{SpadQuantity::Unknown};
+    /// Grid axes, ascending, in degrees. Azimuth is the body-frame longitude
+    /// of the incident direction, elevation its latitude.
+    std::vector<double> azimuthDeg;
+    std::vector<double> elevationDeg;
+    /// Row-major values, `value[iEl * azimuthDeg.size() + iAz]`, in m^2.
+    std::vector<double> values;
+    double mass{0.0};        ///< Spacecraft mass (kg) if the file declares one
+    std::string name;
+
+    bool valid() const {
+        return !azimuthDeg.empty() && !elevationDeg.empty() &&
+               values.size() == azimuthDeg.size() * elevationDeg.size();
+    }
+};
+
+enum class SpadFileStatus {
+    Ok = 0,
+    Empty,
+    MissingGrid,
+    MalformedRecord,
+    RaggedTable,
+};
+
+struct SpadLoadResult {
+    SpadFileStatus status{SpadFileStatus::Empty};
+    SpadTable table;
+    std::string detail;
+    bool ok() const { return status == SpadFileStatus::Ok; }
+};
+
+/// Parse SPAD file content.
+/// @param content Whole file text
+/// @return Table, or a typed refusal
+SpadLoadResult loadSpadFile(const std::string& content);
+
+/// Bilinear interpolation on the SPAD grid.
+///
+/// Exact at grid nodes by construction: a node's fractional weights are 1 and
+/// 0, so the node's own value is returned bit-for-bit.
+/// @param table Loaded table
+/// @param azimuthDeg Azimuth of the incident direction (degrees)
+/// @param elevationDeg Elevation of the incident direction (degrees)
+/// @return Interpolated area (m^2); clamped at the grid edges
+double spadInterpolate(const SpadTable& table, double azimuthDeg, double elevationDeg);
+
+/// Azimuth/elevation of a body-frame direction, in the table's convention.
+void spadDirectionToAzEl(const Vec3& bodyFrameDirection,
+                         double& azimuthDeg, double& elevationDeg);
+
+// =============================================================================
 // 8.6.5 Space Weather Integration
 // =============================================================================
+
+// -----------------------------------------------------------------------------
+// Schatten predicted solar activity
+// -----------------------------------------------------------------------------
+//
+// The observed feed answers for the past. A mission flown into the future
+// needs a PREDICTION, and a prediction without a confidence band is a number
+// pretending to be a measurement. A Schatten-class table publishes three
+// bands — early, nominal and late cycle — and the band is a first-class input,
+// not a footnote.
+
+enum class SolarActivityBand : uint8_t {
+    Nominal = 0,
+    Early = 1,   ///< Cycle arrives early / higher flux
+    Late = 2,    ///< Cycle arrives late / lower flux
+};
+
+struct SolarActivityPrediction {
+    double epoch{0.0};       ///< Julian date of the sample
+    double f107{0.0};        ///< Predicted 10.7 cm flux (SFU)
+    double f107a{0.0};       ///< Predicted 81-day average (SFU)
+    double ap{0.0};          ///< Predicted daily Ap
+};
+
+/// A three-band prediction table, monotonic in epoch.
+struct SolarActivityPredictionTable {
+    std::vector<SolarActivityPrediction> nominal;
+    std::vector<SolarActivityPrediction> early;
+    std::vector<SolarActivityPrediction> late;
+    std::string name;
+
+    const std::vector<SolarActivityPrediction>& band(SolarActivityBand b) const;
+    bool empty() const { return nominal.empty() && early.empty() && late.empty(); }
+};
+
+enum class PredictionFileStatus { Ok = 0, Empty, MalformedRecord, NotMonotonic };
+
+struct PredictionLoadResult {
+    PredictionFileStatus status{PredictionFileStatus::Empty};
+    SolarActivityPredictionTable table;
+    std::string detail;
+    bool ok() const { return status == PredictionFileStatus::Ok; }
+};
+
+/// Parse a Schatten-class prediction table from file content.
+///
+/// Record form, one per line, `#` comments ignored:
+///   `<year> <month> <band> <f107> <f107a> <ap>`
+/// where band is `EARLY`, `NOMINAL` or `LATE`. Monthly samples are the
+/// published cadence; interpolation between them is linear in Julian date.
+PredictionLoadResult loadSolarActivityPredictions(const std::string& content);
+
+/// Sample a band at an epoch, linearly interpolated, clamped at the ends.
+/// @return false when the requested band is empty — a refusal, not a default.
+bool predictSolarActivityAt(const SolarActivityPredictionTable& table,
+                            SolarActivityBand band,
+                            double jd,
+                            SolarActivityPrediction& out);
 
 /// Space weather data source
 enum class SpaceWeatherSource {

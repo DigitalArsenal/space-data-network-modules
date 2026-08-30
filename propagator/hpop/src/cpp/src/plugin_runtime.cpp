@@ -1,10 +1,10 @@
 #include "hpop/plugin_runtime.h"
 
-#include "hpop/astrodynamics.h"
-#include "hpop/astrodynamics_types.h"
-#include "hpop/integrators.h"
-#include "hpop/force_models.h"
-#include "hpop/coords.h"
+#include "astrodynamics.h"
+#include "astrodynamics_types.h"
+#include "integrators.h"
+#include "force_models.h"
+#include "coords.h"
 
 #include <nlohmann/json.hpp>
 

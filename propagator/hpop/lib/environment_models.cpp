@@ -11,6 +11,10 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
+#include <cstdlib>
+#include <cctype>
+#include <sstream>
+#include <string>
 
 namespace astro {
 
@@ -908,6 +912,816 @@ AccelerationBreakdown computeAccelerationBreakdown(
     }
 
     return result;
+}
+
+
+// =============================================================================
+// 8.6.1b Generic potential-file loader                              (gmat-07)
+// =============================================================================
+
+namespace {
+
+/// Scan every number out of a line, tolerating BOTH whitespace-separated and
+/// fixed-column-concatenated records.
+///
+/// Fixed-column potential files routinely emit `2  0-0.484165371736E-03`: the
+/// degree, the order and a negative coefficient with no separator, because the
+/// columns are the separator. A whitespace tokenizer reads that as two numbers
+/// and loses the field. This scanner starts a new number at any `+`/`-`/`.`/
+/// digit that cannot continue the number in progress, so the same routine
+/// reads both encodings. Fortran `D` exponents are accepted.
+std::vector<double> scanNumbers(const std::string& line, size_t maxCount = 64) {
+    std::vector<double> out;
+    size_t i = 0;
+    const size_t n = line.size();
+    while (i < n && out.size() < maxCount) {
+        char c = line[i];
+        bool starts = (c >= '0' && c <= '9');
+        if (!starts && (c == '+' || c == '-' || c == '.')) {
+            // A sign or point only starts a number if a digit or point follows.
+            size_t j = i + 1;
+            if (c != '.' && j < n && line[j] == '.') j++;
+            starts = (j < n && line[j] >= '0' && line[j] <= '9');
+        }
+        if (!starts) { i++; continue; }
+
+        size_t start = i;
+        if (line[i] == '+' || line[i] == '-') i++;
+        bool sawDot = false, sawDigit = false;
+        while (i < n) {
+            char d = line[i];
+            if (d >= '0' && d <= '9') { sawDigit = true; i++; continue; }
+            if (d == '.' && !sawDot) { sawDot = true; i++; continue; }
+            break;
+        }
+        if (!sawDigit) { i = start + 1; continue; }
+        // Exponent
+        if (i < n && (line[i] == 'e' || line[i] == 'E' ||
+                      line[i] == 'd' || line[i] == 'D')) {
+            size_t save = i;
+            size_t j = i + 1;
+            if (j < n && (line[j] == '+' || line[j] == '-')) j++;
+            if (j < n && line[j] >= '0' && line[j] <= '9') {
+                while (j < n && line[j] >= '0' && line[j] <= '9') j++;
+                i = j;
+            } else {
+                i = save;
+            }
+        }
+        std::string tok = line.substr(start, i - start);
+        for (char& d : tok) if (d == 'd' || d == 'D') d = 'e';
+        out.push_back(std::strtod(tok.c_str(), nullptr));
+    }
+    return out;
+}
+
+std::string lowerTrim(const std::string& s) {
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    size_t b = s.find_last_not_of(" \t\r\n");
+    std::string t = s.substr(a, b - a + 1);
+    for (char& c : t) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return t;
+}
+
+std::string firstToken(const std::string& s) {
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    size_t b = s.find_first_of(" \t\r\n", a);
+    return s.substr(a, (b == std::string::npos ? s.size() : b) - a);
+}
+
+/// Julian date at 00:00 UT of a Gregorian calendar date (Meeus, ch. 7).
+double gregorianToJulianDay(int year, int month, int day) {
+    if (month <= 2) { year -= 1; month += 12; }
+    const int A = year / 100;
+    const int B = 2 - A + A / 4;
+    return std::floor(365.25 * (year + 4716)) +
+           std::floor(30.6001 * (month + 1)) + day + B - 1524.5;
+}
+
+std::vector<std::string> splitLines(const std::string& content) {
+    std::vector<std::string> lines;
+    std::string cur;
+    for (char c : content) {
+        if (c == '\n') { lines.push_back(cur); cur.clear(); }
+        else if (c != '\r') cur.push_back(c);
+    }
+    if (!cur.empty()) lines.push_back(cur);
+    return lines;
+}
+
+/// A potential file states GM and the reference radius in SI (m^3/s^2, m) or,
+/// occasionally, already in km. Discriminate by magnitude rather than by
+/// trusting a header keyword that may be absent: an Earth GM is ~4e14 in SI
+/// and ~4e5 in km units, six orders apart, so there is no ambiguous middle.
+void normalizeFieldUnits(double& gm, double& radius) {
+    if (gm > 1.0e10) gm *= 1.0e-9;      // m^3/s^2 -> km^3/s^2
+    if (radius > 1.0e5) radius *= 1.0e-3;  // m -> km
+}
+
+}  // namespace
+
+GravityFileLoadResult loadGravityField(const std::string& content,
+                                       uint16_t maxDegree,
+                                       uint16_t maxOrder,
+                                       GravityFileFormat format) {
+    GravityFileLoadResult res;
+    const std::vector<std::string> lines = splitLines(content);
+
+    if (format == GravityFileFormat::Auto) {
+        for (const std::string& raw : lines) {
+            const std::string tok = lowerTrim(firstToken(raw));
+            if (tok == "gfc" || tok == "gfct" || tok == "end_of_head" ||
+                tok == "earth_gravity_constant" || tok == "product_type") {
+                format = GravityFileFormat::ICGEM;
+                break;
+            }
+            if (tok == "recoef" || tok == "potfield") {
+                format = GravityFileFormat::COF;
+                break;
+            }
+        }
+    }
+    if (format == GravityFileFormat::Auto) {
+        res.status = GravityFileStatus::UnknownFormat;
+        res.detail = "content matched neither an ICGEM nor a fixed-column record set";
+        return res;
+    }
+    res.format = format;
+
+    double gm = 0.0, radius = 0.0;
+    uint16_t declaredMax = 0;
+    // (degree, order) -> (C, S). Ordered so the highest degree present is
+    // discoverable without a second pass.
+    std::vector<std::array<double, 4>> records;  // n, m, C, S
+    records.reserve(4096);
+
+    for (const std::string& raw : lines) {
+        const std::string key = lowerTrim(firstToken(raw));
+        if (key.empty() || key[0] == '#' || key[0] == '!') continue;
+
+        if (format == GravityFileFormat::ICGEM) {
+            if (key == "modelname") {
+                std::vector<std::string> parts;
+                std::istringstream is(raw);
+                std::string w;
+                while (is >> w) parts.push_back(w);
+                if (parts.size() > 1) res.modelName = parts[1];
+                continue;
+            }
+            if (key == "tide_system") {
+                std::istringstream is(raw);
+                std::string w;
+                is >> w;
+                if (is >> w) res.tideSystem = w;
+                continue;
+            }
+            if (key == "earth_gravity_constant" || key == "gravity_constant") {
+                auto v = scanNumbers(raw.substr(key.size()));
+                if (!v.empty()) gm = v[0];
+                continue;
+            }
+            if (key == "radius" || key == "reference_radius") {
+                auto v = scanNumbers(raw.substr(key.size()));
+                if (!v.empty()) radius = v[0];
+                continue;
+            }
+            if (key == "max_degree") {
+                auto v = scanNumbers(raw.substr(key.size()));
+                if (!v.empty()) declaredMax = static_cast<uint16_t>(v[0]);
+                continue;
+            }
+            if (key != "gfc" && key != "gfct") continue;
+
+            // `gfc n m C S [sigC sigS]`; `gfct` adds a reference epoch that we
+            // read as the static part, which is what a fixed-epoch propagation
+            // wants.
+            auto v = scanNumbers(raw.substr(key.size()));
+            if (v.size() < 4) {
+                res.status = GravityFileStatus::MalformedRecord;
+                res.detail = "coefficient record with fewer than four fields: " + raw;
+                return res;
+            }
+            records.push_back({v[0], v[1], v[2], v[3]});
+            continue;
+        }
+
+        // Fixed-column encoding.
+        if (key == "potfield" || key == "potfieldm") {
+            // `POTFIELD <deg> <ord> [flags...] <GM> <Re> [...]`. The flag
+            // fields between the order and GM vary between producers, so the
+            // header is read by MAGNITUDE rather than by position: a degree or
+            // a flag is a small integer and a gravitational constant is not.
+            auto v = scanNumbers(raw.substr(key.size()));
+            if (!v.empty()) declaredMax = static_cast<uint16_t>(v[0]);
+            for (size_t i = 2; i < v.size(); i++) {
+                if (std::abs(v[i]) < 1.0e4) continue;
+                gm = v[i];
+                if (i + 1 < v.size()) radius = v[i + 1];
+                break;
+            }
+            continue;
+        }
+        if (key != "recoef") continue;
+        auto v = scanNumbers(raw.substr(key.size()));
+        if (v.size() < 3) {
+            res.status = GravityFileStatus::MalformedRecord;
+            res.detail = "coefficient record with fewer than three fields: " + raw;
+            return res;
+        }
+        // A zonal record may omit S entirely.
+        records.push_back({v[0], v[1], v[2], v.size() > 3 ? v[3] : 0.0});
+    }
+
+    if (records.empty()) {
+        res.status = GravityFileStatus::Empty;
+        res.detail = "no coefficient records";
+        return res;
+    }
+
+    uint16_t filePresentMax = 0;
+    for (const auto& r : records) {
+        filePresentMax = std::max(filePresentMax, static_cast<uint16_t>(r[0]));
+    }
+    res.fileMaxDegree = std::max(filePresentMax, declaredMax);
+    res.recordsRead = records.size();
+
+    if (gm <= 0.0 || radius <= 0.0) {
+        res.status = GravityFileStatus::MissingHeader;
+        res.detail = "file declares no gravitational constant and/or reference radius";
+        return res;
+    }
+    normalizeFieldUnits(gm, radius);
+
+    uint16_t deg = maxDegree > 0 ? std::min<uint16_t>(maxDegree, filePresentMax)
+                                 : filePresentMax;
+    deg = std::min<uint16_t>(deg, static_cast<uint16_t>(MAX_GRAVITY_DEGREE));
+    uint16_t ord = maxOrder > 0 ? std::min<uint16_t>(maxOrder, deg) : deg;
+
+    ExtendedGravityField& field = res.field;
+    field.model = GravityModelType::Custom;
+    field.mu = gm;
+    field.referenceRadius = radius;
+    field.normalized = true;
+    field.allocate(deg, ord);
+    field.Cnm[0][0] = 1.0;
+
+    for (const auto& r : records) {
+        const int n = static_cast<int>(r[0]);
+        const int m = static_cast<int>(r[1]);
+        if (n < 0 || m < 0 || m > n) continue;
+        if (n > deg || m > ord) continue;
+        if (n == 0 && m == 0) continue;  // C00 is the normalization, not data
+        field.Cnm[n][m] = r[2];
+        field.Snm[n][m] = r[3];
+    }
+
+    res.status = GravityFileStatus::Ok;
+    return res;
+}
+
+namespace ForceModel {
+
+Vec3 LoadedFieldGravity(const Vec3& position, const ExtendedGravityField& field) {
+    return computeExtendedGravity(position, field, 0.0).total;
+}
+
+}  // namespace ForceModel
+
+// =============================================================================
+// 8.6.1c Polyhedron gravity — Werner & Scheeres (1997)               (gmat-07)
+// =============================================================================
+
+/// Newton's constant in the module's units: km^3 kg^-1 s^-2 (CODATA 2018).
+static constexpr double G_KM3_PER_KG_S2 = 6.67430e-20;
+
+double PolyhedronShape::volume() const {
+    // Divergence theorem over the triangulation: each face contributes the
+    // signed volume of the tetrahedron it makes with the origin.
+    double v = 0.0;
+    for (const auto& f : faces) {
+        const Vec3& a = vertices[f[0]];
+        const Vec3& b = vertices[f[1]];
+        const Vec3& c = vertices[f[2]];
+        v += a.dot(b.cross(c));
+    }
+    return v / 6.0;
+}
+
+PolyhedronShape makeBoxPolyhedron(double hx, double hy, double hz, double density) {
+    PolyhedronShape s;
+    s.density = density;
+    s.vertices = {
+        {-hx, -hy, -hz}, {+hx, -hy, -hz}, {+hx, +hy, -hz}, {-hx, +hy, -hz},
+        {-hx, -hy, +hz}, {+hx, -hy, +hz}, {+hx, +hy, +hz}, {-hx, +hy, +hz},
+    };
+    // Every face wound counter-clockwise seen from OUTSIDE.
+    s.faces = {
+        {0, 3, 2}, {0, 2, 1},   // -z
+        {4, 5, 6}, {4, 6, 7},   // +z
+        {0, 1, 5}, {0, 5, 4},   // -y
+        {2, 3, 7}, {2, 7, 6},   // +y
+        {1, 2, 6}, {1, 6, 5},   // +x
+        {0, 4, 7}, {0, 7, 3},   // -x
+    };
+    return s;
+}
+
+PolyhedronGravityResult computePolyhedronGravity(const Vec3& fieldPoint,
+                                                 const PolyhedronShape& shape) {
+    PolyhedronGravityResult out;
+    const size_t nF = shape.faces.size();
+    if (shape.vertices.empty() || nF == 0) return out;
+
+    // ---- Face normals -------------------------------------------------------
+    std::vector<Vec3> normals(nF);
+    for (size_t i = 0; i < nF; i++) {
+        const auto& f = shape.faces[i];
+        const Vec3 e1 = shape.vertices[f[1]] - shape.vertices[f[0]];
+        const Vec3 e2 = shape.vertices[f[2]] - shape.vertices[f[0]];
+        normals[i] = e1.cross(e2).normalized();
+    }
+
+    // ---- Face sum: solid angles --------------------------------------------
+    // Sum_f F_f r_f omega_f, with F_f = n_f (x) n_f.
+    Vec3 faceAcc;
+    double facePot = 0.0;
+    double omegaSum = 0.0;
+
+    for (size_t i = 0; i < nF; i++) {
+        const auto& f = shape.faces[i];
+        const Vec3 r1 = shape.vertices[f[0]] - fieldPoint;
+        const Vec3 r2 = shape.vertices[f[1]] - fieldPoint;
+        const Vec3 r3 = shape.vertices[f[2]] - fieldPoint;
+        const double R1 = r1.magnitude(), R2 = r2.magnitude(), R3 = r3.magnitude();
+
+        // Van Oosterom & Strackee: the signed solid angle of a triangle seen
+        // from the origin. atan2 keeps it continuous across the half-turn where
+        // an atan form flips sign.
+        const double num = r1.dot(r2.cross(r3));
+        const double den = R1 * R2 * R3 + R1 * r2.dot(r3) + R2 * r3.dot(r1) +
+                           R3 * r1.dot(r2);
+        const double omega = 2.0 * std::atan2(num, den);
+        omegaSum += omega;
+
+        // r_f: field point to any point of the face plane.
+        const double rn = r1.dot(normals[i]);
+        faceAcc += normals[i] * (rn * omega);
+        facePot += rn * rn * omega;
+    }
+
+    // ---- Edge sum: edge dyads ----------------------------------------------
+    // Each undirected edge is shared by exactly two faces in a closed mesh.
+    // Walk the directed edges and pair (a,b) with (b,a).
+    struct DirectedEdge { int a, b; size_t face; };
+    std::vector<DirectedEdge> directed;
+    directed.reserve(nF * 3);
+    for (size_t i = 0; i < nF; i++) {
+        const auto& f = shape.faces[i];
+        directed.push_back({f[0], f[1], i});
+        directed.push_back({f[1], f[2], i});
+        directed.push_back({f[2], f[0], i});
+    }
+
+    Vec3 edgeAcc;
+    double edgePot = 0.0;
+
+    for (const DirectedEdge& e : directed) {
+        if (e.a > e.b) continue;  // take each undirected edge once
+        // Its partner is the reversed directed edge.
+        size_t other = SIZE_MAX;
+        for (const DirectedEdge& o : directed) {
+            if (o.a == e.b && o.b == e.a) { other = o.face; break; }
+        }
+        if (other == SIZE_MAX) {
+            // Not a closed mesh; refuse rather than answer with an open surface.
+            return out;
+        }
+
+        const Vec3 va = shape.vertices[e.a];
+        const Vec3 vb = shape.vertices[e.b];
+        const Vec3 edge = vb - va;
+        const double eLen = edge.magnitude();
+        if (eLen <= 0.0) continue;
+        const Vec3 eHat = edge / eLen;
+
+        // In-plane edge normals, each pointing OUT of its own face.
+        // Face A traverses a->b, so n_A x e_hat points away from A's interior.
+        const Vec3& nA = normals[e.face];
+        const Vec3& nB = normals[other];
+        const Vec3 nAB = eHat.cross(nA);
+        const Vec3 nBA = (-eHat).cross(nB);
+
+        const Vec3 ra = va - fieldPoint;
+        const Vec3 rb = vb - fieldPoint;
+        const double Ra = ra.magnitude(), Rb = rb.magnitude();
+
+        const double denom = Ra + Rb - eLen;
+        if (denom <= 0.0) continue;  // field point on the edge line
+        const double Le = std::log((Ra + Rb + eLen) / denom);
+
+        // E_e = n_A (x) n_AB + n_B (x) n_BA, applied to r_e = ra.
+        const Vec3 Ee_r = nA * (nAB.dot(ra)) + nB * (nBA.dot(ra));
+        edgeAcc += Ee_r * Le;
+        edgePot += ra.dot(Ee_r) * Le;
+    }
+
+    const double Gsigma = G_KM3_PER_KG_S2 * shape.density;
+    out.potential = 0.5 * Gsigma * (edgePot - facePot);
+    out.acceleration = (edgeAcc - faceAcc) * (-Gsigma);
+    out.laplacian = -Gsigma * omegaSum;
+    out.valid = true;
+    return out;
+}
+
+// =============================================================================
+// 8.6.4b Atmosphere label honesty                                    (gmat-07)
+// =============================================================================
+
+AtmosphereImplementation atmosphereImplementationOf(AtmosphereModelType model) {
+    switch (model) {
+        case AtmosphereModelType::Exponential:
+        case AtmosphereModelType::USSA1976:
+        case AtmosphereModelType::NRLMSISE00:
+        case AtmosphereModelType::HarrisPriester:
+            return AtmosphereImplementation::Published;
+        case AtmosphereModelType::JB2008:
+        case AtmosphereModelType::DTM2020:
+        case AtmosphereModelType::GOST2004:
+        default:
+            return AtmosphereImplementation::NotImplemented;
+    }
+}
+
+const char* atmosphereModelName(AtmosphereModelType model) {
+    switch (model) {
+        case AtmosphereModelType::Exponential:    return "Exponential";
+        case AtmosphereModelType::USSA1976:       return "USSA1976";
+        case AtmosphereModelType::NRLMSISE00:     return "NRLMSISE00";
+        case AtmosphereModelType::JB2008:         return "JB2008";
+        case AtmosphereModelType::DTM2020:        return "DTM2020";
+        case AtmosphereModelType::GOST2004:       return "GOST2004";
+        case AtmosphereModelType::HarrisPriester: return "HarrisPriester";
+    }
+    return "Unknown";
+}
+
+const char* atmosphereModelProvenance(AtmosphereModelType model) {
+    switch (model) {
+        case AtmosphereModelType::Exponential:
+            return "Vallado, Fundamentals of Astrodynamics and Applications, Table 8-4";
+        case AtmosphereModelType::USSA1976:
+            return "U.S. Standard Atmosphere 1976, 0-86 km";
+        case AtmosphereModelType::NRLMSISE00:
+            return "NRLMSISE-00 gtd7d, full model, vendored reference C port";
+        case AtmosphereModelType::HarrisPriester:
+            return "Harris-Priester modified-exponential table, 100-1000 km, "
+                   "mean solar activity";
+        case AtmosphereModelType::JB2008:
+            return "not implemented: only a simplified exospheric-temperature "
+                   "stand-in exists, which is not the published coefficient model";
+        case AtmosphereModelType::DTM2020:
+            return "not implemented: only a simplified stand-in exists, which is "
+                   "not the published spherical-harmonic coefficient model";
+        case AtmosphereModelType::GOST2004:
+            return "not implemented: no implementation exists; the label "
+                   "previously fell through to a different model";
+    }
+    return "unknown label";
+}
+
+namespace {
+
+/// Harris-Priester tabulated density bounds at mean solar activity.
+/// Altitude (km), minimum ("antapex") and maximum ("apex") density in
+/// g/km^3 — the published units; 1 g/km^3 = 1e-12 kg/m^3.
+struct HPRow { double h, rmin, rmax; };
+constexpr HPRow HP_TABLE[] = {
+    {100.0, 4.974e+05, 4.974e+05}, {120.0, 2.490e+04, 2.490e+04},
+    {130.0, 8.377e+03, 8.710e+03}, {140.0, 3.899e+03, 4.059e+03},
+    {150.0, 2.122e+03, 2.215e+03}, {160.0, 1.263e+03, 1.344e+03},
+    {170.0, 8.008e+02, 8.758e+02}, {180.0, 5.283e+02, 6.010e+02},
+    {190.0, 3.617e+02, 4.297e+02}, {200.0, 2.557e+02, 3.162e+02},
+    {210.0, 1.839e+02, 2.396e+02}, {220.0, 1.341e+02, 1.853e+02},
+    {230.0, 9.949e+01, 1.455e+02}, {240.0, 7.488e+01, 1.157e+02},
+    {250.0, 5.709e+01, 9.308e+01}, {260.0, 4.403e+01, 7.555e+01},
+    {270.0, 3.430e+01, 6.182e+01}, {280.0, 2.697e+01, 5.095e+01},
+    {290.0, 2.139e+01, 4.226e+01}, {300.0, 1.708e+01, 3.526e+01},
+    {320.0, 1.099e+01, 2.511e+01}, {340.0, 7.214e+00, 1.819e+01},
+    {360.0, 4.824e+00, 1.337e+01}, {380.0, 3.274e+00, 9.955e+00},
+    {400.0, 2.249e+00, 7.492e+00}, {420.0, 1.558e+00, 5.684e+00},
+    {440.0, 1.091e+00, 4.355e+00}, {460.0, 7.701e-01, 3.362e+00},
+    {480.0, 5.474e-01, 2.612e+00}, {500.0, 3.916e-01, 2.042e+00},
+    {520.0, 2.819e-01, 1.605e+00}, {540.0, 2.042e-01, 1.267e+00},
+    {560.0, 1.488e-01, 1.005e+00}, {580.0, 1.092e-01, 7.997e-01},
+    {600.0, 8.070e-02, 6.390e-01}, {620.0, 6.012e-02, 5.123e-01},
+    {640.0, 4.519e-02, 4.121e-01}, {660.0, 3.430e-02, 3.325e-01},
+    {680.0, 2.632e-02, 2.691e-01}, {700.0, 2.043e-02, 2.185e-01},
+    {720.0, 1.607e-02, 1.779e-01}, {740.0, 1.281e-02, 1.452e-01},
+    {760.0, 1.036e-02, 1.190e-01}, {780.0, 8.496e-03, 9.776e-02},
+    {800.0, 7.069e-03, 8.059e-02}, {840.0, 4.680e-03, 5.741e-02},
+    {880.0, 3.200e-03, 4.210e-02}, {920.0, 2.210e-03, 3.130e-02},
+    {960.0, 1.560e-03, 2.360e-02}, {1000.0, 1.150e-03, 1.810e-02},
+};
+constexpr int HP_ROWS = static_cast<int>(sizeof(HP_TABLE) / sizeof(HP_TABLE[0]));
+
+/// The diurnal bulge lags the sub-solar point by this much in right ascension.
+constexpr double HP_BULGE_LAG_RAD = 30.0 * PI / 180.0;
+
+/// g/km^3 -> kg/m^3
+constexpr double HP_UNIT = 1.0e-12;
+
+}  // namespace
+
+int harrisPriesterTableSize() { return HP_ROWS; }
+
+void harrisPriesterTableRow(int i, double& altitudeKm, double& rhoMin, double& rhoMax) {
+    if (i < 0 || i >= HP_ROWS) { altitudeKm = rhoMin = rhoMax = 0.0; return; }
+    altitudeKm = HP_TABLE[i].h;
+    rhoMin = HP_TABLE[i].rmin * HP_UNIT;
+    rhoMax = HP_TABLE[i].rmax * HP_UNIT;
+}
+
+AtmosphericDensity computeHarrisPriester(const Vec3& position,
+                                         const Vec3& sunPositionBodyFixed,
+                                         double n) {
+    AtmosphericDensity out;
+
+    double lat, lon, alt;
+    ecefToGeodetic(position, lat, lon, alt);
+    out.latitude = lat;
+    out.longitude = lon;
+    out.altitude = alt;
+
+    // The table has support from 100 to 1000 km and nothing outside it. A
+    // model asked for a value it does not have returns zero as a REFUSAL to
+    // extrapolate — not an assertion that the density is zero.
+    //
+    // The 1 mm tolerance is floating point, not extrapolation: a geodetic
+    // altitude computed from a Cartesian position lands a few ulp either side
+    // of a table endpoint, and refusing the boundary itself would make the
+    // model's own tabulated values unreachable.
+    constexpr double kEdgeToleranceKm = 1.0e-6;
+    if (alt < HP_TABLE[0].h - kEdgeToleranceKm ||
+        alt > HP_TABLE[HP_ROWS - 1].h + kEdgeToleranceKm) {
+        return out;
+    }
+    alt = std::max(HP_TABLE[0].h, std::min(HP_TABLE[HP_ROWS - 1].h, alt));
+
+    int i = 0;
+    while (i < HP_ROWS - 2 && HP_TABLE[i + 1].h <= alt) i++;
+    const HPRow& lo = HP_TABLE[i];
+    const HPRow& hi = HP_TABLE[i + 1];
+
+    // Scale heights from the tabulated bounds, then the published exponential
+    // interpolation within the layer.
+    const double Hmin = (lo.h - hi.h) / std::log(hi.rmin / lo.rmin);
+    const double Hmax = (lo.h - hi.h) / std::log(hi.rmax / lo.rmax);
+    const double rhoMin = lo.rmin * std::exp((lo.h - alt) / Hmin);
+    const double rhoMax = lo.rmax * std::exp((lo.h - alt) / Hmax);
+
+    // Diurnal bulge: the apex direction is the sun direction advanced in right
+    // ascension by the lag, at the sun's declination.
+    const double sunR = sunPositionBodyFixed.magnitude();
+    double cosPsi = 0.0;
+    if (sunR > 0.0) {
+        const double ra = std::atan2(sunPositionBodyFixed.y, sunPositionBodyFixed.x) +
+                          HP_BULGE_LAG_RAD;
+        const double dec = std::asin(sunPositionBodyFixed.z / sunR);
+        const Vec3 apex(std::cos(dec) * std::cos(ra),
+                        std::cos(dec) * std::sin(ra),
+                        std::sin(dec));
+        cosPsi = position.normalized().dot(apex);
+    }
+    // cos^n(psi/2), written through the half-angle identity so the branch at
+    // psi = pi is exact rather than a cancellation.
+    const double half = std::max(0.0, 0.5 * (1.0 + cosPsi));
+    const double weight = std::pow(half, 0.5 * n);
+
+    out.density = (rhoMin + (rhoMax - rhoMin) * weight) * HP_UNIT;
+    out.scaleHeight = Hmin;
+    out.localSolarTime = computeLocalSolarTime(lon, 0.0);
+    return out;
+}
+
+// =============================================================================
+// 8.6.4c SPAD area tables                                            (gmat-07)
+// =============================================================================
+
+SpadLoadResult loadSpadFile(const std::string& content) {
+    SpadLoadResult res;
+    SpadTable& t = res.table;
+    std::vector<std::vector<double>> rows;
+
+    bool inData = false;
+    for (const std::string& raw : splitLines(content)) {
+        const std::string key = lowerTrim(firstToken(raw));
+        if (key.empty() || key[0] == '#') continue;
+
+        if (!inData) {
+            if (key == "data") { inData = true; continue; }
+            if (key == "name") {
+                std::istringstream is(raw);
+                std::string w; is >> w;
+                if (is >> w) t.name = w;
+                continue;
+            }
+            if (key == "quantity" || key == "spad_quantity") {
+                const std::string v = lowerTrim(raw.substr(raw.find_first_of(" \t")));
+                if (v.find("drag") != std::string::npos) t.quantity = SpadQuantity::DragArea;
+                else if (v.find("srp") != std::string::npos ||
+                         v.find("solar") != std::string::npos) t.quantity = SpadQuantity::SrpArea;
+                continue;
+            }
+            if (key == "mass") {
+                auto v = scanNumbers(raw.substr(key.size()));
+                if (!v.empty()) t.mass = v[0];
+                continue;
+            }
+            if (key == "azimuth") { t.azimuthDeg = scanNumbers(raw.substr(key.size()), 4096); continue; }
+            if (key == "elevation") { t.elevationDeg = scanNumbers(raw.substr(key.size()), 4096); continue; }
+            continue;
+        }
+        rows.push_back(scanNumbers(raw, 4096));
+    }
+
+    if (t.azimuthDeg.empty() || t.elevationDeg.empty()) {
+        res.status = SpadFileStatus::MissingGrid;
+        res.detail = "file declares no AZIMUTH and/or ELEVATION axis";
+        return res;
+    }
+    if (rows.empty()) {
+        res.status = SpadFileStatus::Empty;
+        res.detail = "no DATA rows";
+        return res;
+    }
+    if (rows.size() != t.elevationDeg.size()) {
+        res.status = SpadFileStatus::RaggedTable;
+        res.detail = "DATA row count does not match the ELEVATION axis";
+        return res;
+    }
+    for (const auto& r : rows) {
+        if (r.size() != t.azimuthDeg.size()) {
+            res.status = SpadFileStatus::RaggedTable;
+            res.detail = "a DATA row does not match the AZIMUTH axis";
+            return res;
+        }
+        t.values.insert(t.values.end(), r.begin(), r.end());
+    }
+
+    res.status = SpadFileStatus::Ok;
+    return res;
+}
+
+double spadInterpolate(const SpadTable& table, double azimuthDeg, double elevationDeg) {
+    if (!table.valid()) return 0.0;
+    const size_t nA = table.azimuthDeg.size();
+    const size_t nE = table.elevationDeg.size();
+
+    auto bracket = [](const std::vector<double>& axis, double v, size_t& i, double& f) {
+        if (v <= axis.front() || axis.size() == 1) { i = 0; f = 0.0; return; }
+        if (v >= axis.back()) { i = axis.size() - 2; f = 1.0; return; }
+        i = 0;
+        while (i + 2 < axis.size() && axis[i + 1] <= v) i++;
+        const double span = axis[i + 1] - axis[i];
+        // A repeated axis value has no interior; take the lower node rather
+        // than dividing by zero.
+        f = span > 0.0 ? (v - axis[i]) / span : 0.0;
+    };
+
+    size_t ia = 0, ie = 0;
+    double fa = 0.0, fe = 0.0;
+    bracket(table.azimuthDeg, azimuthDeg, ia, fa);
+    bracket(table.elevationDeg, elevationDeg, ie, fe);
+
+    const size_t ia1 = std::min(ia + 1, nA - 1);
+    const size_t ie1 = std::min(ie + 1, nE - 1);
+    const double v00 = table.values[ie * nA + ia];
+    const double v10 = table.values[ie * nA + ia1];
+    const double v01 = table.values[ie1 * nA + ia];
+    const double v11 = table.values[ie1 * nA + ia1];
+
+    // Written so that a node's exact value survives unaltered: at fa = fe = 0
+    // this is v00 with no arithmetic applied to it at all.
+    const double bottom = v00 + (v10 - v00) * fa;
+    const double top    = v01 + (v11 - v01) * fa;
+    return bottom + (top - bottom) * fe;
+}
+
+void spadDirectionToAzEl(const Vec3& d, double& azimuthDeg, double& elevationDeg) {
+    const double m = d.magnitude();
+    if (m <= 0.0) { azimuthDeg = elevationDeg = 0.0; return; }
+    azimuthDeg = std::atan2(d.y, d.x) * 180.0 / PI;
+    if (azimuthDeg < 0.0) azimuthDeg += 360.0;
+    elevationDeg = std::asin(std::max(-1.0, std::min(1.0, d.z / m))) * 180.0 / PI;
+}
+
+// =============================================================================
+// Schatten-class predicted solar activity                            (gmat-07)
+// =============================================================================
+
+const std::vector<SolarActivityPrediction>&
+SolarActivityPredictionTable::band(SolarActivityBand b) const {
+    switch (b) {
+        case SolarActivityBand::Early: return early;
+        case SolarActivityBand::Late:  return late;
+        case SolarActivityBand::Nominal:
+        default: return nominal;
+    }
+}
+
+PredictionLoadResult loadSolarActivityPredictions(const std::string& content) {
+    PredictionLoadResult res;
+    SolarActivityPredictionTable& t = res.table;
+
+    for (const std::string& raw : splitLines(content)) {
+        const std::string key = lowerTrim(firstToken(raw));
+        if (key.empty() || key[0] == '#') continue;
+        if (key == "name") {
+            std::istringstream is(raw);
+            std::string w; is >> w;
+            if (is >> w) t.name = w;
+            continue;
+        }
+
+        std::istringstream is(raw);
+        std::string yearTok, monthTok, bandTok;
+        if (!(is >> yearTok >> monthTok >> bandTok)) {
+            res.status = PredictionFileStatus::MalformedRecord;
+            res.detail = "record is not `<year> <month> <band> <f107> <f107a> <ap>`: " + raw;
+            return res;
+        }
+        double f107 = 0, f107a = 0, ap = 0;
+        if (!(is >> f107 >> f107a >> ap)) {
+            res.status = PredictionFileStatus::MalformedRecord;
+            res.detail = "record carries fewer than three index values: " + raw;
+            return res;
+        }
+
+        const int year = std::atoi(yearTok.c_str());
+        const int month = std::atoi(monthTok.c_str());
+        if (month < 1 || month > 12) {
+            res.status = PredictionFileStatus::MalformedRecord;
+            res.detail = "month out of range: " + raw;
+            return res;
+        }
+
+        SolarActivityPrediction p;
+        // Mid-month sample, the published cadence's own convention.
+        p.epoch = gregorianToJulianDay(year, month, 15);
+        p.f107 = f107;
+        p.f107a = f107a;
+        p.ap = ap;
+
+        const std::string band = lowerTrim(bandTok);
+        std::vector<SolarActivityPrediction>* dest =
+            band == "early" ? &t.early : band == "late" ? &t.late :
+            band == "nominal" ? &t.nominal : nullptr;
+        if (!dest) {
+            res.status = PredictionFileStatus::MalformedRecord;
+            res.detail = "band is not EARLY / NOMINAL / LATE: " + raw;
+            return res;
+        }
+        if (!dest->empty() && p.epoch <= dest->back().epoch) {
+            res.status = PredictionFileStatus::NotMonotonic;
+            res.detail = "samples are not ascending in epoch within a band";
+            return res;
+        }
+        dest->push_back(p);
+    }
+
+    if (t.empty()) {
+        res.status = PredictionFileStatus::Empty;
+        res.detail = "no prediction records";
+        return res;
+    }
+    res.status = PredictionFileStatus::Ok;
+    return res;
+}
+
+bool predictSolarActivityAt(const SolarActivityPredictionTable& table,
+                            SolarActivityBand band,
+                            double jd,
+                            SolarActivityPrediction& out) {
+    const std::vector<SolarActivityPrediction>& s = table.band(band);
+    if (s.empty()) return false;  // a refusal, not a default
+
+    if (jd <= s.front().epoch) { out = s.front(); out.epoch = jd; return true; }
+    if (jd >= s.back().epoch)  { out = s.back();  out.epoch = jd; return true; }
+
+    size_t i = 0;
+    while (i + 2 < s.size() && s[i + 1].epoch <= jd) i++;
+    const SolarActivityPrediction& a = s[i];
+    const SolarActivityPrediction& b = s[i + 1];
+    const double span = b.epoch - a.epoch;
+    const double f = span > 0.0 ? (jd - a.epoch) / span : 0.0;
+
+    out.epoch = jd;
+    out.f107  = a.f107  + (b.f107  - a.f107)  * f;
+    out.f107a = a.f107a + (b.f107a - a.f107a) * f;
+    out.ap    = a.ap    + (b.ap    - a.ap)    * f;
+    return true;
 }
 
 } // namespace astro

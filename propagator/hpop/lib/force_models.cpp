@@ -185,15 +185,38 @@ Vec3 SphericalHarmonics(const Vec3& position, const SphericalHarmonicsConfig& co
     coeffs.maxDegree = std::min(config.maxDegree, (uint16_t)20);
     coeffs.maxOrder = std::min(config.maxOrder, coeffs.maxDegree);
 
+    // A caller-supplied field REPLACES the built-in set. Until gmat-07 a
+    // non-null Cnm only skipped the defaults and was never copied, so every
+    // custom field evaluated as identically zero — which is why nothing in the
+    // tree ever passed one.
+    if (config.Cnm != nullptr && config.Snm != nullptr) {
+        constexpr int S = SphericalHarmonicsConfig::CUSTOM_STRIDE;
+        for (int n = 0; n <= coeffs.maxDegree; n++) {
+            for (int m = 0; m <= std::min<int>(n, coeffs.maxOrder); m++) {
+                coeffs.Cnm[n][m] = config.Cnm[n * S + m];
+                coeffs.Snm[n][m] = config.Snm[n * S + m];
+            }
+        }
+        GravityAcceleration custom = computeSphericalHarmonicGravity(position, coeffs);
+        return custom.total;
+    }
+
     // Initialize with standard Earth coefficients if not provided
-    if (config.Cnm == nullptr) {
+    {
         // J2-J6 zonal coefficients (normalized)
         // C̄ₙ₀ = −Jₙ / √(2n+1)
-        coeffs.Cnm[2][0] = -J2_EARTH / std::sqrt(5.0);
-        coeffs.Cnm[3][0] = -J3_EARTH / std::sqrt(7.0);
-        coeffs.Cnm[4][0] = -J4_EARTH / 3.0;
-        coeffs.Cnm[5][0] = -2.2727e-7;  // J5
-        coeffs.Cnm[6][0] = 5.4068e-7;   // J6
+        //
+        // The gates are honored: a zonal the caller did not ask for is ABSENT.
+        // Before gmat-07 the whole J2-J6 set plus the tesserals below loaded
+        // unconditionally, so `includeJ2 = true, includeJ3 = includeJ4 = false`
+        // — the plugin's "J2 only" setting — returned a J2-J6 tesseral field.
+        if (config.includeJ2) coeffs.Cnm[2][0] = -J2_EARTH / std::sqrt(5.0);
+        if (config.includeJ3) coeffs.Cnm[3][0] = -J3_EARTH / std::sqrt(7.0);
+        if (config.includeJ4) coeffs.Cnm[4][0] = -J4_EARTH / 3.0;
+        if (config.includeHigherZonals) {
+            coeffs.Cnm[5][0] = -2.2727e-7;  // J5
+            coeffs.Cnm[6][0] = 5.4068e-7;   // J6
+        }
 
         // Add tesseral/sectoral coefficients (EGM2008-derived, low degree)
         // These represent Earth's non-axisymmetric mass distribution
@@ -472,6 +495,58 @@ Vec3 AtmosphericDragExponential(const Vec3& position, const Vec3& velocity,
     return vRel.normalized() * (-aMag);
 }
 
+AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
+    // Written out one member at a time, because it used to be a
+    // `static_cast<AtmosphereModelType>(config.model)` — and the two enums do
+    // not share an ordering. `DragModelType` runs
+    // Exponential, USSA1976, HarrisPriester, NRLMSISE00, JB2008, DTM2020
+    // while `AtmosphereModelType` runs
+    // Exponential, USSA1976, NRLMSISE00, JB2008, DTM2020, GOST2004,
+    // HarrisPriester.
+    // From index 2 on, every value therefore named a DIFFERENT model:
+    // Harris-Priester selected NRLMSISE-00, NRLMSISE-00 selected JB2008,
+    // JB2008 selected DTM2020, and DTM2020 selected GOST2004, which no
+    // dispatch handles and which fell through to NRLMSISE-00 again. A cast
+    // between two enums is not a conversion; it is a coincidence, and this one
+    // had stopped being true.
+    switch (model) {
+        case DragModelType::Exponential:    return AtmosphereModelType::Exponential;
+        case DragModelType::USSA1976:       return AtmosphereModelType::USSA1976;
+        case DragModelType::HarrisPriester: return AtmosphereModelType::HarrisPriester;
+        case DragModelType::NRLMSISE00:     return AtmosphereModelType::NRLMSISE00;
+        case DragModelType::JB2008:         return AtmosphereModelType::JB2008;
+        case DragModelType::DTM2020:        return AtmosphereModelType::DTM2020;
+    }
+    return AtmosphereModelType::NRLMSISE00;
+}
+
+Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
+                    const DragForceConfig& dragConfig, double bulgeExponent) {
+    // The apex direction needs the Sun in the same frame as `position`. The
+    // force set works body-fixed, so the Sun comes from the same ephemeris the
+    // rest of the force model uses and is rotated with it.
+    EphemerisState sun = getSunPosition(jd);
+    AtmosphericDensity density =
+        computeHarrisPriester(position, sun.valid ? sun.position : Vec3(1.0, 0.0, 0.0),
+                              bulgeExponent);
+
+    // Zero density here means the field point is outside the table's 100-1000
+    // km support, where the model declines to answer. Declining is not the
+    // same as asserting a vacuum, but for an acceleration the two agree.
+    if (density.density < 1e-20) return Vec3();
+
+    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, jd,
+                                           dragConfig.coRotatingAtmosphere,
+                                           dragConfig.includeWinds);
+    double vRelMag = vRel.magnitude();
+    if (vRelMag < 1e-6) return Vec3();
+
+    double vRel_ms = vRelMag * 1000.0;
+    double B = dragConfig.Cd * dragConfig.area / dragConfig.mass;
+    double aMag = 0.5 * density.density * vRel_ms * vRel_ms * B * 1e-3;
+    return vRel.normalized() * (-aMag);
+}
+
 Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
                      const SpaceWeatherData& weather, const DragForceConfig& config) {
     double alt = position.magnitude() - RE_EARTH;
@@ -484,7 +559,7 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
     dragCfg.mass = config.mass;
     dragCfg.dragArea = config.area;
     dragCfg.Cd = config.Cd;
-    dragCfg.atmosphere.model = static_cast<AtmosphereModelType>(config.model);
+    dragCfg.atmosphere.model = AtmosphereModelForDrag(config.model);
     dragCfg.atmosphere.includeWinds = config.includeWinds;
     dragCfg.atmosphere.coRotatingAtmosphere = config.coRotatingAtmosphere;
     dragCfg.atmosphere.minAltitude = config.minAltitude;
@@ -1439,6 +1514,127 @@ Vec3 EmpiricalAcceleration(const Vec3& position, const Vec3& velocity,
 // Combined Force Model Evaluation
 // =============================================================================
 
+Vec3 ZonalHarmonic(const Vec3& position, double mu, double Re, int n, double Jn) {
+    if (n < 2) return Vec3();
+    const double r = position.magnitude();
+    if (r <= 0.0) return Vec3();
+    const double u = position.z / r;
+
+    // P_n(u) and P_n'(u) by the standard recursions. No term of this shares
+    // algebra with J2Only()/J2J4(), which is the point: agreement between the
+    // two is a cross-validation.
+    double pPrev = 1.0;   // P_0
+    double pCur  = u;     // P_1
+    for (int k = 2; k <= n; k++) {
+        const double pNext = ((2.0 * k - 1.0) * u * pCur - (k - 1.0) * pPrev) / k;
+        pPrev = pCur;
+        pCur = pNext;
+    }
+    const double Pn = (n == 0) ? 1.0 : (n == 1 ? u : pCur);
+    // P_n'(u) = n (u P_n - P_{n-1}) / (u^2 - 1); the removable singularity at
+    // the poles is taken by the equivalent recurrence limit.
+    double dPn;
+    const double denom = u * u - 1.0;
+    if (std::abs(denom) < 1e-14) {
+        // On the axis P_n'(±1) = ±^(n+1) n(n+1)/2.
+        dPn = 0.5 * n * (n + 1.0) * ((u > 0.0 || (n % 2 == 1)) ? 1.0 : -1.0);
+        if (u < 0.0 && (n % 2 == 0)) dPn = -0.5 * n * (n + 1.0);
+    } else {
+        dPn = n * (u * Pn - pPrev) / denom;
+    }
+
+    // U_n = -(mu/r) (Re/r)^n J_n P_n(u)
+    const double ratio = std::pow(Re / r, static_cast<double>(n));
+    const double common = mu * Jn * ratio / r;
+    const double dUdr = (n + 1.0) * common * Pn / r;   // d/dr of -(mu/r)(Re/r)^n...
+    const double dUdu = -common * dPn;
+
+    // grad u = (zhat - u rhat) / r
+    const Vec3 rhat = position / r;
+    const Vec3 gradU_r = rhat * dUdr;
+    const Vec3 gradU_u = (Vec3(0.0, 0.0, 1.0) - rhat * u) * (dUdu / r);
+    return gradU_r + gradU_u;
+}
+
+Vec3 EvaluateContribution(const ForceContribution& c,
+                          const Vec3& position, const Vec3& velocity) {
+    if (!c.enabled) return Vec3();
+    switch (c.kind) {
+        case ContributionKind::ConstantInertial:
+            return Vec3(c.p[0], c.p[1], c.p[2]);
+        case ContributionKind::ConstantRTN: {
+            const Vec3 R = position.normalized();
+            const Vec3 h = position.cross(velocity);
+            if (h.magnitude() <= 0.0) return Vec3();
+            const Vec3 N = h.normalized();
+            const Vec3 T = N.cross(R);
+            return R * c.p[0] + T * c.p[1] + N * c.p[2];
+        }
+        case ContributionKind::ZonalHarmonic:
+            return ZonalHarmonic(position, c.p[0], c.p[1],
+                                 static_cast<int>(c.p[2]), c.p[3]);
+        case ContributionKind::PointMassAt: {
+            const Vec3 body(c.p[1], c.p[2], c.p[3]);
+            const Vec3 d = position - body;
+            const double dm = d.magnitude();
+            if (dm <= 0.0) return Vec3();
+            return d * (-c.p[0] / (dm * dm * dm));
+        }
+        case ContributionKind::None:
+        default:
+            return Vec3();
+    }
+}
+
+Vec3 EvaluateContributions(const ContributionSet& set,
+                           const Vec3& position, const Vec3& velocity) {
+    Vec3 sum;
+    const int n = std::min(set.count, ContributionSet::MAX_SLOTS);
+    for (int i = 0; i < n; i++) {
+        sum += EvaluateContribution(set.slots[i], position, velocity);
+    }
+    return sum;
+}
+
+Vec3 CentralBodyGravity(const Vec3& position, const ForceModelSet& forceSet) {
+    // A stated mode wins outright. `Infer` reproduces the pre-gmat-07
+    // precedence exactly, so existing callers are unmoved.
+    GravityMode mode = forceSet.gravityMode;
+    if (mode == GravityMode::Infer) {
+        if (forceSet.useLoadedField && forceSet.loadedField) mode = GravityMode::LoadedField;
+        else if (forceSet.useEGM2008) mode = GravityMode::EGM2008;
+        else if (forceSet.useSphericalHarmonics) mode = GravityMode::SphericalHarmonics;
+        else if (forceSet.usePointMass) mode = GravityMode::PointMass;
+        else return Vec3();
+    }
+
+    switch (mode) {
+        case GravityMode::PointMass:
+            return PointMass(position, forceSet.mu);
+
+        // J2Only() and J2J4() return the PERTURBING acceleration only — the
+        // central term is excluded (see their definitions above) — so the
+        // point mass is added explicitly. These are the closed forms
+        // tests/zonal_crossvalidation.cpp validates against an independent
+        // Legendre recursion to 1.4e-15; before gmat-07 nothing outside that
+        // harness could reach them.
+        case GravityMode::J2Only:
+            return PointMass(position, forceSet.mu) +
+                   J2Only(position, forceSet.mu, J2_EARTH, RE_EARTH);
+        case GravityMode::J2J4:
+            return PointMass(position, forceSet.mu) + J2J4(position, forceSet.mu);
+
+        case GravityMode::EGM2008:
+            return EGM2008(position, forceSet.egm2008);
+        case GravityMode::LoadedField:
+            if (forceSet.loadedField) return LoadedFieldGravity(position, *forceSet.loadedField);
+            return PointMass(position, forceSet.mu);
+        case GravityMode::SphericalHarmonics:
+        default:
+            return SphericalHarmonics(position, forceSet.sphericalHarmonics);
+    }
+}
+
 Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double jd,
                               ForceModelSet& forceSet) {
     Vec3 totalAcc;
@@ -1455,18 +1651,9 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
         }
     }
 
-    // Gravity models - use the most detailed one available
-    // Note: SphericalHarmonics, EGM2008, and GRGM1200A all include point mass internally
-    if (forceSet.useEGM2008) {
-        // EGM2008 includes point mass + all harmonics
-        totalAcc += EGM2008(position, forceSet.egm2008);
-    } else if (forceSet.useSphericalHarmonics) {
-        // Spherical Harmonics includes point mass + harmonics
-        totalAcc += SphericalHarmonics(position, forceSet.sphericalHarmonics);
-    } else if (forceSet.usePointMass) {
-        // Only use point mass if no higher-fidelity gravity model is enabled
-        totalAcc += PointMass(position, forceSet.mu);
-    }
+    // Central-body gravity: exactly one model answers, and which one is the
+    // caller's stated choice whenever it made one.
+    totalAcc += CentralBodyGravity(position, forceSet);
 
     // Lunar gravity (separate body, doesn't include Earth point mass)
     if (forceSet.useGRGM1200A) {
@@ -1484,11 +1671,28 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
     }
 
     // 7-10. Atmospheric Drag
+    //
+    // Every enumerator has a case. `USSA1976` and `HarrisPriester` had none
+    // and fell through `default:` to the exponential model, so two of the six
+    // drag settings answered with a model the caller did not ask for. The
+    // plugin ABI additionally REFUSES the labels that no published
+    // implementation stands behind, so JB2008 and DTM2020 are unreachable from
+    // there; the two cases below remain for direct C++ callers, and the
+    // functions they reach carry their own "simplified stand-in, not the
+    // published model" banner at their definitions.
     if (forceSet.useDrag) {
         switch (forceSet.dragModel) {
             case DragModelType::NRLMSISE00:
                 totalAcc += NRLMSISE00(position, velocity, jd, forceSet.weather,
                                        forceSet.drag, forceSet.nrlmsise00);
+                break;
+            case DragModelType::HarrisPriester:
+                totalAcc += HarrisPriester(position, velocity, jd, forceSet.drag,
+                                           forceSet.harrisPriesterExponent);
+                break;
+            case DragModelType::USSA1976:
+                totalAcc += AtmosphericDrag(position, velocity, jd,
+                                            forceSet.weather, forceSet.drag);
                 break;
             case DragModelType::JB2008:
                 totalAcc += JB2008(position, velocity, jd, forceSet.weather,
@@ -1499,7 +1703,6 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
                                     forceSet.drag, forceSet.dtm2020);
                 break;
             case DragModelType::Exponential:
-            default:
                 totalAcc += AtmosphericDragExponential(position, velocity,
                                                        forceSet.drag.mass,
                                                        forceSet.drag.area,
@@ -1542,6 +1745,12 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
     // 19. Empirical Accelerations
     if (forceSet.useEmpiricalAccel) {
         totalAcc += EmpiricalAcceleration(position, velocity, forceSet.empiricalAccel);
+    }
+
+    // 16b. Registered third-party contributions, in the same integration as
+    // everything above — not a post-hoc correction applied to the answer.
+    if (forceSet.useContributions) {
+        totalAcc += EvaluateContributions(forceSet.contributions, position, velocity);
     }
 
     // 17. Finite Maneuver

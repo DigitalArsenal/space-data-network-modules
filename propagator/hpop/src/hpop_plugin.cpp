@@ -17,6 +17,8 @@
 #include "../lib/force_models.h"
 #include "../lib/coords.h"
 #include "../lib/coords_types.h"
+#include "../lib/environment_models.h"
+#include <memory>
 
 #include "generated/PluginMessage_generated.h"
 #include "generated/PropagatorTrajectorySegments_generated.h"
@@ -44,6 +46,15 @@ static ForceModel::ForceModelSet g_forceSet;
 static IntegrationMethod g_integratorType = IntegrationMethod::RK78;
 static SpaceWeatherData g_weather;
 static bool g_initialized = false;
+
+// gmat-07 environment state. A field loaded from a potential file, a predicted
+// solar-activity table, and the reason the last load refused — a refusal that
+// cannot explain itself gets guessed at.
+static std::shared_ptr<const ExtendedGravityField> g_loadedGravityField;
+static std::string g_loadedGravityName;
+static std::string g_gravityFileDetail;
+static SolarActivityPredictionTable g_predictions;
+static std::string g_predictionDetail;
 
 // Incremented on any config change to invalidate per-entity caches.
 static uint32_t g_configVersion = 0;
@@ -1433,8 +1444,24 @@ void plugin_set_state(double* statePtr) {
 /// Input: [mu, gravDeg, gravOrd, useJ2, useJ3, useJ4,
 ///         useDrag, useSRP, useSun, useMoon,
 ///         mass, dragArea, srpArea, Cd, Cr]
+///
+/// Fifteen elements exactly. Callers allocate `15 * 8` bytes, so reading a
+/// sixteenth is an out-of-bounds heap read — a longer configuration goes
+/// through `plugin_set_force_model_v2`, which is told its own length.
 void plugin_set_force_model(double* configPtr) {
+    // Registered contributions are a SEPARATE registration and survive a
+    // force-model reconfiguration. Wiping them here would make the port
+    // order-dependent — register before configure and your force silently
+    // vanishes — which is exactly the class of surprise this build item exists
+    // to remove. `plugin_clear_force_contributions` is how they go away.
+    const ForceModel::ContributionSet keptContributions = g_forceSet.contributions;
+    const bool keptUseContributions = g_forceSet.useContributions;
+    const auto keptLoadedField = g_forceSet.loadedField;
+
     g_forceSet = ForceModel::ForceModelSet();
+    g_forceSet.contributions = keptContributions;
+    g_forceSet.useContributions = keptUseContributions;
+    g_forceSet.loadedField = keptLoadedField;
 
     double mu       = configPtr[0];
     int gravDeg     = (int)configPtr[1];
@@ -1464,13 +1491,21 @@ void plugin_set_force_model(double* configPtr) {
         g_forceSet.sphericalHarmonics.includeJ3 = useJ3;
         g_forceSet.sphericalHarmonics.includeJ4 = useJ4;
     } else {
+        // No degree was asked for, only zonal switches. This is the setting the
+        // gallery's "J2 only" and "J2-J4" controls produce, and until gmat-07
+        // it answered with a J2-J6 tesseral field: the include flags were
+        // declared here and then ignored inside SphericalHarmonics(). They are
+        // honored now, and the higher zonals are gated off so that a request
+        // for a closed zonal set gets exactly that set.
         g_forceSet.usePointMass = true;
         g_forceSet.useSphericalHarmonics = false;
         if (useJ2 || useJ3 || useJ4) {
             g_forceSet.useSphericalHarmonics = true;
+            g_forceSet.sphericalHarmonics.mu = g_forceSet.mu;
             g_forceSet.sphericalHarmonics.includeJ2 = useJ2;
             g_forceSet.sphericalHarmonics.includeJ3 = useJ3;
             g_forceSet.sphericalHarmonics.includeJ4 = useJ4;
+            g_forceSet.sphericalHarmonics.includeHigherZonals = false;
             g_forceSet.sphericalHarmonics.maxDegree = useJ4 ? 4 : (useJ3 ? 3 : 2);
             g_forceSet.sphericalHarmonics.maxOrder = 0;
         }
@@ -1499,6 +1534,59 @@ void plugin_set_force_model(double* configPtr) {
     g_configVersion++;
 }
 
+// -----------------------------------------------------------------------------
+// Force-model configuration, extended                                (gmat-07)
+// -----------------------------------------------------------------------------
+
+/// Refusal codes shared by every gmat-07 setter. Zero is success; every
+/// refusal is NEGATIVE, distinct, and leaves the configuration untouched.
+enum HpopStatus {
+    HPOP_OK = 0,
+    HPOP_ERR_SHORT_BUFFER = -1,     ///< The caller's array is too short to read
+    HPOP_ERR_UNKNOWN_LABEL = -2,    ///< No such enumerator
+    HPOP_ERR_NOT_IMPLEMENTED = -3,  ///< The label names a model we do not have
+    HPOP_ERR_BAD_ARGUMENT = -4,
+    HPOP_ERR_PARSE = -5,            ///< File content could not be read
+    HPOP_ERR_NOT_LOADED = -6,       ///< Nothing has been loaded to use
+};
+
+/// Set force model configuration, length-checked, with an explicit gravity
+/// model.
+///
+/// `configPtr[0..14]` are exactly `plugin_set_force_model`'s fifteen elements.
+/// Beyond them, all optional:
+///   [15] gravityMode  0 infer (as v1), 1 point mass, 2 J2 closed form,
+///                     3 J2-J4 closed form, 4 spherical harmonics,
+///                     5 vendored EGM2008, 6 a field loaded from a file
+///   [16] harrisPriesterExponent (2 low inclination, 6 polar; default 4)
+///
+/// `len` is the number of DOUBLES the caller allocated. It is honored: a
+/// shorter array is read only as far as it goes, and a request that needs more
+/// than the caller supplied is refused rather than read past the end.
+int plugin_set_force_model_v2(double* configPtr, int len) {
+    if (!configPtr || len < 15) return HPOP_ERR_SHORT_BUFFER;
+
+    plugin_set_force_model(configPtr);
+
+    if (len >= 16) {
+        const int mode = (int)configPtr[15];
+        if (mode < 0 || mode > 6) return HPOP_ERR_UNKNOWN_LABEL;
+        if (mode == 6 && !g_loadedGravityField) return HPOP_ERR_NOT_LOADED;
+        g_forceSet.gravityMode = (ForceModel::GravityMode)mode;
+        if (mode == 6) {
+            g_forceSet.useLoadedField = true;
+            g_forceSet.loadedField = g_loadedGravityField;
+        }
+    }
+    if (len >= 17) {
+        const double n = configPtr[16];
+        if (!(n > 0.0)) return HPOP_ERR_BAD_ARGUMENT;
+        g_forceSet.harrisPriesterExponent = n;
+    }
+    g_configVersion++;
+    return HPOP_OK;
+}
+
 /// Set drag-model options not included in the packed force-model array.
 /// includeWinds: 0/1, coRotatingAtmosphere: 0/1
 void plugin_set_drag_options(int includeWinds, int coRotatingAtmosphere) {
@@ -1507,28 +1595,88 @@ void plugin_set_drag_options(int includeWinds, int coRotatingAtmosphere) {
     g_configVersion++;
 }
 
-/// Set atmosphere model type.
-/// 0=Exponential, 1=US76, 2=NRLMSISE00
-void plugin_set_atmosphere_model(int modelEnum) {
-    switch (modelEnum) {
-        case 0:
-            g_forceSet.dragModel = ForceModel::DragModelType::Exponential;
-            g_forceSet.drag.model = ForceModel::DragModelType::Exponential;
-            break;
-        case 1:
-            g_forceSet.dragModel = ForceModel::DragModelType::USSA1976;
-            g_forceSet.drag.model = ForceModel::DragModelType::USSA1976;
-            break;
-        case 2:
-            g_forceSet.dragModel = ForceModel::DragModelType::NRLMSISE00;
-            g_forceSet.drag.model = ForceModel::DragModelType::NRLMSISE00;
-            break;
-        default:
-            g_forceSet.dragModel = ForceModel::DragModelType::NRLMSISE00;
-            g_forceSet.drag.model = ForceModel::DragModelType::NRLMSISE00;
-            break;
+/// Every atmosphere label the ABI names, in ABI order. This order is the
+/// contract; new labels are appended, never inserted.
+static const AtmosphereModelType kAtmosphereLabels[] = {
+    AtmosphereModelType::Exponential,     // 0
+    AtmosphereModelType::USSA1976,        // 1
+    AtmosphereModelType::NRLMSISE00,      // 2
+    AtmosphereModelType::HarrisPriester,  // 3
+    AtmosphereModelType::JB2008,          // 4
+    AtmosphereModelType::DTM2020,         // 5
+    AtmosphereModelType::GOST2004,        // 6
+};
+static constexpr int kAtmosphereLabelCount =
+    (int)(sizeof(kAtmosphereLabels) / sizeof(kAtmosphereLabels[0]));
+
+static ForceModel::DragModelType dragModelForLabel(AtmosphereModelType m) {
+    switch (m) {
+        case AtmosphereModelType::Exponential:    return ForceModel::DragModelType::Exponential;
+        case AtmosphereModelType::USSA1976:       return ForceModel::DragModelType::USSA1976;
+        case AtmosphereModelType::HarrisPriester: return ForceModel::DragModelType::HarrisPriester;
+        case AtmosphereModelType::JB2008:         return ForceModel::DragModelType::JB2008;
+        case AtmosphereModelType::DTM2020:        return ForceModel::DragModelType::DTM2020;
+        case AtmosphereModelType::NRLMSISE00:
+        case AtmosphereModelType::GOST2004:
+        default:                                  return ForceModel::DragModelType::NRLMSISE00;
     }
+}
+
+/// Set the atmosphere model.
+///
+/// 0 Exponential, 1 USSA1976, 2 NRLMSISE00, 3 HarrisPriester,
+/// 4 JB2008, 5 DTM2020, 6 GOST2004.
+///
+/// A label with no published implementation behind it is REFUSED with
+/// `HPOP_ERR_NOT_IMPLEMENTED` and the configuration is left exactly as it was.
+/// It is not substituted. Until gmat-07 this function accepted only 0, 1 and 2
+/// and sent everything else — including labels naming entirely different
+/// models — to NRLMSISE-00 through a `default:`, so a caller could ask for
+/// JB2008, receive NRLMSISE-00, and be told nothing.
+///
+/// @return HPOP_OK, or a negative HpopStatus
+int plugin_set_atmosphere_model(int modelEnum) {
+    if (modelEnum < 0 || modelEnum >= kAtmosphereLabelCount) {
+        return HPOP_ERR_UNKNOWN_LABEL;
+    }
+    const AtmosphereModelType label = kAtmosphereLabels[modelEnum];
+    if (atmosphereImplementationOf(label) != AtmosphereImplementation::Published) {
+        return HPOP_ERR_NOT_IMPLEMENTED;
+    }
+    const ForceModel::DragModelType drag = dragModelForLabel(label);
+    g_forceSet.dragModel = drag;
+    g_forceSet.drag.model = drag;
     g_configVersion++;
+    return HPOP_OK;
+}
+
+/// What stands behind an atmosphere label.
+/// @return 1 published implementation, 0 declared but not implemented,
+///         HPOP_ERR_UNKNOWN_LABEL for a label the ABI does not name.
+int plugin_get_atmosphere_model_status(int modelEnum) {
+    if (modelEnum < 0 || modelEnum >= kAtmosphereLabelCount) {
+        return HPOP_ERR_UNKNOWN_LABEL;
+    }
+    return atmosphereImplementationOf(kAtmosphereLabels[modelEnum]) ==
+                   AtmosphereImplementation::Published
+               ? 1
+               : 0;
+}
+
+/// How many atmosphere labels the ABI names.
+int plugin_get_atmosphere_model_count() { return kAtmosphereLabelCount; }
+
+/// The label's stable name, so a UI never has to hard-code the list.
+const char* plugin_get_atmosphere_model_name(int modelEnum) {
+    if (modelEnum < 0 || modelEnum >= kAtmosphereLabelCount) return "";
+    return atmosphereModelName(kAtmosphereLabels[modelEnum]);
+}
+
+/// The authority a published label reproduces, or why an unimplemented one
+/// refuses. A refusal that cannot explain itself gets guessed at.
+const char* plugin_get_atmosphere_model_provenance(int modelEnum) {
+    if (modelEnum < 0 || modelEnum >= kAtmosphereLabelCount) return "";
+    return atmosphereModelProvenance(kAtmosphereLabels[modelEnum]);
 }
 
 /// Set solar activity indices for atmosphere models.
@@ -1541,6 +1689,180 @@ void plugin_set_solar_activity(double f107, double f107a, double* apPtr) {
     }
     g_forceSet.weather = g_weather;
     g_configVersion++;
+}
+
+// -----------------------------------------------------------------------------
+// Potential-file loading                                             (gmat-07)
+// -----------------------------------------------------------------------------
+
+/// Load a spherical-harmonic potential field from file CONTENT.
+///
+/// The module has no filesystem. The host hands over bytes — from an embedded
+/// blob, an SDS record payload or a fetch — and the module parses them. ICGEM
+/// and fixed-column encodings are both recognized and the format is sniffed.
+///
+/// The field is held but NOT selected: select it with
+/// `plugin_set_force_model_v2` gravity mode 6, so loading and flying are two
+/// decisions rather than one implicit one.
+///
+/// @param contentPtr UTF-8 file content (not necessarily NUL-terminated)
+/// @param contentLen Length in bytes
+/// @param maxDegree Truncation degree, 0 for whatever the file holds
+/// @param maxOrder Truncation order, 0 for the same as the degree
+/// @return the loaded maximum degree (positive), or a negative HpopStatus
+int plugin_load_gravity_field(const char* contentPtr, int contentLen,
+                              int maxDegree, int maxOrder) {
+    if (!contentPtr || contentLen <= 0) return HPOP_ERR_BAD_ARGUMENT;
+    const std::string content(contentPtr, (size_t)contentLen);
+    GravityFileLoadResult r = loadGravityField(content,
+                                              (uint16_t)std::max(0, maxDegree),
+                                              (uint16_t)std::max(0, maxOrder));
+    if (!r.ok()) {
+        g_gravityFileDetail = r.detail;
+        return HPOP_ERR_PARSE;
+    }
+    g_gravityFileDetail.clear();
+    g_loadedGravityField = std::make_shared<const ExtendedGravityField>(r.field);
+    g_loadedGravityName = r.modelName;
+    g_configVersion++;
+    return (int)r.field.maxDegree;
+}
+
+/// Why the last `plugin_load_gravity_field` refused, or "" if it did not.
+const char* plugin_get_gravity_field_error() { return g_gravityFileDetail.c_str(); }
+
+/// The model name the loaded file declared, or "".
+const char* plugin_get_gravity_field_name() { return g_loadedGravityName.c_str(); }
+
+// -----------------------------------------------------------------------------
+// Force-model contribution port                                      (gmat-07)
+// -----------------------------------------------------------------------------
+
+/// Register a parameterized force contribution into a slot.
+///
+/// Contributions are PARAMETERS, not code: hosting foreign code inside the
+/// propagator would be a new host capability, which this surface does not
+/// grant. A registered contribution is integrated with the built-in models —
+/// it is not a correction applied afterwards — and appears in its own lane of
+/// the extended acceleration breakdown.
+///
+/// kind: 0 clear the slot, 1 constant vector in the working frame,
+///       2 constant vector in the RTN triad, 3 zonal harmonic
+///       (mu, Re, degree, Jn), 4 point mass at a fixed position (mu, x, y, z).
+/// @param slot 0..7
+/// @param kind see above
+/// @param paramsPtr six doubles; the kind decides how many are read
+/// @return HPOP_OK, or a negative HpopStatus
+int plugin_register_force_contribution(int slot, int kind, double* paramsPtr) {
+    if (slot < 0 || slot >= ForceModel::ContributionSet::MAX_SLOTS) {
+        return HPOP_ERR_BAD_ARGUMENT;
+    }
+    if (kind < 0 || kind > 4) return HPOP_ERR_UNKNOWN_LABEL;
+    if (kind != 0 && !paramsPtr) return HPOP_ERR_BAD_ARGUMENT;
+
+    ForceModel::ForceContribution& c = g_forceSet.contributions.slots[slot];
+    c = ForceModel::ForceContribution();
+    c.kind = (ForceModel::ContributionKind)kind;
+    c.enabled = kind != 0;
+    if (paramsPtr) {
+        for (int i = 0; i < 6; i++) c.p[i] = paramsPtr[i];
+    }
+    if (kind == 3 && (int)c.p[2] < 2) return HPOP_ERR_BAD_ARGUMENT;
+
+    int highest = 0;
+    for (int i = 0; i < ForceModel::ContributionSet::MAX_SLOTS; i++) {
+        if (g_forceSet.contributions.slots[i].kind != ForceModel::ContributionKind::None) {
+            highest = i + 1;
+        }
+    }
+    g_forceSet.contributions.count = highest;
+    g_forceSet.useContributions = highest > 0;
+    g_configVersion++;
+    return HPOP_OK;
+}
+
+/// Remove every registered contribution.
+void plugin_clear_force_contributions() {
+    g_forceSet.contributions = ForceModel::ContributionSet();
+    g_forceSet.useContributions = false;
+    g_configVersion++;
+}
+
+/// How many contribution slots the ABI provides.
+int plugin_get_force_contribution_slots() {
+    return ForceModel::ContributionSet::MAX_SLOTS;
+}
+
+/// The central-body constants the built-in models use.
+///
+/// A caller registering a contribution that must reproduce a built-in model
+/// EXACTLY has to supply the same constants the built-in model uses. Making it
+/// guess them is how a port that is exact by construction measures 2.9e-10:
+/// a reference radius copied from a different publication differs in the
+/// seventh digit, and the J2 term carries that straight through.
+///
+/// Layout: [mu (km^3/s^2), Re (km), J2, J3, J4].
+/// @param outPtr at least five doubles
+/// @return the number of doubles written, or a negative HpopStatus
+int plugin_get_body_constants(double* outPtr, int len) {
+    if (!outPtr || len < 5) return HPOP_ERR_SHORT_BUFFER;
+    outPtr[0] = MU_EARTH;
+    outPtr[1] = RE_EARTH;
+    outPtr[2] = J2_EARTH;
+    outPtr[3] = J3_EARTH;
+    outPtr[4] = J4_EARTH;
+    return 5;
+}
+
+// -----------------------------------------------------------------------------
+// Predicted solar activity                                           (gmat-07)
+// -----------------------------------------------------------------------------
+
+/// Load a three-band predicted-solar-activity table from file content.
+///
+/// Record form, one per line: `<year> <month> <band> <f107> <f107a> <ap>`,
+/// band ∈ EARLY | NOMINAL | LATE. A prediction without a confidence band is a
+/// number pretending to be a measurement, so the band is a required field.
+/// @return the number of samples loaded across all bands, or a negative status
+int plugin_load_solar_activity_predictions(const char* contentPtr, int contentLen) {
+    if (!contentPtr || contentLen <= 0) return HPOP_ERR_BAD_ARGUMENT;
+    PredictionLoadResult r =
+        loadSolarActivityPredictions(std::string(contentPtr, (size_t)contentLen));
+    if (!r.ok()) {
+        g_predictionDetail = r.detail;
+        return HPOP_ERR_PARSE;
+    }
+    g_predictionDetail.clear();
+    g_predictions = r.table;
+    return (int)(g_predictions.nominal.size() + g_predictions.early.size() +
+                 g_predictions.late.size());
+}
+
+/// Why the last prediction load refused, or "".
+const char* plugin_get_solar_activity_prediction_error() {
+    return g_predictionDetail.c_str();
+}
+
+/// Drive the solar-activity indices from a loaded prediction band at an epoch.
+///
+/// This is the same channel `plugin_set_solar_activity` writes, so the
+/// prediction and the observed feed are interchangeable inputs to the same
+/// atmosphere, not two parallel code paths.
+/// @param band 0 nominal, 1 early, 2 late
+/// @param jd Julian date
+/// @param outPtr optional; receives [f107, f107a, ap]
+/// @return HPOP_OK, or a negative HpopStatus
+int plugin_set_solar_activity_from_prediction(int band, double jd, double* outPtr) {
+    if (band < 0 || band > 2) return HPOP_ERR_UNKNOWN_LABEL;
+    SolarActivityPrediction p{};
+    if (!predictSolarActivityAt(g_predictions, (SolarActivityBand)band, jd, p)) {
+        return HPOP_ERR_NOT_LOADED;
+    }
+    double ap[7];
+    for (int i = 0; i < 7; i++) ap[i] = p.ap;
+    plugin_set_solar_activity(p.f107, p.f107a, ap);
+    if (outPtr) { outPtr[0] = p.f107; outPtr[1] = p.f107a; outPtr[2] = p.ap; }
+    return HPOP_OK;
 }
 
 /// Set gravity model configuration.
@@ -1756,13 +2078,11 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
 
     Vec3 gravity, thirdBody, drag, srp, tides, relativity, albedo, empirical;
 
-    if (g_forceSet.useEGM2008) {
-        gravity = ForceModel::EGM2008(g_state.position, g_forceSet.egm2008);
-    } else if (g_forceSet.useSphericalHarmonics) {
-        gravity = ForceModel::SphericalHarmonics(g_state.position, g_forceSet.sphericalHarmonics);
-    } else {
-        gravity = ForceModel::PointMass(g_state.position, g_forceSet.mu);
-    }
+    // One call, the same precedence the integrator uses. Re-deriving it here
+    // is how a breakdown comes to disagree with the trajectory it explains:
+    // this block used to have no gravity-mode case at all, so a closed-form
+    // selection was reported as a harmonics field.
+    gravity = ForceModel::CentralBodyGravity(g_state.position, g_forceSet);
 
     if (g_forceSet.useThirdBody)
         thirdBody = ForceModel::ThirdBody(g_state.position, jd, g_forceSet.thirdBody);
@@ -1818,6 +2138,49 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     outPtr[21] = empirical.x;   outPtr[22] = empirical.y;   outPtr[23] = empirical.z;
 
     return 0;
+}
+
+/// Acceleration breakdown with the registered-contribution lane.
+///
+/// `plugin_get_acceleration_breakdown` writes exactly 24 doubles and its
+/// callers allocate exactly that, so the contribution lane cannot be appended
+/// to it without writing past the end of somebody's buffer. This variant is
+/// told how much room it has.
+///
+/// Layout: the same 24, then [24..26] the sum of every enabled registered
+/// contribution, then [27..29] the total.
+/// @param len number of DOUBLES the caller allocated (>= 24)
+/// @return the number of doubles written, or a negative HpopStatus
+int plugin_get_acceleration_breakdown_v2(double jd, double* outPtr, int len) {
+    if (!outPtr || len < 24) return HPOP_ERR_SHORT_BUFFER;
+    const int rc = plugin_get_acceleration_breakdown(jd, outPtr);
+    if (rc != 0) return rc;
+
+    int written = 24;
+    Vec3 contributed;
+    if (g_forceSet.useContributions) {
+        contributed = ForceModel::EvaluateContributions(
+            g_forceSet.contributions, g_state.position, g_state.velocity);
+    }
+    if (len >= 27) {
+        outPtr[24] = contributed.x;
+        outPtr[25] = contributed.y;
+        outPtr[26] = contributed.z;
+        written = 27;
+    }
+    if (len >= 30) {
+        Vec3 total;
+        for (int i = 0; i < 27; i += 3) {
+            total.x += outPtr[i];
+            total.y += outPtr[i + 1];
+            total.z += outPtr[i + 2];
+        }
+        outPtr[27] = total.x;
+        outPtr[28] = total.y;
+        outPtr[29] = total.z;
+        written = 30;
+    }
+    return written;
 }
 
 // -----------------------------------------------------------------------------
