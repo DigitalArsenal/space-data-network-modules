@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "spacedatastandards.org": "1.202.0"
+  },
   "scripts": {
     "generate:basilisk-plan": "node scripts/generate-basilisk-module-plan.mjs && node scripts/generate-basilisk-message-map.mjs",
     "check:basilisk-plan": "node scripts/check-basilisk-plan.mjs",
