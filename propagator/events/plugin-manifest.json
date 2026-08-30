@@ -296,7 +296,7 @@
   ],
   "abiVersion": 1,
   "sequentialJustification": {
-    "kind": "pure-transform",
-    "detail": "The runner is a bracketing scan and a root refinement over one continuous function of time. It spawns nothing, shares nothing and holds no state between invocations; the trajectory arrives whole on an input port and every root is found and returned inside the same call, so there is no work to fan out."
+    "kind": "inherently-sequential-algorithm",
+    "detail": "Root refinement carries state from iteration k-1 into iteration k: each bracket, each interpolation and each function evaluation depends on the one before it. There is nothing to fan out inside a refinement, and the strict ordering is what makes the artifact's arithmetic reproducible bit for bit across runtimes."
   }
 }
