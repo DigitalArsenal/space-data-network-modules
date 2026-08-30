@@ -9,7 +9,9 @@ const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "frames_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
+  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT) + path.sep
+  : fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
