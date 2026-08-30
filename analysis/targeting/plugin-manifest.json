@@ -1,0 +1,62 @@
+{
+  "pluginId": "com.orbpro.analysis.targeting",
+  "name": "Differential Correction Targeter",
+  "version": "0.1.0",
+  "description": "Vary and Achieve differential correction over consumer-supplied propagator and parameter-evaluator ports.",
+  "pluginFamily": "maneuver",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "Each differential-correction or SQP iteration depends on the previous iterate and its supplied propagator evaluations. Independent solves remain caller-parallel; this artifact still compiles through the SDK's clang wasm32-wasip1-threads lane and spawns no guest thread."
+  },
+  "methods": [
+    {
+      "methodId": "solve",
+      "displayName": "Begin Solver Session",
+      "description": "Validates a signed solver problem and starts Vary/Achieve or constrained optimization through the pull/supply ABI. Candidate states are evaluated by the propagator and objective ports selected by the consumer.",
+      "inputPorts": [
+        {
+          "portId": "problem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-solver-problem",
+              "allowedTypes": [
+                {
+                  "schemaName": "SLP.fbs",
+                  "fileIdentifier": "$SLP",
+                  "rootTypeName": "SLP"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "SLP.fbs",
+      "fileIdentifier": "$SLP",
+      "rootTypeName": "SLP"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "analysis-targeting-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
   invokeJsonRequest,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const EARTH_MOON_MU = 0.0121505856;
@@ -17,6 +18,9 @@ const EARTH_MOON_SYSTEM = {
   m2: 7.348e22,
   name: "Earth-Moon",
 };
+const HALO_AUTHORITIES = JSON.parse(
+  fs.readFileSync(new URL("../vectors/jpl-halo-authority.json", import.meta.url), "utf8"),
+);
 
 function jacobiConstant(state, mu) {
   const [x, y, z, vx, vy, vz] = state;
@@ -75,6 +79,60 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(Math.abs(northern.x - southern.x) < 1e-12);
     assert.ok(Math.abs(northern.vy - southern.vy) < 1e-12);
     assert.ok(Math.abs(northern.z + southern.z) < 1e-12);
+  });
+
+  test(`Earth-Moon L1/L2 halo periods and Jacobi constants reproduce the published family on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    assert.equal(HALO_AUTHORITIES.authority, "NASA/JPL Three-Body Periodic Orbits API");
+    assert.equal(HALO_AUTHORITIES.apiVersion, "1.0");
+    let worstJacobiRelative = 0;
+    let worstPeriodRelative = 0;
+    for (const authority of HALO_AUTHORITIES.queries) {
+      const solved = await invokeJsonRequest(harness, {
+        operation: "computePeriodicOrbit",
+        params: {
+          config: {
+            family: 0,
+            point: authority.librationPoint - 1,
+            amplitude: authority.moduleAmplitude,
+            maxIterations: 100,
+            tolerance: 1e-10,
+          },
+          system: {
+            ...EARTH_MOON_SYSTEM,
+            mu: HALO_AUTHORITIES.massRatio,
+          },
+        },
+      });
+      assert.equal(solved.converged, true);
+      const jacobiRelative =
+        Math.abs(solved.jacobi - authority.record.jacobi) /
+        Math.abs(authority.record.jacobi);
+      const periodRelative =
+        Math.abs(solved.period - authority.record.period) /
+        Math.abs(authority.record.period);
+      worstJacobiRelative = Math.max(worstJacobiRelative, jacobiRelative);
+      worstPeriodRelative = Math.max(worstPeriodRelative, periodRelative);
+      assert.ok(
+        jacobiRelative <= 1e-4,
+        `L${authority.librationPoint} Jacobi relative error ${jacobiRelative}`,
+      );
+      assert.ok(
+        periodRelative <= 1e-4,
+        `L${authority.librationPoint} period relative error ${periodRelative}`,
+      );
+    }
+    t.diagnostic(
+      `JPL halo worst_jacobi_relative=${worstJacobiRelative.toExponential(6)} ` +
+      `worst_period_relative=${worstPeriodRelative.toExponential(6)}`,
+    );
   });
 
   test(`coordinate transforms round-trip through ECI on ${runtimeKind}`, async (t) => {

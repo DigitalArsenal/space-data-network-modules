@@ -1,0 +1,18 @@
+{
+  "authority": {
+    "name": "Orekit",
+    "repository": "https://gitlab.orekit.org/orekit/orekit.git",
+    "commit": "7b39f84999bca5b51b11f216befd6555116f8f52",
+    "file": "src/test/java/org/orekit/propagation/conversion/FiniteDifferencePropagatorConverterTest.java",
+    "test": "testGetObjectiveFunctionParametersOnlyScaledOnce",
+    "license": "Apache-2.0"
+  },
+  "case": {
+    "parameterName": "p1",
+    "physicalValue": 0.0,
+    "scale": 0.001,
+    "normalizedSamples": [0.0, 1.0],
+    "expectedBuilderParameters": [[0.0], [1.0]]
+  },
+  "note": "The pinned Orekit commit contains no LeastSquaresConverterTest class; this is the complete finite-difference converter corpus present at that pin."
+}

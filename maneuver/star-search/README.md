@@ -131,27 +131,18 @@ scripts/dump_ephemeris.py \
 The binary layout, interface judgments, stage counts, and measured deviations
 are recorded in [`PORTING_NOTES.md`](PORTING_NOTES.md).
 
-## Status — what is NOT done
-
-**The manifest does not pass SDK compliance, and cannot yet.** Two of three port
-surfaces have no SDS record to point at:
+## Typed port status
 
 | port | status |
 | --- | --- |
 | `ephemeris` (input) | typed `$OEM` — **ruled and declared** |
-| `problem` (input) | **HELD** — no SDS record exists |
-| `solutions` (output) | **HELD** — no SDS record exists |
+| `problem` (input) | typed `$SLP` solver/search definition |
+| `solutions` (output) | typed `$PSS` Pareto solution set |
 
-Themis returned **LACK** on both against pin 1.165.0 on 2026-07-29: a grep for
-`flyby|v-infinity|C3|DSM|encounter|pareto` across ~200 schemas returns zero
-hits. `OCM.Maneuver` is the closest legal carrier for a *single* planned burn,
-but its payload is untyped `DATA:[string]` and there is no multi-solution
-container anywhere in SDS. Two new codes are required, and a new code is an
-**owner-ratification stop** — tracked in graph task
-`sds-star-search-mission-design-records`. The wildcard placeholders in the
-manifest are recorded rather than hidden so the intent stays legible; the SDK
-gate rejects them (`wildcard-port-type`), which is the correct and expected
-outcome until ratification.
+The two records are shared with targeting and optimization. `$SLP` names the
+propagator and evaluator ports instead of binding a provider; `$PSS` carries
+each candidate's objective vector, dominance rank, verification residual and
+provenance.
 
 Separately, the `$OEM` port also trips `invalid-integer` on the aligned-binary
 peer's `byteLength` — but so does every other shipped manifest in this repo,

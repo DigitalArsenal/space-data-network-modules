@@ -1,0 +1,45 @@
+{
+  "authority": "NASA/JPL Three-Body Periodic Orbits API",
+  "apiVersion": "1.0",
+  "retrievedAt": "2026-08-30T15:41:00.000Z",
+  "system": "earth-moon",
+  "massRatio": 0.01215058560962404,
+  "methodLineage": [
+    "Richardson 1980, Analytic Construction of Periodic Orbits about the Collinear Points, DOI 10.1007/BF01229511",
+    "Howell 1984, Three-Dimensional, Periodic, Halo Orbits, DOI 10.1007/BF01358403"
+  ],
+  "queries": [
+    {
+      "uri": "https://ssd-api.jpl.nasa.gov/periodic_orbits.api?sys=earth-moon&family=halo&libr=1&branch=N",
+      "librationPoint": 1,
+      "branch": "N",
+      "moduleAmplitude": 0.04,
+      "record": {
+        "x": 0.8233881034503151,
+        "y": -5.3482817862226854e-27,
+        "z": 0.0061082821282146954,
+        "vx": -1.9506672179196258e-15,
+        "vy": 0.12694619279694275,
+        "vz": 1.3890616987463511e-15,
+        "jacobi": 3.17403077844034,
+        "period": 2.7432501441453545
+      }
+    },
+    {
+      "uri": "https://ssd-api.jpl.nasa.gov/periodic_orbits.api?sys=earth-moon&family=halo&libr=2&branch=N",
+      "librationPoint": 2,
+      "branch": "N",
+      "moduleAmplitude": 0.01,
+      "record": {
+        "x": 1.1808953369341215,
+        "y": -4.8029628457701707e-27,
+        "z": 0.0018203497312974898,
+        "vx": 4.2096835752205114e-15,
+        "vy": -0.15587548912645197,
+        "vz": 1.7312730079482095e-16,
+        "jacobi": 3.15210434573208,
+        "period": 3.4155038173845433
+      }
+    }
+  ]
+}

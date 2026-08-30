@@ -1,0 +1,8 @@
+{
+  "name": "space-data-network-plugin-optimal-control",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run-native.mjs && node --test tests/provenance.test.mjs"
+  }
+}

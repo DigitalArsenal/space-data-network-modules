@@ -67,15 +67,22 @@
           "portId": "problem",
           "acceptedTypeSets": [
             {
-              "setId": "star-search-problem-definition-UNRATIFIED",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "HELD — NOT A SHIPPABLE PORT. The broad-search problem definition (body sequence constraints, epoch/TOF grid discretization, delta-V / flyby / C3 caps, optional propulsion limits) has NO existing SDS record: Themis returned LACK against pin 1.165.0 on 2026-07-29. A new standard code is required and is an OWNER-RATIFICATION stop, tracked in graph task sds-star-search-mission-design-records. This wildcard is a placeholder that the SDK compliance gate WILL reject (wildcard-port-type, pluginCompliance.js:536-544) — it is recorded rather than hidden so the intent is legible; it is replaced by the typed declaration the moment the code is ratified."
+              "setId": "star-search-problem-definition",
+              "allowedTypes": [
+                {
+                  "schemaName": "SLP.fbs",
+                  "fileIdentifier": "$SLP",
+                  "rootTypeName": "SLP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Ratified solver/search problem definition carrying variables, bounds, objectives, constraints, solver settings, and generic evaluator and propagator port identifiers."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Search problem definition. PORT SURFACE HELD pending SDS ratification."
+          "description": "Search problem definition."
         }
       ],
       "outputPorts": [
@@ -83,15 +90,22 @@
           "portId": "solutions",
           "acceptedTypeSets": [
             {
-              "setId": "star-search-pareto-solution-set-UNRATIFIED",
-              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "HELD — NOT A SHIPPABLE PORT. The Pareto trajectory-solution set (repeated candidate: ordered encounter list with body/epoch/v-infinity in-out/turn angle/powered-flyby delta-V/periapsis radius; repeated DSM list; per-candidate totals) has NO existing SDS record: Themis returned LACK against pin 1.165.0 on 2026-07-29 (OCM.Maneuver is the closest legal carrier for a SINGLE planned burn but its payload is untyped DATA:[string] and there is no multi-solution container anywhere in SDS). New standard code required — OWNER-RATIFICATION stop, tracked in sds-star-search-mission-design-records."
+              "setId": "star-search-pareto-solution-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "PSS.fbs",
+                  "fileIdentifier": "$PSS",
+                  "rootTypeName": "PSS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Ratified multi-solution container with objective vectors, feasibility, constraint violations, dominance ranks, verify-by-propagation residuals, and module provenance."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Pareto-optimal trajectory set. PORT SURFACE HELD pending SDS ratification."
+          "description": "Pareto-optimal trajectory set carried by the ratified signed $PSS record."
         }
       ],
       "maxBatch": 1,
@@ -104,6 +118,18 @@
       "schemaName": "OEM/main.fbs",
       "fileIdentifier": "$OEM",
       "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SLP.fbs",
+      "fileIdentifier": "$SLP",
+      "rootTypeName": "SLP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PSS.fbs",
+      "fileIdentifier": "$PSS",
+      "rootTypeName": "PSS",
       "wireFormat": "flatbuffer"
     }
   ],

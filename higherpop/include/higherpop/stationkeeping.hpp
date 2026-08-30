@@ -23,6 +23,7 @@
 
 #include <cmath>
 #include "higherpop/constants.hpp"
+#include "higherpop/target.hpp"
 
 namespace hp {
 namespace stationkeeping {
@@ -89,6 +90,80 @@ inline LEOResult leoAltitudeMaintenance(double a, double da_dt_km_per_s,
   r.dv_per_year = (r.reboost_interval_days>0)
                     ? r.dv_per_reboost*(365.25/r.reboost_interval_days) : 0.0;
   return r;
+}
+
+// ---- one-year GEO longitude/inclination budget -----------------------------
+// The dominant north-south term cancels the luni-solar inclination-vector
+// drift. A representative uncompensated GEO plane drifts by 0.85 deg/year;
+// the normal impulse is v_geo * sin(delta-i). This is the standard
+// Soop/Vallado textbook sizing anchor (about 45.5 m/s/year). The drift rate is
+// an input so an operational force-model port can replace the textbook mean.
+struct NSResult {
+  double inclination_drift_deg_year;
+  double orbital_speed;
+  double dv_per_year;
+};
+
+inline NSResult northSouthKeeping(
+    double inclination_drift_deg_year = 0.85,
+    double mu = MU_EARTH,
+    double omega_earth = OMEGA_EARTH) {
+  NSResult result{};
+  result.inclination_drift_deg_year = inclination_drift_deg_year;
+  const double radius = std::cbrt(mu / (omega_earth * omega_earth));
+  result.orbital_speed = std::sqrt(mu / radius);
+  result.dv_per_year =
+      result.orbital_speed * std::sin(std::fabs(inclination_drift_deg_year) * M_PI / 180.0);
+  return result;
+}
+
+struct GEOAnnualBudget {
+  EWResult east_west;
+  NSResult north_south;
+  double total_dv_per_year;
+};
+
+inline GEOAnnualBudget annualGeoBudget(
+    double semi_major_axis_error_km,
+    double longitude_deadband_deg,
+    double inclination_drift_deg_year = 0.85,
+    double mu = MU_EARTH,
+    double omega_earth = OMEGA_EARTH) {
+  GEOAnnualBudget result{};
+  result.east_west = eastWestKeeping(
+      semi_major_axis_error_km, longitude_deadband_deg, mu, omega_earth);
+  result.north_south = northSouthKeeping(
+      inclination_drift_deg_year, mu, omega_earth);
+  result.total_dv_per_year =
+      result.east_west.dv_per_year + result.north_south.dv_per_year;
+  return result;
+}
+
+// A long-horizon station-keeping plan is a target problem, not a second
+// optimizer. The caller's evaluator MUST propagate the complete horizon over
+// its selected propagator port and return the terminal errors/budget metrics.
+// This thin application preserves that port seam while reusing the same
+// Vary/Achieve machinery and report format as mission targeting.
+struct LongHorizonResult {
+  hp::target::Result target;
+  double horizon_seconds;
+  int correction_opportunities;
+};
+
+inline LongHorizonResult solveLongHorizon(
+    const hp::target::ResidualFn& propagated_metrics,
+    const hp::target::Vecd& initial_burns,
+    const hp::target::Vecd& desired_metrics,
+    double horizon_seconds,
+    int correction_opportunities,
+    const hp::target::Options& options = hp::target::Options(),
+    const hp::target::JacobianFn& analytic_stm = hp::target::JacobianFn()) {
+  LongHorizonResult result{};
+  result.horizon_seconds = horizon_seconds;
+  result.correction_opportunities = correction_opportunities;
+  result.target = hp::target::solve(
+      propagated_metrics, initial_burns, desired_metrics, options, analytic_stm);
+  return result;
 }
 
 } // namespace stationkeeping

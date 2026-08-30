@@ -112,14 +112,26 @@ test("built artifact loads through the SDK browser harness", async (t) => {
 
 test("built artifact loads through the WasmEdge server path", async (t) => {
   let harness;
+  const isUnavailable = (error) => {
+    let current = error;
+    while (current) {
+      if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(current))) {
+        return true;
+      }
+      current = current.cause;
+    }
+    return false;
+  };
   try {
     harness = await loadModule({
       wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
       runtimeKind: "wasmedge",
       enableThreads: false,
     });
+    const response = await harness.invoke(createInvokeRequest());
+    assertSuccessfulResponse(response);
   } catch (error) {
-    if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
+    if (isUnavailable(error)) {
       t.skip("Install wasmedge to verify the server-path harness.");
       return;
     }
@@ -128,9 +140,6 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
   t.after(async () => {
     await harness.destroy();
   });
-
-  const response = await harness.invoke(createInvokeRequest());
-  assertSuccessfulResponse(response);
 });
 
 test("hosted-runtime example is wired to the canonical invoke contract", () => {

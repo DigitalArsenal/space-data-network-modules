@@ -1,0 +1,17 @@
+{
+  "authority": {
+    "authors": ["W. Hock", "K. Schittkowski"],
+    "title": "Test Examples for Nonlinear Programming Codes",
+    "series": "Lecture Notes in Economics and Mathematical Systems 187",
+    "year": 1981,
+    "doi": "10.1007/978-3-642-48320-2",
+    "openCorpus": "https://github.com/jacobwilliams/schittkowski-test-problems",
+    "problem": "HS1"
+  },
+  "case": {
+    "initial": [-2.0, 1.0],
+    "lowerBoundX2": -1.5,
+    "optimum": [1.0, 1.0],
+    "objective": 0.0
+  }
+}
