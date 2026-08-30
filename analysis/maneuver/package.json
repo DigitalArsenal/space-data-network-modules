@@ -16,7 +16,9 @@
     "capture-transcripts": "node vectors/tools/capture-transcripts.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+    "flatbuffers": "25.9.23",
+    "space-data-module-sdk": "0.8.17",
+    "spacedatastandards.org": "1.203.0"
   },
   "type": "module"
 }
