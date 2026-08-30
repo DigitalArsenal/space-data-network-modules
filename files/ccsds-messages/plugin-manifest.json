@@ -1,0 +1,387 @@
+{
+  "pluginId": "com.digitalarsenal.files.ccsds-messages",
+  "name": "CCSDS Message Reader",
+  "version": "0.1.0",
+  "description": "Reads and writes the two CCSDS keyword-value messages this stack round-trips \u2014 the Attitude Ephemeris Message (504.0-B-2) and the Tracking Data Message (503.0-B-2 Cor.1) \u2014 and projects them onto SDS $AEM and $TDM with the file-level facts carried out separately as $NCD. Parsing goes through an ordered keyword/value/units/comment document rather than a struct, so a keyword the record has no field for is still read, and the projection NAMES what it cannot carry instead of dropping it in silence. $AEM always takes the verbose ATTITUDE_DATA_LINES form with an explicit per-state EPOCH: the published Figure G-4 steps 2336.3 s then 1.0 s then 98398.0 s, so the compact START_TIME + i * STEP_SIZE array cannot express a real AEM at all, and a record that arrives in that form is refused rather than guessed at because rebuilding its epochs needs a leap-second table this module does not carry. $TDM observations are per-observation (KEYWORD, EPOCH, VALUE) triples in file order, never sorted, deduplicated or laid on a grid: published Figure E-17 stamps its last RCS observation 0.2678 s EARLIER than the line above it. TRANSMIT_RAMPS is left absent rather than empty, so a ramp-free record is exactly a CCSDS-conformant TDM. No time-scale conversion happens here; epochs stay the text the file wrote. A malformed message is a named status, never a trap and never a NaN. Pure compute \u2014 no capabilities, no host calls, no filesystem.",
+  "tagline": "CCSDS AEM and TDM keyword-value messages in; $AEM/$TDM records and an $NCD descriptor out.",
+  "pluginFamily": "parser",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Reading a message is one forward pass over one resident frame into an ordered entry list, and the projection onto $AEM/$TDM is a second pass over that list; writing is the same two passes in reverse. The module spawns nothing, opens nothing, shares nothing between invocations and holds no state after one: everything it can answer is already in the frame it was handed, so there is no work to fan out and never will be."
+  },
+  "tags": [
+    "parser",
+    "ccsds",
+    "aem",
+    "tdm",
+    "kvn",
+    "attitude",
+    "tracking",
+    "ncd",
+    "sds",
+    "space-data"
+  ],
+  "methods": [
+    {
+      "methodId": "read_aem",
+      "displayName": "Read CCSDS AEM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact KVN bytes in the same frame. $NCD carries a file's facts and its SOURCE_SHA256, not its payload, so the payload rides with the descriptor that describes it: the size prefix gives the descriptor's exact length and therefore the offset the text starts at, and SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against those trailing bytes whenever the caller declared either, which is what makes the pairing provable rather than assumed. This module has no fetch capability and will not resolve SOURCE_CID on its own. FORMAT must be UNSPECIFIED or the member matching the method; a descriptor that names the other CCSDS message is refused rather than reinterpreted.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the described message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "attitude",
+          "displayName": "attitude",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $AEM envelope carrying every segment the message declared, each with its own metadata block and its attitude states as ATTITUDE_DATA_LINES with an explicit EPOCH per state. STEP_SIZE stays 0 and ATTITUDE_DATA stays empty: the IDL forbids populating both forms, and the verbose one is the only form that can carry a real AEM. The columns a state populates are selected by ATTITUDE_TYPE exactly as CCSDS 504.0-B-2 table 4-4 fixes them. What the record cannot carry is dropped only after being named: at $AEM 2.0.2 a COMMENT line inside a data block has no field (AEMSegment.COMMENT is the metadata block's), at $TDM 2.0.4 the bare EPHEMERIS_NAME the Blue Book prints is not in the metadata table, and any numeric keyword whose value equals its FlatBuffers type default is indistinguishable from an absent one. Nothing else in the message is lost.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-aem-attitude",
+              "description": "SDS $AEM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM"
+                },
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope carrying the half of the file the message record cannot hold: the resolved FORMAT, the CCSDS version the file declared, its ORIGINATOR and CREATION_DATE, the header comment area, the time system the first metadata block named, the total coverage span, and the SHA-256 of the bytes this run actually read. A writer handed the record and this descriptor reproduces the source; a writer handed only the record invents a header.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "read_tdm",
+      "displayName": "Read CCSDS TDM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The message to read, as a size-prefixed SDS $NCD descriptor followed IMMEDIATELY by the message's exact KVN bytes in the same frame. $NCD carries a file's facts and its SOURCE_SHA256, not its payload, so the payload rides with the descriptor that describes it: the size prefix gives the descriptor's exact length and therefore the offset the text starts at, and SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against those trailing bytes whenever the caller declared either, which is what makes the pairing provable rather than assumed. This module has no fetch capability and will not resolve SOURCE_CID on its own. FORMAT must be UNSPECIFIED or the member matching the method; a descriptor that names the other CCSDS message is refused rather than reinterpreted.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the described message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "tracking",
+          "displayName": "tracking",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $TDM envelope carrying every metadata and data segment the message declared in SEGMENTS, each observation a (KEYWORD, EPOCH, VALUE) triple in file order. The root's legacy parallel arrays and their OBSERVATION_START_TIME + i * OBSERVATION_STEP_SIZE grid are never written, and TRANSMIT_RAMPS is left absent rather than empty. What the record cannot carry is dropped only after being named: at $AEM 2.0.2 a COMMENT line inside a data block has no field (AEMSegment.COMMENT is the metadata block's), at $TDM 2.0.4 the bare EPHEMERIS_NAME the Blue Book prints is not in the metadata table, and any numeric keyword whose value equals its FlatBuffers type default is indistinguishable from an absent one. Nothing else in the message is lost.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm-tracking",
+              "description": "SDS $TDM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM"
+                },
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD envelope carrying the half of the file the message record cannot hold: the resolved FORMAT, the CCSDS version the file declared, its ORIGINATOR and CREATION_DATE, the header comment area, the time system the first metadata block named, the total coverage span, and the SHA-256 of the bytes this run actually read. A writer handed the record and this descriptor reproduces the source; a writer handed only the record invents a header.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "write_aem",
+      "displayName": "Write CCSDS AEM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "attitude",
+          "displayName": "attitude",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $AEM envelope to emit as a CCSDS 504.0-B-2 keyword-value message. Only the verbose ATTITUDE_DATA_LINES form is accepted; a record carrying the compact ATTITUDE_DATA array is refused with compact-form-needs-time-math because its epochs were never stored and rebuilding them needs a leap-second table this module does not carry.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-aem-attitude",
+              "description": "SDS $AEM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM"
+                },
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The emitted message in the same frame shape the read methods take: a size-prefixed SDS $NCD descriptor followed immediately by the CCSDS keyword-value text. The descriptor's SOURCE_BYTE_LENGTH and SOURCE_SHA256 are computed over the bytes in this frame, so the pairing a consumer checks is the pairing this module produced. Keywords appear in the order CCSDS 504.0-B-2 table 4-3 and 503.0-B-2 table 3-3 fix, because a record carries fields rather than lines and re-emitting has to choose an order; the standard's own is the one choice that is not arbitrary. No SDS extension ever reaches the text: TRANSMIT_RAMPS, SIGNAL_TO_NOISE, SPECTRAL_MAX and DOPPLER_NOISE_HZ have no CCSDS keyword and emitting one would produce a file no TDM reader can parse.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the emitted message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "write_tdm",
+      "displayName": "Write CCSDS TDM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "tracking",
+          "displayName": "tracking",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $TDM envelope to emit as a CCSDS 503.0-B-2 Cor.1 keyword-value message. SEGMENTS is read when present and the single-segment root OBSERVATIONS form otherwise; a record whose data lives only in the legacy parallel arrays is refused with uniform-grid-needs-time-math, because those epochs exist nowhere in the record.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm-tracking",
+              "description": "SDS $TDM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM"
+                },
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "message",
+          "displayName": "message",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The emitted message in the same frame shape the read methods take: a size-prefixed SDS $NCD descriptor followed immediately by the CCSDS keyword-value text. The descriptor's SOURCE_BYTE_LENGTH and SOURCE_SHA256 are computed over the bytes in this frame, so the pairing a consumer checks is the pairing this module produced. Keywords appear in the order CCSDS 504.0-B-2 table 4-3 and 503.0-B-2 table 3-3 fix, because a record carries fields rather than lines and re-emitting has to choose an order; the standard's own is the one choice that is not arbitrary. No SDS extension ever reaches the text: TRANSMIT_RAMPS, SIGNAL_TO_NOISE, SPECTRAL_MAX and DOPPLER_NOISE_HZ have no CCSDS keyword and emitting one would produce a file no TDM reader can parse.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-message",
+              "description": "SDS $NCD envelope, with the emitted message's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "NCD.fbs",
+      "fileIdentifier": "$NCD",
+      "rootTypeName": "NCD"
+    },
+    {
+      "schemaName": "AEM.fbs",
+      "fileIdentifier": "$AEM",
+      "rootTypeName": "AEM"
+    },
+    {
+      "schemaName": "TDM.fbs",
+      "fileIdentifier": "$TDM",
+      "rootTypeName": "TDM"
+    },
+    {
+      "schemaName": "RFM.fbs",
+      "fileIdentifier": "$RFM",
+      "rootTypeName": "RFM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "files-ccsds-messages-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

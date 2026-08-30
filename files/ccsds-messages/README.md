@@ -155,7 +155,8 @@ projection never populates them — a CCSDS TDM states its frame in
 
 ```sh
 npm ci
-npm test          # 222 checks across two native lanes
+npm run build     # dist/isomorphic/module.wasm, signed
+npm test          # 222 native checks + 7 artifact/invoke tests
 ```
 
 Two lanes, because they have different dependencies:
@@ -182,15 +183,72 @@ lands in the repo.
 printer, the structural document comparison, the independent line scans, the
 epoch arithmetic — and knows nothing about SDS.
 
-## The compiled module surface is not shipped yet
+## The compiled module surface
 
-There is no `plugin-manifest.json` or `build.mjs` here, and the reason is a
-contract question rather than effort. The SDK requires every port to declare a
-concrete SDS identity and refuses `acceptsAnyFlatbuffer`, but this module's
-product is **KVN text in, record out** — and a frame of CCSDS text has no record
-identity of its own. `files/orbit-products` solves the same problem by pairing an
-`$NCD` descriptor with the container's bytes in one frame; adopting that
-convention for a KVN message is a decision about `$NCD`'s meaning, not a wiring
-detail, and it belongs with whoever owns that pairing. The projection itself is
-complete and measured, and attaches to a module surface without changing shape
-when the port identity is settled.
+`plugin-manifest.json` + `build.mjs` build `dist/isomorphic/module.wasm` —
+**327,328 bytes**, `pluginFamily: "parser"`, `capabilities: []`,
+`threadModel: "wasi-sequential"`, standalone WASI (imports
+`wasi_snapshot_preview1` and nothing else), **signed in the build** by
+`scripts/sign-module-artifact.mjs`. Four methods, four exports:
+
+| Method | In | Out |
+| --- | --- | --- |
+| `read_aem` | `$NCD` + AEM text | `$AEM`, `$NCD` |
+| `read_tdm` | `$NCD` + TDM text | `$TDM`, `$NCD` |
+| `write_aem` | `$AEM` | `$NCD` + AEM text |
+| `write_tdm` | `$TDM` | `$NCD` + TDM text |
+
+**The frame.** The SDK requires every port to declare a concrete SDS identity
+and refuses `acceptsAnyFlatbuffer`, but this module's product is KVN *text* and
+a frame of text has no record identity of its own. `$NCD` describes a file and
+deliberately does not carry one, so descriptor and file travel together in one
+frame — the same shape `files/orbit-products` reads:
+
+```
+[u32le n][ $NCD flatbuffer, n bytes ][ the message's exact bytes ]
+```
+
+i.e. a size-prefixed `$NCD` with the described file appended. The prefix makes
+the boundary self-describing rather than agreed out of band, and
+`SOURCE_SHA256` / `SOURCE_BYTE_LENGTH` make the pairing **provable**: whenever
+the caller declares either, it is checked against the trailing bytes and a
+mismatch is refused. That check is why the schema carries the hash, and it is
+what lets a pure parser do its job with no fetch capability.
+`ncdContainerFormat` already names `CCSDS_AEM_KVN = 9` and
+`CCSDS_TDM_KVN = 11`, so this is the use those members were minted for. A
+descriptor declaring the *other* CCSDS message is refused, never reinterpreted.
+
+**Four methods rather than one.** A single `read_message` would leave one of two
+record ports unpopulated on every invoke, making both optional and the contract
+"one of these, we will not say which". Naming the message in the method keeps
+every port required and every invoke's shape known before it runs.
+
+**The methods are invoked in the tests, not just built.**
+`plugin_push_output_ex` takes
+`(…, root_type, fixed_string_length, required_alignment, ptr, len)`, and
+transposing the two `uint16`s compiles, links, passes SDK compliance and
+inspects clean — then refuses every call with `unsupported-output-type`.
+Verified: with the two transposed, `node build.mjs` still succeeds and the
+compliance and inspection tests still pass, and only the invoke tests go red.
+`tests/ccsds_module.test.mjs` therefore calls all four methods, and proves the
+frame by **consumption**: read a published fixture, write the record back, read
+that emitted frame, and assert the two record payloads are byte-identical. It
+also asserts no SDS extension (`TRANSMIT_RAMPS`, `SIGNAL_TO_NOISE`,
+`SPECTRAL_MAX`, `DOPPLER_NOISE_HZ`) ever reaches the CCSDS body, and that a
+wrong `FORMAT`, a hash over other bytes, and a descriptor with no file behind it
+are each refused.
+
+The descriptor states only what the file said. `PRODUCER`,
+`INTERNAL_FILE_NAME` and `SOURCE_CID` have no CCSDS keyword, so they are carried
+through from the caller's descriptor when it stated them and left empty
+otherwise — never synthesised from `ORIGINATOR`, which is a different fact.
+`START_TIME` / `STOP_TIME` come from the first and last segment rather than a
+comparison across all of them, because both books require segments in time order
+and comparing epoch strings would be time math this package does not do. Figure
+E-17 declares neither, and gets neither.
+
+`SOURCE_SHA256` is computed with `files/orbit-products`' `sha256.hpp`: one
+implementation, included by whoever needs it, because a descriptor written by one
+package and checked by the other must hash the same way. The reach is already
+mutual — `orbit-products` includes this package's `kvn.hpp` for its own OEM
+reader.
