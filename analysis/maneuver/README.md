@@ -273,8 +273,43 @@ Codes: `invalid-parameter`, `malformed-request`, `unknown-operation`,
   `solveLambertMinDV` REQUIRES them — ranking revolution counts needs a cost,
   and 0.1.0 ranked on `|v1| + |v2|`, which is not the cost of anything.
 - **Signed RIC arrays** are serialised by every operation that computes one:
-  `dv1_ric` / `dv2_ric` / `dv3_ric` / `dv_ric`. Read the array, never the
-  scalar — the scalars are magnitudes.
+  `dv1_ric` / `dv2_ric` / `dv3_ric` / `dv_ric`.
+- **Signed scalars, since 0.5.0.** Every single-axis delta-v scalar now carries
+  its sign and equals the in-track component of its RIC array
+  (`dv1 == dv1_ric[1]`), so a retrograde burn is distinguishable from a
+  prograde one of the same size. Through 0.4.0 they were `std::abs()`'d and
+  this section said "read the array, never the scalar"; that instruction is
+  retired. Two scalars stay MAGNITUDES, and for a stated reason:
+  - `totalDeltaV` is the propellant budget. A budget that cancels is not a
+    budget, so it is the sum of magnitudes.
+  - `combinedManeuver`'s `dv2` is the law-of-cosines norm of a burn with both
+    in-track and cross-track components; a scalar sign is not defined for it,
+    and `dv2_ric` carries the direction.
+  `computePatchedConicTransfer`'s departure/arrival burns also stay magnitudes:
+  that result carries no RIC array, and a sign against no declared frame is a
+  claim the result cannot support.
+- **Every response that carries a delta-v declares its frame.** `frame` is
+  `"RIC"` on the maneuver operations and `"ECI"` on `solveLambert` /
+  `solveLambertMinDV`, whose velocities are stated in the same inertial frame
+  as their `r1` / `r2` inputs. There is no default: the frame is on the wire
+  or the call refused.
+- **`transformDeltaV`** rotates one delta-v between the RIC triad and the
+  inertial frame — `{position, velocity, deltaV, from: "RIC" | "ECI"}` in, the
+  rotated vector plus the basis out. Any other `from` is an
+  `invalid-parameter` refusal; a purely radial state, which has no orbit
+  normal, is `singular-configuration`.
+
+### The RIC triad
+
+    R = unit(r)      C = unit(r x v)      I = C x R
+
+built from the **inertial** state, components ordered
+`[radial, in-track, cross-track]`. This is the one convention the module emits
+and accepts, it matches the engine's `ManeuverFrame.RIC`, and it is written
+down in `space-data-module-sdk/docs/families/maneuver.md`. Before 0.5.0 no
+frame was declared and none was applied — r/t/n components were written onto
+x/y/z raw while three distinct RTN triads were live across the stack (the D1
+defect in `graph/findings/official-harness-shapes.md`).
 
 ## Runtime contract
 

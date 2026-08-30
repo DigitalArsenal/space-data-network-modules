@@ -120,6 +120,33 @@ Vec3 J2Only(const Vec3& position, double mu, double J2, double Re) {
     return Vec3(ax, ay, az);
 }
 
+// Zonal J2-J4 perturbing acceleration (central point-mass term EXCLUDED).
+//
+// All three terms are the gradient of the standard zonal potential
+//
+//     U_n = -mu * J_n * Re^n * P_n(z/r) / r^(n+1)
+//
+// with P_2 = (3u^2-1)/2, P_3 = (5u^3-3u)/2, P_4 = (35u^4-30u^2+3)/8, u = z/r.
+// Written out per term the gradient is
+//
+//   J3:  a_xy = +(5/2) J3 mu Re^3 / r^7 * {x,y} * z * (7 z^2/r^2 - 3)
+//        a_z  = -(5/2) J3 mu Re^3 / r^7 * (6 z^2 - 7 z^4/r^2 - 3/5 r^2)
+//   J4:  a_xy = +(5/8) J4 mu Re^4 / r^7 * {x,y} * (63 z^4/r^4 - 42 z^2/r^2 + 3)
+//        a_z  = +(5/8) J4 mu Re^4 / r^7 * z * (63 z^4/r^4 - 70 z^2/r^2 + 15)
+//
+// Two defects lived here and are fixed above (gmat-01-defect-burn-down):
+//
+//   1. The J3 z-component carried the WRONG SIGN. The x/y components absorb
+//      the leading minus of grad(U_3) into the rearranged (7z^2/r^2 - 3)
+//      bracket; the z-component's bracket is not rearranged, so it needs the
+//      minus written out. It was '+factor3 * (...)'.
+//   2. The J4 scale factor was 1.875 * J4 * mu * Re^4 / r^9, which is
+//      3/r^2 times the correct 0.625 * J4 * mu * Re^4 / r^7 (the bracket is
+//      dimensionless, so only r^7 balances mu*Re^4 into an acceleration).
+//      At LEO that is a factor ~6e-8: the J4 term was effectively absent.
+//
+// Cross-validated pointwise against higherpop's independent Legendre-recursion
+// zonal reference (hp::zonalPert) in tests/zonal_crossvalidation.cpp.
 Vec3 J2J4(const Vec3& position, double mu) {
     Vec3 acc = J2Only(position, mu, J2_EARTH, RE_EARTH);
 
@@ -127,20 +154,19 @@ Vec3 J2J4(const Vec3& position, double mu) {
     double r2 = r * r;
     double z = position.z;
     double z2 = z * z;
+    double r7 = r2 * r2 * r2 * r;
 
     // J3 contribution
-    double r7 = r2 * r2 * r2 * r;
     double factor3 = 2.5 * J3_EARTH * mu * RE_EARTH * RE_EARTH * RE_EARTH / r7;
 
     double term3 = 7.0 * z2 / r2 - 3.0;
     acc.x += position.x * z * factor3 * term3;
     acc.y += position.y * z * factor3 * term3;
-    acc.z += factor3 * (6.0 * z2 - 7.0 * z2 * z2 / r2 - 0.6 * r2);
+    acc.z -= factor3 * (6.0 * z2 - 7.0 * z2 * z2 / r2 - 0.6 * r2);
 
     // J4 contribution
-    double r9 = r2 * r2 * r2 * r2 * r;
     double Re4 = RE_EARTH * RE_EARTH * RE_EARTH * RE_EARTH;
-    double factor4 = 1.875 * J4_EARTH * mu * Re4 / r9;
+    double factor4 = 0.625 * J4_EARTH * mu * Re4 / r7;
 
     double z4 = z2 * z2;
     double term4 = 63.0 * z4 / (r2 * r2) - 42.0 * z2 / r2 + 3.0;

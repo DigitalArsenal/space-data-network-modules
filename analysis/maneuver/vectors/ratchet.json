@@ -1,8 +1,8 @@
 {
   "//": "THE RATCHET. Vector counts may only grow, and the GREEN count may only grow — a row demoted to expected-to-fail fails tests/ratchet.test.mjs even though the total is unchanged. Raise with vectors/tools/update-ratchet.mjs.",
-  "updated": "2026-08-10T20:05:38.182Z",
-  "total": 43,
-  "green": 40,
+  "updated": "2026-08-30T00:13:10.752Z",
+  "total": 44,
+  "green": 41,
   "byOperation": {
     "solveLambert": {
       "total": 19,
@@ -10,8 +10,8 @@
       "knownRed": 0
     },
     "hohmannTransfer": {
-      "total": 4,
-      "green": 3,
+      "total": 5,
+      "green": 4,
       "knownRed": 1
     },
     "biEllipticTransfer": {
@@ -57,8 +57,8 @@
       "knownRed": 0
     },
     "in-repo": {
-      "total": 19,
-      "green": 18,
+      "total": 20,
+      "green": 19,
       "knownRed": 1
     },
     "hapsira": {

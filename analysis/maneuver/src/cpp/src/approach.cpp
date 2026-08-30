@@ -355,9 +355,13 @@ PhasingResult computePhasingManeuver(
     double totalTime = T_phasing * numRevs;
 
     PhasingResult result;
-    result.dv1 = std::abs(dv1);
-    result.dv2 = std::abs(dv2);
-    result.totalDeltaV = result.dv1 + result.dv2;
+    // Signed in-track scalars (gmat-01-defect-burn-down): a catch-up phasing
+    // orbit is entered by braking (dv1 < 0) and left by accelerating, and the
+    // pair is symmetric, so std::abs() erased the only thing that told the two
+    // burns apart. The budget stays a magnitude sum.
+    result.dv1 = dv1;
+    result.dv2 = dv2;
+    result.totalDeltaV = std::abs(dv1) + std::abs(dv2);
     result.phasingPeriod = T_phasing;
     result.phasingSMA = a_phasing;
     result.numRevs = numRevs;
@@ -591,7 +595,11 @@ HohmannResult computeCombinedManeuver(
     double dv2_I = v2_circ * std::cos(di) - v2_transfer;
     double dv2_C = v2_circ * std::sin(di);
 
-    return {std::abs(dv1), dv2,
+    // dv1 is purely in-track and therefore SIGNED. dv2 is the law-of-cosines
+    // norm of a two-component (in-track + cross-track) burn: a scalar sign is
+    // not defined for it, so it stays a magnitude and dv2_ric carries the
+    // direction.
+    return {dv1, dv2,
             std::abs(dv1) + dv2,
             tof, aTransfer,
             {0.0, dv1, 0.0},

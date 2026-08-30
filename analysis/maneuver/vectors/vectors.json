@@ -385,6 +385,54 @@
       ]
     },
     {
+      "id": "program-hohmann-geo-to-300km-retrograde",
+      "tier": "B",
+      "operation": "hohmannTransfer",
+      "source": {
+        "work": "saw-beta-maneuver-program P0 probe (sign control)",
+        "example": "the canonical GEO->LEO descent: the NEGATIVE control for the sign defect. Both burns brake, so both in-track components and both scalars must be negative; through 0.4.0 the scalars came back positive and were indistinguishable from the LEO->GEO ascent",
+        "inputs": "circular 42164 km radius down to circular 6678.137 km radius"
+      },
+      "params": {
+        "r1": 42164000,
+        "r2": 6678137,
+        "mu": 398600441800000
+      },
+      "expect": {
+        "dv1": -1466.8244779445922,
+        "dv2": -2425.7299089463063,
+        "dv1_ric.1": -1466.8244779445922,
+        "dv2_ric.1": -2425.7299089463063,
+        "totalDeltaV": 3892.5543868908985,
+        "aTransfer": 24421068.5,
+        "tof": 18990.13173812482,
+        "frame": "RIC"
+      },
+      "anchors": [
+        {
+          "what": "descent burns are both retrograde: sign(dv1) [-]",
+          "published": -1,
+          "computed": -1,
+          "error": 0,
+          "tolerance": 0.5
+        },
+        {
+          "what": "descent burns are both retrograde: sign(dv2) [-]",
+          "published": -1,
+          "computed": -1,
+          "error": 0,
+          "tolerance": 0.5
+        },
+        {
+          "what": "the budget stays positive: sign(totalDeltaV) [-]",
+          "published": 1,
+          "computed": 1,
+          "error": 0,
+          "tolerance": 0.5
+        }
+      ]
+    },
+    {
       "id": "vallado-6-2-bielliptic",
       "tier": "B",
       "operation": "biEllipticTransfer",
@@ -402,7 +450,7 @@
       "expect": {
         "dv1": 3155.352728710235,
         "dv2": 683.7050551784591,
-        "dv3": 67.51849263261201,
+        "dv3": -67.51849263261201,
         "totalDeltaV": 3906.5762765213058,
         "tof": 2110172.753793371
       },
@@ -541,18 +589,13 @@
         "mu": 398600441800000
       },
       "expect": {
-        "dv1": 73.0382731842063,
+        "dv1": -73.0382731842063,
         "dv2": 73.0382731842063,
         "totalDeltaV": 146.0765463684126,
         "phasingPeriod": 5399.3569303841105,
         "phasingSMA": 6652027.535728255,
         "totalTime": 16198.070791152331,
         "numRevs": 3
-      },
-      "signedDeltaV": {
-        "//": "The SIGNED truth the JSON bridge does not carry. The module computes dv1_ric = {0, dv1, 0} with the sign intact and then does not serialise it, so a consumer reading the scalar flies a catch-up burn PROGRADE when it must be RETROGRADE. The wrapper recovers the sign from phasingSMA vs currentRadius; this is the value that recovery must reproduce.",
-        "dv1": -73.0382731842063,
-        "dv2": 73.0382731842063
       },
       "anchors": [
         {
@@ -583,10 +626,6 @@
         "dv1": 69.08987391530897,
         "totalDeltaV": 138.17974783061794,
         "phasingSMA": 6903083.999689901
-      },
-      "signedDeltaV": {
-        "dv1": 69.08987391530897,
-        "dv2": -69.08987391530897
       },
       "anchors": [
         {
@@ -647,7 +686,7 @@
         "coOrbital": true,
         "revsFromCaller": true,
         "phasingRadius": 6778137,
-        "dv1": 73.0382731842063,
+        "dv1": -73.0382731842063,
         "dv2": 73.0382731842063,
         "totalDeltaV": 146.0765463684126,
         "phasingPeriod": 5399.3569303841105,
@@ -710,7 +749,7 @@
         "coplanar": true,
         "coOrbital": true,
         "dv1": 69.08987391530897,
-        "dv2": 69.08987391530897,
+        "dv2": -69.08987391530897,
         "totalDeltaV": 138.17974783061794,
         "phasingPeriod": 5707.891612120346,
         "phasingSMA": 6903083.999689901,
@@ -773,7 +812,7 @@
         "targetMeanAnomaly": 3.839724354387525,
         "coplanar": true,
         "coOrbital": true,
-        "dv1": 73.0382731842063,
+        "dv1": -73.0382731842063,
         "dv2": 73.0382731842063,
         "totalDeltaV": 146.0765463684126,
         "phasingPeriod": 5399.3569303841105,
@@ -831,7 +870,7 @@
         "relativePhaseAngle": 0.3544863873525213,
         "raanDifference": 0.008726646259971648,
         "inclinationDifference": 0,
-        "dv1": 48.99455508825934,
+        "dv1": -48.99455508825934,
         "dv2": 48.99455508825934,
         "totalDeltaV": 97.98911017651868,
         "phasingPeriod": 5449.182330400989,
@@ -883,7 +922,7 @@
         "direction": "fallBehind",
         "relativePhaseAngle": 0.5235987755982988,
         "dv1": 600.8729094898353,
-        "dv2": 600.8729094898353,
+        "dv2": -600.8729094898353,
         "totalDeltaV": 1201.7458189796705,
         "phasingPeriod": 7250.5650208015195,
         "phasingSMA": 8096685.072483417,
@@ -952,7 +991,7 @@
         "clampedToEarthFloor": false,
         "maxRevs": 100,
         "deltaVBudget": 76.68558175407055,
-        "dv1": 38.287121115705425,
+        "dv1": -38.287121115705425,
         "dv2": 38.287121115705425,
         "totalDeltaV": 76.57424223141085,
         "phasingPeriod": 5471.669746416041,
@@ -1018,7 +1057,7 @@
         "coplanarTolerance": 0.017453292519943295,
         "relativePhaseAngle": 0.5235987755982988,
         "coOrbital": true,
-        "dv1": 73.0382731842063,
+        "dv1": -73.0382731842063,
         "dv2": 73.0382731842063,
         "totalDeltaV": 146.0765463684126,
         "phasingPeriod": 5399.3569303841105,

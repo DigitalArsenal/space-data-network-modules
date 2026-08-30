@@ -146,8 +146,9 @@ function combinedOptimalSplit(r1, r2, deltaInclination) {
  *
  * SIGN IS THE WHOLE POINT of this case. `dv1` is `v_phasing - v_circular`,
  * which is NEGATIVE for a catch-up (positive phase angle => smaller phasing
- * orbit). The module returns `std::abs(dv1)`, so a harness that only compares
- * magnitudes certifies a solver that flies every catch-up burn backwards.
+ * orbit). Through 0.4.0 the module returned `std::abs(dv1)`, so a harness
+ * comparing magnitudes certified a solver that flies every catch-up burn
+ * backwards; 0.5.0 returns the signed scalar and these rows assert it.
  */
 function phasing(radius, phaseAngle, numRevs) {
   const period = 2 * Math.PI * Math.sqrt(radius ** 3 / MU_KM);
@@ -314,8 +315,12 @@ function planExpectations(phaseAngle, numRevs, { withFloor = false } = {}) {
     ? phasingWithFloor(radiusKm, phaseAngle, numRevs)
     : phasing(radiusKm, phaseAngle, numRevs);
   return {
-    dv1: Math.abs(solution.dv1) * KM,
-    dv2: Math.abs(solution.dv2) * KM,
+    // SIGNED since maneuver-planner 0.5.0 (gmat-01-defect-burn-down): the
+    // module no longer std::abs()'s the in-track scalars, so the expectation
+    // is the signed closed form and a solver that flies a catch-up burn
+    // prograde now FAILS here instead of matching on magnitude.
+    dv1: solution.dv1 * KM,
+    dv2: solution.dv2 * KM,
     totalDeltaV: solution.totalDeltaV * KM,
     phasingPeriod: solution.phasingPeriod,
     phasingSMA: solution.phasingSMA * KM,
@@ -564,6 +569,57 @@ const CASES = [
     },
   },
   {
+    id: "program-hohmann-geo-to-300km-retrograde",
+    operation: "hohmannTransfer",
+    source: {
+      work: "saw-beta-maneuver-program P0 probe (sign control)",
+      example:
+        "the canonical GEO->LEO descent: the NEGATIVE control for the sign " +
+        "defect. Both burns brake, so both in-track components and both " +
+        "scalars must be negative; through 0.4.0 the scalars came back " +
+        "positive and were indistinguishable from the LEO->GEO ascent",
+      inputs: "circular 42164 km radius down to circular 6678.137 km radius",
+    },
+    build() {
+      const r1 = 42164;
+      const r2 = 6678.137;
+      const solution = hohmann(r1, r2);
+      return {
+        params: { r1: r1 * KM, r2: r2 * KM, mu: MU },
+        expect: {
+          // Signed scalars AND signed in-track components. A descent brakes
+          // twice, so every one of these four numbers is negative, while
+          // totalDeltaV -- the propellant budget -- stays positive.
+          dv1: solution.dv1 * KM,
+          dv2: solution.dv2 * KM,
+          "dv1_ric.1": solution.dv1 * KM,
+          "dv2_ric.1": solution.dv2 * KM,
+          totalDeltaV: solution.totalDeltaV * KM,
+          aTransfer: solution.aTransfer * KM,
+          tof: solution.tof,
+          frame: "RIC",
+        },
+        anchors: [
+          {
+            what: "descent burns are both retrograde: sign(dv1) [-]",
+            published: -1,
+            computed: Math.sign(solution.dv1),
+          },
+          {
+            what: "descent burns are both retrograde: sign(dv2) [-]",
+            published: -1,
+            computed: Math.sign(solution.dv2),
+          },
+          {
+            what: "the budget stays positive: sign(totalDeltaV) [-]",
+            published: 1,
+            computed: Math.sign(solution.totalDeltaV),
+          },
+        ],
+      };
+    },
+  },
+  {
     id: "vallado-6-2-bielliptic",
     operation: "biEllipticTransfer",
     source: {
@@ -586,9 +642,9 @@ const CASES = [
           mu: MU,
         },
         expect: {
-          dv1: Math.abs(solution.dv1) * KM,
-          dv2: Math.abs(solution.dv2) * KM,
-          dv3: Math.abs(solution.dv3) * KM,
+          dv1: solution.dv1 * KM,
+          dv2: solution.dv2 * KM,
+          dv3: solution.dv3 * KM,
           totalDeltaV: solution.totalDeltaV * KM,
           tof: solution.tof,
         },
@@ -658,7 +714,9 @@ const CASES = [
       return {
         params: { r1: r1 * KM, r2: r2 * KM, deltaInclination, mu: MU },
         expect: {
-          dv1: Math.abs(solution.dv1) * KM,
+          dv1: solution.dv1 * KM,
+          // dv2 has no scalar sign: it is the law-of-cosines norm of an
+          // in-track + cross-track burn, and stays a magnitude in 0.5.0.
           dv2: solution.dv2 * KM,
           totalDeltaV: solution.totalDeltaV * KM,
           aTransfer: solution.aTransfer * KM,
@@ -746,27 +804,22 @@ const CASES = [
       return {
         params: { currentRadius: radius * KM, phaseAngle, numRevs, mu: MU },
         expect: {
-          dv1: Math.abs(solution.dv1) * KM,
-          dv2: Math.abs(solution.dv2) * KM,
+          // The scalar itself is the assertion now. maneuver-planner 0.5.0
+          // serialises the sign (gmat-01-defect-burn-down); until it did, this
+          // row carried a separate `signedDeltaV` shadow block recording the
+          // truth the bridge dropped, and a consumer reading the scalar flew a
+          // catch-up burn PROGRADE when it must be RETROGRADE.
+          dv1: solution.dv1 * KM,
+          dv2: solution.dv2 * KM,
           totalDeltaV: solution.totalDeltaV * KM,
           phasingPeriod: solution.phasingPeriod,
           phasingSMA: solution.phasingSMA * KM,
           totalTime: solution.totalTime,
           numRevs,
         },
-        signedDeltaV: {
-          "//":
-            "The SIGNED truth the JSON bridge does not carry. The module " +
-            "computes dv1_ric = {0, dv1, 0} with the sign intact and then " +
-            "does not serialise it, so a consumer reading the scalar flies a " +
-            "catch-up burn PROGRADE when it must be RETROGRADE. The wrapper " +
-            "recovers the sign from phasingSMA vs currentRadius; this is the " +
-            "value that recovery must reproduce.",
-          dv1: solution.dv1 * KM,
-          dv2: solution.dv2 * KM,
-        },
         anchors: [
           {
+            // The textbook publishes a magnitude; the anchor compares one.
             what: "|dv1| [m/s]",
             published: 73.038,
             computed: Math.abs(solution.dv1) * KM,
@@ -792,11 +845,10 @@ const CASES = [
       return {
         params: { currentRadius: radius * KM, phaseAngle, numRevs, mu: MU },
         expect: {
-          dv1: Math.abs(solution.dv1) * KM,
+          dv1: solution.dv1 * KM,
           totalDeltaV: solution.totalDeltaV * KM,
           phasingSMA: solution.phasingSMA * KM,
         },
-        signedDeltaV: { dv1: solution.dv1 * KM, dv2: solution.dv2 * KM },
         anchors: [
           {
             what: "|dv1| [m/s]",
@@ -850,7 +902,7 @@ const CASES = [
           {
             what: "|dv1| [m/s]",
             published: 73.038,
-            computed: planExpectations(phaseAngle, 3).dv1,
+            computed: Math.abs(planExpectations(phaseAngle, 3).dv1),
             tolerance: 5e-4,
           },
         ],
@@ -893,7 +945,7 @@ const CASES = [
           {
             what: "|dv1| [m/s]",
             published: 69.0899,
-            computed: planExpectations(phaseAngle, 3).dv1,
+            computed: Math.abs(planExpectations(phaseAngle, 3).dv1),
             tolerance: 5e-4,
           },
         ],

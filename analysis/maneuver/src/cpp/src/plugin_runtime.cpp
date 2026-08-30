@@ -57,7 +57,7 @@ namespace {
 /// three releases went by without it moving because nothing compared it to
 /// anything. `tests/behavior.test.mjs` now asserts this string against the
 /// manifest, so the next release cannot forget it.
-constexpr const char* kModuleVersion = "0.4.0";
+constexpr const char* kModuleVersion = "0.5.0";
 
 std::string version() { return kModuleVersion; }
 
@@ -71,6 +71,55 @@ Vector3 toVector3(const double v[3]) { return {v[0], v[1], v[2]}; }
 void writeVec3(ObjectWriter& out, const char* key, const Vector3& v) {
     const double values[3] = {v[0], v[1], v[2]};
     out.vec3(key, values);
+}
+
+/// The ONE frame every delta-v this module emits is expressed in.
+///
+/// R = unit(r) ; C = unit(r x v) ; I = C x R, built from the INERTIAL state,
+/// components ordered [radial, in-track, cross-track]. This is the triad
+/// `rendezvous.cpp`'s lvlhBasis() implements and the one the engine's
+/// ManeuverFrame.RIC names; it is now written down in
+/// space-data-module-sdk/docs/families/maneuver.md.
+///
+/// `graph/findings/official-harness-shapes.md` records the D1 defect this
+/// closes: r/t/n was mapped onto x/y/z RAW, with three distinct RTN triads
+/// live across the stack and no frame ever declared on the wire. Declaration
+/// is now mandatory and unconditional — there is no default to fall back on,
+/// so a consumer can never silently assume the wrong triad.
+constexpr const char* kDeltaVFrame = "RIC";
+
+/// Stamp the delta-v frame on a response. Called by EVERY operation whose
+/// response carries a delta-v, next to the vectors it qualifies.
+void writeDeltaVFrame(ObjectWriter& out) {
+    out.string("frame", kDeltaVFrame);
+}
+
+/// The RIC basis of an inertial state, as ROWS of the RIC <- ECI rotation.
+/// Returns false (and latches a fault) for a degenerate state — a zero
+/// position, a zero velocity, or a radial velocity, none of which define an
+/// orbit normal.
+bool ricBasisFromState(const Vector3& r, const Vector3& v, const char* op,
+                       Vector3* R, Vector3* I, Vector3* C) {
+    const double rn = norm3(r);
+    if (!(rn > 0.0)) {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     std::string("[") + op +
+                         "]: position must be non-zero to define a RIC frame.");
+        return false;
+    }
+    const Vector3 h = cross3(r, v);
+    const double hn = norm3(h);
+    if (!(hn > 0.0)) {
+        fault::raise(fault_code::SINGULAR,
+                     std::string("[") + op +
+                         "]: position and velocity are collinear, so the orbit "
+                         "normal is undefined and no RIC frame exists.");
+        return false;
+    }
+    *R = {r[0] / rn, r[1] / rn, r[2] / rn};
+    *C = {h[0] / hn, h[1] / hn, h[2] / hn};
+    *I = cross3(*C, *R);
+    return true;
 }
 
 bool readChief(const Value& object, const char* key, const char* operation,
@@ -303,6 +352,7 @@ std::string hohmannTransfer(const Value& params) {
         .number("aTransfer", result.aTransfer);
     writeVec3(out, "dv1_ric", result.dv1_ric);
     writeVec3(out, "dv2_ric", result.dv2_ric);
+    writeDeltaVFrame(out);
     if (!out.ok()) return {};
     return out.finish();
 }
@@ -334,6 +384,77 @@ std::string biEllipticTransfer(const Value& params) {
     writeVec3(out, "dv1_ric", result.dv1_ric);
     writeVec3(out, "dv2_ric", result.dv2_ric);
     writeVec3(out, "dv3_ric", result.dv3_ric);
+    writeDeltaVFrame(out);
+    if (!out.ok()) return {};
+    return out.finish();
+}
+
+/// Rotate one delta-v between the canonical RIC triad and the inertial frame.
+///
+/// The D1 defect (`graph/findings/official-harness-shapes.md`) was not that the
+/// frame was named wrongly — it was that NO frame was ever applied: r/t/n
+/// components were written onto x/y/z raw. Declaring the frame on the wire
+/// closes half of that; this operation closes the other half by making the
+/// rotation a thing a caller can actually perform, against the SAME triad the
+/// module's own results are expressed in, rather than re-deriving one of the
+/// three variants that were live across the stack.
+///
+/// params: { position:[x,y,z], velocity:[x,y,z], deltaV:[a,b,c],
+///           from:"RIC"|"ECI" }   (`from` defaults to "RIC")
+/// result: { deltaV:[...], frame:"ECI"|"RIC", magnitude, basis:{R,I,C} }
+///
+/// The rotation is orthonormal by construction, so RIC -> ECI -> RIC is exact
+/// to rounding; `tests/frame_and_sign.test.mjs` asserts that round trip.
+std::string transformDeltaVOp(const Value& params) {
+    const char* op = "transformDeltaV";
+    double position[3] = {0, 0, 0};
+    double velocity[3] = {0, 0, 0};
+    double deltaV[3] = {0, 0, 0};
+    if (!json_lite::requireVec3(params, "position", op, position) ||
+        !json_lite::requireVec3(params, "velocity", op, velocity) ||
+        !json_lite::requireVec3(params, "deltaV", op, deltaV)) {
+        return {};
+    }
+    std::string from = "RIC";
+    if (!json_lite::optionalString(params, "from", op, &from)) return {};
+    if (from != "RIC" && from != "ECI") {
+        fault::raise(fault_code::INVALID_PARAMETER,
+                     std::string("[") + op +
+                         "]: `from` must be \"RIC\" or \"ECI\" (got \"" + from +
+                         "\"). There is no default triad to fall back on.");
+        return {};
+    }
+
+    Vector3 R{}, I{}, C{};
+    if (!ricBasisFromState(toVector3(position), toVector3(velocity), op,
+                           &R, &I, &C)) {
+        return {};
+    }
+
+    const Vector3 d = toVector3(deltaV);
+    Vector3 result{};
+    const char* resultFrame = nullptr;
+    if (from == "RIC") {
+        // ECI = R*d_r + I*d_i + C*d_c  (basis vectors are the RIC axes in ECI)
+        for (int k = 0; k < 3; ++k) {
+            result[k] = R[k] * d[0] + I[k] * d[1] + C[k] * d[2];
+        }
+        resultFrame = "ECI";
+    } else {
+        // RIC = (d.R, d.I, d.C)
+        result = {dot3(d, R), dot3(d, I), dot3(d, C)};
+        resultFrame = "RIC";
+    }
+
+    ObjectWriter out;
+    writeVec3(out, "deltaV", result);
+    out.string("frame", resultFrame).number("magnitude", norm3(result));
+    ObjectWriter basis;
+    writeVec3(basis, "R", R);
+    writeVec3(basis, "I", I);
+    writeVec3(basis, "C", C);
+    if (!basis.ok()) return {};
+    out.raw("basis", basis.finish());
     if (!out.ok()) return {};
     return out.finish();
 }
@@ -436,6 +557,11 @@ std::string writeLambert(const LambertResult& result, const char* op) {
             .number("totalDeltaV", result.totalDeltaV);
         writeVec3(out, "dv1_vec", result.dv1_vec);
         writeVec3(out, "dv2_vec", result.dv2_vec);
+        // NOT RIC. A Lambert solve is stated in the same INERTIAL frame its
+        // r1/r2/velocity inputs arrived in, so its delta-v vectors are
+        // inertial too. Declared explicitly rather than left to be guessed:
+        // that guess is exactly the D1 defect.
+        out.string("frame", "ECI");
     }
     // -----------------------------------------------------------------------
     // ADDITIVE, 0.3.0. Every field above keeps its 0.2.0 value and meaning; a
@@ -616,6 +742,7 @@ void writePhasingPlan(ObjectWriter& out, const PhasingResult& result) {
     // sign(phasingSMA - currentRadius).
     writeVec3(out, "dv1_ric", result.dv1_ric);
     writeVec3(out, "dv2_ric", result.dv2_ric);
+    writeDeltaVFrame(out);
     // The Earth-collision guard, reported rather than silent.
     out.number("farApse", result.farApse)
         .number("earthFloorRadius", result.earthFloorRadius)
@@ -804,6 +931,7 @@ std::string planeChange(const Value& params) {
     ObjectWriter out;
     out.number("dv", result.dv).number("optimalTrueAnomaly", result.optimalTrueAnomaly);
     writeVec3(out, "dv_ric", result.dv_ric);
+    writeDeltaVFrame(out);
     if (!out.ok()) return {};
     return out.finish();
 }
@@ -831,6 +959,7 @@ std::string combinedManeuver(const Value& params) {
     // emitted neither, so the console reconstructed them from aTransfer.
     writeVec3(out, "dv1_ric", result.dv1_ric);
     writeVec3(out, "dv2_ric", result.dv2_ric);
+    writeDeltaVFrame(out);
     if (!out.ok()) return {};
     return out.finish();
 }
@@ -1050,6 +1179,7 @@ std::string planRelativeWaypointMission(const Value& params) {
             ObjectWriter burnOut;
             writeVec3(burnOut, "deltaV", maneuver.deltaV);
             burnOut.number("magnitude", maneuver.magnitude);
+            writeDeltaVFrame(burnOut);
             ObjectWriter chiefOut;
             chiefOut.number("semiMajorAxis", maneuver.chief.semiMajorAxis)
                 .number("eccentricity", maneuver.chief.eccentricity)
@@ -1119,6 +1249,7 @@ std::string computeCAMOp(const Value& params) {
 
     ObjectWriter out;
     writeVec3(out, "deltaV", result.deltaV);
+    writeDeltaVFrame(out);
     out.number("magnitude", result.magnitude)
         .number("achievedMiss", result.achievedMiss)
         .boolean("feasible", result.feasible)
@@ -1357,6 +1488,7 @@ std::string dispatch(const std::string& operation, const Value& params) {
     if (operation == "phasingManeuver") return phasingManeuver(params);
     if (operation == "phasingFromTargetState") return phasingFromTargetState(params);
     if (operation == "planeChange") return planeChange(params);
+    if (operation == "transformDeltaV") return transformDeltaVOp(params);
     if (operation == "combinedManeuver") return combinedManeuver(params);
     if (operation == "computeRoeStateTransition") return computeRoeStateTransition(params);
     if (operation == "planRelativeWaypointMission") return planRelativeWaypointMission(params);

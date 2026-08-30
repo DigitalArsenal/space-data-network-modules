@@ -47,7 +47,14 @@ HohmannResult computeHohmannTransfer(double r1, double r2, double mu) {
     Vector3 dv1_ric = {0.0, dv1, 0.0};
     Vector3 dv2_ric = {0.0, dv2, 0.0};
 
-    return {std::abs(dv1), std::abs(dv2), std::abs(dv1) + std::abs(dv2),
+    // dv1/dv2 are SIGNED (gmat-01-defect-burn-down). Both burns are purely
+    // in-track, so the scalar is the in-track component and its sign is
+    // physical: a transfer to a LOWER orbit brakes (dv1 < 0). 0.4.0 returned
+    // std::abs() of both, so a caller could not tell a retrograde burn from a
+    // prograde one without re-deriving it from dv*_ric.
+    // totalDeltaV stays a MAGNITUDE sum: it is the propellant budget, and a
+    // budget that cancels is not a budget.
+    return {dv1, dv2, std::abs(dv1) + std::abs(dv2),
             tof, aTransfer, dv1_ric, dv2_ric};
 }
 
@@ -94,7 +101,8 @@ BiEllipticResult computeBiEllipticTransfer(double r1, double r2, double rInt,
     Vector3 dv2_ric = {0.0, dv2, 0.0};
     Vector3 dv3_ric = {0.0, dv3, 0.0};
 
-    return {std::abs(dv1), std::abs(dv2), std::abs(dv3),
+    // Signed scalars, magnitude budget — see computeHohmannTransfer.
+    return {dv1, dv2, dv3,
             std::abs(dv1) + std::abs(dv2) + std::abs(dv3),
             tof, aTransfer1, aTransfer2, dv1_ric, dv2_ric, dv3_ric};
 }
@@ -205,6 +213,11 @@ PatchedConicResult computePatchedConicTransfer(const Planet& departurePlanet,
     // Transfer time
     double tof = M_PI * std::sqrt(aTransfer * aTransfer * aTransfer / muSun);
 
+    // Patched-conic departure/arrival burns carry NO frame on the wire (there
+    // is no RIC array for them: the planetocentric hyperbola's orientation is
+    // not part of this result), so these two stay MAGNITUDES and are
+    // documented as magnitudes. Emitting a sign against no declared frame
+    // would be a claim the result cannot support.
     return {vInfDepart,   vInfArrive,   std::abs(dvDepart),
             std::abs(dvArrive),
             std::abs(dvDepart) + std::abs(dvArrive),

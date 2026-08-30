@@ -549,21 +549,30 @@ without `--allow-lower "<reason>"`, which is recorded in the file.
 
 ---
 
-## Signed delta-v: what the JSON bridge does not carry
+## Signed delta-v — CLOSED in 0.5.0
 
-The C++ computes `dv1_ric = {0, dv1, 0}` with the sign intact for phasing,
-bi-elliptic and combined — and then **does not serialise it**. Only
-`hohmannTransfer` (`dv1_ric`, `dv2_ric`) and `planeChange` (`dv_ric`) emit their
-RIC arrays. Every other operation exposes `std::abs(dv)` and nothing else.
+**What it was.** The C++ computed `dv1_ric = {0, dv1, 0}` with the sign intact
+for phasing, bi-elliptic and combined, and then returned `std::abs(dv)` as the
+scalar. A consumer reading the scalar flew every catch-up phasing burn
+**prograde when it must be retrograde**, with no error anywhere. Tier-B phasing
+rows carried a `signedDeltaV` block — the signed truth the bridge dropped,
+which the console wrapper's sign recovery had to reproduce out of
+`sign(phasingSMA - currentRadius)`.
 
-A consumer reading the scalar flies every catch-up phasing burn **prograde when
-it must be retrograde**, with no error anywhere. Tier-B phasing rows therefore
-carry a `signedDeltaV` block: the signed truth the bridge drops, which the
-console wrapper's sign recovery must reproduce. The recovery is exact and uses
-only module outputs — `sign(dv1) = sign(phasingSMA - currentRadius)`, because
-`v_visviva(r, a) > v_circular(r)` exactly when `a > r`.
+**What it is.** `maneuver-planner` 0.5.0 returns the signed scalar
+(`gmat-01-defect-burn-down`), so the tier-B rows assert the signed closed form
+directly and the `signedDeltaV` shadow blocks are gone — there is nothing left
+for them to shadow. `totalDeltaV` and `combinedManeuver`'s `dv2` stay
+magnitudes for the reasons `README.md` gives.
 
-Recorded against `modules-maneuver-planner-rebuild-batch`.
+`program-hohmann-geo-to-300km-retrograde` is the negative control this closure
+needed: a GEO-to-LEO descent whose two burns both brake, so `dv1`, `dv2`,
+`dv1_ric[1]` and `dv2_ric[1]` are all negative while `totalDeltaV` stays
+positive. Under 0.4.0 it was numerically indistinguishable from the LEO-to-GEO
+ascent, which is exactly why the defect survived a green suite.
+
+Recorded against `modules-maneuver-planner-rebuild-batch` and closed under
+`gmat-01-defect-burn-down`.
 
 ---
 
