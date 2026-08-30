@@ -292,8 +292,16 @@ int32_t describe_impl() {
     ::flatbuffers::FlatBufferBuilder fbb(4096);
     fbb.FinishSizePrefixed(CreateOEM(fbb, &out), OEMIdentifier());
 
+    /* The type ref is DECLARED, not left null. `ResolveOutputType` refuses a
+     * null schema/identifier on a port that declares concrete SDS types, and
+     * for aligned-binary it requires fixed_string_length 0 and alignment 8 —
+     * this call shipped with those two swapped and every invocation would have
+     * failed with `unsupported-output-type`. The argument order is
+     * (port, schema, identifier, wire_format, root_type, fixed_len, alignment,
+     * ptr, len); the two uint16_t neighbours are exactly the pair that a
+     * transposition slips past the compiler. */
     const int32_t pushed = plugin_push_output_ex(
-        "summary", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 8, 1,
+        "summary", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OEM", 0, 8,
         fbb.GetBufferPointer(), static_cast<uint32_t>(fbb.GetSize()));
     return pushed < 0 ? 500 : 0;
 }
