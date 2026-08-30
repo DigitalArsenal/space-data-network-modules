@@ -1,0 +1,28 @@
+{
+  "name": "@digitalarsenal/sdn-module-ephemeris-propagator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "index.js",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "flatbuffers": "^25.9.23",
+    "flatc-wasm": "^26.1.32",
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk",
+    "spacedatastandards.org": "^1.202.0"
+  }
+}

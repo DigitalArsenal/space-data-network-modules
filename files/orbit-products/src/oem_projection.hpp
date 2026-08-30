@@ -63,7 +63,18 @@ inline std::string iso_from_seconds(double seconds_past_j2000) {
     }
     /* civil_from_days, the inverse of the days_from_civil this repo already
      * uses — exact integer arithmetic, no floating point, no table. */
-    long long z = days + 730120; /* days from 0000-03-01 to 2000-01-01 */
+    /* Hinnant's civil_from_days takes days since 1970-01-01 and shifts them by
+     * 719468 onto the 0000-03-01 era. `days` here counts from 2000-01-01, so
+     * the shift is 719468 + 10957 (1970-01-01 to 2000-01-01) = 730425.
+     *
+     * This read 730120 and put every emitted epoch EXACTLY 305 DAYS EARLY.
+     * Worth recording how it hid: the states were right and only the epochs
+     * were wrong, which is the shape that survives every state comparison.
+     * A four-container agreement check that compares positions ROW BY ROW
+     * passed at 1.3e-12 km with the epoch axis 305 days out; what caught it
+     * was asserting the absolute J2000 instants agree, not just the states.
+     * Any consumer comparing trajectories should assert both. */
+    long long z = days + 730425;
     const long long era = (z >= 0 ? z : z - 146096) / 146097;
     const unsigned long long doe = static_cast<unsigned long long>(z - era * 146097);
     const unsigned long long yoe =

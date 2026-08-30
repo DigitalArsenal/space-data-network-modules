@@ -1,0 +1,87 @@
+{
+  "pluginId": "com.digitalarsenal.propagator.ephemeris",
+  "name": "Ephemeris Propagator",
+  "version": "0.1.0",
+  "description": "Propagates a spacecraft from an ephemeris CONTAINER rather than from elements: SPK (NAIF DAF, segment types 8, 9 and 13), Code-500, STK ephemeris and CCSDS-OEM, behind one format discriminator. It answers the same plugin_propagate / plugin_propagate_batch as the element-based providers, so a consumer drives it with no branch of its own — the pluggable-propagation law applied to the one family that most invites a bypass, because a file already contains the answer and reading it in the consumer is how a JavaScript propagator gets built. Ingest is plugin_init_ephemeris(bytes, len, format), not plugin_init: the generic init verb is bound by the ABI to packed OrbProOMMRecord data and must refuse any length that is not a whole multiple of that struct, so this module exports no plugin_init at all rather than exporting a lie. Each container is evaluated by the interpolation rule the container itself declares — an SPK segment type fixes it, an OEM and an STK file say it outright — never by a rule this module picked. States exit in the container's own declared frame with StateVector.reference_frame set to say which, translated by named token onto the ABI roster; a declared frame with no roster member is a refusal, because a guessed frame is wrong by up to a full Earth rotation. Positions and velocities exit in ABI-normative metres. Pure compute — no capabilities, no host calls, no filesystem.",
+  "tagline": "Propagates from an SPK, Code-500, STK or CCSDS-OEM container behind the standard propagator port.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Ingest is a single pass over one container buffer and every propagate call is a bounded interpolation over an already-resident window. The module spawns nothing, shares nothing across calls beyond the loaded series, and has no work to fan out: a caller wanting parallelism batches entities, which is caller-level and already expressed by plugin_propagate_batch."
+  },
+  "tags": [
+    "propagator",
+    "ephemeris",
+    "spk",
+    "daf",
+    "code500",
+    "stk",
+    "oem",
+    "sds",
+    "space-data"
+  ],
+  "methods": [
+    {
+      "methodId": "describe_ephemeris",
+      "displayName": "Describe Loaded Ephemeris",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM envelope describing the trajectory to summarise. The propagation entry point for a native container is the plugin_init_ephemeris ABI export, which carries raw container bytes and therefore has no SDS port identity to declare; this method is the record-shaped surface for the same series.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-ephemeris",
+              "description": "SDS $OEM envelope.",
+              "allowedTypes": [
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "summary",
+          "displayName": "summary",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM envelope carrying the series as this module resolved it: declared frame, centre, time system, interpolation rule and degree, and the state rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-summary",
+              "description": "SDS $OEM envelope.",
+              "allowedTypes": [
+                { "schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM" },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
