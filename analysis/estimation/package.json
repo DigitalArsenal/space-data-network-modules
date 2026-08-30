@@ -1,0 +1,28 @@
+{
+  "name": "@digitalarsenal/sdn-module-analysis-estimation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "index.js",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test:native": "node tests/native.test.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "flatbuffers": "^25.9.23",
+    "space-data-module-sdk": "0.8.17",
+    "spacedatastandards.org": "1.203.0"
+  }
+}

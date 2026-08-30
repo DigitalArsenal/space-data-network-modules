@@ -1,0 +1,10 @@
+{
+  "spacedatastandards": "1.203.0",
+  "moduleSdk": "0.8.17",
+  "family": "estimation",
+  "propagatorContract": [
+    "plugin_propagate",
+    "plugin_compute_stm"
+  ],
+  "threadModel": "wasi-sequential"
+}

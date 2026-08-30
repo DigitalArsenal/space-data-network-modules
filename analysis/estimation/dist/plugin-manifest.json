@@ -1,0 +1,141 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.estimation",
+  "name": "Measurement-based Orbit Estimation",
+  "version": "0.1.0",
+  "description": "Batch weighted least squares, covariance-form sequential filtering and smoothing, measurement simulation, media corrections and initial orbit determination over a caller-supplied propagator port.",
+  "pluginFamily": "analysis",
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "The public state dimension is six and each observation update is order-dependent. Parallel reductions would change floating-point association while providing no useful speedup; the module still compiles on the sanctioned wasm32-wasip1-threads toolchain and the conformance kit instantiates the same artifact with host worker widths 1, 2, 4 and 8."
+  },
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "methods": [
+    {
+      "methodId": "run_estimation",
+      "displayName": "Run Estimation",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [{
+            "setId": "estimation-request",
+            "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}],
+            "description": "Fixed-layout estimation configuration and observations."
+          }],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Estimator request and observations."
+        },
+        {
+          "portId": "propagator_samples",
+          "acceptedTypeSets": [{
+            "setId": "estimation-propagator-samples",
+            "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}],
+            "description": "States and STMs produced through plugin_propagate and plugin_compute_stm on the caller-selected propagator port."
+          }],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The pluggable propagator port response; no provider name appears in this contract."
+        },
+        {
+          "portId": "tracking_data",
+          "acceptedTypeSets": [{"setId": "tracking-data", "allowedTypes": [{"schemaName": "TDM.fbs", "fileIdentifier": "$TDM", "rootTypeName": "TDM"}], "description": "Tracking observations in the published tracking-data record."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional tracking-data record decoded into the estimation observations."
+        },
+        {
+          "portId": "laser_tracking",
+          "acceptedTypeSets": [{"setId": "laser-tracking", "allowedTypes": [{"schemaName": "CRD.fbs", "fileIdentifier": "$CRD", "rootTypeName": "CRD"}], "description": "Laser-ranging coordinate record."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional laser-ranging observation source."
+        },
+        {
+          "portId": "error_model",
+          "acceptedTypeSets": [{"setId": "measurement-error-model", "allowedTypes": [{"schemaName": "MEM.fbs", "fileIdentifier": "$MEM", "rootTypeName": "MEM"}], "description": "Noise, bias and editing model."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Error model and outer-loop editing policy."
+        },
+        {
+          "portId": "tracking_hardware",
+          "acceptedTypeSets": [{"setId": "tracking-hardware", "allowedTypes": [{"schemaName": "TRH.fbs", "fileIdentifier": "$TRH", "rootTypeName": "TRH"}], "description": "Tracking hardware delays and turnaround ratios."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Ground or spacecraft tracking hardware."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [{"setId": "estimation-result", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "Estimated state, covariance, residuals and filter history."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Family result wire."
+        },
+        {
+          "portId": "odr",
+          "acceptedTypeSets": [{"setId": "estimation-run-report", "allowedTypes": [{"schemaName": "ODR.fbs", "fileIdentifier": "$ODR", "rootTypeName": "ODR"}], "description": "Signed estimation run report."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Canonical result report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [{"setId": "orbit-covariance", "allowedTypes": [{"schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM"}], "description": "Orbit covariance message containing the estimator covariance."}],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The actual state and solve-for covariance, never a placeholder."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Runs batch WLS, EKF, UKF or EKF plus RTS using states and STMs from the propagator port."
+    },
+    {
+      "methodId": "simulate_tracking",
+      "displayName": "Simulate Tracking",
+      "inputPorts": [
+        {"portId": "request", "acceptedTypeSets": [{"setId": "simulation-request", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "Observation templates and error models."}], "minStreams": 1, "maxStreams": 1, "required": true, "description": "Simulation request."},
+        {"portId": "propagator_samples", "acceptedTypeSets": [{"setId": "truth-samples", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "Truth states from the selected propagator."}], "minStreams": 1, "maxStreams": 1, "required": true, "description": "Truth propagator port response."}
+      ],
+      "outputPorts": [{"portId": "observations", "acceptedTypeSets": [{"setId": "simulated-observations", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "Seeded simulated observations."}], "minStreams": 0, "maxStreams": 1, "required": false, "description": "Forward-mode observations with noise and bias."}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Runs the measurement models forward and applies the declared error model."
+    },
+    {
+      "methodId": "initial_orbit",
+      "displayName": "Initial Orbit Determination",
+      "inputPorts": [{"portId": "request", "acceptedTypeSets": [{"setId": "iod-request", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "Three-observation IOD request."}], "minStreams": 1, "maxStreams": 1, "required": true, "description": "Gauss, Laplace, Gibbs or Herrick-Gibbs request."}],
+      "outputPorts": [{"portId": "result", "acceptedTypeSets": [{"setId": "iod-result", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "Middle-epoch Cartesian state."}], "minStreams": 0, "maxStreams": 1, "required": false, "description": "Initial orbit result."}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Makes the four compiled initial-orbit methods reachable through the family ABI."
+    }
+  ],
+  "schemasUsed": [
+    {"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"},
+    {"schemaName": "TDM.fbs", "fileIdentifier": "$TDM", "rootTypeName": "TDM"},
+    {"schemaName": "CRD.fbs", "fileIdentifier": "$CRD", "rootTypeName": "CRD"},
+    {"schemaName": "MEM.fbs", "fileIdentifier": "$MEM", "rootTypeName": "MEM"},
+    {"schemaName": "ODR.fbs", "fileIdentifier": "$ODR", "rootTypeName": "ODR"},
+    {"schemaName": "TRH.fbs", "fileIdentifier": "$TRH", "rootTypeName": "TRH"},
+    {"schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM"}
+  ],
+  "buildArtifacts": [{"artifactId": "analysis-estimation-isomorphic", "kind": "wasm", "path": "dist/isomorphic/module.wasm", "target": "browser,wasmedge"}],
+  "abiVersion": 1
+}
