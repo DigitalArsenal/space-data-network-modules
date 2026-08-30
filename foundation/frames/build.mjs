@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
@@ -99,6 +100,29 @@ if (!compilation.report?.ok) {
   const issues = JSON.stringify(compilation.report?.issues ?? [], null, 2);
   throw new Error(`Compiled artifact failed SDK validation:\n${issues}`);
 }
+
+// SIGN, in the build, always — never as a separate step someone can forget.
+//
+// This module's declared consumer verifies before it instantiates and has no
+// unsigned fallback (OrbPro `coordinate-systems-and-state-reps`), so an
+// unsigned artifact is not a weaker artifact, it is an UNLOADABLE one. That is
+// exactly how it shipped once: `4f3e925` rebuilt this artifact and dropped the
+// signature the rebuild never re-applied, and the demo died on Pages.
+//
+// Signing is purely additive to the executable payload: it appends a `$REC`
+// publication trailer, and every loader in the SDK strips the trailer and the
+// `sds.manifest` section through `toLoadableWasmBytes` before compiling. The
+// browser, native WasmEdge and Docker WasmEdge lanes therefore execute the
+// same bytes signed or unsigned — verified section-by-section, so nothing here
+// can move a numeric result.
+//
+// It fails LOUD when the keypair is unreachable. A build that quietly emits an
+// unsigned artifact is the defect this exists to prevent.
+execFileSync(
+  process.execPath,
+  [path.join(packageRoot, "..", "..", "scripts", "sign-module-artifact.mjs"), outputPath],
+  { stdio: "inherit" },
+);
 
 console.log(
   `Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion} with ${erfa.fileCount} vendored ERFA sources`,
