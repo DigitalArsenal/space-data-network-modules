@@ -1,7 +1,8 @@
 # files/ccsds-messages
 
 CCSDS **AEM** (Attitude Ephemeris Message) and **TDM** (Tracking Data Message)
-readers and writers, measured against the published Blue Book example messages.
+readers, writers and SDS record projections, measured against the published
+Blue Book example messages.
 
 ## The shape, and why it is this shape
 
@@ -17,11 +18,7 @@ So this package is three layers:
 | --- | --- | --- |
 | Document | `src/kvn.hpp` | Ordered, lossless keyword/value/units/comment model. Round trip is exact by construction. |
 | View | `src/aem.hpp`, `src/tdm.hpp` | Named accessors over that document, with per-message structure (attitude component widths, observation triples). Refuses rather than truncates. |
-| Record | *(not yet)* | The `$AEM` / `$TDM` projection. Gated on a schema — see below. |
-
-The document layer is what makes exactness provable, and the measurements bear
-it out: **110 checks, 0 failures**, and the numeric round trips are exactly
-`0.0` rather than merely small, because values are carried as written.
+| Record | `src/aem_projection.hpp`, `src/tdm_projection.hpp` | The `$AEM` / `$TDM` projection, both directions, against `spacedatastandards.org` **1.202.0** (`$AEM` 2.0.2, `$TDM` 2.0.4). What it cannot carry it **declares**. |
 
 ## Measured, against the published books
 
@@ -30,6 +27,9 @@ Fixtures and their extraction are documented in `fixtures/PROVENANCE.md`.
 are superseded and `public.ccsds.org` serves only B-2 for each (verified
 2026-08-30, B-1 URLs 404).
 
+**222 checks, 0 failures** across two lanes — 110 for the KVN layer, 112 for the
+record projection.
+
 | Claim | Result |
 | --- | --- |
 | KVN round trip, parse→serialize→parse, structural | 5 fixtures, **0 differences** (225 / 154 / 223 / 163 / 250 fields compared) |
@@ -37,6 +37,14 @@ are superseded and `public.ccsds.org` serves only B-2 for each (verified
 | AEM numeric fidelity through the serialized form | max relative error **0.0** (bound 1e-12) |
 | Structured-view round trip | **0** differences on all five |
 | Component-count mismatch | refused (code −13) with an explicit fault, **no** Message produced |
+| **Record round trip**, KVN→view→`$AEM`/`$TDM`→FlatBuffer→view→KVN | 5 fixtures, **0 differences** (225 / 153 / 223 / 158 / 240 fields compared) |
+| **Keyword accounting**, mapped + declared-lost vs an independent count | equal on all five (32, 16, 22, 15, 25) |
+| **Sampled attitude** through the record | max relative error **0.0** over 64 components (bound 1e-12) |
+| **Observation epochs** through the record | 0 mismatches, verbatim, on all three TDM fixtures |
+| **Uniform-grid rule** where a grid exists (E-18, both segments) | `START + i·STEP` reproduces every epoch, max error **0.0 s** (bound 1e-9 s), step 1.0 s |
+| `TRANSMIT_RAMPS` on a ramp-free record | **absent** (null accessor on the buffer), not empty, on all three |
+| Ramped record | 14/14 ramp fields survive exactly; **0** ramp keywords reach the KVN body; the ramp-free message is **0 differences** from the ramped one |
+| Malformed record | NaN attitude and infinite observation both **refused** by status code, no Message produced |
 
 Cross-checked with **Orekit 13.1** (`AemParser`, `TdmParser`), which agrees on
 four of the five fixtures.
@@ -69,33 +77,120 @@ Two things Orekit does that this layer deliberately does not: it
 units** (RADEC degrees → radians, km → m). Both make an exact keyword round
 trip impossible. The value is kept as written.
 
-## The record projection is gated on a schema
+## The record projection
 
-`src/aem.hpp` and `src/tdm.hpp` each end with a marked, empty projection seam.
-They are empty because at `spacedatastandards.org` 1.201.0 the records cannot
-carry these messages:
+SDS **1.202.0** (Themis, `upstream-spacedatastandards-10`) added the carriers
+these messages need: `attitudeDataLine` with a per-state `EPOCH` and the whole
+504.0-B-2 table 4-4 column set, ten more `AEMSegment` keywords, and on `$TDM` a
+`TDMObservation{KEYWORD, EPOCH, VALUE}` triple plus a real `TDMSegment`. The
+seams in `src/aem.hpp` and `src/tdm.hpp` are filled.
 
-- **`$AEM`** has no carrier for `CENTER_NAME`, `QUATERNION_TYPE`,
-  `EULER_ROT_SEQ`, `RATE_FRAME`, `INTERPOLATION_METHOD`,
-  `INTERPOLATION_DEGREE`, `USEABLE_START_TIME`, `USEABLE_STOP_TIME` or
-  `MESSAGE_ID`, and it reconstructs epochs from `START_TIME + i * STEP_SIZE` —
-  which Figure G-4 disproves.
-- **`$TDM`** has **no `RANGE` field at all** — the format's primary observable —
-  and models observations as parallel arrays on a uniform grid, which Figure
-  E-17 disproves.
+**Always the verbose form.** `STEP_SIZE` is 0 and `ATTITUDE_DATA` empty for
+every segment, uniform or not. Figure G-4 cannot use the compact form at all,
+and choosing it for the uniform Figure G-5 would mean computing a step size from
+two epoch strings and an epoch string back from a start and an index — which
+needs the leap-second table `foundation/time` owns, and would not reproduce
+`2006-090T05:00:00.196` even so. A record that ARRIVES in the compact form is
+refused with `compact-form-needs-time-math` rather than guessed at.
 
-Themis ruled the additive extension required and is landing it under
-`upstream-spacedatastandards-10`. The views consume the ordered `kvn::Entry`
-list rather than a struct precisely so the projection can attach without
-reshaping this layer when the schema lands.
+**Observations are triples in file order.** Never sorted, never deduplicated,
+never gathered into columns. The root's legacy parallel arrays and their
+`OBSERVATION_START_TIME + i * OBSERVATION_STEP_SIZE` grid are never written, and
+a record carrying only them is refused with `uniform-grid-needs-time-math`.
+
+**`TRANSMIT_RAMPS` is absent, not empty.** No ramp is ever synthesised from
+`TRANSMIT_FREQ_1`, and no ramp field — nor `SIGNAL_TO_NOISE`, `SPECTRAL_MAX` or
+`DOPPLER_NOISE_HZ` — ever reaches a KVN body, because CCSDS has no keyword for
+one. A ramp-free record is exactly a CCSDS-conformant TDM.
+
+**Absent is not zero.** A FlatBuffers table omits a scalar equal to its type
+default, so a numeric keyword written as `0` and one never written are the same
+bytes. A keyword is re-emitted only when it differs from the default, and the
+projection declares on the way in every keyword that rule will drop.
+
+### What the record still cannot carry, declared rather than dropped
+
+`ProjectionReport::losses` names every keyword and comment with no field to land
+in, with its segment and its text — so a caller can ask *what will I lose*
+before it writes. The acceptance uses that report as its reference: the original
+document with exactly the declared losses removed must match the round-tripped
+one field for field, with **zero** differences. A loss the projection failed to
+declare shows up as a difference; a loss it declared but did not cause shows up
+as a failed removal.
+
+The published corpus produces three, and each is a **LACK** for Themis:
+
+| Fixture | Declared loss | Why |
+| --- | --- | --- |
+| G-5 | `COMMENT` (`no-carrier`) | A COMMENT line **inside the data block**. `AEMSegment.COMMENT` is defined as the metadata block's comments and `attitudeDataLine` has no comment field, so carrying it would make the record say the file had it somewhere it did not. |
+| E-17 | `EPHEMERIS_NAME` (`no-carrier`) | 503.0-B-2's metadata table defines only `EPHEMERIS_NAME_1..5`; the bare form the figure prints is not in it, and Orekit rejects the same line. Renaming it to `_1` would invent a participant index. |
+| E-18 | `FREQ_OFFSET` ×2 (`default-valued`) | `FREQ_OFFSET = 0.0` in both segments. Zero is the field's type default and therefore the same bytes as absent. |
+
+The counts are **pinned** in the harness. When a carrier lands, the pin goes to
+zero — which is the point of pinning it.
+
+### Two fields that are NOT here, on purpose
+
+`QUATERNION_TYPE` was **removed** by CCSDS 504.0-B-2 (change item 7) and
+`RATE_FRAME` occurs zero times in B-2 — **`ANGVEL_FRAME`** is the ratified name.
+Themis refused both with evidence; neither is reintroduced. The two B-1
+spellings the reader still accepts (`QUATERNION/RATE`, `EULER_ANGLE/RATE`) map
+onto the columns B-2's rename produced, because B-2 renamed those keywords, it
+did not add a second set of columns for the old ones.
+
+### JSON
+
+`to_json` emits the record with keys stringized from the same identifiers the
+field accesses compile against, so no key was ever typed by hand
+(json-schema-capitalization-rule). `tests/ccsds_projection.test.mjs` closes the
+loop at the other end: it parses
+`node_modules/spacedatastandards.org/schema/{AEM,TDM}/main.fbs` and requires the
+emitted key set of each of the seven tables to be exactly that table's IDL field
+set, case-exact, in both directions. A schema rename fails the suite. The two
+`$RFM` union fields on the `$TDM` root have no JSON-trivial form and this
+projection never populates them — a CCSDS TDM states its frame in
+`REFERENCE_FRAME`, carried as the string the file wrote.
 
 ## Build and test
 
 ```sh
 npm ci
-npm test          # 110 checks against the published examples
+npm test          # 222 checks across two native lanes
 ```
 
-The module's compiled surface lands with the record projection: the SDK
-requires every port to declare one concrete SDS identity, and until the records
-can carry these messages there is nothing honest to declare.
+Two lanes, because they have different dependencies:
+
+- `tests/ccsds_native.cpp` — the KVN layer. Compiles with `-I src -I tests` and
+  **nothing else**: no SDS schema, no FlatBuffers runtime, no generated header.
+  It is the floor everything else stands on and must stay measurable when the
+  record toolchain is not available. 110 checks.
+- `tests/ccsds_projection_native.cpp` — the `$AEM` / `$TDM` projection. Needs the
+  generated headers (`src/generated/sds/`, produced by
+  `generate-sds-headers.mjs` from the pinned `spacedatastandards.org`) and the
+  FlatBuffers C++ runtime, which comes from `flatc-wasm`'s embedded C++ tree —
+  the same source the module SDK's own compiler uses
+  (`space-data-module-sdk/src/compiler/flatcSupport.js`). Both are **published
+  packages this module already pins**; neither is read from a sibling checkout,
+  which would not resolve from a task worktree and would break the
+  published-deps law. The runtime is written to a temp directory for the length
+  of the compile and deleted with it. 112 checks.
+
+Binaries are built into a temp directory and deleted. Nothing compiled here ever
+lands in the repo.
+
+`tests/ccsds_test_support.hpp` holds the apparatus both lanes share — the RESULT
+printer, the structural document comparison, the independent line scans, the
+epoch arithmetic — and knows nothing about SDS.
+
+## The compiled module surface is not shipped yet
+
+There is no `plugin-manifest.json` or `build.mjs` here, and the reason is a
+contract question rather than effort. The SDK requires every port to declare a
+concrete SDS identity and refuses `acceptsAnyFlatbuffer`, but this module's
+product is **KVN text in, record out** — and a frame of CCSDS text has no record
+identity of its own. `files/orbit-products` solves the same problem by pairing an
+`$NCD` descriptor with the container's bytes in one frame; adopting that
+convention for a KVN message is a decision about `$NCD`'s meaning, not a wiring
+detail, and it belongs with whoever owns that pairing. The projection itself is
+complete and measured, and attaches to a module surface without changing shape
+when the port identity is settled.

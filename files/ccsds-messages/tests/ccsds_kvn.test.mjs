@@ -7,6 +7,12 @@
 // re-implementation. This wrapper does three things and no more — build, run,
 // and refuse to let a FAIL or a silently-empty report pass as a green suite.
 //
+// This lane compiles with `-I src -I tests` and NOTHING else: no SDS schema, no
+// FlatBuffers runtime, no generated header. That is deliberate — the KVN layer
+// is the floor the record projection stands on, and it stays measurable when
+// the record toolchain is not available. ccsds_projection.test.mjs is the lane
+// that needs all three.
+//
 // The binary is built into a temp directory and deleted. Nothing compiled here
 // ever lands in the repo.
 
@@ -58,7 +64,7 @@ test("CCSDS KVN round-trips the published Blue Book examples", { concurrency: fa
   try {
     execFileSync(
       compiler,
-      ["-std=c++17", "-O2", "-I", includePath, sourcePath, "-o", binaryPath],
+      ["-std=c++17", "-O2", "-I", includePath, "-I", here, sourcePath, "-o", binaryPath],
       { stdio: "pipe" },
     );
     run = spawnSync(binaryPath, [fixturePath], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
