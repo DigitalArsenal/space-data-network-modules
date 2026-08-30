@@ -5,6 +5,9 @@
 #include "maneuver/targeting.h"
 #include "maneuver/transforms.h"
 #include "maneuver/propagation.h"
+#ifndef LAMBERT_IZZO_SOLVER_HPP
+#include "../../../../lambert-izzo/include/lambert_izzo/solver.hpp"
+#endif
 
 #include <cmath>
 #include <algorithm>
@@ -607,150 +610,37 @@ HohmannResult computeCombinedManeuver(
 }
 
 // ===========================================================================
-// Lambert Solver — Bate-Mueller-White / Curtis Algorithm 5.2 universal variable
-//
-// 0.1.0's version of this function was section-headed "Izzo's method" (it is
-// not Izzo's) and returned departure velocities that do not fly from r1 to r2,
-// while reporting `converged: true` on every path — 50 of 52 sampled prograde
-// LEO geometries plus every hyperbolic, retrograde and near-pi case
-// (graph: modules-maneuver-lambert-returns-non-solutions). Four things were
-// wrong and all four are fixed here:
-//
-//   1. The small-|z| derivative was (sqrt(2)/40)*y^3.5 where BMW/Curtis give
-//      y^1.5. At y ~ 1e7 that is too large by y^2 ~ 1e14, so the Newton step
-//      out of the z = 0 start was effectively zero and the solver returned its
-//      starting guess.
-//   2. The z != 0 derivative was also not the Curtis expression.
-//   3. `converged` was the literal `true`, assigned on every path including
-//      MAX_ITER exhaustion and the y < 0 bail-out.
-//   4. The residual was never re-evaluated after the loop.
-//
-// Two conditioning choices here are not in the textbook and are load-bearing:
-//
-//   * The transfer angle's sine comes from |r1 x r2| and its "1 - cos" from a
-//     unit-vector CHORD, never from sin(acos(.)). acos has an infinite
-//     derivative at +-1, which is exactly the near-pi geometry the solver has
-//     to survive; going through it costs five orders of magnitude of arrival
-//     accuracy on Tudat's 179.999-degree case (4.5e-6 -> 3.0e-11 of |r2|).
-//   * The root is BRACKETED and then found by Newton safeguarded with
-//     bisection, rather than by unguarded Newton from a fixed start. F(z) is
-//     monotone on the zero-revolution branch, so the bracket is exact; a
-//     multi-revolution branch is not monotone and is scanned instead. This is
-//     also what makes "no solution" a REPORTABLE answer rather than a silent
-//     wrong one: a geometry with no N-revolution arc returns converged=false.
+// Lambert Solver — delegated to the shared analysis/lambert-izzo kernel.
 // ===========================================================================
 
 namespace {
 
-// Stumpff functions. The near-zero branches are SERIES, not constants: the
-// 0.1.0 code returned the leading term only (1/6, 1/120 — themselves the
-// z -> 0 limits of the OTHER function), which is both wrong by a factor of 3
-// and non-continuous with the branches on either side.
-double stumpffC(double z) {
-    if (z > 1e-6) {
-        return (1.0 - std::cos(std::sqrt(z))) / z;
-    }
-    if (z < -1e-6) {
-        return (std::cosh(std::sqrt(-z)) - 1.0) / (-z);
-    }
-    return 0.5 - z / 24.0 + (z * z) / 720.0 - (z * z * z) / 40320.0;
+lambert_izzo::Vector3 toIzzoVector(const Vector3& value) {
+    return {value[0], value[1], value[2]};
 }
 
-double stumpffS(double z) {
-    if (z > 1e-6) {
-        const double s = std::sqrt(z);
-        return (s - std::sin(s)) / (s * s * s);
-    }
-    if (z < -1e-6) {
-        const double s = std::sqrt(-z);
-        return (std::sinh(s) - s) / (s * s * s);
-    }
-    return 1.0 / 6.0 - z / 120.0 + (z * z) / 5040.0 - (z * z * z) / 362880.0;
+Vector3 fromIzzoVector(const lambert_izzo::Vector3& value) {
+    return {value.x, value.y, value.z};
 }
 
-// Cross product for 3-vectors
-Vector3 lambertCross3(const Vector3& a, const Vector3& b) {
-    return {a[1]*b[2] - a[2]*b[1],
-            a[2]*b[0] - a[0]*b[2],
-            a[0]*b[1] - a[1]*b[0]};
-}
-
-// Scale a 3-vector
-Vector3 lambertScale3(const Vector3& v, double s) {
-    return {v[0]*s, v[1]*s, v[2]*s};
-}
-
-/// The universal-variable problem for one (geometry, tof) pair.
-struct LambertProblem {
-    double r1n = 0.0;
-    double r2n = 0.0;
-    double A = 0.0;
-    double sqrtMu = 0.0;
-    double tof = 0.0;
-
-    double y(double z) const {
-        const double C = stumpffC(z);
-        if (!(C > 0.0)) return -1.0;
-        return r1n + r2n + A * (z * stumpffS(z) - 1.0) / std::sqrt(C);
-    }
-
-    /// F(z) = (y/C)^1.5 * S + A*sqrt(y) - sqrt(mu)*tof. Zero at the solution.
-    /// Returns NaN outside the domain (y <= 0) so callers can treat "no value
-    /// here" and "value with the wrong sign" differently.
-    double F(double z) const {
-        const double C = stumpffC(z);
-        const double S = stumpffS(z);
-        if (!(C > 0.0)) return std::numeric_limits<double>::quiet_NaN();
-        const double yy = r1n + r2n + A * (z * S - 1.0) / std::sqrt(C);
-        if (!(yy > 0.0)) return std::numeric_limits<double>::quiet_NaN();
-        return std::pow(yy / C, 1.5) * S + A * std::sqrt(yy) - sqrtMu * tof;
-    }
-
-    /// dF/dz, Curtis eq. 5.43. Both branches, both correct.
-    double dF(double z) const {
-        const double C = stumpffC(z);
-        const double S = stumpffS(z);
-        const double yy = y(z);
-        if (!(yy > 0.0) || !(C > 0.0)) {
-            return std::numeric_limits<double>::quiet_NaN();
-        }
-        if (std::abs(z) < 1e-6) {
-            return (std::sqrt(2.0) / 40.0) * std::pow(yy, 1.5) +
-                   (A / 8.0) * (std::sqrt(yy) + A * std::sqrt(1.0 / (2.0 * yy)));
-        }
-        return std::pow(yy / C, 1.5) *
-                   ((1.0 / (2.0 * z)) * (C - 3.0 * S / (2.0 * C)) +
-                    3.0 * S * S / (4.0 * C)) +
-               (A / 8.0) * (3.0 * S * std::sqrt(yy) / C + A * std::sqrt(C / yy));
-    }
-};
-
-constexpr int LAMBERT_MAX_ITER = 200;
-/// Residual gate, relative to the natural scale of F (which carries units of
-/// sqrt(mu)*time). This is what `converged` now MEANS.
-constexpr double LAMBERT_RESIDUAL_TOL = 1e-10;
-
-/// Fill the transfer arc's conic block from the departure state the solve just
-/// produced. Three lines of textbook algebra over quantities already in hand;
-/// see the block comment on LambertResult for why the module owes a caller
-/// this rather than a refusal.
-///
-/// The eccentricity comes from `e^2 = 1 + 2 E h^2 / mu^2`, which is finite and
-/// correct for every conic INCLUDING the parabolic limit — unlike any form that
-/// divides by `1 - e^2`. The perigee comes from `p / (1 + e)`, which is well
-/// conditioned everywhere; only the apoapsis and the semi-major axis can fail
-/// to exist, and each says so with its own flag instead of emitting a
-/// non-finite number the JSON writer would have to reject.
+/// Fill the transfer arc's conic block from the shared solver's departure
+/// state. The solver owns the trajectory; this planner-only adapter reports the
+/// existing maneuver JSON diagnostics.
 void fillTransferConic(LambertResult& result, const Vector3& r1, double mu) {
     const double rMag = norm3(r1);
     const double vMag = norm3(result.v1);
-    const double h = norm3(lambertCross3(r1, result.v1));
+    const Vector3 angularMomentum = {
+        r1[1] * result.v1[2] - r1[2] * result.v1[1],
+        r1[2] * result.v1[0] - r1[0] * result.v1[2],
+        r1[0] * result.v1[1] - r1[1] * result.v1[0],
+    };
+    const double h = norm3(angularMomentum);
     if (!(rMag > 0.0) || !std::isfinite(vMag) || !std::isfinite(h)) return;
 
     const double energy = 0.5 * vMag * vMag - mu / rMag;
     const double p = h * h / mu;
     double eSquared = 1.0 + 2.0 * energy * h * h / (mu * mu);
-    if (!(eSquared > 0.0)) eSquared = 0.0;  // round-off below a circular arc
+    if (!(eSquared > 0.0)) eSquared = 0.0;
     const double e = std::sqrt(eSquared);
     const double rPerigee = p / (1.0 + e);
     if (!std::isfinite(e) || !std::isfinite(rPerigee)) return;
@@ -771,22 +661,15 @@ void fillTransferConic(LambertResult& result, const Vector3& r1, double mu) {
                 result.apogeeRadius = rApogee;
             }
         } else {
-            // A bound arc so nearly parabolic that its semi-major axis
-            // overflows a double. It has an apoapsis in principle and no
-            // representable one in fact; saying nothing is the only honest
-            // answer, and `transferConicType` still tells the caller which
-            // conic it is looking at.
             result.transferConicType = ConicType::PARABOLIC;
         }
     } else if (energy > 0.0) {
         result.transferConicType = ConicType::HYPERBOLIC;
         if (std::isfinite(a)) {
             result.hasTransferSemiMajorAxis = true;
-            result.transferSemiMajorAxis = a;  // negative, by construction
+            result.transferSemiMajorAxis = a;
         }
-        // No apoapsis: the arc never returns.
     } else {
-        // Exactly parabolic. `a` is infinite and there is no apoapsis.
         result.transferConicType = ConicType::PARABOLIC;
     }
 }
@@ -803,294 +686,72 @@ LambertResult solveLambert(
     result.branch = branch;
     result.converged = false;
 
-    const double r1_mag = norm3(r1);
-    const double r2_mag = norm3(r2);
-    if (!(r1_mag > 0.0) || !(r2_mag > 0.0) || !(mu > 0.0) || !(tof > 0.0) ||
-        nRevs < 0) {
+    if (nRevs < 0 || nRevs > 32) {
         result.status = "invalid-input";
         return result;
     }
 
-    // Unit position vectors: every angular quantity below is derived from
-    // these, which is what keeps the near-pi geometry conditioned.
-    const Vector3 u1 = lambertScale3(r1, 1.0 / r1_mag);
-    const Vector3 u2 = lambertScale3(r2, 1.0 / r2_mag);
-    double cosdt = u1[0]*u2[0] + u1[1]*u2[1] + u1[2]*u2[2];
-    cosdt = std::max(-1.0, std::min(1.0, cosdt));
-
-    // 1 - cos, taken from whichever half-angle chord keeps full precision:
-    // |u1 - u2|^2 = 2(1 - cos) is accurate for SMALL angles, |u1 + u2|^2 =
-    // 2(1 + cos) for angles near pi. Computing 1 - cos directly loses the
-    // significant digits at exactly the ends where the solver is hardest.
-    const Vector3 chordMinus = sub3(u1, u2);
-    const Vector3 chordPlus = {u1[0]+u2[0], u1[1]+u2[1], u1[2]+u2[2]};
-    const double dMinus = norm3(chordMinus);
-    const double dPlus = norm3(chordPlus);
-    const double oneMinusCos =
-        (cosdt > 0.0) ? (dMinus * dMinus) / 2.0 : 2.0 - (dPlus * dPlus) / 2.0;
-
-    // |sin| from the cross product, NEVER from sin(acos(cos)).
-    const Vector3 crossU = lambertCross3(u1, u2);
-    const double sinMag = norm3(crossU);
-    // Direction: the "short way" is the one whose angular momentum agrees with
-    // the requested sense. r1 x r2 pointing +z is a prograde (counterclockwise)
-    // sweep of less than pi.
-    const Vector3 crossR = lambertCross3(r1, r2);
+    const Vector3 crossR = {
+        r1[1] * r2[2] - r1[2] * r2[1],
+        r1[2] * r2[0] - r1[0] * r2[2],
+        r1[0] * r2[1] - r1[1] * r2[0],
+    };
     const bool shortWay = prograde ? (crossR[2] >= 0.0) : (crossR[2] < 0.0);
-    const double sindt = shortWay ? sinMag : -sinMag;
-
-    if (!(oneMinusCos > 0.0)) {
-        // r1 and r2 are collinear and same-sense: the transfer plane is
-        // undefined. This is a real "no solution", not a failure to find one.
-        result.status = "degenerate-geometry";
+    const lambert_izzo::Request request{
+        toIzzoVector(r1),
+        toIzzoVector(r2),
+        tof,
+        mu,
+        !shortWay,
+        static_cast<uint16_t>(nRevs),
+    };
+    const lambert_izzo::Result solved = lambert_izzo::solve(request);
+    if (solved.status != lambert_izzo::Status::Ok) {
+        switch (solved.status) {
+            case lambert_izzo::Status::InvalidInput:
+                result.status = "invalid-input";
+                break;
+            case lambert_izzo::Status::DegenerateGeometry:
+                result.status = "degenerate-geometry";
+                break;
+            default:
+                result.status = "no-solution";
+                break;
+        }
         return result;
     }
 
-    LambertProblem problem;
-    problem.r1n = r1_mag;
-    problem.r2n = r2_mag;
-    problem.A = sindt * std::sqrt(r1_mag * r2_mag / oneMinusCos);
-    problem.sqrtMu = std::sqrt(mu);
-    problem.tof = tof;
-
-    if (!(std::abs(problem.A) > 0.0)) {
-        result.status = "degenerate-geometry";
-        return result;
-    }
-
-    // -----------------------------------------------------------------------
-    // Bracket the root.
-    // -----------------------------------------------------------------------
-    const double zCeiling = TWO_PI * (nRevs + 1) * TWO_PI * (nRevs + 1);
-    double a = 0.0;
-    double b = 0.0;
-    double fa = 0.0;
-    bool bracketed = false;
-
-    if (nRevs == 0) {
-        // The zero-revolution branch is monotone in z (tof -> 0 as z -> -inf,
-        // tof -> +inf as z -> (2*pi)^2), so MARCH from z = 0 in the direction
-        // F(0) points instead of scanning. Scanning a huge interval is not
-        // merely slower: at z ~ -1500 the two terms of F are each ~1e14 and
-        // cancel to pure round-off, and a scan over that region brackets noise.
-        double z0 = 0.0;
-        double f0 = problem.F(0.0);
-        if (!std::isfinite(f0)) {
-            // y(0) < 0: climb until the domain opens.
-            for (int guard = 0; guard < 4000 && !std::isfinite(f0); ++guard) {
-                z0 += 0.05 * zCeiling;
-                if (z0 >= zCeiling) break;
-                f0 = problem.F(z0);
-            }
-            if (!std::isfinite(f0)) {
-                result.status = "empty-domain";
-                return result;
-            }
-        }
-        if (f0 <= 0.0) {
-            a = z0;
-            fa = f0;
-            for (int i = 0; i < 200; ++i) {
-                const double hi = zCeiling - (zCeiling - z0) * std::pow(0.5, i + 1);
-                const double f = problem.F(hi);
-                if (std::isfinite(f) && f > 0.0) {
-                    b = hi;
-                    bracketed = true;
-                    break;
-                }
-            }
-        } else {
-            // -----------------------------------------------------------
-            // MARCHING DOWN, WITH THE DOMAIN BOUNDARY RESPECTED.
-            //
-            // Below z0 the branch runs out: `y(z)` decreases monotonically
-            // and at some `z_boundary` it reaches zero, past which `F` has no
-            // value at all. The root, when there is one, lies strictly
-            // between that boundary and z0 — as `y -> 0+`, `F -> -sqrt(mu)*tof`,
-            // which is negative, so a positive `F(z0)` guarantees a crossing
-            // inside the domain.
-            //
-            // 0.2.0 marched `step = 1, 2, 4, ...` and gave up the moment a
-            // probe came back non-finite, which is a probe that landed OUTSIDE
-            // the domain rather than one that proved anything. For Curtis
-            // example 5.3 the boundary is at z = -0.398 and the root at
-            // z = -0.173, so the very first probe at z = -1 fell off the end
-            // and every later one fell further, and a geometry hapsira solves
-            // came back `no-solution` (graph:
-            // modules-maneuver-lambert-refuses-a-solvable-arc). The class lost
-            // was short-transfer-angle hyperbolic arcs — the ones whose domain
-            // boundary sits close to zero — and it was large: of 3,320
-            // forward-constructed hyperbolic arcs, 1,544 were refused.
-            //
-            // The repair keeps a BRACKET IN STEP SPACE. `stepInside` is the
-            // deepest step known to land inside the domain and `stepOutside`
-            // the shallowest known to land outside; a non-finite probe
-            // bisects toward the boundary instead of doubling away from it,
-            // and a finite-but-still-positive probe doubles outward exactly as
-            // before while no boundary is known. That makes the search
-            // converge ON the boundary rather than stepping over it, and it is
-            // a repair to the SEARCH only: every expression evaluated here is
-            // unchanged, the bracket handed to Newton has the same meaning,
-            // and a geometry 0.2.0 solved is solved identically (verified over
-            // the 72-geometry LEO sweep and every Lambert vector).
-            //
-            // NOT the 0.1.0 `if (y < 0) { z += 0.1; continue; }` recovery,
-            // which walked the wrong way for hyperbolic arcs and was one of the
-            // four defects modules-maneuver-lambert-returns-non-solutions
-            // closed.
-            // -----------------------------------------------------------
-            b = z0;
-            double stepInside = 0.0;
-            double stepOutside = std::numeric_limits<double>::infinity();
-            double step = std::max(1.0, std::abs(z0));
-            for (int i = 0; i < 200; ++i) {
-                const double lo = z0 - step;
-                const double f = problem.F(lo);
-                if (std::isfinite(f)) {
-                    if (f < 0.0) {
-                        a = lo;
-                        fa = f;
-                        bracketed = true;
-                        break;
-                    }
-                    // Inside the domain and still above the root: go deeper.
-                    stepInside = step;
-                    if (std::isfinite(stepOutside)) {
-                        step = 0.5 * (stepInside + stepOutside);
-                    } else if (step >= 1e6) {
-                        // No boundary found within the conditioning limit and
-                        // no sign change either. Beyond this the two terms of F
-                        // are ~1e14 apiece and cancel to round-off, so a probe
-                        // there brackets noise rather than a root.
-                        break;
-                    } else {
-                        step = std::min(step * 2.0, 1e6);
-                    }
-                } else {
-                    // Outside the domain. The boundary — and with it the root
-                    // — is shallower than this.
-                    stepOutside = step;
-                    step = 0.5 * (stepInside + stepOutside);
-                }
-                if (!(step > stepInside) || step >= stepOutside) break;
-            }
-        }
-    } else {
-        // A multi-revolution branch lives on ((2*pi*N)^2, (2*pi*(N+1))^2) and
-        // is NOT monotone there — it dips to a minimum and rises, so a given
-        // tof has TWO solutions or none. The interval is bounded and
-        // well-conditioned, so scan it and take the crossing the caller asked
-        // for: the first (LOW, the default and 0.2.0's only answer) or the
-        // second (HIGH).
-        //
-        // Crossings are counted by SIGN CLASSIFICATION rather than by the
-        // product `prevF * f <= 0`, which double-counts a scan node that lands
-        // exactly on the root — harmless when the loop stopped at the first
-        // crossing, and an off-by-one in the branch index now that it does not.
-        const double zFloor = TWO_PI * nRevs * TWO_PI * nRevs;
-        constexpr int SCAN = 2048;
-        const int wanted = (branch == LambertBranch::HIGH) ? 2 : 1;
-        int seen = 0;
-        double prevZ = zFloor;
-        double prevF = problem.F(zFloor);
-        for (int i = 1; i <= SCAN; ++i) {
-            const double z = zFloor + (zCeiling - zFloor) * i / SCAN;
-            const double f = problem.F(z);
-            if (std::isfinite(prevF) && std::isfinite(f) &&
-                ((prevF < 0.0) != (f < 0.0))) {
-                ++seen;
-                if (seen == wanted) {
-                    a = prevZ;
-                    b = z;
-                    fa = prevF;
-                    bracketed = true;
-                    break;
-                }
-            }
-            prevZ = z;
-            prevF = f;
-        }
-    }
-
-    if (!bracketed) {
-        // There is no arc of this revolution count that flies this geometry in
-        // this time. Saying so is the whole point of this task.
-        result.status = "no-solution";
-        return result;
-    }
-
-    // -----------------------------------------------------------------------
-    // Safeguarded Newton: take the Newton step when it stays inside the
-    // bracket, bisect when it does not. Cannot diverge, cannot leave the
-    // domain, and terminates.
-    // -----------------------------------------------------------------------
-    double z = 0.5 * (a + b);
-    int iterations = 0;
-    for (; iterations < LAMBERT_MAX_ITER; ++iterations) {
-        const double f = problem.F(z);
-        if (!std::isfinite(f)) {
-            z = 0.5 * (a + b);
-            continue;
-        }
-        if (f * fa > 0.0) {
-            a = z;
-            fa = f;
-        } else {
-            b = z;
-        }
-        const double df = problem.dF(z);
-        double next = (std::isfinite(df) && df != 0.0) ? z - f / df
-                                                       : std::numeric_limits<double>::quiet_NaN();
-        const double lo = std::min(a, b);
-        const double hi = std::max(a, b);
-        if (!std::isfinite(next) || next <= lo || next >= hi) {
-            next = 0.5 * (a + b);
-        }
-        const double step = std::abs(next - z);
-        z = next;
-        if (step <= 1e-14 * std::max(1.0, std::abs(z))) {
-            ++iterations;
+    const lambert_izzo::Solution* selected = &solved.single;
+    if (nRevs > 0) {
+        selected = nullptr;
+        for (const auto& pair : solved.multi) {
+            if (pair.revolutions != nRevs) continue;
+            // The maneuver API follows hapsira's lowpath naming. Izzo's
+            // left/right roots are named by period in the standalone record:
+            // lowpath is the short-period root and highpath the long-period
+            // root for this parameterization.
+            selected = branch == LambertBranch::LOW
+                           ? &pair.short_period
+                           : &pair.long_period;
             break;
         }
+        if (selected == nullptr) {
+            result.status = "no-solution";
+            return result;
+        }
     }
 
-    const double y = problem.y(z);
-    const double residual = std::abs(problem.F(z));
-    const double budget = LAMBERT_RESIDUAL_TOL * problem.sqrtMu * std::abs(tof);
-
-    if (!(y > 0.0) || !std::isfinite(residual)) {
-        result.status = "empty-domain";
-        return result;
-    }
-
-    const double f_lagrange = 1.0 - y / r1_mag;
-    const double g_dot = 1.0 - y / r2_mag;
-    const double g = problem.A * std::sqrt(y / mu);
-    if (!std::isfinite(g) || g == 0.0) {
-        result.status = "degenerate-geometry";
-        return result;
-    }
-
-    const Vector3 v1_vec = lambertScale3(sub3(r2, lambertScale3(r1, f_lagrange)), 1.0 / g);
-    const Vector3 v2_vec = lambertScale3(sub3(lambertScale3(r2, g_dot), r1), 1.0 / g);
-    if (!std::isfinite(v1_vec[0]) || !std::isfinite(v1_vec[1]) ||
-        !std::isfinite(v1_vec[2]) || !std::isfinite(v2_vec[0]) ||
-        !std::isfinite(v2_vec[1]) || !std::isfinite(v2_vec[2])) {
-        result.status = "non-finite-solution";
-        return result;
-    }
-
-    result.v1 = v1_vec;
-    result.v2 = v2_vec;
-    result.z = z;
-    result.iterations = iterations;
-    result.residual = residual;
-    result.residualBudget = budget;
-    // `converged` is now a MEASUREMENT, not a literal.
-    result.converged = residual <= budget;
+    result.v1 = fromIzzoVector(selected->v1);
+    result.v2 = fromIzzoVector(selected->v2);
+    result.z = selected->x;
+    result.iterations = static_cast<int>(selected->iterations);
+    result.residual = selected->residual;
+    result.residualBudget = 1e-8;
+    result.converged =
+        std::isfinite(selected->residual) && selected->residual <= result.residualBudget;
     result.status = result.converged ? "converged" : "residual-not-met";
-    result.v1Magnitude = norm3(v1_vec);
-    result.v2Magnitude = norm3(v2_vec);
+    result.v1Magnitude = norm3(result.v1);
+    result.v2Magnitude = norm3(result.v2);
     if (result.converged) fillTransferConic(result, r1, mu);
     return result;
 }

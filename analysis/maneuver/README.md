@@ -218,19 +218,12 @@ Codes: `invalid-parameter`, `malformed-request`, `unknown-operation`,
   seeding it with the instantaneous `|r|` would produce a plan for an orbit the
   chaser is not on.
 
-- **`solveLambert`** is a bracketed, residual-checked universal-variable solve
-  (Bate-Mueller-White / Curtis Algorithm 5.2). `converged` is a MEASUREMENT —
-  the residual met its gate — never a literal, and the response carries
-  `residual`, `residualBudget`, `z` and `iterations` so the claim is auditable.
+- **`solveLambert`** delegates to the header-only Izzo 2014 kernel owned by
+  `analysis/lambert-izzo`; the standalone `$LMS`/`$LMO` module and this planner
+  compile one trajectory implementation. `converged` remains a measurement,
+  and the response carries `residual`, `residualBudget`, `z` and `iterations`.
   A geometry with no arc of the requested revolution count returns
   `no-solution` rather than a velocity that flies nowhere.
-
-  The zero-revolution search marches down from `z = 0` and, since **0.3.0**,
-  respects the branch's own domain boundary: a probe that lands where `y(z) < 0`
-  bisects back toward the boundary instead of doubling further past it. 0.2.0
-  doubled unconditionally and so reported `no-solution` for a whole class of
-  short-transfer-angle hyperbolic arcs — Curtis example 5.3 among them, whose
-  root at `z = -0.173` sits inside a domain that ends at `z = -0.398`.
 
 - **`branch`** (request, optional, **0.3.0**): `"low"` | `"high"`, default
   `"low"`. A Lambert problem with `nRevs >= 1` has TWO arcs per revolution

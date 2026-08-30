@@ -40,6 +40,14 @@ const cppRoot = path.join(packageRoot, "src", "cpp");
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
+const lambertSolverPath = path.join(
+  packageRoot,
+  "..",
+  "lambert-izzo",
+  "include",
+  "lambert_izzo",
+  "solver.hpp",
+);
 
 /**
  * Header order is DEPENDENCY order, not alphabetical: a single translation unit
@@ -112,6 +120,9 @@ const parts = [
   "// ===========================================================================",
   "",
 ];
+
+parts.push("// ---- shared lambert-izzo/include/lambert_izzo/solver.hpp ----");
+parts.push(await fs.readFile(lambertSolverPath, "utf8"));
 
 for (const header of HEADERS) {
   const file = path.join(cppRoot, "include", "maneuver", header);

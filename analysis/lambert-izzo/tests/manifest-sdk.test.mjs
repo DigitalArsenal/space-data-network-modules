@@ -14,7 +14,7 @@ import { validateManifestWithStandards } from "space-data-module-sdk/compliance"
 
 const manifestPath = new URL("../plugin-manifest.json", import.meta.url);
 const standardsRoot = fileURLToPath(
-  new URL("../../../../spacedatastandards.org/", import.meta.url),
+  new URL("../../../node_modules/spacedatastandards.org/", import.meta.url),
 );
 
 function readManifest() {
@@ -38,19 +38,19 @@ test("Lambert manifest round-trips through SDK PMAN codec", () => {
   assert.deepEqual(decoded.invokeSurfaces, ["direct", "command"]);
   assert.equal(
     findPortType(decoded, "inputPorts", "request").schemaName,
-    "spacedata.LMS",
+    "LMS.fbs",
   );
   assert.equal(
     findPortType(decoded, "inputPorts", "request").fileIdentifier,
-    "LMS",
+    "$LMS",
   );
   assert.equal(
     findPortType(decoded, "outputPorts", "solutions").schemaName,
-    "spacedata.LMO",
+    "LMO.fbs",
   );
   assert.equal(
     findPortType(decoded, "outputPorts", "solutions").fileIdentifier,
-    "LMO",
+    "$LMO",
   );
 });
 
@@ -59,33 +59,35 @@ test("Lambert manifest maps to canonical PLG codec without local schema aliases"
   const plgManifest = legacyManifestToPlg(manifest);
 
   assert.deepEqual(plgManifest.requiredSchemas, [
-    "spacedata.LMS",
-    "spacedata.LMO",
+    "LMS.fbs",
+    "LMO.fbs",
   ]);
   assert.deepEqual(plgManifest.entryFunctions, [
     {
       name: "solve_lambert",
       description:
         "Solves single- and multi-revolution Lambert boundary-value transfer cases with Izzo's revisited algorithm.",
-      inputSchemas: ["spacedata.LMS"],
-      outputSchema: "spacedata.LMO",
+      inputSchemas: ["LMS.fbs"],
+      outputSchema: "LMO.fbs",
     },
   ]);
 
   const plgDecoded = decodePlgManifest(encodePlgManifest(plgManifest));
   assert.equal(plgDecoded.pluginId, manifest.pluginId);
   assert.deepEqual(plgDecoded.requiredSchemas, [
-    "spacedata.LMS",
-    "spacedata.LMO",
+    "LMS.fbs",
+    "LMO.fbs",
   ]);
 
   const decoded = decodePluginManifest(encodePlgManifest(plgManifest));
-  assert.deepEqual(findPortType(decoded, "inputPorts", "input-1"), {
-    schemaName: "spacedata.LMS",
-  });
-  assert.deepEqual(findPortType(decoded, "outputPorts", "output-1"), {
-    schemaName: "spacedata.LMO",
-  });
+  assert.equal(
+    findPortType(decoded, "inputPorts", "request").fileIdentifier,
+    "$LMS",
+  );
+  assert.equal(
+    findPortType(decoded, "outputPorts", "solutions").fileIdentifier,
+    "$LMO",
+  );
 });
 
 test("Lambert manifest resolves LMS and LMO through SDK standards validation", async () => {

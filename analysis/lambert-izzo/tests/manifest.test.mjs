@@ -20,12 +20,12 @@ test("Lambert package declares the planned SDK solve surface", () => {
   assert.equal(method.inputPorts[0].portId, "request");
   assert.equal(
     method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "LMS",
+    "$LMS",
   );
   assert.equal(method.outputPorts[0].portId, "solutions");
   assert.equal(
     method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,
-    "LMO",
+    "$LMO",
   );
 });
 

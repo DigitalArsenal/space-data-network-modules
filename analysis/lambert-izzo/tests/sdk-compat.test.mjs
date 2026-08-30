@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
-import { LMS } from "../../../../spacedatastandards.org/lib/js/LMS/main.js";
-import { LMO, lambertSolveState } from "../../../../spacedatastandards.org/lib/js/LMO/main.js";
+import * as flatbuffers from "flatbuffers";
+import { LMS } from "spacedatastandards.org/lib/js/LMS/main.js";
+import {
+  LMO,
+  lambertBranchKind,
+  lambertSolveState,
+} from "spacedatastandards.org/lib/js/LMO/main.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule, loadModule } from "space-data-module-sdk/host/isomorphic";
 import {
@@ -20,7 +25,7 @@ const ISOMORPHIC_WASM_PATH = new URL(
   import.meta.url,
 );
 const STANDARDS_ROOT = fileURLToPath(
-  new URL("../../../../spacedatastandards.org/", import.meta.url),
+  new URL("../../../node_modules/spacedatastandards.org/", import.meta.url),
 );
 
 function readManifest() {
@@ -76,8 +81,9 @@ function createLambertInvokeRequest(payload) {
       {
         portId: "request",
         typeRef: {
-          schemaName: "spacedata.LMS",
-          fileIdentifier: "LMS",
+          schemaName: "LMS.fbs",
+          fileIdentifier: "$LMS",
+          rootTypeName: "LMS",
         },
         payload,
       },
@@ -99,13 +105,27 @@ function assertPluginErrorResponse(response, { statusCode, errorCode, errorMessa
   assert.match(response.errorMessage, errorMessage);
 }
 
+function isWasmEdgeUnavailable(error) {
+  return /spawn wasmedge ENOENT|command not found|Failed to launch/i.test(
+    `${String(error)}\n${String(error?.cause ?? "")}`,
+  );
+}
+
+function hasWasmEdge() {
+  return spawnSync("wasmedge", ["--version"], { stdio: "ignore" }).status === 0;
+}
+
 function decodeLambertOutputFrame(response) {
-  assert.equal(response.statusCode, 0);
+  assert.equal(
+    response.statusCode,
+    0,
+    `${response.errorCode ?? "no-error-code"}: ${response.errorMessage ?? "no error message"}`,
+  );
   assert.equal(response.outputs.length, 1);
   const [frame] = response.outputs;
   assert.equal(frame.portId, "solutions");
-  assert.equal(frame.typeRef?.schemaName, "spacedata.LMO");
-  assert.equal(frame.typeRef?.fileIdentifier, "LMO");
+  assert.equal(frame.typeRef?.schemaName, "LMO.fbs");
+  assert.equal(frame.typeRef?.fileIdentifier, "$LMO");
   const bb = new flatbuffers.ByteBuffer(frame.payload);
   assert.equal(LMO.bufferHasIdentifier(bb), true);
   return LMO.getRootAsLMO(bb);
@@ -229,6 +249,10 @@ test("built artifact loads through the SDK browser harness and fails closed", as
 });
 
 test("built artifact loads through the WasmEdge server path when available", async (t) => {
+  if (!hasWasmEdge()) {
+    t.skip("Install wasmedge to verify the server-path harness.");
+    return;
+  }
   let harness;
   try {
     harness = await loadModule({
@@ -237,7 +261,7 @@ test("built artifact loads through the WasmEdge server path when available", asy
       enableThreads: false,
     });
   } catch (error) {
-    if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
+    if (isWasmEdgeUnavailable(error)) {
       t.skip("Install wasmedge to verify the server-path harness.");
       return;
     }
@@ -368,7 +392,7 @@ for (const entry of invalidRequestCases) {
 test("built artifact solves the closed-form circular quarter-orbit benchmark", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-    surface: "direct",
+    surface: "command",
   });
   t.after(() => {
     harness.destroy();
@@ -395,6 +419,10 @@ test("built artifact solves the closed-form circular quarter-orbit benchmark", a
 });
 
 test("built artifact returns deterministic circular benchmark output in browser and WasmEdge", async (t) => {
+  if (!hasWasmEdge()) {
+    t.skip("Install wasmedge to verify browser/WasmEdge numerical determinism.");
+    return;
+  }
   const wasmPath = fileURLToPath(ISOMORPHIC_WASM_PATH);
   const browserHarness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(wasmPath),
@@ -412,7 +440,7 @@ test("built artifact returns deterministic circular benchmark output in browser 
       enableThreads: false,
     });
   } catch (error) {
-    if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
+    if (isWasmEdgeUnavailable(error)) {
       t.skip("Install wasmedge to verify browser/WasmEdge numerical determinism.");
       return;
     }
@@ -460,7 +488,7 @@ test("built artifact solves the closed-form circular long-way benchmark", async 
   assertVectorNear(branch.V2(), { X: circularSpeedKmPerSec, Y: 0, Z: 0 }, 1e-6);
 });
 
-test("built artifact reports multi-revolution branch enumeration as not implemented", async (t) => {
+test("built artifact returns both branches of an upstream multi-revolution case", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
@@ -469,19 +497,39 @@ test("built artifact reports multi-revolution branch enumeration as not implemen
     harness.destroy();
   });
 
+  const mu = 398600.4418;
+  const radiusKm = 8000;
+  const periodSeconds = 2 * Math.PI * Math.sqrt((radiusKm ** 3) / mu);
   const response = await harness.invoke(
     createLambertInvokeRequest(
       createLambertRequestPayload({
-        requestId: "multi-rev-unsupported",
-        maxRevs: 1,
-        tofSec: 20000,
+        requestId: "upstream-multi-rev",
+        r1x: radiusKm,
+        r2x: 5600,
+        r2y: 5600,
+        maxRevs: 3,
+        tofSec: 5 * periodSeconds,
       }),
     ),
   );
 
-  assertPluginErrorResponse(response, {
-    statusCode: 501,
-    errorCode: "solver-not-implemented",
-    errorMessage: /runtime is not implemented/i,
-  });
+  const result = decodeLambertOutputFrame(response);
+  assert.equal(result.REQUEST_ID(), "upstream-multi-rev");
+  assert.equal(result.STATUS(), lambertSolveState.OK);
+  assert.equal(result.MAX_FEASIBLE_REVS(), 3);
+  assert.equal(result.multiLength(), 6);
+  for (let revolutions = 1; revolutions <= 3; revolutions += 1) {
+    const longPeriod = result.MULTI((revolutions - 1) * 2);
+    const shortPeriod = result.MULTI((revolutions - 1) * 2 + 1);
+    assert.equal(longPeriod.N_REVS(), revolutions);
+    assert.equal(shortPeriod.N_REVS(), revolutions);
+    assert.equal(longPeriod.BRANCH_KIND(), lambertBranchKind.MULTI_LONG_PERIOD);
+    assert.equal(shortPeriod.BRANCH_KIND(), lambertBranchKind.MULTI_SHORT_PERIOD);
+    assert.ok(longPeriod.ITERATIONS() > 0);
+    assert.ok(shortPeriod.ITERATIONS() > 0);
+    assert.notDeepEqual(
+      [longPeriod.V1().X(), longPeriod.V1().Y(), longPeriod.V1().Z()],
+      [shortPeriod.V1().X(), shortPeriod.V1().Y(), shortPeriod.V1().Z()],
+    );
+  }
 });

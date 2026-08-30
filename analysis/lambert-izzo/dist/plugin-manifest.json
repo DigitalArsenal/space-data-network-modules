@@ -8,6 +8,11 @@
   "externalInterfaces": [],
   "invokeSurfaces": ["direct", "command"],
   "runtimeTargets": ["browser", "wasmedge"],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "One Lambert boundary-value problem is a bounded scalar solve. Independent transfer geometries are parallelized by the caller; this module owns no cross-call state or thread pool."
+  },
   "methods": [
     {
       "methodId": "solve_lambert",
@@ -20,8 +25,9 @@
               "setId": "analysis.lambert-solve-request",
               "allowedTypes": [
                 {
-                  "schemaName": "spacedata.LMS",
-                  "fileIdentifier": "LMS"
+                  "schemaName": "LMS.fbs",
+                  "fileIdentifier": "$LMS",
+                  "rootTypeName": "LMS"
                 }
               ],
               "description": "Canonical Lambert boundary-value request: r1, r2, time of flight, gravitational parameter, transfer way, and revolution budget."
@@ -41,8 +47,9 @@
               "setId": "analysis.lambert-solve-result",
               "allowedTypes": [
                 {
-                  "schemaName": "spacedata.LMO",
-                  "fileIdentifier": "LMO"
+                  "schemaName": "LMO.fbs",
+                  "fileIdentifier": "$LMO",
+                  "rootTypeName": "LMO"
                 }
               ],
               "description": "Canonical Lambert solve result with departure/arrival velocities, multi-revolution branch metadata, and solver diagnostics."
@@ -63,12 +70,14 @@
   "protocols": [],
   "schemasUsed": [
     {
-      "schemaName": "spacedata.LMS",
-      "fileIdentifier": "LMS"
+      "schemaName": "LMS.fbs",
+      "fileIdentifier": "$LMS",
+      "rootTypeName": "LMS"
     },
     {
-      "schemaName": "spacedata.LMO",
-      "fileIdentifier": "LMO"
+      "schemaName": "LMO.fbs",
+      "fileIdentifier": "$LMO",
+      "rootTypeName": "LMO"
     }
   ],
   "buildArtifacts": [

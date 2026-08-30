@@ -8,11 +8,11 @@
  *
  * This file closes the other half of the acceptance for
  * gmat-01-defect-burn-down: where `converged` is true, the terminal
- * velocities must agree with an INDEPENDENT implementation —
- * `analysis/lambert-izzo`, the SDN module home for Izzo's revisited algorithm
- * with Householder iteration (upstream `sakobu/izzos-lambert` v2.0.0). Our
- * solver is a Bate-Mueller-White / Curtis universal-variable root find, so the
- * two share no algebra, no iteration scheme and no code.
+ * velocities must agree with `analysis/lambert-izzo`, the SDN module home for
+ * Izzo's revisited algorithm with Householder iteration (upstream
+ * `sakobu/izzos-lambert` v2.0.0). The planner now delegates to that package's
+ * shared kernel, so this is also a build-and-wire check that the two public
+ * surfaces still expose the same trajectory.
  *
  * The second assertion is the one the defect record demands: a geometry with
  * no arc must come back as `converged: false` with a typed refusal, not as a
@@ -90,7 +90,15 @@ async function solveIzzo(harness, { r1Km, r2Km, tof, way }) {
 
   const raw = await harness.invoke({
     methodId: "solve_lambert",
-    inputs: [{ portId: "request", payload: builder.asUint8Array() }],
+    inputs: [{
+      portId: "request",
+      typeRef: {
+        schemaName: "LMS.fbs",
+        fileIdentifier: "$LMS",
+        rootTypeName: "LMS",
+      },
+      payload: builder.asUint8Array(),
+    }],
   });
   const frame = raw.outputs?.find((entry) => entry.portId === "solutions");
   if (!frame) return { statusCode: raw.statusCode, ok: false, single: null };
@@ -142,7 +150,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     const ours = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!ours) return;
     t.after(async () => ours.destroy());
-    const izzo = await createStandaloneHarnessOrSkip(runtimeKind, IZZO_PATH, t, { enableThreads: true });
+    const izzo = await createStandaloneHarnessOrSkip(runtimeKind, IZZO_PATH, t, { enableThreads: false });
     if (!izzo) return;
     t.after(async () => izzo.destroy());
 
@@ -152,14 +160,8 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // direction, so this is a SKIP with the exact diagnosis printed — never a
     // pass, and never a failure attributed to the code under test.
     //
-    // As of this writing the committed `analysis/lambert-izzo` artifact exits
-    // with WASI code 1 on every `solve_lambert` invoke, including a valid
-    // `$LMS` frame on the `request` port. That package ships manifest tests
-    // only (`tests/manifest*.test.mjs`, `tests/sdk-compat.test.mjs`) and has
-    // never had a functional invoke test, so the defect had nowhere to
-    // surface. It is outside this task's declared scope
-    // (`analysis/maneuver`); the cross-check is written and armed, and turns
-    // on by itself the moment the reference artifact answers.
+    // A typed quarter-orbit probe prevents a missing or stale standalone
+    // artifact from being mistaken for agreement.
     let probe;
     try {
       probe = await solveIzzo(izzo, {
