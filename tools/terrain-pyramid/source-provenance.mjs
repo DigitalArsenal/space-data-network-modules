@@ -7,13 +7,21 @@
 // keeps a world-sized URL map in memory.
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 import { iterateStreamFile } from "./dtt-reader.mjs";
 
 export const MAX_GLOBAL_SOURCE_CACHE_BYTES = 96 * 1024 ** 3;
+// Publication is deliberately bounded independently from source cache space.
+// These are protocol ceilings for the approved z<=10 epoch, not aspirational
+// disk capacities: a changed global scope must obtain a new reviewed policy.
+export const MAX_GLOBAL_VERIFIED_STORE_BYTES = 16 * 1024 ** 3;
+// The global static directory is empirically much larger than the compressed
+// DTT stream (the checked Liguria identity directory is 12.807x its store).
+// 128 GiB is a reviewed binary ceiling, not a generic 1 TiB escape hatch.
+export const MAX_GLOBAL_STATIC_DIRECTORY_BYTES = 128 * 1024 ** 3;
 export const SOURCE_MANIFEST_VERSION = 1;
 const MAX_OBSERVATION_LINE_BYTES = 16 * 1024;
 const SOURCE_SORT_RUN_BYTES = 4 * 1024 * 1024;
@@ -25,6 +33,7 @@ const MAX_SOURCE_RECEIPT_BYTES = 16 * 1024;
 const MAX_SOURCE_URL_BYTES = 4 * 1024;
 const MAX_SOURCE_HEADER_BYTES = 8 * 1024;
 const MAX_SOURCE_TIMESTAMP_BYTES = 128;
+export const MAX_GLOBAL_SOURCE_RESPONSE_BYTES = 128 * 1024 ** 2;
 
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -36,6 +45,224 @@ export function canonicalJson(value) {
 
 export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** Validate the small, immutable publication envelope carried by every shard. */
+export function publicationPolicyContract(runConfig) {
+  const policy = runConfig?.publication_policy;
+  if (!policy) return null;
+  assert.equal(policy.version, 1, "publication_policy.version must be 1");
+  assert.ok(Number.isSafeInteger(policy.max_verified_store_bytes) && policy.max_verified_store_bytes > 0,
+    "publication_policy.max_verified_store_bytes must be a positive safe integer");
+  assert.ok(policy.max_verified_store_bytes <= MAX_GLOBAL_VERIFIED_STORE_BYTES,
+    `publication_policy.max_verified_store_bytes may not exceed ${MAX_GLOBAL_VERIFIED_STORE_BYTES} bytes`);
+  assert.ok(Number.isSafeInteger(policy.max_static_directory_bytes) && policy.max_static_directory_bytes > 0,
+    "publication_policy.max_static_directory_bytes must be a positive safe integer");
+  assert.ok(policy.max_static_directory_bytes <= MAX_GLOBAL_STATIC_DIRECTORY_BYTES,
+    `publication_policy.max_static_directory_bytes may not exceed ${MAX_GLOBAL_STATIC_DIRECTORY_BYTES} bytes`);
+  assert.ok(policy.max_static_directory_bytes >= policy.max_verified_store_bytes,
+    "publication_policy.max_static_directory_bytes must cover the verified store ceiling");
+  assert.ok(typeof policy.static_directory_basis === "string" && policy.static_directory_basis.length > 0,
+    "publication_policy.static_directory_basis is required");
+  assert.ok(Number.isSafeInteger(policy.synthesized_tile_grid_size) &&
+    policy.synthesized_tile_grid_size >= 2 && policy.synthesized_tile_grid_size <= 255,
+  "publication_policy.synthesized_tile_grid_size must be in [2, 255]");
+  assert.equal(runConfig.flow_config?.terrain_synth_grid_size, policy.synthesized_tile_grid_size,
+    "flow_config.terrain_synth_grid_size must equal publication_policy.synthesized_tile_grid_size");
+  return { policy, digest: sha256(canonicalJson(policy)) };
+}
+
+// A cell produces four independently useful artifacts (DTT frames, index
+// facts, all-ocean declarations, and the $IRM resume mark).  They must advance
+// as one logical unit: the mark is last, and a durable journal makes a crash
+// between physical appends resumable without replaying a cell.  The helper is
+// deliberately byte-oriented so it can be exercised without a Wasm flow and
+// does not retain a cell's records after the bounded staging buffers are made.
+function fsyncDirectory(directory) {
+  const handle = fs.openSync(directory, "r");
+  try { fs.fsyncSync(handle); } finally { fs.closeSync(handle); }
+}
+
+function writeJsonAtomic(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  const handle = fs.openSync(temporary, "wx", 0o600);
+  try {
+    fs.writeFileSync(handle, `${JSON.stringify(value, null, 2)}\n`);
+    fs.fsyncSync(handle);
+  } finally {
+    fs.closeSync(handle);
+  }
+  fs.renameSync(temporary, file);
+  fsyncDirectory(path.dirname(file));
+}
+
+function framedRecord(bytes) {
+  const framed = Buffer.alloc(4 + bytes.length);
+  framed.writeUInt32LE(bytes.length, 0);
+  Buffer.from(bytes).copy(framed, 4);
+  return framed;
+}
+
+function tailDigest(file, offset, length) {
+  const handle = fs.openSync(file, "r");
+  const hash = createHash("sha256");
+  const chunk = Buffer.alloc(Math.min(64 * 1024, Math.max(1, length)));
+  let position = offset;
+  let remaining = length;
+  try {
+    while (remaining > 0) {
+      const read = fs.readSync(handle, chunk, 0, Math.min(chunk.length, remaining), position);
+      assert.ok(read > 0, `attempt artifact ended before ${offset + length}: ${file}`);
+      hash.update(chunk.subarray(0, read));
+      position += read;
+      remaining -= read;
+    }
+  } finally {
+    fs.closeSync(handle);
+  }
+  return hash.digest("hex");
+}
+
+function wholeFileDigest(file) {
+  if (!fs.existsSync(file)) return sha256("");
+  return tailDigest(file, 0, fs.statSync(file).size);
+}
+
+function chainDigest(beforeDigest, appendDigest, afterLength) {
+  return sha256(`${beforeDigest}:${appendDigest}:${afterLength}`);
+}
+
+function appendDurably(file, bytes) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const handle = fs.openSync(file, "a", 0o600);
+  try {
+    fs.writeFileSync(handle, bytes);
+    fs.fsyncSync(handle);
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+function loadArtifactChains(outDir, targets) {
+  const file = path.join(outDir, "artifact-chains.json");
+  let chains = {};
+  try { chains = JSON.parse(fs.readFileSync(file, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  for (const target of targets) {
+    const length = fs.existsSync(target) ? fs.statSync(target).size : 0;
+    if (!chains[target]) chains[target] = { length, digest: wholeFileDigest(target) };
+    assert.equal(chains[target].length, length, `artifact chain length does not match ${target}`);
+  }
+  return { file, chains };
+}
+
+function replayCellOperation(operation, { faultPhase = undefined } = {}) {
+  assert.equal(operation.afterDigest, chainDigest(operation.beforeDigest, operation.appendDigest, operation.afterLength),
+    `cell attempt has an invalid ${operation.name} digest chain`);
+  const actual = fs.existsSync(operation.target) ? fs.statSync(operation.target).size : 0;
+  if (actual === operation.afterLength) {
+    assert.equal(tailDigest(operation.target, operation.beforeLength, operation.appendLength), operation.appendDigest,
+      `cell attempt has corrupt committed ${operation.name} bytes`);
+    return;
+  }
+  assert.ok(actual >= operation.beforeLength && actual <= operation.afterLength,
+    `cell attempt ${operation.name} has an unexpected length and cannot be recovered safely`);
+  const bytes = fs.readFileSync(operation.stage);
+  assert.equal(bytes.length, operation.appendLength, `cell attempt stage length changed for ${operation.name}`);
+  assert.equal(sha256(bytes), operation.appendDigest, `cell attempt stage digest changed for ${operation.name}`);
+  const committedLength = actual - operation.beforeLength;
+  if (committedLength) {
+    assert.ok(tailDigest(operation.target, operation.beforeLength, committedLength) === sha256(bytes.subarray(0, committedLength)),
+      `cell attempt ${operation.name} partial bytes are not a prefix of its staged append`);
+  }
+  if (faultPhase === `mid-${operation.name}`) {
+    const partial = Math.max(1, Math.floor(bytes.length / 2));
+    appendDurably(operation.target, bytes.subarray(0, partial));
+    throw new Error(`fault injection ${faultPhase} for cell attempt`);
+  }
+  appendDurably(operation.target, bytes.subarray(committedLength));
+  assert.equal(fs.statSync(operation.target).size, operation.afterLength, `cell attempt did not append ${operation.name} exactly`);
+}
+
+export function recoverCellAttempt({ outDir, markPath = path.join(outDir, "resume-mark.json") }) {
+  const journalPath = path.join(outDir, "cell-attempt.json");
+  if (!fs.existsSync(journalPath)) return false;
+  const journal = readSmallJson(journalPath, 512 * 1024, "cell attempt journal");
+  assert.equal(journal.version, 1, "unsupported cell attempt journal");
+  assert.equal(journal.markPath, markPath, "cell attempt mark path does not match this run");
+  assert.ok(Array.isArray(journal.operations) && journal.operations.length > 0, "cell attempt has no operations");
+  assert.equal(journal.operations.at(-1).name, "mark", "cell attempt must commit the $IRM mark last");
+  for (const operation of journal.operations) replayCellOperation(operation);
+  if (journal.chainFile && journal.chains) writeJsonAtomic(journal.chainFile, journal.chains);
+  if (journal.markJson) writeJsonAtomic(markPath, journal.markJson);
+  fs.rmSync(journal.stageDir, { recursive: true, force: true });
+  fs.rmSync(journalPath, { force: true });
+  fsyncDirectory(outDir);
+  return true;
+}
+
+/**
+ * Atomically advance one cell's durable artifacts, modulo crash recovery.
+ * `operations` are append-only byte payloads and MUST put the `$IRM` `mark`
+ * last.  Each payload is staged before the journal is made durable.  Recovery
+ * either observes an exact already-appended payload or appends exactly the
+ * staged digest, so it cannot duplicate a partially committed cell.
+ */
+export function commitCellAttempt({
+  outDir,
+  cell,
+  operations,
+  markJson,
+  markPath = path.join(outDir, "resume-mark.json"),
+  faultPhase = undefined,
+}) {
+  assert.ok(Array.isArray(operations) && operations.length > 0, "cell attempt operations are required");
+  assert.equal(operations.at(-1).name, "mark", "cell attempt must put $IRM mark last");
+  assert.ok(Buffer.isBuffer(operations.at(-1).bytes) && operations.at(-1).bytes.length > 0,
+    "cell attempt has no durable $IRM mark");
+  const stageDir = path.join(outDir, `.cell-stage-${cell}-${randomUUID()}`);
+  fs.mkdirSync(stageDir, { recursive: true });
+  const nonEmpty = operations.filter((operation) => Buffer.isBuffer(operation.bytes) && operation.bytes.length > 0);
+  assert.equal(nonEmpty.length, operations.length, "cell attempt cannot journal empty artifact operations");
+  const targets = nonEmpty.map((operation) => operation.target);
+  assert.equal(new Set(targets).size, targets.length, "cell attempt artifact targets must be unique");
+  const chain = loadArtifactChains(outDir, targets);
+  const journalOperations = nonEmpty.map((input) => {
+    assert.ok(typeof input.name === "string" && input.name.length > 0, "cell operation name is required");
+    assert.ok(typeof input.target === "string" && path.isAbsolute(input.target), "cell operation target must be absolute");
+    const bytes = Buffer.from(input.bytes);
+    const stage = path.join(stageDir, `${input.name}.append`);
+    appendDurably(stage, bytes);
+    const beforeLength = fs.existsSync(input.target) ? fs.statSync(input.target).size : 0;
+    const beforeDigest = chain.chains[input.target].digest;
+    const appendDigest = sha256(bytes);
+    const afterLength = beforeLength + bytes.length;
+    const afterDigest = chainDigest(beforeDigest, appendDigest, afterLength);
+    chain.chains[input.target] = { length: afterLength, digest: afterDigest };
+    return {
+      name: input.name, target: input.target, stage, beforeLength, beforeDigest,
+      appendLength: bytes.length, afterLength, appendDigest, afterDigest,
+    };
+  });
+  const journalPath = path.join(outDir, "cell-attempt.json");
+  writeJsonAtomic(journalPath, {
+    version: 1, cell, stageDir, operations: journalOperations, markJson, markPath,
+    chainFile: chain.file, chains: chain.chains,
+  });
+  for (const operation of journalOperations) {
+    replayCellOperation(operation, { faultPhase });
+    if ((faultPhase === "after-tiles" && operation.name === "tiles") ||
+        (faultPhase === "after-ocean" && operation.name === "ocean") ||
+        (faultPhase === "after-mark" && operation.name === "mark")) {
+      throw new Error(`fault injection ${faultPhase} for cell ${cell}`);
+    }
+  }
+  writeJsonAtomic(chain.file, chain.chains);
+  if (markJson) writeJsonAtomic(markPath, markJson);
+  fs.rmSync(stageDir, { recursive: true, force: true });
+  fs.rmSync(journalPath, { force: true });
+  fsyncDirectory(outDir);
+  return journalOperations;
 }
 
 function escapeRegExp(value) {
@@ -59,7 +286,26 @@ function sourceTemplatePattern(template) {
 }
 
 export function sourcePolicyAllowsUrl(contract, url) {
-  return contract.urlPattern.test(url);
+  if (!contract.urlPattern.test(url)) return false;
+  // The shape regex prevents a mutable/foreign path but cannot tell N99/E999
+  // from a real tile. Inspect every coordinate occurrence so the directory
+  // and filename must name the same canonical Copernicus southwest tile.
+  const relative = url.slice(contract.policy.url_policy.base_url.length);
+  const latitudes = relative.match(/[NS]\d{2}/g) ?? [];
+  const longitudes = relative.match(/[EW]\d{3}/g) ?? [];
+  if (!latitudes.length || !longitudes.length) return false;
+  const validLatitude = (token) => {
+    const value = Number(token.slice(1));
+    return (token[0] === "N" && value >= 0 && value <= 89) ||
+      (token[0] === "S" && value >= 1 && value <= 90);
+  };
+  const validLongitude = (token) => {
+    const value = Number(token.slice(1));
+    return (token[0] === "E" && value >= 0 && value <= 179) ||
+      (token[0] === "W" && value >= 1 && value <= 180);
+  };
+  return latitudes.every(validLatitude) && longitudes.every(validLongitude) &&
+    new Set(latitudes).size === 1 && new Set(longitudes).size === 1;
 }
 
 function assertBoundedText(value, maxBytes, label) {
@@ -126,12 +372,44 @@ export class BoundedTopK {
   ordered() { return [...this.heap].sort((a, b) => -this.compareBest(a, b)); }
 }
 
+/** Exact bounded integer histogram for values under a declared hard ceiling. */
+export class FixedHistogram {
+  constructor(maxValue) {
+    assert.ok(Number.isSafeInteger(maxValue) && maxValue >= 0, "histogram maxValue must be a non-negative integer");
+    this.maxValue = maxValue;
+    this.bins = new Uint32Array(maxValue + 1);
+    this.count = 0;
+    this.max = 0;
+  }
+  add(value) {
+    assert.ok(Number.isSafeInteger(value) && value >= 0 && value <= this.maxValue,
+      `histogram value must be in [0, ${this.maxValue}]`);
+    assert.ok(this.bins[value] < 0xffffffff, "histogram bucket overflow");
+    this.bins[value] += 1;
+    this.count += 1;
+    this.max = Math.max(this.max, value);
+  }
+  percentile(fraction) {
+    if (!this.count) return 0;
+    assert.ok(fraction >= 0 && fraction <= 1, "histogram percentile must be in [0, 1]");
+    const target = Math.floor((this.count - 1) * fraction);
+    let seen = 0;
+    for (let value = 0; value <= this.max; value += 1) {
+      seen += this.bins[value];
+      if (seen > target) return value;
+    }
+    throw new Error("histogram count is inconsistent with bins");
+  }
+}
+
 export function sourcePolicyContract(runConfig) {
   const policy = runConfig?.source_policy;
   if (!policy) return null;
   assert.equal(policy.version, 1, "source_policy.version must be 1");
   assert.ok(typeof policy.dataset_epoch === "string" && policy.dataset_epoch.length > 0,
     "source_policy.dataset_epoch is required");
+  assert.equal(runConfig.flow_config?.dataset_epoch, policy.dataset_epoch,
+    "flow_config.dataset_epoch must equal source_policy.dataset_epoch");
   assert.ok(typeof policy.provider === "string" && policy.provider.length > 0,
     "source_policy.provider is required");
   assert.ok(typeof policy.url_policy?.base_url === "string" && policy.url_policy.base_url.startsWith("https://"),
@@ -160,6 +438,9 @@ export function sourcePolicyContract(runConfig) {
     "source_policy.request.retry_base_ms must be a non-negative integer");
   assert.ok(Number.isSafeInteger(policy.request?.max_outstanding) && policy.request.max_outstanding >= 1 && policy.request.max_outstanding <= 64,
     "source_policy.request.max_outstanding must be an integer in [1, 64]");
+  assert.ok(Number.isSafeInteger(policy.request?.max_response_bytes) && policy.request.max_response_bytes > 0 &&
+    policy.request.max_response_bytes <= MAX_GLOBAL_SOURCE_RESPONSE_BYTES,
+  `source_policy.request.max_response_bytes must be in [1, ${MAX_GLOBAL_SOURCE_RESPONSE_BYTES}]`);
   assert.equal(policy.no_data?.http_404, "record-no-coverage-never-retry",
     "source_policy.no_data.http_404 must explicitly preserve 404 observations");
   assert.ok(typeof policy.no_data?.non_water === "string" && policy.no_data.non_water.length > 0,
@@ -266,14 +547,36 @@ function assertObservation(observation) {
   assert.match(observation?.source_key ?? "", /^sha256:[0-9a-f]{64}$/, "invalid source observation key");
   assertBoundedText(observation?.url, MAX_SOURCE_URL_BYTES, "source observation URL");
   assert.ok(observation.url.length > 0, "source observation URL is required");
-  assert.ok(Number.isInteger(observation?.status), "source observation status is required");
+  assert.ok(Number.isInteger(observation?.status) && observation.status >= 100 && observation.status <= 599,
+    "source observation status must be an HTTP status");
   assert.ok(Number.isSafeInteger(observation?.content_length) && observation.content_length >= 0,
     "source observation content_length is required");
   assert.match(observation?.content_digest ?? "", /^[0-9a-f]{64}$/, "source observation SHA-256 digest is required");
   assertBoundedText(observation?.observed_at, MAX_SOURCE_TIMESTAMP_BYTES, "source observation observed_at");
   assert.ok(observation.observed_at.length > 0, "source observation observed_at is required");
+  assertCanonicalRfc3339(observation.observed_at, "source observation observed_at");
   if (observation.etag !== undefined) assertBoundedText(observation.etag, MAX_SOURCE_HEADER_BYTES, "source observation ETag");
   if (observation.last_modified !== undefined) assertBoundedText(observation.last_modified, MAX_SOURCE_HEADER_BYTES, "source observation Last-Modified");
+}
+
+function assertCanonicalRfc3339(value, label) {
+  assertBoundedText(value, MAX_SOURCE_TIMESTAMP_BYTES, label);
+  const epoch = Date.parse(value);
+  assert.ok(Number.isFinite(epoch) && new Date(epoch).toISOString() === value,
+    `${label} must be canonical RFC3339 UTC milliseconds`);
+}
+
+function assertContractObservation(observation, contract) {
+  if (!contract) return;
+  assert.equal(observation.source_key, sourceKey(observation.url), "source observation key must equal SHA-256(url)");
+  assert.ok(sourcePolicyAllowsUrl(contract, observation.url),
+    `source observation URL is outside the approved naming policy: ${observation.url}`);
+}
+
+function assertRequestLogObservation(observation, contract) {
+  assertContractObservation(observation, contract);
+  assertCanonicalRfc3339(observation.requested_at, "source request requested_at");
+  assert.equal(typeof observation.cache_hit, "boolean", "source request cache_hit must be boolean");
 }
 
 function readReceipt(cacheDir, url) {
@@ -295,7 +598,14 @@ function persistReceipt(cacheDir, observation) {
   const bytes = `${canonicalJson(observation)}\n`;
   try {
     const handle = fs.openSync(file, "wx", 0o600);
-    try { fs.writeFileSync(handle, bytes); } finally { fs.closeSync(handle); }
+    try {
+      fs.writeFileSync(handle, bytes);
+      fs.fsyncSync(handle);
+    } finally { fs.closeSync(handle); }
+    // The cache's `current.json` may publish immediately after this callback.
+    // Sync the receipt parent too, so a power loss cannot leave the pointer
+    // durable while the provenance entry that authorized it is absent.
+    fsyncDirectory(path.dirname(file));
     return observation;
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
@@ -341,38 +651,58 @@ export class SourceRequestObserver {
       const etag = header("etag");
       const lastModified = header("last-modified");
       this.byUrl.set(url, {
-        ...(etag ? { etag: assertBoundedText(String(etag), MAX_SOURCE_HEADER_BYTES, "response ETag") } : {}),
-        ...(lastModified ? { last_modified: assertBoundedText(String(lastModified), MAX_SOURCE_HEADER_BYTES, "response Last-Modified") } : {}),
-        observed_at: new Date().toISOString(),
+        observation: {
+          ...(etag ? { etag: assertBoundedText(String(etag), MAX_SOURCE_HEADER_BYTES, "response ETag") } : {}),
+          ...(lastModified ? { last_modified: assertBoundedText(String(lastModified), MAX_SOURCE_HEADER_BYTES, "response Last-Modified") } : {}),
+          observed_at: new Date().toISOString(),
+        },
+        timer,
+        controller,
       });
       return response;
     } catch (error) {
+      clearTimeout(timer);
       this.byUrl.delete(url);
       this.pending.delete(url);
       throw error;
-    } finally {
-      clearTimeout(timer);
     }
   }
 
+  peek(url) { return this.byUrl.get(url)?.observation; }
+
   take(url) {
-    const observed = this.byUrl.get(url);
+    const entry = this.byUrl.get(url);
     this.byUrl.delete(url);
     this.pending.delete(url);
-    return observed;
+    if (entry) clearTimeout(entry.timer);
+    return entry?.observation;
   }
 
   discard(url) {
+    const entry = this.byUrl.get(url);
     this.byUrl.delete(url);
     this.pending.delete(url);
+    if (entry) clearTimeout(entry.timer);
   }
+
+  abort(url, reason = "source response exceeded its approved object cap") {
+    const entry = this.byUrl.get(url);
+    entry?.controller.abort(new Error(reason));
+  }
+}
+
+export function validateCachedSource({ cacheDir, url, status, body }) {
+  const existing = readReceipt(cacheDir, url);
+  assert.ok(existing, `cached source object has no immutable observation receipt: ${url}`);
+  assert.equal(existing.status, status, `cached source status differs from receipt: ${url}`);
+  assert.equal(existing.content_length, body.length, `cached source length differs from receipt: ${url}`);
+  assert.equal(existing.content_digest, sha256(body), `cached source digest differs from receipt: ${url}`);
+  return existing;
 }
 
 export function observationForRequest({ cacheDir, url, fetched, networkObservation = undefined }) {
   if (fetched.hit) {
-    const existing = readReceipt(cacheDir, url);
-    assert.ok(existing, `cached source object has no immutable observation receipt: ${url}`);
-    return existing;
+    return validateCachedSource({ cacheDir, url, status: fetched.status, body: fetched.body });
   }
   const observation = {
     source_key: sourceKey(url),
@@ -390,7 +720,7 @@ export function observationForRequest({ cacheDir, url, fetched, networkObservati
 
 export function appendRequestObservation(logFile, observation, { requestedAt, cacheHit }) {
   assertObservation(observation);
-  assert.ok(typeof requestedAt === "string" && requestedAt.length > 0, "requestedAt is required");
+  assertCanonicalRfc3339(requestedAt, "source request requested_at");
   fs.appendFileSync(logFile, `${canonicalJson({ ...observation, requested_at: requestedAt, cache_hit: Boolean(cacheHit) })}\n`);
 }
 
@@ -428,12 +758,30 @@ async function* boundedLines(file, maxBytes) {
   assert.equal(pending.length, 0, `JSONL file ends without a newline: ${file}`);
 }
 
-async function* jsonl(file) {
+async function* jsonl(file, { contract = null, requestLog = false } = {}) {
   for await (const bytes of boundedLines(file, MAX_OBSERVATION_LINE_BYTES)) {
     const row = JSON.parse(bytes.toString("utf8"));
     assertObservation(row);
+    if (requestLog) assertRequestLogObservation(row, contract);
+    else assertContractObservation(row, contract);
     yield row;
   }
+}
+
+export async function validateSourceObservationLog(file, contract, { cacheDir = undefined } = {}) {
+  let count = 0;
+  for await (const row of jsonl(file, { contract, requestLog: true })) {
+    if (cacheDir) {
+      const receipt = readReceipt(cacheDir, row.url);
+      assert.ok(receipt, `source request log has no immutable response receipt: ${row.url}`);
+      assertContractObservation(receipt, contract);
+      assert.equal(canonicalJson(manifestObservation(row)), canonicalJson(manifestObservation(receipt)),
+        `source request log does not match immutable response receipt: ${row.url}`);
+    }
+    count += 1;
+  }
+  assert.ok(count > 0, `completed source shard has an empty observation log: ${file}`);
+  return count;
 }
 
 function flushRun(rows, dir, ordinal) {
@@ -445,14 +793,14 @@ function flushRun(rows, dir, ordinal) {
   return file;
 }
 
-async function sortObservationLogs(logFiles, dir, maxRunBytes) {
+async function sortObservationLogs(logFiles, dir, maxRunBytes, contract) {
   fs.mkdirSync(dir, { recursive: true });
   const rows = [];
   let bytes = 0;
   const runs = [];
   for (const file of logFiles) {
     assert.ok(fs.existsSync(file), `missing completed shard source log: ${file}`);
-    for await (const row of jsonl(file)) {
+    for await (const row of jsonl(file, { contract, requestLog: true })) {
       const canonical = canonicalJson(row);
       rows.push(row);
       bytes += Buffer.byteLength(canonical) + 1;
@@ -521,18 +869,31 @@ async function collapseRuns(runs, sortDir, fanIn) {
   return active[0] ?? null;
 }
 
-async function digestFile(file) {
+async function digestFile(file, contract = null) {
   const hash = createHash("sha256");
   let count = 0;
   for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-  for await (const unused of jsonl(file)) { void unused; count += 1; }
+  for await (const unused of jsonl(file, { contract })) { void unused; count += 1; }
   return { digest: hash.digest("hex"), count };
 }
 
-async function writeCanonicalManifest(input, output) {
+export async function readSourceManifestEvidence(file, contract) {
+  const hash = createHash("sha256");
+  let observations = 0;
+  let latestObservedAt = "";
+  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+  for await (const observation of jsonl(file, { contract })) {
+    observations += 1;
+    if (observation.observed_at > latestObservedAt) latestObservedAt = observation.observed_at;
+  }
+  assert.ok(observations > 0 && latestObservedAt, `source manifest is empty: ${file}`);
+  return { digest: hash.digest("hex"), observations, latestObservedAt };
+}
+
+async function writeCanonicalManifest(input, output, contract) {
   const handle = fs.openSync(output, "w", 0o600);
   try {
-    for await (const row of jsonl(input)) {
+    for await (const row of jsonl(input, { contract, requestLog: true })) {
       fs.writeSync(handle, `${canonicalJson(manifestObservation(row))}\n`);
     }
   } finally {
@@ -561,12 +922,12 @@ export async function emitCompletionSourceManifest({
   try {
     assert.ok(Number.isSafeInteger(sortRunBytes) && sortRunBytes > 0, "sortRunBytes must be positive");
     assert.ok(Number.isSafeInteger(fanIn) && fanIn > 1, "fanIn must exceed one");
-    const runs = await sortObservationLogs(logFiles, sortDir, sortRunBytes);
+    const runs = await sortObservationLogs(logFiles, sortDir, sortRunBytes, contract);
     assert.ok(runs.length > 0, "a source-backed completion has no source observations");
     const collapsed = await collapseRuns(runs, sortDir, fanIn);
     assert.ok(collapsed, "source observation merge produced no manifest run");
-    await writeCanonicalManifest(collapsed, temporary);
-    const receipt = await digestFile(temporary);
+    await writeCanonicalManifest(collapsed, temporary, contract);
+    const receipt = await digestFile(temporary, contract);
     assert.ok(receipt.count > 0, "a source-backed completion has an empty source manifest");
     fs.mkdirSync(path.dirname(final), { recursive: true });
     try {
@@ -574,7 +935,7 @@ export async function emitCompletionSourceManifest({
       fs.chmodSync(final, 0o444);
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      const existing = await digestFile(final);
+      const existing = await digestFile(final, contract);
       assert.deepEqual(existing, receipt,
         `refusing to overwrite immutable source manifest with different bytes: ${final}`);
     }
@@ -734,9 +1095,33 @@ export async function mergeBoundedFramedStores({
   }
 }
 
+function oceanAddressKey(address, file) {
+  // Geographic WGS84 has 2^(z+1) columns and 2^z rows.  Fixed-width numeric
+  // fields make code-unit comparison a host-independent level,y,x ordering;
+  // raw lexical address ordering would put z10 before z8 and corrupt the
+  // deterministic availability worklist.
+  const match = /^(0|[1-9]\d*)\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/.exec(address);
+  assert.ok(match, `invalid canonical ocean-skip address in ${file}`);
+  const [, levelText, xText, yText] = match;
+  const level = Number(levelText);
+  const x = Number(xText);
+  const y = Number(yText);
+  assert.ok(Number.isSafeInteger(level) && level >= 0 && level <= 30,
+    `ocean-skip level is outside [0,30] in ${file}`);
+  assert.ok(Number.isSafeInteger(x) && x >= 0 && x < 2 ** (level + 1),
+    `ocean-skip x is outside geographic bounds for level ${level} in ${file}`);
+  assert.ok(Number.isSafeInteger(y) && y >= 0 && y < 2 ** level,
+    `ocean-skip y is outside geographic bounds for level ${level} in ${file}`);
+  return `${String(level).padStart(2, "0")}|${String(y).padStart(10, "0")}|${String(x).padStart(10, "0")}`;
+}
+
 function assertOceanAddress(address, file) {
-  assert.match(address, /^\d+\/\d+\/\d+$/, `invalid ocean-skip address in ${file}`);
+  oceanAddressKey(address, file);
   return address;
+}
+
+function compareOceanAddress(a, b) {
+  return codeUnitCompare(oceanAddressKey(a, "ocean merge"), oceanAddressKey(b, "ocean merge"));
 }
 
 async function* legacyOceanAddresses(file) {
@@ -781,18 +1166,19 @@ async function* oceanAddresses(file) {
   }
 }
 
-async function mergeOceanGroup(inputFiles, output) {
+async function mergeOceanGroup(inputFiles, output, { allowDuplicate = false } = {}) {
   const iterators = inputFiles.map((file) => oceanAddresses(file));
   const current = await Promise.all(iterators.map((iterator) => iterator.next()));
   const handle = fs.openSync(output, "w", 0o600);
   let previous = null;
   let count = 0;
+  let duplicates = 0;
   try {
     while (true) {
       let selected = -1;
       for (let i = 0; i < current.length; i += 1) {
         if (current[i].done) continue;
-        if (selected < 0 || codeUnitCompare(current[i].value, current[selected].value) < 0) selected = i;
+        if (selected < 0 || compareOceanAddress(current[i].value, current[selected].value) < 0) selected = i;
       }
       if (selected < 0) break;
       const address = current[selected].value;
@@ -802,32 +1188,75 @@ async function mergeOceanGroup(inputFiles, output) {
         previous = address;
         count += 1;
       } else {
-        throw new Error(`ocean-skip inputs overlap at ${address}; refusing to hide duplicate shard coverage`);
+        duplicates += 1;
+        if (!allowDuplicate) {
+          throw new Error(`ocean-skip inputs overlap at ${address}; refusing to hide duplicate shard coverage`);
+        }
       }
     }
   } finally {
     fs.closeSync(handle);
   }
-  return count;
+  return { count, duplicates };
 }
 
 function flushOceanRun(rows, dir, ordinal) {
   if (!rows.length) return null;
-  rows.sort(codeUnitCompare);
-  let duplicates = 0;
-  let duplicateAddress = null;
-  for (let i = 1; i < rows.length; i += 1) {
-    if (rows[i] === rows[i - 1]) {
-      duplicates += 1;
-      duplicateAddress ??= rows[i];
-    }
-  }
-  assert.equal(duplicates, 0,
-    `ocean-skip inputs contain ${duplicates} duplicate address(es), first ${duplicateAddress}; refusing to hide shard overlap`);
+  rows.sort(compareOceanAddress);
   const run = path.join(dir, `ocean-run-${String(ordinal).padStart(8, "0")}.lines`);
   fs.writeFileSync(run, `${rows.join("\n")}\n`);
   rows.length = 0;
   return run;
+}
+
+async function collapseOceanRuns(runs, dir, fanIn, { allowDuplicate }) {
+  let active = runs;
+  let round = 0;
+  let duplicates = 0;
+  while (active.length > 1) {
+    const next = [];
+    for (let start = 0; start < active.length; start += fanIn) {
+      const file = path.join(dir, `ocean-merge-${String(round).padStart(4, "0")}-${String(next.length).padStart(6, "0")}.lines`);
+      const result = await mergeOceanGroup(active.slice(start, start + fanIn), file, { allowDuplicate });
+      duplicates += result.duplicates;
+      next.push(file);
+    }
+    for (const file of active) fs.unlinkSync(file);
+    active = next;
+    round += 1;
+  }
+  if (!active.length) return { file: null, duplicates };
+  // One sorted initial run has not passed through duplicate handling yet.
+  const normalized = path.join(dir, `ocean-normalized-${String(round).padStart(4, "0")}.lines`);
+  const result = await mergeOceanGroup(active, normalized, { allowDuplicate });
+  duplicates += result.duplicates;
+  fs.unlinkSync(active[0]);
+  return { file: normalized, duplicates };
+}
+
+async function oceanRunsForInput(file, dir, ordinalStart, maxRunBytes, fanIn) {
+  const localDir = fs.mkdtempSync(path.join(dir, "ocean-input-"));
+  const rows = [];
+  const runs = [];
+  let bytes = 0;
+  try {
+    for await (const address of oceanAddresses(file)) {
+      rows.push(address);
+      bytes += Buffer.byteLength(address) + 1;
+      if (bytes >= maxRunBytes) {
+        runs.push(flushOceanRun(rows, localDir, ordinalStart + runs.length));
+        bytes = 0;
+      }
+    }
+    if (rows.length) runs.push(flushOceanRun(rows, localDir, ordinalStart + runs.length));
+    const collapsed = await collapseOceanRuns(runs, localDir, fanIn, { allowDuplicate: true });
+    if (!collapsed.file) return collapsed;
+    const output = path.join(dir, `ocean-shard-${String(ordinalStart).padStart(8, "0")}.lines`);
+    fs.renameSync(collapsed.file, output);
+    return { ...collapsed, file: output };
+  } finally {
+    fs.rmSync(localDir, { recursive: true, force: true });
+  }
 }
 
 /** Produce the stream-friendly global ocean-skip artifact, accepting legacy JSON inputs. */
@@ -836,43 +1265,25 @@ export async function mergeOceanSkips({ inputFiles, outputFile, maxRunBytes = SO
   assert.ok(Number.isSafeInteger(fanIn) && fanIn > 1, "fanIn must exceed one");
   const sortDir = fs.mkdtempSync(path.join(path.dirname(outputFile), ".ocean-skip-runs-"));
   try {
-    const rows = [];
-    const runs = [];
-    let bytes = 0;
+    const shardRuns = [];
+    let ordinal = 0;
+    let duplicateLinesWithinShards = 0;
     for (const file of inputFiles) {
       if (!fs.existsSync(file)) continue;
-      for await (const address of oceanAddresses(file)) {
-        rows.push(address);
-        bytes += Buffer.byteLength(address) + 1;
-        if (bytes >= maxRunBytes) {
-          runs.push(flushOceanRun(rows, sortDir, runs.length));
-          bytes = 0;
-        }
-      }
+      const local = await oceanRunsForInput(file, sortDir, ordinal, maxRunBytes, fanIn);
+      ordinal += 1_000_000;
+      duplicateLinesWithinShards += local.duplicates;
+      if (local.file) shardRuns.push(local.file);
     }
-    if (rows.length) {
-      runs.push(flushOceanRun(rows, sortDir, runs.length));
-    }
-    let active = runs;
-    let round = 0;
-    while (active.length > 1) {
-      const next = [];
-      for (let start = 0; start < active.length; start += fanIn) {
-        const file = path.join(sortDir, `ocean-merge-${String(round).padStart(4, "0")}-${String(next.length).padStart(6, "0")}.lines`);
-        await mergeOceanGroup(active.slice(start, start + fanIn), file);
-        next.push(file);
-      }
-      for (const file of active) fs.unlinkSync(file);
-      active = next; round += 1;
-    }
-    const final = active[0];
+    const merged = await collapseOceanRuns(shardRuns, sortDir, fanIn, { allowDuplicate: false });
+    const final = merged.file;
     if (final) fs.renameSync(final, outputFile);
     else fs.writeFileSync(outputFile, "");
     const hash = createHash("sha256");
     let count = 0;
     for await (const chunk of fs.createReadStream(outputFile)) hash.update(chunk);
     for await (const unused of oceanAddresses(outputFile)) { void unused; count += 1; }
-    return { count, duplicates: 0, digest: hash.digest("hex"), path: path.basename(outputFile) };
+    return { count, duplicates: 0, duplicateLinesWithinShards, digest: hash.digest("hex"), path: path.basename(outputFile) };
   } finally {
     fs.rmSync(sortDir, { recursive: true, force: true });
   }

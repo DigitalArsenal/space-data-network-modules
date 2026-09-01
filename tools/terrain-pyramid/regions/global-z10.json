@@ -2,6 +2,13 @@
   "//": "APPROVED OFF-FLEET GLOBAL EPOCH. The source is Copernicus DEM GLO-30 public COGs at the immutable naming scheme below; this config intentionally stores z8-z10 only. z0-z7 are global ancestor coverage synthesized by the serving module, not guessed source terrain. A 404 for a planned DEM or WBM is the provider's no-coverage/ocean result (never retried); the encoder may synthesize only an all-water tile, and any non-water no-data/partial-coverage result remains visible to verify.mjs and fails its missing-row/coverage gates.",
   "out": "tools/terrain-pyramid/out/global-z10",
   "cache_max_bytes": 103079215104,
+  "publication_policy": {
+    "version": 1,
+    "max_verified_store_bytes": 12884901888,
+    "max_static_directory_bytes": 137438953472,
+    "synthesized_tile_grid_size": 2,
+    "static_directory_basis": "The verified compressed DTT stream is measured at 5.55–8.51 GiB; 12 GiB gives the observed upper bound 41% headroom. Static identity bytes have a separate empirical budget: checked Liguria evidence is 450,180,397 directory bytes / 35,149,748 DTT bytes = 12.8075x. Applying that ratio to the global 8.51 GiB upper store estimate is 108.99 GiB before headroom; the reviewed 128 GiB binary ceiling leaves 17.4% headroom without using a generic 1 TiB host-capacity placeholder. Flat synthesized tiles use the serving module's accepted 2x2 lattice, so four coplanar vertices replace the default 4,225; this exact setting is carried into both mount and IPFS synthesis."
+  },
   "source_policy": {
     "version": 1,
     "provider": "Copernicus DEM",
@@ -17,6 +24,7 @@
       "retries": 4,
       "retry_base_ms": 250,
       "max_outstanding": 8,
+      "max_response_bytes": 134217728,
       "retryable": "network failures and HTTP 408, 425, 429, and 5xx only; exponential backoff without jitter"
     },
     "no_data": {
@@ -46,6 +54,7 @@
     "source_license": "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
     "source_coverage_policy": "HTTP 200 is sampled source. HTTP 404 is an immutable no-coverage observation, recorded in the shared generation cache and interpreted as ocean only where the paired water classification is all-water. Other HTTP failures are retried by the bounded runner and then fail the cut; partial/non-water no-data is never filled as land or water.",
     "ocean_policy": "all-water addresses are omitted from tiles.dttstream, declared by verify.mjs, and materialized as UNIFORM_WATER for static IPFS delivery; z0-z7 global ancestors are synthesized only to complete global client availability.",
+    "terrain_synth_grid_size": 2,
     "grid_size": 65,
     "max_grid_size": 361,
     "min_level": 8,

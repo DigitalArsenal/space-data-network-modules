@@ -53,7 +53,7 @@ import zlib from "node:zlib";
 
 import { readGenerationCacheEntry } from "./build-support.mjs";
 import { iterateStreamFile } from "./dtt-reader.mjs";
-import { BoundedTopK } from "./source-provenance.mjs";
+import { BoundedTopK, canonicalJson, readSourceManifestEvidence, sha256, sourcePolicyContract } from "./source-provenance.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -62,7 +62,6 @@ const WASM = path.join(REPO, "data-source", "terrain-source", "dist", "isomorphi
 const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(REPO, "data-source", "terrain-source", "plugin-manifest.json"), "utf8"),
 );
-const GRANULE_BASE = "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/";
 // THE REFERENCE'S DEPTH IS ALSO PER LEVEL. A fixed level+2 forces the whole
 // reference lattice into ONE tile's worth of posts, and at the shallow levels
 // that lattice cannot encode under the 32 KiB ceiling at all. Going one level
@@ -118,11 +117,15 @@ const MAX_SAMPLES_PER_LEVEL = 32;
 const MAX_LEVEL_SUMMARIES = 64;
 const MAX_REFERENCE_RESPONSE_BYTES = 4 * 1024 * 1024;
 
-const args = { perLevel: 6, json: false };
+const args = { perLevel: 6, json: false, allowLegacyRegional: false };
 for (let i = 2; i < process.argv.length; i += 1) {
   if (process.argv[i] === "--out") args.out = process.argv[++i];
   else if (process.argv[i] === "--per-level") args.perLevel = Number(process.argv[++i]);
   else if (process.argv[i] === "--json") args.json = true;
+  else if (process.argv[i] === "--allow-legacy-regional") args.allowLegacyRegional = true;
+  else if (process.argv[i] === "--legacy-granule-base") args.legacyGranuleBase = process.argv[++i];
+  else if (process.argv[i] === "--legacy-dataset-epoch") args.legacyDatasetEpoch = process.argv[++i];
+  else if (process.argv[i] === "--legacy-retrieved-at") args.legacyRetrievedAt = process.argv[++i];
   else throw new Error(`unknown argument ${process.argv[i]}`);
 }
 assert.ok(args.out, "--out <store dir> is required");
@@ -134,6 +137,37 @@ const outDir = path.resolve(args.out);
 const granuleDir = fs.existsSync(path.join(outDir, "granule-cache"))
   ? path.join(outDir, "granule-cache")
   : path.join(outDir, "granules");
+
+async function approvedSourceLineage() {
+  const configPath = path.join(outDir, "approved-run-config.json");
+  if (!fs.existsSync(configPath)) {
+    assert.ok(args.allowLegacyRegional,
+      "global accuracy requires approved-run-config.json; use --allow-legacy-regional only for an explicit legacy regional store");
+    assert.ok(args.legacyGranuleBase && args.legacyDatasetEpoch && args.legacyRetrievedAt,
+      "legacy regional accuracy requires --legacy-granule-base, --legacy-dataset-epoch, and --legacy-retrieved-at");
+    return { kind: "legacy-regional", policy: null, configDigest: null, manifestDigest: null, latestObservedAt: args.legacyRetrievedAt };
+  }
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  const contract = sourcePolicyContract(config);
+  assert.ok(contract, "approved global run config has no source policy");
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "global-merge-report.json"), "utf8"));
+  assert.equal(report.completion, "complete", "global accuracy requires a terminal global merge receipt");
+  assert.equal(report.configDigest, sha256(canonicalJson(config)),
+    "global merge report config digest must match approved config");
+  assert.equal(report.sourceManifest?.sourcePolicyDigest, contract.digest,
+    "global merge report source policy digest mismatch");
+  const manifest = path.join(outDir, report.sourceManifest.path);
+  const evidence = await readSourceManifestEvidence(manifest, contract);
+  assert.equal(evidence.digest, report.sourceManifest.digest, "source manifest digest mismatch");
+  return {
+    kind: "global-source-policy", contract,
+    configDigest: report.configDigest,
+    manifestDigest: evidence.digest,
+    latestObservedAt: evidence.latestObservedAt,
+  };
+}
+
+const sourceLineage = await approvedSourceLineage();
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -279,15 +313,27 @@ function triangleHeight(lattice, grid, fu, fv) {
 }
 
 // ── the granules a tile needs, from the run's own on-disk cache ─────────────
-const stem = (lat, lon) =>
-  `Copernicus_DSM_COG_10_${lat < 0 ? "S" : "N"}${String(Math.abs(lat)).padStart(2, "0")}_00_` +
-  `${lon < 0 ? "W" : "E"}${String(Math.abs(lon)).padStart(3, "0")}_00`;
-const demUrl = (lat, lon) => `${GRANULE_BASE}${stem(lat, lon)}_DEM/${stem(lat, lon)}_DEM.tif`;
+function demUrl(lat, lon) {
+  if (!sourceLineage.contract) {
+    const stem = `Copernicus_DSM_COG_10_${lat < 0 ? "S" : "N"}${String(Math.abs(lat)).padStart(2, "0")}_00_` +
+      `${lon < 0 ? "W" : "E"}${String(Math.abs(lon)).padStart(3, "0")}_00`;
+    return `${args.legacyGranuleBase}${stem}_DEM/${stem}_DEM.tif`;
+  }
+  const template = sourceLineage.contract.policy.url_policy.dem_template;
+  const rendered = template
+    .replaceAll("{NS}", lat < 0 ? "S" : "N")
+    .replaceAll("{LAT2}", String(Math.abs(lat)).padStart(2, "0"))
+    .replaceAll("{EW}", lon < 0 ? "W" : "E")
+    .replaceAll("{LON3}", String(Math.abs(lon)).padStart(3, "0"));
+  return `${sourceLineage.contract.policy.url_policy.base_url}${rendered}`;
+}
 const cachePath = (url) => path.join(granuleDir, `${createHash("sha256").update(url).digest("hex").slice(0, 32)}.bin`);
 
 function cachedGranule(url) {
   const generation = readGenerationCacheEntry(granuleDir, url);
   if (generation) return generation;
+  assert.ok(!sourceLineage.contract,
+    `global accuracy requires the current immutable cache generation for ${url}`);
   const file = cachePath(url);
   const statusFile = `${file}.status`;
   if (!fs.existsSync(file) || !fs.existsSync(statusFile)) return null;
@@ -363,9 +409,9 @@ async function visitReferenceAt(tile, harness, grid, visit) {
         skipOceanTiles: false,
         tiles,
         provenance: {
-          datasetId: "cop-dem-glo-30",
-          datasetEpoch: "2023-04-01T00:00:00.000Z",
-          retrievedAt: "2026-08-26T00:00:00.000Z",
+          datasetId: sourceLineage.contract?.policy.provider ?? "legacy-regional",
+          datasetEpoch: sourceLineage.contract?.datasetEpoch ?? "legacy-regional",
+          retrievedAt: sourceLineage.latestObservedAt ?? "legacy-regional",
           license: "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
         },
       }),
@@ -566,6 +612,13 @@ const summary = {
   sourcePostsPerTileEdgeByLevel: Object.fromEntries(
     levels.map((l) => [l.level, l.sourcePostsPerTileEdge]),
   ),
+  sourceLineage: {
+    kind: sourceLineage.kind,
+    configDigest: sourceLineage.configDigest,
+    sourcePolicyDigest: sourceLineage.contract?.digest ?? null,
+    sourceManifestDigest: sourceLineage.manifestDigest,
+    latestObservedAt: sourceLineage.latestObservedAt,
+  },
   // WHAT THIS HARNESS CAN AND CANNOT CONCLUDE, stated in the artefact rather
   // than in the file's own comments, because the report is what gets read.
   limits: [

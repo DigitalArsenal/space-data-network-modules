@@ -40,14 +40,20 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { BoundedGranuleCache } from "./build-support.mjs";
+import { MAX_TERRAIN_RECORD_BYTES } from "./dtt-reader.mjs";
 import {
+  FixedHistogram,
   SourceRequestObserver,
   appendRequestObservation,
   canonicalJson,
+  commitCellAttempt,
   ensureSourceEpoch,
   observationForRequest,
+  publicationPolicyContract,
+  recoverCellAttempt,
   sha256,
   sourcePolicyContract,
+  validateCachedSource,
 } from "./source-provenance.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -57,6 +63,8 @@ const SDK_DIR = path.join(REPO, "flows", "terrain-ingest", "node_modules", "spac
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const MAX_CELL_DETAIL_LINE_BYTES = 4096;
+const MAX_CELL_DETAIL_SAMPLE = 128;
 
 // ── argv ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -70,6 +78,7 @@ function parseArgs(argv) {
     else if (flag === "--cache-max-bytes") args.cacheMaxBytes = Number(argv[++i]);
     else if (flag === "--fetch-retries") args.fetchRetries = Number(argv[++i]);
     else if (flag === "--retry-base-ms") args.retryBaseMs = Number(argv[++i]);
+    else if (flag === "--fault-cell-phase") args.faultCellPhase = argv[++i];
     else if (flag === "--docker") args.docker = true;
     else if (flag === "--no-wasmedge-verify") args.wasmedgeVerify = false;
     else throw new Error(`unknown argument ${flag}`);
@@ -244,7 +253,6 @@ class TileStore {
     if (!fs.existsSync(this.recordsPath)) fs.writeFileSync(this.recordsPath, Buffer.alloc(0));
     if (!fs.existsSync(this.indexPath)) fs.writeFileSync(this.indexPath, "");
     this.bytes = fs.statSync(this.recordsPath).size;
-    this.count = fs.readFileSync(this.indexPath, "utf8").split("\n").filter(Boolean).length;
   }
   // ── THE RESUME MARK IS THE $IRM RECORD, NOT A SIDECAR ───────────────────
   //
@@ -268,19 +276,42 @@ class TileStore {
   readRecords(type, limit) {
     const file = path.join(this.dir, `${String(type).toLowerCase()}.records`);
     if (!fs.existsSync(file)) return Buffer.alloc(0);
-    const buf = fs.readFileSync(file);
+    // Do not turn a long-resumed global run's complete $IRM history into one
+    // buffer just to answer `LIMIT 32`. The storage relation is append-only;
+    // scan it in fixed blocks and retain only the bounded newest window.
+    const maximum = Math.min(Math.max(1, Number(limit) || 1), 64);
+    const frameLimit = 256 * 1024;
+    const handle = fs.openSync(file, "r");
+    const chunk = Buffer.alloc(64 * 1024);
+    let pending = Buffer.alloc(0);
     const frames = [];
-    let offset = 0;
-    while (offset + 4 <= buf.length) {
-      const length = buf.readUInt32LE(offset);
-      if (length === 0 || offset + 4 + length > buf.length) break;
-      frames.push(buf.subarray(offset, offset + 4 + length));
-      offset += 4 + length;
+    try {
+      let position = 0;
+      while (true) {
+        const read = fs.readSync(handle, chunk, 0, chunk.length, position);
+        if (!read) break;
+        position += read;
+        pending = pending.length ? Buffer.concat([pending, chunk.subarray(0, read)]) : Buffer.from(chunk.subarray(0, read));
+        let offset = 0;
+        while (offset + 4 <= pending.length) {
+          const length = pending.readUInt32LE(offset);
+          assert.ok(length > 0 && length <= frameLimit, "durable $IRM frame has an invalid bounded length");
+          if (offset + 4 + length > pending.length) break;
+          frames.push(Buffer.from(pending.subarray(offset, offset + 4 + length)));
+          if (frames.length > maximum) frames.shift();
+          offset += 4 + length;
+        }
+        pending = pending.subarray(offset);
+        assert.ok(pending.length <= frameLimit + 4, "durable $IRM carry exceeds bounded frame length");
+      }
+    } finally {
+      fs.closeSync(handle);
     }
-    return Buffer.concat(frames.reverse().slice(0, limit));
+    assert.equal(pending.length, 0, "durable $IRM record stream ends inside a frame");
+    return Buffer.concat(frames.reverse().slice(0, maximum));
   }
   // The record stream arrives in the store's own framing: [u32 len][record].
-  append(streamBytes) {
+  prepareAppend(streamBytes) {
     const added = [];
     const buf = Buffer.from(streamBytes);
     let offset = 0;
@@ -292,16 +323,52 @@ class TileStore {
       added.push(buf.subarray(offset, offset + length));
       offset += length;
     }
-    if (added.length === 0) return [];
-    fs.appendFileSync(this.recordsPath, buf);
-    this.bytes += buf.length;
-    this.count += added.length;
-    return added;
+    return { bytes: buf, records: added };
+  }
+  appendPrepared(prepared) {
+    if (prepared.records.length === 0) return [];
+    fs.appendFileSync(this.recordsPath, prepared.bytes);
+    this.bytes += prepared.bytes.length;
+    return prepared.records;
+  }
+  append(streamBytes) {
+    const prepared = this.prepareAppend(streamBytes);
+    return this.appendPrepared(prepared);
   }
   appendIndex(rows) {
     if (rows.length === 0) return;
     fs.appendFileSync(this.indexPath, `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`);
   }
+}
+
+async function summarizeOceanLines(file) {
+  const hash = createHash("sha256");
+  let pending = Buffer.alloc(0);
+  let count = 0;
+  let minLevel = Infinity;
+  if (!fs.existsSync(file)) return { count, minLevel: null, digest: hash.digest("hex") };
+  for await (const chunk of fs.createReadStream(file, { highWaterMark: 4096 })) {
+    hash.update(chunk);
+    let start = 0;
+    while (start < chunk.length) {
+      const newline = chunk.indexOf(0x0a, start);
+      const end = newline < 0 ? chunk.length : newline;
+      const piece = chunk.subarray(start, end);
+      assert.ok(pending.length + piece.length <= 128, "ocean address line exceeds 128 bytes");
+      if (newline < 0) {
+        pending = pending.length ? Buffer.concat([pending, piece]) : Buffer.from(piece);
+        break;
+      }
+      const line = pending.length ? Buffer.concat([pending, piece]).toString("utf8") : piece.toString("utf8");
+      pending = Buffer.alloc(0);
+      assert.match(line, /^\d+\/\d+\/\d+$/, "invalid ocean address line");
+      count += 1;
+      minLevel = Math.min(minLevel, Number(line.split("/", 1)[0]));
+      start = newline + 1;
+    }
+  }
+  assert.equal(pending.length, 0, "ocean address file ends without a newline");
+  return { count, minLevel: Number.isFinite(minLevel) ? minLevel : null, digest: hash.digest("hex") };
 }
 
 // ── a minimal $DTT reader, for the run report only ──────────────────────────
@@ -407,14 +474,16 @@ async function main() {
   assert.ok(fs.existsSync(RUNTIME_WASM), `build the flow first: ${RUNTIME_WASM}`);
   const { createFlowRuntimeHost } = await import(path.join(SDK_DIR, "src/flow/index.js"));
 
+  recoverCellAttempt({ outDir, markPath: path.join(outDir, "resume-mark.json") });
   const store = new TileStore(outDir);
   const configuredFlowConfig = runConfig.flow_config ?? {};
   const sourceContract = sourcePolicyContract(runConfig);
+  const publicationContract = publicationPolicyContract(runConfig);
   // A region config is policy, not evidence.  In particular it must not claim
   // an observation date before a request has happened.  The terrain module
-  // requires a retrieved_at lineage field, so the runner supplies one fresh
-  // coordinator receipt shared by all shards; exact response times belong in
-  // source-observations.ndjson, not in the checked config.
+  // requires a retrieved_at lineage field, so the runner derives it from the
+  // actual per-cell source observations; it is never supplied by checked
+  // config or replaced with a build-start timestamp.
   if (sourceContract) {
     assert.equal(Object.hasOwn(configuredFlowConfig, "retrieved_at"), false,
       "a source_policy run must not prefill flow_config.retrieved_at; run.mjs records observations at request time");
@@ -424,10 +493,17 @@ async function main() {
       "a source-policy run may not override its approved retry base delay");
   }
   const sourceRunStartedAt = runConfig.source_run_started_at ?? new Date().toISOString();
+  let activeRetrievedAt = null;
   const flowConfig = sourceContract
     ? { ...configuredFlowConfig, retrieved_at: sourceRunStartedAt }
     : configuredFlowConfig;
+  const flowConfigForCurrentCell = () => sourceContract
+    ? { ...flowConfig, retrieved_at: activeRetrievedAt ?? sourceRunStartedAt }
+    : flowConfig;
   const configDigest = sha256(canonicalJson(runConfig));
+  const globalConfigDigest = runConfig.global_config_digest ?? configDigest;
+  if (sourceContract) assert.match(globalConfigDigest, /^[0-9a-f]{64}$/,
+    "a source-policy shard requires an immutable global_config_digest");
   const stats = {
     cells: 0,
     fetches: 0,
@@ -440,7 +516,7 @@ async function main() {
     oceanSkipped: 0,
     uniformMasks: 0,
     rasterMasks: 0,
-    tileBytes: [],
+    tileByteHistogram: new FixedHistogram(MAX_TERRAIN_RECORD_BYTES),
     // ── WHAT THE SOURCE ACTUALLY CARRIES, PER LEVEL ─────────────────────────
     //
     // The encoder reports `sourcePostsPerTileEdge` on every block frame, and
@@ -498,13 +574,26 @@ async function main() {
     // WBM auxfile for ground it did fetch elevation for. verify.mjs refuses it.
     maskUnclassifiedSamples: 0,
     sourceObservationRequests: 0,
+    cellDetailsWritten: 0,
+    cellDetailSample: [],
     errors: [],
   };
+  const cellDetailLog = path.join(outDir, "cells-detail.ndjson");
+  if (!fs.existsSync(cellDetailLog)) fs.writeFileSync(cellDetailLog, "");
+  function appendCellDetail(detail) {
+    const line = JSON.stringify(detail);
+    assert.ok(Buffer.byteLength(line) <= MAX_CELL_DETAIL_LINE_BYTES,
+      `cell detail exceeds ${MAX_CELL_DETAIL_LINE_BYTES} byte bound`);
+    fs.appendFileSync(cellDetailLog, `${line}\n`);
+    stats.cellDetailsWritten += 1;
+    if (stats.cellDetailSample.length < MAX_CELL_DETAIL_SAMPLE) stats.cellDetailSample.push(detail);
+  }
 
   // ── the four host operations, and only those ─────────────────────────────
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
   let lastCellRecords = Buffer.alloc(0);
+  let cellStage = null;
   const pending = [];
 
   const imports = {
@@ -576,9 +665,9 @@ async function main() {
         allowUrl: (url) => sourceContract.urlPattern.test(url),
       })
     : null;
-  function recordSourceObservation(url, fetched, requestedAt) {
+  function recordSourceObservation(url, fetched, requestedAt, persisted = undefined) {
     if (!sourceObservationLog) return;
-    const observation = observationForRequest({
+    const observation = persisted ?? observationForRequest({
       cacheDir: granuleCache.dir,
       url,
       fetched,
@@ -592,22 +681,47 @@ async function main() {
     stats.sourceObservationRequests += 1;
   }
   async function prefetch(urls) {
-    await Promise.all(
+    return Promise.all(
       urls.map(async (url) => {
         const requestedAt = new Date().toISOString();
+        let sourceObservation;
         try {
           const fetched = await granuleCache.fetch(url, {
             retries: args.fetchRetries ?? sourceContract?.policy.request.retries ?? runConfig.fetch_retries ?? 4,
             retryBaseMs: args.retryBaseMs ?? sourceContract?.policy.request.retry_base_ms ?? runConfig.retry_base_ms ?? 250,
             ...(sourceRequestObserver ? { fetchImpl: sourceRequestObserver.fetch.bind(sourceRequestObserver) } : {}),
+            ...(sourceContract ? {
+              maxResponseBytes: sourceContract.policy.request.max_response_bytes,
+              requireStreamingBody: true,
+              onBodyLimit: () => sourceRequestObserver?.abort(url),
+              onDiscardResponse: () => sourceRequestObserver?.discard(url),
+              beforeUse: ({ status, body }) => {
+                sourceObservation = validateCachedSource({ cacheDir: granuleCache.dir, url, status, body });
+              },
+              beforePublish: ({ status, body }) => {
+                // The request timer stays active through body consumption and
+                // this receipt write. Only after the receipt is durable may
+                // current.json publish the cache generation.
+                const networkObservation = sourceRequestObserver?.peek(url);
+                assert.ok(networkObservation, `source response lost its observation before publication: ${url}`);
+                sourceObservation = observationForRequest({
+                  cacheDir: granuleCache.dir,
+                  url,
+                  fetched: { status, body, hit: false },
+                  networkObservation,
+                });
+                sourceRequestObserver?.take(url);
+              },
+            } : {}),
             onRetry: () => { stats.fetchRetries += 1; },
           });
-          recordSourceObservation(url, fetched, requestedAt);
+          recordSourceObservation(url, fetched, requestedAt, sourceObservation);
           if (!fetched.hit) {
             stats.fetches += 1;
             stats.fetchBytes += fetched.body.length;
             if (fetched.status === 404) stats.fetch404 += 1;
           }
+          return sourceObservation;
         } finally {
           // fetchWithRetry can fail while reading a successful response body,
           // after the observer retained headers.  Do not let that failed
@@ -621,7 +735,7 @@ async function main() {
   pending.push({
     operation: "plugin.getConfig",
     matches: () => true,
-    respond: () => encodeEnvelope(flowConfig),
+    respond: () => encodeEnvelope(flowConfigForCurrentCell()),
   });
   pending.push({
     operation: "storage.flatsql_query_stream",
@@ -647,8 +761,10 @@ async function main() {
       if (!schema) return encodeEnvelope({ ok: false, message: "missing schema" });
       const bytes = Buffer.from(String(meta?.data ?? ""), "base64");
       if (bytes.length === 0) return encodeEnvelope({ ok: false, message: "empty record" });
-      store.writeRecord(schema, bytes);
-      stats.marksWritten += 1;
+      assert.ok(cellStage, "durable storage.write occurred outside a staged cell");
+      assert.equal(schema, "IRM", "terrain runner stages only the durable $IRM resume mark");
+      assert.equal(cellStage.markBytes, null, "cell wrote more than one durable $IRM mark");
+      cellStage.markBytes = bytes;
       return encodeEnvelope({ ok: true, result: { ok: true, schema, bytes: bytes.length } });
     },
   });
@@ -674,19 +790,12 @@ async function main() {
     respond: (meta, segments) => {
       // Kept verbatim so the WasmEdge cross-check compares the bytes the flow
       // ACTUALLY stored, not a re-encode of them.
+      assert.ok(cellStage, "storage.ingest_with_source occurred outside a staged cell");
+      assert.equal(cellStage.recordStream, null, "cell emitted more than one terrain record stream");
       lastCellRecords = Buffer.from(segments[0] ?? new Uint8Array(0));
-      const added = store.append(segments[0] ?? new Uint8Array(0));
-      const rows = [];
-      for (const record of added) {
-        const dtt = readDtt(record);
-        if (!dtt) continue;
-        stats.tiles += 1;
-        stats.tileBytes.push(dtt.payloadBytes);
-        if (dtt.waterMaskKind === 3) stats.rasterMasks += 1;
-        else stats.uniformMasks += 1;
-        rows.push(dtt);
-      }
-      store.appendIndex(rows);
+      const prepared = store.prepareAppend(segments[0] ?? new Uint8Array(0));
+      cellStage.recordStream = prepared.bytes;
+      cellStage.records = prepared.records;
       // `inserted`, NOT `records` — the connector's own key. hostcap/storage-
       // ingest documents its host result as {"schema","inserted","batch_id",…}
       // and publish_request reads `inserted` for two things: the silent-nop
@@ -700,7 +809,7 @@ async function main() {
       // now has tests.
       return encodeEnvelope({
         ok: true,
-        result: { ok: true, schema: meta?.schema, batch_id: meta?.batch_id, inserted: added.length },
+        result: { ok: true, schema: meta?.schema, batch_id: meta?.batch_id, inserted: prepared.records.length },
       });
     },
   });
@@ -777,7 +886,7 @@ async function main() {
       manifest: INGEST_MANIFEST,
       surface: "direct",
       hostcallDispatch: (operation) => {
-        if (operation === "plugin.getConfig") return flowConfig;
+        if (operation === "plugin.getConfig") return flowConfigForCurrentCell();
         throw new Error(`unexpected hostcall operation: ${operation}`);
       },
     });
@@ -813,6 +922,7 @@ async function main() {
   }
 
   async function buildCell() {
+    cellStage = { recordStream: null, records: [], markBytes: null, oceanAddresses: [] };
     const host = await createFlowRuntimeHost({
       wasmSource: new Uint8Array(fs.readFileSync(RUNTIME_WASM)),
       extraImports: imports,
@@ -880,9 +990,7 @@ async function main() {
           // was built for.
           if (tile.skippedOcean) {
             const address = `${tile.level}/${tile.x}/${tile.y}`;
-            fs.appendFileSync(oceanSkipLog, `${address}\n`);
-            stats.oceanSkippedLogged += 1;
-            stats.oceanSkippedMinLevel = Math.min(stats.oceanSkippedMinLevel, tile.level);
+            cellStage.oceanAddresses.push(address);
           }
         }
       }
@@ -892,8 +1000,7 @@ async function main() {
       // and `marksWritten` below is the only evidence that happened.
       if (value.next_tile_index !== undefined) markJson = value;
     }
-    if (markJson) fs.writeFileSync(store.markPath, `${JSON.stringify(markJson)}\n`);
-    return { stored, markJson };
+    return { stored, markJson, stage: cellStage };
   }
 
   // The same `tile` invocation the flow performs, reassembled from the plan
@@ -945,8 +1052,6 @@ async function main() {
 
   const started = Date.now();
   let backlog = Infinity;
-  const report = [];
-
   while (stats.cells < args.maxCells && backlog > 0) {
     const planned = await planCell();
     if (!planned) {
@@ -954,14 +1059,19 @@ async function main() {
       break;
     }
     try {
-      await prefetch(planned.urls);
-    const marksBefore = stats.marksWritten;
+      const observations = await prefetch(planned.urls);
+      if (sourceContract) {
+        assert.equal(observations.length, planned.urls.length, "every planned source URL needs one immutable observation");
+        activeRetrievedAt = observations.reduce((latest, observation) =>
+          observation.observed_at > latest ? observation.observed_at : latest, "");
+        assert.ok(activeRetrievedAt, "source-backed cell has no observed_at evidence for retrieved_at lineage");
+      }
     const built = await buildCell();
     // THE DURABLE MARK IS THE TEST, not the egress frame. Without a mark IN THE
     // STORE the next tick re-plans the SAME cell forever, and that is exactly
     // the failure this runner used to hide by keeping its own resume-mark.json:
     // the flow wrote no mark at all, and nothing said so.
-    if (stats.marksWritten === marksBefore) {
+    if (!built.stage.markBytes) {
       stats.errors.push(
         `cell ${planned.job.cell_index} stored ${built.stored} tiles but wrote NO durable $IRM ` +
           "mark; the next tick would replan the same cell forever",
@@ -989,9 +1099,47 @@ async function main() {
       }
       stats.wasmedgeVerifiedCells += 1;
     }
+    const indexRows = built.stage.records.map(readDtt).filter(Boolean);
+    const markFrame = Buffer.alloc(4 + built.stage.markBytes.length);
+    markFrame.writeUInt32LE(built.stage.markBytes.length, 0);
+    Buffer.from(built.stage.markBytes).copy(markFrame, 4);
+    commitCellAttempt({
+      outDir,
+      cell: planned.job.cell_index,
+      markJson: built.markJson,
+      markPath: store.markPath,
+      faultPhase: args.faultCellPhase,
+      operations: [
+        ...(built.stage.recordStream?.length ? [{ name: "tiles", target: store.recordsPath, bytes: built.stage.recordStream }] : []),
+        ...(indexRows.length ? [{
+          name: "index", target: store.indexPath,
+          bytes: Buffer.from(`${indexRows.map((row) => JSON.stringify(row)).join("\n")}\n`),
+        }] : []),
+        ...(built.stage.oceanAddresses.length ? [{
+          name: "ocean", target: oceanSkipLog,
+          bytes: Buffer.from(built.stage.oceanAddresses.map((address) => `${address}\n`).join("")),
+        }] : []),
+        { name: "mark", target: path.join(outDir, "irm.records"), bytes: markFrame },
+      ],
+    });
+    // The journal commits byte streams, so update the local accounting only
+    // after its terminal receipt exists. A crash before this point is recovered
+    // from durable artifacts rather than invocation-local counters.
+    store.bytes = fs.statSync(store.recordsPath).size;
+    stats.marksWritten += 1;
+    for (const dtt of committedRows) {
+      stats.tiles += 1;
+      stats.tileByteHistogram.add(dtt.payloadBytes);
+      if (dtt.waterMaskKind === 3) stats.rasterMasks += 1;
+      else stats.uniformMasks += 1;
+    }
+    for (const address of built.stage.oceanAddresses) {
+      stats.oceanSkippedLogged += 1;
+      stats.oceanSkippedMinLevel = Math.min(stats.oceanSkippedMinLevel, Number(address.split("/", 1)[0]));
+    }
     backlog = planned.backlog;
     stats.cells += 1;
-    report.push({
+    appendCellDetail({
       cell: planned.job.cell_index,
       level: planned.job.level,
       lon: planned.job.cell_lon,
@@ -1015,8 +1163,6 @@ async function main() {
   }
 
   const elapsed = Date.now() - started;
-  const sorted = [...stats.tileBytes].sort((a, b) => a - b);
-  const pct = (p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))] : 0);
   const summary = {
     generatedAt: new Date().toISOString(),
     outDir,
@@ -1034,11 +1180,20 @@ async function main() {
       ? {
           sourcePolicyDigest: sourceContract.digest,
           datasetEpoch: sourceContract.datasetEpoch,
+          globalConfigDigest,
+          executionConfigDigest: configDigest,
           sourceRunStartedAt,
           sourceEpochReceipt: path.relative(outDir, sourceEpoch.file),
           observationLog: path.relative(outDir, sourceObservationLog),
           observationRequests: stats.sourceObservationRequests,
           manifestContract: sourceContract.policy.manifest,
+        }
+      : null,
+    publicationPolicy: publicationContract
+      ? {
+          policy: publicationContract.policy,
+          digest: publicationContract.digest,
+          globalConfigDigest,
         }
       : null,
     granuleCache: {
@@ -1063,9 +1218,9 @@ async function main() {
     wasmedgeRuntime: wasmedge ? wasmedge.version : null,
     storeBytes: store.bytes,
     storeMiB: +(store.bytes / 1048576).toFixed(2),
-    tileBytesP50: pct(0.5),
-    tileBytesP99: pct(0.99),
-    tileBytesMax: sorted.length ? sorted[sorted.length - 1] : 0,
+    tileBytesP50: stats.tileByteHistogram.percentile(0.5),
+    tileBytesP99: stats.tileByteHistogram.percentile(0.99),
+    tileBytesMax: stats.tileByteHistogram.max,
     uniformMasks: stats.uniformMasks,
     rasterMasks: stats.rasterMasks,
     uniformMaskRatio: stats.tiles ? +(stats.uniformMasks / stats.tiles).toFixed(4) : 0,
@@ -1090,7 +1245,9 @@ async function main() {
       maskUnclassifiedSamples: stats.maskUnclassifiedSamples,
     },
     errors: stats.errors,
-    cellsDetail: report,
+    cellDetailLog: path.basename(cellDetailLog),
+    cellDetailCount: stats.cellDetailsWritten,
+    cellDetailSample: stats.cellDetailSample,
   };
   if (wasmedge) wasmedge.dispose();
   // The skipped-ocean addresses ride in their own file rather than in the run
@@ -1098,6 +1255,7 @@ async function main() {
   // the regional proof), they are consumed by exactly one reader, and burying
   // a machine-read list inside an operator-read summary is how the count came
   // to be kept while the addresses were dropped.
+  const oceanArtifact = await summarizeOceanLines(oceanSkipLog);
   const oceanSkipped = {
     generatedAt: summary.generatedAt,
     // The level at and below which "declared but not stored" means "the
@@ -1107,25 +1265,14 @@ async function main() {
     // `level/x/y` value so the global external sorter can consume it directly.
     format: "terrain-ocean-skips-lines-v1",
     addressesPath: path.basename(oceanSkipLog),
-    minLevel: stats.oceanSkippedMinLevel,
-    // This is an invocation-local consistency count. The append-only JSONL
-    // file can include retained prior cells after resume; global-build.mjs
-    // externally sorts/deduplicates that file for the terminal count.
-    observedThisInvocation: stats.oceanSkippedLogged,
+    minLevel: oceanArtifact.minLevel,
+    count: oceanArtifact.count,
+    digest: oceanArtifact.digest,
   };
-  if (!Number.isFinite(oceanSkipped.minLevel)) oceanSkipped.minLevel = null;
   fs.writeFileSync(
     path.join(outDir, "ocean-skipped.json"),
     `${JSON.stringify(oceanSkipped, null, 2)}\n`,
   );
-  if (oceanSkipped.observedThisInvocation !== stats.tilesSkippedOcean) {
-    stats.errors.push(
-      `the encoder counted ${stats.tilesSkippedOcean} ocean skips and named ` +
-          `${oceanSkipped.observedThisInvocation} addresses; a skip that is not named cannot be declared, and an ` +
-        "address that is not declared is one a client falls off the bottom of into a land tile",
-    );
-    summary.errors = stats.errors;
-  }
   fs.writeFileSync(path.join(outDir, "run-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
   console.log(JSON.stringify(summary, null, 2));
 }

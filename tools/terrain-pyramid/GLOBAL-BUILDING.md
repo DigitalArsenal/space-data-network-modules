@@ -14,15 +14,23 @@ This is an off-fleet build command. The checked approved source policy is
 object-naming templates, dataset epoch, fixed timeout/retry rules, a <=96 GiB
 cache ceiling, and the distinction between an immutable 404 no-coverage
 observation, all-water synthesis, and a failing non-water/no-data gap. It does
-not prefill `retrieved_at`: the coordinator supplies one real run-start receipt
-to satisfy tile lineage, while every actual HTTP response carries its own
-`observed_at` source-manifest observation. It stores source-backed z8--z10 records; z0--z7 are
+not prefill `retrieved_at`: each cell derives its DTT lineage value from the
+latest immutable `observed_at` among the source objects it actually prefetched;
+build start remains separately named metadata. It stores source-backed z8--z10 records; z0--z7 are
 declared global ancestors synthesized by the serving flow. It does not publish
 an IPFS CID, tunnel to a host, or deploy a flow.
 
+Template shape is not enough: every requested URL is also checked as a real
+Copernicus southwest tile (`S90..N89`, `W180..E179`, with zero canonically
+`N00`/`E000`), and repeated directory/filename coordinates must agree. An
+out-of-world planner bug cannot become an authoritative 404 or ocean fact.
+
 ## Boundaries and resume contract
 
-- The shared source cache is capped at 96 GiB. Capacity reservation,
+- The shared source cache is capped at 96 GiB, while every individual source
+  response is capped at the approved 128 MiB before it is buffered. The runner
+  rejects an over-cap `Content-Length` and streams body chunks with abort-on-cap
+  while the request observation timer remains live. Capacity reservation,
   eviction and generation publication are serialized by an inter-process lock;
   each URL has a second producer lock, so competing 200/404 observations can
   only publish one immutable body/status generation. Each active cell holds
@@ -48,7 +56,9 @@ an IPFS CID, tunnel to a host, or deploy a flow.
   stable SHA-256 key), final status, actual body length and digest,
   ETag/Last-Modified when supplied, cached-vs-network status, `requested_at`,
   and exact response `observed_at`. Cache receipts sit beside the immutable
-  cache generation; a cache hit without one fails rather than inheriting
+  cache generation. The receipt is written inside the producer lock after the
+  full response body is read but before `current.json` publishes; a cache hit
+  without one fails rather than inheriting
   unprovenanced bytes. A `source-epoch.json` receipt refuses policy/epoch
   mixing and a legacy cache with unreceipted entries.
 - Regions are cut into deterministic, non-overlapping longitude slices. A
@@ -65,9 +75,11 @@ an IPFS CID, tunnel to a host, or deploy a flow.
   report digest is accumulated in that canonical order rather than from an
   address map. Ocean skips follow the same path: `ocean-skipped.lines` is the
   raw ASCII one-`level/x/y`-per-line (`terrain-ocean-skips-lines-v1`) sorted
-  unique address stream and `ocean-skipped.json` is its small format,
-  count, and digest receipt. Duplicate ocean addresses also fail instead of
-  being collapsed (the merger still streams legacy JSON arrays on input). The
+  unique address stream in canonical numeric `level,y,x` order (not raw
+  lexical address order) and `ocean-skipped.json` is its small format,
+  count, and digest receipt. Repeated lines recovered within one shard are
+  collapsed and counted; the same address from distinct shards fails (the
+  merger still streams legacy JSON arrays on input). The
   merge report's sorted address/digest set is the order-independent
   parity identity used to compare a multi-worker rehearsal with the existing
   single-process lane.
@@ -78,6 +90,31 @@ an IPFS CID, tunnel to a host, or deploy a flow.
   source-policy digest, dataset epoch, and canonical complete-config digest are
   bound into `global-merge-report.json`. An interrupted shard or a
   `--skip-verify` source-policy invocation cannot create that manifest.
+- Each cell stages records, index rows, ocean lines, and its durable `$IRM`
+  mark under an attempt journal. The journal records pre/post lengths and
+  digest-chain receipts; startup completes an exact partial append or refuses
+  an unexpected length, and commits the mark last. Cell detail is append-only
+  bounded JSONL with a fixed report sample, while tile-byte percentiles use an
+  exact fixed histogram under the DTT size cap.
+- Global output includes `approved-run-config.json`; its digest is carried by
+  every shard report, the manifest receipt, and the terminal merge report.
+  Accuracy tools require that approved config and manifest lineage for global
+  output. Legacy regional stores require their explicit compatibility flags.
+- `regions/global-z10.json` also carries an immutable `publication_policy`.
+  Its 12 GiB `max_verified_store_bytes` is a 41% margin over the 8.51 GiB
+  measured compressed-store upper estimate. Its **separate** 128 GiB
+  `max_static_directory_bytes` follows checked Liguria evidence: 450,180,397
+  identity-directory bytes / 35,149,748 DTT-store bytes = 12.8075×; that
+  ratio applied to the 8.51 GiB global upper estimate is 108.99 GiB, leaving
+  17.4% within the reviewed binary ceiling. Neither number is a host-capacity
+  placeholder. The exact
+  policy, policy digest, and global-config digest are carried in every shard
+  `run-report.json`, retained in global state, and bound into
+  `global-merge-report.json`; a shard that reports any other policy is refused.
+  The policy fixes `terrain_synth_grid_size: 2`: the shipped source module
+  accepts `[2,255]`, and a flat land/water/ancestor tile needs only the four
+  coplanar vertices of a 2x2 lattice. The publisher passes that exact key to
+  its module harness, so the mount and IPFS generation remain one function.
 - `measure-accuracy.mjs` and `cross-check-accuracy.mjs` stream
   `tiles.dttstream`; accuracy retains at most 32 high-relief entries plus one
   flat control per level, uses a bounded heap instead of sorting each streamed
