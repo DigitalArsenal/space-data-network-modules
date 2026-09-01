@@ -11,7 +11,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { iterateStreamFile } from "./dtt-reader.mjs";
+import { iterateStreamFile, MAX_TERRAIN_RECORD_BYTES } from "./dtt-reader.mjs";
 
 export const MAX_GLOBAL_SOURCE_CACHE_BYTES = 96 * 1024 ** 3;
 // Publication is deliberately bounded independently from source cache space.
@@ -33,12 +33,31 @@ const MAX_SOURCE_RECEIPT_BYTES = 16 * 1024;
 const MAX_SOURCE_URL_BYTES = 4 * 1024;
 const MAX_SOURCE_HEADER_BYTES = 8 * 1024;
 const MAX_SOURCE_TIMESTAMP_BYTES = 128;
-// A cell stages at most one bounded terrain frame plus its compact index,
-// source-observation lines, ocean declaration, and $IRM mark. Keep journal
-// replay below the constrained 32 MiB provenance-suite heap even if a forged
-// journal names a sparse multi-gigabyte staged file.
-const MAX_CELL_ATTEMPT_APPEND_BYTES = 2 * 1024 * 1024;
+// The runner intentionally holds one whole planned-cell record stream before
+// atomically committing it with the $IRM mark. Liguria evidence includes a
+// 1,693-tile cell (about 12.3 MiB at the measured 7,616 B/tile average), so a
+// tiny generic append cap would reject an approved regional cut. Derive each
+// live attempt's allowance from its planner-owned tile count and the framing
+// reader's hard record maximum, but retain a 32 MiB ceiling so a forged or
+// incompatible planner cannot turn recovery into unbounded allocation.
+export const MAX_CELL_ATTEMPT_APPEND_BYTES = 32 * 1024 * 1024;
 export const MAX_GLOBAL_SOURCE_RESPONSE_BYTES = 128 * 1024 ** 2;
+
+export function cellAttemptAppendBound(cellTiles) {
+  assert.ok(Number.isSafeInteger(cellTiles) && cellTiles > 0,
+    "cell attempt needs a positive planner-owned tile count");
+  const framedRecordBytes = MAX_TERRAIN_RECORD_BYTES + 4;
+  assert.ok(cellTiles <= Math.floor(Number.MAX_SAFE_INTEGER / framedRecordBytes),
+    "cell attempt planner tile count overflows its framed record bound");
+  return Math.min(MAX_CELL_ATTEMPT_APPEND_BYTES, cellTiles * framedRecordBytes);
+}
+
+function assertCellAttemptAppendBound(maxAppendBytes) {
+  assert.ok(Number.isSafeInteger(maxAppendBytes) && maxAppendBytes > 0 &&
+    maxAppendBytes <= MAX_CELL_ATTEMPT_APPEND_BYTES,
+  `cell attempt append bound must be in [1, ${MAX_CELL_ATTEMPT_APPEND_BYTES}]`);
+  return maxAppendBytes;
+}
 
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -323,7 +342,7 @@ function cellStageDirectory(outDir, cell, attemptId) {
   return path.join(path.resolve(outDir), `.cell-stage-${cell}-${attemptId}`);
 }
 
-function validateCellJournal(journal, outDir, artifactPaths, markPath) {
+function validateCellJournal(journal, outDir, artifactPaths, markPath, maxAppendBytes) {
   assert.equal(journal?.version, 2, "unsupported cell attempt journal");
   assert.deepEqual(Object.keys(journal).sort(), ["attemptId", "cell", "chains", "markJson", "operations", "version"],
     "cell attempt journal has unexpected authority-bearing fields");
@@ -344,8 +363,8 @@ function validateCellJournal(journal, outDir, artifactPaths, markPath) {
     for (const key of ["beforeLength", "appendLength", "afterLength"]) {
       assert.ok(Number.isSafeInteger(operation[key]) && operation[key] >= 0, `cell attempt ${operation.name} has an invalid ${key}`);
     }
-    assert.ok(operation.appendLength <= MAX_CELL_ATTEMPT_APPEND_BYTES,
-      `cell attempt ${operation.name} exceeds its ${MAX_CELL_ATTEMPT_APPEND_BYTES}-byte staged append bound`);
+    assert.ok(operation.appendLength <= maxAppendBytes,
+      `cell attempt ${operation.name} exceeds its ${maxAppendBytes}-byte live staged append bound`);
     assert.equal(operation.afterLength, operation.beforeLength + operation.appendLength,
       `cell attempt ${operation.name} has an invalid append length`);
     for (const key of ["beforeDigest", "appendDigest", "afterDigest"]) {
@@ -425,6 +444,8 @@ export function recoverCellAttempt({
   outDir,
   markPath = path.join(outDir, "resume-mark.json"),
   artifactPaths = undefined,
+  maxAppendBytes = MAX_CELL_ATTEMPT_APPEND_BYTES,
+  expectedCell = undefined,
 }) {
   outDir = path.resolve(outDir);
   const journalPath = path.join(outDir, "cell-attempt.json");
@@ -432,7 +453,14 @@ export function recoverCellAttempt({
   if (!journalStat) return false;
   const journal = readSmallJson(journalPath, 512 * 1024, "cell attempt journal");
   const targets = cellArtifactPaths(outDir, artifactPaths);
-  const validated = validateCellJournal(journal, outDir, targets, markPath);
+  const validated = validateCellJournal(journal, outDir, targets, markPath,
+    assertCellAttemptAppendBound(maxAppendBytes));
+  if (expectedCell !== undefined) {
+    assert.ok(Number.isSafeInteger(expectedCell) && expectedCell >= 0,
+      "current live planner cell is invalid");
+    assert.equal(journal.cell, expectedCell,
+      "cell attempt does not match the current live planner cell");
+  }
   const chain = loadArtifactChains(outDir, targets, validated.targets, {
     // A crash may have appended a journaled suffix before the separate chain
     // receipt was replaced.  The persistent chain is therefore the durable
@@ -475,6 +503,7 @@ export function commitCellAttempt({
   markJson,
   markPath = path.join(outDir, "resume-mark.json"),
   artifactPaths = undefined,
+  maxAppendBytes = MAX_CELL_ATTEMPT_APPEND_BYTES,
   faultPhase = undefined,
 }) {
   outDir = path.resolve(outDir);
@@ -486,6 +515,7 @@ export function commitCellAttempt({
     "cell attempt has no durable $IRM mark");
   assert.ok(markJson && typeof markJson === "object" && !Array.isArray(markJson), "cell attempt has no operator-readable mark");
   const targetsByName = cellArtifactPaths(outDir, artifactPaths);
+  maxAppendBytes = assertCellAttemptAppendBound(maxAppendBytes);
   assert.equal(path.resolve(markPath), path.join(outDir, "resume-mark.json"), "cell attempt mark path does not match this run");
   const attemptId = randomUUID();
   const stageDir = cellStageDirectory(outDir, cell, attemptId);
@@ -494,8 +524,8 @@ export function commitCellAttempt({
   fsyncDirectory(outDir);
   const nonEmpty = operations.filter((operation) => Buffer.isBuffer(operation.bytes) && operation.bytes.length > 0);
   assert.equal(nonEmpty.length, operations.length, "cell attempt cannot journal empty artifact operations");
-  for (const operation of nonEmpty) assert.ok(operation.bytes.length <= MAX_CELL_ATTEMPT_APPEND_BYTES,
-    `cell operation ${operation.name} exceeds its ${MAX_CELL_ATTEMPT_APPEND_BYTES}-byte staged append bound`);
+  for (const operation of nonEmpty) assert.ok(operation.bytes.length <= maxAppendBytes,
+    `cell operation ${operation.name} exceeds its ${maxAppendBytes}-byte live staged append bound`);
   const names = nonEmpty.map((operation) => operation.name);
   assert.equal(new Set(names).size, names.length, "cell attempt artifact operations must be unique");
   for (const operation of nonEmpty) {

@@ -42,6 +42,7 @@ import zlib from "node:zlib";
 import { BoundedGranuleCache } from "./build-support.mjs";
 import { MAX_TERRAIN_RECORD_BYTES } from "./dtt-reader.mjs";
 import {
+  cellAttemptAppendBound,
   FixedHistogram,
   SourceRequestObserver,
   canonicalJson,
@@ -66,6 +67,60 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const MAX_CELL_DETAIL_LINE_BYTES = 4096;
 const MAX_CELL_DETAIL_SAMPLE = 128;
+const MAX_RESUME_MARK_BYTES = 256 * 1024;
+
+function sameStableFile(left, right, label) {
+  assert.equal(right.dev, left.dev, `${label} inode changed`);
+  assert.equal(right.ino, left.ino, `${label} inode changed`);
+  assert.equal(right.size, left.size, `${label} size changed`);
+  assert.equal(right.mtimeNs, left.mtimeNs, `${label} mtime changed`);
+  assert.equal(right.ctimeNs, left.ctimeNs, `${label} ctime changed`);
+}
+
+// A cell journal can survive after its terminal $IRM append but before the
+// operator-readable sidecar advances. Recovery must plan against that older
+// sidecar state: reading `$IRM` here would select the *next* cell and could
+// apply a valid derived cap to the wrong journal. Hold one no-follow regular
+// file descriptor through the bounded read, then prove the name still denotes
+// that same stable inode before handing its bytes to the planner.
+function readPriorResumeMark(outDir) {
+  const root = path.resolve(outDir);
+  const file = path.join(root, "resume-mark.json");
+  const rootStat = fs.lstatSync(root);
+  assert.ok(rootStat.isDirectory() && !rootStat.isSymbolicLink(),
+    "resume mark output directory is not a real directory");
+  let named;
+  try {
+    named = fs.lstatSync(file, { bigint: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return Buffer.alloc(0);
+    throw error;
+  }
+  assert.ok(named.isFile() && !named.isSymbolicLink(), "resume mark is not a regular file");
+  assert.ok(named.size <= BigInt(MAX_RESUME_MARK_BYTES), "resume mark exceeds bounded planner input");
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), "resume mark is not a regular file");
+    sameStableFile(named, before, "resume mark changed before open");
+    const bytes = Buffer.alloc(Number(before.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = fs.readSync(handle, bytes, offset, bytes.length - offset, offset);
+      assert.ok(read > 0, "resume mark ended while reading");
+      offset += read;
+    }
+    sameStableFile(before, fs.fstatSync(handle, { bigint: true }), "resume mark changed while reading");
+    const after = fs.lstatSync(file, { bigint: true });
+    sameStableFile(before, after, "resume mark path changed while reading");
+    const mark = JSON.parse(decoder.decode(bytes));
+    assert.ok(mark && typeof mark === "object" && !Array.isArray(mark),
+      "resume mark must be a JSON object");
+    return bytes;
+  } finally {
+    fs.closeSync(handle);
+  }
+}
 
 // ── argv ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -488,13 +543,6 @@ async function main() {
     assert.ok(sourceObservationLog.startsWith(`${outDir}${path.sep}`),
       "source_policy.manifest.shard_log must stay inside the run output");
   }
-  // Recovery derives every artifact location from the current approved run,
-  // not from path strings persisted in the interrupted cell journal.
-  recoverCellAttempt({
-    outDir,
-    markPath: path.join(outDir, "resume-mark.json"),
-    artifactPaths: sourceObservationLog ? { "source-observations": sourceObservationLog } : undefined,
-  });
   const store = new TileStore(outDir);
   // A region config is policy, not evidence.  In particular it must not claim
   // an observation date before a request has happened.  The terrain module
@@ -899,7 +947,7 @@ async function main() {
     }
   }
 
-  async function planCell() {
+  async function planCell({ markBytes = undefined } = {}) {
     const harness = await createBrowserModuleHarness({
       wasmSource: fs.readFileSync(INGEST_WASM),
       manifest: INGEST_MANIFEST,
@@ -915,7 +963,7 @@ async function main() {
       // record out of the store, in the stream framing the query connector
       // delivers. Pass 1 and pass 2 must see one mark or the enumeration stops
       // being the pure function of config-and-mark this runner rests on.
-      const mark = store.readRecords("IRM", 32);
+      const mark = markBytes ?? store.readRecords("IRM", 32);
       if (mark.length) {
         inputs.push({
           portId: "mark",
@@ -1058,6 +1106,34 @@ async function main() {
     return inputs;
   }
 
+  // A journal can persist after the terminal $IRM append but before its
+  // sidecar, so select its live cell from the PRE-attempt sidecar state rather
+  // than the possibly already-advanced record stream. Its tile count is
+  // current approved-run data; do not recover with a size recorded by the
+  // journal itself. This makes the staged-byte ceiling both resumable and
+  // resistant to forged oversized journal fields.
+  const cellAttemptJournal = path.join(outDir, "cell-attempt.json");
+  let hasCellAttempt = false;
+  try { hasCellAttempt = Boolean(fs.lstatSync(cellAttemptJournal)); } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const recoveryPlan = hasCellAttempt ? await planCell({ markBytes: readPriorResumeMark(outDir) }) : null;
+  assert.ok(!hasCellAttempt || recoveryPlan,
+    "interrupted cell attempt exists but the live planner is already drained");
+  // Recovery derives every artifact location and its exact payload bound from
+  // the current approved run, not from path strings or byte limits persisted
+  // in the interrupted cell journal.
+  recoverCellAttempt({
+    outDir,
+    markPath: path.join(outDir, "resume-mark.json"),
+    artifactPaths: sourceObservationLog ? { "source-observations": sourceObservationLog } : undefined,
+    ...(recoveryPlan ? {
+      maxAppendBytes: cellAttemptAppendBound(recoveryPlan.job.cell_tiles),
+      expectedCell: recoveryPlan.job.cell_index,
+    } : {}),
+  });
+  store.bytes = fs.statSync(store.recordsPath).size;
+
   let wasmedge = null;
   if (args.wasmedgeVerify) {
     wasmedge = await createWasmEdgeVerifier(REPO);
@@ -1132,6 +1208,7 @@ async function main() {
       markJson: built.markJson,
       markPath: store.markPath,
       artifactPaths: sourceObservationLog ? { "source-observations": sourceObservationLog } : undefined,
+      maxAppendBytes: cellAttemptAppendBound(planned.job.cell_tiles),
       faultPhase: args.faultCellPhase,
       operations: [
         ...(built.stage.recordStream?.length ? [{ name: "tiles", target: store.recordsPath, bytes: built.stage.recordStream }] : []),

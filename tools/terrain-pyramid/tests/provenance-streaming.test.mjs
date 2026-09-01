@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 
 import {
   BoundedTopK,
+  cellAttemptAppendBound,
   commitCellAttempt,
   FixedHistogram,
   recoverCellAttempt,
@@ -17,6 +18,7 @@ import {
   ensureSourceEpoch,
   mergeBoundedFramedStores,
   mergeOceanSkips,
+  MAX_CELL_ATTEMPT_APPEND_BYTES,
   observationForRequest,
   publicationPolicyContract,
   sha256,
@@ -508,6 +510,38 @@ test("cell journal recovers exactly after each durable artifact boundary", async
   await assert.rejects(execFileAsync(process.execPath, [chainChild, afterChain]), /fault injection after artifact chain/);
   assert.equal(recoverCellAttempt({ outDir: afterChain }), true);
   assert.deepEqual(artifactSnapshot(afterChain), expected, "post-chain child crash preserves exact cell artifacts once");
+});
+
+test("planner-derived cell append bounds preserve Liguria-scale cells and reject a smaller live recovery bound", (t) => {
+  const regional = JSON.parse(fs.readFileSync(path.join(HERE, "..", "evidence", "liguria-z11", "run-report.json"), "utf8"));
+  const largest = regional.cellsDetail.reduce((best, cell) =>
+    cell.tilesStored > best.tilesStored ? cell : best, regional.cellsDetail[0]);
+  const measuredCellBytes = Math.ceil(largest.tilesStored * (regional.storeBytes / regional.tiles));
+  assert.equal(largest.tilesStored, 1693);
+  assert.ok(measuredCellBytes > 2 * 1024 * 1024, "checked Liguria evidence exceeds the rejected 2 MiB cap");
+  assert.equal(cellAttemptAppendBound(largest.tilesInCell), MAX_CELL_ATTEMPT_APPEND_BYTES,
+    "large approved cells use the reviewed 32 MiB ceiling, not a generic tiny cap");
+
+  const root = temporary(t);
+  const out = path.join(root, "out");
+  fs.mkdirSync(out);
+  const threeMiB = Buffer.alloc(3 * 1024 * 1024, 0x61);
+  const maxAppendBytes = cellAttemptAppendBound(4);
+  assert.ok(maxAppendBytes > threeMiB.length && maxAppendBytes <= MAX_CELL_ATTEMPT_APPEND_BYTES);
+  assert.throws(() => commitCellAttempt({
+    outDir: out, cell: 7, markJson: { cell: 7 }, maxAppendBytes, faultPhase: "after-tiles",
+    operations: [
+      { name: "tiles", target: path.join(out, "tiles.dttstream"), bytes: threeMiB },
+      { name: "mark", target: path.join(out, "irm.records"), bytes: Buffer.from("mark-frame") },
+    ],
+  }), /fault injection after-tiles/);
+  assert.throws(() => recoverCellAttempt({ outDir: out, maxAppendBytes: cellAttemptAppendBound(2) }),
+    /live staged append bound/);
+  assert.throws(() => recoverCellAttempt({ outDir: out, maxAppendBytes, expectedCell: 8 }),
+    /does not match the current live planner cell/);
+  assert.equal(recoverCellAttempt({ outDir: out, maxAppendBytes, expectedCell: 7 }), true);
+  assert.equal(fs.statSync(path.join(out, "tiles.dttstream")).size, threeMiB.length,
+    "a >2 MiB staged tile stream commits exactly once under the live plan bound");
 });
 
 test("forged cell journal paths and chain targets cannot redirect recovery outside its run", (t) => {
