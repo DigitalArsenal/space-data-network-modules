@@ -122,11 +122,6 @@ function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
   };
   const globalConfigDigest = createHash("sha256").update(canonicalJson(approvedConfig)).digest("hex");
   const boundPolicy = { ...policy, globalConfigDigest };
-  const policyReceipt = {
-    policy: rawPolicy,
-    digest: createHash("sha256").update(canonicalJson(rawPolicy)).digest("hex"),
-    globalConfigDigest,
-  };
   fs.writeFileSync(path.join(outDir, "approved-run-config.json"), `${JSON.stringify(approvedConfig)}\n`);
   const input = (name, countField = null) => {
     const file = path.join(outDir, name);
@@ -142,13 +137,13 @@ function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
       version: 1,
       completed: true,
       configDigest: globalConfigDigest,
-      publicationPolicy: policyReceipt,
+      publicationPolicy: boundPolicy,
       merged: {
         completion: "complete",
         configDigest: globalConfigDigest,
         approvedConfigPath: "approved-run-config.json",
         records: tiles.records,
-        publicationPolicy: policyReceipt,
+        publicationPolicy: boundPolicy,
       },
     }),
   );
@@ -669,7 +664,7 @@ test("the publication report and the directory agree on what was published", () 
   assert.ok(BigInt(report.materializationPlan.reservedStaticPhysicalBytes) >= BigInt(report.materializationPlan.approvedStaticLogicalBytes));
   assert.ok(BigInt(report.materializationPlan.reservedStaticPhysicalBytes) >= BigInt(report.materializationPlan.actualStaticPhysicalUpperBytes));
   assert.ok(BigInt(report.materializationPlan.reservedUploadManifestPhysicalBytes) > 0n);
-  assert.ok(report.materializationPlan.plannedDirectoryRows >= report.materializationPlan.files);
+  assert.ok(BigInt(report.materializationPlan.plannedDirectoryRows) >= 1n);
   assert.ok(BigInt(report.materializationPlan.reservedUploadManifestRows) >= BigInt(report.materializationPlan.files));
   assert.ok(BigInt(report.materializationPlan.stagingRequiredBytes) > BigInt(report.materializationPlan.approvedStaticLogicalBytes));
 });
@@ -776,7 +771,7 @@ test("global completion state and canonical approved config must authorize the v
     (state) => { state.configDigest = "0".repeat(64); },
     (state) => { state.merged.records += 1; },
     (state) => { state.merged.approvedConfigPath = "other.json"; },
-    (state) => { state.publicationPolicy.policy.max_static_directory_bytes += 1; },
+    (state) => { state.publicationPolicy.maxStaticDirectoryBytes += 1; },
   ]) {
     const outDir = copyFixtureOutput();
     const statePath = path.join(outDir, "global-build-state.json");
@@ -811,16 +806,33 @@ test("publication policy independently caps store and static-directory materiali
   assert.match(grid.stderr, /terrain_synth_grid_size disagrees/);
 
   const tooSmallStatic = copyFixtureOutput();
-  refreshPublicationReceipt(tooSmallStatic, { ...TEST_PUBLICATION_POLICY, maxStaticDirectoryBytes: 1 });
+  const storedBytes = fs.statSync(path.join(tooSmallStatic, "tiles.dttstream")).size;
+  refreshPublicationReceipt(tooSmallStatic, {
+    ...TEST_PUBLICATION_POLICY,
+    maxVerifiedStoreBytes: storedBytes,
+    maxStaticDirectoryBytes: storedBytes,
+  });
   const staticResult = await runPublisher(tooSmallStatic, ["--no-add"]);
   assert.notEqual(staticResult.code, 0);
   assert.match(staticResult.stderr, /static directory would exceed approved/);
 
   const noSpace = copyFixtureOutput();
-  refreshPublicationReceipt(noSpace, { ...TEST_PUBLICATION_POLICY, maxStaticDirectoryBytes: Number.MAX_SAFE_INTEGER });
-  const capacity = await runPublisher(noSpace, ["--no-add"]);
+  const capacity = await runPublisher(noSpace, ["--no-add", "--reserve-free-bytes", "999999999999999999"]);
   assert.notEqual(capacity.code, 0);
   assert.match(capacity.stderr, /insufficient free space for staged IPFS directory/);
+
+  const caps = [
+    { ...TEST_PUBLICATION_POLICY, maxVerifiedStoreBytes: 12 * 1024 ** 3 + 1 },
+    { ...TEST_PUBLICATION_POLICY, maxStaticDirectoryBytes: 128 * 1024 ** 3 + 1 },
+    { ...TEST_PUBLICATION_POLICY, maxVerifiedStoreBytes: 9, maxStaticDirectoryBytes: 8 },
+  ];
+  for (const policy of caps) {
+    const outDir = copyFixtureOutput();
+    refreshPublicationReceipt(outDir, policy);
+    const result = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(result.code, 0, "a self-consistent but unapproved publication policy must be refused");
+    assert.match(result.stderr, /publicationPolicy\.max(?:VerifiedStore|StaticDirectory)Bytes/);
+  }
 });
 
 test("bounded publisher inflate refuses a gzip bomb", async () => {

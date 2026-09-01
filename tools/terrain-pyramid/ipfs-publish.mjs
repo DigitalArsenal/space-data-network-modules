@@ -73,6 +73,9 @@ const IPFS_TILES_TEMPLATE = "{z}/{x}/{y}.terrain";
 // runaway mask/payload before a permanent CID is created.
 const STATIC_TRANSPORT_BOUNDS = Object.freeze({ p50: 96 * 1024, p99: 384 * 1024, hard: 512 * 1024 });
 const MAX_MATERIALIZED_FILES = 5_000_000;
+const MAX_VERIFIED_STORE_BYTES = 12 * 1024 ** 3;
+const MAX_STATIC_DIRECTORY_BYTES = 128 * 1024 ** 3;
+const MAX_STATIC_DIRECTORY_LEVEL = 30;
 const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
 const MAX_RECEIPT_LINE_BYTES = 64 * 1024;
 const MAX_RECEIPT_NAME_BYTES = 4 * 1024;
@@ -376,6 +379,12 @@ function assertPublicationPolicy(policy) {
   for (const field of ["maxVerifiedStoreBytes", "maxStaticDirectoryBytes"]) {
     assert.ok(Number.isSafeInteger(policy[field]) && policy[field] > 0, `publicationPolicy.${field} must be a positive safe integer`);
   }
+  assert.ok(policy.maxVerifiedStoreBytes <= MAX_VERIFIED_STORE_BYTES,
+    `publicationPolicy.maxVerifiedStoreBytes may not exceed ${MAX_VERIFIED_STORE_BYTES}`);
+  assert.ok(policy.maxStaticDirectoryBytes <= MAX_STATIC_DIRECTORY_BYTES,
+    `publicationPolicy.maxStaticDirectoryBytes may not exceed ${MAX_STATIC_DIRECTORY_BYTES}`);
+  assert.ok(policy.maxStaticDirectoryBytes >= policy.maxVerifiedStoreBytes,
+    "publicationPolicy.maxStaticDirectoryBytes must cover publicationPolicy.maxVerifiedStoreBytes");
   assert.ok(Number.isSafeInteger(policy.synthGridSize) && policy.synthGridSize >= 2 && policy.synthGridSize <= 255,
     "publicationPolicy.synthGridSize must be an integer in [2, 255]");
   return policy;
@@ -387,10 +396,6 @@ function canonicalJson(value) {
     return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
-}
-
-function policyDigest(policy) {
-  return createHash("sha256").update(canonicalJson(policy)).digest("hex");
 }
 
 async function hashPublicationInput(entry, label, countField = null, expectedIdentity = null) {
@@ -462,18 +467,6 @@ function normalizeApprovedPublicationPolicy(policy, globalConfigDigest, label) {
   };
 }
 
-function assertGlobalPolicyReceipt(receipt, approvedPolicy, label) {
-  assertExactKeys(receipt, ["policy", "digest", "globalConfigDigest"], label);
-  assert.equal(canonicalJson(receipt.policy), canonicalJson(approvedPolicy), `${label}.policy disagrees with approved run config publication_policy`);
-  assert.equal(receipt.digest, policyDigest(approvedPolicy), `${label}.digest disagrees with approved run config publication_policy`);
-  assert.equal(receipt.globalConfigDigest, publicationPolicy.globalConfigDigest, `${label}.globalConfigDigest disagrees with verify publicationPolicy`);
-  assert.deepEqual(
-    normalizeApprovedPublicationPolicy(receipt.policy, receipt.globalConfigDigest, `${label}.policy`),
-    publicationPolicy,
-    `${label}.policy normalized form disagrees with verify publicationPolicy`,
-  );
-}
-
 function assertAuthoritativeGlobalInputs() {
   const approvedConfig = readBoundedJson(
     publicationInputs.approvedConfig.file,
@@ -505,7 +498,11 @@ function assertAuthoritativeGlobalInputs() {
   assert.equal(state.completed, true, "global build state is not terminally completed");
   assert.equal(state.configDigest, publicationPolicy.globalConfigDigest,
     "global build state configDigest disagrees with verify publicationPolicy");
-  assertGlobalPolicyReceipt(state.publicationPolicy, approvedPolicy, "global build state publicationPolicy");
+  assert.deepEqual(
+    assertPublicationPolicy(state.publicationPolicy),
+    publicationPolicy,
+    "global build state publicationPolicy must exactly equal verify publicationPolicy",
+  );
   const merged = state.merged;
   assert.ok(merged && typeof merged === "object" && !Array.isArray(merged), "global build state lacks merged completion receipt");
   assert.equal(merged.completion, "complete", "global merged receipt is not complete");
@@ -514,7 +511,11 @@ function assertAuthoritativeGlobalInputs() {
   assert.equal(merged.approvedConfigPath, "approved-run-config.json", "global merged receipt names an unexpected approved config");
   assert.equal(merged.records, publicationInputs.tiles.entry.records,
     "global merged receipt record count disagrees with publicationInputs tiles");
-  assertGlobalPolicyReceipt(merged.publicationPolicy, approvedPolicy, "global merged receipt publicationPolicy");
+  assert.deepEqual(
+    assertPublicationPolicy(merged.publicationPolicy),
+    publicationPolicy,
+    "global merged receipt publicationPolicy must exactly equal verify publicationPolicy",
+  );
   return { state, approvedConfig };
 }
 
@@ -756,6 +757,8 @@ assert.equal(typeof tilesetId, "string", "first tile has no tileset ID");
 assert.ok(Buffer.byteLength(tilesetId) > 0 && Buffer.byteLength(tilesetId) <= MAX_TILESET_ID_BYTES,
   `tileset ID exceeds ${MAX_TILESET_ID_BYTES}-byte upload-manifest bound`);
 const maxzoom = layerConfig.terrain_maxzoom;
+assert.ok(Number.isSafeInteger(maxzoom) && maxzoom >= 0 && maxzoom <= MAX_STATIC_DIRECTORY_LEVEL,
+  `terrain_maxzoom must be an integer in [0, ${MAX_STATIC_DIRECTORY_LEVEL}] for bounded static directory planning`);
 
 // The serving config the SHIPPED mount would run under, plus the two keys this
 // lane adds. The harness gets exactly this, so a tile synthesized here is the
@@ -987,11 +990,18 @@ async function precomputeMaterializationPlan() {
   }
   const files = 1 + storedFiles + synthesizedFiles;
   assert.ok(files <= MAX_MATERIALIZED_FILES, `materialization plans ${files} files; hard limit is ${MAX_MATERIALIZED_FILES}`);
-  // Static terrain paths have at most two parent directory rows (`z/x`) per
-  // file.  This deliberately over-reserves repeated rows while avoiding an
-  // in-memory set just to count them before materialization.
-  const directoryRows = 1 + files * 2;
-  assert.ok(Number.isSafeInteger(directoryRows), "materialization directory-row bound exceeds safe range");
+  // `{z}/{x}/{y}.terrain` has one root, at most one level directory per z,
+  // and at most 2^(z+1) x directories at geographic level z. This is tight
+  // for the fixed layout, bounded by the tile count, and avoids a per-tile
+  // fictional directory reservation or an in-memory directory set.
+  const tileFiles = BigInt(storedFiles + synthesizedFiles);
+  let possibleXRows = 0n;
+  for (let level = 0; level <= maxzoom; level += 1) possibleXRows += 1n << BigInt(level + 1);
+  const levelRows = BigInt(Math.min(maxzoom + 1, Number(tileFiles)));
+  const xRows = possibleXRows < tileFiles ? possibleXRows : tileFiles;
+  const directoryRows = 1n + levelRows + xRows;
+  assert.ok(directoryRows <= BigInt(MAX_MATERIALIZED_FILES) + BigInt(maxzoom) + 2n,
+    "materialization directory-row bound exceeds the fixed static tree limit");
   return { files, directoryRows, storedFiles, synthesizedFiles, decodedStoredBytes: storedBytes };
 }
 
@@ -1001,7 +1011,7 @@ function reserveStagingSpace(plan) {
   assert.ok(stats.bsize > 0n, "statfs returned an invalid allocation block size");
   const blockSize = stats.bsize;
   const fileCountBound = BigInt(plan.files);
-  const directoryRowBound = BigInt(plan.directoryRows);
+  const directoryRowBound = plan.directoryRows;
   // `maxStaticDirectoryBytes` is a logical-byte policy.  On a 4 KiB volume a
   // few million small files need one allocation block each in addition to the
   // logical total, while the bounded, on-disk multipart manifest is live at
@@ -1412,7 +1422,7 @@ assert.equal(fileCount, materializationPlan.files, "materialized file count disa
 assert.ok(BigInt(totalBytes) <= BigInt(publicationPolicy.maxStaticDirectoryBytes), "materialized bytes exceed approved static directory bound");
 actualStaticPhysicalUpperBytes = BigInt(totalBytes) + BigInt(fileCount) *
   (stagingReservation.blockSize - 1n) +
-  (BigInt(fileCount) + BigInt(materializationPlan.directoryRows)) * stagingReservation.blockSize;
+  (BigInt(fileCount) + materializationPlan.directoryRows) * stagingReservation.blockSize;
 assert.ok(actualStaticPhysicalUpperBytes <= stagingReservation.physicalStaticBytes,
   "materialized staging tree exceeds its approved physical allocation reservation");
 } catch (error) {
@@ -1439,18 +1449,20 @@ function assertSafeRelativePath(rel, label) {
 
 function fileIdentity(full) {
   const stat = fs.lstatSync(full, { bigint: true });
-  assert.ok(stat.isFile(), `${full} is not a regular file`);
+  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${full} is not a regular file`);
   return {
     dev: stat.dev.toString(),
     ino: stat.ino.toString(),
     size: stat.size.toString(),
     mtimeNs: stat.mtimeNs.toString(),
+    ctimeNs: stat.ctimeNs.toString(),
   };
 }
 
 function sameIdentity(actual, expected) {
   return actual.dev === expected.dev && actual.ino === expected.ino &&
-    actual.size === expected.size && actual.mtimeNs === expected.mtimeNs;
+    actual.size === expected.size && actual.mtimeNs === expected.mtimeNs &&
+    actual.ctimeNs === expected.ctimeNs;
 }
 
 function* sortedRegularFiles(directory, prefix = "") {
@@ -1570,7 +1582,7 @@ async function* uploadManifestEntries(plan) {
     assert.ok(entry && typeof entry === "object" && !Array.isArray(entry), "upload manifest entry is not an object");
     assertSafeRelativePath(entry.rel, "upload manifest path");
     assert.equal(entry.name, `${tilesetId}/${entry.rel}`, "upload manifest name disagrees with path");
-    for (const field of ["dev", "ino", "size", "mtimeNs"]) assert.match(entry[field] ?? "", /^\d+$/, `upload manifest ${field} is invalid`);
+    for (const field of ["dev", "ino", "size", "mtimeNs", "ctimeNs"]) assert.match(entry[field] ?? "", /^\d+$/, `upload manifest ${field} is invalid`);
     yield entry;
   }
 }
@@ -1597,8 +1609,7 @@ async function* multipartParts(plan) {
     assert.equal(current.rel, planned.rel, "staged file order changed after multipart planning");
     assert.ok(sameIdentity(current.identity, planned), `staged file ${current.rel} changed after multipart planning`);
     yield multipartHeader(plan.boundary, planned.name);
-    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
-    for await (const chunk of fs.createReadStream(current.full, { flags, highWaterMark: 64 * 1024 })) yield chunk;
+    for await (const chunk of regularFileChunks(current.full, `staged upload ${current.rel}`, planned)) yield chunk;
     assert.ok(sameIdentity(fileIdentity(current.full), planned), `staged file ${current.rel} changed during multipart upload`);
     yield Buffer.from("\r\n");
     files += 1;
@@ -2243,7 +2254,7 @@ const report = {
   files: fileCount,
   materializationPlan: {
     files: materializationPlan.files,
-    plannedDirectoryRows: materializationPlan.directoryRows,
+    plannedDirectoryRows: materializationPlan.directoryRows.toString(),
     storedFiles: materializationPlan.storedFiles,
     synthesizedFiles: materializationPlan.synthesizedFiles,
     decodedStoredBytes: materializationPlan.decodedStoredBytes,
